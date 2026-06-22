@@ -315,13 +315,80 @@ var CAMERA_PRESETS = {
   close: { name: "close", position: [0, 2, 4], target: [0, 0, 0], fov: 35 },
   cinematic: { name: "cinematic", position: [6, 4, 6], target: [0, 0, 0], fov: 40 }
 };
+var PROVENANCE_KEYS = [
+  "device_id",
+  "recorded_variable",
+  "units",
+  "sampling_interval",
+  "recorder_id",
+  "sender_ids",
+  "population_labels",
+  "time_units",
+  "source_ids",
+  "target_ids",
+  "synapse_model",
+  "weight_units",
+  "extent",
+  "mask",
+  "kernel",
+  "projection_sample_policy",
+  "morphology_disclaimer",
+  "frame_rate",
+  "state_variables",
+  "bin_ms",
+  "pair_labels",
+  "stim_units",
+  "rate_normalization"
+];
+var ProvenanceKeyEnum = zod.z.enum(PROVENANCE_KEYS);
+var PROVENANCE_KEY_LABELS = {
+  device_id: "device id",
+  recorded_variable: "recorded variable",
+  units: "units",
+  sampling_interval: "sampling interval",
+  recorder_id: "spike_recorder id",
+  sender_ids: "sender ids",
+  population_labels: "population labels",
+  time_units: "time units",
+  source_ids: "source ids",
+  target_ids: "target ids",
+  synapse_model: "synapse model",
+  weight_units: "weight units",
+  extent: "extent",
+  mask: "mask",
+  kernel: "kernel",
+  projection_sample_policy: "projection sample policy",
+  morphology_disclaimer: "morphology geometry disclaimer",
+  frame_rate: "frame rate",
+  state_variables: "state variables",
+  bin_ms: "bin width",
+  pair_labels: "pair labels",
+  stim_units: "stimulus units",
+  rate_normalization: "rate normalization"
+};
+function isProvenanceKey(value) {
+  return typeof value === "string" && PROVENANCE_KEYS.includes(value);
+}
+
+// core/vizSpec.ts
 var ProvenanceSchema = zod.z.object({
   source: zod.z.string().min(1).max(200),
   calibrated_posterior: zod.z.boolean().default(false),
   // fail-closed
   advisory_only: zod.z.boolean().default(false),
   is_paper_local_evidence: zod.z.boolean().default(false),
-  caption: zod.z.string().max(500).optional()
+  caption: zod.z.string().max(500).optional(),
+  /** Machine-checkable record of the inputs an agent declared (keyed by
+   *  ProvenanceKey). validateSkillInvocation requires the keys a skill's
+   *  honesty contract demands. Presence-checked here; value truthfulness is the
+   *  host/backend's responsibility (Cortexel is host-agnostic). */
+  declared_inputs: zod.z.partialRecord(
+    ProvenanceKeyEnum,
+    zod.z.union([zod.z.string(), zod.z.number(), zod.z.literal(true)])
+  ).optional(),
+  /** Explicit synthetic/illustrative discriminator — forces the schematic
+   *  caption regardless of the other flags. */
+  synthetic: zod.z.boolean().default(false)
 });
 var VizSpecSchema = zod.z.object({
   scene: zod.z.enum(SCENE_NAMES),
@@ -353,17 +420,716 @@ var CONSERVATIVE_PROVENANCE = Object.freeze({
   is_paper_local_evidence: false
 });
 function requiresHonestyCaption(p) {
-  return !p.calibrated_posterior || p.advisory_only || !p.is_paper_local_evidence;
+  return !!p.synthetic || !p.calibrated_posterior || p.advisory_only || !p.is_paper_local_evidence;
 }
 function defaultHonestyCaption(p) {
   if (p.caption) return p.caption;
-  if (p.source === "synthetic_test" || p.source.startsWith("synthetic")) {
+  if (p.synthetic || p.source === "synthetic_test" || p.source.startsWith("synthetic")) {
     return "Schematic \u2014 illustrative synthetic data, not measured.";
   }
   if (!p.is_paper_local_evidence) {
     return "Advisory \u2014 not paper-local evidence; candidate ranking only.";
   }
   return "Illustrative \u2014 not a calibrated posterior.";
+}
+
+// core/skills/skillIds.ts
+var PI_NEST_SKILL_IDS = [
+  "pi.nest.voltage_trace",
+  "pi.nest.spike_raster",
+  "pi.nest.rate_response",
+  "pi.nest.connectivity_matrix",
+  "pi.nest.spatial_2d",
+  "pi.nest.spatial_3d",
+  "pi.nest.plasticity_dynamics",
+  "pi.nest.phase_plane",
+  "pi.nest.correlogram",
+  "pi.nest.stimulus_response",
+  "pi.nest.astrocyte_dynamics",
+  "pi.nest.compartmental_dynamics",
+  "pi.nest.animation_replay"
+];
+var VIZ_ROUTER_ID = "pi.nest.viz_router";
+var NEST_DEVICE_FAMILIES = [
+  "multimeter",
+  "spike_recorder",
+  "get_connections",
+  "get_position",
+  "weight_recorder",
+  "computed"
+  // no NEST device — numerically derived (phase plane, replay frames)
+];
+function isPiNestSkillId(value) {
+  return typeof value === "string" && PI_NEST_SKILL_IDS.includes(value);
+}
+var VALID_RENDERER_ROUTES = [
+  "pi.media.trace_figure",
+  "pi.media.model_graph",
+  "pi.media.webgl_scene",
+  "pi.media.react_fiber_scene",
+  "pi.media.manim_storyboard",
+  "pi.media.*",
+  "matplotlib",
+  "d3",
+  "three",
+  "fiber",
+  "manim"
+];
+var numArray = zod.z.array(zod.z.number());
+var VoltageTraceParamsSchema = zod.z.object({
+  times_ms: numArray.min(1),
+  series: zod.z.array(zod.z.array(zod.z.number())).min(1),
+  units: zod.z.string().min(1)
+}).passthrough();
+var SpikeRasterParamsSchema = zod.z.object({
+  times_ms: numArray.min(1),
+  senders: numArray.min(1)
+}).passthrough();
+var RateResponseParamsSchema = zod.z.object({
+  stimulus_amplitudes: numArray.min(1),
+  rates_hz: numArray.min(1),
+  units: zod.z.string().min(1)
+}).passthrough();
+var NetworkParamsSchema = zod.z.object({
+  sources: numArray.min(1),
+  targets: numArray.min(1),
+  weights: numArray.optional()
+}).passthrough();
+var Spatial3DParamsSchema = zod.z.object({
+  objects: zod.z.array(zod.z.unknown()).min(1)
+}).passthrough();
+var PlasticityParamsSchema = zod.z.object({
+  times_ms: numArray.min(1),
+  weights: numArray.min(1),
+  weight_units: zod.z.string().min(1)
+}).passthrough();
+var PhasePlaneParamsSchema = zod.z.object({
+  grid: zod.z.record(zod.z.string(), zod.z.unknown())
+}).passthrough();
+var AstrocyteParamsSchema = zod.z.object({
+  ca_trace: numArray.min(1),
+  units: zod.z.string().min(1)
+}).passthrough();
+
+// core/skills/registry.ts
+var CORTEXEL_SKILL_VERSION = "1.0.0";
+var NEST_SKILL_REGISTRY = {
+  "pi.nest.voltage_trace": {
+    id: "pi.nest.voltage_trace",
+    version: "1.0.0",
+    title: "NEST voltage trace renderer",
+    description: "Render multimeter/voltmeter analog traces (V_m, currents, conductances).",
+    deviceFamily: "multimeter",
+    scene: "voltage-trace",
+    requiredInputKeys: ["times_ms", "series", "units"],
+    paramsSchema: VoltageTraceParamsSchema,
+    requiredProvenanceKeys: [
+      "device_id",
+      "recorded_variable",
+      "units",
+      "sampling_interval"
+    ],
+    rendererRoutes: ["pi.media.trace_figure", "matplotlib", "d3"],
+    examples: [
+      {
+        nestExample: "One neuron example / multimeter recording",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/one_neuron.html",
+        dataShape: "times_ms + V_m/current/conductance series split by sender",
+        output: "Selectable trace, spike markers, JSON + SVG export",
+        note: "Mirrors NEST voltage_trace while keeping data provenance inspectable."
+      }
+    ]
+  },
+  "pi.nest.spike_raster": {
+    id: "pi.nest.spike_raster",
+    version: "1.0.0",
+    title: "NEST spike raster renderer",
+    description: "Render spike_recorder events as rasters, spike trains and population plots.",
+    deviceFamily: "spike_recorder",
+    scene: "spike-raster",
+    requiredInputKeys: ["times_ms", "senders"],
+    paramsSchema: SpikeRasterParamsSchema,
+    requiredProvenanceKeys: [
+      "recorder_id",
+      "sender_ids",
+      "population_labels",
+      "time_units"
+    ],
+    rendererRoutes: ["pi.media.model_graph", "d3"],
+    examples: [
+      {
+        nestExample: "Random balanced Brunel network",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/brunel_alpha_nest.html",
+        dataShape: "spike_recorder events: times_ms, senders, population labels",
+        output: "Sender-time raster, population rate strip, selectable windows",
+        note: "Use exact spike times first; aggregate only when too dense to read."
+      }
+    ]
+  },
+  "pi.nest.rate_response": {
+    id: "pi.nest.rate_response",
+    version: "1.0.0",
+    title: "NEST rate / IF response renderer",
+    description: "Render firing-rate / IF curves and population rates derived from spike counts.",
+    deviceFamily: "spike_recorder",
+    scene: "fi-curve",
+    requiredInputKeys: ["stimulus_amplitudes", "rates_hz", "units"],
+    paramsSchema: RateResponseParamsSchema,
+    requiredProvenanceKeys: ["stim_units", "bin_ms", "rate_normalization"],
+    rendererRoutes: ["pi.media.trace_figure", "matplotlib", "d3"],
+    examples: [
+      {
+        nestExample: "IF curve example",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/if_curve.html",
+        dataShape: "stimulus amplitudes, rates_hz, spike counts",
+        output: "IF curve, population-rate trace, decision crossing markers",
+        note: "Always show bin width / counting window so rates stay auditable."
+      }
+    ]
+  },
+  "pi.nest.connectivity_matrix": {
+    id: "pi.nest.connectivity_matrix",
+    version: "1.0.0",
+    title: "NEST connectivity matrix renderer",
+    description: "Render SynapseCollection connectivity, weights and population blocks.",
+    deviceFamily: "get_connections",
+    scene: "network-topology",
+    requiredInputKeys: ["sources", "targets"],
+    paramsSchema: NetworkParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "weight_units"
+    ],
+    rendererRoutes: ["pi.media.model_graph", "d3"],
+    examples: [
+      {
+        nestExample: "Plot weight matrices example / SynapseCollection",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
+        dataShape: "sources, targets, weights, delays, source/target populations",
+        output: "Topology node-edge view, selected block stats, weight histogram",
+        note: "Keep absent connections distinct from zero-weight connections."
+      }
+    ]
+  },
+  "pi.nest.spatial_2d": {
+    id: "pi.nest.spatial_2d",
+    version: "1.0.0",
+    title: "NEST 2D spatial renderer",
+    description: "Render 2D layer positions, masks, kernels and sampled projections.",
+    deviceFamily: "get_position",
+    scene: null,
+    // no honest 2D-spatial scene yet (would violate sphere/voxel law)
+    requiredInputKeys: ["positions"],
+    requiredProvenanceKeys: ["extent", "mask", "kernel"],
+    rendererRoutes: ["pi.media.model_graph", "d3"],
+    examples: [
+      {
+        nestExample: "Circular mask, Gaussian kernel, grid/free spatial examples",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/connex.html",
+        dataShape: "node x/y positions, masks, kernels, sampled edges",
+        output: "No Cortexel scene yet \u2014 route to a 2D d3 map on the host.",
+        note: "scene:null \u2014 render via host d3, not a Cortexel 3D scene."
+      }
+    ]
+  },
+  "pi.nest.spatial_3d": {
+    id: "pi.nest.spatial_3d",
+    version: "1.0.0",
+    title: "NEST 3D spatial renderer",
+    description: "Render 3D population/node positions for spatial inspection.",
+    deviceFamily: "get_position",
+    scene: "network-topology",
+    requiredInputKeys: ["objects"],
+    paramsSchema: Spatial3DParamsSchema,
+    requiredProvenanceKeys: ["extent", "projection_sample_policy"],
+    rendererRoutes: [
+      "pi.media.webgl_scene",
+      "pi.media.react_fiber_scene",
+      "three",
+      "fiber"
+    ],
+    examples: [
+      {
+        nestExample: "3D spatial network with exponential/Gaussian probabilities",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/test_3d.html",
+        dataShape: "node x/y/z positions, extent, sampled edges",
+        output: "Selectable 3D scene plus SVG projection fallback",
+        note: "Use 3D as inspection aid; do not imply biological geometry."
+      }
+    ]
+  },
+  "pi.nest.plasticity_dynamics": {
+    id: "pi.nest.plasticity_dynamics",
+    version: "1.0.0",
+    title: "NEST plasticity dynamics renderer",
+    description: "Render STDP windows, weight adaptation and short-term dynamics.",
+    deviceFamily: "weight_recorder",
+    scene: "stdp",
+    requiredInputKeys: ["times_ms", "weights", "weight_units"],
+    paramsSchema: PlasticityParamsSchema,
+    requiredProvenanceKeys: ["synapse_model", "weight_units"],
+    rendererRoutes: ["pi.media.trace_figure", "matplotlib"],
+    examples: [
+      {
+        nestExample: "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/urbanczik_synapse_example.html",
+        dataShape: "weights, u/x resources, pre/post spikes, delta_t, delta_weight",
+        output: "Weight trace, STDP window, spike protocol rugs",
+        note: "Preserve pre/post sign convention; label all plasticity parameters."
+      }
+    ]
+  },
+  "pi.nest.phase_plane": {
+    id: "pi.nest.phase_plane",
+    version: "1.0.0",
+    title: "NEST phase-plane renderer",
+    description: "Render phase planes, vector fields, nullclines and trajectories.",
+    deviceFamily: "computed",
+    scene: "phase-plane",
+    requiredInputKeys: ["grid"],
+    paramsSchema: PhasePlaneParamsSchema,
+    requiredProvenanceKeys: ["state_variables"],
+    rendererRoutes: ["pi.media.model_graph", "d3"],
+    examples: [
+      {
+        nestExample: "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/hh_phaseplane.html",
+        dataShape: "state variable grid, derivatives, nullcline points, trajectory",
+        output: "Vector field, nullclines, trajectory, equilibrium annotations",
+        note: "Distinguish clamped state variables from simulated dynamic ones."
+      }
+    ]
+  },
+  "pi.nest.correlogram": {
+    id: "pi.nest.correlogram",
+    version: "1.0.0",
+    title: "NEST correlogram / synchrony renderer",
+    description: "Render auto/cross-correlation functions for spike trains.",
+    deviceFamily: "spike_recorder",
+    scene: null,
+    // ISI-histogram scene exists but the math differs — no honest reuse
+    requiredInputKeys: ["lags_ms", "correlation"],
+    requiredProvenanceKeys: ["bin_ms", "pair_labels"],
+    rendererRoutes: ["pi.media.model_graph", "d3"],
+    examples: [
+      {
+        nestExample: "Auto- and crosscorrelation functions for spike trains",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/cross_check_mip_corrdet.html",
+        dataShape: "lags_ms, correlation values, pair labels, bin width",
+        output: "No Cortexel scene (distinct from ISI) \u2014 route to host d3.",
+        note: "scene:null \u2014 correlogram math differs from the ISI histogram scene."
+      }
+    ]
+  },
+  "pi.nest.stimulus_response": {
+    id: "pi.nest.stimulus_response",
+    version: "1.0.0",
+    title: "NEST stimulus-response protocol renderer",
+    description: "Render aligned stimulus waveforms, responses, spikes and protocol epochs.",
+    deviceFamily: "multimeter",
+    scene: null,
+    // composite multi-panel protocol; no single Cortexel scene
+    requiredInputKeys: ["stimulus", "response"],
+    requiredProvenanceKeys: ["stim_units", "units"],
+    rendererRoutes: ["pi.media.trace_figure", "matplotlib"],
+    examples: [
+      {
+        nestExample: "Sinusoidal generator / pulse packet / repeated stimulation",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/pulsepacket.html",
+        dataShape: "stimulus waveform, analog response, spike events, epochs",
+        output: "Composite protocol panels \u2014 host-composed, no single scene.",
+        note: "scene:null \u2014 multi-panel protocol composed by the host."
+      }
+    ]
+  },
+  "pi.nest.astrocyte_dynamics": {
+    id: "pi.nest.astrocyte_dynamics",
+    version: "1.0.0",
+    title: "NEST astrocyte Ca\xB2\u207A/IP\u2083 dynamics renderer",
+    description: "Render tripartite-synapse calcium/IP3 state-variable traces.",
+    deviceFamily: "multimeter",
+    scene: "voltage-trace",
+    weak: true,
+    // analog-trace reuse: Ca/IP3 are not membrane voltage
+    requiredInputKeys: ["ca_trace", "units"],
+    paramsSchema: AstrocyteParamsSchema,
+    requiredProvenanceKeys: ["recorded_variable", "units"],
+    rendererRoutes: ["pi.media.trace_figure", "matplotlib"],
+    examples: [
+      {
+        nestExample: "Single astrocyte / tripartite interaction examples",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/astrocytes/astrocyte_single.html",
+        dataShape: "Ca/IP3/state variables, linked neuron events",
+        output: "Calcium/IP3 traces via the analog-trace scene (flagged derived)",
+        note: "weak:true \u2014 keep glial and neuronal units explicitly separate."
+      }
+    ]
+  },
+  "pi.nest.compartmental_dynamics": {
+    id: "pi.nest.compartmental_dynamics",
+    version: "1.0.0",
+    title: "NEST compartmental morphology + dynamics renderer",
+    description: "Render multi-compartment morphologies, receptor ports and soma/dendrite traces.",
+    deviceFamily: "multimeter",
+    scene: null,
+    // morphology geometry has no honest Cortexel scene (no invented geometry)
+    requiredInputKeys: ["compartments"],
+    requiredProvenanceKeys: ["morphology_disclaimer", "recorded_variable"],
+    rendererRoutes: ["pi.media.model_graph", "d3"],
+    examples: [
+      {
+        nestExample: "Receptors/current and two-compartment neuron examples",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/compartmental_model/receptors_and_current.html",
+        dataShape: "compartments, receptor ports, soma/dendrite traces",
+        output: "No Cortexel scene \u2014 host d3 morphology tree with linked traces.",
+        note: "scene:null \u2014 do not invent morphology geometry from labels."
+      }
+    ]
+  },
+  "pi.nest.animation_replay": {
+    id: "pi.nest.animation_replay",
+    version: "1.0.0",
+    title: "NEST state replay / animation storyboard renderer",
+    description: "Render time-evolution storyboards and inspectable state replays.",
+    deviceFamily: "computed",
+    scene: null,
+    // offline manim storyboard, not a live r3f scene — do not mis-route
+    requiredInputKeys: ["frames"],
+    requiredProvenanceKeys: ["frame_rate"],
+    rendererRoutes: ["pi.media.manim_storyboard", "manim"],
+    examples: [
+      {
+        nestExample: "Sudoku progress GIF / Pong replay",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/sudoku/plot_progress.html",
+        dataShape: "frames, entities, metrics, frame rate, annotations",
+        output: "Manim storyboard / source \u2014 no live Cortexel scene.",
+        note: "scene:null \u2014 offline storyboard, not a real-time render target."
+      }
+    ]
+  }
+};
+function listSkills() {
+  return Object.values(NEST_SKILL_REGISTRY);
+}
+function getSkill(id) {
+  return NEST_SKILL_REGISTRY[id];
+}
+
+// core/skills/router.ts
+var SPIKE_KIND_TO_SKILL = {
+  events: "pi.nest.spike_raster",
+  rates: "pi.nest.rate_response",
+  correlation: "pi.nest.correlogram"
+};
+var FAMILY_TO_SKILL = {
+  multimeter: "pi.nest.voltage_trace",
+  get_connections: "pi.nest.connectivity_matrix",
+  get_position: "pi.nest.spatial_3d",
+  weight_recorder: "pi.nest.plasticity_dynamics",
+  computed: "pi.nest.phase_plane"
+};
+function resolve(skill) {
+  const contract = NEST_SKILL_REGISTRY[skill];
+  if (contract.scene === null) {
+    return { ok: false, reason: "no_cortexel_scene", candidates: [skill] };
+  }
+  return { ok: true, skill, scene: contract.scene };
+}
+function routeToScene(input) {
+  if (input.deviceFamily === "spike_recorder") {
+    const kind = input.dataShape?.kind;
+    if (!kind) {
+      return {
+        ok: false,
+        reason: "ambiguous",
+        candidates: Object.values(SPIKE_KIND_TO_SKILL)
+      };
+    }
+    return resolve(SPIKE_KIND_TO_SKILL[kind]);
+  }
+  const skill = FAMILY_TO_SKILL[input.deviceFamily];
+  if (!skill) return { ok: false, reason: "unknown_family" };
+  return resolve(skill);
+}
+
+// core/skills/validateSkillInvocation.ts
+function validateSkillInvocation(skillId, payload) {
+  const errors = [];
+  const contract = getSkill(skillId);
+  if (!contract) {
+    return {
+      ok: false,
+      errors: [
+        {
+          code: "unknown_skill",
+          path: "skillId",
+          message: `unknown skill '${skillId}'`,
+          hint: "Use one of the registered pi.nest.* skills.",
+          validSkills: PI_NEST_SKILL_IDS
+        }
+      ]
+    };
+  }
+  const envelope = validateVizSpec(payload);
+  if (!envelope.ok) {
+    return {
+      ok: false,
+      errors: envelope.errors.map((message) => ({
+        code: "invalid_envelope",
+        path: "(spec)",
+        message,
+        validScenes: SCENE_NAMES
+      }))
+    };
+  }
+  const spec = envelope.spec;
+  const prov = spec.provenance;
+  if (prov.calibrated_posterior === true) {
+    errors.push({
+      code: "calibrated_posterior_unsupported",
+      path: "provenance.calibrated_posterior",
+      message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary",
+      hint: "Validation/search is candidate ranking; leave calibrated_posterior=false."
+    });
+  }
+  if (contract.scene === null) {
+    errors.push({
+      code: "no_cortexel_scene",
+      path: "skillId",
+      message: `skill '${skillId}' has no Cortexel scene (route to a host renderer)`,
+      hint: `Renderer routes: ${contract.rendererRoutes.join(", ")}.`
+    });
+  } else if (spec.scene !== contract.scene) {
+    errors.push({
+      code: "scene_mismatch",
+      path: "scene",
+      message: `scene '${spec.scene}' does not match skill '${skillId}' scene '${contract.scene}'`,
+      hint: `Set scene: '${contract.scene}'.`,
+      validScenes: [contract.scene]
+    });
+  }
+  if (contract.paramsSchema) {
+    const parsed = contract.paramsSchema.safeParse(spec.params);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        errors.push({
+          code: "invalid_params",
+          path: `params.${issue.path.join(".") || "(root)"}`,
+          message: issue.message,
+          hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`
+        });
+      }
+    }
+  }
+  const declared = prov.declared_inputs ?? {};
+  for (const key of contract.requiredProvenanceKeys) {
+    if (!(key in declared)) {
+      errors.push({
+        code: "missing_provenance",
+        path: `provenance.declared_inputs.${key}`,
+        message: `missing required provenance: ${key}`,
+        hint: `Skill '${skillId}' requires declared_inputs for: ${contract.requiredProvenanceKeys.join(", ")}.`
+      });
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors };
+  const caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  return { ok: true, spec, scene: contract.scene, caption };
+}
+var finiteNumberArray = zod.z.array(zod.z.number()).refine((a) => a.every((v) => Number.isFinite(v)), {
+  message: "array contains non-finite values (NaN/Inf) \u2014 unusable evidence"
+});
+var nonEmptyFinite = finiteNumberArray.min(
+  1,
+  "empty array \u2014 no samples to render"
+);
+var SpikeRecorderEventsSchema = zod.z.object({
+  senders: zod.z.array(zod.z.number()),
+  times: finiteNumberArray
+}).superRefine((v, ctx) => {
+  if (v.senders.length !== v.times.length) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      message: `senders (${v.senders.length}) and times (${v.times.length}) length mismatch`
+    });
+  }
+});
+var MultimeterEventsSchema = zod.z.object({
+  times: nonEmptyFinite,
+  values: nonEmptyFinite
+}).superRefine((v, ctx) => {
+  if (v.times.length !== v.values.length) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      message: `times (${v.times.length}) and values (${v.values.length}) length mismatch`
+    });
+  }
+});
+var GetConnectionsSchema = zod.z.object({
+  sources: zod.z.array(zod.z.number()).min(1, "no connections"),
+  targets: zod.z.array(zod.z.number()).min(1, "no connections"),
+  weights: finiteNumberArray.optional(),
+  delays: finiteNumberArray.optional()
+}).superRefine((v, ctx) => {
+  if (v.sources.length !== v.targets.length) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      message: `sources (${v.sources.length}) and targets (${v.targets.length}) length mismatch`
+    });
+  }
+  if (v.weights && v.weights.length !== v.sources.length) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      message: "weights length does not match connection count"
+    });
+  }
+});
+var xyz = zod.z.tuple([zod.z.number(), zod.z.number(), zod.z.number()]);
+var xy = zod.z.tuple([zod.z.number(), zod.z.number()]);
+var GetPosition2DSchema = zod.z.object({
+  positions: zod.z.array(xy).min(1, "no positions")
+});
+var GetPosition3DSchema = zod.z.object({
+  positions: zod.z.array(xyz).min(1, "no positions"),
+  edges: zod.z.array(zod.z.object({ source: zod.z.number(), target: zod.z.number() })).optional()
+});
+var WeightRecorderEventsSchema = zod.z.object({
+  times: nonEmptyFinite,
+  weights: nonEmptyFinite,
+  senders: zod.z.array(zod.z.number()).optional(),
+  targets: zod.z.array(zod.z.number()).optional()
+}).superRefine((v, ctx) => {
+  if (v.times.length !== v.weights.length) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      message: `times (${v.times.length}) and weights (${v.weights.length}) length mismatch`
+    });
+  }
+});
+
+// core/nest/adapters.ts
+function zerr(error) {
+  return {
+    ok: false,
+    errors: error.issues.map(
+      (i) => `${i.path.map(String).join(".") || "(root)"}: ${i.message}`
+    )
+  };
+}
+function denseIndex(senders) {
+  const map = /* @__PURE__ */ new Map();
+  const dense = new Float32Array(senders.length);
+  let next = 0;
+  for (let i = 0; i < senders.length; i++) {
+    const s = senders[i];
+    let idx = map.get(s);
+    if (idx === void 0) {
+      idx = next++;
+      map.set(s, idx);
+    }
+    dense[i] = idx;
+  }
+  return { dense, map };
+}
+function spikeRecorderToSceneData(events) {
+  const parsed = SpikeRecorderEventsSchema.safeParse(events);
+  if (!parsed.success) return zerr(parsed.error);
+  const { senders, times } = parsed.data;
+  const { dense, map } = denseIndex(senders);
+  return {
+    ok: true,
+    data: {
+      spikeTimes: Float32Array.from(times),
+      spikeSenders: dense
+    },
+    senderIndexMap: map
+  };
+}
+function multimeterToSceneData(events) {
+  const parsed = MultimeterEventsSchema.safeParse(events);
+  if (!parsed.success) return zerr(parsed.error);
+  const { times, values } = parsed.data;
+  return {
+    ok: true,
+    data: {
+      traceTimes: Float32Array.from(times),
+      voltageTraces: Float32Array.from(values)
+    }
+  };
+}
+function getConnectionsToSceneData(conns) {
+  const parsed = GetConnectionsSchema.safeParse(conns);
+  if (!parsed.success) return zerr(parsed.error);
+  const { sources, targets, weights } = parsed.data;
+  const ids = /* @__PURE__ */ new Set();
+  sources.forEach((s) => ids.add(s));
+  targets.forEach((t) => ids.add(t));
+  const networkNodes = Array.from(ids).map((id, i) => ({
+    id,
+    // Place on a ring so a topology scene has something honest to draw; the host
+    // can override with real GetPosition data via getPositionToSceneData.
+    x: Math.cos(2 * Math.PI * i / ids.size),
+    y: Math.sin(2 * Math.PI * i / ids.size),
+    z: 0,
+    label: String(id)
+  }));
+  const networkEdges = sources.map((source, i) => ({
+    source,
+    target: targets[i],
+    weight: weights ? weights[i] : 1
+  }));
+  return { ok: true, data: { networkNodes, networkEdges } };
+}
+function getPositionToSceneData(positions, opts = { dims: 3 }) {
+  if (opts.dims === 2) {
+    const parsed2 = GetPosition2DSchema.safeParse(positions);
+    if (!parsed2.success) return zerr(parsed2.error);
+    return {
+      ok: true,
+      data: {
+        networkNodes: parsed2.data.positions.map(([x, y], i) => ({
+          id: i,
+          x,
+          y,
+          z: 0,
+          label: String(i)
+        }))
+      }
+    };
+  }
+  const parsed = GetPosition3DSchema.safeParse(positions);
+  if (!parsed.success) return zerr(parsed.error);
+  return {
+    ok: true,
+    data: {
+      networkNodes: parsed.data.positions.map(([x, y, z5], i) => ({
+        id: i,
+        x,
+        y,
+        z: z5,
+        label: String(i)
+      })),
+      networkEdges: parsed.data.edges?.map((e) => ({
+        source: e.source,
+        target: e.target,
+        weight: 1
+      }))
+    }
+  };
+}
+function weightRecorderToSceneData(events) {
+  const parsed = WeightRecorderEventsSchema.safeParse(events);
+  if (!parsed.success) return zerr(parsed.error);
+  const { times, weights } = parsed.data;
+  return {
+    ok: true,
+    data: {
+      traceTimes: Float32Array.from(times),
+      weightSeries: Float32Array.from(weights)
+    }
+  };
 }
 function usePopulationExpand(controlled) {
   const [localSelected, setLocalSelected] = react.useState(null);
@@ -491,9 +1257,37 @@ function ExpandablePopulation({
 function VizSpecRenderer({
   spec,
   renderScene,
+  skillId,
   active = true,
   onError
 }) {
+  if (skillId) {
+    const gated = validateSkillInvocation(skillId, spec);
+    if (!gated.ok) {
+      const messages = gated.errors.map((e) => `${e.path}: ${e.message}`);
+      onError?.(messages);
+      return /* @__PURE__ */ jsxRuntime.jsxs("div", { role: "alert", className: "cortexel-vizspec-error", children: [
+        /* @__PURE__ */ jsxRuntime.jsxs("strong", { children: [
+          "Invalid skill invocation (",
+          skillId,
+          ")"
+        ] }),
+        /* @__PURE__ */ jsxRuntime.jsx("ul", { children: messages.map((e, i) => /* @__PURE__ */ jsxRuntime.jsx("li", { children: e }, i)) })
+      ] });
+    }
+    return /* @__PURE__ */ jsxRuntime.jsx(
+      SceneFrame,
+      {
+        scene: gated.scene,
+        themeMode: gated.spec.themeMode,
+        mode: gated.spec.mode,
+        camera: gated.spec.camera,
+        caption: gated.caption,
+        active,
+        renderScene
+      }
+    );
+  }
   const result = validateVizSpec(spec);
   if (!result.ok) {
     onError?.(result.errors);
@@ -503,10 +1297,32 @@ function VizSpecRenderer({
     ] });
   }
   const { scene, themeMode, mode, camera, provenance } = result.spec;
+  const caption = requiresHonestyCaption(provenance) ? defaultHonestyCaption(provenance) : null;
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    SceneFrame,
+    {
+      scene,
+      themeMode,
+      mode,
+      camera,
+      caption,
+      active,
+      renderScene
+    }
+  );
+}
+function SceneFrame({
+  scene,
+  themeMode,
+  mode,
+  camera,
+  caption,
+  active,
+  renderScene
+}) {
   if (mode === "export") {
     return /* @__PURE__ */ jsxRuntime.jsx("div", { role: "status", className: "cortexel-vizspec-export-unsupported", children: "Headless export rendering is not available in this build. Request an interactive render, or use the backend render endpoint once enabled." });
   }
-  const showCaption = requiresHonestyCaption(provenance);
   return /* @__PURE__ */ jsxRuntime.jsxs(
     "div",
     {
@@ -514,7 +1330,7 @@ function VizSpecRenderer({
       style: { position: "relative", width: "100%", height: "100%" },
       children: [
         renderScene({ scene, themeMode, active, camera }),
-        showCaption && /* @__PURE__ */ jsxRuntime.jsx(
+        caption && /* @__PURE__ */ jsxRuntime.jsx(
           "div",
           {
             className: "cortexel-honesty-caption",
@@ -535,7 +1351,7 @@ function VizSpecRenderer({
               lineHeight: 1.4,
               pointerEvents: "none"
             },
-            children: defaultHonestyCaption(provenance)
+            children: caption
           }
         )
       ]
@@ -544,30 +1360,64 @@ function VizSpecRenderer({
 }
 
 exports.AXIS_COLORS = AXIS_COLORS;
+exports.AstrocyteParamsSchema = AstrocyteParamsSchema;
 exports.CAMERA_PRESETS = CAMERA_PRESETS;
 exports.CATEGORICAL = CATEGORICAL;
 exports.CONSERVATIVE_PROVENANCE = CONSERVATIVE_PROVENANCE;
+exports.CORTEXEL_SKILL_VERSION = CORTEXEL_SKILL_VERSION;
 exports.CORTICAL_LAYER_COLORS = CORTICAL_LAYER_COLORS;
 exports.ENGRAM_PALETTE = ENGRAM_PALETTE;
 exports.ExpandablePopulation = ExpandablePopulation;
+exports.GetConnectionsSchema = GetConnectionsSchema;
+exports.GetPosition2DSchema = GetPosition2DSchema;
+exports.GetPosition3DSchema = GetPosition3DSchema;
+exports.MultimeterEventsSchema = MultimeterEventsSchema;
+exports.NEST_DEVICE_FAMILIES = NEST_DEVICE_FAMILIES;
+exports.NEST_SKILL_REGISTRY = NEST_SKILL_REGISTRY;
+exports.NetworkParamsSchema = NetworkParamsSchema;
 exports.OKABE_ITO = OKABE_ITO;
+exports.PI_NEST_SKILL_IDS = PI_NEST_SKILL_IDS;
+exports.PROVENANCE_KEYS = PROVENANCE_KEYS;
+exports.PROVENANCE_KEY_LABELS = PROVENANCE_KEY_LABELS;
+exports.PhasePlaneParamsSchema = PhasePlaneParamsSchema;
+exports.PlasticityParamsSchema = PlasticityParamsSchema;
+exports.ProvenanceKeyEnum = ProvenanceKeyEnum;
 exports.ProvenanceSchema = ProvenanceSchema;
+exports.RateResponseParamsSchema = RateResponseParamsSchema;
 exports.SCENE_FRAMING = SCENE_FRAMING;
 exports.SCENE_NAMES = SCENE_NAMES;
 exports.SYNAPSE_COLORS = SYNAPSE_COLORS;
+exports.Spatial3DParamsSchema = Spatial3DParamsSchema;
+exports.SpikeRasterParamsSchema = SpikeRasterParamsSchema;
+exports.SpikeRecorderEventsSchema = SpikeRecorderEventsSchema;
 exports.TURBO_GLSL = TURBO_GLSL;
+exports.VALID_RENDERER_ROUTES = VALID_RENDERER_ROUTES;
 exports.VIRIDIS_GLSL = VIRIDIS_GLSL;
+exports.VIZ_ROUTER_ID = VIZ_ROUTER_ID;
 exports.VizSpecRenderer = VizSpecRenderer;
 exports.VizSpecSchema = VizSpecSchema;
+exports.VoltageTraceParamsSchema = VoltageTraceParamsSchema;
+exports.WeightRecorderEventsSchema = WeightRecorderEventsSchema;
 exports.categorical = categorical;
 exports.colormapGradient = colormapGradient;
 exports.colormapHex = colormapHex;
 exports.colormapRgba = colormapRgba;
 exports.colormapSvgStops = colormapSvgStops;
 exports.defaultHonestyCaption = defaultHonestyCaption;
+exports.getConnectionsToSceneData = getConnectionsToSceneData;
+exports.getPositionToSceneData = getPositionToSceneData;
+exports.getSkill = getSkill;
+exports.isPiNestSkillId = isPiNestSkillId;
+exports.isProvenanceKey = isProvenanceKey;
+exports.listSkills = listSkills;
+exports.multimeterToSceneData = multimeterToSceneData;
 exports.requiresHonestyCaption = requiresHonestyCaption;
+exports.routeToScene = routeToScene;
 exports.sampleColormap = sampleColormap;
+exports.spikeRecorderToSceneData = spikeRecorderToSceneData;
 exports.usePopulationExpand = usePopulationExpand;
+exports.validateSkillInvocation = validateSkillInvocation;
 exports.validateVizSpec = validateVizSpec;
+exports.weightRecorderToSceneData = weightRecorderToSceneData;
 //# sourceMappingURL=index.cjs.map
 //# sourceMappingURL=index.cjs.map

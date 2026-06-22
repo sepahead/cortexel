@@ -12,6 +12,7 @@
 
 import { z } from 'zod';
 import { SCENE_NAMES } from './designLaws';
+import { ProvenanceKeyEnum } from './skills/provenanceKeys';
 
 export const ProvenanceSchema = z.object({
   source: z.string().min(1).max(200),
@@ -19,6 +20,19 @@ export const ProvenanceSchema = z.object({
   advisory_only: z.boolean().default(false),
   is_paper_local_evidence: z.boolean().default(false),
   caption: z.string().max(500).optional(),
+  /** Machine-checkable record of the inputs an agent declared (keyed by
+   *  ProvenanceKey). validateSkillInvocation requires the keys a skill's
+   *  honesty contract demands. Presence-checked here; value truthfulness is the
+   *  host/backend's responsibility (Cortexel is host-agnostic). */
+  declared_inputs: z
+    .partialRecord(
+      ProvenanceKeyEnum,
+      z.union([z.string(), z.number(), z.literal(true)]),
+    )
+    .optional(),
+  /** Explicit synthetic/illustrative discriminator — forces the schematic
+   *  caption regardless of the other flags. */
+  synthetic: z.boolean().default(false),
 });
 
 export const VizSpecSchema = z.object({

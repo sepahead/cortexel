@@ -1,4 +1,5 @@
-export { C as CAMERA_PRESETS, a as CameraPreset, b as CameraPresetName, L as LayerConfig, N as NeuralSceneHandle, c as NeuralSceneMode, d as NeuralSceneProps, P as PlaybackState, S as SCENE_FRAMING, e as SCENE_NAMES, f as STDPSynapse, g as SceneData, h as SceneFraming, i as SceneName } from '../designLaws-DIbEzwRB.cjs';
+import { i as SceneName, g as SceneData } from '../designLaws-Df8R28iI.cjs';
+export { C as CAMERA_PRESETS, a as CameraPreset, b as CameraPresetName, L as LayerConfig, N as NeuralSceneHandle, c as NeuralSceneMode, d as NeuralSceneProps, P as PlaybackState, S as SCENE_FRAMING, e as SCENE_NAMES, f as STDPSynapse, h as SceneFraming } from '../designLaws-Df8R28iI.cjs';
 import { z } from 'zod';
 
 type RGB = readonly [number, number, number];
@@ -76,6 +77,32 @@ declare const ProvenanceSchema: z.ZodObject<{
     advisory_only: z.ZodDefault<z.ZodBoolean>;
     is_paper_local_evidence: z.ZodDefault<z.ZodBoolean>;
     caption: z.ZodOptional<z.ZodString>;
+    declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodEnum<{
+        device_id: "device_id";
+        recorded_variable: "recorded_variable";
+        units: "units";
+        sampling_interval: "sampling_interval";
+        recorder_id: "recorder_id";
+        sender_ids: "sender_ids";
+        population_labels: "population_labels";
+        time_units: "time_units";
+        source_ids: "source_ids";
+        target_ids: "target_ids";
+        synapse_model: "synapse_model";
+        weight_units: "weight_units";
+        extent: "extent";
+        mask: "mask";
+        kernel: "kernel";
+        projection_sample_policy: "projection_sample_policy";
+        morphology_disclaimer: "morphology_disclaimer";
+        frame_rate: "frame_rate";
+        state_variables: "state_variables";
+        bin_ms: "bin_ms";
+        pair_labels: "pair_labels";
+        stim_units: "stim_units";
+        rate_normalization: "rate_normalization";
+    }> & z.core.$partial, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
+    synthetic: z.ZodDefault<z.ZodBoolean>;
 }, z.core.$strip>;
 declare const VizSpecSchema: z.ZodObject<{
     scene: z.ZodEnum<{
@@ -114,6 +141,32 @@ declare const VizSpecSchema: z.ZodObject<{
         advisory_only: z.ZodDefault<z.ZodBoolean>;
         is_paper_local_evidence: z.ZodDefault<z.ZodBoolean>;
         caption: z.ZodOptional<z.ZodString>;
+        declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodEnum<{
+            device_id: "device_id";
+            recorded_variable: "recorded_variable";
+            units: "units";
+            sampling_interval: "sampling_interval";
+            recorder_id: "recorder_id";
+            sender_ids: "sender_ids";
+            population_labels: "population_labels";
+            time_units: "time_units";
+            source_ids: "source_ids";
+            target_ids: "target_ids";
+            synapse_model: "synapse_model";
+            weight_units: "weight_units";
+            extent: "extent";
+            mask: "mask";
+            kernel: "kernel";
+            projection_sample_policy: "projection_sample_policy";
+            morphology_disclaimer: "morphology_disclaimer";
+            frame_rate: "frame_rate";
+            state_variables: "state_variables";
+            bin_ms: "bin_ms";
+            pair_labels: "pair_labels";
+            stim_units: "stim_units";
+            rate_normalization: "rate_normalization";
+        }> & z.core.$partial, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
+        synthetic: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>;
 }, z.core.$strip>;
 type VizSpec = z.infer<typeof VizSpecSchema>;
@@ -139,6 +192,8 @@ interface ProvenanceMetadata {
     is_paper_local_evidence: boolean;
     /** Optional human-readable caption (e.g. "Illustrative — not measured"). */
     caption?: string;
+    /** Explicit synthetic/illustrative flag — forces the schematic caption. */
+    synthetic?: boolean;
 }
 declare const CONSERVATIVE_PROVENANCE: Readonly<Pick<ProvenanceMetadata, 'calibrated_posterior' | 'advisory_only' | 'is_paper_local_evidence'>>;
 /**
@@ -149,4 +204,217 @@ declare function requiresHonestyCaption(p: ProvenanceMetadata): boolean;
 /** Default caption text when none is supplied but a caption is required. */
 declare function defaultHonestyCaption(p: ProvenanceMetadata): string;
 
-export { AXIS_COLORS, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTICAL_LAYER_COLORS, type ColormapName, ENGRAM_PALETTE, OKABE_ITO, type ProvenanceMetadata, ProvenanceSchema, type RGB, SYNAPSE_COLORS, TURBO_GLSL, VIRIDIS_GLSL, type VizSpec, VizSpecSchema, type VizSpecValidation, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, requiresHonestyCaption, sampleColormap, validateVizSpec };
+declare const PI_NEST_SKILL_IDS: readonly ["pi.nest.voltage_trace", "pi.nest.spike_raster", "pi.nest.rate_response", "pi.nest.connectivity_matrix", "pi.nest.spatial_2d", "pi.nest.spatial_3d", "pi.nest.plasticity_dynamics", "pi.nest.phase_plane", "pi.nest.correlogram", "pi.nest.stimulus_response", "pi.nest.astrocyte_dynamics", "pi.nest.compartmental_dynamics", "pi.nest.animation_replay"];
+type PiNestSkillId = (typeof PI_NEST_SKILL_IDS)[number];
+/** The routing meta-skill. Not a renderer — it selects among the 13 above. */
+declare const VIZ_ROUTER_ID: "pi.nest.viz_router";
+type VizRouterId = typeof VIZ_ROUTER_ID;
+declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "get_connections", "get_position", "weight_recorder", "computed"];
+type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];
+declare function isPiNestSkillId(value: unknown): value is PiNestSkillId;
+declare const VALID_RENDERER_ROUTES: readonly ["pi.media.trace_figure", "pi.media.model_graph", "pi.media.webgl_scene", "pi.media.react_fiber_scene", "pi.media.manim_storyboard", "pi.media.*", "matplotlib", "d3", "three", "fiber", "manim"];
+type RendererRoute = (typeof VALID_RENDERER_ROUTES)[number];
+
+declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "bin_ms", "pair_labels", "stim_units", "rate_normalization"];
+type ProvenanceKey = (typeof PROVENANCE_KEYS)[number];
+declare const ProvenanceKeyEnum: z.ZodEnum<{
+    device_id: "device_id";
+    recorded_variable: "recorded_variable";
+    units: "units";
+    sampling_interval: "sampling_interval";
+    recorder_id: "recorder_id";
+    sender_ids: "sender_ids";
+    population_labels: "population_labels";
+    time_units: "time_units";
+    source_ids: "source_ids";
+    target_ids: "target_ids";
+    synapse_model: "synapse_model";
+    weight_units: "weight_units";
+    extent: "extent";
+    mask: "mask";
+    kernel: "kernel";
+    projection_sample_policy: "projection_sample_policy";
+    morphology_disclaimer: "morphology_disclaimer";
+    frame_rate: "frame_rate";
+    state_variables: "state_variables";
+    bin_ms: "bin_ms";
+    pair_labels: "pair_labels";
+    stim_units: "stim_units";
+    rate_normalization: "rate_normalization";
+}>;
+declare const PROVENANCE_KEY_LABELS: Record<ProvenanceKey, string>;
+declare function isProvenanceKey(value: unknown): value is ProvenanceKey;
+
+declare const VoltageTraceParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    series: z.ZodArray<z.ZodArray<z.ZodNumber>>;
+    units: z.ZodString;
+}, z.core.$loose>;
+type VoltageTraceParams = z.infer<typeof VoltageTraceParamsSchema>;
+declare const SpikeRasterParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    senders: z.ZodArray<z.ZodNumber>;
+}, z.core.$loose>;
+type SpikeRasterParams = z.infer<typeof SpikeRasterParamsSchema>;
+declare const RateResponseParamsSchema: z.ZodObject<{
+    stimulus_amplitudes: z.ZodArray<z.ZodNumber>;
+    rates_hz: z.ZodArray<z.ZodNumber>;
+    units: z.ZodString;
+}, z.core.$loose>;
+type RateResponseParams = z.infer<typeof RateResponseParamsSchema>;
+declare const NetworkParamsSchema: z.ZodObject<{
+    sources: z.ZodArray<z.ZodNumber>;
+    targets: z.ZodArray<z.ZodNumber>;
+    weights: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
+}, z.core.$loose>;
+type NetworkParams = z.infer<typeof NetworkParamsSchema>;
+declare const Spatial3DParamsSchema: z.ZodObject<{
+    objects: z.ZodArray<z.ZodUnknown>;
+}, z.core.$loose>;
+type Spatial3DParams = z.infer<typeof Spatial3DParamsSchema>;
+declare const PlasticityParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    weights: z.ZodArray<z.ZodNumber>;
+    weight_units: z.ZodString;
+}, z.core.$loose>;
+type PlasticityParams = z.infer<typeof PlasticityParamsSchema>;
+declare const PhasePlaneParamsSchema: z.ZodObject<{
+    grid: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$loose>;
+type PhasePlaneParams = z.infer<typeof PhasePlaneParamsSchema>;
+declare const AstrocyteParamsSchema: z.ZodObject<{
+    ca_trace: z.ZodArray<z.ZodNumber>;
+    units: z.ZodString;
+}, z.core.$loose>;
+type AstrocyteParams = z.infer<typeof AstrocyteParamsSchema>;
+
+declare const CORTEXEL_SKILL_VERSION = "1.0.0";
+interface SkillExample {
+    nestExample: string;
+    sourceUrl: string;
+    dataShape: string;
+    output: string;
+    note: string;
+}
+interface SkillContract {
+    id: PiNestSkillId;
+    version: string;
+    title: string;
+    description: string;
+    deviceFamily: NestDeviceFamily;
+    /** Cortexel scene this skill renders to, or null when none is honest yet. */
+    scene: SceneName | null;
+    /** When true, the scene is a derived/approximate target, not a clean 1:1. */
+    weak?: boolean;
+    /** Top-level param keys an invocation must supply (subset of paramsSchema). */
+    requiredInputKeys: string[];
+    /** Per-skill zod schema for `params` (undefined when scene is null). */
+    paramsSchema?: z.ZodType;
+    /** Provenance keys the agent must declare for this skill to render. */
+    requiredProvenanceKeys: ProvenanceKey[];
+    rendererRoutes: RendererRoute[];
+    examples: SkillExample[];
+}
+declare const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract>;
+declare function listSkills(): SkillContract[];
+declare function getSkill(id: string): SkillContract | undefined;
+
+type SpikeDataKind = 'events' | 'rates' | 'correlation';
+interface RouteInput {
+    deviceFamily: NestDeviceFamily;
+    /** Required when deviceFamily === 'spike_recorder' to pick the analysis view. */
+    dataShape?: {
+        kind?: SpikeDataKind;
+    };
+}
+type RouteResult = {
+    ok: true;
+    skill: PiNestSkillId;
+    scene: SceneName;
+} | {
+    ok: false;
+    reason: 'unknown_family' | 'no_cortexel_scene' | 'ambiguous';
+    candidates?: PiNestSkillId[];
+};
+declare function routeToScene(input: RouteInput): RouteResult;
+
+interface SkillInvocationError {
+    code: 'unknown_skill' | 'invalid_envelope' | 'no_cortexel_scene' | 'scene_mismatch' | 'invalid_params' | 'missing_provenance' | 'calibrated_posterior_unsupported';
+    path: string;
+    message: string;
+    hint?: string;
+    validScenes?: readonly SceneName[];
+    validSkills?: readonly string[];
+}
+type SkillInvocationResult = {
+    ok: true;
+    spec: VizSpec;
+    scene: SceneName;
+    caption: string | null;
+} | {
+    ok: false;
+    errors: SkillInvocationError[];
+};
+declare function validateSkillInvocation(skillId: string, payload: unknown): SkillInvocationResult;
+
+/** spike_recorder events: nest.GetStatus(sr, 'events') → {senders, times}. */
+declare const SpikeRecorderEventsSchema: z.ZodObject<{
+    senders: z.ZodArray<z.ZodNumber>;
+    times: z.ZodArray<z.ZodNumber>;
+}, z.core.$strip>;
+type SpikeRecorderEvents = z.infer<typeof SpikeRecorderEventsSchema>;
+/** multimeter events: {times, <variable>: values}. The host names the variable;
+ *  Cortexel takes a normalized {times, values}. */
+declare const MultimeterEventsSchema: z.ZodObject<{
+    times: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+}, z.core.$strip>;
+type MultimeterEvents = z.infer<typeof MultimeterEventsSchema>;
+/** nest.GetConnections() → parallel source/target/weight/delay arrays. */
+declare const GetConnectionsSchema: z.ZodObject<{
+    sources: z.ZodArray<z.ZodNumber>;
+    targets: z.ZodArray<z.ZodNumber>;
+    weights: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
+    delays: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
+}, z.core.$strip>;
+type GetConnections = z.infer<typeof GetConnectionsSchema>;
+/** nest.GetPosition(nodes) in 2D → ((x,y), ...). */
+declare const GetPosition2DSchema: z.ZodObject<{
+    positions: z.ZodArray<z.ZodTuple<[z.ZodNumber, z.ZodNumber], null>>;
+}, z.core.$strip>;
+type GetPosition2D = z.infer<typeof GetPosition2DSchema>;
+/** nest.GetPosition(nodes) in 3D → ((x,y,z), ...). */
+declare const GetPosition3DSchema: z.ZodObject<{
+    positions: z.ZodArray<z.ZodTuple<[z.ZodNumber, z.ZodNumber, z.ZodNumber], null>>;
+    edges: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        source: z.ZodNumber;
+        target: z.ZodNumber;
+    }, z.core.$strip>>>;
+}, z.core.$strip>;
+type GetPosition3D = z.infer<typeof GetPosition3DSchema>;
+/** weight_recorder events: {times, weights, senders?, targets?}. */
+declare const WeightRecorderEventsSchema: z.ZodObject<{
+    times: z.ZodArray<z.ZodNumber>;
+    weights: z.ZodArray<z.ZodNumber>;
+    senders: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
+    targets: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
+}, z.core.$strip>;
+type WeightRecorderEvents = z.infer<typeof WeightRecorderEventsSchema>;
+
+type AdapterResult = {
+    ok: true;
+    data: SceneData;
+    senderIndexMap?: Map<number, number>;
+} | {
+    ok: false;
+    errors: string[];
+};
+declare function spikeRecorderToSceneData(events: unknown): AdapterResult;
+declare function multimeterToSceneData(events: unknown): AdapterResult;
+declare function getConnectionsToSceneData(conns: unknown): AdapterResult;
+declare function getPositionToSceneData(positions: unknown, opts?: {
+    dims: 2 | 3;
+}): AdapterResult;
+declare function weightRecorderToSceneData(events: unknown): AdapterResult;
+
+export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, ENGRAM_PALETTE, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PI_NEST_SKILL_IDS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PiNestSkillId, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, getConnectionsToSceneData, getPositionToSceneData, getSkill, isPiNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };

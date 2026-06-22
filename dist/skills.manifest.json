@@ -1,0 +1,465 @@
+{
+  "manifestVersion": "1",
+  "skillAxisVersion": "1.0.0",
+  "vizRouterId": "pi.nest.viz_router",
+  "sceneNames": [
+    "live-activity",
+    "cortical-column",
+    "stdp",
+    "spike-raster",
+    "network-topology",
+    "voltage-trace",
+    "phase-plane",
+    "brunel-network",
+    "fi-curve",
+    "isi-distribution",
+    "psth",
+    "weight-histogram"
+  ],
+  "provenanceKeys": [
+    "device_id",
+    "recorded_variable",
+    "units",
+    "sampling_interval",
+    "recorder_id",
+    "sender_ids",
+    "population_labels",
+    "time_units",
+    "source_ids",
+    "target_ids",
+    "synapse_model",
+    "weight_units",
+    "extent",
+    "mask",
+    "kernel",
+    "projection_sample_policy",
+    "morphology_disclaimer",
+    "frame_rate",
+    "state_variables",
+    "bin_ms",
+    "pair_labels",
+    "stim_units",
+    "rate_normalization"
+  ],
+  "deviceFamilies": [
+    "multimeter",
+    "spike_recorder",
+    "get_connections",
+    "get_position",
+    "weight_recorder",
+    "computed"
+  ],
+  "validRendererRoutes": [
+    "pi.media.trace_figure",
+    "pi.media.model_graph",
+    "pi.media.webgl_scene",
+    "pi.media.react_fiber_scene",
+    "pi.media.manim_storyboard",
+    "pi.media.*",
+    "matplotlib",
+    "d3",
+    "three",
+    "fiber",
+    "manim"
+  ],
+  "skills": [
+    {
+      "id": "pi.nest.voltage_trace",
+      "version": "1.0.0",
+      "title": "NEST voltage trace renderer",
+      "description": "Render multimeter/voltmeter analog traces (V_m, currents, conductances).",
+      "deviceFamily": "multimeter",
+      "scene": "voltage-trace",
+      "weak": false,
+      "requiredInputKeys": [
+        "times_ms",
+        "series",
+        "units"
+      ],
+      "requiredProvenanceKeys": [
+        "device_id",
+        "recorded_variable",
+        "units",
+        "sampling_interval"
+      ],
+      "rendererRoutes": [
+        "pi.media.trace_figure",
+        "matplotlib",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "One neuron example / multimeter recording",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/one_neuron.html",
+          "dataShape": "times_ms + V_m/current/conductance series split by sender",
+          "output": "Selectable trace, spike markers, JSON + SVG export",
+          "note": "Mirrors NEST voltage_trace while keeping data provenance inspectable."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.spike_raster",
+      "version": "1.0.0",
+      "title": "NEST spike raster renderer",
+      "description": "Render spike_recorder events as rasters, spike trains and population plots.",
+      "deviceFamily": "spike_recorder",
+      "scene": "spike-raster",
+      "weak": false,
+      "requiredInputKeys": [
+        "times_ms",
+        "senders"
+      ],
+      "requiredProvenanceKeys": [
+        "recorder_id",
+        "sender_ids",
+        "population_labels",
+        "time_units"
+      ],
+      "rendererRoutes": [
+        "pi.media.model_graph",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "Random balanced Brunel network",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/brunel_alpha_nest.html",
+          "dataShape": "spike_recorder events: times_ms, senders, population labels",
+          "output": "Sender-time raster, population rate strip, selectable windows",
+          "note": "Use exact spike times first; aggregate only when too dense to read."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.rate_response",
+      "version": "1.0.0",
+      "title": "NEST rate / IF response renderer",
+      "description": "Render firing-rate / IF curves and population rates derived from spike counts.",
+      "deviceFamily": "spike_recorder",
+      "scene": "fi-curve",
+      "weak": false,
+      "requiredInputKeys": [
+        "stimulus_amplitudes",
+        "rates_hz",
+        "units"
+      ],
+      "requiredProvenanceKeys": [
+        "stim_units",
+        "bin_ms",
+        "rate_normalization"
+      ],
+      "rendererRoutes": [
+        "pi.media.trace_figure",
+        "matplotlib",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "IF curve example",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/if_curve.html",
+          "dataShape": "stimulus amplitudes, rates_hz, spike counts",
+          "output": "IF curve, population-rate trace, decision crossing markers",
+          "note": "Always show bin width / counting window so rates stay auditable."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.connectivity_matrix",
+      "version": "1.0.0",
+      "title": "NEST connectivity matrix renderer",
+      "description": "Render SynapseCollection connectivity, weights and population blocks.",
+      "deviceFamily": "get_connections",
+      "scene": "network-topology",
+      "weak": false,
+      "requiredInputKeys": [
+        "sources",
+        "targets"
+      ],
+      "requiredProvenanceKeys": [
+        "source_ids",
+        "target_ids",
+        "synapse_model",
+        "weight_units"
+      ],
+      "rendererRoutes": [
+        "pi.media.model_graph",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "Plot weight matrices example / SynapseCollection",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
+          "dataShape": "sources, targets, weights, delays, source/target populations",
+          "output": "Topology node-edge view, selected block stats, weight histogram",
+          "note": "Keep absent connections distinct from zero-weight connections."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.spatial_2d",
+      "version": "1.0.0",
+      "title": "NEST 2D spatial renderer",
+      "description": "Render 2D layer positions, masks, kernels and sampled projections.",
+      "deviceFamily": "get_position",
+      "scene": null,
+      "weak": false,
+      "requiredInputKeys": [
+        "positions"
+      ],
+      "requiredProvenanceKeys": [
+        "extent",
+        "mask",
+        "kernel"
+      ],
+      "rendererRoutes": [
+        "pi.media.model_graph",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "Circular mask, Gaussian kernel, grid/free spatial examples",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/connex.html",
+          "dataShape": "node x/y positions, masks, kernels, sampled edges",
+          "output": "No Cortexel scene yet — route to a 2D d3 map on the host.",
+          "note": "scene:null — render via host d3, not a Cortexel 3D scene."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.spatial_3d",
+      "version": "1.0.0",
+      "title": "NEST 3D spatial renderer",
+      "description": "Render 3D population/node positions for spatial inspection.",
+      "deviceFamily": "get_position",
+      "scene": "network-topology",
+      "weak": false,
+      "requiredInputKeys": [
+        "objects"
+      ],
+      "requiredProvenanceKeys": [
+        "extent",
+        "projection_sample_policy"
+      ],
+      "rendererRoutes": [
+        "pi.media.webgl_scene",
+        "pi.media.react_fiber_scene",
+        "three",
+        "fiber"
+      ],
+      "examples": [
+        {
+          "nestExample": "3D spatial network with exponential/Gaussian probabilities",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/test_3d.html",
+          "dataShape": "node x/y/z positions, extent, sampled edges",
+          "output": "Selectable 3D scene plus SVG projection fallback",
+          "note": "Use 3D as inspection aid; do not imply biological geometry."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.plasticity_dynamics",
+      "version": "1.0.0",
+      "title": "NEST plasticity dynamics renderer",
+      "description": "Render STDP windows, weight adaptation and short-term dynamics.",
+      "deviceFamily": "weight_recorder",
+      "scene": "stdp",
+      "weak": false,
+      "requiredInputKeys": [
+        "times_ms",
+        "weights",
+        "weight_units"
+      ],
+      "requiredProvenanceKeys": [
+        "synapse_model",
+        "weight_units"
+      ],
+      "rendererRoutes": [
+        "pi.media.trace_figure",
+        "matplotlib"
+      ],
+      "examples": [
+        {
+          "nestExample": "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/urbanczik_synapse_example.html",
+          "dataShape": "weights, u/x resources, pre/post spikes, delta_t, delta_weight",
+          "output": "Weight trace, STDP window, spike protocol rugs",
+          "note": "Preserve pre/post sign convention; label all plasticity parameters."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.phase_plane",
+      "version": "1.0.0",
+      "title": "NEST phase-plane renderer",
+      "description": "Render phase planes, vector fields, nullclines and trajectories.",
+      "deviceFamily": "computed",
+      "scene": "phase-plane",
+      "weak": false,
+      "requiredInputKeys": [
+        "grid"
+      ],
+      "requiredProvenanceKeys": [
+        "state_variables"
+      ],
+      "rendererRoutes": [
+        "pi.media.model_graph",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/hh_phaseplane.html",
+          "dataShape": "state variable grid, derivatives, nullcline points, trajectory",
+          "output": "Vector field, nullclines, trajectory, equilibrium annotations",
+          "note": "Distinguish clamped state variables from simulated dynamic ones."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.correlogram",
+      "version": "1.0.0",
+      "title": "NEST correlogram / synchrony renderer",
+      "description": "Render auto/cross-correlation functions for spike trains.",
+      "deviceFamily": "spike_recorder",
+      "scene": null,
+      "weak": false,
+      "requiredInputKeys": [
+        "lags_ms",
+        "correlation"
+      ],
+      "requiredProvenanceKeys": [
+        "bin_ms",
+        "pair_labels"
+      ],
+      "rendererRoutes": [
+        "pi.media.model_graph",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "Auto- and crosscorrelation functions for spike trains",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/cross_check_mip_corrdet.html",
+          "dataShape": "lags_ms, correlation values, pair labels, bin width",
+          "output": "No Cortexel scene (distinct from ISI) — route to host d3.",
+          "note": "scene:null — correlogram math differs from the ISI histogram scene."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.stimulus_response",
+      "version": "1.0.0",
+      "title": "NEST stimulus-response protocol renderer",
+      "description": "Render aligned stimulus waveforms, responses, spikes and protocol epochs.",
+      "deviceFamily": "multimeter",
+      "scene": null,
+      "weak": false,
+      "requiredInputKeys": [
+        "stimulus",
+        "response"
+      ],
+      "requiredProvenanceKeys": [
+        "stim_units",
+        "units"
+      ],
+      "rendererRoutes": [
+        "pi.media.trace_figure",
+        "matplotlib"
+      ],
+      "examples": [
+        {
+          "nestExample": "Sinusoidal generator / pulse packet / repeated stimulation",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/pulsepacket.html",
+          "dataShape": "stimulus waveform, analog response, spike events, epochs",
+          "output": "Composite protocol panels — host-composed, no single scene.",
+          "note": "scene:null — multi-panel protocol composed by the host."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.astrocyte_dynamics",
+      "version": "1.0.0",
+      "title": "NEST astrocyte Ca²⁺/IP₃ dynamics renderer",
+      "description": "Render tripartite-synapse calcium/IP3 state-variable traces.",
+      "deviceFamily": "multimeter",
+      "scene": "voltage-trace",
+      "weak": true,
+      "requiredInputKeys": [
+        "ca_trace",
+        "units"
+      ],
+      "requiredProvenanceKeys": [
+        "recorded_variable",
+        "units"
+      ],
+      "rendererRoutes": [
+        "pi.media.trace_figure",
+        "matplotlib"
+      ],
+      "examples": [
+        {
+          "nestExample": "Single astrocyte / tripartite interaction examples",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/astrocytes/astrocyte_single.html",
+          "dataShape": "Ca/IP3/state variables, linked neuron events",
+          "output": "Calcium/IP3 traces via the analog-trace scene (flagged derived)",
+          "note": "weak:true — keep glial and neuronal units explicitly separate."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.compartmental_dynamics",
+      "version": "1.0.0",
+      "title": "NEST compartmental morphology + dynamics renderer",
+      "description": "Render multi-compartment morphologies, receptor ports and soma/dendrite traces.",
+      "deviceFamily": "multimeter",
+      "scene": null,
+      "weak": false,
+      "requiredInputKeys": [
+        "compartments"
+      ],
+      "requiredProvenanceKeys": [
+        "morphology_disclaimer",
+        "recorded_variable"
+      ],
+      "rendererRoutes": [
+        "pi.media.model_graph",
+        "d3"
+      ],
+      "examples": [
+        {
+          "nestExample": "Receptors/current and two-compartment neuron examples",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/compartmental_model/receptors_and_current.html",
+          "dataShape": "compartments, receptor ports, soma/dendrite traces",
+          "output": "No Cortexel scene — host d3 morphology tree with linked traces.",
+          "note": "scene:null — do not invent morphology geometry from labels."
+        }
+      ]
+    },
+    {
+      "id": "pi.nest.animation_replay",
+      "version": "1.0.0",
+      "title": "NEST state replay / animation storyboard renderer",
+      "description": "Render time-evolution storyboards and inspectable state replays.",
+      "deviceFamily": "computed",
+      "scene": null,
+      "weak": false,
+      "requiredInputKeys": [
+        "frames"
+      ],
+      "requiredProvenanceKeys": [
+        "frame_rate"
+      ],
+      "rendererRoutes": [
+        "pi.media.manim_storyboard",
+        "manim"
+      ],
+      "examples": [
+        {
+          "nestExample": "Sudoku progress GIF / Pong replay",
+          "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/sudoku/plot_progress.html",
+          "dataShape": "frames, entities, metrics, frame rate, annotations",
+          "output": "Manim storyboard / source — no live Cortexel scene.",
+          "note": "scene:null — offline storyboard, not a real-time render target."
+        }
+      ]
+    }
+  ]
+}

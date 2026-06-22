@@ -19,6 +19,7 @@ import {
   requiresHonestyCaption,
 } from '../core/provenance';
 import { validateVizSpec } from '../core/vizSpec';
+import { validateSkillInvocation } from '../core/skills/validateSkillInvocation';
 
 export type CameraHint = 'default' | 'top' | 'side' | 'close' | 'cinematic';
 
@@ -35,6 +36,11 @@ export interface VizSpecRendererProps {
   spec: unknown;
   /** Host-injected scene renderer. Keeps Cortexel free of app dependencies. */
   renderScene: (args: RenderSceneArgs) => ReactNode;
+  /** When set, the spec is validated through the strict skill gate
+   *  (validateSkillInvocation): per-skill params + declared provenance keys are
+   *  enforced, calibrated_posterior=true is rejected, and the honesty caption is
+   *  bound at this render boundary. Prefer this for agent payloads. */
+  skillId?: string;
   active?: boolean;
   onError?: (errors: string[]) => void;
 }
@@ -42,9 +48,42 @@ export interface VizSpecRendererProps {
 export function VizSpecRenderer({
   spec,
   renderScene,
+  skillId,
   active = true,
   onError,
 }: VizSpecRendererProps) {
+  // Strict, skill-aware path: the documented agent entrypoint.
+  if (skillId) {
+    const gated = validateSkillInvocation(skillId, spec);
+    if (!gated.ok) {
+      const messages = gated.errors.map((e) => `${e.path}: ${e.message}`);
+      onError?.(messages);
+      return (
+        <div role="alert" className="cortexel-vizspec-error">
+          <strong>Invalid skill invocation ({skillId})</strong>
+          <ul>
+            {messages.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
+    return (
+      <SceneFrame
+        scene={gated.scene}
+        themeMode={gated.spec.themeMode}
+        mode={gated.spec.mode}
+        camera={gated.spec.camera}
+        // Honesty is bound here: the gate already resolved the caption (fail-
+        // closed), so the renderer cannot "forget" it.
+        caption={gated.caption}
+        active={active}
+        renderScene={renderScene}
+      />
+    );
+  }
+
   const result = validateVizSpec(spec);
 
   if (!result.ok) {
@@ -62,7 +101,41 @@ export function VizSpecRenderer({
   }
 
   const { scene, themeMode, mode, camera, provenance } = result.spec;
+  const caption = requiresHonestyCaption(provenance)
+    ? defaultHonestyCaption(provenance)
+    : null;
+  return (
+    <SceneFrame
+      scene={scene}
+      themeMode={themeMode}
+      mode={mode}
+      camera={camera}
+      caption={caption}
+      active={active}
+      renderScene={renderScene}
+    />
+  );
+}
 
+interface SceneFrameProps {
+  scene: SceneName;
+  themeMode: 'dark' | 'light';
+  mode: 'interactive' | 'export';
+  camera?: CameraHint;
+  caption: string | null;
+  active: boolean;
+  renderScene: (args: RenderSceneArgs) => ReactNode;
+}
+
+function SceneFrame({
+  scene,
+  themeMode,
+  mode,
+  camera,
+  caption,
+  active,
+  renderScene,
+}: SceneFrameProps) {
   if (mode === 'export') {
     return (
       <div role="status" className="cortexel-vizspec-export-unsupported">
@@ -72,15 +145,13 @@ export function VizSpecRenderer({
     );
   }
 
-  const showCaption = requiresHonestyCaption(provenance);
-
   return (
     <div
       className="cortexel-vizspec"
       style={{ position: 'relative', width: '100%', height: '100%' }}
     >
       {renderScene({ scene, themeMode, active, camera })}
-      {showCaption && (
+      {caption && (
         <div
           className="cortexel-honesty-caption"
           role="note"
@@ -101,7 +172,7 @@ export function VizSpecRenderer({
             pointerEvents: 'none',
           }}
         >
-          {defaultHonestyCaption(provenance)}
+          {caption}
         </div>
       )}
     </div>

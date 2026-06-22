@@ -19,6 +19,8 @@ export interface ProvenanceMetadata {
   is_paper_local_evidence: boolean;
   /** Optional human-readable caption (e.g. "Illustrative — not measured"). */
   caption?: string;
+  /** Explicit synthetic/illustrative flag — forces the schematic caption. */
+  synthetic?: boolean;
 }
 
 export const CONSERVATIVE_PROVENANCE: Readonly<
@@ -38,14 +40,17 @@ export const CONSERVATIVE_PROVENANCE: Readonly<
  */
 export function requiresHonestyCaption(p: ProvenanceMetadata): boolean {
   return (
-    !p.calibrated_posterior || p.advisory_only || !p.is_paper_local_evidence
+    !!p.synthetic ||
+    !p.calibrated_posterior ||
+    p.advisory_only ||
+    !p.is_paper_local_evidence
   );
 }
 
 /** Default caption text when none is supplied but a caption is required. */
 export function defaultHonestyCaption(p: ProvenanceMetadata): string {
   if (p.caption) return p.caption;
-  if (p.source === 'synthetic_test' || p.source.startsWith('synthetic')) {
+  if (p.synthetic || p.source === 'synthetic_test' || p.source.startsWith('synthetic')) {
     return 'Schematic — illustrative synthetic data, not measured.';
   }
   if (!p.is_paper_local_evidence) {

@@ -87,6 +87,10 @@ export interface SceneData {
   spikeSenders?: Float32Array;
   voltageTraces?: Float32Array;
   traceTimes?: Float32Array;
+  // Synaptic weight time-series (plasticity / weight_recorder). Kept distinct
+  // from voltageTraces so a renderer never mislabels weights as membrane voltage
+  // and weight_units provenance is not lost at the SceneData boundary.
+  weightSeries?: Float32Array;
   networkNodes?: { id: number; x: number; y: number; z: number; label: string }[];
   networkEdges?: { source: number; target: number; weight: number }[];
   vectorField?: { x: number; y: number; z: number; dx: number; dy: number; dz: number }[];

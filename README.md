@@ -89,6 +89,45 @@ Dependency-ascending layers, each its own entrypoint:
 The concrete r3f scene components are **injected by the host** via
 `VizSpecRenderer`'s `renderScene` callback, so Cortexel has zero host dependency.
 
+## Agent skill API
+
+Cortexel is the authoring source of the agent-invocable NEST visualization
+skills — an agent holding NEST output dicts has a typed path to an honest render:
+
+```ts
+import {
+  listSkills,            // discover: 13 pi.nest.* skills + contracts
+  routeToScene,          // "I have a device family → which scene?"
+  spikeRecorderToSceneData, // dict → SceneData adapter (host-agnostic)
+  validateSkillInvocation,  // strict gate: params + provenance + honesty
+} from 'cortexel/core';
+
+// 1. route a NEST spike_recorder to a skill/scene
+routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'events' } });
+// → { ok: true, skill: 'pi.nest.spike_raster', scene: 'spike-raster' }
+
+// 2. validate an invocation (fail-closed): per-skill params + declared provenance
+const r = validateSkillInvocation('pi.nest.spike_raster', {
+  scene: 'spike-raster',
+  params: { times_ms, senders },
+  provenance: {
+    source: 'nest_simulation:run42',
+    declared_inputs: { recorder_id, sender_ids, population_labels, time_units },
+  },
+});
+// r.ok ? { spec, scene, caption } : { errors: [{ code, path, message, hint }] }
+```
+
+Each skill declares the NEST device family it consumes, the Cortexel `scene` it
+renders to (or `null` when no honest scene exists — never mis-routed), required
+params, and the structured provenance keys its honesty contract demands.
+`validateSkillInvocation` enforces all of them, rejects `calibrated_posterior=true`
+as unsupported, and resolves the honesty caption so the renderer can't drop it.
+
+A language-neutral **`dist/skills.manifest.json`** is emitted at build for non-TS
+hosts (e.g. a Python backend) to consume and parity-check against — one source of
+truth, two derived mirrors.
+
 ## VizSpec contract
 
 `core/vizSpec.ts` is the runtime source of truth (Zod; `VizSpec` is inferred from
@@ -100,9 +139,9 @@ it). The shape:
 
 - `scene` — one of `SCENE_NAMES` (`SceneName` and the Zod enum derive from the
   same tuple, so they cannot drift).
-- `params` — scene-specific. **Phase 1: opaque and not validated per-scene**, so
-  a malformed/empty `params` passes validation and errors surface at render time.
-  Per-scene typed schemas are planned.
+- `params` — scene-specific. `validateVizSpec` keeps `params` opaque (lenient,
+  back-compat). The strict agent path `validateSkillInvocation` enforces the
+  per-skill param schema, so malformed/empty params fail at validation, not render.
 - `mode` — `interactive` (default) or `export`. `export` is not yet implemented
   and returns an explicit notice rather than faking a render.
 - `provenance` — see below; **required**.

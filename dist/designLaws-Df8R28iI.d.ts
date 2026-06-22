@@ -56,6 +56,7 @@ interface SceneData {
     spikeSenders?: Float32Array;
     voltageTraces?: Float32Array;
     traceTimes?: Float32Array;
+    weightSeries?: Float32Array;
     networkNodes?: {
         id: number;
         x: number;

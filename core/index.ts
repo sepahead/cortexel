@@ -5,3 +5,4 @@ export * from './colormaps';
 export * from './designLaws';
 export * from './vizSpec';
 export * from './provenance';
+export * from './skills';

@@ -4,7 +4,37 @@ All notable changes to Cortexel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] — Agent skill axis
+
+### Added
+- **Skill axis (`cortexel/core` skills/):** Cortexel is now the authoring source
+  of the agent-invocable NEST visualization skills, not just the render targets.
+  - `NEST_SKILL_REGISTRY` (`listSkills()`/`getSkill()`): the 13 `pi.nest.*`
+    skills, each mapping a NEST device family → a Cortexel scene (or `null` when
+    no honest scene exists yet), with required params, structured provenance
+    keys, renderer routes, and a worked example.
+  - `validateSkillInvocation(skillId, payload)`: the strict, skill-aware agent
+    entrypoint. Enforces per-skill param schemas (closing the opaque-`params`
+    hole), required `declared_inputs` provenance keys, scene/contract match, and
+    rejects `calibrated_posterior=true` as unsupported (mirrors the 501
+    boundary). Returns the resolved honesty caption so the renderer can't drop it.
+  - `routeToScene(...)`: the executable `viz_router` — picks a skill/scene from a
+    NEST device family (`dataShape.kind` disambiguates `spike_recorder`), fail-
+    closed for unknown families and scene-less skills.
+  - Host-agnostic `core/nest` adapters (`spikeRecorderToSceneData`,
+    `multimeterToSceneData`, `getConnectionsToSceneData`, `getPositionToSceneData`,
+    `weightRecorderToSceneData`) + zod device-dict shapes with axis invariants.
+  - `SceneData.weightSeries` so plasticity weights are never mislabeled as voltage.
+  - `provenance.declared_inputs` + `synthetic` flag (forces the schematic caption).
+- **`dist/skills.manifest.json`** — language-neutral artifact non-TS hosts (the
+  Engram Python backend) consume and parity-check against; emitted at build,
+  guarded byte-identical by a Vitest test.
+- `VizSpecRenderer` `skillId` prop routes through the strict gate and binds the
+  honesty caption at the render boundary.
+- Pure-Node import guard test: `cortexel/core` (incl. the skill axis) stays
+  zero-dep beyond zod — no three/react/@react-three leakage.
+
+## [0.1.0]
 
 ### Added
 - `core` entrypoint (`cortexel/core`): dependency-free colormaps, palettes, GLSL

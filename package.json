@@ -1,6 +1,6 @@
 {
   "name": "cortexel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agent-consumable scientific-visualization library for neural simulations. Emit a declarative VizSpec; render spike rasters, Brunel networks, STDP curves and more, with scientific-honesty provenance enforced fail-closed.",
   "license": "MIT",
   "author": "Sepehr Mahmoudian",
@@ -51,7 +51,8 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && tsx scripts/emit-manifest.ts",
+    "manifest": "tsx scripts/emit-manifest.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -66,20 +67,30 @@
     "zod": "^4"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true },
-    "three": { "optional": true },
-    "@react-three/fiber": { "optional": true },
-    "@react-three/drei": { "optional": true }
+    "react": {
+      "optional": true
+    },
+    "three": {
+      "optional": true
+    },
+    "@react-three/fiber": {
+      "optional": true
+    },
+    "@react-three/drei": {
+      "optional": true
+    }
   },
   "_peerNote": "zod is required (the `cortexel/core` VizSpec contract needs it at runtime). react/three/@react-three/* are optional peers — only the `cortexel/react` entry needs them; `cortexel/core` is dependency-free beyond zod.",
   "devDependencies": {
     "@react-three/drei": "^10.7.0",
     "@react-three/fiber": "^9.6.1",
+    "@types/node": "^26.0.0",
     "@types/react": "^19.0.0",
     "@types/three": "^0.184.0",
     "react": "^19.0.0",
     "three": "^0.184.0",
     "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0",
     "zod": "^4.0.0"

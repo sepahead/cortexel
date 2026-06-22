@@ -1,4 +1,4 @@
-import { validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-K4R4BT7N.js';
+import { validateSkillInvocation, validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-BCNMXKC3.js';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -130,9 +130,37 @@ function ExpandablePopulation({
 function VizSpecRenderer({
   spec,
   renderScene,
+  skillId,
   active = true,
   onError
 }) {
+  if (skillId) {
+    const gated = validateSkillInvocation(skillId, spec);
+    if (!gated.ok) {
+      const messages = gated.errors.map((e) => `${e.path}: ${e.message}`);
+      onError?.(messages);
+      return /* @__PURE__ */ jsxs("div", { role: "alert", className: "cortexel-vizspec-error", children: [
+        /* @__PURE__ */ jsxs("strong", { children: [
+          "Invalid skill invocation (",
+          skillId,
+          ")"
+        ] }),
+        /* @__PURE__ */ jsx("ul", { children: messages.map((e, i) => /* @__PURE__ */ jsx("li", { children: e }, i)) })
+      ] });
+    }
+    return /* @__PURE__ */ jsx(
+      SceneFrame,
+      {
+        scene: gated.scene,
+        themeMode: gated.spec.themeMode,
+        mode: gated.spec.mode,
+        camera: gated.spec.camera,
+        caption: gated.caption,
+        active,
+        renderScene
+      }
+    );
+  }
   const result = validateVizSpec(spec);
   if (!result.ok) {
     onError?.(result.errors);
@@ -142,10 +170,32 @@ function VizSpecRenderer({
     ] });
   }
   const { scene, themeMode, mode, camera, provenance } = result.spec;
+  const caption = requiresHonestyCaption(provenance) ? defaultHonestyCaption(provenance) : null;
+  return /* @__PURE__ */ jsx(
+    SceneFrame,
+    {
+      scene,
+      themeMode,
+      mode,
+      camera,
+      caption,
+      active,
+      renderScene
+    }
+  );
+}
+function SceneFrame({
+  scene,
+  themeMode,
+  mode,
+  camera,
+  caption,
+  active,
+  renderScene
+}) {
   if (mode === "export") {
     return /* @__PURE__ */ jsx("div", { role: "status", className: "cortexel-vizspec-export-unsupported", children: "Headless export rendering is not available in this build. Request an interactive render, or use the backend render endpoint once enabled." });
   }
-  const showCaption = requiresHonestyCaption(provenance);
   return /* @__PURE__ */ jsxs(
     "div",
     {
@@ -153,7 +203,7 @@ function VizSpecRenderer({
       style: { position: "relative", width: "100%", height: "100%" },
       children: [
         renderScene({ scene, themeMode, active, camera }),
-        showCaption && /* @__PURE__ */ jsx(
+        caption && /* @__PURE__ */ jsx(
           "div",
           {
             className: "cortexel-honesty-caption",
@@ -174,7 +224,7 @@ function VizSpecRenderer({
               lineHeight: 1.4,
               pointerEvents: "none"
             },
-            children: defaultHonestyCaption(provenance)
+            children: caption
           }
         )
       ]
@@ -183,5 +233,5 @@ function VizSpecRenderer({
 }
 
 export { ExpandablePopulation, VizSpecRenderer, usePopulationExpand };
-//# sourceMappingURL=chunk-KLBCXEB7.js.map
-//# sourceMappingURL=chunk-KLBCXEB7.js.map
+//# sourceMappingURL=chunk-H5O44DDA.js.map
+//# sourceMappingURL=chunk-H5O44DDA.js.map

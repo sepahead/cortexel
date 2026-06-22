@@ -1,6 +1,6 @@
 import * as react from 'react';
 import { ReactNode } from 'react';
-import { i as SceneName } from '../designLaws-DIbEzwRB.js';
+import { i as SceneName } from '../designLaws-Df8R28iI.js';
 
 interface PopulationExpandController {
     selectedPopId: string | null;
@@ -48,9 +48,14 @@ interface VizSpecRendererProps {
     spec: unknown;
     /** Host-injected scene renderer. Keeps Cortexel free of app dependencies. */
     renderScene: (args: RenderSceneArgs) => ReactNode;
+    /** When set, the spec is validated through the strict skill gate
+     *  (validateSkillInvocation): per-skill params + declared provenance keys are
+     *  enforced, calibrated_posterior=true is rejected, and the honesty caption is
+     *  bound at this render boundary. Prefer this for agent payloads. */
+    skillId?: string;
     active?: boolean;
     onError?: (errors: string[]) => void;
 }
-declare function VizSpecRenderer({ spec, renderScene, active, onError, }: VizSpecRendererProps): react.JSX.Element;
+declare function VizSpecRenderer({ spec, renderScene, skillId, active, onError, }: VizSpecRendererProps): react.JSX.Element;
 
 export { type CameraHint, ExpandablePopulation, type ExpandablePopulationProps, type PopulationExpand, type PopulationExpandController, type RenderSceneArgs, VizSpecRenderer, type VizSpecRendererProps, usePopulationExpand };
