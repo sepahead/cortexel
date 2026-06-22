@@ -515,6 +515,92 @@ var AstrocyteParamsSchema = zod.z.object({
   units: zod.z.string().min(1)
 }).passthrough();
 
+// core/skills/examples.ts
+var synthetic = (declared_inputs) => ({
+  source: "synthetic_test",
+  calibrated_posterior: false,
+  advisory_only: false,
+  is_paper_local_evidence: false,
+  synthetic: true,
+  declared_inputs
+});
+var SKILL_EXAMPLE_PAYLOADS = {
+  "pi.nest.voltage_trace": {
+    scene: "voltage-trace",
+    params: { times_ms: [0, 1, 2], series: [[-65, -64, -63]], units: "mV" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      device_id: "mm_1",
+      recorded_variable: "V_m",
+      units: "mV",
+      sampling_interval: 0.1
+    })
+  },
+  "pi.nest.spike_raster": {
+    scene: "spike-raster",
+    params: { times_ms: [1, 2, 3], senders: [1, 2, 1] },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      recorder_id: "sr_1",
+      sender_ids: "[1,2]",
+      population_labels: "E",
+      time_units: "ms"
+    })
+  },
+  "pi.nest.rate_response": {
+    scene: "fi-curve",
+    params: { stimulus_amplitudes: [0, 100, 200], rates_hz: [0, 12, 31], units: "Hz" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ stim_units: "pA", bin_ms: 100, rate_normalization: "spikes/s" })
+  },
+  "pi.nest.connectivity_matrix": {
+    scene: "network-topology",
+    params: { sources: [1, 2], targets: [2, 3], weights: [1, 0.5] },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[2,3]",
+      synapse_model: "static_synapse",
+      weight_units: "pA"
+    })
+  },
+  "pi.nest.spatial_3d": {
+    scene: "network-topology",
+    params: { objects: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }] },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ extent: "[1,1,1]", projection_sample_policy: "all" })
+  },
+  "pi.nest.plasticity_dynamics": {
+    scene: "stdp",
+    params: { times_ms: [0, 10, 20], weights: [1, 1.1, 1.05], weight_units: "nS" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ synapse_model: "stdp_synapse", weight_units: "nS" })
+  },
+  "pi.nest.phase_plane": {
+    scene: "phase-plane",
+    params: { grid: { v: [-70, -50], w: [0, 1] } },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ state_variables: "V,w" })
+  },
+  "pi.nest.astrocyte_dynamics": {
+    scene: "voltage-trace",
+    params: { ca_trace: [0.1, 0.2, 0.15], units: "uM" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ recorded_variable: "Ca", units: "uM" })
+  }
+};
+function getExamplePayload(id) {
+  return SKILL_EXAMPLE_PAYLOADS[id];
+}
+
 // core/skills/registry.ts
 var CORTEXEL_SKILL_VERSION = "1.0.0";
 var NEST_SKILL_REGISTRY = {
@@ -820,6 +906,27 @@ function listSkills() {
 function getSkill(id) {
   return NEST_SKILL_REGISTRY[id];
 }
+function describeSkill(id) {
+  const c = getSkill(id);
+  if (!c) return void 0;
+  return {
+    id: c.id,
+    title: c.title,
+    description: c.description,
+    deviceFamily: c.deviceFamily,
+    scene: c.scene,
+    renderable: c.scene !== null,
+    weak: c.weak ?? false,
+    requiredInputKeys: [...c.requiredInputKeys],
+    requiredProvenanceKeys: [...c.requiredProvenanceKeys],
+    rendererRoutes: [...c.rendererRoutes],
+    examplePayload: getExamplePayload(c.id),
+    examples: c.examples.map((e) => ({ ...e }))
+  };
+}
+function describeSkills() {
+  return listSkills().map((c) => describeSkill(c.id)).filter((d) => d !== void 0);
+}
 
 // core/skills/router.ts
 var SPIKE_KIND_TO_SKILL = {
@@ -906,6 +1013,7 @@ function validateSkillInvocation(skillId, payload) {
   }
   const spec = envelope.spec;
   const prov = spec.provenance;
+  const example = getExamplePayload(skillId);
   if (contract.scene === null) {
     errors.push({
       code: "no_cortexel_scene",
@@ -919,7 +1027,8 @@ function validateSkillInvocation(skillId, payload) {
       path: "scene",
       message: `scene '${spec.scene}' does not match skill '${skillId}' scene '${contract.scene}'`,
       hint: `Set scene: '${contract.scene}'.`,
-      validScenes: [contract.scene]
+      validScenes: [contract.scene],
+      example
     });
   }
   if (contract.paramsSchema) {
@@ -930,7 +1039,8 @@ function validateSkillInvocation(skillId, payload) {
           code: "invalid_params",
           path: `params.${issue.path.join(".") || "(root)"}`,
           message: issue.message,
-          hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`
+          hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`,
+          example
         });
       }
     }
@@ -942,7 +1052,8 @@ function validateSkillInvocation(skillId, payload) {
         code: "missing_provenance",
         path: `provenance.declared_inputs.${key}`,
         message: `missing required provenance: ${key}`,
-        hint: `Skill '${skillId}' requires declared_inputs for: ${contract.requiredProvenanceKeys.join(", ")}.`
+        hint: `Skill '${skillId}' requires declared_inputs for: ${contract.requiredProvenanceKeys.join(", ")}.`,
+        example
       });
     }
   }
@@ -953,6 +1064,26 @@ function validateSkillInvocation(skillId, payload) {
     caption = caption ? `${weakMsg} ${caption}` : weakMsg;
   }
   return { ok: true, spec, scene: contract.scene, caption };
+}
+
+// core/skills/verify.ts
+function len(a) {
+  return a ? a.length : 0;
+}
+function detectEmptyScene(data) {
+  const populated = [];
+  if (len(data.spikeTimes) > 0) populated.push("spikeTimes");
+  if (len(data.voltageTraces) > 0) populated.push("voltageTraces");
+  if (len(data.weightSeries) > 0) populated.push("weightSeries");
+  if (len(data.analogTraces?.values) > 0) populated.push("analogTraces");
+  if (len(data.networkNodes) > 0) populated.push("networkNodes");
+  if (len(data.vectorField) > 0) populated.push("vectorField");
+  const empty = populated.length === 0;
+  return {
+    empty,
+    populated,
+    reason: empty ? "SceneData has no renderable content \u2014 all channels are empty; the render would be blank" : void 0
+  };
 }
 var finiteNumberArray = zod.z.array(zod.z.number()).refine((a) => a.every((v) => Number.isFinite(v)), {
   message: "array contains non-finite values (NaN/Inf) \u2014 unusable evidence"
@@ -992,6 +1123,19 @@ var MultimeterEventsSchema = zod.z.object({
       });
       break;
     }
+  }
+});
+var MultimeterMultiSenderSchema = zod.z.object({
+  times: nonEmptyFinite,
+  values: nonEmptyFinite,
+  senders: finiteNumberArray.min(1, "no senders")
+}).superRefine((v, ctx) => {
+  const n = v.times.length;
+  if (v.values.length !== n || v.senders.length !== n) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      message: "times, values and senders must be the same length"
+    });
   }
 });
 var GetConnectionsSchema = zod.z.object({
@@ -1095,6 +1239,34 @@ function multimeterToSceneData(events, opts = {}) {
       }
     }
   };
+}
+function splitMultimeterBySender(events) {
+  const parsed = MultimeterMultiSenderSchema.safeParse(events);
+  if (!parsed.success) return zerr(parsed.error);
+  const { times, values, senders } = parsed.data;
+  const byId = /* @__PURE__ */ new Map();
+  for (let i = 0; i < senders.length; i++) {
+    let bucket = byId.get(senders[i]);
+    if (!bucket) {
+      bucket = { times: [], values: [] };
+      byId.set(senders[i], bucket);
+    }
+    bucket.times.push(times[i]);
+    bucket.values.push(values[i]);
+  }
+  const series = [];
+  const errors = [];
+  for (const [sender, b] of byId) {
+    for (let i = 1; i < b.times.length; i++) {
+      if (b.times[i] < b.times[i - 1]) {
+        errors.push(`sender ${sender}: times are non-monotonic after split`);
+        break;
+      }
+    }
+    series.push({ sender, times: b.times, values: Float32Array.from(b.values) });
+  }
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, series };
 }
 function getConnectionsToSceneData(conns) {
   const parsed = GetConnectionsSchema.safeParse(conns);
@@ -1409,6 +1581,7 @@ exports.GetConnectionsSchema = GetConnectionsSchema;
 exports.GetPosition2DSchema = GetPosition2DSchema;
 exports.GetPosition3DSchema = GetPosition3DSchema;
 exports.MultimeterEventsSchema = MultimeterEventsSchema;
+exports.MultimeterMultiSenderSchema = MultimeterMultiSenderSchema;
 exports.NEST_DEVICE_FAMILIES = NEST_DEVICE_FAMILIES;
 exports.NEST_SKILL_REGISTRY = NEST_SKILL_REGISTRY;
 exports.NetworkParamsSchema = NetworkParamsSchema;
@@ -1423,6 +1596,7 @@ exports.ProvenanceSchema = ProvenanceSchema;
 exports.RateResponseParamsSchema = RateResponseParamsSchema;
 exports.SCENE_FRAMING = SCENE_FRAMING;
 exports.SCENE_NAMES = SCENE_NAMES;
+exports.SKILL_EXAMPLE_PAYLOADS = SKILL_EXAMPLE_PAYLOADS;
 exports.SYNAPSE_COLORS = SYNAPSE_COLORS;
 exports.Spatial3DParamsSchema = Spatial3DParamsSchema;
 exports.SpikeRasterParamsSchema = SpikeRasterParamsSchema;
@@ -1441,7 +1615,11 @@ exports.colormapHex = colormapHex;
 exports.colormapRgba = colormapRgba;
 exports.colormapSvgStops = colormapSvgStops;
 exports.defaultHonestyCaption = defaultHonestyCaption;
+exports.describeSkill = describeSkill;
+exports.describeSkills = describeSkills;
+exports.detectEmptyScene = detectEmptyScene;
 exports.getConnectionsToSceneData = getConnectionsToSceneData;
+exports.getExamplePayload = getExamplePayload;
 exports.getPositionToSceneData = getPositionToSceneData;
 exports.getSkill = getSkill;
 exports.isPiNestSkillId = isPiNestSkillId;
@@ -1452,6 +1630,7 @@ exports.requiresHonestyCaption = requiresHonestyCaption;
 exports.routeToScene = routeToScene;
 exports.sampleColormap = sampleColormap;
 exports.spikeRecorderToSceneData = spikeRecorderToSceneData;
+exports.splitMultimeterBySender = splitMultimeterBySender;
 exports.usePopulationExpand = usePopulationExpand;
 exports.validateSkillInvocation = validateSkillInvocation;
 exports.validateVizSpec = validateVizSpec;

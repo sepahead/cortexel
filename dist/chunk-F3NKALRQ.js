@@ -182,6 +182,92 @@ var AstrocyteParamsSchema = z.object({
   units: z.string().min(1)
 }).passthrough();
 
+// core/skills/examples.ts
+var synthetic = (declared_inputs) => ({
+  source: "synthetic_test",
+  calibrated_posterior: false,
+  advisory_only: false,
+  is_paper_local_evidence: false,
+  synthetic: true,
+  declared_inputs
+});
+var SKILL_EXAMPLE_PAYLOADS = {
+  "pi.nest.voltage_trace": {
+    scene: "voltage-trace",
+    params: { times_ms: [0, 1, 2], series: [[-65, -64, -63]], units: "mV" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      device_id: "mm_1",
+      recorded_variable: "V_m",
+      units: "mV",
+      sampling_interval: 0.1
+    })
+  },
+  "pi.nest.spike_raster": {
+    scene: "spike-raster",
+    params: { times_ms: [1, 2, 3], senders: [1, 2, 1] },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      recorder_id: "sr_1",
+      sender_ids: "[1,2]",
+      population_labels: "E",
+      time_units: "ms"
+    })
+  },
+  "pi.nest.rate_response": {
+    scene: "fi-curve",
+    params: { stimulus_amplitudes: [0, 100, 200], rates_hz: [0, 12, 31], units: "Hz" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ stim_units: "pA", bin_ms: 100, rate_normalization: "spikes/s" })
+  },
+  "pi.nest.connectivity_matrix": {
+    scene: "network-topology",
+    params: { sources: [1, 2], targets: [2, 3], weights: [1, 0.5] },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[2,3]",
+      synapse_model: "static_synapse",
+      weight_units: "pA"
+    })
+  },
+  "pi.nest.spatial_3d": {
+    scene: "network-topology",
+    params: { objects: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }] },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ extent: "[1,1,1]", projection_sample_policy: "all" })
+  },
+  "pi.nest.plasticity_dynamics": {
+    scene: "stdp",
+    params: { times_ms: [0, 10, 20], weights: [1, 1.1, 1.05], weight_units: "nS" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ synapse_model: "stdp_synapse", weight_units: "nS" })
+  },
+  "pi.nest.phase_plane": {
+    scene: "phase-plane",
+    params: { grid: { v: [-70, -50], w: [0, 1] } },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ state_variables: "V,w" })
+  },
+  "pi.nest.astrocyte_dynamics": {
+    scene: "voltage-trace",
+    params: { ca_trace: [0.1, 0.2, 0.15], units: "uM" },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({ recorded_variable: "Ca", units: "uM" })
+  }
+};
+function getExamplePayload(id) {
+  return SKILL_EXAMPLE_PAYLOADS[id];
+}
+
 // core/skills/registry.ts
 var CORTEXEL_SKILL_VERSION = "1.0.0";
 var NEST_SKILL_REGISTRY = {
@@ -487,6 +573,27 @@ function listSkills() {
 function getSkill(id) {
   return NEST_SKILL_REGISTRY[id];
 }
+function describeSkill(id) {
+  const c = getSkill(id);
+  if (!c) return void 0;
+  return {
+    id: c.id,
+    title: c.title,
+    description: c.description,
+    deviceFamily: c.deviceFamily,
+    scene: c.scene,
+    renderable: c.scene !== null,
+    weak: c.weak ?? false,
+    requiredInputKeys: [...c.requiredInputKeys],
+    requiredProvenanceKeys: [...c.requiredProvenanceKeys],
+    rendererRoutes: [...c.rendererRoutes],
+    examplePayload: getExamplePayload(c.id),
+    examples: c.examples.map((e) => ({ ...e }))
+  };
+}
+function describeSkills() {
+  return listSkills().map((c) => describeSkill(c.id)).filter((d) => d !== void 0);
+}
 
 // core/skills/validateSkillInvocation.ts
 function validateSkillInvocation(skillId, payload) {
@@ -534,6 +641,7 @@ function validateSkillInvocation(skillId, payload) {
   }
   const spec = envelope.spec;
   const prov = spec.provenance;
+  const example = getExamplePayload(skillId);
   if (contract.scene === null) {
     errors.push({
       code: "no_cortexel_scene",
@@ -547,7 +655,8 @@ function validateSkillInvocation(skillId, payload) {
       path: "scene",
       message: `scene '${spec.scene}' does not match skill '${skillId}' scene '${contract.scene}'`,
       hint: `Set scene: '${contract.scene}'.`,
-      validScenes: [contract.scene]
+      validScenes: [contract.scene],
+      example
     });
   }
   if (contract.paramsSchema) {
@@ -558,7 +667,8 @@ function validateSkillInvocation(skillId, payload) {
           code: "invalid_params",
           path: `params.${issue.path.join(".") || "(root)"}`,
           message: issue.message,
-          hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`
+          hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`,
+          example
         });
       }
     }
@@ -570,7 +680,8 @@ function validateSkillInvocation(skillId, payload) {
         code: "missing_provenance",
         path: `provenance.declared_inputs.${key}`,
         message: `missing required provenance: ${key}`,
-        hint: `Skill '${skillId}' requires declared_inputs for: ${contract.requiredProvenanceKeys.join(", ")}.`
+        hint: `Skill '${skillId}' requires declared_inputs for: ${contract.requiredProvenanceKeys.join(", ")}.`,
+        example
       });
     }
   }
@@ -583,6 +694,6 @@ function validateSkillInvocation(skillId, payload) {
   return { ok: true, spec, scene: contract.scene, caption };
 }
 
-export { AstrocyteParamsSchema, CAMERA_PRESETS, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, NetworkParamsSchema, PI_NEST_SKILL_IDS, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, Spatial3DParamsSchema, SpikeRasterParamsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, defaultHonestyCaption, getSkill, isPiNestSkillId, listSkills, requiresHonestyCaption, validateSkillInvocation, validateVizSpec };
-//# sourceMappingURL=chunk-X3PTQEFC.js.map
-//# sourceMappingURL=chunk-X3PTQEFC.js.map
+export { AstrocyteParamsSchema, CAMERA_PRESETS, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, NetworkParamsSchema, PI_NEST_SKILL_IDS, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, SKILL_EXAMPLE_PAYLOADS, Spatial3DParamsSchema, SpikeRasterParamsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, defaultHonestyCaption, describeSkill, describeSkills, getExamplePayload, getSkill, isPiNestSkillId, listSkills, requiresHonestyCaption, validateSkillInvocation, validateVizSpec };
+//# sourceMappingURL=chunk-F3NKALRQ.js.map
+//# sourceMappingURL=chunk-F3NKALRQ.js.map

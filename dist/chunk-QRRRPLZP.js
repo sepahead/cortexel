@@ -1,4 +1,4 @@
-import { validateSkillInvocation, validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-X3PTQEFC.js';
+import { validateSkillInvocation, validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-F3NKALRQ.js';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -233,5 +233,5 @@ function SceneFrame({
 }
 
 export { ExpandablePopulation, VizSpecRenderer, usePopulationExpand };
-//# sourceMappingURL=chunk-FHJ5ZBE7.js.map
-//# sourceMappingURL=chunk-FHJ5ZBE7.js.map
+//# sourceMappingURL=chunk-QRRRPLZP.js.map
+//# sourceMappingURL=chunk-QRRRPLZP.js.map

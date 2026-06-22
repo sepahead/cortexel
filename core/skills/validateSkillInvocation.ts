@@ -18,6 +18,7 @@ import {
 } from '../provenance';
 import { SCENE_NAMES, type SceneName } from '../designLaws';
 import { getSkill } from './registry';
+import { getExamplePayload } from './examples';
 import { PI_NEST_SKILL_IDS } from './skillIds';
 
 export interface SkillInvocationError {
@@ -34,6 +35,9 @@ export interface SkillInvocationError {
   hint?: string;
   validScenes?: readonly SceneName[];
   validSkills?: readonly string[];
+  /** A copyable valid payload for this skill, attached to actionable errors so
+   *  an autonomous agent can self-repair without reading source. */
+  example?: VizSpec;
 }
 
 export type SkillInvocationResult =
@@ -99,6 +103,7 @@ export function validateSkillInvocation(
   }
   const spec = envelope.spec;
   const prov = spec.provenance;
+  const example = getExamplePayload(skillId);
 
   // 3. Scene must be renderable and match the contract.
   if (contract.scene === null) {
@@ -115,6 +120,7 @@ export function validateSkillInvocation(
       message: `scene '${spec.scene}' does not match skill '${skillId}' scene '${contract.scene}'`,
       hint: `Set scene: '${contract.scene}'.`,
       validScenes: [contract.scene],
+      example,
     });
   }
 
@@ -128,6 +134,7 @@ export function validateSkillInvocation(
           path: `params.${issue.path.join('.') || '(root)'}`,
           message: issue.message,
           hint: `Required params: ${contract.requiredInputKeys.join(', ')}.`,
+          example,
         });
       }
     }
@@ -142,6 +149,7 @@ export function validateSkillInvocation(
         path: `provenance.declared_inputs.${key}`,
         message: `missing required provenance: ${key}`,
         hint: `Skill '${skillId}' requires declared_inputs for: ${contract.requiredProvenanceKeys.join(', ')}.`,
+        example,
       });
     }
   }

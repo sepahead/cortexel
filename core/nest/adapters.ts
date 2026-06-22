@@ -12,6 +12,7 @@ import {
   GetPosition2DSchema,
   GetPosition3DSchema,
   MultimeterEventsSchema,
+  MultimeterMultiSenderSchema,
   SpikeRecorderEventsSchema,
   WeightRecorderEventsSchema,
 } from './shapes';
@@ -95,6 +96,47 @@ export function multimeterToSceneData(
       },
     },
   };
+}
+
+export interface MultimeterSenderSeries {
+  sender: number;
+  times: number[]; // float64 — ms timestamps
+  values: Float32Array;
+}
+
+export type MultimeterSplitResult =
+  | { ok: true; series: MultimeterSenderSeries[] }
+  | { ok: false; errors: string[] };
+
+/** Split a flattened multi-sender multimeter dump ({times,values,senders}) into
+ *  one monotonic series per sender — the honest alternative to rejecting it. */
+export function splitMultimeterBySender(events: unknown): MultimeterSplitResult {
+  const parsed = MultimeterMultiSenderSchema.safeParse(events);
+  if (!parsed.success) return zerr(parsed.error);
+  const { times, values, senders } = parsed.data;
+  const byId = new Map<number, { times: number[]; values: number[] }>();
+  for (let i = 0; i < senders.length; i++) {
+    let bucket = byId.get(senders[i]);
+    if (!bucket) {
+      bucket = { times: [], values: [] };
+      byId.set(senders[i], bucket);
+    }
+    bucket.times.push(times[i]);
+    bucket.values.push(values[i]);
+  }
+  const series: MultimeterSenderSeries[] = [];
+  const errors: string[] = [];
+  for (const [sender, b] of byId) {
+    for (let i = 1; i < b.times.length; i++) {
+      if (b.times[i] < b.times[i - 1]) {
+        errors.push(`sender ${sender}: times are non-monotonic after split`);
+        break;
+      }
+    }
+    series.push({ sender, times: b.times, values: Float32Array.from(b.values) });
+  }
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, series };
 }
 
 export function getConnectionsToSceneData(conns: unknown): AdapterResult {

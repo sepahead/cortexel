@@ -72,6 +72,26 @@ export const MultimeterEventsSchema = z
   });
 export type MultimeterEvents = z.infer<typeof MultimeterEventsSchema>;
 
+/** A multimeter recording multiple senders: {times, values, senders} parallel
+ *  arrays (the flattened form a single multimeter actually returns). Split per
+ *  sender before rendering — each sender's sub-series must be monotonic. */
+export const MultimeterMultiSenderSchema = z
+  .object({
+    times: nonEmptyFinite,
+    values: nonEmptyFinite,
+    senders: finiteNumberArray.min(1, 'no senders'),
+  })
+  .superRefine((v, ctx) => {
+    const n = v.times.length;
+    if (v.values.length !== n || v.senders.length !== n) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'times, values and senders must be the same length',
+      });
+    }
+  });
+export type MultimeterMultiSender = z.infer<typeof MultimeterMultiSenderSchema>;
+
 /** nest.GetConnections() → parallel source/target/weight/delay arrays. */
 export const GetConnectionsSchema = z
   .object({

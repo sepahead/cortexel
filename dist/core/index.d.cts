@@ -270,6 +270,25 @@ interface SkillContract {
 declare const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract>;
 declare function listSkills(): SkillContract[];
 declare function getSkill(id: string): SkillContract | undefined;
+interface SkillDescriptor {
+    id: PiNestSkillId;
+    title: string;
+    description: string;
+    deviceFamily: NestDeviceFamily;
+    scene: SceneName | null;
+    renderable: boolean;
+    weak: boolean;
+    requiredInputKeys: string[];
+    requiredProvenanceKeys: ProvenanceKey[];
+    rendererRoutes: RendererRoute[];
+    examplePayload?: VizSpec;
+    examples: SkillExample[];
+}
+declare function describeSkill(id: string): SkillDescriptor | undefined;
+declare function describeSkills(): SkillDescriptor[];
+
+declare const SKILL_EXAMPLE_PAYLOADS: Partial<Record<PiNestSkillId, VizSpec>>;
+declare function getExamplePayload(id: string): VizSpec | undefined;
 
 type SpikeDataKind = 'events' | 'rates' | 'correlation';
 interface RouteInput {
@@ -307,6 +326,9 @@ interface SkillInvocationError {
     hint?: string;
     validScenes?: readonly SceneName[];
     validSkills?: readonly string[];
+    /** A copyable valid payload for this skill, attached to actionable errors so
+     *  an autonomous agent can self-repair without reading source. */
+    example?: VizSpec;
 }
 type SkillInvocationResult = {
     ok: true;
@@ -318,6 +340,15 @@ type SkillInvocationResult = {
     errors: SkillInvocationError[];
 };
 declare function validateSkillInvocation(skillId: string, payload: unknown): SkillInvocationResult;
+
+interface EmptySceneResult {
+    empty: boolean;
+    /** Which channels carried data (for an actionable message). */
+    populated: string[];
+    reason?: string;
+}
+/** Detect whether adapted SceneData has any renderable content. */
+declare function detectEmptyScene(data: SceneData): EmptySceneResult;
 
 /** spike_recorder events: nest.GetStatus(sr, 'events') → {senders, times}. */
 declare const SpikeRecorderEventsSchema: z.ZodObject<{
@@ -332,6 +363,15 @@ declare const MultimeterEventsSchema: z.ZodObject<{
     values: z.ZodArray<z.ZodNumber>;
 }, z.core.$strip>;
 type MultimeterEvents = z.infer<typeof MultimeterEventsSchema>;
+/** A multimeter recording multiple senders: {times, values, senders} parallel
+ *  arrays (the flattened form a single multimeter actually returns). Split per
+ *  sender before rendering — each sender's sub-series must be monotonic. */
+declare const MultimeterMultiSenderSchema: z.ZodObject<{
+    times: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    senders: z.ZodArray<z.ZodNumber>;
+}, z.core.$strip>;
+type MultimeterMultiSender = z.infer<typeof MultimeterMultiSenderSchema>;
 /** nest.GetConnections() → parallel source/target/weight/delay arrays. */
 declare const GetConnectionsSchema: z.ZodObject<{
     sources: z.ZodArray<z.ZodNumber>;
@@ -376,10 +416,25 @@ declare function multimeterToSceneData(events: unknown, opts?: {
     variable?: string;
     units?: string;
 }): AdapterResult;
+interface MultimeterSenderSeries {
+    sender: number;
+    times: number[];
+    values: Float32Array;
+}
+type MultimeterSplitResult = {
+    ok: true;
+    series: MultimeterSenderSeries[];
+} | {
+    ok: false;
+    errors: string[];
+};
+/** Split a flattened multi-sender multimeter dump ({times,values,senders}) into
+ *  one monotonic series per sender — the honest alternative to rejecting it. */
+declare function splitMultimeterBySender(events: unknown): MultimeterSplitResult;
 declare function getConnectionsToSceneData(conns: unknown): AdapterResult;
 declare function getPositionToSceneData(positions: unknown, opts?: {
     dims: 2 | 3;
 }): AdapterResult;
 declare function weightRecorderToSceneData(events: unknown): AdapterResult;
 
-export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, ENGRAM_PALETTE, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PI_NEST_SKILL_IDS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PiNestSkillId, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, getConnectionsToSceneData, getPositionToSceneData, getSkill, isPiNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
+export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, ENGRAM_PALETTE, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PI_NEST_SKILL_IDS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PiNestSkillId, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isPiNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };

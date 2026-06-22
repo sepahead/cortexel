@@ -25,6 +25,7 @@ import {
   SpikeRasterParamsSchema,
   VoltageTraceParamsSchema,
 } from './params';
+import { getExamplePayload } from './examples';
 
 export const CORTEXEL_SKILL_VERSION = '1.0.0';
 
@@ -373,4 +374,47 @@ export function listSkills(): SkillContract[] {
 
 export function getSkill(id: string): SkillContract | undefined {
   return (NEST_SKILL_REGISTRY as Record<string, SkillContract>)[id];
+}
+
+// Self-describing descriptor an agent fetches to learn how to invoke a skill
+// WITHOUT reading TS source: scene, required params/provenance, renderer routes,
+// whether the scene reuse is approximate (weak), and a copyable example payload.
+export interface SkillDescriptor {
+  id: PiNestSkillId;
+  title: string;
+  description: string;
+  deviceFamily: NestDeviceFamily;
+  scene: SceneName | null;
+  renderable: boolean;
+  weak: boolean;
+  requiredInputKeys: string[];
+  requiredProvenanceKeys: ProvenanceKey[];
+  rendererRoutes: RendererRoute[];
+  examplePayload?: import('../vizSpec').VizSpec;
+  examples: SkillExample[];
+}
+
+export function describeSkill(id: string): SkillDescriptor | undefined {
+  const c = getSkill(id);
+  if (!c) return undefined;
+  return {
+    id: c.id,
+    title: c.title,
+    description: c.description,
+    deviceFamily: c.deviceFamily,
+    scene: c.scene,
+    renderable: c.scene !== null,
+    weak: c.weak ?? false,
+    requiredInputKeys: [...c.requiredInputKeys],
+    requiredProvenanceKeys: [...c.requiredProvenanceKeys],
+    rendererRoutes: [...c.rendererRoutes],
+    examplePayload: getExamplePayload(c.id),
+    examples: c.examples.map((e) => ({ ...e })),
+  };
+}
+
+export function describeSkills(): SkillDescriptor[] {
+  return listSkills()
+    .map((c) => describeSkill(c.id))
+    .filter((d): d is SkillDescriptor => d !== undefined);
 }

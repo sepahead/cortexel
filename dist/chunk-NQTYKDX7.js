@@ -1,4 +1,4 @@
-import { listSkills, NEST_SKILL_REGISTRY } from './chunk-X3PTQEFC.js';
+import { listSkills, NEST_SKILL_REGISTRY } from './chunk-F3NKALRQ.js';
 import { z } from 'zod';
 
 // core/colormaps.ts
@@ -346,6 +346,26 @@ function routeToScene(input) {
   };
   return { ok: false, reason: "ambiguous", candidates: members, disambiguateBy };
 }
+
+// core/skills/verify.ts
+function len(a) {
+  return a ? a.length : 0;
+}
+function detectEmptyScene(data) {
+  const populated = [];
+  if (len(data.spikeTimes) > 0) populated.push("spikeTimes");
+  if (len(data.voltageTraces) > 0) populated.push("voltageTraces");
+  if (len(data.weightSeries) > 0) populated.push("weightSeries");
+  if (len(data.analogTraces?.values) > 0) populated.push("analogTraces");
+  if (len(data.networkNodes) > 0) populated.push("networkNodes");
+  if (len(data.vectorField) > 0) populated.push("vectorField");
+  const empty = populated.length === 0;
+  return {
+    empty,
+    populated,
+    reason: empty ? "SceneData has no renderable content \u2014 all channels are empty; the render would be blank" : void 0
+  };
+}
 var finiteNumberArray = z.array(z.number()).refine((a) => a.every((v) => Number.isFinite(v)), {
   message: "array contains non-finite values (NaN/Inf) \u2014 unusable evidence"
 });
@@ -384,6 +404,19 @@ var MultimeterEventsSchema = z.object({
       });
       break;
     }
+  }
+});
+var MultimeterMultiSenderSchema = z.object({
+  times: nonEmptyFinite,
+  values: nonEmptyFinite,
+  senders: finiteNumberArray.min(1, "no senders")
+}).superRefine((v, ctx) => {
+  const n = v.times.length;
+  if (v.values.length !== n || v.senders.length !== n) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "times, values and senders must be the same length"
+    });
   }
 });
 var GetConnectionsSchema = z.object({
@@ -488,6 +521,34 @@ function multimeterToSceneData(events, opts = {}) {
     }
   };
 }
+function splitMultimeterBySender(events) {
+  const parsed = MultimeterMultiSenderSchema.safeParse(events);
+  if (!parsed.success) return zerr(parsed.error);
+  const { times, values, senders } = parsed.data;
+  const byId = /* @__PURE__ */ new Map();
+  for (let i = 0; i < senders.length; i++) {
+    let bucket = byId.get(senders[i]);
+    if (!bucket) {
+      bucket = { times: [], values: [] };
+      byId.set(senders[i], bucket);
+    }
+    bucket.times.push(times[i]);
+    bucket.values.push(values[i]);
+  }
+  const series = [];
+  const errors = [];
+  for (const [sender, b] of byId) {
+    for (let i = 1; i < b.times.length; i++) {
+      if (b.times[i] < b.times[i - 1]) {
+        errors.push(`sender ${sender}: times are non-monotonic after split`);
+        break;
+      }
+    }
+    series.push({ sender, times: b.times, values: Float32Array.from(b.values) });
+  }
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, series };
+}
 function getConnectionsToSceneData(conns) {
   const parsed = GetConnectionsSchema.safeParse(conns);
   if (!parsed.success) return zerr(parsed.error);
@@ -561,6 +622,6 @@ function weightRecorderToSceneData(events) {
   };
 }
 
-export { AXIS_COLORS, CATEGORICAL, CORTICAL_LAYER_COLORS, ENGRAM_PALETTE, GetConnectionsSchema, GetPosition2DSchema, GetPosition3DSchema, MultimeterEventsSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, ProvenanceKeyEnum, SYNAPSE_COLORS, SpikeRecorderEventsSchema, TURBO_GLSL, VIRIDIS_GLSL, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, getConnectionsToSceneData, getPositionToSceneData, isProvenanceKey, multimeterToSceneData, routeToScene, sampleColormap, spikeRecorderToSceneData, weightRecorderToSceneData };
-//# sourceMappingURL=chunk-JQSEVV6O.js.map
-//# sourceMappingURL=chunk-JQSEVV6O.js.map
+export { AXIS_COLORS, CATEGORICAL, CORTICAL_LAYER_COLORS, ENGRAM_PALETTE, GetConnectionsSchema, GetPosition2DSchema, GetPosition3DSchema, MultimeterEventsSchema, MultimeterMultiSenderSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, ProvenanceKeyEnum, SYNAPSE_COLORS, SpikeRecorderEventsSchema, TURBO_GLSL, VIRIDIS_GLSL, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, detectEmptyScene, getConnectionsToSceneData, getPositionToSceneData, isProvenanceKey, multimeterToSceneData, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, weightRecorderToSceneData };
+//# sourceMappingURL=chunk-NQTYKDX7.js.map
+//# sourceMappingURL=chunk-NQTYKDX7.js.map

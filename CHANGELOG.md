@@ -4,6 +4,25 @@ All notable changes to Cortexel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — Agent ergonomics & verification
+
+### Added
+- `describeSkill(id)` / `describeSkills()` — self-describing discovery: scene,
+  required params/provenance, renderer routes, weak flag, and a copyable example
+  payload, so an agent never reads TS source to invoke a skill.
+- `SKILL_EXAMPLE_PAYLOADS` / `getExamplePayload(id)` — one valid VizSpec per
+  renderable skill (synthetic provenance). Asserted to pass their own gate, so
+  they are living fixtures, and attached to `invalid_params` / `missing_provenance`
+  / `scene_mismatch` errors for one-shot agent self-repair.
+- `detectEmptyScene(SceneData)` — cheap "valid but blank" check (Vega-Lite
+  scene-graph emptiness, adapted) so an agent can verify a render carries data
+  without rendering pixels.
+- `splitMultimeterBySender(events)` — splits a flattened multi-sender multimeter
+  dump into one monotonic series per sender (the honest alternative to rejecting).
+- Per-skill provenance snapshot test, design-law executable guards (allocation-
+  free useFrame, bloom-safe emissive ≤1.15, unlit populations), and a published
+  `.d.ts` Node-type leak scan.
+
 ## [0.2.0] — Agent skill axis
 
 ### Added

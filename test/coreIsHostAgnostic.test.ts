@@ -40,6 +40,22 @@ describe('core is host-agnostic', () => {
     const mod = await import('../core/index');
     expect(typeof mod.validateSkillInvocation).toBe('function');
     expect(typeof mod.routeToScene).toBe('function');
+    expect(typeof mod.describeSkill).toBe('function');
+    expect(typeof mod.detectEmptyScene).toBe('function');
     expect(Array.isArray(mod.PI_NEST_SKILL_IDS)).toBe(true);
+  });
+
+  it('shipped core .d.ts does not leak Node types (types:["node"] hygiene)', () => {
+    // tsconfig pulls @types/node for scripts/tests, but the published core types
+    // must stay environment-neutral — no NodeJS.* / node: references.
+    const distCore = join(here, '..', 'dist', 'core');
+    if (!statSync(distCore, { throwIfNoEntry: false })?.isDirectory()) return; // pre-build
+    const offenders: string[] = [];
+    for (const f of walk(distCore)) {
+      if (!f.endsWith('.d.ts') && !f.endsWith('.d.cts')) continue;
+      const src = readFileSync(f, 'utf8');
+      if (/\bNodeJS\.|['"]node:/.test(src)) offenders.push(f);
+    }
+    expect(offenders).toEqual([]);
   });
 });

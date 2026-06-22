@@ -5,8 +5,10 @@ export * from './skillIds';
 export * from './provenanceKeys';
 export * from './params';
 export * from './registry';
+export * from './examples';
 export * from './router';
 export * from './validateSkillInvocation';
+export * from './verify';
 
 // NEST device-dict shapes + host-agnostic adapters (dict → SceneData).
 export * from '../nest/shapes';
