@@ -1,0 +1,5 @@
+export { AXIS_COLORS, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTICAL_LAYER_COLORS, ColormapName, ENGRAM_PALETTE, OKABE_ITO, ProvenanceMetadata, ProvenanceSchema, RGB, SYNAPSE_COLORS, TURBO_GLSL, VIRIDIS_GLSL, VizSpec, VizSpecSchema, VizSpecValidation, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, requiresHonestyCaption, sampleColormap, validateVizSpec } from './core/index.js';
+export { C as CAMERA_PRESETS, a as CameraPreset, b as CameraPresetName, L as LayerConfig, N as NeuralSceneHandle, c as NeuralSceneMode, d as NeuralSceneProps, P as PlaybackState, S as SCENE_FRAMING, e as SCENE_NAMES, f as STDPSynapse, g as SceneData, h as SceneFraming, i as SceneName } from './designLaws-DIbEzwRB.js';
+export { CameraHint, ExpandablePopulation, ExpandablePopulationProps, PopulationExpand, PopulationExpandController, RenderSceneArgs, VizSpecRenderer, VizSpecRendererProps, usePopulationExpand } from './react/index.js';
+import 'zod';
+import 'react';
