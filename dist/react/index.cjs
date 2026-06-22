@@ -2,7 +2,7 @@
 
 var react = require('react');
 var fiber = require('@react-three/fiber');
-var THREE = require('three');
+var THREE2 = require('three');
 var jsxRuntime = require('react/jsx-runtime');
 var zod = require('zod');
 
@@ -24,7 +24,7 @@ function _interopNamespace(e) {
   return Object.freeze(n);
 }
 
-var THREE__namespace = /*#__PURE__*/_interopNamespace(THREE);
+var THREE2__namespace = /*#__PURE__*/_interopNamespace(THREE2);
 
 // react/usePopulationExpand.ts
 function usePopulationExpand(controlled) {
@@ -70,7 +70,7 @@ function ExpandablePopulation({
   const ringRef = react.useRef(null);
   const scaleRef = react.useRef(1);
   const opacityRef = react.useRef(1);
-  const colorObj = react.useMemo(() => new THREE__namespace.Color(color), [color]);
+  const colorObj = react.useMemo(() => new THREE2__namespace.Color(color), [color]);
   const voxelColor = react.useMemo(() => colorObj.clone().multiplyScalar(0.82), [colorObj]);
   const ringColor = react.useMemo(
     () => themeMode === "light" ? colorObj.clone().multiplyScalar(0.8) : colorObj.clone().multiplyScalar(1.15),
@@ -144,11 +144,224 @@ function ExpandablePopulation({
           color: ringColor,
           transparent: true,
           depthWrite: false,
-          side: THREE__namespace.DoubleSide
+          side: THREE2__namespace.DoubleSide
         }
       )
     ] })
   ] });
+}
+
+// react/neuronShaders.ts
+var NEURON_VERT = (
+  /* glsl */
+  `
+attribute float instancePhase;
+attribute float neuronIndex;
+
+uniform float uTime;
+uniform float uExpansion;
+uniform float uSelectedNeuronIndex;
+uniform vec3 uCenter;
+
+varying float vMembranePotential;
+varying float vSpikeIntensity;
+varying float vIsSelected;
+
+void main() {
+  // Sub-threshold membrane oscillation, phase-offset per neuron.
+  float oscillation = sin(uTime * 2.0 + instancePhase) * 0.5 + 0.5;
+  vMembranePotential = oscillation;
+
+  // Sparse, cheap "spike": the top of each neuron's own oscillation pops bright.
+  // Schematic liveliness only \u2014 not measured spiking.
+  vSpikeIntensity = smoothstep(0.93, 1.0, oscillation);
+
+  vIsSelected = abs(neuronIndex - uSelectedNeuronIndex) < 0.1 ? 1.0 : 0.0;
+
+  // Progressive reveal: a small core shows first, outer rows fade in with uExpansion.
+  if (neuronIndex > 50.0) {
+    float rowThreshold = (neuronIndex - 50.0) / 1200.0;
+    float visibility = smoothstep(rowThreshold - 0.06, rowThreshold + 0.06, uExpansion);
+    if (visibility <= 0.01) {
+      gl_Position = vec4(0.0);
+      return;
+    }
+  }
+
+  // Cluster tightly at the hub centre when collapsed; spread to the full grid as
+  // uExpansion goes to 1. The position attribute is the centered local grid offset.
+  float scale = mix(0.06, 1.0, uExpansion);
+  vec3 pos = uCenter + position * scale;
+
+  float size = mix(1.0, 1.8, uExpansion);
+  if (vIsSelected > 0.5) size = 6.5;
+
+  vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+  gl_PointSize = size * (300.0 / -mvPosition.z);
+  gl_Position = projectionMatrix * mvPosition;
+}
+`
+);
+var NEURON_FRAG = (
+  /* glsl */
+  `
+varying float vMembranePotential;
+varying float vSpikeIntensity;
+varying float vIsSelected;
+
+uniform vec3 uBaseColor;
+uniform vec3 uSpikeColor;
+
+void main() {
+  vec2 center = gl_PointCoord - 0.5;
+  float dist = length(center);
+  if (dist > 0.5) discard;
+
+  // Reconstruct the sphere normal across the point sprite.
+  vec3 normal = vec3(center * 2.0, 0.0);
+  normal.z = sqrt(max(0.0, 1.0 - dot(normal.xy, normal.xy)));
+  normal = normalize(normal);
+
+  vec3 lightDir = normalize(vec3(0.4, 0.6, 0.9));
+  float diffuse = max(0.30, dot(normal, lightDir));
+  vec3 baseColor = uBaseColor * diffuse * (0.72 + 0.28 * vMembranePotential);
+
+  float fresnel = pow(1.0 - normal.z, 2.5);
+  vec3 rim = uBaseColor * fresnel * (0.9 + 0.6 * vMembranePotential);
+
+  float coreGlow = smoothstep(0.5, 0.0, dist);
+  vec3 emissive = uBaseColor * coreGlow * (0.35 + 0.55 * vMembranePotential);
+
+  vec3 color = baseColor + rim + emissive;
+
+  // Spike flash \u2014 coloured bloom, capped ~1.15 luminance to stay under the
+  // bloom bleach budget (design law).
+  if (vSpikeIntensity > 0.001) {
+    vec3 flash = mix(uSpikeColor, vec3(1.0), 0.35) * (1.10 + 0.05 * vSpikeIntensity);
+    color = mix(color, flash, clamp(vSpikeIntensity * 1.1, 0.0, 1.0));
+  }
+
+  vec3 viewDir = vec3(0.0, 0.0, 1.0);
+  vec3 halfDir = normalize(lightDir + viewDir);
+  float spec = pow(max(0.0, dot(normal, halfDir)), 22.0);
+  color += vec3(0.35) * spec * (1.0 - 0.4 * vSpikeIntensity);
+
+  float alpha = smoothstep(0.5, 0.46, dist);
+
+  // Selected neuron \u2014 gold halo ring.
+  if (vIsSelected > 0.5) {
+    if (dist > 0.40) {
+      float ring = smoothstep(0.40, 0.43, dist);
+      color = mix(color, vec3(1.15, 1.0, 0.36), ring);
+      alpha = 1.0;
+    }
+    color += vec3(0.25, 0.22, 0.05);
+  }
+
+  gl_FragColor = vec4(max(color, vec3(0.0)), alpha);
+}
+`
+);
+var NEURON_CLUSTER_SCALE = 0.06;
+function neuronExpandedScale(expansion) {
+  return NEURON_CLUSTER_SCALE + (1 - NEURON_CLUSTER_SCALE) * expansion;
+}
+function neuronLocalGrid(count, spacing = 0.4) {
+  const side = Math.max(2, Math.ceil(Math.cbrt(count)));
+  const totalCount = side * side * side;
+  const positions = new Float32Array(totalCount * 3);
+  const phases = new Float32Array(totalCount);
+  const neuronIndex = new Float32Array(totalCount);
+  const half = (side - 1) / 2;
+  for (let i = 0; i < totalCount; i++) {
+    const ix = i % side;
+    const iy = Math.floor(i / side) % side;
+    const iz = Math.floor(i / (side * side));
+    positions[i * 3] = (ix - half) * spacing;
+    positions[i * 3 + 1] = (iy - half) * spacing;
+    positions[i * 3 + 2] = (iz - half) * spacing;
+    phases[i] = i * 2.399963 % (Math.PI * 2);
+    neuronIndex[i] = i;
+  }
+  return { positions, phases, neuronIndex, side, totalCount };
+}
+function ExpandableNeurons({
+  count,
+  center = [0, 0, 0],
+  color,
+  spikeColor,
+  expanded,
+  themeMode,
+  reducedMotion = false,
+  spacing = 0.4,
+  selectedNeuronIndex = null,
+  onHoverNeuron,
+  onSelectNeuron
+}) {
+  const grid = react.useMemo(() => neuronLocalGrid(count, spacing), [count, spacing]);
+  const geometry = react.useMemo(() => {
+    const g = new THREE2__namespace.BufferGeometry();
+    g.setAttribute("position", new THREE2__namespace.BufferAttribute(grid.positions, 3));
+    g.setAttribute("instancePhase", new THREE2__namespace.BufferAttribute(grid.phases, 1));
+    g.setAttribute("neuronIndex", new THREE2__namespace.BufferAttribute(grid.neuronIndex, 1));
+    return g;
+  }, [grid]);
+  const resolvedSpike = spikeColor ?? (themeMode === "light" ? "#b45309" : "#fde68a");
+  const material = react.useMemo(() => {
+    return new THREE2__namespace.ShaderMaterial({
+      vertexShader: NEURON_VERT,
+      fragmentShader: NEURON_FRAG,
+      uniforms: {
+        uTime: { value: 0 },
+        uExpansion: { value: 0 },
+        uSelectedNeuronIndex: { value: -1 },
+        uCenter: { value: new THREE2__namespace.Vector3(center[0], center[1], center[2]) },
+        uBaseColor: { value: new THREE2__namespace.Color(color) },
+        uSpikeColor: { value: new THREE2__namespace.Color(resolvedSpike) }
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE2__namespace.NormalBlending
+    });
+  }, [color, resolvedSpike]);
+  const timeRef = react.useRef(0);
+  const expansionRef = react.useRef(0);
+  const opacityRef = react.useRef(0);
+  fiber.useFrame((_, delta) => {
+    if (!reducedMotion) timeRef.current += delta;
+    const lerp = reducedMotion ? 1 : 0.15;
+    const target = expanded ? 1 : 0;
+    expansionRef.current += (target - expansionRef.current) * lerp;
+    opacityRef.current += (target - opacityRef.current) * lerp;
+    const u = material.uniforms;
+    u.uTime.value = timeRef.current;
+    u.uExpansion.value = expansionRef.current;
+    u.uSelectedNeuronIndex.value = selectedNeuronIndex === null ? -1 : selectedNeuronIndex;
+    u.uCenter.value.set(center[0], center[1], center[2]);
+    material.opacity = opacityRef.current;
+  });
+  const interactive = expanded;
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    "points",
+    {
+      geometry,
+      material,
+      onPointerOver: (e) => {
+        if (!interactive || !onHoverNeuron) return;
+        e.stopPropagation();
+        if (e.index !== void 0) onHoverNeuron(e.index);
+      },
+      onPointerOut: () => {
+        if (!interactive || !onHoverNeuron) return;
+        onHoverNeuron(null);
+      },
+      onClick: (e) => {
+        if (!interactive || !onSelectNeuron) return;
+        e.stopPropagation();
+        if (e.index !== void 0) onSelectNeuron(e.index);
+      }
+    }
+  );
 }
 function requiresHonestyCaption(p) {
   return !!p.synthetic || !p.calibrated_posterior || p.advisory_only || !p.is_paper_local_evidence;
@@ -872,8 +1085,14 @@ function SceneFrame({
   );
 }
 
+exports.ExpandableNeurons = ExpandableNeurons;
 exports.ExpandablePopulation = ExpandablePopulation;
+exports.NEURON_CLUSTER_SCALE = NEURON_CLUSTER_SCALE;
+exports.NEURON_FRAG = NEURON_FRAG;
+exports.NEURON_VERT = NEURON_VERT;
 exports.VizSpecRenderer = VizSpecRenderer;
+exports.neuronExpandedScale = neuronExpandedScale;
+exports.neuronLocalGrid = neuronLocalGrid;
 exports.usePopulationExpand = usePopulationExpand;
 //# sourceMappingURL=index.cjs.map
 //# sourceMappingURL=index.cjs.map

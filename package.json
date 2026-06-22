@@ -1,6 +1,6 @@
 {
   "name": "cortexel",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Agent-consumable scientific-visualization library for neural simulations. Emit a declarative VizSpec; render spike rasters, Brunel networks, STDP curves and more, with scientific-honesty provenance enforced fail-closed.",
   "license": "MIT",
   "author": "Sepehr Mahmoudian",

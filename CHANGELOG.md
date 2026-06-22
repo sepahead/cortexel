@@ -4,6 +4,19 @@ All notable changes to Cortexel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — ExpandableNeurons
+
+### Added
+- `ExpandableNeurons` (`cortexel/react`) — the companion to ExpandablePopulation:
+  a population voxel hub collapses and this reveals its constituent neurons as
+  ray-cast sphere points, clustered at the hub centre and blooming to a 3D grid
+  on expand. Single neuron = sphere (design law); allocation-free useFrame.
+- `neuronLocalGrid(count, spacing)` / `neuronExpandedScale(expansion)` /
+  `NEURON_CLUSTER_SCALE` — the shared grid layout + morph math so an owning scene
+  can place synapses on the exact same neuron positions without duplicating it.
+- Point-neuron shaders (`NEURON_VERT` / `NEURON_FRAG`) ported to TS strings (no
+  Vite `?raw`), so the renderer builds under tsup and is host-portable.
+
 ## [0.3.0] — Agent ergonomics & verification
 
 ### Added
