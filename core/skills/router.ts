@@ -1,22 +1,35 @@
 // routeToScene — the executable replacement for the pi.nest.viz_router stub.
 // An agent holding a NEST output dict asks "which skill/scene renders this?" and
-// gets a concrete answer, fail-closed for unknown families and for skills whose
-// scene is null. Pure and zero-dep.
+// gets a concrete answer, fail-closed for unknown families, for skills whose
+// scene is null, AND for any device family that maps to more than one skill.
 //
-// spike_recorder feeds FOUR skills (raster, rate, correlogram, ...), so for that
-// family `dataShape.kind` is REQUIRED to disambiguate — otherwise the router is
-// no better than the stub it replaces.
+// The family→skill index is DERIVED from NEST_SKILL_REGISTRY (not hand-written),
+// so it can never drift from the registry. Several families are many-to-one —
+// spike_recorder (raster/rate/correlogram), multimeter (voltage/stimulus/
+// astrocyte/compartmental), computed (phase-plane/replay) — so for those a
+// discriminator is REQUIRED; without it the router returns `ambiguous` carrying
+// the exact field + value→skill map an agent needs to retry in one shot.
 
 import type { SceneName } from '../designLaws';
 import type { NestDeviceFamily, PiNestSkillId } from './skillIds';
-import { NEST_SKILL_REGISTRY } from './registry';
+import { NEST_SKILL_REGISTRY, listSkills } from './registry';
 
 export type SpikeDataKind = 'events' | 'rates' | 'correlation';
 
 export interface RouteInput {
   deviceFamily: NestDeviceFamily;
-  /** Required when deviceFamily === 'spike_recorder' to pick the analysis view. */
+  /** Disambiguator for the spike_recorder family (raster/rate/correlogram). */
   dataShape?: { kind?: SpikeDataKind };
+  /** General disambiguator for any many-to-one family: name the skill directly.
+   *  Must belong to `deviceFamily` or it is ignored. */
+  skill?: PiNestSkillId;
+}
+
+export interface Disambiguator {
+  /** The RouteInput field an agent should set to retry. */
+  field: 'skill' | 'dataShape.kind';
+  /** Value → skill it would resolve to (so the agent can pick deterministically). */
+  maps: Partial<Record<string, PiNestSkillId>>;
 }
 
 export type RouteResult =
@@ -25,6 +38,7 @@ export type RouteResult =
       ok: false;
       reason: 'unknown_family' | 'no_cortexel_scene' | 'ambiguous';
       candidates?: PiNestSkillId[];
+      disambiguateBy?: Disambiguator;
     };
 
 const SPIKE_KIND_TO_SKILL: Record<SpikeDataKind, PiNestSkillId> = {
@@ -33,14 +47,15 @@ const SPIKE_KIND_TO_SKILL: Record<SpikeDataKind, PiNestSkillId> = {
   correlation: 'pi.nest.correlogram',
 };
 
-// One unambiguous skill per family (spike_recorder handled separately above).
-const FAMILY_TO_SKILL: Partial<Record<NestDeviceFamily, PiNestSkillId>> = {
-  multimeter: 'pi.nest.voltage_trace',
-  get_connections: 'pi.nest.connectivity_matrix',
-  get_position: 'pi.nest.spatial_3d',
-  weight_recorder: 'pi.nest.plasticity_dynamics',
-  computed: 'pi.nest.phase_plane',
-};
+// Derived once from the registry: family → its member skill ids. Keeps the
+// router pinned to the registry (a new skill in a family is picked up for free).
+const FAMILY_MEMBERS: Partial<Record<NestDeviceFamily, PiNestSkillId[]>> = (() => {
+  const out: Partial<Record<NestDeviceFamily, PiNestSkillId[]>> = {};
+  for (const c of listSkills()) {
+    (out[c.deviceFamily] ??= []).push(c.id);
+  }
+  return out;
+})();
 
 function resolve(skill: PiNestSkillId): RouteResult {
   const contract = NEST_SKILL_REGISTRY[skill];
@@ -51,18 +66,31 @@ function resolve(skill: PiNestSkillId): RouteResult {
 }
 
 export function routeToScene(input: RouteInput): RouteResult {
-  if (input.deviceFamily === 'spike_recorder') {
-    const kind = input.dataShape?.kind;
-    if (!kind) {
-      return {
-        ok: false,
-        reason: 'ambiguous',
-        candidates: Object.values(SPIKE_KIND_TO_SKILL),
-      };
-    }
-    return resolve(SPIKE_KIND_TO_SKILL[kind]);
+  const members = FAMILY_MEMBERS[input.deviceFamily];
+  if (!members || members.length === 0) {
+    return { ok: false, reason: 'unknown_family' };
   }
-  const skill = FAMILY_TO_SKILL[input.deviceFamily];
-  if (!skill) return { ok: false, reason: 'unknown_family' };
-  return resolve(skill);
+
+  // Explicit skill hint wins, if it belongs to this family.
+  if (input.skill && members.includes(input.skill)) {
+    return resolve(input.skill);
+  }
+
+  // Single-member family: unambiguous.
+  if (members.length === 1) return resolve(members[0]);
+
+  // Many-to-one: the spike family has a typed kind discriminator.
+  if (input.deviceFamily === 'spike_recorder' && input.dataShape?.kind) {
+    return resolve(SPIKE_KIND_TO_SKILL[input.dataShape.kind]);
+  }
+
+  // Ambiguous — hand back exactly what is needed to retry deterministically.
+  const disambiguateBy: Disambiguator =
+    input.deviceFamily === 'spike_recorder'
+      ? { field: 'dataShape.kind', maps: { ...SPIKE_KIND_TO_SKILL } }
+      : {
+          field: 'skill',
+          maps: Object.fromEntries(members.map((s) => [s, s])),
+        };
+  return { ok: false, reason: 'ambiguous', candidates: members, disambiguateBy };
 }

@@ -21,10 +21,15 @@ function walk(dir: string): string[] {
 describe('core is host-agnostic', () => {
   it('no core/ file imports three/react/@react-three', () => {
     const offenders: string[] = [];
+    const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
     for (const file of walk(coreDir)) {
       const src = readFileSync(file, 'utf8');
       for (const dep of FORBIDDEN) {
-        const re = new RegExp(`from ['"]${dep.replace('/', '\\/')}['"]`);
+        // Catch `from 'dep'`, `import 'dep'`, `import(...'dep')`, `require('dep')`
+        // and any subpath (`dep/x`) — not just the bare `from` form.
+        const re = new RegExp(
+          `(?:from|import|require)\\s*\\(?\\s*['"]${escape(dep)}(?:/[^'"]*)?['"]`,
+        );
         if (re.test(src)) offenders.push(`${file} → ${dep}`);
       }
     }

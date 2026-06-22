@@ -92,6 +92,19 @@ describe('validateSkillInvocation', () => {
     if (!r.ok) expect(r.errors.some((e) => e.code === 'no_cortexel_scene')).toBe(true);
   });
 
+  it('always carries a derived-view disclosure for a weak skill (astrocyte)', () => {
+    const r = validateSkillInvocation('pi.nest.astrocyte_dynamics', {
+      scene: 'voltage-trace',
+      params: { ca_trace: [0.1, 0.2], units: 'uM' },
+      provenance: {
+        source: 'nest_simulation:astro',
+        declared_inputs: { recorded_variable: 'Ca', units: 'uM' },
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.caption).toMatch(/Derived view/);
+  });
+
   it('rejects a scene that does not match the skill contract', () => {
     const r = validateSkillInvocation(
       'pi.nest.spike_raster',

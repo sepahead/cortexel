@@ -1,4 +1,4 @@
-import { NEST_SKILL_REGISTRY } from './chunk-BCNMXKC3.js';
+import { listSkills, NEST_SKILL_REGISTRY } from './chunk-X3PTQEFC.js';
 import { z } from 'zod';
 
 // core/colormaps.ts
@@ -253,6 +253,60 @@ vec3 viridis(float t) {
 }
 `
 );
+var PROVENANCE_KEYS = [
+  "device_id",
+  "recorded_variable",
+  "units",
+  "sampling_interval",
+  "recorder_id",
+  "sender_ids",
+  "population_labels",
+  "time_units",
+  "source_ids",
+  "target_ids",
+  "synapse_model",
+  "weight_units",
+  "extent",
+  "mask",
+  "kernel",
+  "projection_sample_policy",
+  "morphology_disclaimer",
+  "frame_rate",
+  "state_variables",
+  "bin_ms",
+  "pair_labels",
+  "stim_units",
+  "rate_normalization"
+];
+var ProvenanceKeyEnum = z.enum(PROVENANCE_KEYS);
+var PROVENANCE_KEY_LABELS = {
+  device_id: "device id",
+  recorded_variable: "recorded variable",
+  units: "units",
+  sampling_interval: "sampling interval",
+  recorder_id: "spike_recorder id",
+  sender_ids: "sender ids",
+  population_labels: "population labels",
+  time_units: "time units",
+  source_ids: "source ids",
+  target_ids: "target ids",
+  synapse_model: "synapse model",
+  weight_units: "weight units",
+  extent: "extent",
+  mask: "mask",
+  kernel: "kernel",
+  projection_sample_policy: "projection sample policy",
+  morphology_disclaimer: "morphology geometry disclaimer",
+  frame_rate: "frame rate",
+  state_variables: "state variables",
+  bin_ms: "bin width",
+  pair_labels: "pair labels",
+  stim_units: "stimulus units",
+  rate_normalization: "rate normalization"
+};
+function isProvenanceKey(value) {
+  return typeof value === "string" && PROVENANCE_KEYS.includes(value);
+}
 
 // core/skills/router.ts
 var SPIKE_KIND_TO_SKILL = {
@@ -260,13 +314,13 @@ var SPIKE_KIND_TO_SKILL = {
   rates: "pi.nest.rate_response",
   correlation: "pi.nest.correlogram"
 };
-var FAMILY_TO_SKILL = {
-  multimeter: "pi.nest.voltage_trace",
-  get_connections: "pi.nest.connectivity_matrix",
-  get_position: "pi.nest.spatial_3d",
-  weight_recorder: "pi.nest.plasticity_dynamics",
-  computed: "pi.nest.phase_plane"
-};
+var FAMILY_MEMBERS = (() => {
+  const out = {};
+  for (const c of listSkills()) {
+    (out[c.deviceFamily] ??= []).push(c.id);
+  }
+  return out;
+})();
 function resolve(skill) {
   const contract = NEST_SKILL_REGISTRY[skill];
   if (contract.scene === null) {
@@ -275,20 +329,22 @@ function resolve(skill) {
   return { ok: true, skill, scene: contract.scene };
 }
 function routeToScene(input) {
-  if (input.deviceFamily === "spike_recorder") {
-    const kind = input.dataShape?.kind;
-    if (!kind) {
-      return {
-        ok: false,
-        reason: "ambiguous",
-        candidates: Object.values(SPIKE_KIND_TO_SKILL)
-      };
-    }
-    return resolve(SPIKE_KIND_TO_SKILL[kind]);
+  const members = FAMILY_MEMBERS[input.deviceFamily];
+  if (!members || members.length === 0) {
+    return { ok: false, reason: "unknown_family" };
   }
-  const skill = FAMILY_TO_SKILL[input.deviceFamily];
-  if (!skill) return { ok: false, reason: "unknown_family" };
-  return resolve(skill);
+  if (input.skill && members.includes(input.skill)) {
+    return resolve(input.skill);
+  }
+  if (members.length === 1) return resolve(members[0]);
+  if (input.deviceFamily === "spike_recorder" && input.dataShape?.kind) {
+    return resolve(SPIKE_KIND_TO_SKILL[input.dataShape.kind]);
+  }
+  const disambiguateBy = input.deviceFamily === "spike_recorder" ? { field: "dataShape.kind", maps: { ...SPIKE_KIND_TO_SKILL } } : {
+    field: "skill",
+    maps: Object.fromEntries(members.map((s) => [s, s]))
+  };
+  return { ok: false, reason: "ambiguous", candidates: members, disambiguateBy };
 }
 var finiteNumberArray = z.array(z.number()).refine((a) => a.every((v) => Number.isFinite(v)), {
   message: "array contains non-finite values (NaN/Inf) \u2014 unusable evidence"
@@ -297,8 +353,10 @@ var nonEmptyFinite = finiteNumberArray.min(
   1,
   "empty array \u2014 no samples to render"
 );
+var finiteNum = z.number().refine((v) => Number.isFinite(v), "non-finite value (NaN/Inf)");
 var SpikeRecorderEventsSchema = z.object({
-  senders: z.array(z.number()),
+  senders: finiteNumberArray,
+  // becomes denseIndex Map keys — reject NaN/Inf
   times: finiteNumberArray
 }).superRefine((v, ctx) => {
   if (v.senders.length !== v.times.length) {
@@ -318,10 +376,19 @@ var MultimeterEventsSchema = z.object({
       message: `times (${v.times.length}) and values (${v.values.length}) length mismatch`
     });
   }
+  for (let i = 1; i < v.times.length; i++) {
+    if (v.times[i] < v.times[i - 1]) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "multimeter times are non-monotonic \u2014 likely multiple senders flattened together; split per sender before adapting"
+      });
+      break;
+    }
+  }
 });
 var GetConnectionsSchema = z.object({
-  sources: z.array(z.number()).min(1, "no connections"),
-  targets: z.array(z.number()).min(1, "no connections"),
+  sources: finiteNumberArray.min(1, "no connections"),
+  targets: finiteNumberArray.min(1, "no connections"),
   weights: finiteNumberArray.optional(),
   delays: finiteNumberArray.optional()
 }).superRefine((v, ctx) => {
@@ -338,8 +405,8 @@ var GetConnectionsSchema = z.object({
     });
   }
 });
-var xyz = z.tuple([z.number(), z.number(), z.number()]);
-var xy = z.tuple([z.number(), z.number()]);
+var xyz = z.tuple([finiteNum, finiteNum, finiteNum]);
+var xy = z.tuple([finiteNum, finiteNum]);
 var GetPosition2DSchema = z.object({
   positions: z.array(xy).min(1, "no positions")
 });
@@ -350,8 +417,8 @@ var GetPosition3DSchema = z.object({
 var WeightRecorderEventsSchema = z.object({
   times: nonEmptyFinite,
   weights: nonEmptyFinite,
-  senders: z.array(z.number()).optional(),
-  targets: z.array(z.number()).optional()
+  senders: finiteNumberArray.optional(),
+  targets: finiteNumberArray.optional()
 }).superRefine((v, ctx) => {
   if (v.times.length !== v.weights.length) {
     ctx.addIssue({
@@ -399,15 +466,25 @@ function spikeRecorderToSceneData(events) {
     senderIndexMap: map
   };
 }
-function multimeterToSceneData(events) {
+function multimeterToSceneData(events, opts = {}) {
   const parsed = MultimeterEventsSchema.safeParse(events);
   if (!parsed.success) return zerr(parsed.error);
   const { times, values } = parsed.data;
+  const traceTimes = Float32Array.from(times);
+  const variable = opts.variable;
+  const isVoltage = variable === void 0 || /^v_?m$/i.test(variable) || variable === "V_m";
+  if (isVoltage) {
+    return { ok: true, data: { traceTimes, voltageTraces: Float32Array.from(values) } };
+  }
   return {
     ok: true,
     data: {
-      traceTimes: Float32Array.from(times),
-      voltageTraces: Float32Array.from(values)
+      traceTimes,
+      analogTraces: {
+        values: Float32Array.from(values),
+        variable,
+        units: opts.units ?? "unknown"
+      }
     }
   };
 }
@@ -456,11 +533,11 @@ function getPositionToSceneData(positions, opts = { dims: 3 }) {
   return {
     ok: true,
     data: {
-      networkNodes: parsed.data.positions.map(([x, y, z2], i) => ({
+      networkNodes: parsed.data.positions.map(([x, y, z3], i) => ({
         id: i,
         x,
         y,
-        z: z2,
+        z: z3,
         label: String(i)
       })),
       networkEdges: parsed.data.edges?.map((e) => ({
@@ -484,6 +561,6 @@ function weightRecorderToSceneData(events) {
   };
 }
 
-export { AXIS_COLORS, CATEGORICAL, CORTICAL_LAYER_COLORS, ENGRAM_PALETTE, GetConnectionsSchema, GetPosition2DSchema, GetPosition3DSchema, MultimeterEventsSchema, OKABE_ITO, SYNAPSE_COLORS, SpikeRecorderEventsSchema, TURBO_GLSL, VIRIDIS_GLSL, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, getConnectionsToSceneData, getPositionToSceneData, multimeterToSceneData, routeToScene, sampleColormap, spikeRecorderToSceneData, weightRecorderToSceneData };
-//# sourceMappingURL=chunk-AC5XP3OL.js.map
-//# sourceMappingURL=chunk-AC5XP3OL.js.map
+export { AXIS_COLORS, CATEGORICAL, CORTICAL_LAYER_COLORS, ENGRAM_PALETTE, GetConnectionsSchema, GetPosition2DSchema, GetPosition3DSchema, MultimeterEventsSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, ProvenanceKeyEnum, SYNAPSE_COLORS, SpikeRecorderEventsSchema, TURBO_GLSL, VIRIDIS_GLSL, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, getConnectionsToSceneData, getPositionToSceneData, isProvenanceKey, multimeterToSceneData, routeToScene, sampleColormap, spikeRecorderToSceneData, weightRecorderToSceneData };
+//# sourceMappingURL=chunk-JQSEVV6O.js.map
+//# sourceMappingURL=chunk-JQSEVV6O.js.map

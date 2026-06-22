@@ -1,5 +1,5 @@
-import { i as SceneName, g as SceneData } from '../designLaws-Df8R28iI.cjs';
-export { C as CAMERA_PRESETS, a as CameraPreset, b as CameraPresetName, L as LayerConfig, N as NeuralSceneHandle, c as NeuralSceneMode, d as NeuralSceneProps, P as PlaybackState, S as SCENE_FRAMING, e as SCENE_NAMES, f as STDPSynapse, h as SceneFraming } from '../designLaws-Df8R28iI.cjs';
+import { i as SceneName, g as SceneData } from '../designLaws-DjS3Nx-h.cjs';
+export { C as CAMERA_PRESETS, a as CameraPreset, b as CameraPresetName, L as LayerConfig, N as NeuralSceneHandle, c as NeuralSceneMode, d as NeuralSceneProps, P as PlaybackState, S as SCENE_FRAMING, e as SCENE_NAMES, f as STDPSynapse, h as SceneFraming } from '../designLaws-DjS3Nx-h.cjs';
 import { z } from 'zod';
 
 type RGB = readonly [number, number, number];
@@ -77,31 +77,7 @@ declare const ProvenanceSchema: z.ZodObject<{
     advisory_only: z.ZodDefault<z.ZodBoolean>;
     is_paper_local_evidence: z.ZodDefault<z.ZodBoolean>;
     caption: z.ZodOptional<z.ZodString>;
-    declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodEnum<{
-        device_id: "device_id";
-        recorded_variable: "recorded_variable";
-        units: "units";
-        sampling_interval: "sampling_interval";
-        recorder_id: "recorder_id";
-        sender_ids: "sender_ids";
-        population_labels: "population_labels";
-        time_units: "time_units";
-        source_ids: "source_ids";
-        target_ids: "target_ids";
-        synapse_model: "synapse_model";
-        weight_units: "weight_units";
-        extent: "extent";
-        mask: "mask";
-        kernel: "kernel";
-        projection_sample_policy: "projection_sample_policy";
-        morphology_disclaimer: "morphology_disclaimer";
-        frame_rate: "frame_rate";
-        state_variables: "state_variables";
-        bin_ms: "bin_ms";
-        pair_labels: "pair_labels";
-        stim_units: "stim_units";
-        rate_normalization: "rate_normalization";
-    }> & z.core.$partial, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
+    declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
     synthetic: z.ZodDefault<z.ZodBoolean>;
 }, z.core.$strip>;
 declare const VizSpecSchema: z.ZodObject<{
@@ -141,31 +117,7 @@ declare const VizSpecSchema: z.ZodObject<{
         advisory_only: z.ZodDefault<z.ZodBoolean>;
         is_paper_local_evidence: z.ZodDefault<z.ZodBoolean>;
         caption: z.ZodOptional<z.ZodString>;
-        declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodEnum<{
-            device_id: "device_id";
-            recorded_variable: "recorded_variable";
-            units: "units";
-            sampling_interval: "sampling_interval";
-            recorder_id: "recorder_id";
-            sender_ids: "sender_ids";
-            population_labels: "population_labels";
-            time_units: "time_units";
-            source_ids: "source_ids";
-            target_ids: "target_ids";
-            synapse_model: "synapse_model";
-            weight_units: "weight_units";
-            extent: "extent";
-            mask: "mask";
-            kernel: "kernel";
-            projection_sample_policy: "projection_sample_policy";
-            morphology_disclaimer: "morphology_disclaimer";
-            frame_rate: "frame_rate";
-            state_variables: "state_variables";
-            bin_ms: "bin_ms";
-            pair_labels: "pair_labels";
-            stim_units: "stim_units";
-            rate_normalization: "rate_normalization";
-        }> & z.core.$partial, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
+        declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
         synthetic: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>;
 }, z.core.$strip>;
@@ -322,10 +274,19 @@ declare function getSkill(id: string): SkillContract | undefined;
 type SpikeDataKind = 'events' | 'rates' | 'correlation';
 interface RouteInput {
     deviceFamily: NestDeviceFamily;
-    /** Required when deviceFamily === 'spike_recorder' to pick the analysis view. */
+    /** Disambiguator for the spike_recorder family (raster/rate/correlogram). */
     dataShape?: {
         kind?: SpikeDataKind;
     };
+    /** General disambiguator for any many-to-one family: name the skill directly.
+     *  Must belong to `deviceFamily` or it is ignored. */
+    skill?: PiNestSkillId;
+}
+interface Disambiguator {
+    /** The RouteInput field an agent should set to retry. */
+    field: 'skill' | 'dataShape.kind';
+    /** Value → skill it would resolve to (so the agent can pick deterministically). */
+    maps: Partial<Record<string, PiNestSkillId>>;
 }
 type RouteResult = {
     ok: true;
@@ -335,6 +296,7 @@ type RouteResult = {
     ok: false;
     reason: 'unknown_family' | 'no_cortexel_scene' | 'ambiguous';
     candidates?: PiNestSkillId[];
+    disambiguateBy?: Disambiguator;
 };
 declare function routeToScene(input: RouteInput): RouteResult;
 
@@ -410,11 +372,14 @@ type AdapterResult = {
     errors: string[];
 };
 declare function spikeRecorderToSceneData(events: unknown): AdapterResult;
-declare function multimeterToSceneData(events: unknown): AdapterResult;
+declare function multimeterToSceneData(events: unknown, opts?: {
+    variable?: string;
+    units?: string;
+}): AdapterResult;
 declare function getConnectionsToSceneData(conns: unknown): AdapterResult;
 declare function getPositionToSceneData(positions: unknown, opts?: {
     dims: 2 | 3;
 }): AdapterResult;
 declare function weightRecorderToSceneData(events: unknown): AdapterResult;
 
-export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, ENGRAM_PALETTE, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PI_NEST_SKILL_IDS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PiNestSkillId, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, getConnectionsToSceneData, getPositionToSceneData, getSkill, isPiNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
+export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, ENGRAM_PALETTE, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PI_NEST_SKILL_IDS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PiNestSkillId, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, getConnectionsToSceneData, getPositionToSceneData, getSkill, isPiNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };

@@ -49,15 +49,38 @@ describe('NEST adapters', () => {
 });
 
 describe('routeToScene', () => {
-  it('routes multimeter to voltage_trace', () => {
-    const r = routeToScene({ deviceFamily: 'multimeter' });
-    expect(r).toEqual({ ok: true, skill: 'pi.nest.voltage_trace', scene: 'voltage-trace' });
+  it('routes a single-member family (weight_recorder) unambiguously', () => {
+    expect(routeToScene({ deviceFamily: 'weight_recorder' })).toEqual({
+      ok: true,
+      skill: 'pi.nest.plasticity_dynamics',
+      scene: 'stdp',
+    });
   });
 
-  it('is ambiguous for spike_recorder without a dataShape kind', () => {
+  it('is ambiguous for multimeter (4 skills) without a discriminator', () => {
+    const r = routeToScene({ deviceFamily: 'multimeter' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe('ambiguous');
+      expect(r.candidates!.length).toBeGreaterThan(1);
+      expect(r.disambiguateBy!.field).toBe('skill');
+    }
+  });
+
+  it('resolves a many-to-one family via an explicit skill hint', () => {
+    expect(
+      routeToScene({ deviceFamily: 'multimeter', skill: 'pi.nest.voltage_trace' }),
+    ).toEqual({ ok: true, skill: 'pi.nest.voltage_trace', scene: 'voltage-trace' });
+  });
+
+  it('is ambiguous for spike_recorder without a kind, and hands back the map', () => {
     const r = routeToScene({ deviceFamily: 'spike_recorder' });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('ambiguous');
+    if (!r.ok) {
+      expect(r.reason).toBe('ambiguous');
+      expect(r.disambiguateBy!.field).toBe('dataShape.kind');
+      expect(r.disambiguateBy!.maps.events).toBe('pi.nest.spike_raster');
+    }
   });
 
   it('disambiguates spike_recorder by kind', () => {
@@ -70,5 +93,35 @@ describe('routeToScene', () => {
     const r = routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'correlation' } });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe('no_cortexel_scene');
+  });
+
+  it('every multi-member family is ambiguous without a discriminator', () => {
+    for (const fam of ['spike_recorder', 'multimeter', 'computed'] as const) {
+      const r = routeToScene({ deviceFamily: fam });
+      expect(r.ok).toBe(false);
+    }
+  });
+});
+
+describe('NEST input hardening', () => {
+  it('rejects non-finite senders (denseIndex keys)', () => {
+    expect(spikeRecorderToSceneData({ senders: [NaN], times: [1] }).ok).toBe(false);
+  });
+
+  it('rejects a flattened multi-sender multimeter dump (non-monotonic times)', () => {
+    expect(multimeterToSceneData({ times: [0, 1, 0, 1], values: [1, 2, 3, 4] }).ok).toBe(false);
+  });
+
+  it('routes a non-voltage multimeter variable into the labeled analog channel', () => {
+    const r = multimeterToSceneData(
+      { times: [0, 1], values: [0.1, 0.2] },
+      { variable: 'Ca', units: 'uM' },
+    );
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.voltageTraces).toBeUndefined();
+      expect(r.data.analogTraces?.variable).toBe('Ca');
+      expect(r.data.analogTraces?.units).toBe('uM');
+    }
   });
 });

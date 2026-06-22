@@ -36,60 +36,6 @@ var CAMERA_PRESETS = {
   close: { name: "close", position: [0, 2, 4], target: [0, 0, 0], fov: 35 },
   cinematic: { name: "cinematic", position: [6, 4, 6], target: [0, 0, 0], fov: 40 }
 };
-var PROVENANCE_KEYS = [
-  "device_id",
-  "recorded_variable",
-  "units",
-  "sampling_interval",
-  "recorder_id",
-  "sender_ids",
-  "population_labels",
-  "time_units",
-  "source_ids",
-  "target_ids",
-  "synapse_model",
-  "weight_units",
-  "extent",
-  "mask",
-  "kernel",
-  "projection_sample_policy",
-  "morphology_disclaimer",
-  "frame_rate",
-  "state_variables",
-  "bin_ms",
-  "pair_labels",
-  "stim_units",
-  "rate_normalization"
-];
-var ProvenanceKeyEnum = z.enum(PROVENANCE_KEYS);
-var PROVENANCE_KEY_LABELS = {
-  device_id: "device id",
-  recorded_variable: "recorded variable",
-  units: "units",
-  sampling_interval: "sampling interval",
-  recorder_id: "spike_recorder id",
-  sender_ids: "sender ids",
-  population_labels: "population labels",
-  time_units: "time units",
-  source_ids: "source ids",
-  target_ids: "target ids",
-  synapse_model: "synapse model",
-  weight_units: "weight units",
-  extent: "extent",
-  mask: "mask",
-  kernel: "kernel",
-  projection_sample_policy: "projection sample policy",
-  morphology_disclaimer: "morphology geometry disclaimer",
-  frame_rate: "frame rate",
-  state_variables: "state variables",
-  bin_ms: "bin width",
-  pair_labels: "pair labels",
-  stim_units: "stimulus units",
-  rate_normalization: "rate normalization"
-};
-function isProvenanceKey(value) {
-  return typeof value === "string" && PROVENANCE_KEYS.includes(value);
-}
 var ProvenanceSchema = z.object({
   source: z.string().min(1).max(200),
   calibrated_posterior: z.boolean().default(false),
@@ -97,17 +43,23 @@ var ProvenanceSchema = z.object({
   advisory_only: z.boolean().default(false),
   is_paper_local_evidence: z.boolean().default(false),
   caption: z.string().max(500).optional(),
-  /** Machine-checkable record of the inputs an agent declared (keyed by
-   *  ProvenanceKey). validateSkillInvocation requires the keys a skill's
-   *  honesty contract demands. Presence-checked here; value truthfulness is the
-   *  host/backend's responsibility (Cortexel is host-agnostic). */
-  declared_inputs: z.partialRecord(
-    ProvenanceKeyEnum,
-    z.union([z.string(), z.number(), z.literal(true)])
-  ).optional(),
+  /** Machine-checkable record of the inputs an agent declared. Keys are
+   *  open here (lenient envelope) — validateSkillInvocation enforces the
+   *  closed ProvenanceKey set a skill demands, so an unknown key surfaces as a
+   *  clear missing_provenance error rather than zod's opaque invalid_key.
+   *  Presence-checked only; value truthfulness is the host's responsibility. */
+  declared_inputs: z.record(z.string(), z.union([z.string(), z.number(), z.literal(true)])).optional(),
   /** Explicit synthetic/illustrative discriminator — forces the schematic
    *  caption regardless of the other flags. */
   synthetic: z.boolean().default(false)
+}).superRefine((p, ctx) => {
+  if (p.calibrated_posterior === true) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["calibrated_posterior"],
+      message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary"
+    });
+  }
 });
 var VizSpecSchema = z.object({
   scene: z.enum(SCENE_NAMES),
@@ -554,6 +506,20 @@ function validateSkillInvocation(skillId, payload) {
       ]
     };
   }
+  const rawProv = payload?.provenance;
+  if (rawProv?.calibrated_posterior === true) {
+    return {
+      ok: false,
+      errors: [
+        {
+          code: "calibrated_posterior_unsupported",
+          path: "provenance.calibrated_posterior",
+          message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary",
+          hint: "Validation/search is candidate ranking; leave calibrated_posterior=false."
+        }
+      ]
+    };
+  }
   const envelope = validateVizSpec(payload);
   if (!envelope.ok) {
     return {
@@ -568,14 +534,6 @@ function validateSkillInvocation(skillId, payload) {
   }
   const spec = envelope.spec;
   const prov = spec.provenance;
-  if (prov.calibrated_posterior === true) {
-    errors.push({
-      code: "calibrated_posterior_unsupported",
-      path: "provenance.calibrated_posterior",
-      message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary",
-      hint: "Validation/search is candidate ranking; leave calibrated_posterior=false."
-    });
-  }
   if (contract.scene === null) {
     errors.push({
       code: "no_cortexel_scene",
@@ -617,10 +575,14 @@ function validateSkillInvocation(skillId, payload) {
     }
   }
   if (errors.length > 0) return { ok: false, errors };
-  const caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  if (contract.weak) {
+    const weakMsg = `Derived view \u2014 ${skillId} reuses the '${contract.scene}' scene; not a 1:1 rendering.`;
+    caption = caption ? `${weakMsg} ${caption}` : weakMsg;
+  }
   return { ok: true, spec, scene: contract.scene, caption };
 }
 
-export { AstrocyteParamsSchema, CAMERA_PRESETS, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, NetworkParamsSchema, PI_NEST_SKILL_IDS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceKeyEnum, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, Spatial3DParamsSchema, SpikeRasterParamsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, defaultHonestyCaption, getSkill, isPiNestSkillId, isProvenanceKey, listSkills, requiresHonestyCaption, validateSkillInvocation, validateVizSpec };
-//# sourceMappingURL=chunk-BCNMXKC3.js.map
-//# sourceMappingURL=chunk-BCNMXKC3.js.map
+export { AstrocyteParamsSchema, CAMERA_PRESETS, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, NetworkParamsSchema, PI_NEST_SKILL_IDS, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, Spatial3DParamsSchema, SpikeRasterParamsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, defaultHonestyCaption, getSkill, isPiNestSkillId, listSkills, requiresHonestyCaption, validateSkillInvocation, validateVizSpec };
+//# sourceMappingURL=chunk-X3PTQEFC.js.map
+//# sourceMappingURL=chunk-X3PTQEFC.js.map

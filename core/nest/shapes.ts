@@ -21,10 +21,15 @@ const nonEmptyFinite = finiteNumberArray.min(
   'empty array — no samples to render',
 );
 
+// A single finite number (for tuple coordinates that become GPU geometry).
+const finiteNum = z
+  .number()
+  .refine((v) => Number.isFinite(v), 'non-finite value (NaN/Inf)');
+
 /** spike_recorder events: nest.GetStatus(sr, 'events') → {senders, times}. */
 export const SpikeRecorderEventsSchema = z
   .object({
-    senders: z.array(z.number()),
+    senders: finiteNumberArray, // becomes denseIndex Map keys — reject NaN/Inf
     times: finiteNumberArray,
   })
   .superRefine((v, ctx) => {
@@ -51,14 +56,27 @@ export const MultimeterEventsSchema = z
         message: `times (${v.times.length}) and values (${v.values.length}) length mismatch`,
       });
     }
+    // A single multimeter feeding multiple senders interleaves their samples, so
+    // times reset and are non-monotonic. Reject fail-closed: the caller must
+    // split per sender before adapting, else the trace is a meaningless zigzag.
+    for (let i = 1; i < v.times.length; i++) {
+      if (v.times[i] < v.times[i - 1]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'multimeter times are non-monotonic — likely multiple senders flattened together; split per sender before adapting',
+        });
+        break;
+      }
+    }
   });
 export type MultimeterEvents = z.infer<typeof MultimeterEventsSchema>;
 
 /** nest.GetConnections() → parallel source/target/weight/delay arrays. */
 export const GetConnectionsSchema = z
   .object({
-    sources: z.array(z.number()).min(1, 'no connections'),
-    targets: z.array(z.number()).min(1, 'no connections'),
+    sources: finiteNumberArray.min(1, 'no connections'),
+    targets: finiteNumberArray.min(1, 'no connections'),
     weights: finiteNumberArray.optional(),
     delays: finiteNumberArray.optional(),
   })
@@ -78,8 +96,8 @@ export const GetConnectionsSchema = z
   });
 export type GetConnections = z.infer<typeof GetConnectionsSchema>;
 
-const xyz = z.tuple([z.number(), z.number(), z.number()]);
-const xy = z.tuple([z.number(), z.number()]);
+const xyz = z.tuple([finiteNum, finiteNum, finiteNum]);
+const xy = z.tuple([finiteNum, finiteNum]);
 
 /** nest.GetPosition(nodes) in 2D → ((x,y), ...). */
 export const GetPosition2DSchema = z.object({
@@ -101,8 +119,8 @@ export const WeightRecorderEventsSchema = z
   .object({
     times: nonEmptyFinite,
     weights: nonEmptyFinite,
-    senders: z.array(z.number()).optional(),
-    targets: z.array(z.number()).optional(),
+    senders: finiteNumberArray.optional(),
+    targets: finiteNumberArray.optional(),
   })
   .superRefine((v, ctx) => {
     if (v.times.length !== v.weights.length) {

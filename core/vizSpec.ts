@@ -12,28 +12,41 @@
 
 import { z } from 'zod';
 import { SCENE_NAMES } from './designLaws';
-import { ProvenanceKeyEnum } from './skills/provenanceKeys';
 
-export const ProvenanceSchema = z.object({
-  source: z.string().min(1).max(200),
-  calibrated_posterior: z.boolean().default(false), // fail-closed
-  advisory_only: z.boolean().default(false),
-  is_paper_local_evidence: z.boolean().default(false),
-  caption: z.string().max(500).optional(),
-  /** Machine-checkable record of the inputs an agent declared (keyed by
-   *  ProvenanceKey). validateSkillInvocation requires the keys a skill's
-   *  honesty contract demands. Presence-checked here; value truthfulness is the
-   *  host/backend's responsibility (Cortexel is host-agnostic). */
-  declared_inputs: z
-    .partialRecord(
-      ProvenanceKeyEnum,
-      z.union([z.string(), z.number(), z.literal(true)]),
-    )
-    .optional(),
-  /** Explicit synthetic/illustrative discriminator — forces the schematic
-   *  caption regardless of the other flags. */
-  synthetic: z.boolean().default(false),
-});
+export const ProvenanceSchema = z
+  .object({
+    source: z.string().min(1).max(200),
+    calibrated_posterior: z.boolean().default(false), // fail-closed
+    advisory_only: z.boolean().default(false),
+    is_paper_local_evidence: z.boolean().default(false),
+    caption: z.string().max(500).optional(),
+    /** Machine-checkable record of the inputs an agent declared. Keys are
+     *  open here (lenient envelope) — validateSkillInvocation enforces the
+     *  closed ProvenanceKey set a skill demands, so an unknown key surfaces as a
+     *  clear missing_provenance error rather than zod's opaque invalid_key.
+     *  Presence-checked only; value truthfulness is the host's responsibility. */
+    declared_inputs: z
+      .record(z.string(), z.union([z.string(), z.number(), z.literal(true)]))
+      .optional(),
+    /** Explicit synthetic/illustrative discriminator — forces the schematic
+     *  caption regardless of the other flags. */
+    synthetic: z.boolean().default(false),
+  })
+  // Fail closed at the SHARED envelope: a calibrated Bayesian posterior is never
+  // produced by the pipeline, so calibrated_posterior=true is rejected on EVERY
+  // entrypoint (skill gate AND the plain VizSpec path) — it must never be the
+  // flag that suppresses the honesty caption. Mirrors the API's HTTP 501 /
+  // CalibratedPosteriorNotImplementedError boundary.
+  .superRefine((p, ctx) => {
+    if (p.calibrated_posterior === true) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['calibrated_posterior'],
+        message:
+          'calibrated_posterior=true is not implemented and is rejected at the visualization boundary',
+      });
+    }
+  });
 
 export const VizSpecSchema = z.object({
   scene: z.enum(SCENE_NAMES),

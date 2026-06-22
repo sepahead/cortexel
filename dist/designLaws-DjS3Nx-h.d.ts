@@ -57,6 +57,11 @@ interface SceneData {
     voltageTraces?: Float32Array;
     traceTimes?: Float32Array;
     weightSeries?: Float32Array;
+    analogTraces?: {
+        values: Float32Array;
+        variable: string;
+        units: string;
+    };
     networkNodes?: {
         id: number;
         x: number;

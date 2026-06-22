@@ -67,15 +67,32 @@ export function spikeRecorderToSceneData(events: unknown): AdapterResult {
   };
 }
 
-export function multimeterToSceneData(events: unknown): AdapterResult {
+export function multimeterToSceneData(
+  events: unknown,
+  opts: { variable?: string; units?: string } = {},
+): AdapterResult {
   const parsed = MultimeterEventsSchema.safeParse(events);
   if (!parsed.success) return zerr(parsed.error);
   const { times, values } = parsed.data;
+  const traceTimes = Float32Array.from(times);
+  const variable = opts.variable;
+  // Only a membrane-voltage recording goes into voltageTraces. Any other analog
+  // variable (Ca, IP3, conductance, current) is self-labeled in analogTraces so
+  // a renderer cannot mislabel it as mV.
+  const isVoltage =
+    variable === undefined || /^v_?m$/i.test(variable) || variable === 'V_m';
+  if (isVoltage) {
+    return { ok: true, data: { traceTimes, voltageTraces: Float32Array.from(values) } };
+  }
   return {
     ok: true,
     data: {
-      traceTimes: Float32Array.from(times),
-      voltageTraces: Float32Array.from(values),
+      traceTimes,
+      analogTraces: {
+        values: Float32Array.from(values),
+        variable,
+        units: opts.units ?? 'unknown',
+      },
     },
   };
 }

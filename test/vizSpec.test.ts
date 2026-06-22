@@ -54,4 +54,14 @@ describe('VizSpec validation', () => {
     });
     expect(parsed.success).toBe(true);
   });
+
+  it('rejects calibrated_posterior=true at the shared envelope (501 boundary)', () => {
+    // The non-skill VizSpec path must fail closed too — this is the only flag
+    // that could ever suppress the honesty caption, so it can never be accepted.
+    const r = validateVizSpec({
+      scene: 'spike-raster',
+      provenance: { source: 's', calibrated_posterior: true },
+    });
+    expect(r.ok).toBe(false);
+  });
 });

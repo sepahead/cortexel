@@ -315,62 +315,6 @@ var CAMERA_PRESETS = {
   close: { name: "close", position: [0, 2, 4], target: [0, 0, 0], fov: 35 },
   cinematic: { name: "cinematic", position: [6, 4, 6], target: [0, 0, 0], fov: 40 }
 };
-var PROVENANCE_KEYS = [
-  "device_id",
-  "recorded_variable",
-  "units",
-  "sampling_interval",
-  "recorder_id",
-  "sender_ids",
-  "population_labels",
-  "time_units",
-  "source_ids",
-  "target_ids",
-  "synapse_model",
-  "weight_units",
-  "extent",
-  "mask",
-  "kernel",
-  "projection_sample_policy",
-  "morphology_disclaimer",
-  "frame_rate",
-  "state_variables",
-  "bin_ms",
-  "pair_labels",
-  "stim_units",
-  "rate_normalization"
-];
-var ProvenanceKeyEnum = zod.z.enum(PROVENANCE_KEYS);
-var PROVENANCE_KEY_LABELS = {
-  device_id: "device id",
-  recorded_variable: "recorded variable",
-  units: "units",
-  sampling_interval: "sampling interval",
-  recorder_id: "spike_recorder id",
-  sender_ids: "sender ids",
-  population_labels: "population labels",
-  time_units: "time units",
-  source_ids: "source ids",
-  target_ids: "target ids",
-  synapse_model: "synapse model",
-  weight_units: "weight units",
-  extent: "extent",
-  mask: "mask",
-  kernel: "kernel",
-  projection_sample_policy: "projection sample policy",
-  morphology_disclaimer: "morphology geometry disclaimer",
-  frame_rate: "frame rate",
-  state_variables: "state variables",
-  bin_ms: "bin width",
-  pair_labels: "pair labels",
-  stim_units: "stimulus units",
-  rate_normalization: "rate normalization"
-};
-function isProvenanceKey(value) {
-  return typeof value === "string" && PROVENANCE_KEYS.includes(value);
-}
-
-// core/vizSpec.ts
 var ProvenanceSchema = zod.z.object({
   source: zod.z.string().min(1).max(200),
   calibrated_posterior: zod.z.boolean().default(false),
@@ -378,17 +322,23 @@ var ProvenanceSchema = zod.z.object({
   advisory_only: zod.z.boolean().default(false),
   is_paper_local_evidence: zod.z.boolean().default(false),
   caption: zod.z.string().max(500).optional(),
-  /** Machine-checkable record of the inputs an agent declared (keyed by
-   *  ProvenanceKey). validateSkillInvocation requires the keys a skill's
-   *  honesty contract demands. Presence-checked here; value truthfulness is the
-   *  host/backend's responsibility (Cortexel is host-agnostic). */
-  declared_inputs: zod.z.partialRecord(
-    ProvenanceKeyEnum,
-    zod.z.union([zod.z.string(), zod.z.number(), zod.z.literal(true)])
-  ).optional(),
+  /** Machine-checkable record of the inputs an agent declared. Keys are
+   *  open here (lenient envelope) — validateSkillInvocation enforces the
+   *  closed ProvenanceKey set a skill demands, so an unknown key surfaces as a
+   *  clear missing_provenance error rather than zod's opaque invalid_key.
+   *  Presence-checked only; value truthfulness is the host's responsibility. */
+  declared_inputs: zod.z.record(zod.z.string(), zod.z.union([zod.z.string(), zod.z.number(), zod.z.literal(true)])).optional(),
   /** Explicit synthetic/illustrative discriminator — forces the schematic
    *  caption regardless of the other flags. */
   synthetic: zod.z.boolean().default(false)
+}).superRefine((p, ctx) => {
+  if (p.calibrated_posterior === true) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      path: ["calibrated_posterior"],
+      message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary"
+    });
+  }
 });
 var VizSpecSchema = zod.z.object({
   scene: zod.z.enum(SCENE_NAMES),
@@ -475,6 +425,60 @@ var VALID_RENDERER_ROUTES = [
   "fiber",
   "manim"
 ];
+var PROVENANCE_KEYS = [
+  "device_id",
+  "recorded_variable",
+  "units",
+  "sampling_interval",
+  "recorder_id",
+  "sender_ids",
+  "population_labels",
+  "time_units",
+  "source_ids",
+  "target_ids",
+  "synapse_model",
+  "weight_units",
+  "extent",
+  "mask",
+  "kernel",
+  "projection_sample_policy",
+  "morphology_disclaimer",
+  "frame_rate",
+  "state_variables",
+  "bin_ms",
+  "pair_labels",
+  "stim_units",
+  "rate_normalization"
+];
+var ProvenanceKeyEnum = zod.z.enum(PROVENANCE_KEYS);
+var PROVENANCE_KEY_LABELS = {
+  device_id: "device id",
+  recorded_variable: "recorded variable",
+  units: "units",
+  sampling_interval: "sampling interval",
+  recorder_id: "spike_recorder id",
+  sender_ids: "sender ids",
+  population_labels: "population labels",
+  time_units: "time units",
+  source_ids: "source ids",
+  target_ids: "target ids",
+  synapse_model: "synapse model",
+  weight_units: "weight units",
+  extent: "extent",
+  mask: "mask",
+  kernel: "kernel",
+  projection_sample_policy: "projection sample policy",
+  morphology_disclaimer: "morphology geometry disclaimer",
+  frame_rate: "frame rate",
+  state_variables: "state variables",
+  bin_ms: "bin width",
+  pair_labels: "pair labels",
+  stim_units: "stimulus units",
+  rate_normalization: "rate normalization"
+};
+function isProvenanceKey(value) {
+  return typeof value === "string" && PROVENANCE_KEYS.includes(value);
+}
 var numArray = zod.z.array(zod.z.number());
 var VoltageTraceParamsSchema = zod.z.object({
   times_ms: numArray.min(1),
@@ -823,13 +827,13 @@ var SPIKE_KIND_TO_SKILL = {
   rates: "pi.nest.rate_response",
   correlation: "pi.nest.correlogram"
 };
-var FAMILY_TO_SKILL = {
-  multimeter: "pi.nest.voltage_trace",
-  get_connections: "pi.nest.connectivity_matrix",
-  get_position: "pi.nest.spatial_3d",
-  weight_recorder: "pi.nest.plasticity_dynamics",
-  computed: "pi.nest.phase_plane"
-};
+var FAMILY_MEMBERS = (() => {
+  const out = {};
+  for (const c of listSkills()) {
+    (out[c.deviceFamily] ??= []).push(c.id);
+  }
+  return out;
+})();
 function resolve(skill) {
   const contract = NEST_SKILL_REGISTRY[skill];
   if (contract.scene === null) {
@@ -838,20 +842,22 @@ function resolve(skill) {
   return { ok: true, skill, scene: contract.scene };
 }
 function routeToScene(input) {
-  if (input.deviceFamily === "spike_recorder") {
-    const kind = input.dataShape?.kind;
-    if (!kind) {
-      return {
-        ok: false,
-        reason: "ambiguous",
-        candidates: Object.values(SPIKE_KIND_TO_SKILL)
-      };
-    }
-    return resolve(SPIKE_KIND_TO_SKILL[kind]);
+  const members = FAMILY_MEMBERS[input.deviceFamily];
+  if (!members || members.length === 0) {
+    return { ok: false, reason: "unknown_family" };
   }
-  const skill = FAMILY_TO_SKILL[input.deviceFamily];
-  if (!skill) return { ok: false, reason: "unknown_family" };
-  return resolve(skill);
+  if (input.skill && members.includes(input.skill)) {
+    return resolve(input.skill);
+  }
+  if (members.length === 1) return resolve(members[0]);
+  if (input.deviceFamily === "spike_recorder" && input.dataShape?.kind) {
+    return resolve(SPIKE_KIND_TO_SKILL[input.dataShape.kind]);
+  }
+  const disambiguateBy = input.deviceFamily === "spike_recorder" ? { field: "dataShape.kind", maps: { ...SPIKE_KIND_TO_SKILL } } : {
+    field: "skill",
+    maps: Object.fromEntries(members.map((s) => [s, s]))
+  };
+  return { ok: false, reason: "ambiguous", candidates: members, disambiguateBy };
 }
 
 // core/skills/validateSkillInvocation.ts
@@ -872,6 +878,20 @@ function validateSkillInvocation(skillId, payload) {
       ]
     };
   }
+  const rawProv = payload?.provenance;
+  if (rawProv?.calibrated_posterior === true) {
+    return {
+      ok: false,
+      errors: [
+        {
+          code: "calibrated_posterior_unsupported",
+          path: "provenance.calibrated_posterior",
+          message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary",
+          hint: "Validation/search is candidate ranking; leave calibrated_posterior=false."
+        }
+      ]
+    };
+  }
   const envelope = validateVizSpec(payload);
   if (!envelope.ok) {
     return {
@@ -886,14 +906,6 @@ function validateSkillInvocation(skillId, payload) {
   }
   const spec = envelope.spec;
   const prov = spec.provenance;
-  if (prov.calibrated_posterior === true) {
-    errors.push({
-      code: "calibrated_posterior_unsupported",
-      path: "provenance.calibrated_posterior",
-      message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary",
-      hint: "Validation/search is candidate ranking; leave calibrated_posterior=false."
-    });
-  }
   if (contract.scene === null) {
     errors.push({
       code: "no_cortexel_scene",
@@ -935,7 +947,11 @@ function validateSkillInvocation(skillId, payload) {
     }
   }
   if (errors.length > 0) return { ok: false, errors };
-  const caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  if (contract.weak) {
+    const weakMsg = `Derived view \u2014 ${skillId} reuses the '${contract.scene}' scene; not a 1:1 rendering.`;
+    caption = caption ? `${weakMsg} ${caption}` : weakMsg;
+  }
   return { ok: true, spec, scene: contract.scene, caption };
 }
 var finiteNumberArray = zod.z.array(zod.z.number()).refine((a) => a.every((v) => Number.isFinite(v)), {
@@ -945,8 +961,10 @@ var nonEmptyFinite = finiteNumberArray.min(
   1,
   "empty array \u2014 no samples to render"
 );
+var finiteNum = zod.z.number().refine((v) => Number.isFinite(v), "non-finite value (NaN/Inf)");
 var SpikeRecorderEventsSchema = zod.z.object({
-  senders: zod.z.array(zod.z.number()),
+  senders: finiteNumberArray,
+  // becomes denseIndex Map keys — reject NaN/Inf
   times: finiteNumberArray
 }).superRefine((v, ctx) => {
   if (v.senders.length !== v.times.length) {
@@ -966,10 +984,19 @@ var MultimeterEventsSchema = zod.z.object({
       message: `times (${v.times.length}) and values (${v.values.length}) length mismatch`
     });
   }
+  for (let i = 1; i < v.times.length; i++) {
+    if (v.times[i] < v.times[i - 1]) {
+      ctx.addIssue({
+        code: zod.z.ZodIssueCode.custom,
+        message: "multimeter times are non-monotonic \u2014 likely multiple senders flattened together; split per sender before adapting"
+      });
+      break;
+    }
+  }
 });
 var GetConnectionsSchema = zod.z.object({
-  sources: zod.z.array(zod.z.number()).min(1, "no connections"),
-  targets: zod.z.array(zod.z.number()).min(1, "no connections"),
+  sources: finiteNumberArray.min(1, "no connections"),
+  targets: finiteNumberArray.min(1, "no connections"),
   weights: finiteNumberArray.optional(),
   delays: finiteNumberArray.optional()
 }).superRefine((v, ctx) => {
@@ -986,8 +1013,8 @@ var GetConnectionsSchema = zod.z.object({
     });
   }
 });
-var xyz = zod.z.tuple([zod.z.number(), zod.z.number(), zod.z.number()]);
-var xy = zod.z.tuple([zod.z.number(), zod.z.number()]);
+var xyz = zod.z.tuple([finiteNum, finiteNum, finiteNum]);
+var xy = zod.z.tuple([finiteNum, finiteNum]);
 var GetPosition2DSchema = zod.z.object({
   positions: zod.z.array(xy).min(1, "no positions")
 });
@@ -998,8 +1025,8 @@ var GetPosition3DSchema = zod.z.object({
 var WeightRecorderEventsSchema = zod.z.object({
   times: nonEmptyFinite,
   weights: nonEmptyFinite,
-  senders: zod.z.array(zod.z.number()).optional(),
-  targets: zod.z.array(zod.z.number()).optional()
+  senders: finiteNumberArray.optional(),
+  targets: finiteNumberArray.optional()
 }).superRefine((v, ctx) => {
   if (v.times.length !== v.weights.length) {
     ctx.addIssue({
@@ -1047,15 +1074,25 @@ function spikeRecorderToSceneData(events) {
     senderIndexMap: map
   };
 }
-function multimeterToSceneData(events) {
+function multimeterToSceneData(events, opts = {}) {
   const parsed = MultimeterEventsSchema.safeParse(events);
   if (!parsed.success) return zerr(parsed.error);
   const { times, values } = parsed.data;
+  const traceTimes = Float32Array.from(times);
+  const variable = opts.variable;
+  const isVoltage = variable === void 0 || /^v_?m$/i.test(variable) || variable === "V_m";
+  if (isVoltage) {
+    return { ok: true, data: { traceTimes, voltageTraces: Float32Array.from(values) } };
+  }
   return {
     ok: true,
     data: {
-      traceTimes: Float32Array.from(times),
-      voltageTraces: Float32Array.from(values)
+      traceTimes,
+      analogTraces: {
+        values: Float32Array.from(values),
+        variable,
+        units: opts.units ?? "unknown"
+      }
     }
   };
 }

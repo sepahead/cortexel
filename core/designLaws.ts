@@ -91,6 +91,10 @@ export interface SceneData {
   // from voltageTraces so a renderer never mislabels weights as membrane voltage
   // and weight_units provenance is not lost at the SceneData boundary.
   weightSeries?: Float32Array;
+  // Non-voltage analog recordings (e.g. astrocyte Ca²⁺/IP₃) that share the
+  // analog-trace scene but are NOT membrane voltage. Self-labeling so the
+  // renderer never presents Ca/IP3 as mV — the same separation as weightSeries.
+  analogTraces?: { values: Float32Array; variable: string; units: string };
   networkNodes?: { id: number; x: number; y: number; z: number; label: string }[];
   networkEdges?: { source: number; target: number; weight: number }[];
   vectorField?: { x: number; y: number; z: number; dx: number; dy: number; dz: number }[];

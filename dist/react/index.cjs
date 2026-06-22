@@ -179,32 +179,6 @@ var SCENE_NAMES = [
   "psth",
   "weight-histogram"
 ];
-var PROVENANCE_KEYS = [
-  "device_id",
-  "recorded_variable",
-  "units",
-  "sampling_interval",
-  "recorder_id",
-  "sender_ids",
-  "population_labels",
-  "time_units",
-  "source_ids",
-  "target_ids",
-  "synapse_model",
-  "weight_units",
-  "extent",
-  "mask",
-  "kernel",
-  "projection_sample_policy",
-  "morphology_disclaimer",
-  "frame_rate",
-  "state_variables",
-  "bin_ms",
-  "pair_labels",
-  "stim_units",
-  "rate_normalization"
-];
-var ProvenanceKeyEnum = zod.z.enum(PROVENANCE_KEYS);
 
 // core/vizSpec.ts
 var ProvenanceSchema = zod.z.object({
@@ -214,17 +188,23 @@ var ProvenanceSchema = zod.z.object({
   advisory_only: zod.z.boolean().default(false),
   is_paper_local_evidence: zod.z.boolean().default(false),
   caption: zod.z.string().max(500).optional(),
-  /** Machine-checkable record of the inputs an agent declared (keyed by
-   *  ProvenanceKey). validateSkillInvocation requires the keys a skill's
-   *  honesty contract demands. Presence-checked here; value truthfulness is the
-   *  host/backend's responsibility (Cortexel is host-agnostic). */
-  declared_inputs: zod.z.partialRecord(
-    ProvenanceKeyEnum,
-    zod.z.union([zod.z.string(), zod.z.number(), zod.z.literal(true)])
-  ).optional(),
+  /** Machine-checkable record of the inputs an agent declared. Keys are
+   *  open here (lenient envelope) — validateSkillInvocation enforces the
+   *  closed ProvenanceKey set a skill demands, so an unknown key surfaces as a
+   *  clear missing_provenance error rather than zod's opaque invalid_key.
+   *  Presence-checked only; value truthfulness is the host's responsibility. */
+  declared_inputs: zod.z.record(zod.z.string(), zod.z.union([zod.z.string(), zod.z.number(), zod.z.literal(true)])).optional(),
   /** Explicit synthetic/illustrative discriminator — forces the schematic
    *  caption regardless of the other flags. */
   synthetic: zod.z.boolean().default(false)
+}).superRefine((p, ctx) => {
+  if (p.calibrated_posterior === true) {
+    ctx.addIssue({
+      code: zod.z.ZodIssueCode.custom,
+      path: ["calibrated_posterior"],
+      message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary"
+    });
+  }
 });
 var VizSpecSchema = zod.z.object({
   scene: zod.z.enum(SCENE_NAMES),
@@ -621,6 +601,20 @@ function validateSkillInvocation(skillId, payload) {
       ]
     };
   }
+  const rawProv = payload?.provenance;
+  if (rawProv?.calibrated_posterior === true) {
+    return {
+      ok: false,
+      errors: [
+        {
+          code: "calibrated_posterior_unsupported",
+          path: "provenance.calibrated_posterior",
+          message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary",
+          hint: "Validation/search is candidate ranking; leave calibrated_posterior=false."
+        }
+      ]
+    };
+  }
   const envelope = validateVizSpec(payload);
   if (!envelope.ok) {
     return {
@@ -635,14 +629,6 @@ function validateSkillInvocation(skillId, payload) {
   }
   const spec = envelope.spec;
   const prov = spec.provenance;
-  if (prov.calibrated_posterior === true) {
-    errors.push({
-      code: "calibrated_posterior_unsupported",
-      path: "provenance.calibrated_posterior",
-      message: "calibrated_posterior=true is not implemented and is rejected at the visualization boundary",
-      hint: "Validation/search is candidate ranking; leave calibrated_posterior=false."
-    });
-  }
   if (contract.scene === null) {
     errors.push({
       code: "no_cortexel_scene",
@@ -684,7 +670,11 @@ function validateSkillInvocation(skillId, payload) {
     }
   }
   if (errors.length > 0) return { ok: false, errors };
-  const caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  if (contract.weak) {
+    const weakMsg = `Derived view \u2014 ${skillId} reuses the '${contract.scene}' scene; not a 1:1 rendering.`;
+    caption = caption ? `${weakMsg} ${caption}` : weakMsg;
+  }
   return { ok: true, spec, scene: contract.scene, caption };
 }
 function VizSpecRenderer({

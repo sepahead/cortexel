@@ -63,6 +63,27 @@ export function validateSkillInvocation(
     };
   }
 
+  // 6 (early). calibrated_posterior=true is rejected at the shared envelope
+  // (ProvenanceSchema.superRefine), but check the raw payload first so the agent
+  // gets the precise 'calibrated_posterior_unsupported' code rather than a
+  // generic envelope error. (Mirrors CalibratedPosteriorNotImplementedError.)
+  const rawProv = (payload as { provenance?: { calibrated_posterior?: unknown } })
+    ?.provenance;
+  if (rawProv?.calibrated_posterior === true) {
+    return {
+      ok: false,
+      errors: [
+        {
+          code: 'calibrated_posterior_unsupported',
+          path: 'provenance.calibrated_posterior',
+          message:
+            'calibrated_posterior=true is not implemented and is rejected at the visualization boundary',
+          hint: 'Validation/search is candidate ranking; leave calibrated_posterior=false.',
+        },
+      ],
+    };
+  }
+
   // 1. Envelope.
   const envelope = validateVizSpec(payload);
   if (!envelope.ok) {
@@ -78,19 +99,6 @@ export function validateSkillInvocation(
   }
   const spec = envelope.spec;
   const prov = spec.provenance;
-
-  // 6. calibrated_posterior=true must fail closed (no calibrated posterior is
-  // ever produced by the pipeline; mirrors CalibratedPosteriorNotImplementedError
-  // / HTTP 501). It must NEVER be the flag that suppresses the honesty caption.
-  if (prov.calibrated_posterior === true) {
-    errors.push({
-      code: 'calibrated_posterior_unsupported',
-      path: 'provenance.calibrated_posterior',
-      message:
-        'calibrated_posterior=true is not implemented and is rejected at the visualization boundary',
-      hint: 'Validation/search is candidate ranking; leave calibrated_posterior=false.',
-    });
-  }
 
   // 3. Scene must be renderable and match the contract.
   if (contract.scene === null) {
@@ -140,9 +148,16 @@ export function validateSkillInvocation(
 
   if (errors.length > 0) return { ok: false, errors };
 
-  const caption = requiresHonestyCaption(prov)
-    ? defaultHonestyCaption(prov)
-    : null;
+  // `weak` is load-bearing: a skill that reuses a scene approximately (e.g.
+  // astrocyte Ca/IP3 through the analog-trace scene) ALWAYS carries the derived-
+  // view disclosure, prepended to any provenance caption. (With calibrated_
+  // posterior=true rejected upstream, requiresHonestyCaption is effectively
+  // always true on the accepted path, so this augments rather than replaces.)
+  let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  if (contract.weak) {
+    const weakMsg = `Derived view — ${skillId} reuses the '${contract.scene}' scene; not a 1:1 rendering.`;
+    caption = caption ? `${weakMsg} ${caption}` : weakMsg;
+  }
 
   return { ok: true, spec, scene: contract.scene as SceneName, caption };
 }
