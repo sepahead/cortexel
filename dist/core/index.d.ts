@@ -14,28 +14,35 @@ declare function colormapRgba(name: ColormapName, t: number, alpha?: number): st
 declare function colormapGradient(name: ColormapName, angle?: number, stops?: number): string;
 /** SVG `<stop>` entries for a `<linearGradient>` spanning a colormap. */
 declare function colormapSvgStops(name: ColormapName, stops?: number): string;
-declare const CORTEXEL_PALETTE: {
-    readonly voidNavy: "#030711";
-    readonly deepNavy: "#050816";
-    readonly panel: "#0b1220";
-    readonly grid: "#1e293b";
-    readonly cyan: "#275a60";
-    readonly teal: "#3a6b54";
-    readonly violet: "#faccfa";
-    readonly amber: "#c09036";
-    readonly orange: "#d89448";
-    readonly pink: "#ed9a62";
-    readonly membrane: "#52744a";
-    readonly spike: "#dd954d";
-    readonly spikeHot: "#ef9b67";
-    readonly excitatory: "#136697";
-    readonly inhibitory: "#983307";
-    readonly ltp: "#023175";
-    readonly ltd: "#6f1107";
-    readonly ink: "#e2e8f0";
-    readonly inkDim: "#94a3b8";
-    readonly inkFaint: "#64748b";
-};
+type PaletteName = 'crameri' | 'brunel';
+interface SemanticPalette {
+    voidNavy: string;
+    deepNavy: string;
+    panel: string;
+    grid: string;
+    cyan: string;
+    teal: string;
+    violet: string;
+    amber: string;
+    orange: string;
+    pink: string;
+    membrane: string;
+    spike: string;
+    spikeHot: string;
+    excitatory: string;
+    inhibitory: string;
+    ltp: string;
+    ltd: string;
+    ink: string;
+    inkDim: string;
+    inkFaint: string;
+}
+/** Default palette — Crameri scientific colour maps (batlow + vik). */
+declare const CORTEXEL_PALETTE: SemanticPalette;
+/** Brunel palette — Okabe-Ito-derived, luminance-lifted for dark canvas. */
+declare const BRUNEL_PALETTE: SemanticPalette;
+/** Select a semantic palette by name. Defaults to 'crameri'. */
+declare function getPalette(name?: PaletteName): SemanticPalette;
 declare const CORTICAL_LAYER_COLORS: Record<string, string>;
 /** Categorical neuron/population colors — batlowS (Crameri's categorical set).
  *  Distinct, CVD-friendly hues sampled from the batlow colour map at
@@ -441,4 +448,4 @@ declare function getPositionToSceneData(positions: unknown, opts?: {
 }): AdapterResult;
 declare function weightRecorderToSceneData(events: unknown): AdapterResult;
 
-export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, BATLOW_GLSL, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIK_GLSL, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
+export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, BATLOW_GLSL, BRUNEL_PALETTE, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PaletteName, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, SceneData, SceneName, type SemanticPalette, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIK_GLSL, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPalette, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };

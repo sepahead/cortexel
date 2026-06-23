@@ -166,18 +166,59 @@ export function colormapSvgStops(name: ColormapName, stops = 8): string {
   return out;
 }
 
-// ───────────────────────── Semantic palette ─────────────────────────
+// ───────────────────────── Semantic palettes ─────────────────────────
 // Named colors carry meaning consistently across every figure and scene, so a
 // reader who learns "blue = excitatory / potentiation" in one view keeps it in
-// the next. Every color is sampled from a Crameri scientific colour map:
-//   - membrane/spike from batlow (sequential)
-//   - E/I and LTP/LTD from vik (diverging blue↔red, Allen/MICrONS convention)
-//   - brand accents from batlow's distinctive mid-range hues
-// This grounds the visual identity in scientific colour theory rather than
-// generic UI palettes. Tuned for the deep-navy canvas.
+// the next. Two palettes ship:
+//
+// 1. CORTEXEL_PALETTE ('crameri') — the default. Every color sampled from a
+//    Crameri scientific colour map (batlow sequential, vik diverging). Muted,
+//    earthy, scientifically honest. Allen/MICrONS E/I convention.
+//
+// 2. BRUNEL_PALETTE ('brunel') — Okabe-Ito-derived, luminance-lifted for the
+//    deep-navy canvas. Luminous azure E, bright vermilion I, warm gold spike.
+//    Higher-saturation, more "alive" feel. Based on the Brunel (2000) balanced
+//    network scene colors. Okabe-Ito is the deuteranopia/protanopia gold
+//    standard (Okabe & Ito 2008), so E/I separation stays CB-safe.
+//
+// Both share the same canvas/surface and text colors — only the semantic
+// signal colors differ. Use getPalette('brunel') or getPalette('crameri') to
+// select; import CORTEXEL_PALETTE directly for the default.
 
-export const CORTEXEL_PALETTE = {
-  // Canvas / surfaces (unchanged — the deep navy lets Crameri colors pop)
+export type PaletteName = 'crameri' | 'brunel';
+
+export interface SemanticPalette {
+  // Canvas / surfaces
+  voidNavy: string;
+  deepNavy: string;
+  panel: string;
+  grid: string;
+  // Brand signal
+  cyan: string;
+  teal: string;
+  violet: string;
+  amber: string;
+  orange: string;
+  pink: string;
+  // Membrane / spikes
+  membrane: string;
+  spike: string;
+  spikeHot: string;
+  // Excitatory vs inhibitory
+  excitatory: string;
+  inhibitory: string;
+  // Plasticity
+  ltp: string;
+  ltd: string;
+  // Text
+  ink: string;
+  inkDim: string;
+  inkFaint: string;
+}
+
+/** Default palette — Crameri scientific colour maps (batlow + vik). */
+export const CORTEXEL_PALETTE: SemanticPalette = {
+  // Canvas / surfaces (shared with brunel — the deep navy lets colors pop)
   voidNavy: '#030711',
   deepNavy: '#050816',
   panel: '#0b1220',
@@ -200,11 +241,51 @@ export const CORTEXEL_PALETTE = {
   // Plasticity — from vik (LTP = cool potentiation, LTD = warm depression)
   ltp: '#023175',       // vik(0.08) — deep blue
   ltd: '#6f1107',       // vik(0.92) — deep red
-  // Text (unchanged — WCAG AA on the deep-navy canvas)
+  // Text (shared — WCAG AA on the deep-navy canvas)
   ink: '#e2e8f0',
   inkDim: '#94a3b8',
   inkFaint: '#64748b',
-} as const;
+};
+
+/** Brunel palette — Okabe-Ito-derived, luminance-lifted for dark canvas. */
+export const BRUNEL_PALETTE: SemanticPalette = {
+  // Canvas / surfaces (shared)
+  voidNavy: '#030711',
+  deepNavy: '#050816',
+  panel: '#0b1220',
+  grid: '#1e293b',
+  // Brand signal — Okabe-Ito hues, luminance-lifted
+  cyan: '#2a9fe0',      // luminous azure (lifted OI blue)
+  teal: '#56b4e9',      // OI sky blue
+  violet: '#cc79a7',    // OI reddish-purple
+  amber: '#ffd06b',     // warm gold (spike flash hue)
+  orange: '#f4711e',    // bright vermilion (OI vermillion, lifted)
+  pink: '#e8783c',      // warm action orange
+  // Membrane / spikes — warm gold bloom, never acid white-yellow
+  membrane: '#2a9fe0',  // luminous azure — membrane traces read as "live signal"
+  spike: '#ffd06b',     // warm gold (flash / pulse)
+  spikeHot: '#ff8a4c',  // hotter orange-gold for spike bursts
+  // Excitatory vs inhibitory — Okabe-Ito blue vs vermillion (CB gold standard)
+  excitatory: '#2a9fe0', // luminous azure (lifted OI blue)
+  inhibitory: '#f4711e', // bright vermilion (OI vermillion, lifted)
+  // Plasticity — same blue/orange axis as E/I (LTP potentiates, LTD depresses)
+  ltp: '#2a9fe0',       // azure — potentiation
+  ltd: '#f4711e',       // vermilion — depression
+  // Text (shared)
+  ink: '#e2e8f0',
+  inkDim: '#94a3b8',
+  inkFaint: '#64748b',
+};
+
+const PALETTES: Record<PaletteName, SemanticPalette> = {
+  crameri: CORTEXEL_PALETTE,
+  brunel: BRUNEL_PALETTE,
+};
+
+/** Select a semantic palette by name. Defaults to 'crameri'. */
+export function getPalette(name: PaletteName = 'crameri'): SemanticPalette {
+  return PALETTES[name] ?? CORTEXEL_PALETTE;
+}
 
 // Cortical layers L1–L6 — sampled along batlow so layer order maps to a
 // monotone perceptual ramp (deep → superficial reads as a gradient, not a

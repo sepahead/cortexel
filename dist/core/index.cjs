@@ -166,7 +166,7 @@ function colormapSvgStops(name, stops = 8) {
   return out;
 }
 var CORTEXEL_PALETTE = {
-  // Canvas / surfaces (unchanged — the deep navy lets Crameri colors pop)
+  // Canvas / surfaces (shared with brunel — the deep navy lets colors pop)
   voidNavy: "#030711",
   deepNavy: "#050816",
   panel: "#0b1220",
@@ -202,11 +202,59 @@ var CORTEXEL_PALETTE = {
   // vik(0.08) — deep blue
   ltd: "#6f1107",
   // vik(0.92) — deep red
-  // Text (unchanged — WCAG AA on the deep-navy canvas)
+  // Text (shared — WCAG AA on the deep-navy canvas)
   ink: "#e2e8f0",
   inkDim: "#94a3b8",
   inkFaint: "#64748b"
 };
+var BRUNEL_PALETTE = {
+  // Canvas / surfaces (shared)
+  voidNavy: "#030711",
+  deepNavy: "#050816",
+  panel: "#0b1220",
+  grid: "#1e293b",
+  // Brand signal — Okabe-Ito hues, luminance-lifted
+  cyan: "#2a9fe0",
+  // luminous azure (lifted OI blue)
+  teal: "#56b4e9",
+  // OI sky blue
+  violet: "#cc79a7",
+  // OI reddish-purple
+  amber: "#ffd06b",
+  // warm gold (spike flash hue)
+  orange: "#f4711e",
+  // bright vermilion (OI vermillion, lifted)
+  pink: "#e8783c",
+  // warm action orange
+  // Membrane / spikes — warm gold bloom, never acid white-yellow
+  membrane: "#2a9fe0",
+  // luminous azure — membrane traces read as "live signal"
+  spike: "#ffd06b",
+  // warm gold (flash / pulse)
+  spikeHot: "#ff8a4c",
+  // hotter orange-gold for spike bursts
+  // Excitatory vs inhibitory — Okabe-Ito blue vs vermillion (CB gold standard)
+  excitatory: "#2a9fe0",
+  // luminous azure (lifted OI blue)
+  inhibitory: "#f4711e",
+  // bright vermilion (OI vermillion, lifted)
+  // Plasticity — same blue/orange axis as E/I (LTP potentiates, LTD depresses)
+  ltp: "#2a9fe0",
+  // azure — potentiation
+  ltd: "#f4711e",
+  // vermilion — depression
+  // Text (shared)
+  ink: "#e2e8f0",
+  inkDim: "#94a3b8",
+  inkFaint: "#64748b"
+};
+var PALETTES = {
+  crameri: CORTEXEL_PALETTE,
+  brunel: BRUNEL_PALETTE
+};
+function getPalette(name = "crameri") {
+  return PALETTES[name] ?? CORTEXEL_PALETTE;
+}
 var CORTICAL_LAYER_COLORS = {
   L1: colormapHex("batlow", 0.05),
   "L2/3": colormapHex("batlow", 0.28),
@@ -1403,6 +1451,7 @@ function weightRecorderToSceneData(events) {
 exports.AXIS_COLORS = AXIS_COLORS;
 exports.AstrocyteParamsSchema = AstrocyteParamsSchema;
 exports.BATLOW_GLSL = BATLOW_GLSL;
+exports.BRUNEL_PALETTE = BRUNEL_PALETTE;
 exports.CAMERA_PRESETS = CAMERA_PRESETS;
 exports.CATEGORICAL = CATEGORICAL;
 exports.CONSERVATIVE_PROVENANCE = CONSERVATIVE_PROVENANCE;
@@ -1452,6 +1501,7 @@ exports.describeSkills = describeSkills;
 exports.detectEmptyScene = detectEmptyScene;
 exports.getConnectionsToSceneData = getConnectionsToSceneData;
 exports.getExamplePayload = getExamplePayload;
+exports.getPalette = getPalette;
 exports.getPositionToSceneData = getPositionToSceneData;
 exports.getSkill = getSkill;
 exports.isNestSkillId = isNestSkillId;
