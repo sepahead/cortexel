@@ -1,6 +1,6 @@
 import * as react from 'react';
 import { ReactNode } from 'react';
-import { q as SceneName, r as SemanticPalette } from '../designLaws-rhhuDvhZ.cjs';
+import { q as SceneName, r as SemanticPalette } from '../designLaws-DNgmp6mG.cjs';
 
 interface PopulationExpandController {
     selectedPopId: string | null;

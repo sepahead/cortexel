@@ -233,7 +233,19 @@ function registerPalette(name, palette, metadata) {
   _paletteRegistry.set(name, { palette, metadata });
 }
 function getPalette(name = "crameri") {
-  return _paletteRegistry.get(name)?.palette ?? CORTEXEL_PALETTE;
+  const entry = _paletteRegistry.get(name);
+  if (entry) return entry.palette;
+  if (name && name !== "crameri") {
+    try {
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn(
+          `[cortexel] getPalette('${name}'): not registered, falling back to 'crameri'. Call registerPalette('${name}', ...) at app startup. Available: ${listPalettes().map((p) => p.name).join(", ")}`
+        );
+      }
+    } catch {
+    }
+  }
+  return CORTEXEL_PALETTE;
 }
 function getPaletteEntry(name) {
   return _paletteRegistry.get(name);
@@ -1088,5 +1100,5 @@ function validateSkillInvocation(skillId, payload) {
 }
 
 export { AXIS_COLORS, AstrocyteParamsSchema, BATLOW_GLSL, CAMERA_PRESETS, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, NetworkParamsSchema, OKABE_ITO, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, Spatial3DParamsSchema, SpikeRasterParamsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIK_GLSL, VIRIDIS_GLSL, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, getExamplePayload, getPalette, getPaletteEntry, getSkill, isNestSkillId, isRegisteredPalette, listPalettes, listSkills, registerPalette, requiresHonestyCaption, sampleColormap, validatePalette, validateSkillInvocation, validateVizSpec };
-//# sourceMappingURL=chunk-SB4YPXTA.js.map
-//# sourceMappingURL=chunk-SB4YPXTA.js.map
+//# sourceMappingURL=chunk-GWWXJ7YG.js.map
+//# sourceMappingURL=chunk-GWWXJ7YG.js.map

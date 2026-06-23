@@ -1066,7 +1066,19 @@ _paletteRegistry.set("crameri", {
   }
 });
 function getPalette(name = "crameri") {
-  return _paletteRegistry.get(name)?.palette ?? CORTEXEL_PALETTE;
+  const entry = _paletteRegistry.get(name);
+  if (entry) return entry.palette;
+  if (name && name !== "crameri") {
+    try {
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn(
+          `[cortexel] getPalette('${name}'): not registered, falling back to 'crameri'. Call registerPalette('${name}', ...) at app startup. Available: ${listPalettes().map((p) => p.name).join(", ")}`
+        );
+      }
+    } catch {
+    }
+  }
+  return CORTEXEL_PALETTE;
 }
 function listPalettes() {
   return [..._paletteRegistry.entries()].map(([name, entry]) => ({

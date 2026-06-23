@@ -317,9 +317,25 @@ export function registerPalette(
 }
 
 /** Select a semantic palette by name. Falls back to the default ('crameri')
- *  if the name is not registered. */
+ *  if the name is not registered. In dev mode, warns on non-default fallback
+ *  so missing registrations surface during development instead of silently
+ *  producing the wrong colors. */
 export function getPalette(name: PaletteName = 'crameri'): SemanticPalette {
-  return _paletteRegistry.get(name)?.palette ?? CORTEXEL_PALETTE;
+  const entry = _paletteRegistry.get(name);
+  if (entry) return entry.palette;
+  if (name && name !== 'crameri') {
+    // Dev-mode warning — silent in production (crameri is a valid fallback).
+    try {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          `[cortexel] getPalette('${name}'): not registered, falling back to 'crameri'. ` +
+            `Call registerPalette('${name}', ...) at app startup. ` +
+            `Available: ${listPalettes().map((p) => p.name).join(', ')}`,
+        );
+      }
+    } catch { /* console may be unavailable in some environments */ }
+  }
+  return CORTEXEL_PALETTE;
 }
 
 /** Get full palette entry (colors + metadata) by name. Returns undefined if

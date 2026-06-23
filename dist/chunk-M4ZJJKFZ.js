@@ -1,4 +1,4 @@
-import { validateSkillInvocation, getPalette, validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-SB4YPXTA.js';
+import { validateSkillInvocation, getPalette, validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-GWWXJ7YG.js';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE2 from 'three';
@@ -452,5 +452,5 @@ function SceneFrame({
 }
 
 export { ExpandableNeurons, ExpandablePopulation, NEURON_CLUSTER_SCALE, NEURON_FRAG, NEURON_VERT, VizSpecRenderer, neuronExpandedScale, neuronLocalGrid, usePopulationExpand };
-//# sourceMappingURL=chunk-BWAGV7SF.js.map
-//# sourceMappingURL=chunk-BWAGV7SF.js.map
+//# sourceMappingURL=chunk-M4ZJJKFZ.js.map
+//# sourceMappingURL=chunk-M4ZJJKFZ.js.map

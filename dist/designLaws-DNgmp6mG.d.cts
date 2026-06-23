@@ -58,7 +58,9 @@ declare function validatePalette(p: SemanticPalette): void;
  *  invalid input. Overwriting an existing name is allowed (for hot-reload). */
 declare function registerPalette(name: PaletteName, palette: SemanticPalette, metadata: PaletteMetadata): void;
 /** Select a semantic palette by name. Falls back to the default ('crameri')
- *  if the name is not registered. */
+ *  if the name is not registered. In dev mode, warns on non-default fallback
+ *  so missing registrations surface during development instead of silently
+ *  producing the wrong colors. */
 declare function getPalette(name?: PaletteName): SemanticPalette;
 /** Get full palette entry (colors + metadata) by name. Returns undefined if
  *  not registered. */
