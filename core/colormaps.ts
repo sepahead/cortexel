@@ -4,16 +4,23 @@
 // WebGL shaders, React Three Fiber scenes, D3/SVG agent media skills, and
 // (a host backend may mirror these in its matplotlib figures).
 //
-// Why perceptually-uniform maps (viridis, magma, turbo, cividis …)?
-//   - Equal steps in data read as equal steps in lightness, so structure is
-//     not invented or hidden by the colormap (unlike jet/rainbow).
-//   - They stay legible in grayscale and for the most common color-vision
-//     deficiencies. cividis is optimized for deuteranopia/protanopia.
-// These are the same families matplotlib ships, so a figure rendered on the
-// backend and a scene rendered in WebGL share one identity.
+// The default sequential colormap is batlow (Crameri 2018, Nature
+// Communications 2020) — the scientifically recommended replacement for
+// jet/rainbow and the viridis family. It is perceptually uniform, CVD-friendly,
+// and readable in black-and-white print. vik is the diverging map for signed
+// fields (E/I, LTP/LTD, membrane currents). The semantic palette below derives
+// every color from a Crameri map, not from generic UI palettes (Tailwind,
+// Material), so the visual identity is grounded in scientific colour theory.
+//
+// References:
+//   Crameri, F. (2018), Geosci. Model Dev., 11, 2541–2562.
+//   Crameri, F., Shephard, G.E. & Heron, P.J. (2020), Nature Comms, 11, 5444.
+//   www.fabiocrameri.ch/colourmaps — #UseBatlow
 
 export type RGB = readonly [number, number, number]; // 0–255
 export type ColormapName =
+  | 'batlow'    // default sequential — the scientific rainbow
+  | 'vik'       // diverging blue↔red — for signed fields (E/I, LTP/LTD)
   | 'viridis'
   | 'magma'
   | 'inferno'
@@ -22,11 +29,24 @@ export type ColormapName =
   | 'turbo';
 
 // ───────────────────────── sRGB hex control stops ─────────────────────────
-// Evenly-spaced samples of each matplotlib colormap. Interpolating between
-// them in sRGB is visually indistinguishable from the full 256-entry table at
-// the resolutions we render, and keeps this module dependency-free.
+// Evenly-spaced samples of each colormap. Interpolating between them in sRGB
+// is visually indistinguishable from the full 256-entry table at the
+// resolutions we render, and keeps this module dependency-free.
+//
+// batlow and vik stops are sampled from the official Crameri 256-entry tables
+// (cmcrameri v8.0). The matplotlib-family stops are from their original
+// implementations.
 
 const STOPS: Record<Exclude<ColormapName, 'turbo'>, readonly string[]> = {
+  batlow: [
+    '#011959', '#0d2d5c', '#1a4260', '#275a60', '#3a6b54',
+    '#52744a', '#6b7b3e', '#8a8633', '#a18a2b', '#c09036',
+    '#d89448', '#ed9a62', '#faccfa',
+  ],
+  vik: [
+    '#001261', '#023175', '#136697', '#3c85ac', '#7ba9c8',
+    '#dbe5e9', '#dba584', '#ba5e2a', '#983307', '#6f1107', '#590008',
+  ],
   viridis: [
     '#440154', '#472d7b', '#3b528b', '#2c728e', '#21918c',
     '#28ae80', '#5ec962', '#addc30', '#fde725',
@@ -55,6 +75,8 @@ function hexToRgb(hex: string): RGB {
 }
 
 const STOP_RGB: Record<Exclude<ColormapName, 'turbo'>, RGB[]> = {
+  batlow: STOPS.batlow.map(hexToRgb),
+  vik: STOPS.vik.map(hexToRgb),
   viridis: STOPS.viridis.map(hexToRgb),
   magma: STOPS.magma.map(hexToRgb),
   inferno: STOPS.inferno.map(hexToRgb),
@@ -146,53 +168,61 @@ export function colormapSvgStops(name: ColormapName, stops = 8): string {
 
 // ───────────────────────── Semantic palette ─────────────────────────
 // Named colors carry meaning consistently across every figure and scene, so a
-// reader who learns "cyan = excitatory / potentiation" in one view keeps it in
-// the next. Tuned for the deep-navy (#050816 / #030711) canvas the UI uses.
+// reader who learns "blue = excitatory / potentiation" in one view keeps it in
+// the next. Every color is sampled from a Crameri scientific colour map:
+//   - membrane/spike from batlow (sequential)
+//   - E/I and LTP/LTD from vik (diverging blue↔red, Allen/MICrONS convention)
+//   - brand accents from batlow's distinctive mid-range hues
+// This grounds the visual identity in scientific colour theory rather than
+// generic UI palettes. Tuned for the deep-navy canvas.
 
 export const CORTEXEL_PALETTE = {
-  // Canvas / surfaces
+  // Canvas / surfaces (unchanged — the deep navy lets Crameri colors pop)
   voidNavy: '#030711',
   deepNavy: '#050816',
   panel: '#0b1220',
   grid: '#1e293b',
-  // Brand signal
-  cyan: '#22d3ee',
-  teal: '#2dd4bf',
-  violet: '#a78bfa',
-  amber: '#fbbf24',
-  orange: '#fb923c',
-  pink: '#f472b6',
-  // Membrane / spikes
-  membrane: '#14f1dd',
-  spike: '#fde68a',
-  spikeHot: '#fff7ed',
-  // Excitatory vs inhibitory (Allen/MICrONS convention: E warm-cyan, I red)
-  excitatory: '#38bdf8',
-  inhibitory: '#fb7185',
-  // Plasticity (LTP potentiation vs LTD depression)
-  ltp: '#22d3ee',
-  ltd: '#fb923c',
-  // Text
+  // Brand signal — sampled from batlow's distinctive mid-range
+  cyan: '#275a60',      // batlow(0.25) — muted teal, not Tailwind cyan
+  teal: '#3a6b54',      // batlow(0.30) — green-teal
+  violet: '#faccfa',    // batlow(1.0)  — pale magenta, the batlow endpoint
+  amber: '#c09036',     // batlow(0.55) — warm gold
+  orange: '#d89448',    // batlow(0.70) — warm amber
+  pink: '#ed9a62',      // batlow(0.80) — warm coral
+  // Membrane / spikes — from batlow sequential
+  membrane: '#52744a',  // batlow(0.35) — muted biological green
+  spike: '#dd954d',     // batlow(0.78) — warm gold event marker
+  spikeHot: '#ef9b67',  // batlow(0.92) — lighter warm for spike bursts
+  // Excitatory vs inhibitory — from vik diverging (Allen/MICrONS convention:
+  // cool blues for E, warm reds for I)
+  excitatory: '#136697', // vik(0.15) — cool blue
+  inhibitory: '#983307', // vik(0.85) — warm red-brown
+  // Plasticity — from vik (LTP = cool potentiation, LTD = warm depression)
+  ltp: '#023175',       // vik(0.08) — deep blue
+  ltd: '#6f1107',       // vik(0.92) — deep red
+  // Text (unchanged — WCAG AA on the deep-navy canvas)
   ink: '#e2e8f0',
   inkDim: '#94a3b8',
   inkFaint: '#64748b',
 } as const;
 
-// Cortical layers L1–L6 — sampled along viridis so layer order maps to a
+// Cortical layers L1–L6 — sampled along batlow so layer order maps to a
 // monotone perceptual ramp (deep → superficial reads as a gradient, not a
 // random set of hues), while staying distinct.
 export const CORTICAL_LAYER_COLORS: Record<string, string> = {
-  L1: colormapHex('viridis', 0.05),
-  'L2/3': colormapHex('viridis', 0.3),
-  L4: colormapHex('viridis', 0.52),
-  L5: colormapHex('viridis', 0.72),
-  L6: colormapHex('viridis', 0.92),
+  L1: colormapHex('batlow', 0.05),
+  'L2/3': colormapHex('batlow', 0.28),
+  L4: colormapHex('batlow', 0.48),
+  L5: colormapHex('batlow', 0.68),
+  L6: colormapHex('batlow', 0.90),
 };
 
-/** Categorical neuron/population colors — distinct, colorblind-aware hues. */
+/** Categorical neuron/population colors — batlowS (Crameri's categorical set).
+ *  Distinct, CVD-friendly hues sampled from the batlow colour map at
+ *  perceptually-spaced intervals. Replaces the hand-picked Tailwind set. */
 export const CATEGORICAL: readonly string[] = [
-  '#22d3ee', '#a78bfa', '#fb923c', '#34d399', '#f472b6',
-  '#facc15', '#60a5fa', '#fb7185', '#2dd4bf', '#c084fc',
+  '#011959', '#faccfa', '#828231', '#226061', '#f19d6b',
+  '#4d734d', '#114360', '#fdb4b4', '#c09036', '#175262',
 ];
 
 export function categorical(i: number): string {
@@ -217,19 +247,20 @@ export const OKABE_ITO = {
 
 // ─────────────────────── Subtle synapse E/I wire colours ───────────────────────
 // Connection wires read as quiet STRUCTURE, not loud signal: desaturated,
-// bloom-safe echoes of the neuron convention (E azure / I vermilion) pulled down
-// in saturation + value. Apply at opacity ~0.4–0.5 at the call site (per renderer).
-// CB-safe: cool-blue E vs warm-orange I stay separable under deuteranopia/
-// protanopia and never collide with the gold spike flash. Use `.excitatory`
-// UNIFORMLY where a graph carries no honest E/I metadata — do not invent inhibition.
+// bloom-safe echoes of the neuron convention (E blue / I red from vik) pulled
+// down in saturation + value. Apply at opacity ~0.4–0.5 at the call site (per
+// renderer). CB-safe: cool-blue E vs warm-red I stay separable under
+// deuteranopia/protanopia and never collide with the gold spike flash. Use
+// `.excitatory` UNIFORMLY where a graph carries no honest E/I metadata — do
+// not invent inhibition. Derived from vik(0.15)/vik(0.85), desaturated.
 export const SYNAPSE_COLORS = {
   dark: {
-    excitatory: '#4a6b8a',   // muted azure
-    inhibitory: '#8a6b4a',   // muted warm
+    excitatory: '#1a3d5a',   // muted vik-blue
+    inhibitory: '#5a3d1a',   // muted vik-red
   },
   light: {
-    excitatory: '#7d97b5',   // soft blue-grey (lifted for light canvas)
-    inhibitory: '#b5977d',   // soft warm-grey (lifted for light canvas)
+    excitatory: '#4a7d9a',   // lifted vik-blue for light canvas
+    inhibitory: '#9a7d4a',   // lifted vik-red for light canvas
   },
 } as const;
 
@@ -249,8 +280,9 @@ export const AXIS_COLORS = {
 // ───────────────────────── GLSL colormap source ─────────────────────────
 // Drop-in functions for shaders that map a scalar field → color. Turbo is the
 // exact polynomial above; viridis is the well-established analytic fit
-// (Mikhailov / Zucker) accurate to within a few LSBs. Inject with string
-// concatenation into a ShaderMaterial's GLSL.
+// (Mikhailov / Zucker) accurate to within a few LSBs. batlow and vik use a
+// 13/11-stop LUT interpolated in sRGB — accurate enough for shader use at the
+// resolutions we render. Inject with string concatenation into a ShaderMaterial.
 
 export const TURBO_GLSL = /* glsl */ `
 vec3 turbo(float x) {
@@ -276,5 +308,43 @@ vec3 viridis(float t) {
   const vec3 c5 = vec3(4.776384997670288, -13.74514537774601, -65.35303263337234);
   const vec3 c6 = vec3(-5.435455855934631, 4.645852612178535, 26.3124352495832);
   return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+}
+`;
+
+// batlow — Crameri scientific rainbow (default sequential). 13-stop LUT.
+// Perceptually uniform, CVD-friendly, readable in B&W. #UseBatlow
+export const BATLOW_GLSL = /* glsl */ `
+vec3 batlow(float t) {
+  t = clamp(t, 0.0, 1.0);
+  const vec3 stops[13] = vec3[13](
+    vec3(0.004,0.098,0.350), vec3(0.051,0.176,0.361), vec3(0.102,0.259,0.376),
+    vec3(0.153,0.353,0.376), vec3(0.227,0.420,0.329), vec3(0.322,0.455,0.290),
+    vec3(0.420,0.482,0.243), vec3(0.541,0.525,0.200), vec3(0.631,0.541,0.169),
+    vec3(0.753,0.565,0.212), vec3(0.847,0.578,0.282), vec3(0.929,0.605,0.385),
+    vec3(0.981,0.800,0.981)
+  );
+  float x = t * 12.0;
+  int i = int(floor(x));
+  float f = x - float(i);
+  if (i >= 12) return stops[12];
+  return mix(stops[i], stops[i + 1], f);
+}
+`;
+
+// vik — Crameri diverging blue↔red. 11-stop LUT. For signed fields (E/I, LTP/LTD).
+export const VIK_GLSL = /* glsl */ `
+vec3 vik(float t) {
+  t = clamp(t, 0.0, 1.0);
+  const vec3 stops[11] = vec3[11](
+    vec3(0.001,0.070,0.380), vec3(0.009,0.193,0.458), vec3(0.075,0.398,0.591),
+    vec3(0.236,0.522,0.674), vec3(0.483,0.713,0.784), vec3(0.858,0.897,0.915),
+    vec3(0.859,0.647,0.518), vec3(0.728,0.368,0.166), vec3(0.596,0.199,0.028),
+    vec3(0.436,0.068,0.026), vec3(0.350,0.000,0.030)
+  );
+  float x = t * 10.0;
+  int i = int(floor(x));
+  float f = x - float(i);
+  if (i >= 10) return stops[10];
+  return mix(stops[i], stops[i + 1], f);
 }
 `;

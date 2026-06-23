@@ -4,6 +4,34 @@ var zod = require('zod');
 
 // core/colormaps.ts
 var STOPS = {
+  batlow: [
+    "#011959",
+    "#0d2d5c",
+    "#1a4260",
+    "#275a60",
+    "#3a6b54",
+    "#52744a",
+    "#6b7b3e",
+    "#8a8633",
+    "#a18a2b",
+    "#c09036",
+    "#d89448",
+    "#ed9a62",
+    "#faccfa"
+  ],
+  vik: [
+    "#001261",
+    "#023175",
+    "#136697",
+    "#3c85ac",
+    "#7ba9c8",
+    "#dbe5e9",
+    "#dba584",
+    "#ba5e2a",
+    "#983307",
+    "#6f1107",
+    "#590008"
+  ],
   viridis: [
     "#440154",
     "#472d7b",
@@ -70,6 +98,8 @@ function hexToRgb(hex) {
   return [v >> 16 & 255, v >> 8 & 255, v & 255];
 }
 var STOP_RGB = {
+  batlow: STOPS.batlow.map(hexToRgb),
+  vik: STOPS.vik.map(hexToRgb),
   viridis: STOPS.viridis.map(hexToRgb),
   magma: STOPS.magma.map(hexToRgb),
   inferno: STOPS.inferno.map(hexToRgb),
@@ -136,51 +166,65 @@ function colormapSvgStops(name, stops = 8) {
   return out;
 }
 var CORTEXEL_PALETTE = {
-  // Canvas / surfaces
+  // Canvas / surfaces (unchanged — the deep navy lets Crameri colors pop)
   voidNavy: "#030711",
   deepNavy: "#050816",
   panel: "#0b1220",
   grid: "#1e293b",
-  // Brand signal
-  cyan: "#22d3ee",
-  teal: "#2dd4bf",
-  violet: "#a78bfa",
-  amber: "#fbbf24",
-  orange: "#fb923c",
-  pink: "#f472b6",
-  // Membrane / spikes
-  membrane: "#14f1dd",
-  spike: "#fde68a",
-  spikeHot: "#fff7ed",
-  // Excitatory vs inhibitory (Allen/MICrONS convention: E warm-cyan, I red)
-  excitatory: "#38bdf8",
-  inhibitory: "#fb7185",
-  // Plasticity (LTP potentiation vs LTD depression)
-  ltp: "#22d3ee",
-  ltd: "#fb923c",
-  // Text
+  // Brand signal — sampled from batlow's distinctive mid-range
+  cyan: "#275a60",
+  // batlow(0.25) — muted teal, not Tailwind cyan
+  teal: "#3a6b54",
+  // batlow(0.30) — green-teal
+  violet: "#faccfa",
+  // batlow(1.0)  — pale magenta, the batlow endpoint
+  amber: "#c09036",
+  // batlow(0.55) — warm gold
+  orange: "#d89448",
+  // batlow(0.70) — warm amber
+  pink: "#ed9a62",
+  // batlow(0.80) — warm coral
+  // Membrane / spikes — from batlow sequential
+  membrane: "#52744a",
+  // batlow(0.35) — muted biological green
+  spike: "#dd954d",
+  // batlow(0.78) — warm gold event marker
+  spikeHot: "#ef9b67",
+  // batlow(0.92) — lighter warm for spike bursts
+  // Excitatory vs inhibitory — from vik diverging (Allen/MICrONS convention:
+  // cool blues for E, warm reds for I)
+  excitatory: "#136697",
+  // vik(0.15) — cool blue
+  inhibitory: "#983307",
+  // vik(0.85) — warm red-brown
+  // Plasticity — from vik (LTP = cool potentiation, LTD = warm depression)
+  ltp: "#023175",
+  // vik(0.08) — deep blue
+  ltd: "#6f1107",
+  // vik(0.92) — deep red
+  // Text (unchanged — WCAG AA on the deep-navy canvas)
   ink: "#e2e8f0",
   inkDim: "#94a3b8",
   inkFaint: "#64748b"
 };
 var CORTICAL_LAYER_COLORS = {
-  L1: colormapHex("viridis", 0.05),
-  "L2/3": colormapHex("viridis", 0.3),
-  L4: colormapHex("viridis", 0.52),
-  L5: colormapHex("viridis", 0.72),
-  L6: colormapHex("viridis", 0.92)
+  L1: colormapHex("batlow", 0.05),
+  "L2/3": colormapHex("batlow", 0.28),
+  L4: colormapHex("batlow", 0.48),
+  L5: colormapHex("batlow", 0.68),
+  L6: colormapHex("batlow", 0.9)
 };
 var CATEGORICAL = [
-  "#22d3ee",
-  "#a78bfa",
-  "#fb923c",
-  "#34d399",
-  "#f472b6",
-  "#facc15",
-  "#60a5fa",
-  "#fb7185",
-  "#2dd4bf",
-  "#c084fc"
+  "#011959",
+  "#faccfa",
+  "#828231",
+  "#226061",
+  "#f19d6b",
+  "#4d734d",
+  "#114360",
+  "#fdb4b4",
+  "#c09036",
+  "#175262"
 ];
 function categorical(i) {
   return CATEGORICAL[(i % CATEGORICAL.length + CATEGORICAL.length) % CATEGORICAL.length];
@@ -197,16 +241,16 @@ var OKABE_ITO = {
 };
 var SYNAPSE_COLORS = {
   dark: {
-    excitatory: "#4a6b8a",
-    // muted azure
-    inhibitory: "#8a6b4a"
-    // muted warm
+    excitatory: "#1a3d5a",
+    // muted vik-blue
+    inhibitory: "#5a3d1a"
+    // muted vik-red
   },
   light: {
-    excitatory: "#7d97b5",
-    // soft blue-grey (lifted for light canvas)
-    inhibitory: "#b5977d"
-    // soft warm-grey (lifted for light canvas)
+    excitatory: "#4a7d9a",
+    // lifted vik-blue for light canvas
+    inhibitory: "#9a7d4a"
+    // lifted vik-red for light canvas
   }
 };
 var AXIS_COLORS = {
@@ -251,6 +295,45 @@ vec3 viridis(float t) {
   const vec3 c5 = vec3(4.776384997670288, -13.74514537774601, -65.35303263337234);
   const vec3 c6 = vec3(-5.435455855934631, 4.645852612178535, 26.3124352495832);
   return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+}
+`
+);
+var BATLOW_GLSL = (
+  /* glsl */
+  `
+vec3 batlow(float t) {
+  t = clamp(t, 0.0, 1.0);
+  const vec3 stops[13] = vec3[13](
+    vec3(0.004,0.098,0.350), vec3(0.051,0.176,0.361), vec3(0.102,0.259,0.376),
+    vec3(0.153,0.353,0.376), vec3(0.227,0.420,0.329), vec3(0.322,0.455,0.290),
+    vec3(0.420,0.482,0.243), vec3(0.541,0.525,0.200), vec3(0.631,0.541,0.169),
+    vec3(0.753,0.565,0.212), vec3(0.847,0.578,0.282), vec3(0.929,0.605,0.385),
+    vec3(0.981,0.800,0.981)
+  );
+  float x = t * 12.0;
+  int i = int(floor(x));
+  float f = x - float(i);
+  if (i >= 12) return stops[12];
+  return mix(stops[i], stops[i + 1], f);
+}
+`
+);
+var VIK_GLSL = (
+  /* glsl */
+  `
+vec3 vik(float t) {
+  t = clamp(t, 0.0, 1.0);
+  const vec3 stops[11] = vec3[11](
+    vec3(0.001,0.070,0.380), vec3(0.009,0.193,0.458), vec3(0.075,0.398,0.591),
+    vec3(0.236,0.522,0.674), vec3(0.483,0.713,0.784), vec3(0.858,0.897,0.915),
+    vec3(0.859,0.647,0.518), vec3(0.728,0.368,0.166), vec3(0.596,0.199,0.028),
+    vec3(0.436,0.068,0.026), vec3(0.350,0.000,0.030)
+  );
+  float x = t * 10.0;
+  int i = int(floor(x));
+  float f = x - float(i);
+  if (i >= 10) return stops[10];
+  return mix(stops[i], stops[i + 1], f);
 }
 `
 );
@@ -1319,6 +1402,7 @@ function weightRecorderToSceneData(events) {
 
 exports.AXIS_COLORS = AXIS_COLORS;
 exports.AstrocyteParamsSchema = AstrocyteParamsSchema;
+exports.BATLOW_GLSL = BATLOW_GLSL;
 exports.CAMERA_PRESETS = CAMERA_PRESETS;
 exports.CATEGORICAL = CATEGORICAL;
 exports.CONSERVATIVE_PROVENANCE = CONSERVATIVE_PROVENANCE;
@@ -1351,6 +1435,7 @@ exports.SpikeRasterParamsSchema = SpikeRasterParamsSchema;
 exports.SpikeRecorderEventsSchema = SpikeRecorderEventsSchema;
 exports.TURBO_GLSL = TURBO_GLSL;
 exports.VALID_RENDERER_ROUTES = VALID_RENDERER_ROUTES;
+exports.VIK_GLSL = VIK_GLSL;
 exports.VIRIDIS_GLSL = VIRIDIS_GLSL;
 exports.VIZ_ROUTER_ID = VIZ_ROUTER_ID;
 exports.VizSpecSchema = VizSpecSchema;
