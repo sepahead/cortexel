@@ -189,8 +189,9 @@ function colormapSvgStops(name, stops = 8) {
   }
   return out;
 }
+var _paletteRegistry = /* @__PURE__ */ new Map();
 var CORTEXEL_PALETTE = {
-  // Canvas / surfaces (shared with brunel — the deep navy lets colors pop)
+  // Canvas / surfaces — the deep navy lets colors pop
   voidNavy: "#030711",
   deepNavy: "#050816",
   panel: "#0b1220",
@@ -226,58 +227,51 @@ var CORTEXEL_PALETTE = {
   // vik(0.08) — deep blue
   ltd: "#6f1107",
   // vik(0.92) — deep red
-  // Text (shared — WCAG AA on the deep-navy canvas)
+  // Text — WCAG AA on the deep-navy canvas
   ink: "#e2e8f0",
   inkDim: "#94a3b8",
   inkFaint: "#64748b"
 };
-var BRUNEL_PALETTE = {
-  // Canvas / surfaces (shared)
-  voidNavy: "#030711",
-  deepNavy: "#050816",
-  panel: "#0b1220",
-  grid: "#1e293b",
-  // Brand signal — Okabe-Ito hues, luminance-lifted
-  cyan: "#2a9fe0",
-  // luminous azure (lifted OI blue)
-  teal: "#56b4e9",
-  // OI sky blue
-  violet: "#cc79a7",
-  // OI reddish-purple
-  amber: "#ffd06b",
-  // warm gold (spike flash hue)
-  orange: "#f4711e",
-  // bright vermilion (OI vermillion, lifted)
-  pink: "#e8783c",
-  // warm action orange
-  // Membrane / spikes — warm gold bloom, never acid white-yellow
-  membrane: "#2a9fe0",
-  // luminous azure — membrane traces read as "live signal"
-  spike: "#ffd06b",
-  // warm gold (flash / pulse)
-  spikeHot: "#ff8a4c",
-  // hotter orange-gold for spike bursts
-  // Excitatory vs inhibitory — Okabe-Ito blue vs vermillion (CB gold standard)
-  excitatory: "#2a9fe0",
-  // luminous azure (lifted OI blue)
-  inhibitory: "#f4711e",
-  // bright vermilion (OI vermillion, lifted)
-  // Plasticity — same blue/orange axis as E/I (LTP potentiates, LTD depresses)
-  ltp: "#2a9fe0",
-  // azure — potentiation
-  ltd: "#f4711e",
-  // vermilion — depression
-  // Text (shared)
-  ink: "#e2e8f0",
-  inkDim: "#94a3b8",
-  inkFaint: "#64748b"
-};
-var PALETTES = {
-  crameri: CORTEXEL_PALETTE,
-  brunel: BRUNEL_PALETTE
-};
+var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+function validatePalette(p) {
+  for (const [key, val] of Object.entries(p)) {
+    if (!HEX_RE.test(val)) {
+      throw new Error(`Palette color '${key}' is not a valid #rrggbb hex: '${val}'`);
+    }
+  }
+  if (p.excitatory.toLowerCase() === p.inhibitory.toLowerCase()) {
+    throw new Error("Palette excitatory and inhibitory colors must differ");
+  }
+  if (p.ltp.toLowerCase() === p.ltd.toLowerCase()) {
+    throw new Error("Palette ltp and ltd colors must differ");
+  }
+}
+_paletteRegistry.set("crameri", {
+  palette: CORTEXEL_PALETTE,
+  metadata: {
+    label: "Crameri",
+    source: "Crameri 2018, Nature Comms 2020 (batlow + vik)",
+    diverging: true
+  }
+});
+function registerPalette(name, palette, metadata) {
+  validatePalette(palette);
+  _paletteRegistry.set(name, { palette, metadata });
+}
 function getPalette(name = "crameri") {
-  return PALETTES[name] ?? CORTEXEL_PALETTE;
+  return _paletteRegistry.get(name)?.palette ?? CORTEXEL_PALETTE;
+}
+function getPaletteEntry(name) {
+  return _paletteRegistry.get(name);
+}
+function listPalettes() {
+  return [..._paletteRegistry.entries()].map(([name, entry]) => ({
+    name,
+    metadata: entry.metadata
+  }));
+}
+function isRegisteredPalette(name) {
+  return _paletteRegistry.has(name);
 }
 var CORTICAL_LAYER_COLORS = {
   L1: colormapHex("batlow", 0.05),
@@ -481,6 +475,11 @@ var VizSpecSchema = zod.z.object({
   mode: zod.z.enum(["interactive", "export"]).default("interactive"),
   themeMode: zod.z.enum(["dark", "light"]).default("dark"),
   camera: zod.z.enum(["default", "top", "side", "close", "cinematic"]).optional(),
+  /** Optional palette hint — an agent can request a named semantic palette
+   *  (e.g. 'crameri', 'okabe-ito'). The name must be registered (via
+   *  registerPalette) at validation time, or the skill gate rejects it with
+   *  'unknown_palette'. When absent, the host's active palette is used. */
+  palette: zod.z.string().min(1).max(60).optional(),
   provenance: ProvenanceSchema
 });
 function validateVizSpec(input) {
@@ -1188,6 +1187,16 @@ function validateSkillInvocation(skillId, payload) {
       });
     }
   }
+  if (spec.palette && !isRegisteredPalette(spec.palette)) {
+    errors.push({
+      code: "unknown_palette",
+      path: "palette",
+      message: `palette '${spec.palette}' is not registered`,
+      hint: `Use one of: ${listPalettes().map((p) => p.name).join(", ")}.`,
+      validPalettes: listPalettes().map((p) => p.name),
+      example
+    });
+  }
   if (errors.length > 0) return { ok: false, errors };
   let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
   if (contract.weak) {
@@ -1812,6 +1821,7 @@ function VizSpecRenderer({
   renderScene,
   skillId,
   active = true,
+  activePalette,
   onError
 }) {
   if (skillId) {
@@ -1828,6 +1838,7 @@ function VizSpecRenderer({
         /* @__PURE__ */ jsxRuntime.jsx("ul", { children: messages.map((e, i) => /* @__PURE__ */ jsxRuntime.jsx("li", { children: e }, i)) })
       ] });
     }
+    const palette2 = gated.spec.palette ? getPalette(gated.spec.palette) : activePalette ?? getPalette("crameri");
     return /* @__PURE__ */ jsxRuntime.jsx(
       SceneFrame,
       {
@@ -1835,6 +1846,7 @@ function VizSpecRenderer({
         themeMode: gated.spec.themeMode,
         mode: gated.spec.mode,
         camera: gated.spec.camera,
+        palette: palette2,
         caption: gated.caption,
         active,
         renderScene
@@ -1849,8 +1861,9 @@ function VizSpecRenderer({
       /* @__PURE__ */ jsxRuntime.jsx("ul", { children: result.errors.map((e, i) => /* @__PURE__ */ jsxRuntime.jsx("li", { children: e }, i)) })
     ] });
   }
-  const { scene, themeMode, mode, camera, provenance } = result.spec;
+  const { scene, themeMode, mode, camera, provenance, palette: paletteHint } = result.spec;
   const caption = requiresHonestyCaption(provenance) ? defaultHonestyCaption(provenance) : null;
+  const palette = paletteHint ? getPalette(paletteHint) : activePalette ?? getPalette("crameri");
   return /* @__PURE__ */ jsxRuntime.jsx(
     SceneFrame,
     {
@@ -1858,6 +1871,7 @@ function VizSpecRenderer({
       themeMode,
       mode,
       camera,
+      palette,
       caption,
       active,
       renderScene
@@ -1869,6 +1883,7 @@ function SceneFrame({
   themeMode,
   mode,
   camera,
+  palette,
   caption,
   active,
   renderScene
@@ -1882,7 +1897,7 @@ function SceneFrame({
       className: "cortexel-vizspec",
       style: { position: "relative", width: "100%", height: "100%" },
       children: [
-        renderScene({ scene, themeMode, active, camera }),
+        renderScene({ scene, themeMode, active, camera, palette }),
         caption && /* @__PURE__ */ jsxRuntime.jsx(
           "div",
           {
@@ -1915,7 +1930,6 @@ function SceneFrame({
 exports.AXIS_COLORS = AXIS_COLORS;
 exports.AstrocyteParamsSchema = AstrocyteParamsSchema;
 exports.BATLOW_GLSL = BATLOW_GLSL;
-exports.BRUNEL_PALETTE = BRUNEL_PALETTE;
 exports.CAMERA_PRESETS = CAMERA_PRESETS;
 exports.CATEGORICAL = CATEGORICAL;
 exports.CONSERVATIVE_PROVENANCE = CONSERVATIVE_PROVENANCE;
@@ -1972,20 +1986,25 @@ exports.detectEmptyScene = detectEmptyScene;
 exports.getConnectionsToSceneData = getConnectionsToSceneData;
 exports.getExamplePayload = getExamplePayload;
 exports.getPalette = getPalette;
+exports.getPaletteEntry = getPaletteEntry;
 exports.getPositionToSceneData = getPositionToSceneData;
 exports.getSkill = getSkill;
 exports.isNestSkillId = isNestSkillId;
 exports.isProvenanceKey = isProvenanceKey;
+exports.isRegisteredPalette = isRegisteredPalette;
+exports.listPalettes = listPalettes;
 exports.listSkills = listSkills;
 exports.multimeterToSceneData = multimeterToSceneData;
 exports.neuronExpandedScale = neuronExpandedScale;
 exports.neuronLocalGrid = neuronLocalGrid;
+exports.registerPalette = registerPalette;
 exports.requiresHonestyCaption = requiresHonestyCaption;
 exports.routeToScene = routeToScene;
 exports.sampleColormap = sampleColormap;
 exports.spikeRecorderToSceneData = spikeRecorderToSceneData;
 exports.splitMultimeterBySender = splitMultimeterBySender;
 exports.usePopulationExpand = usePopulationExpand;
+exports.validatePalette = validatePalette;
 exports.validateSkillInvocation = validateSkillInvocation;
 exports.validateVizSpec = validateVizSpec;
 exports.weightRecorderToSceneData = weightRecorderToSceneData;

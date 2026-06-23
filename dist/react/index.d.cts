@@ -1,6 +1,6 @@
 import * as react from 'react';
 import { ReactNode } from 'react';
-import { i as SceneName } from '../designLaws-DjS3Nx-h.cjs';
+import { q as SceneName, r as SemanticPalette } from '../designLaws-rhhuDvhZ.cjs';
 
 interface PopulationExpandController {
     selectedPopId: string | null;
@@ -79,6 +79,11 @@ interface RenderSceneArgs {
     active: boolean;
     /** Requested camera framing from the spec (undefined → host default). */
     camera?: CameraHint;
+    /** Resolved semantic palette — the active render policy. When the spec
+     *  includes a palette hint, it is resolved here; otherwise the host's
+     *  active palette (or the Cortexel default) is passed. Scene components
+     *  should consume colors from this, not from module-level imports. */
+    palette: SemanticPalette;
 }
 interface VizSpecRendererProps {
     /** Untrusted spec (e.g. an agent payload). Validated before rendering. */
@@ -91,8 +96,12 @@ interface VizSpecRendererProps {
      *  bound at this render boundary. Prefer this for agent payloads. */
     skillId?: string;
     active?: boolean;
+    /** The host's active palette — used when the spec does not include a palette
+     *  hint. Defaults to the Cortexel default ('crameri'). The resolved palette
+     *  (spec hint or host active) is passed to renderScene via RenderSceneArgs. */
+    activePalette?: SemanticPalette;
     onError?: (errors: string[]) => void;
 }
-declare function VizSpecRenderer({ spec, renderScene, skillId, active, onError, }: VizSpecRendererProps): react.JSX.Element;
+declare function VizSpecRenderer({ spec, renderScene, skillId, active, activePalette, onError, }: VizSpecRendererProps): react.JSX.Element;
 
 export { type CameraHint, ExpandableNeurons, type ExpandableNeuronsProps, ExpandablePopulation, type ExpandablePopulationProps, NEURON_CLUSTER_SCALE, NEURON_FRAG, NEURON_VERT, type NeuronGrid, type PopulationExpand, type PopulationExpandController, type RenderSceneArgs, VizSpecRenderer, type VizSpecRendererProps, neuronExpandedScale, neuronLocalGrid, usePopulationExpand };

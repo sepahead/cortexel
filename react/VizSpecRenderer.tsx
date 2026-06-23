@@ -14,12 +14,14 @@
 
 import type { ReactNode } from 'react';
 import type { SceneName } from '../core/designLaws';
+import type { SemanticPalette } from '../core/colormaps';
 import {
   defaultHonestyCaption,
   requiresHonestyCaption,
 } from '../core/provenance';
 import { validateVizSpec } from '../core/vizSpec';
 import { validateSkillInvocation } from '../core/skills/validateSkillInvocation';
+import { getPalette } from '../core/colormaps';
 
 export type CameraHint = 'default' | 'top' | 'side' | 'close' | 'cinematic';
 
@@ -29,6 +31,11 @@ export interface RenderSceneArgs {
   active: boolean;
   /** Requested camera framing from the spec (undefined → host default). */
   camera?: CameraHint;
+  /** Resolved semantic palette — the active render policy. When the spec
+   *  includes a palette hint, it is resolved here; otherwise the host's
+   *  active palette (or the Cortexel default) is passed. Scene components
+   *  should consume colors from this, not from module-level imports. */
+  palette: SemanticPalette;
 }
 
 export interface VizSpecRendererProps {
@@ -42,6 +49,10 @@ export interface VizSpecRendererProps {
    *  bound at this render boundary. Prefer this for agent payloads. */
   skillId?: string;
   active?: boolean;
+  /** The host's active palette — used when the spec does not include a palette
+   *  hint. Defaults to the Cortexel default ('crameri'). The resolved palette
+   *  (spec hint or host active) is passed to renderScene via RenderSceneArgs. */
+  activePalette?: SemanticPalette;
   onError?: (errors: string[]) => void;
 }
 
@@ -50,6 +61,7 @@ export function VizSpecRenderer({
   renderScene,
   skillId,
   active = true,
+  activePalette,
   onError,
 }: VizSpecRendererProps) {
   // Strict, skill-aware path: the documented agent entrypoint.
@@ -69,12 +81,17 @@ export function VizSpecRenderer({
         </div>
       );
     }
+    // Resolve palette: spec hint → host active → Cortexel default.
+    const palette = gated.spec.palette
+      ? getPalette(gated.spec.palette)
+      : activePalette ?? getPalette('crameri');
     return (
       <SceneFrame
         scene={gated.scene}
         themeMode={gated.spec.themeMode}
         mode={gated.spec.mode}
         camera={gated.spec.camera}
+        palette={palette}
         // Honesty is bound here: the gate already resolved the caption (fail-
         // closed), so the renderer cannot "forget" it.
         caption={gated.caption}
@@ -100,16 +117,20 @@ export function VizSpecRenderer({
     );
   }
 
-  const { scene, themeMode, mode, camera, provenance } = result.spec;
+  const { scene, themeMode, mode, camera, provenance, palette: paletteHint } = result.spec;
   const caption = requiresHonestyCaption(provenance)
     ? defaultHonestyCaption(provenance)
     : null;
+  const palette = paletteHint
+    ? getPalette(paletteHint)
+    : activePalette ?? getPalette('crameri');
   return (
     <SceneFrame
       scene={scene}
       themeMode={themeMode}
       mode={mode}
       camera={camera}
+      palette={palette}
       caption={caption}
       active={active}
       renderScene={renderScene}
@@ -122,6 +143,7 @@ interface SceneFrameProps {
   themeMode: 'dark' | 'light';
   mode: 'interactive' | 'export';
   camera?: CameraHint;
+  palette: SemanticPalette;
   caption: string | null;
   active: boolean;
   renderScene: (args: RenderSceneArgs) => ReactNode;
@@ -132,6 +154,7 @@ function SceneFrame({
   themeMode,
   mode,
   camera,
+  palette,
   caption,
   active,
   renderScene,
@@ -150,7 +173,7 @@ function SceneFrame({
       className="cortexel-vizspec"
       style={{ position: 'relative', width: '100%', height: '100%' }}
     >
-      {renderScene({ scene, themeMode, active, camera })}
+      {renderScene({ scene, themeMode, active, camera, palette })}
       {caption && (
         <div
           className="cortexel-honesty-caption"

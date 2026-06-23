@@ -169,23 +169,43 @@ export function colormapSvgStops(name: ColormapName, stops = 8): string {
 // ───────────────────────── Semantic palettes ─────────────────────────
 // Named colors carry meaning consistently across every figure and scene, so a
 // reader who learns "blue = excitatory / potentiation" in one view keeps it in
-// the next. Two palettes ship:
+// the next.
 //
-// 1. CORTEXEL_PALETTE ('crameri') — the default. Every color sampled from a
-//    Crameri scientific colour map (batlow sequential, vik diverging). Muted,
-//    earthy, scientifically honest. Allen/MICrONS E/I convention.
+// ARCHITECTURE: Cortexel ships one default palette ('crameri') and a runtime
+// registration system. Hosts register their own palettes at startup:
 //
-// 2. BRUNEL_PALETTE ('brunel') — Okabe-Ito-derived, luminance-lifted for the
-//    deep-navy canvas. Luminous azure E, bright vermilion I, warm gold spike.
-//    Higher-saturation, more "alive" feel. Based on the Brunel (2000) balanced
-//    network scene colors. Okabe-Ito is the deuteranopia/protanopia gold
-//    standard (Okabe & Ito 2008), so E/I separation stays CB-safe.
+//   import { registerPalette } from 'cortexel/core';
+//   registerPalette('okabe-ito', okabeItoPalette);
 //
-// Both share the same canvas/surface and text colors — only the semantic
-// signal colors differ. Use getPalette('brunel') or getPalette('crameri') to
-// select; import CORTEXEL_PALETTE directly for the default.
+// This keeps Cortexel host-agnostic: the library defines the interface and a
+// scientifically grounded default, while hosts own their color identity.
+// Palette names are open-ended strings (not a closed union) so any host can
+// register any number of palettes without forking the library.
+//
+// The active palette flows as a RENDER POLICY through VizSpec.palette (optional
+// agent hint) → validateSkillInvocation (validates the name exists) →
+// RenderSceneArgs.palette (passed to the host's scene component). Scene
+// components consume it from props, not from module-level imports.
+//
+// DEFAULT: 'crameri' — Crameri scientific colour maps (batlow sequential, vik
+// diverging). Muted, earthy, scientifically honest. Allen/MICrONS E/I
+// convention (cool blue E, warm red I). The scientifically recommended
+// replacement for jet/rainbow and the viridis family (Crameri 2018, Nature
+// Comms 2020).
 
-export type PaletteName = 'crameri' | 'brunel';
+/** Palette names are open-ended: hosts register arbitrary names at runtime. */
+export type PaletteName = string;
+
+/** Metadata describing a palette's color-theory properties. */
+export interface PaletteMetadata {
+  /** Human-readable label for UI display. */
+  label: string;
+  /** Color theory source (e.g. "Crameri 2018", "Okabe & Ito 2008"). */
+  source: string;
+  /** Whether the E/I and LTP/LTD colors use a diverging scheme (recommended
+   *  for signed data). Sequential palettes on signed data invent structure. */
+  diverging: boolean;
+}
 
 export interface SemanticPalette {
   // Canvas / surfaces
@@ -216,9 +236,18 @@ export interface SemanticPalette {
   inkFaint: string;
 }
 
+/** A registered palette entry: the colors plus metadata. */
+export interface PaletteEntry {
+  palette: SemanticPalette;
+  metadata: PaletteMetadata;
+}
+
+// Internal registry — starts with the default, hosts add more at runtime.
+const _paletteRegistry = new Map<PaletteName, PaletteEntry>();
+
 /** Default palette — Crameri scientific colour maps (batlow + vik). */
 export const CORTEXEL_PALETTE: SemanticPalette = {
-  // Canvas / surfaces (shared with brunel — the deep navy lets colors pop)
+  // Canvas / surfaces — the deep navy lets colors pop
   voidNavy: '#030711',
   deepNavy: '#050816',
   panel: '#0b1220',
@@ -241,50 +270,76 @@ export const CORTEXEL_PALETTE: SemanticPalette = {
   // Plasticity — from vik (LTP = cool potentiation, LTD = warm depression)
   ltp: '#023175',       // vik(0.08) — deep blue
   ltd: '#6f1107',       // vik(0.92) — deep red
-  // Text (shared — WCAG AA on the deep-navy canvas)
+  // Text — WCAG AA on the deep-navy canvas
   ink: '#e2e8f0',
   inkDim: '#94a3b8',
   inkFaint: '#64748b',
 };
 
-/** Brunel palette — Okabe-Ito-derived, luminance-lifted for dark canvas. */
-export const BRUNEL_PALETTE: SemanticPalette = {
-  // Canvas / surfaces (shared)
-  voidNavy: '#030711',
-  deepNavy: '#050816',
-  panel: '#0b1220',
-  grid: '#1e293b',
-  // Brand signal — Okabe-Ito hues, luminance-lifted
-  cyan: '#2a9fe0',      // luminous azure (lifted OI blue)
-  teal: '#56b4e9',      // OI sky blue
-  violet: '#cc79a7',    // OI reddish-purple
-  amber: '#ffd06b',     // warm gold (spike flash hue)
-  orange: '#f4711e',    // bright vermilion (OI vermillion, lifted)
-  pink: '#e8783c',      // warm action orange
-  // Membrane / spikes — warm gold bloom, never acid white-yellow
-  membrane: '#2a9fe0',  // luminous azure — membrane traces read as "live signal"
-  spike: '#ffd06b',     // warm gold (flash / pulse)
-  spikeHot: '#ff8a4c',  // hotter orange-gold for spike bursts
-  // Excitatory vs inhibitory — Okabe-Ito blue vs vermillion (CB gold standard)
-  excitatory: '#2a9fe0', // luminous azure (lifted OI blue)
-  inhibitory: '#f4711e', // bright vermilion (OI vermillion, lifted)
-  // Plasticity — same blue/orange axis as E/I (LTP potentiates, LTD depresses)
-  ltp: '#2a9fe0',       // azure — potentiation
-  ltd: '#f4711e',       // vermilion — depression
-  // Text (shared)
-  ink: '#e2e8f0',
-  inkDim: '#94a3b8',
-  inkFaint: '#64748b',
-};
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-const PALETTES: Record<PaletteName, SemanticPalette> = {
-  crameri: CORTEXEL_PALETTE,
-  brunel: BRUNEL_PALETTE,
-};
+/** Validate a palette's hex values and E/I distinctness. Throws on invalid. */
+export function validatePalette(p: SemanticPalette): void {
+  for (const [key, val] of Object.entries(p)) {
+    if (!HEX_RE.test(val)) {
+      throw new Error(`Palette color '${key}' is not a valid #rrggbb hex: '${val}'`);
+    }
+  }
+  // E/I and LTP/LTD must be perceptually distinct (not identical).
+  if (p.excitatory.toLowerCase() === p.inhibitory.toLowerCase()) {
+    throw new Error('Palette excitatory and inhibitory colors must differ');
+  }
+  if (p.ltp.toLowerCase() === p.ltd.toLowerCase()) {
+    throw new Error('Palette ltp and ltd colors must differ');
+  }
+}
 
-/** Select a semantic palette by name. Defaults to 'crameri'. */
+// Register the default at module load. Hosts add more via registerPalette().
+_paletteRegistry.set('crameri', {
+  palette: CORTEXEL_PALETTE,
+  metadata: {
+    label: 'Crameri',
+    source: 'Crameri 2018, Nature Comms 2020 (batlow + vik)',
+    diverging: true,
+  },
+});
+
+/** Register a palette at runtime. Hosts call this at app startup to add their
+ *  color identities. Validates hex format and E/I distinctness. Throws on
+ *  invalid input. Overwriting an existing name is allowed (for hot-reload). */
+export function registerPalette(
+  name: PaletteName,
+  palette: SemanticPalette,
+  metadata: PaletteMetadata,
+): void {
+  validatePalette(palette);
+  _paletteRegistry.set(name, { palette, metadata });
+}
+
+/** Select a semantic palette by name. Falls back to the default ('crameri')
+ *  if the name is not registered. */
 export function getPalette(name: PaletteName = 'crameri'): SemanticPalette {
-  return PALETTES[name] ?? CORTEXEL_PALETTE;
+  return _paletteRegistry.get(name)?.palette ?? CORTEXEL_PALETTE;
+}
+
+/** Get full palette entry (colors + metadata) by name. Returns undefined if
+ *  not registered. */
+export function getPaletteEntry(name: PaletteName): PaletteEntry | undefined {
+  return _paletteRegistry.get(name);
+}
+
+/** List all registered palette names with their metadata. Agents use this for
+ *  discoverability; the manifest serializes it for non-TS hosts. */
+export function listPalettes(): { name: PaletteName; metadata: PaletteMetadata }[] {
+  return [..._paletteRegistry.entries()].map(([name, entry]) => ({
+    name,
+    metadata: entry.metadata,
+  }));
+}
+
+/** Check whether a palette name is registered. */
+export function isRegisteredPalette(name: string): boolean {
+  return _paletteRegistry.has(name);
 }
 
 // Cortical layers L1–L6 — sampled along batlow so layer order maps to a

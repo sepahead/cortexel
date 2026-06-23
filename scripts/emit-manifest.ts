@@ -19,6 +19,7 @@ import {
   VIZ_ROUTER_ID,
 } from '../core/skills/skillIds';
 import { CORTEXEL_SKILL_VERSION, NEST_SKILL_REGISTRY } from '../core/skills/registry';
+import { listPalettes } from '../core/colormaps';
 
 export interface SkillManifestEntry {
   id: string;
@@ -40,6 +41,13 @@ export interface SkillManifestEntry {
   }[];
 }
 
+export interface PaletteManifestEntry {
+  name: string;
+  label: string;
+  source: string;
+  diverging: boolean;
+}
+
 export interface SkillsManifest {
   manifestVersion: string;
   skillAxisVersion: string;
@@ -48,6 +56,7 @@ export interface SkillsManifest {
   provenanceKeys: string[];
   deviceFamilies: string[];
   validRendererRoutes: string[];
+  palettes: PaletteManifestEntry[];
   skills: SkillManifestEntry[];
 }
 
@@ -76,6 +85,12 @@ export function buildManifest(): SkillsManifest {
     provenanceKeys: [...PROVENANCE_KEYS],
     deviceFamilies: [...NEST_DEVICE_FAMILIES],
     validRendererRoutes: [...VALID_RENDERER_ROUTES],
+    palettes: listPalettes().map((p) => ({
+      name: p.name,
+      label: p.metadata.label,
+      source: p.metadata.source,
+      diverging: p.metadata.diverging,
+    })),
     skills,
   };
 }

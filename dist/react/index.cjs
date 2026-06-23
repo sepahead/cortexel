@@ -429,6 +429,11 @@ var VizSpecSchema = zod.z.object({
   mode: zod.z.enum(["interactive", "export"]).default("interactive"),
   themeMode: zod.z.enum(["dark", "light"]).default("dark"),
   camera: zod.z.enum(["default", "top", "side", "close", "cinematic"]).optional(),
+  /** Optional palette hint — an agent can request a named semantic palette
+   *  (e.g. 'crameri', 'okabe-ito'). The name must be registered (via
+   *  registerPalette) at validation time, or the skill gate rejects it with
+   *  'unknown_palette'. When absent, the host's active palette is used. */
+  palette: zod.z.string().min(1).max(60).optional(),
   provenance: ProvenanceSchema
 });
 function validateVizSpec(input) {
@@ -882,6 +887,204 @@ var NEST_SKILL_IDS = [
   "nest.animation_replay"
 ];
 
+// core/colormaps.ts
+var STOPS = {
+  batlow: [
+    "#011959",
+    "#0d2d5c",
+    "#1a4260",
+    "#275a60",
+    "#3a6b54",
+    "#52744a",
+    "#6b7b3e",
+    "#8a8633",
+    "#a18a2b",
+    "#c09036",
+    "#d89448",
+    "#ed9a62",
+    "#faccfa"
+  ],
+  vik: [
+    "#001261",
+    "#023175",
+    "#136697",
+    "#3c85ac",
+    "#7ba9c8",
+    "#dbe5e9",
+    "#dba584",
+    "#ba5e2a",
+    "#983307",
+    "#6f1107",
+    "#590008"
+  ],
+  viridis: [
+    "#440154",
+    "#472d7b",
+    "#3b528b",
+    "#2c728e",
+    "#21918c",
+    "#28ae80",
+    "#5ec962",
+    "#addc30",
+    "#fde725"
+  ],
+  magma: [
+    "#000004",
+    "#180f3e",
+    "#451077",
+    "#721f81",
+    "#9f2f7f",
+    "#cd4071",
+    "#f1605d",
+    "#fd9567",
+    "#feca8d",
+    "#fcfdbf"
+  ],
+  inferno: [
+    "#000004",
+    "#1b0c41",
+    "#4a0c6b",
+    "#781c6d",
+    "#a52c60",
+    "#cf4446",
+    "#ed6925",
+    "#fb9a06",
+    "#f7d13d",
+    "#fcffa4"
+  ],
+  plasma: [
+    "#0d0887",
+    "#41049d",
+    "#6a00a8",
+    "#8f0da4",
+    "#b12a90",
+    "#cc4778",
+    "#e16462",
+    "#f2844b",
+    "#fca636",
+    "#fcce25",
+    "#f0f921"
+  ],
+  cividis: [
+    "#00224e",
+    "#123570",
+    "#3b496c",
+    "#575d6d",
+    "#707173",
+    "#8a8779",
+    "#a59c74",
+    "#c3b369",
+    "#e1cc55",
+    "#fee838"
+  ]
+};
+function hexToRgb(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return [v >> 16 & 255, v >> 8 & 255, v & 255];
+}
+var STOP_RGB = {
+  batlow: STOPS.batlow.map(hexToRgb),
+  vik: STOPS.vik.map(hexToRgb),
+  viridis: STOPS.viridis.map(hexToRgb),
+  magma: STOPS.magma.map(hexToRgb),
+  inferno: STOPS.inferno.map(hexToRgb),
+  plasma: STOPS.plasma.map(hexToRgb),
+  cividis: STOPS.cividis.map(hexToRgb)
+};
+function clamp01(t) {
+  return t < 0 ? 0 : t > 1 ? 1 : t;
+}
+function sampleStops(stops, t) {
+  const x = clamp01(t) * (stops.length - 1);
+  const i = Math.floor(x);
+  const f = x - i;
+  if (i >= stops.length - 1) return stops[stops.length - 1];
+  const a = stops[i];
+  const b = stops[i + 1];
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f)
+  ];
+}
+function sampleColormap(name, t) {
+  return sampleStops(STOP_RGB[name], t);
+}
+function colormapHex(name, t) {
+  const [r, g, b] = sampleColormap(name, t);
+  return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
+}
+var _paletteRegistry = /* @__PURE__ */ new Map();
+var CORTEXEL_PALETTE = {
+  // Canvas / surfaces — the deep navy lets colors pop
+  voidNavy: "#030711",
+  deepNavy: "#050816",
+  panel: "#0b1220",
+  grid: "#1e293b",
+  // Brand signal — sampled from batlow's distinctive mid-range
+  cyan: "#275a60",
+  // batlow(0.25) — muted teal, not Tailwind cyan
+  teal: "#3a6b54",
+  // batlow(0.30) — green-teal
+  violet: "#faccfa",
+  // batlow(1.0)  — pale magenta, the batlow endpoint
+  amber: "#c09036",
+  // batlow(0.55) — warm gold
+  orange: "#d89448",
+  // batlow(0.70) — warm amber
+  pink: "#ed9a62",
+  // batlow(0.80) — warm coral
+  // Membrane / spikes — from batlow sequential
+  membrane: "#52744a",
+  // batlow(0.35) — muted biological green
+  spike: "#dd954d",
+  // batlow(0.78) — warm gold event marker
+  spikeHot: "#ef9b67",
+  // batlow(0.92) — lighter warm for spike bursts
+  // Excitatory vs inhibitory — from vik diverging (Allen/MICrONS convention:
+  // cool blues for E, warm reds for I)
+  excitatory: "#136697",
+  // vik(0.15) — cool blue
+  inhibitory: "#983307",
+  // vik(0.85) — warm red-brown
+  // Plasticity — from vik (LTP = cool potentiation, LTD = warm depression)
+  ltp: "#023175",
+  // vik(0.08) — deep blue
+  ltd: "#6f1107",
+  // vik(0.92) — deep red
+  // Text — WCAG AA on the deep-navy canvas
+  ink: "#e2e8f0",
+  inkDim: "#94a3b8",
+  inkFaint: "#64748b"
+};
+_paletteRegistry.set("crameri", {
+  palette: CORTEXEL_PALETTE,
+  metadata: {
+    label: "Crameri",
+    source: "Crameri 2018, Nature Comms 2020 (batlow + vik)",
+    diverging: true
+  }
+});
+function getPalette(name = "crameri") {
+  return _paletteRegistry.get(name)?.palette ?? CORTEXEL_PALETTE;
+}
+function listPalettes() {
+  return [..._paletteRegistry.entries()].map(([name, entry]) => ({
+    name,
+    metadata: entry.metadata
+  }));
+}
+function isRegisteredPalette(name) {
+  return _paletteRegistry.has(name);
+}
+({
+  L1: colormapHex("batlow", 0.05),
+  "L2/3": colormapHex("batlow", 0.28),
+  L4: colormapHex("batlow", 0.48),
+  L5: colormapHex("batlow", 0.68),
+  L6: colormapHex("batlow", 0.9)
+});
+
 // core/skills/validateSkillInvocation.ts
 function validateSkillInvocation(skillId, payload) {
   const errors = [];
@@ -972,6 +1175,16 @@ function validateSkillInvocation(skillId, payload) {
       });
     }
   }
+  if (spec.palette && !isRegisteredPalette(spec.palette)) {
+    errors.push({
+      code: "unknown_palette",
+      path: "palette",
+      message: `palette '${spec.palette}' is not registered`,
+      hint: `Use one of: ${listPalettes().map((p) => p.name).join(", ")}.`,
+      validPalettes: listPalettes().map((p) => p.name),
+      example
+    });
+  }
   if (errors.length > 0) return { ok: false, errors };
   let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
   if (contract.weak) {
@@ -985,6 +1198,7 @@ function VizSpecRenderer({
   renderScene,
   skillId,
   active = true,
+  activePalette,
   onError
 }) {
   if (skillId) {
@@ -1001,6 +1215,7 @@ function VizSpecRenderer({
         /* @__PURE__ */ jsxRuntime.jsx("ul", { children: messages.map((e, i) => /* @__PURE__ */ jsxRuntime.jsx("li", { children: e }, i)) })
       ] });
     }
+    const palette2 = gated.spec.palette ? getPalette(gated.spec.palette) : activePalette ?? getPalette("crameri");
     return /* @__PURE__ */ jsxRuntime.jsx(
       SceneFrame,
       {
@@ -1008,6 +1223,7 @@ function VizSpecRenderer({
         themeMode: gated.spec.themeMode,
         mode: gated.spec.mode,
         camera: gated.spec.camera,
+        palette: palette2,
         caption: gated.caption,
         active,
         renderScene
@@ -1022,8 +1238,9 @@ function VizSpecRenderer({
       /* @__PURE__ */ jsxRuntime.jsx("ul", { children: result.errors.map((e, i) => /* @__PURE__ */ jsxRuntime.jsx("li", { children: e }, i)) })
     ] });
   }
-  const { scene, themeMode, mode, camera, provenance } = result.spec;
+  const { scene, themeMode, mode, camera, provenance, palette: paletteHint } = result.spec;
   const caption = requiresHonestyCaption(provenance) ? defaultHonestyCaption(provenance) : null;
+  const palette = paletteHint ? getPalette(paletteHint) : activePalette ?? getPalette("crameri");
   return /* @__PURE__ */ jsxRuntime.jsx(
     SceneFrame,
     {
@@ -1031,6 +1248,7 @@ function VizSpecRenderer({
       themeMode,
       mode,
       camera,
+      palette,
       caption,
       active,
       renderScene
@@ -1042,6 +1260,7 @@ function SceneFrame({
   themeMode,
   mode,
   camera,
+  palette,
   caption,
   active,
   renderScene
@@ -1055,7 +1274,7 @@ function SceneFrame({
       className: "cortexel-vizspec",
       style: { position: "relative", width: "100%", height: "100%" },
       children: [
-        renderScene({ scene, themeMode, active, camera }),
+        renderScene({ scene, themeMode, active, camera, palette }),
         caption && /* @__PURE__ */ jsxRuntime.jsx(
           "div",
           {

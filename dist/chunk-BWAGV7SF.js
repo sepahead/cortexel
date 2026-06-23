@@ -1,4 +1,4 @@
-import { validateSkillInvocation, validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-LGX4FY53.js';
+import { validateSkillInvocation, getPalette, validateVizSpec, requiresHonestyCaption, defaultHonestyCaption } from './chunk-SB4YPXTA.js';
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE2 from 'three';
@@ -345,6 +345,7 @@ function VizSpecRenderer({
   renderScene,
   skillId,
   active = true,
+  activePalette,
   onError
 }) {
   if (skillId) {
@@ -361,6 +362,7 @@ function VizSpecRenderer({
         /* @__PURE__ */ jsx("ul", { children: messages.map((e, i) => /* @__PURE__ */ jsx("li", { children: e }, i)) })
       ] });
     }
+    const palette2 = gated.spec.palette ? getPalette(gated.spec.palette) : activePalette ?? getPalette("crameri");
     return /* @__PURE__ */ jsx(
       SceneFrame,
       {
@@ -368,6 +370,7 @@ function VizSpecRenderer({
         themeMode: gated.spec.themeMode,
         mode: gated.spec.mode,
         camera: gated.spec.camera,
+        palette: palette2,
         caption: gated.caption,
         active,
         renderScene
@@ -382,8 +385,9 @@ function VizSpecRenderer({
       /* @__PURE__ */ jsx("ul", { children: result.errors.map((e, i) => /* @__PURE__ */ jsx("li", { children: e }, i)) })
     ] });
   }
-  const { scene, themeMode, mode, camera, provenance } = result.spec;
+  const { scene, themeMode, mode, camera, provenance, palette: paletteHint } = result.spec;
   const caption = requiresHonestyCaption(provenance) ? defaultHonestyCaption(provenance) : null;
+  const palette = paletteHint ? getPalette(paletteHint) : activePalette ?? getPalette("crameri");
   return /* @__PURE__ */ jsx(
     SceneFrame,
     {
@@ -391,6 +395,7 @@ function VizSpecRenderer({
       themeMode,
       mode,
       camera,
+      palette,
       caption,
       active,
       renderScene
@@ -402,6 +407,7 @@ function SceneFrame({
   themeMode,
   mode,
   camera,
+  palette,
   caption,
   active,
   renderScene
@@ -415,7 +421,7 @@ function SceneFrame({
       className: "cortexel-vizspec",
       style: { position: "relative", width: "100%", height: "100%" },
       children: [
-        renderScene({ scene, themeMode, active, camera }),
+        renderScene({ scene, themeMode, active, camera, palette }),
         caption && /* @__PURE__ */ jsx(
           "div",
           {
@@ -446,5 +452,5 @@ function SceneFrame({
 }
 
 export { ExpandableNeurons, ExpandablePopulation, NEURON_CLUSTER_SCALE, NEURON_FRAG, NEURON_VERT, VizSpecRenderer, neuronExpandedScale, neuronLocalGrid, usePopulationExpand };
-//# sourceMappingURL=chunk-5C676YOC.js.map
-//# sourceMappingURL=chunk-5C676YOC.js.map
+//# sourceMappingURL=chunk-BWAGV7SF.js.map
+//# sourceMappingURL=chunk-BWAGV7SF.js.map

@@ -60,6 +60,11 @@ export const VizSpecSchema = z.object({
   camera: z
     .enum(['default', 'top', 'side', 'close', 'cinematic'])
     .optional(),
+  /** Optional palette hint — an agent can request a named semantic palette
+   *  (e.g. 'crameri', 'okabe-ito'). The name must be registered (via
+   *  registerPalette) at validation time, or the skill gate rejects it with
+   *  'unknown_palette'. When absent, the host's active palette is used. */
+  palette: z.string().min(1).max(60).optional(),
   provenance: ProvenanceSchema,
 });
 

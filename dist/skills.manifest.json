@@ -62,6 +62,14 @@
     "fiber",
     "manim"
   ],
+  "palettes": [
+    {
+      "name": "crameri",
+      "label": "Crameri",
+      "source": "Crameri 2018, Nature Comms 2020 (batlow + vik)",
+      "diverging": true
+    }
+  ],
   "skills": [
     {
       "id": "nest.voltage_trace",

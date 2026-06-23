@@ -1,5 +1,383 @@
 import { z } from 'zod';
 
+// core/colormaps.ts
+var STOPS = {
+  batlow: [
+    "#011959",
+    "#0d2d5c",
+    "#1a4260",
+    "#275a60",
+    "#3a6b54",
+    "#52744a",
+    "#6b7b3e",
+    "#8a8633",
+    "#a18a2b",
+    "#c09036",
+    "#d89448",
+    "#ed9a62",
+    "#faccfa"
+  ],
+  vik: [
+    "#001261",
+    "#023175",
+    "#136697",
+    "#3c85ac",
+    "#7ba9c8",
+    "#dbe5e9",
+    "#dba584",
+    "#ba5e2a",
+    "#983307",
+    "#6f1107",
+    "#590008"
+  ],
+  viridis: [
+    "#440154",
+    "#472d7b",
+    "#3b528b",
+    "#2c728e",
+    "#21918c",
+    "#28ae80",
+    "#5ec962",
+    "#addc30",
+    "#fde725"
+  ],
+  magma: [
+    "#000004",
+    "#180f3e",
+    "#451077",
+    "#721f81",
+    "#9f2f7f",
+    "#cd4071",
+    "#f1605d",
+    "#fd9567",
+    "#feca8d",
+    "#fcfdbf"
+  ],
+  inferno: [
+    "#000004",
+    "#1b0c41",
+    "#4a0c6b",
+    "#781c6d",
+    "#a52c60",
+    "#cf4446",
+    "#ed6925",
+    "#fb9a06",
+    "#f7d13d",
+    "#fcffa4"
+  ],
+  plasma: [
+    "#0d0887",
+    "#41049d",
+    "#6a00a8",
+    "#8f0da4",
+    "#b12a90",
+    "#cc4778",
+    "#e16462",
+    "#f2844b",
+    "#fca636",
+    "#fcce25",
+    "#f0f921"
+  ],
+  cividis: [
+    "#00224e",
+    "#123570",
+    "#3b496c",
+    "#575d6d",
+    "#707173",
+    "#8a8779",
+    "#a59c74",
+    "#c3b369",
+    "#e1cc55",
+    "#fee838"
+  ]
+};
+function hexToRgb(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  return [v >> 16 & 255, v >> 8 & 255, v & 255];
+}
+var STOP_RGB = {
+  batlow: STOPS.batlow.map(hexToRgb),
+  vik: STOPS.vik.map(hexToRgb),
+  viridis: STOPS.viridis.map(hexToRgb),
+  magma: STOPS.magma.map(hexToRgb),
+  inferno: STOPS.inferno.map(hexToRgb),
+  plasma: STOPS.plasma.map(hexToRgb),
+  cividis: STOPS.cividis.map(hexToRgb)
+};
+function clamp01(t) {
+  return t < 0 ? 0 : t > 1 ? 1 : t;
+}
+function sampleStops(stops, t) {
+  const x = clamp01(t) * (stops.length - 1);
+  const i = Math.floor(x);
+  const f = x - i;
+  if (i >= stops.length - 1) return stops[stops.length - 1];
+  const a = stops[i];
+  const b = stops[i + 1];
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * f),
+    Math.round(a[1] + (b[1] - a[1]) * f),
+    Math.round(a[2] + (b[2] - a[2]) * f)
+  ];
+}
+function turbo(t) {
+  const x = clamp01(t);
+  const x2 = x * x;
+  const x3 = x2 * x;
+  const x4 = x3 * x;
+  const x5 = x4 * x;
+  const r = 0.13572138 + 4.6153926 * x - 42.66032258 * x2 + 132.13108234 * x3 - 152.94239396 * x4 + 59.28637943 * x5;
+  const g = 0.09140261 + 2.19418839 * x + 4.84296658 * x2 - 14.18503333 * x3 + 4.27729857 * x4 + 2.82956604 * x5;
+  const b = 0.1066733 + 12.64194608 * x - 60.58204836 * x2 + 110.36276771 * x3 - 89.90310912 * x4 + 27.34824973 * x5;
+  return [
+    Math.round(clamp01(r) * 255),
+    Math.round(clamp01(g) * 255),
+    Math.round(clamp01(b) * 255)
+  ];
+}
+function sampleColormap(name, t) {
+  if (name === "turbo") return turbo(t);
+  return sampleStops(STOP_RGB[name], t);
+}
+function colormapHex(name, t) {
+  const [r, g, b] = sampleColormap(name, t);
+  return `#${(1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1)}`;
+}
+function colormapRgba(name, t, alpha = 1) {
+  const [r, g, b] = sampleColormap(name, t);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+function colormapGradient(name, angle = 90, stops = 12) {
+  const parts = [];
+  for (let i = 0; i < stops; i++) {
+    const t = i / (stops - 1);
+    parts.push(`${colormapHex(name, t)} ${(t * 100).toFixed(1)}%`);
+  }
+  return `linear-gradient(${angle}deg, ${parts.join(", ")})`;
+}
+function colormapSvgStops(name, stops = 8) {
+  let out = "";
+  for (let i = 0; i < stops; i++) {
+    const t = i / (stops - 1);
+    out += `<stop offset="${(t * 100).toFixed(1)}%" stop-color="${colormapHex(name, t)}"/>`;
+  }
+  return out;
+}
+var _paletteRegistry = /* @__PURE__ */ new Map();
+var CORTEXEL_PALETTE = {
+  // Canvas / surfaces — the deep navy lets colors pop
+  voidNavy: "#030711",
+  deepNavy: "#050816",
+  panel: "#0b1220",
+  grid: "#1e293b",
+  // Brand signal — sampled from batlow's distinctive mid-range
+  cyan: "#275a60",
+  // batlow(0.25) — muted teal, not Tailwind cyan
+  teal: "#3a6b54",
+  // batlow(0.30) — green-teal
+  violet: "#faccfa",
+  // batlow(1.0)  — pale magenta, the batlow endpoint
+  amber: "#c09036",
+  // batlow(0.55) — warm gold
+  orange: "#d89448",
+  // batlow(0.70) — warm amber
+  pink: "#ed9a62",
+  // batlow(0.80) — warm coral
+  // Membrane / spikes — from batlow sequential
+  membrane: "#52744a",
+  // batlow(0.35) — muted biological green
+  spike: "#dd954d",
+  // batlow(0.78) — warm gold event marker
+  spikeHot: "#ef9b67",
+  // batlow(0.92) — lighter warm for spike bursts
+  // Excitatory vs inhibitory — from vik diverging (Allen/MICrONS convention:
+  // cool blues for E, warm reds for I)
+  excitatory: "#136697",
+  // vik(0.15) — cool blue
+  inhibitory: "#983307",
+  // vik(0.85) — warm red-brown
+  // Plasticity — from vik (LTP = cool potentiation, LTD = warm depression)
+  ltp: "#023175",
+  // vik(0.08) — deep blue
+  ltd: "#6f1107",
+  // vik(0.92) — deep red
+  // Text — WCAG AA on the deep-navy canvas
+  ink: "#e2e8f0",
+  inkDim: "#94a3b8",
+  inkFaint: "#64748b"
+};
+var HEX_RE = /^#[0-9a-fA-F]{6}$/;
+function validatePalette(p) {
+  for (const [key, val] of Object.entries(p)) {
+    if (!HEX_RE.test(val)) {
+      throw new Error(`Palette color '${key}' is not a valid #rrggbb hex: '${val}'`);
+    }
+  }
+  if (p.excitatory.toLowerCase() === p.inhibitory.toLowerCase()) {
+    throw new Error("Palette excitatory and inhibitory colors must differ");
+  }
+  if (p.ltp.toLowerCase() === p.ltd.toLowerCase()) {
+    throw new Error("Palette ltp and ltd colors must differ");
+  }
+}
+_paletteRegistry.set("crameri", {
+  palette: CORTEXEL_PALETTE,
+  metadata: {
+    label: "Crameri",
+    source: "Crameri 2018, Nature Comms 2020 (batlow + vik)",
+    diverging: true
+  }
+});
+function registerPalette(name, palette, metadata) {
+  validatePalette(palette);
+  _paletteRegistry.set(name, { palette, metadata });
+}
+function getPalette(name = "crameri") {
+  return _paletteRegistry.get(name)?.palette ?? CORTEXEL_PALETTE;
+}
+function getPaletteEntry(name) {
+  return _paletteRegistry.get(name);
+}
+function listPalettes() {
+  return [..._paletteRegistry.entries()].map(([name, entry]) => ({
+    name,
+    metadata: entry.metadata
+  }));
+}
+function isRegisteredPalette(name) {
+  return _paletteRegistry.has(name);
+}
+var CORTICAL_LAYER_COLORS = {
+  L1: colormapHex("batlow", 0.05),
+  "L2/3": colormapHex("batlow", 0.28),
+  L4: colormapHex("batlow", 0.48),
+  L5: colormapHex("batlow", 0.68),
+  L6: colormapHex("batlow", 0.9)
+};
+var CATEGORICAL = [
+  "#011959",
+  "#faccfa",
+  "#828231",
+  "#226061",
+  "#f19d6b",
+  "#4d734d",
+  "#114360",
+  "#fdb4b4",
+  "#c09036",
+  "#175262"
+];
+function categorical(i) {
+  return CATEGORICAL[(i % CATEGORICAL.length + CATEGORICAL.length) % CATEGORICAL.length];
+}
+var OKABE_ITO = {
+  black: "#000000",
+  orange: "#e69f00",
+  skyBlue: "#56b4e9",
+  green: "#009e73",
+  yellow: "#f0e442",
+  blue: "#0072b2",
+  vermilion: "#d55e00",
+  reddishPurple: "#cc79a7"
+};
+var SYNAPSE_COLORS = {
+  dark: {
+    excitatory: "#1a3d5a",
+    // muted vik-blue
+    inhibitory: "#5a3d1a"
+    // muted vik-red
+  },
+  light: {
+    excitatory: "#4a7d9a",
+    // lifted vik-blue for light canvas
+    inhibitory: "#9a7d4a"
+    // lifted vik-red for light canvas
+  }
+};
+var AXIS_COLORS = {
+  lightAxisLabel: "#1f2937",
+  // slate-800 — AA on light canvas
+  lightAxisLine: "#475569",
+  // slate-600
+  lightGridLine: "#cbd5e1",
+  // slate-300 (use with low opacity)
+  darkAxisLabel: "#cbd5e1",
+  // slate-300 — AA on deep-navy canvas
+  darkAxisLine: "#64748b",
+  // slate-500
+  darkGridLine: "#334155"
+  // slate-700 (use with low opacity)
+};
+var TURBO_GLSL = (
+  /* glsl */
+  `
+vec3 turbo(float x) {
+  x = clamp(x, 0.0, 1.0);
+  vec4 v4 = vec4(1.0, x, x * x, x * x * x);
+  vec2 v2 = v4.zw * v4.z;
+  return vec3(
+    dot(v4, vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234)) + dot(v2, vec2(-152.94239396, 59.28637943)),
+    dot(v4, vec4(0.09140261, 2.19418839,   4.84296658, -14.18503333)) + dot(v2, vec2(  4.27729857,  2.82956604)),
+    dot(v4, vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771)) + dot(v2, vec2(-89.90310912, 27.34824973))
+  );
+}
+`
+);
+var VIRIDIS_GLSL = (
+  /* glsl */
+  `
+vec3 viridis(float t) {
+  t = clamp(t, 0.0, 1.0);
+  const vec3 c0 = vec3(0.2777273272234177, 0.005407344544966578, 0.3340998053353061);
+  const vec3 c1 = vec3(0.1050930431085774, 1.404613529898575, 1.384590162594685);
+  const vec3 c2 = vec3(-0.3308618287255563, 0.214847559468213, 0.09509516302823659);
+  const vec3 c3 = vec3(-4.634230498983486, -5.799100973351585, -19.33244095627987);
+  const vec3 c4 = vec3(6.228269936347081, 14.17993336680509, 56.69055260068105);
+  const vec3 c5 = vec3(4.776384997670288, -13.74514537774601, -65.35303263337234);
+  const vec3 c6 = vec3(-5.435455855934631, 4.645852612178535, 26.3124352495832);
+  return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
+}
+`
+);
+var BATLOW_GLSL = (
+  /* glsl */
+  `
+vec3 batlow(float t) {
+  t = clamp(t, 0.0, 1.0);
+  const vec3 stops[13] = vec3[13](
+    vec3(0.004,0.098,0.350), vec3(0.051,0.176,0.361), vec3(0.102,0.259,0.376),
+    vec3(0.153,0.353,0.376), vec3(0.227,0.420,0.329), vec3(0.322,0.455,0.290),
+    vec3(0.420,0.482,0.243), vec3(0.541,0.525,0.200), vec3(0.631,0.541,0.169),
+    vec3(0.753,0.565,0.212), vec3(0.847,0.578,0.282), vec3(0.929,0.605,0.385),
+    vec3(0.981,0.800,0.981)
+  );
+  float x = t * 12.0;
+  int i = int(floor(x));
+  float f = x - float(i);
+  if (i >= 12) return stops[12];
+  return mix(stops[i], stops[i + 1], f);
+}
+`
+);
+var VIK_GLSL = (
+  /* glsl */
+  `
+vec3 vik(float t) {
+  t = clamp(t, 0.0, 1.0);
+  const vec3 stops[11] = vec3[11](
+    vec3(0.001,0.070,0.380), vec3(0.009,0.193,0.458), vec3(0.075,0.398,0.591),
+    vec3(0.236,0.522,0.674), vec3(0.483,0.713,0.784), vec3(0.858,0.897,0.915),
+    vec3(0.859,0.647,0.518), vec3(0.728,0.368,0.166), vec3(0.596,0.199,0.028),
+    vec3(0.436,0.068,0.026), vec3(0.350,0.000,0.030)
+  );
+  float x = t * 10.0;
+  int i = int(floor(x));
+  float f = x - float(i);
+  if (i >= 10) return stops[10];
+  return mix(stops[i], stops[i + 1], f);
+}
+`
+);
+
 // core/designLaws.ts
 var SCENE_NAMES = [
   "live-activity",
@@ -71,6 +449,11 @@ var VizSpecSchema = z.object({
   mode: z.enum(["interactive", "export"]).default("interactive"),
   themeMode: z.enum(["dark", "light"]).default("dark"),
   camera: z.enum(["default", "top", "side", "close", "cinematic"]).optional(),
+  /** Optional palette hint — an agent can request a named semantic palette
+   *  (e.g. 'crameri', 'okabe-ito'). The name must be registered (via
+   *  registerPalette) at validation time, or the skill gate rejects it with
+   *  'unknown_palette'. When absent, the host's active palette is used. */
+  palette: z.string().min(1).max(60).optional(),
   provenance: ProvenanceSchema
 });
 function validateVizSpec(input) {
@@ -685,6 +1068,16 @@ function validateSkillInvocation(skillId, payload) {
       });
     }
   }
+  if (spec.palette && !isRegisteredPalette(spec.palette)) {
+    errors.push({
+      code: "unknown_palette",
+      path: "palette",
+      message: `palette '${spec.palette}' is not registered`,
+      hint: `Use one of: ${listPalettes().map((p) => p.name).join(", ")}.`,
+      validPalettes: listPalettes().map((p) => p.name),
+      example
+    });
+  }
   if (errors.length > 0) return { ok: false, errors };
   let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
   if (contract.weak) {
@@ -694,6 +1087,6 @@ function validateSkillInvocation(skillId, payload) {
   return { ok: true, spec, scene: contract.scene, caption };
 }
 
-export { AstrocyteParamsSchema, CAMERA_PRESETS, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, NetworkParamsSchema, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, SKILL_EXAMPLE_PAYLOADS, Spatial3DParamsSchema, SpikeRasterParamsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, defaultHonestyCaption, describeSkill, describeSkills, getExamplePayload, getSkill, isNestSkillId, listSkills, requiresHonestyCaption, validateSkillInvocation, validateVizSpec };
-//# sourceMappingURL=chunk-LGX4FY53.js.map
-//# sourceMappingURL=chunk-LGX4FY53.js.map
+export { AXIS_COLORS, AstrocyteParamsSchema, BATLOW_GLSL, CAMERA_PRESETS, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, NetworkParamsSchema, OKABE_ITO, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, Spatial3DParamsSchema, SpikeRasterParamsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIK_GLSL, VIRIDIS_GLSL, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, getExamplePayload, getPalette, getPaletteEntry, getSkill, isNestSkillId, isRegisteredPalette, listPalettes, listSkills, registerPalette, requiresHonestyCaption, sampleColormap, validatePalette, validateSkillInvocation, validateVizSpec };
+//# sourceMappingURL=chunk-SB4YPXTA.js.map
+//# sourceMappingURL=chunk-SB4YPXTA.js.map

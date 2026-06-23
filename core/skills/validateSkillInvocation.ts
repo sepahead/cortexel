@@ -20,6 +20,7 @@ import { SCENE_NAMES, type SceneName } from '../designLaws';
 import { getSkill } from './registry';
 import { getExamplePayload } from './examples';
 import { NEST_SKILL_IDS } from './skillIds';
+import { isRegisteredPalette, listPalettes } from '../colormaps';
 
 export interface SkillInvocationError {
   code:
@@ -29,12 +30,14 @@ export interface SkillInvocationError {
     | 'scene_mismatch'
     | 'invalid_params'
     | 'missing_provenance'
-    | 'calibrated_posterior_unsupported';
+    | 'calibrated_posterior_unsupported'
+    | 'unknown_palette';
   path: string;
   message: string;
   hint?: string;
   validScenes?: readonly SceneName[];
   validSkills?: readonly string[];
+  validPalettes?: string[];
   /** A copyable valid payload for this skill, attached to actionable errors so
    *  an autonomous agent can self-repair without reading source. */
   example?: VizSpec;
@@ -152,6 +155,18 @@ export function validateSkillInvocation(
         example,
       });
     }
+  }
+
+  // 7. Palette hint must be a registered palette name (if present).
+  if (spec.palette && !isRegisteredPalette(spec.palette)) {
+    errors.push({
+      code: 'unknown_palette',
+      path: 'palette',
+      message: `palette '${spec.palette}' is not registered`,
+      hint: `Use one of: ${listPalettes().map((p) => p.name).join(', ')}.`,
+      validPalettes: listPalettes().map((p) => p.name),
+      example,
+    });
   }
 
   if (errors.length > 0) return { ok: false, errors };

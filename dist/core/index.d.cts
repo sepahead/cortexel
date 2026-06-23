@@ -1,86 +1,6 @@
-import { i as SceneName, g as SceneData } from '../designLaws-DjS3Nx-h.cjs';
-export { C as CAMERA_PRESETS, a as CameraPreset, b as CameraPresetName, L as LayerConfig, N as NeuralSceneHandle, c as NeuralSceneMode, d as NeuralSceneProps, P as PlaybackState, S as SCENE_FRAMING, e as SCENE_NAMES, f as STDPSynapse, h as SceneFraming } from '../designLaws-DjS3Nx-h.cjs';
+import { q as SceneName, o as SceneData } from '../designLaws-rhhuDvhZ.cjs';
+export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CAMERA_PRESETS, a as CATEGORICAL, b as CORTEXEL_PALETTE, c as CORTICAL_LAYER_COLORS, d as CameraPreset, e as CameraPresetName, f as ColormapName, L as LayerConfig, N as NeuralSceneHandle, g as NeuralSceneMode, h as NeuralSceneProps, O as OKABE_ITO, P as PaletteEntry, i as PaletteMetadata, j as PaletteName, k as PlaybackState, R as RGB, S as SCENE_FRAMING, l as SCENE_NAMES, m as STDPSynapse, n as SYNAPSE_COLORS, p as SceneFraming, r as SemanticPalette, T as TURBO_GLSL, V as VIK_GLSL, s as VIRIDIS_GLSL, t as categorical, u as colormapGradient, v as colormapHex, w as colormapRgba, x as colormapSvgStops, y as getPalette, z as getPaletteEntry, D as isRegisteredPalette, E as listPalettes, F as registerPalette, G as sampleColormap, H as validatePalette } from '../designLaws-rhhuDvhZ.cjs';
 import { z } from 'zod';
-
-type RGB = readonly [number, number, number];
-type ColormapName = 'batlow' | 'vik' | 'viridis' | 'magma' | 'inferno' | 'plasma' | 'cividis' | 'turbo';
-/** Sample a perceptually-uniform colormap at `t ∈ [0, 1]` → RGB (0–255). */
-declare function sampleColormap(name: ColormapName, t: number): RGB;
-/** Sample a colormap at `t ∈ [0, 1]` → `#rrggbb`. */
-declare function colormapHex(name: ColormapName, t: number): string;
-/** Sample a colormap → `rgba(r, g, b, a)` with explicit alpha. */
-declare function colormapRgba(name: ColormapName, t: number, alpha?: number): string;
-/** A CSS `linear-gradient(...)` spanning a colormap, for legends and bars. */
-declare function colormapGradient(name: ColormapName, angle?: number, stops?: number): string;
-/** SVG `<stop>` entries for a `<linearGradient>` spanning a colormap. */
-declare function colormapSvgStops(name: ColormapName, stops?: number): string;
-type PaletteName = 'crameri' | 'brunel';
-interface SemanticPalette {
-    voidNavy: string;
-    deepNavy: string;
-    panel: string;
-    grid: string;
-    cyan: string;
-    teal: string;
-    violet: string;
-    amber: string;
-    orange: string;
-    pink: string;
-    membrane: string;
-    spike: string;
-    spikeHot: string;
-    excitatory: string;
-    inhibitory: string;
-    ltp: string;
-    ltd: string;
-    ink: string;
-    inkDim: string;
-    inkFaint: string;
-}
-/** Default palette — Crameri scientific colour maps (batlow + vik). */
-declare const CORTEXEL_PALETTE: SemanticPalette;
-/** Brunel palette — Okabe-Ito-derived, luminance-lifted for dark canvas. */
-declare const BRUNEL_PALETTE: SemanticPalette;
-/** Select a semantic palette by name. Defaults to 'crameri'. */
-declare function getPalette(name?: PaletteName): SemanticPalette;
-declare const CORTICAL_LAYER_COLORS: Record<string, string>;
-/** Categorical neuron/population colors — batlowS (Crameri's categorical set).
- *  Distinct, CVD-friendly hues sampled from the batlow colour map at
- *  perceptually-spaced intervals. Replaces the hand-picked Tailwind set. */
-declare const CATEGORICAL: readonly string[];
-declare function categorical(i: number): string;
-declare const OKABE_ITO: {
-    readonly black: "#000000";
-    readonly orange: "#e69f00";
-    readonly skyBlue: "#56b4e9";
-    readonly green: "#009e73";
-    readonly yellow: "#f0e442";
-    readonly blue: "#0072b2";
-    readonly vermilion: "#d55e00";
-    readonly reddishPurple: "#cc79a7";
-};
-declare const SYNAPSE_COLORS: {
-    readonly dark: {
-        readonly excitatory: "#1a3d5a";
-        readonly inhibitory: "#5a3d1a";
-    };
-    readonly light: {
-        readonly excitatory: "#4a7d9a";
-        readonly inhibitory: "#9a7d4a";
-    };
-};
-declare const AXIS_COLORS: {
-    readonly lightAxisLabel: "#1f2937";
-    readonly lightAxisLine: "#475569";
-    readonly lightGridLine: "#cbd5e1";
-    readonly darkAxisLabel: "#cbd5e1";
-    readonly darkAxisLine: "#64748b";
-    readonly darkGridLine: "#334155";
-};
-declare const TURBO_GLSL = "\nvec3 turbo(float x) {\n  x = clamp(x, 0.0, 1.0);\n  vec4 v4 = vec4(1.0, x, x * x, x * x * x);\n  vec2 v2 = v4.zw * v4.z;\n  return vec3(\n    dot(v4, vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234)) + dot(v2, vec2(-152.94239396, 59.28637943)),\n    dot(v4, vec4(0.09140261, 2.19418839,   4.84296658, -14.18503333)) + dot(v2, vec2(  4.27729857,  2.82956604)),\n    dot(v4, vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771)) + dot(v2, vec2(-89.90310912, 27.34824973))\n  );\n}\n";
-declare const VIRIDIS_GLSL = "\nvec3 viridis(float t) {\n  t = clamp(t, 0.0, 1.0);\n  const vec3 c0 = vec3(0.2777273272234177, 0.005407344544966578, 0.3340998053353061);\n  const vec3 c1 = vec3(0.1050930431085774, 1.404613529898575, 1.384590162594685);\n  const vec3 c2 = vec3(-0.3308618287255563, 0.214847559468213, 0.09509516302823659);\n  const vec3 c3 = vec3(-4.634230498983486, -5.799100973351585, -19.33244095627987);\n  const vec3 c4 = vec3(6.228269936347081, 14.17993336680509, 56.69055260068105);\n  const vec3 c5 = vec3(4.776384997670288, -13.74514537774601, -65.35303263337234);\n  const vec3 c6 = vec3(-5.435455855934631, 4.645852612178535, 26.3124352495832);\n  return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));\n}\n";
-declare const BATLOW_GLSL = "\nvec3 batlow(float t) {\n  t = clamp(t, 0.0, 1.0);\n  const vec3 stops[13] = vec3[13](\n    vec3(0.004,0.098,0.350), vec3(0.051,0.176,0.361), vec3(0.102,0.259,0.376),\n    vec3(0.153,0.353,0.376), vec3(0.227,0.420,0.329), vec3(0.322,0.455,0.290),\n    vec3(0.420,0.482,0.243), vec3(0.541,0.525,0.200), vec3(0.631,0.541,0.169),\n    vec3(0.753,0.565,0.212), vec3(0.847,0.578,0.282), vec3(0.929,0.605,0.385),\n    vec3(0.981,0.800,0.981)\n  );\n  float x = t * 12.0;\n  int i = int(floor(x));\n  float f = x - float(i);\n  if (i >= 12) return stops[12];\n  return mix(stops[i], stops[i + 1], f);\n}\n";
-declare const VIK_GLSL = "\nvec3 vik(float t) {\n  t = clamp(t, 0.0, 1.0);\n  const vec3 stops[11] = vec3[11](\n    vec3(0.001,0.070,0.380), vec3(0.009,0.193,0.458), vec3(0.075,0.398,0.591),\n    vec3(0.236,0.522,0.674), vec3(0.483,0.713,0.784), vec3(0.858,0.897,0.915),\n    vec3(0.859,0.647,0.518), vec3(0.728,0.368,0.166), vec3(0.596,0.199,0.028),\n    vec3(0.436,0.068,0.026), vec3(0.350,0.000,0.030)\n  );\n  float x = t * 10.0;\n  int i = int(floor(x));\n  float f = x - float(i);\n  if (i >= 10) return stops[10];\n  return mix(stops[i], stops[i + 1], f);\n}\n";
 
 declare const ProvenanceSchema: z.ZodObject<{
     source: z.ZodString;
@@ -122,6 +42,7 @@ declare const VizSpecSchema: z.ZodObject<{
         close: "close";
         cinematic: "cinematic";
     }>>;
+    palette: z.ZodOptional<z.ZodString>;
     provenance: z.ZodObject<{
         source: z.ZodString;
         calibrated_posterior: z.ZodDefault<z.ZodBoolean>;
@@ -331,12 +252,13 @@ type RouteResult = {
 declare function routeToScene(input: RouteInput): RouteResult;
 
 interface SkillInvocationError {
-    code: 'unknown_skill' | 'invalid_envelope' | 'no_cortexel_scene' | 'scene_mismatch' | 'invalid_params' | 'missing_provenance' | 'calibrated_posterior_unsupported';
+    code: 'unknown_skill' | 'invalid_envelope' | 'no_cortexel_scene' | 'scene_mismatch' | 'invalid_params' | 'missing_provenance' | 'calibrated_posterior_unsupported' | 'unknown_palette';
     path: string;
     message: string;
     hint?: string;
     validScenes?: readonly SceneName[];
     validSkills?: readonly string[];
+    validPalettes?: string[];
     /** A copyable valid payload for this skill, attached to actionable errors so
      *  an autonomous agent can self-repair without reading source. */
     example?: VizSpec;
@@ -448,4 +370,4 @@ declare function getPositionToSceneData(positions: unknown, opts?: {
 }): AdapterResult;
 declare function weightRecorderToSceneData(events: unknown): AdapterResult;
 
-export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, BATLOW_GLSL, BRUNEL_PALETTE, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PaletteName, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, SceneData, SceneName, type SemanticPalette, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIK_GLSL, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPalette, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
+export { type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
