@@ -1,5 +1,5 @@
-// Structured provenance keys — the machine-checkable form of the Engram skill
-// `provenance_requirements`. The backend declares those as free-text prose
+// Structured provenance keys — the machine-checkable form of a host's skill
+// `provenance_requirements`. A host backend may declare those as free-text prose
 // ('spike_recorder id', 'time units', ...) which a gate cannot validate. Here
 // they become a closed enum so validateSkillInvocation can assert that an agent
 // actually DECLARED the inputs a skill's honesty contract demands.

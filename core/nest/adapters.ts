@@ -4,7 +4,7 @@
 // output dict and gets back the typed SceneData the renderer consumes, with
 // names normalized (times→traceTimes, global senders→0..N + a label map), axis
 // invariants enforced, and value arrays narrowed to Float32Array for the GPU
-// while time axes stay float64. No Engram/NEST import — plain dicts only.
+// while time axes stay float64. No host/NEST import — plain dicts only.
 
 import type { SceneData } from '../designLaws';
 import {

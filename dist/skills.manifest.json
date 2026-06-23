@@ -1,7 +1,7 @@
 {
   "manifestVersion": "1",
   "skillAxisVersion": "1.0.0",
-  "vizRouterId": "pi.nest.viz_router",
+  "vizRouterId": "nest.viz_router",
   "sceneNames": [
     "live-activity",
     "cortical-column",
@@ -50,12 +50,12 @@
     "computed"
   ],
   "validRendererRoutes": [
-    "pi.media.trace_figure",
-    "pi.media.model_graph",
-    "pi.media.webgl_scene",
-    "pi.media.react_fiber_scene",
-    "pi.media.manim_storyboard",
-    "pi.media.*",
+    "media.trace_figure",
+    "media.model_graph",
+    "media.webgl_scene",
+    "media.react_fiber_scene",
+    "media.manim_storyboard",
+    "media.*",
     "matplotlib",
     "d3",
     "three",
@@ -64,7 +64,7 @@
   ],
   "skills": [
     {
-      "id": "pi.nest.voltage_trace",
+      "id": "nest.voltage_trace",
       "version": "1.0.0",
       "title": "NEST voltage trace renderer",
       "description": "Render multimeter/voltmeter analog traces (V_m, currents, conductances).",
@@ -83,7 +83,7 @@
         "sampling_interval"
       ],
       "rendererRoutes": [
-        "pi.media.trace_figure",
+        "media.trace_figure",
         "matplotlib",
         "d3"
       ],
@@ -98,7 +98,7 @@
       ]
     },
     {
-      "id": "pi.nest.spike_raster",
+      "id": "nest.spike_raster",
       "version": "1.0.0",
       "title": "NEST spike raster renderer",
       "description": "Render spike_recorder events as rasters, spike trains and population plots.",
@@ -116,7 +116,7 @@
         "time_units"
       ],
       "rendererRoutes": [
-        "pi.media.model_graph",
+        "media.model_graph",
         "d3"
       ],
       "examples": [
@@ -130,7 +130,7 @@
       ]
     },
     {
-      "id": "pi.nest.rate_response",
+      "id": "nest.rate_response",
       "version": "1.0.0",
       "title": "NEST rate / IF response renderer",
       "description": "Render firing-rate / IF curves and population rates derived from spike counts.",
@@ -148,7 +148,7 @@
         "rate_normalization"
       ],
       "rendererRoutes": [
-        "pi.media.trace_figure",
+        "media.trace_figure",
         "matplotlib",
         "d3"
       ],
@@ -163,7 +163,7 @@
       ]
     },
     {
-      "id": "pi.nest.connectivity_matrix",
+      "id": "nest.connectivity_matrix",
       "version": "1.0.0",
       "title": "NEST connectivity matrix renderer",
       "description": "Render SynapseCollection connectivity, weights and population blocks.",
@@ -181,7 +181,7 @@
         "weight_units"
       ],
       "rendererRoutes": [
-        "pi.media.model_graph",
+        "media.model_graph",
         "d3"
       ],
       "examples": [
@@ -195,7 +195,7 @@
       ]
     },
     {
-      "id": "pi.nest.spatial_2d",
+      "id": "nest.spatial_2d",
       "version": "1.0.0",
       "title": "NEST 2D spatial renderer",
       "description": "Render 2D layer positions, masks, kernels and sampled projections.",
@@ -211,7 +211,7 @@
         "kernel"
       ],
       "rendererRoutes": [
-        "pi.media.model_graph",
+        "media.model_graph",
         "d3"
       ],
       "examples": [
@@ -225,7 +225,7 @@
       ]
     },
     {
-      "id": "pi.nest.spatial_3d",
+      "id": "nest.spatial_3d",
       "version": "1.0.0",
       "title": "NEST 3D spatial renderer",
       "description": "Render 3D population/node positions for spatial inspection.",
@@ -240,8 +240,8 @@
         "projection_sample_policy"
       ],
       "rendererRoutes": [
-        "pi.media.webgl_scene",
-        "pi.media.react_fiber_scene",
+        "media.webgl_scene",
+        "media.react_fiber_scene",
         "three",
         "fiber"
       ],
@@ -256,7 +256,7 @@
       ]
     },
     {
-      "id": "pi.nest.plasticity_dynamics",
+      "id": "nest.plasticity_dynamics",
       "version": "1.0.0",
       "title": "NEST plasticity dynamics renderer",
       "description": "Render STDP windows, weight adaptation and short-term dynamics.",
@@ -273,7 +273,7 @@
         "weight_units"
       ],
       "rendererRoutes": [
-        "pi.media.trace_figure",
+        "media.trace_figure",
         "matplotlib"
       ],
       "examples": [
@@ -287,7 +287,7 @@
       ]
     },
     {
-      "id": "pi.nest.phase_plane",
+      "id": "nest.phase_plane",
       "version": "1.0.0",
       "title": "NEST phase-plane renderer",
       "description": "Render phase planes, vector fields, nullclines and trajectories.",
@@ -301,7 +301,7 @@
         "state_variables"
       ],
       "rendererRoutes": [
-        "pi.media.model_graph",
+        "media.model_graph",
         "d3"
       ],
       "examples": [
@@ -315,7 +315,7 @@
       ]
     },
     {
-      "id": "pi.nest.correlogram",
+      "id": "nest.correlogram",
       "version": "1.0.0",
       "title": "NEST correlogram / synchrony renderer",
       "description": "Render auto/cross-correlation functions for spike trains.",
@@ -331,7 +331,7 @@
         "pair_labels"
       ],
       "rendererRoutes": [
-        "pi.media.model_graph",
+        "media.model_graph",
         "d3"
       ],
       "examples": [
@@ -345,7 +345,7 @@
       ]
     },
     {
-      "id": "pi.nest.stimulus_response",
+      "id": "nest.stimulus_response",
       "version": "1.0.0",
       "title": "NEST stimulus-response protocol renderer",
       "description": "Render aligned stimulus waveforms, responses, spikes and protocol epochs.",
@@ -361,7 +361,7 @@
         "units"
       ],
       "rendererRoutes": [
-        "pi.media.trace_figure",
+        "media.trace_figure",
         "matplotlib"
       ],
       "examples": [
@@ -375,7 +375,7 @@
       ]
     },
     {
-      "id": "pi.nest.astrocyte_dynamics",
+      "id": "nest.astrocyte_dynamics",
       "version": "1.0.0",
       "title": "NEST astrocyte Ca²⁺/IP₃ dynamics renderer",
       "description": "Render tripartite-synapse calcium/IP3 state-variable traces.",
@@ -391,7 +391,7 @@
         "units"
       ],
       "rendererRoutes": [
-        "pi.media.trace_figure",
+        "media.trace_figure",
         "matplotlib"
       ],
       "examples": [
@@ -405,7 +405,7 @@
       ]
     },
     {
-      "id": "pi.nest.compartmental_dynamics",
+      "id": "nest.compartmental_dynamics",
       "version": "1.0.0",
       "title": "NEST compartmental morphology + dynamics renderer",
       "description": "Render multi-compartment morphologies, receptor ports and soma/dendrite traces.",
@@ -420,7 +420,7 @@
         "recorded_variable"
       ],
       "rendererRoutes": [
-        "pi.media.model_graph",
+        "media.model_graph",
         "d3"
       ],
       "examples": [
@@ -434,7 +434,7 @@
       ]
     },
     {
-      "id": "pi.nest.animation_replay",
+      "id": "nest.animation_replay",
       "version": "1.0.0",
       "title": "NEST state replay / animation storyboard renderer",
       "description": "Render time-evolution storyboards and inspectable state replays.",
@@ -448,7 +448,7 @@
         "frame_rate"
       ],
       "rendererRoutes": [
-        "pi.media.manim_storyboard",
+        "media.manim_storyboard",
         "manim"
       ],
       "examples": [

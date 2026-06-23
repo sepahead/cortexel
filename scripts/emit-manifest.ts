@@ -1,5 +1,5 @@
 // Emits dist/skills.manifest.json — the language-neutral artifact non-TS hosts
-// (the Engram Python backend; future agents) consume as the single source of the
+// (a host Python backend; future agents) consume as the single source of the
 // skill→scene map + input/provenance contract. Zod schemas are serialized as
 // their required-key LISTS, not zod internals, so the manifest stays portable.
 //
@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { SCENE_NAMES } from '../core/designLaws';
 import { PROVENANCE_KEYS } from '../core/skills/provenanceKeys';
 import {
-  PI_NEST_SKILL_IDS,
+  NEST_SKILL_IDS,
   VALID_RENDERER_ROUTES,
   NEST_DEVICE_FAMILIES,
   VIZ_ROUTER_ID,
@@ -52,7 +52,7 @@ export interface SkillsManifest {
 }
 
 export function buildManifest(): SkillsManifest {
-  const skills: SkillManifestEntry[] = PI_NEST_SKILL_IDS.map((id) => {
+  const skills: SkillManifestEntry[] = NEST_SKILL_IDS.map((id) => {
     const c = NEST_SKILL_REGISTRY[id];
     return {
       id: c.id,

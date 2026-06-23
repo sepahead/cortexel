@@ -1,4 +1,4 @@
-import { listSkills, NEST_SKILL_REGISTRY } from './chunk-F3NKALRQ.js';
+import { listSkills, NEST_SKILL_REGISTRY } from './chunk-LGX4FY53.js';
 import { z } from 'zod';
 
 // core/colormaps.ts
@@ -134,7 +134,7 @@ function colormapSvgStops(name, stops = 8) {
   }
   return out;
 }
-var ENGRAM_PALETTE = {
+var CORTEXEL_PALETTE = {
   // Canvas / surfaces
   voidNavy: "#030711",
   deepNavy: "#050816",
@@ -310,9 +310,9 @@ function isProvenanceKey(value) {
 
 // core/skills/router.ts
 var SPIKE_KIND_TO_SKILL = {
-  events: "pi.nest.spike_raster",
-  rates: "pi.nest.rate_response",
-  correlation: "pi.nest.correlogram"
+  events: "nest.spike_raster",
+  rates: "nest.rate_response",
+  correlation: "nest.correlogram"
 };
 var FAMILY_MEMBERS = (() => {
   const out = {};
@@ -622,6 +622,6 @@ function weightRecorderToSceneData(events) {
   };
 }
 
-export { AXIS_COLORS, CATEGORICAL, CORTICAL_LAYER_COLORS, ENGRAM_PALETTE, GetConnectionsSchema, GetPosition2DSchema, GetPosition3DSchema, MultimeterEventsSchema, MultimeterMultiSenderSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, ProvenanceKeyEnum, SYNAPSE_COLORS, SpikeRecorderEventsSchema, TURBO_GLSL, VIRIDIS_GLSL, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, detectEmptyScene, getConnectionsToSceneData, getPositionToSceneData, isProvenanceKey, multimeterToSceneData, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, weightRecorderToSceneData };
-//# sourceMappingURL=chunk-NQTYKDX7.js.map
-//# sourceMappingURL=chunk-NQTYKDX7.js.map
+export { AXIS_COLORS, CATEGORICAL, CORTEXEL_PALETTE, CORTICAL_LAYER_COLORS, GetConnectionsSchema, GetPosition2DSchema, GetPosition3DSchema, MultimeterEventsSchema, MultimeterMultiSenderSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, ProvenanceKeyEnum, SYNAPSE_COLORS, SpikeRecorderEventsSchema, TURBO_GLSL, VIRIDIS_GLSL, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, detectEmptyScene, getConnectionsToSceneData, getPositionToSceneData, isProvenanceKey, multimeterToSceneData, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, weightRecorderToSceneData };
+//# sourceMappingURL=chunk-GRZDKLSB.js.map
+//# sourceMappingURL=chunk-GRZDKLSB.js.map

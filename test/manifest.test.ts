@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildManifest, serializeManifest } from '../scripts/emit-manifest';
-import { PI_NEST_SKILL_IDS } from '../core/skills/skillIds';
+import { NEST_SKILL_IDS } from '../core/skills/skillIds';
 import { SCENE_NAMES } from '../core/designLaws';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -12,7 +12,7 @@ const distManifest = join(here, '..', 'dist', 'skills.manifest.json');
 describe('skills manifest', () => {
   it('covers every skill id', () => {
     const m = buildManifest();
-    expect(m.skills.map((s) => s.id).sort()).toEqual([...PI_NEST_SKILL_IDS].sort());
+    expect(m.skills.map((s) => s.id).sort()).toEqual([...NEST_SKILL_IDS].sort());
   });
 
   it('every non-null scene is a real SceneName', () => {

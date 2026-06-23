@@ -1,8 +1,8 @@
-// Scientific color system for Engram Neural Labs visualizations.
+// Scientific color system for neural-simulation visualizations.
 //
 // One perceptually-uniform color language shared across every renderer:
 // WebGL shaders, React Three Fiber scenes, D3/SVG agent media skills, and
-// (mirrored in backend/visualization/engram_style.py) matplotlib figures.
+// (a host backend may mirror these in its matplotlib figures).
 //
 // Why perceptually-uniform maps (viridis, magma, turbo, cividis …)?
 //   - Equal steps in data read as equal steps in lightness, so structure is
@@ -149,7 +149,7 @@ export function colormapSvgStops(name: ColormapName, stops = 8): string {
 // reader who learns "cyan = excitatory / potentiation" in one view keeps it in
 // the next. Tuned for the deep-navy (#050816 / #030711) canvas the UI uses.
 
-export const ENGRAM_PALETTE = {
+export const CORTEXEL_PALETTE = {
   // Canvas / surfaces
   voidNavy: '#030711',
   deepNavy: '#050816',

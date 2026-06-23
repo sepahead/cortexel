@@ -1,6 +1,6 @@
 // Cortexel VizSpec — the agent-emitted, declarative scene contract.
 //
-// An agent (Engram, and later Hermes / OpenClaw) emits a VizSpec as JSON. The
+// An agent (any host — Engram, Hermes, OpenClaw, …) emits a VizSpec as JSON. The
 // frontend validates it here before rendering; a host backend SHOULD mirror this
 // schema (e.g. a Pydantic model with the same conservative provenance defaults)
 // as a server-side gate for defense in depth. The Zod schema is the runtime

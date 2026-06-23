@@ -2,31 +2,31 @@
 // skills. This tuple drives the whole skill registry the same way SCENE_NAMES
 // drives SceneName, so the skill ids can never drift between modules.
 //
-// These mirror the Engram `pi.nest.*` runtime skills, but Cortexel is now the
-// authoring source of the skill→scene map + input/provenance contract; the
-// backend Pydantic registry is a derived, parity-checked VIEW of this artifact.
-// Zero runtime dependencies (no zod, no three, no react).
+// A host runtime (e.g. Engram's PI harness) may mirror these `nest.*` skill ids
+// in its own registry; Cortexel is the authoring source of the skill→scene map +
+// input/provenance contract, and the host registry is a derived, parity-checked
+// VIEW of this artifact. Zero runtime dependencies (no zod, no three, no react).
 
-export const PI_NEST_SKILL_IDS = [
-  'pi.nest.voltage_trace',
-  'pi.nest.spike_raster',
-  'pi.nest.rate_response',
-  'pi.nest.connectivity_matrix',
-  'pi.nest.spatial_2d',
-  'pi.nest.spatial_3d',
-  'pi.nest.plasticity_dynamics',
-  'pi.nest.phase_plane',
-  'pi.nest.correlogram',
-  'pi.nest.stimulus_response',
-  'pi.nest.astrocyte_dynamics',
-  'pi.nest.compartmental_dynamics',
-  'pi.nest.animation_replay',
+export const NEST_SKILL_IDS = [
+  'nest.voltage_trace',
+  'nest.spike_raster',
+  'nest.rate_response',
+  'nest.connectivity_matrix',
+  'nest.spatial_2d',
+  'nest.spatial_3d',
+  'nest.plasticity_dynamics',
+  'nest.phase_plane',
+  'nest.correlogram',
+  'nest.stimulus_response',
+  'nest.astrocyte_dynamics',
+  'nest.compartmental_dynamics',
+  'nest.animation_replay',
 ] as const;
 
-export type PiNestSkillId = (typeof PI_NEST_SKILL_IDS)[number];
+export type NestSkillId = (typeof NEST_SKILL_IDS)[number];
 
 /** The routing meta-skill. Not a renderer — it selects among the 13 above. */
-export const VIZ_ROUTER_ID = 'pi.nest.viz_router' as const;
+export const VIZ_ROUTER_ID = 'nest.viz_router' as const;
 export type VizRouterId = typeof VIZ_ROUTER_ID;
 
 // The raw NEST device families a skill draws its data from. Multiple skills can
@@ -43,10 +43,10 @@ export const NEST_DEVICE_FAMILIES = [
 
 export type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];
 
-export function isPiNestSkillId(value: unknown): value is PiNestSkillId {
+export function isNestSkillId(value: unknown): value is NestSkillId {
   return (
     typeof value === 'string' &&
-    (PI_NEST_SKILL_IDS as readonly string[]).includes(value)
+    (NEST_SKILL_IDS as readonly string[]).includes(value)
   );
 }
 
@@ -54,12 +54,12 @@ export function isPiNestSkillId(value: unknown): value is PiNestSkillId {
 // VALID_RENDERER_ROUTES; kept here so the manifest carries one authoritative
 // copy that the backend drift test asserts membership against.
 export const VALID_RENDERER_ROUTES = [
-  'pi.media.trace_figure',
-  'pi.media.model_graph',
-  'pi.media.webgl_scene',
-  'pi.media.react_fiber_scene',
-  'pi.media.manim_storyboard',
-  'pi.media.*',
+  'media.trace_figure',
+  'media.model_graph',
+  'media.webgl_scene',
+  'media.react_fiber_scene',
+  'media.manim_storyboard',
+  'media.*',
   'matplotlib',
   'd3',
   'three',

@@ -1,5 +1,5 @@
 // Raw NEST device-output shapes — plain neuroscience-instrument dicts, validated
-// with zod. NOTHING here imports Engram or NEST; these are the conventional
+// with zod. NOTHING here imports a host app or NEST; these are the conventional
 // shapes NEST's Python API returns (nest.GetStatus(rec, 'events') etc.), typed
 // so a host can hand Cortexel a plain object and get fail-closed validation.
 //

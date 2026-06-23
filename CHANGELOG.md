@@ -41,7 +41,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **Skill axis (`cortexel/core` skills/):** Cortexel is now the authoring source
   of the agent-invocable NEST visualization skills, not just the render targets.
-  - `NEST_SKILL_REGISTRY` (`listSkills()`/`getSkill()`): the 13 `pi.nest.*`
+  - `NEST_SKILL_REGISTRY` (`listSkills()`/`getSkill()`): the 13 `nest.*`
     skills, each mapping a NEST device family → a Cortexel scene (or `null` when
     no honest scene exists yet), with required params, structured provenance
     keys, renderer routes, and a worked example.
@@ -58,8 +58,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `weightRecorderToSceneData`) + zod device-dict shapes with axis invariants.
   - `SceneData.weightSeries` so plasticity weights are never mislabeled as voltage.
   - `provenance.declared_inputs` + `synthetic` flag (forces the schematic caption).
-- **`dist/skills.manifest.json`** — language-neutral artifact non-TS hosts (the
-  Engram Python backend) consume and parity-check against; emitted at build,
+- **`dist/skills.manifest.json`** — language-neutral artifact non-TS hosts (a
+  host Python backend) consume and parity-check against; emitted at build,
   guarded byte-identical by a Vitest test.
 - `VizSpecRenderer` `skillId` prop routes through the strict gate and binds the
   honesty caption at the render boundary.

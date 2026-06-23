@@ -14,7 +14,7 @@ declare function colormapRgba(name: ColormapName, t: number, alpha?: number): st
 declare function colormapGradient(name: ColormapName, angle?: number, stops?: number): string;
 /** SVG `<stop>` entries for a `<linearGradient>` spanning a colormap. */
 declare function colormapSvgStops(name: ColormapName, stops?: number): string;
-declare const ENGRAM_PALETTE: {
+declare const CORTEXEL_PALETTE: {
     readonly voidNavy: "#030711";
     readonly deepNavy: "#050816";
     readonly panel: "#0b1220";
@@ -156,15 +156,15 @@ declare function requiresHonestyCaption(p: ProvenanceMetadata): boolean;
 /** Default caption text when none is supplied but a caption is required. */
 declare function defaultHonestyCaption(p: ProvenanceMetadata): string;
 
-declare const PI_NEST_SKILL_IDS: readonly ["pi.nest.voltage_trace", "pi.nest.spike_raster", "pi.nest.rate_response", "pi.nest.connectivity_matrix", "pi.nest.spatial_2d", "pi.nest.spatial_3d", "pi.nest.plasticity_dynamics", "pi.nest.phase_plane", "pi.nest.correlogram", "pi.nest.stimulus_response", "pi.nest.astrocyte_dynamics", "pi.nest.compartmental_dynamics", "pi.nest.animation_replay"];
-type PiNestSkillId = (typeof PI_NEST_SKILL_IDS)[number];
+declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.rate_response", "nest.connectivity_matrix", "nest.spatial_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay"];
+type NestSkillId = (typeof NEST_SKILL_IDS)[number];
 /** The routing meta-skill. Not a renderer — it selects among the 13 above. */
-declare const VIZ_ROUTER_ID: "pi.nest.viz_router";
+declare const VIZ_ROUTER_ID: "nest.viz_router";
 type VizRouterId = typeof VIZ_ROUTER_ID;
 declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "get_connections", "get_position", "weight_recorder", "computed"];
 type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];
-declare function isPiNestSkillId(value: unknown): value is PiNestSkillId;
-declare const VALID_RENDERER_ROUTES: readonly ["pi.media.trace_figure", "pi.media.model_graph", "pi.media.webgl_scene", "pi.media.react_fiber_scene", "pi.media.manim_storyboard", "pi.media.*", "matplotlib", "d3", "three", "fiber", "manim"];
+declare function isNestSkillId(value: unknown): value is NestSkillId;
+declare const VALID_RENDERER_ROUTES: readonly ["media.trace_figure", "media.model_graph", "media.webgl_scene", "media.react_fiber_scene", "media.manim_storyboard", "media.*", "matplotlib", "d3", "three", "fiber", "manim"];
 type RendererRoute = (typeof VALID_RENDERER_ROUTES)[number];
 
 declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "bin_ms", "pair_labels", "stim_units", "rate_normalization"];
@@ -249,7 +249,7 @@ interface SkillExample {
     note: string;
 }
 interface SkillContract {
-    id: PiNestSkillId;
+    id: NestSkillId;
     version: string;
     title: string;
     description: string;
@@ -267,11 +267,11 @@ interface SkillContract {
     rendererRoutes: RendererRoute[];
     examples: SkillExample[];
 }
-declare const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract>;
+declare const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract>;
 declare function listSkills(): SkillContract[];
 declare function getSkill(id: string): SkillContract | undefined;
 interface SkillDescriptor {
-    id: PiNestSkillId;
+    id: NestSkillId;
     title: string;
     description: string;
     deviceFamily: NestDeviceFamily;
@@ -287,7 +287,7 @@ interface SkillDescriptor {
 declare function describeSkill(id: string): SkillDescriptor | undefined;
 declare function describeSkills(): SkillDescriptor[];
 
-declare const SKILL_EXAMPLE_PAYLOADS: Partial<Record<PiNestSkillId, VizSpec>>;
+declare const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>>;
 declare function getExamplePayload(id: string): VizSpec | undefined;
 
 type SpikeDataKind = 'events' | 'rates' | 'correlation';
@@ -299,22 +299,22 @@ interface RouteInput {
     };
     /** General disambiguator for any many-to-one family: name the skill directly.
      *  Must belong to `deviceFamily` or it is ignored. */
-    skill?: PiNestSkillId;
+    skill?: NestSkillId;
 }
 interface Disambiguator {
     /** The RouteInput field an agent should set to retry. */
     field: 'skill' | 'dataShape.kind';
     /** Value → skill it would resolve to (so the agent can pick deterministically). */
-    maps: Partial<Record<string, PiNestSkillId>>;
+    maps: Partial<Record<string, NestSkillId>>;
 }
 type RouteResult = {
     ok: true;
-    skill: PiNestSkillId;
+    skill: NestSkillId;
     scene: SceneName;
 } | {
     ok: false;
     reason: 'unknown_family' | 'no_cortexel_scene' | 'ambiguous';
-    candidates?: PiNestSkillId[];
+    candidates?: NestSkillId[];
     disambiguateBy?: Disambiguator;
 };
 declare function routeToScene(input: RouteInput): RouteResult;
@@ -437,4 +437,4 @@ declare function getPositionToSceneData(positions: unknown, opts?: {
 }): AdapterResult;
 declare function weightRecorderToSceneData(events: unknown): AdapterResult;
 
-export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, ENGRAM_PALETTE, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PI_NEST_SKILL_IDS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PiNestSkillId, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isPiNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
+export { AXIS_COLORS, type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, type ColormapName, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, OKABE_ITO, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RGB, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIRIDIS_GLSL, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, sampleColormap, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };

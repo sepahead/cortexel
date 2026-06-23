@@ -42,7 +42,7 @@ describe('core is host-agnostic', () => {
     expect(typeof mod.routeToScene).toBe('function');
     expect(typeof mod.describeSkill).toBe('function');
     expect(typeof mod.detectEmptyScene).toBe('function');
-    expect(Array.isArray(mod.PI_NEST_SKILL_IDS)).toBe(true);
+    expect(Array.isArray(mod.NEST_SKILL_IDS)).toBe(true);
   });
 
   it('shipped core .d.ts does not leak Node types (types:["node"] hygiene)', () => {

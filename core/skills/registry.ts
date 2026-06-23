@@ -13,7 +13,7 @@
 
 import type { z } from 'zod';
 import type { SceneName } from '../designLaws';
-import type { PiNestSkillId, NestDeviceFamily, RendererRoute } from './skillIds';
+import type { NestSkillId, NestDeviceFamily, RendererRoute } from './skillIds';
 import type { ProvenanceKey } from './provenanceKeys';
 import {
   AstrocyteParamsSchema,
@@ -38,7 +38,7 @@ export interface SkillExample {
 }
 
 export interface SkillContract {
-  id: PiNestSkillId;
+  id: NestSkillId;
   version: string;
   title: string;
   description: string;
@@ -57,9 +57,9 @@ export interface SkillContract {
   examples: SkillExample[];
 }
 
-export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
-  'pi.nest.voltage_trace': {
-    id: 'pi.nest.voltage_trace',
+export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
+  'nest.voltage_trace': {
+    id: 'nest.voltage_trace',
     version: '1.0.0',
     title: 'NEST voltage trace renderer',
     description:
@@ -74,7 +74,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       'units',
       'sampling_interval',
     ],
-    rendererRoutes: ['pi.media.trace_figure', 'matplotlib', 'd3'],
+    rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [
       {
         nestExample: 'One neuron example / multimeter recording',
@@ -86,8 +86,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.spike_raster': {
-    id: 'pi.nest.spike_raster',
+  'nest.spike_raster': {
+    id: 'nest.spike_raster',
     version: '1.0.0',
     title: 'NEST spike raster renderer',
     description:
@@ -102,7 +102,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       'population_labels',
       'time_units',
     ],
-    rendererRoutes: ['pi.media.model_graph', 'd3'],
+    rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
       {
         nestExample: 'Random balanced Brunel network',
@@ -114,8 +114,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.rate_response': {
-    id: 'pi.nest.rate_response',
+  'nest.rate_response': {
+    id: 'nest.rate_response',
     version: '1.0.0',
     title: 'NEST rate / IF response renderer',
     description:
@@ -125,7 +125,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     requiredInputKeys: ['stimulus_amplitudes', 'rates_hz', 'units'],
     paramsSchema: RateResponseParamsSchema,
     requiredProvenanceKeys: ['stim_units', 'bin_ms', 'rate_normalization'],
-    rendererRoutes: ['pi.media.trace_figure', 'matplotlib', 'd3'],
+    rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [
       {
         nestExample: 'IF curve example',
@@ -137,8 +137,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.connectivity_matrix': {
-    id: 'pi.nest.connectivity_matrix',
+  'nest.connectivity_matrix': {
+    id: 'nest.connectivity_matrix',
     version: '1.0.0',
     title: 'NEST connectivity matrix renderer',
     description:
@@ -153,7 +153,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       'synapse_model',
       'weight_units',
     ],
-    rendererRoutes: ['pi.media.model_graph', 'd3'],
+    rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
       {
         nestExample: 'Plot weight matrices example / SynapseCollection',
@@ -165,8 +165,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.spatial_2d': {
-    id: 'pi.nest.spatial_2d',
+  'nest.spatial_2d': {
+    id: 'nest.spatial_2d',
     version: '1.0.0',
     title: 'NEST 2D spatial renderer',
     description: 'Render 2D layer positions, masks, kernels and sampled projections.',
@@ -174,7 +174,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     scene: null, // no honest 2D-spatial scene yet (would violate sphere/voxel law)
     requiredInputKeys: ['positions'],
     requiredProvenanceKeys: ['extent', 'mask', 'kernel'],
-    rendererRoutes: ['pi.media.model_graph', 'd3'],
+    rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
       {
         nestExample: 'Circular mask, Gaussian kernel, grid/free spatial examples',
@@ -186,8 +186,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.spatial_3d': {
-    id: 'pi.nest.spatial_3d',
+  'nest.spatial_3d': {
+    id: 'nest.spatial_3d',
     version: '1.0.0',
     title: 'NEST 3D spatial renderer',
     description: 'Render 3D population/node positions for spatial inspection.',
@@ -197,8 +197,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     paramsSchema: Spatial3DParamsSchema,
     requiredProvenanceKeys: ['extent', 'projection_sample_policy'],
     rendererRoutes: [
-      'pi.media.webgl_scene',
-      'pi.media.react_fiber_scene',
+      'media.webgl_scene',
+      'media.react_fiber_scene',
       'three',
       'fiber',
     ],
@@ -213,8 +213,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.plasticity_dynamics': {
-    id: 'pi.nest.plasticity_dynamics',
+  'nest.plasticity_dynamics': {
+    id: 'nest.plasticity_dynamics',
     version: '1.0.0',
     title: 'NEST plasticity dynamics renderer',
     description: 'Render STDP windows, weight adaptation and short-term dynamics.',
@@ -223,7 +223,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     requiredInputKeys: ['times_ms', 'weights', 'weight_units'],
     paramsSchema: PlasticityParamsSchema,
     requiredProvenanceKeys: ['synapse_model', 'weight_units'],
-    rendererRoutes: ['pi.media.trace_figure', 'matplotlib'],
+    rendererRoutes: ['media.trace_figure', 'matplotlib'],
     examples: [
       {
         nestExample: 'Urbanczik-Senn / Clopath / Tsodyks short-term plasticity',
@@ -235,8 +235,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.phase_plane': {
-    id: 'pi.nest.phase_plane',
+  'nest.phase_plane': {
+    id: 'nest.phase_plane',
     version: '1.0.0',
     title: 'NEST phase-plane renderer',
     description: 'Render phase planes, vector fields, nullclines and trajectories.',
@@ -245,7 +245,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     requiredInputKeys: ['grid'],
     paramsSchema: PhasePlaneParamsSchema,
     requiredProvenanceKeys: ['state_variables'],
-    rendererRoutes: ['pi.media.model_graph', 'd3'],
+    rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
       {
         nestExample: 'Numerical phase-plane analysis of the Hodgkin-Huxley neuron',
@@ -257,8 +257,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.correlogram': {
-    id: 'pi.nest.correlogram',
+  'nest.correlogram': {
+    id: 'nest.correlogram',
     version: '1.0.0',
     title: 'NEST correlogram / synchrony renderer',
     description: 'Render auto/cross-correlation functions for spike trains.',
@@ -266,7 +266,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     scene: null, // ISI-histogram scene exists but the math differs — no honest reuse
     requiredInputKeys: ['lags_ms', 'correlation'],
     requiredProvenanceKeys: ['bin_ms', 'pair_labels'],
-    rendererRoutes: ['pi.media.model_graph', 'd3'],
+    rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
       {
         nestExample: 'Auto- and crosscorrelation functions for spike trains',
@@ -278,8 +278,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.stimulus_response': {
-    id: 'pi.nest.stimulus_response',
+  'nest.stimulus_response': {
+    id: 'nest.stimulus_response',
     version: '1.0.0',
     title: 'NEST stimulus-response protocol renderer',
     description:
@@ -288,7 +288,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     scene: null, // composite multi-panel protocol; no single Cortexel scene
     requiredInputKeys: ['stimulus', 'response'],
     requiredProvenanceKeys: ['stim_units', 'units'],
-    rendererRoutes: ['pi.media.trace_figure', 'matplotlib'],
+    rendererRoutes: ['media.trace_figure', 'matplotlib'],
     examples: [
       {
         nestExample: 'Sinusoidal generator / pulse packet / repeated stimulation',
@@ -300,8 +300,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.astrocyte_dynamics': {
-    id: 'pi.nest.astrocyte_dynamics',
+  'nest.astrocyte_dynamics': {
+    id: 'nest.astrocyte_dynamics',
     version: '1.0.0',
     title: 'NEST astrocyte Ca²⁺/IP₃ dynamics renderer',
     description: 'Render tripartite-synapse calcium/IP3 state-variable traces.',
@@ -311,7 +311,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     requiredInputKeys: ['ca_trace', 'units'],
     paramsSchema: AstrocyteParamsSchema,
     requiredProvenanceKeys: ['recorded_variable', 'units'],
-    rendererRoutes: ['pi.media.trace_figure', 'matplotlib'],
+    rendererRoutes: ['media.trace_figure', 'matplotlib'],
     examples: [
       {
         nestExample: 'Single astrocyte / tripartite interaction examples',
@@ -323,8 +323,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.compartmental_dynamics': {
-    id: 'pi.nest.compartmental_dynamics',
+  'nest.compartmental_dynamics': {
+    id: 'nest.compartmental_dynamics',
     version: '1.0.0',
     title: 'NEST compartmental morphology + dynamics renderer',
     description:
@@ -333,7 +333,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     scene: null, // morphology geometry has no honest Cortexel scene (no invented geometry)
     requiredInputKeys: ['compartments'],
     requiredProvenanceKeys: ['morphology_disclaimer', 'recorded_variable'],
-    rendererRoutes: ['pi.media.model_graph', 'd3'],
+    rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
       {
         nestExample: 'Receptors/current and two-compartment neuron examples',
@@ -345,8 +345,8 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
       },
     ],
   },
-  'pi.nest.animation_replay': {
-    id: 'pi.nest.animation_replay',
+  'nest.animation_replay': {
+    id: 'nest.animation_replay',
     version: '1.0.0',
     title: 'NEST state replay / animation storyboard renderer',
     description: 'Render time-evolution storyboards and inspectable state replays.',
@@ -354,7 +354,7 @@ export const NEST_SKILL_REGISTRY: Record<PiNestSkillId, SkillContract> = {
     scene: null, // offline manim storyboard, not a live r3f scene — do not mis-route
     requiredInputKeys: ['frames'],
     requiredProvenanceKeys: ['frame_rate'],
-    rendererRoutes: ['pi.media.manim_storyboard', 'manim'],
+    rendererRoutes: ['media.manim_storyboard', 'manim'],
     examples: [
       {
         nestExample: 'Sudoku progress GIF / Pong replay',
@@ -380,7 +380,7 @@ export function getSkill(id: string): SkillContract | undefined {
 // WITHOUT reading TS source: scene, required params/provenance, renderer routes,
 // whether the scene reuse is approximate (weak), and a copyable example payload.
 export interface SkillDescriptor {
-  id: PiNestSkillId;
+  id: NestSkillId;
   title: string;
   description: string;
   deviceFamily: NestDeviceFamily;

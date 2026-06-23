@@ -19,7 +19,7 @@ import {
 import { SCENE_NAMES, type SceneName } from '../designLaws';
 import { getSkill } from './registry';
 import { getExamplePayload } from './examples';
-import { PI_NEST_SKILL_IDS } from './skillIds';
+import { NEST_SKILL_IDS } from './skillIds';
 
 export interface SkillInvocationError {
   code:
@@ -60,8 +60,8 @@ export function validateSkillInvocation(
           code: 'unknown_skill',
           path: 'skillId',
           message: `unknown skill '${skillId}'`,
-          hint: 'Use one of the registered pi.nest.* skills.',
-          validSkills: PI_NEST_SKILL_IDS,
+          hint: 'Use one of the registered nest.* skills.',
+          validSkills: NEST_SKILL_IDS,
         },
       ],
     };

@@ -9,7 +9,7 @@ simulations. An agent emits a declarative **`VizSpec`** and Cortexel renders the
 figure — spike rasters, Brunel networks, STDP curves, cortical columns, and more
 — with **scientific-honesty provenance enforced fail-closed**.
 
-It is built for AI agents (Engram today; Hermes / OpenClaw later) that need to
+It is built for AI agents (Engram, Hermes, OpenClaw, and others) that need to
 *request* a figure without knowing React or Three.js.
 
 > **Status:** early (`0.1.0`). The `core` and `react` layers are usable; headless
@@ -96,7 +96,7 @@ skills — an agent holding NEST output dicts has a typed path to an honest rend
 
 ```ts
 import {
-  listSkills,            // discover: 13 pi.nest.* skills + contracts
+  listSkills,            // discover: 13 nest.* skills + contracts
   routeToScene,          // "I have a device family → which scene?"
   spikeRecorderToSceneData, // dict → SceneData adapter (host-agnostic)
   validateSkillInvocation,  // strict gate: params + provenance + honesty
@@ -104,10 +104,10 @@ import {
 
 // 1. route a NEST spike_recorder to a skill/scene
 routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'events' } });
-// → { ok: true, skill: 'pi.nest.spike_raster', scene: 'spike-raster' }
+// → { ok: true, skill: 'nest.spike_raster', scene: 'spike-raster' }
 
 // 2. validate an invocation (fail-closed): per-skill params + declared provenance
-const r = validateSkillInvocation('pi.nest.spike_raster', {
+const r = validateSkillInvocation('nest.spike_raster', {
   scene: 'spike-raster',
   params: { times_ms, senders },
   provenance: {
@@ -174,8 +174,8 @@ bun run check   # typecheck + tests
 bun run build   # tsup → dist/ (ESM + CJS + d.ts)
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md). Cortexel is developed in the Engram
-monorepo and mirrored here; open code PRs against the monorepo.
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Cortexel is a standalone library in its
+own repository; it is consumed as a git dependency by host applications.
 
 ## License
 

@@ -52,7 +52,7 @@ describe('routeToScene', () => {
   it('routes a single-member family (weight_recorder) unambiguously', () => {
     expect(routeToScene({ deviceFamily: 'weight_recorder' })).toEqual({
       ok: true,
-      skill: 'pi.nest.plasticity_dynamics',
+      skill: 'nest.plasticity_dynamics',
       scene: 'stdp',
     });
   });
@@ -69,8 +69,8 @@ describe('routeToScene', () => {
 
   it('resolves a many-to-one family via an explicit skill hint', () => {
     expect(
-      routeToScene({ deviceFamily: 'multimeter', skill: 'pi.nest.voltage_trace' }),
-    ).toEqual({ ok: true, skill: 'pi.nest.voltage_trace', scene: 'voltage-trace' });
+      routeToScene({ deviceFamily: 'multimeter', skill: 'nest.voltage_trace' }),
+    ).toEqual({ ok: true, skill: 'nest.voltage_trace', scene: 'voltage-trace' });
   });
 
   it('is ambiguous for spike_recorder without a kind, and hands back the map', () => {
@@ -79,13 +79,13 @@ describe('routeToScene', () => {
     if (!r.ok) {
       expect(r.reason).toBe('ambiguous');
       expect(r.disambiguateBy!.field).toBe('dataShape.kind');
-      expect(r.disambiguateBy!.maps.events).toBe('pi.nest.spike_raster');
+      expect(r.disambiguateBy!.maps.events).toBe('nest.spike_raster');
     }
   });
 
   it('disambiguates spike_recorder by kind', () => {
     expect(routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'events' } })).toEqual(
-      { ok: true, skill: 'pi.nest.spike_raster', scene: 'spike-raster' },
+      { ok: true, skill: 'nest.spike_raster', scene: 'spike-raster' },
     );
   });
 

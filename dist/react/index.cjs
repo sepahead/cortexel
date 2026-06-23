@@ -487,7 +487,7 @@ var synthetic = (declared_inputs) => ({
   declared_inputs
 });
 var SKILL_EXAMPLE_PAYLOADS = {
-  "pi.nest.voltage_trace": {
+  "nest.voltage_trace": {
     scene: "voltage-trace",
     params: { times_ms: [0, 1, 2], series: [[-65, -64, -63]], units: "mV" },
     mode: "interactive",
@@ -499,7 +499,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
       sampling_interval: 0.1
     })
   },
-  "pi.nest.spike_raster": {
+  "nest.spike_raster": {
     scene: "spike-raster",
     params: { times_ms: [1, 2, 3], senders: [1, 2, 1] },
     mode: "interactive",
@@ -511,14 +511,14 @@ var SKILL_EXAMPLE_PAYLOADS = {
       time_units: "ms"
     })
   },
-  "pi.nest.rate_response": {
+  "nest.rate_response": {
     scene: "fi-curve",
     params: { stimulus_amplitudes: [0, 100, 200], rates_hz: [0, 12, 31], units: "Hz" },
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({ stim_units: "pA", bin_ms: 100, rate_normalization: "spikes/s" })
   },
-  "pi.nest.connectivity_matrix": {
+  "nest.connectivity_matrix": {
     scene: "network-topology",
     params: { sources: [1, 2], targets: [2, 3], weights: [1, 0.5] },
     mode: "interactive",
@@ -530,28 +530,28 @@ var SKILL_EXAMPLE_PAYLOADS = {
       weight_units: "pA"
     })
   },
-  "pi.nest.spatial_3d": {
+  "nest.spatial_3d": {
     scene: "network-topology",
     params: { objects: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }] },
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({ extent: "[1,1,1]", projection_sample_policy: "all" })
   },
-  "pi.nest.plasticity_dynamics": {
+  "nest.plasticity_dynamics": {
     scene: "stdp",
     params: { times_ms: [0, 10, 20], weights: [1, 1.1, 1.05], weight_units: "nS" },
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({ synapse_model: "stdp_synapse", weight_units: "nS" })
   },
-  "pi.nest.phase_plane": {
+  "nest.phase_plane": {
     scene: "phase-plane",
     params: { grid: { v: [-70, -50], w: [0, 1] } },
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({ state_variables: "V,w" })
   },
-  "pi.nest.astrocyte_dynamics": {
+  "nest.astrocyte_dynamics": {
     scene: "voltage-trace",
     params: { ca_trace: [0.1, 0.2, 0.15], units: "uM" },
     mode: "interactive",
@@ -565,8 +565,8 @@ function getExamplePayload(id) {
 
 // core/skills/registry.ts
 var NEST_SKILL_REGISTRY = {
-  "pi.nest.voltage_trace": {
-    id: "pi.nest.voltage_trace",
+  "nest.voltage_trace": {
+    id: "nest.voltage_trace",
     version: "1.0.0",
     title: "NEST voltage trace renderer",
     description: "Render multimeter/voltmeter analog traces (V_m, currents, conductances).",
@@ -580,7 +580,7 @@ var NEST_SKILL_REGISTRY = {
       "units",
       "sampling_interval"
     ],
-    rendererRoutes: ["pi.media.trace_figure", "matplotlib", "d3"],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [
       {
         nestExample: "One neuron example / multimeter recording",
@@ -591,8 +591,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.spike_raster": {
-    id: "pi.nest.spike_raster",
+  "nest.spike_raster": {
+    id: "nest.spike_raster",
     version: "1.0.0",
     title: "NEST spike raster renderer",
     description: "Render spike_recorder events as rasters, spike trains and population plots.",
@@ -606,7 +606,7 @@ var NEST_SKILL_REGISTRY = {
       "population_labels",
       "time_units"
     ],
-    rendererRoutes: ["pi.media.model_graph", "d3"],
+    rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
         nestExample: "Random balanced Brunel network",
@@ -617,8 +617,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.rate_response": {
-    id: "pi.nest.rate_response",
+  "nest.rate_response": {
+    id: "nest.rate_response",
     version: "1.0.0",
     title: "NEST rate / IF response renderer",
     description: "Render firing-rate / IF curves and population rates derived from spike counts.",
@@ -627,7 +627,7 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["stimulus_amplitudes", "rates_hz", "units"],
     paramsSchema: RateResponseParamsSchema,
     requiredProvenanceKeys: ["stim_units", "bin_ms", "rate_normalization"],
-    rendererRoutes: ["pi.media.trace_figure", "matplotlib", "d3"],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [
       {
         nestExample: "IF curve example",
@@ -638,8 +638,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.connectivity_matrix": {
-    id: "pi.nest.connectivity_matrix",
+  "nest.connectivity_matrix": {
+    id: "nest.connectivity_matrix",
     version: "1.0.0",
     title: "NEST connectivity matrix renderer",
     description: "Render SynapseCollection connectivity, weights and population blocks.",
@@ -653,7 +653,7 @@ var NEST_SKILL_REGISTRY = {
       "synapse_model",
       "weight_units"
     ],
-    rendererRoutes: ["pi.media.model_graph", "d3"],
+    rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
         nestExample: "Plot weight matrices example / SynapseCollection",
@@ -664,8 +664,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.spatial_2d": {
-    id: "pi.nest.spatial_2d",
+  "nest.spatial_2d": {
+    id: "nest.spatial_2d",
     version: "1.0.0",
     title: "NEST 2D spatial renderer",
     description: "Render 2D layer positions, masks, kernels and sampled projections.",
@@ -674,7 +674,7 @@ var NEST_SKILL_REGISTRY = {
     // no honest 2D-spatial scene yet (would violate sphere/voxel law)
     requiredInputKeys: ["positions"],
     requiredProvenanceKeys: ["extent", "mask", "kernel"],
-    rendererRoutes: ["pi.media.model_graph", "d3"],
+    rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
         nestExample: "Circular mask, Gaussian kernel, grid/free spatial examples",
@@ -685,8 +685,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.spatial_3d": {
-    id: "pi.nest.spatial_3d",
+  "nest.spatial_3d": {
+    id: "nest.spatial_3d",
     version: "1.0.0",
     title: "NEST 3D spatial renderer",
     description: "Render 3D population/node positions for spatial inspection.",
@@ -696,8 +696,8 @@ var NEST_SKILL_REGISTRY = {
     paramsSchema: Spatial3DParamsSchema,
     requiredProvenanceKeys: ["extent", "projection_sample_policy"],
     rendererRoutes: [
-      "pi.media.webgl_scene",
-      "pi.media.react_fiber_scene",
+      "media.webgl_scene",
+      "media.react_fiber_scene",
       "three",
       "fiber"
     ],
@@ -711,8 +711,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.plasticity_dynamics": {
-    id: "pi.nest.plasticity_dynamics",
+  "nest.plasticity_dynamics": {
+    id: "nest.plasticity_dynamics",
     version: "1.0.0",
     title: "NEST plasticity dynamics renderer",
     description: "Render STDP windows, weight adaptation and short-term dynamics.",
@@ -721,7 +721,7 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["times_ms", "weights", "weight_units"],
     paramsSchema: PlasticityParamsSchema,
     requiredProvenanceKeys: ["synapse_model", "weight_units"],
-    rendererRoutes: ["pi.media.trace_figure", "matplotlib"],
+    rendererRoutes: ["media.trace_figure", "matplotlib"],
     examples: [
       {
         nestExample: "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
@@ -732,8 +732,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.phase_plane": {
-    id: "pi.nest.phase_plane",
+  "nest.phase_plane": {
+    id: "nest.phase_plane",
     version: "1.0.0",
     title: "NEST phase-plane renderer",
     description: "Render phase planes, vector fields, nullclines and trajectories.",
@@ -742,7 +742,7 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["grid"],
     paramsSchema: PhasePlaneParamsSchema,
     requiredProvenanceKeys: ["state_variables"],
-    rendererRoutes: ["pi.media.model_graph", "d3"],
+    rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
         nestExample: "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
@@ -753,8 +753,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.correlogram": {
-    id: "pi.nest.correlogram",
+  "nest.correlogram": {
+    id: "nest.correlogram",
     version: "1.0.0",
     title: "NEST correlogram / synchrony renderer",
     description: "Render auto/cross-correlation functions for spike trains.",
@@ -763,7 +763,7 @@ var NEST_SKILL_REGISTRY = {
     // ISI-histogram scene exists but the math differs — no honest reuse
     requiredInputKeys: ["lags_ms", "correlation"],
     requiredProvenanceKeys: ["bin_ms", "pair_labels"],
-    rendererRoutes: ["pi.media.model_graph", "d3"],
+    rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
         nestExample: "Auto- and crosscorrelation functions for spike trains",
@@ -774,8 +774,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.stimulus_response": {
-    id: "pi.nest.stimulus_response",
+  "nest.stimulus_response": {
+    id: "nest.stimulus_response",
     version: "1.0.0",
     title: "NEST stimulus-response protocol renderer",
     description: "Render aligned stimulus waveforms, responses, spikes and protocol epochs.",
@@ -784,7 +784,7 @@ var NEST_SKILL_REGISTRY = {
     // composite multi-panel protocol; no single Cortexel scene
     requiredInputKeys: ["stimulus", "response"],
     requiredProvenanceKeys: ["stim_units", "units"],
-    rendererRoutes: ["pi.media.trace_figure", "matplotlib"],
+    rendererRoutes: ["media.trace_figure", "matplotlib"],
     examples: [
       {
         nestExample: "Sinusoidal generator / pulse packet / repeated stimulation",
@@ -795,8 +795,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.astrocyte_dynamics": {
-    id: "pi.nest.astrocyte_dynamics",
+  "nest.astrocyte_dynamics": {
+    id: "nest.astrocyte_dynamics",
     version: "1.0.0",
     title: "NEST astrocyte Ca\xB2\u207A/IP\u2083 dynamics renderer",
     description: "Render tripartite-synapse calcium/IP3 state-variable traces.",
@@ -807,7 +807,7 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["ca_trace", "units"],
     paramsSchema: AstrocyteParamsSchema,
     requiredProvenanceKeys: ["recorded_variable", "units"],
-    rendererRoutes: ["pi.media.trace_figure", "matplotlib"],
+    rendererRoutes: ["media.trace_figure", "matplotlib"],
     examples: [
       {
         nestExample: "Single astrocyte / tripartite interaction examples",
@@ -818,8 +818,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.compartmental_dynamics": {
-    id: "pi.nest.compartmental_dynamics",
+  "nest.compartmental_dynamics": {
+    id: "nest.compartmental_dynamics",
     version: "1.0.0",
     title: "NEST compartmental morphology + dynamics renderer",
     description: "Render multi-compartment morphologies, receptor ports and soma/dendrite traces.",
@@ -828,7 +828,7 @@ var NEST_SKILL_REGISTRY = {
     // morphology geometry has no honest Cortexel scene (no invented geometry)
     requiredInputKeys: ["compartments"],
     requiredProvenanceKeys: ["morphology_disclaimer", "recorded_variable"],
-    rendererRoutes: ["pi.media.model_graph", "d3"],
+    rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
         nestExample: "Receptors/current and two-compartment neuron examples",
@@ -839,8 +839,8 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
-  "pi.nest.animation_replay": {
-    id: "pi.nest.animation_replay",
+  "nest.animation_replay": {
+    id: "nest.animation_replay",
     version: "1.0.0",
     title: "NEST state replay / animation storyboard renderer",
     description: "Render time-evolution storyboards and inspectable state replays.",
@@ -849,7 +849,7 @@ var NEST_SKILL_REGISTRY = {
     // offline manim storyboard, not a live r3f scene — do not mis-route
     requiredInputKeys: ["frames"],
     requiredProvenanceKeys: ["frame_rate"],
-    rendererRoutes: ["pi.media.manim_storyboard", "manim"],
+    rendererRoutes: ["media.manim_storyboard", "manim"],
     examples: [
       {
         nestExample: "Sudoku progress GIF / Pong replay",
@@ -866,20 +866,20 @@ function getSkill(id) {
 }
 
 // core/skills/skillIds.ts
-var PI_NEST_SKILL_IDS = [
-  "pi.nest.voltage_trace",
-  "pi.nest.spike_raster",
-  "pi.nest.rate_response",
-  "pi.nest.connectivity_matrix",
-  "pi.nest.spatial_2d",
-  "pi.nest.spatial_3d",
-  "pi.nest.plasticity_dynamics",
-  "pi.nest.phase_plane",
-  "pi.nest.correlogram",
-  "pi.nest.stimulus_response",
-  "pi.nest.astrocyte_dynamics",
-  "pi.nest.compartmental_dynamics",
-  "pi.nest.animation_replay"
+var NEST_SKILL_IDS = [
+  "nest.voltage_trace",
+  "nest.spike_raster",
+  "nest.rate_response",
+  "nest.connectivity_matrix",
+  "nest.spatial_2d",
+  "nest.spatial_3d",
+  "nest.plasticity_dynamics",
+  "nest.phase_plane",
+  "nest.correlogram",
+  "nest.stimulus_response",
+  "nest.astrocyte_dynamics",
+  "nest.compartmental_dynamics",
+  "nest.animation_replay"
 ];
 
 // core/skills/validateSkillInvocation.ts
@@ -894,8 +894,8 @@ function validateSkillInvocation(skillId, payload) {
           code: "unknown_skill",
           path: "skillId",
           message: `unknown skill '${skillId}'`,
-          hint: "Use one of the registered pi.nest.* skills.",
-          validSkills: PI_NEST_SKILL_IDS
+          hint: "Use one of the registered nest.* skills.",
+          validSkills: NEST_SKILL_IDS
         }
       ]
     };
