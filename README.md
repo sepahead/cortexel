@@ -158,6 +158,23 @@ shows a non-dismissible disclosure caption (with `role="note"` / `aria-live`)
 is no misconfiguration that silently hides it. Synthetic data is captioned as
 schematic. This boundary is load-bearing — see [SECURITY.md](./SECURITY.md).
 
+### Two rendering paths
+
+Hosts can use Cortexel's honesty model through two paths:
+
+1. **Agent path** (`VizSpecRenderer` + `skillId`): an agent emits a VizSpec;
+   `VizSpecRenderer` validates it through the strict skill gate
+   (`validateSkillInvocation`), rejects `calibrated_posterior=true`, and binds
+   the caption at the render boundary. Use for untrusted agent payloads.
+
+2. **Showcase path** (`defaultHonestyCaption` + `requiresHonestyCaption`): a
+   host renders its own trusted content (e.g. synthetic demo scenes) and binds
+   the caption directly from the provenance functions — no VizSpec to validate,
+   but the same fail-closed caption text. Use for host-authored content.
+
+Both paths share the same honesty model; the difference is whether the payload
+is untrusted (agent → validate) or trusted (host → bind directly).
+
 ## Population expand
 
 Populations expand into their constituent neurons on click/tap.
