@@ -1,4 +1,4 @@
-import { listSkills, NEST_SKILL_REGISTRY } from './chunk-GWWXJ7YG.js';
+import { listSkills, NEST_SKILL_REGISTRY } from './chunk-2XFQVRBH.js';
 import { z } from 'zod';
 
 var PROVENANCE_KEYS = [
@@ -24,7 +24,11 @@ var PROVENANCE_KEYS = [
   "bin_ms",
   "pair_labels",
   "stim_units",
-  "rate_normalization"
+  "rate_normalization",
+  "graph_source",
+  "node_kinds",
+  "edge_kinds",
+  "identity_advisory"
 ];
 var ProvenanceKeyEnum = z.enum(PROVENANCE_KEYS);
 var PROVENANCE_KEY_LABELS = {
@@ -50,7 +54,11 @@ var PROVENANCE_KEY_LABELS = {
   bin_ms: "bin width",
   pair_labels: "pair labels",
   stim_units: "stimulus units",
-  rate_normalization: "rate normalization"
+  rate_normalization: "rate normalization",
+  graph_source: "graph source",
+  node_kinds: "node kinds",
+  edge_kinds: "edge kinds",
+  identity_advisory: "model-identity advisory (structural similarity, not certified sameness)"
 };
 function isProvenanceKey(value) {
   return typeof value === "string" && PROVENANCE_KEYS.includes(value);
@@ -371,5 +379,5 @@ function weightRecorderToSceneData(events) {
 }
 
 export { GetConnectionsSchema, GetPosition2DSchema, GetPosition3DSchema, MultimeterEventsSchema, MultimeterMultiSenderSchema, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, ProvenanceKeyEnum, SpikeRecorderEventsSchema, WeightRecorderEventsSchema, detectEmptyScene, getConnectionsToSceneData, getPositionToSceneData, isProvenanceKey, multimeterToSceneData, routeToScene, spikeRecorderToSceneData, splitMultimeterBySender, weightRecorderToSceneData };
-//# sourceMappingURL=chunk-O3S3QSUF.js.map
-//# sourceMappingURL=chunk-O3S3QSUF.js.map
+//# sourceMappingURL=chunk-4LB2KSHX.js.map
+//# sourceMappingURL=chunk-4LB2KSHX.js.map

@@ -3,8 +3,10 @@
 var zod = require('zod');
 var react = require('react');
 var fiber = require('@react-three/fiber');
-var THREE2 = require('three');
+var THREE3 = require('three');
 var jsxRuntime = require('react/jsx-runtime');
+var drei = require('@react-three/drei');
+var d3Force3d = require('d3-force-3d');
 
 function _interopNamespace(e) {
   if (e && e.__esModule) return e;
@@ -24,7 +26,7 @@ function _interopNamespace(e) {
   return Object.freeze(n);
 }
 
-var THREE2__namespace = /*#__PURE__*/_interopNamespace(THREE2);
+var THREE3__namespace = /*#__PURE__*/_interopNamespace(THREE3);
 
 // core/colormaps.ts
 var STOPS = {
@@ -429,7 +431,8 @@ var SCENE_NAMES = [
   "fi-curve",
   "isi-distribution",
   "psth",
-  "weight-histogram"
+  "weight-histogram",
+  "knowledge-graph-3d"
 ];
 var SCENE_FRAMING = {
   "live-activity": { position: [0, 0, 9.4], target: [0, 0, 0], rotatable: false },
@@ -443,7 +446,8 @@ var SCENE_FRAMING = {
   "fi-curve": { position: [0, 0.7, 6.4], target: [0, 0.7, 0], rotatable: false },
   "isi-distribution": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false },
   "psth": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false },
-  "weight-histogram": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false }
+  "weight-histogram": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false },
+  "knowledge-graph-3d": { position: [0, 0, 260], target: [0, 0, 0], rotatable: true }
 };
 var CAMERA_PRESETS = {
   default: { name: "default", position: [0, 0, 8], target: [0, 0, 0], fov: 50 },
@@ -539,7 +543,8 @@ var NEST_SKILL_IDS = [
   "nest.stimulus_response",
   "nest.astrocyte_dynamics",
   "nest.compartmental_dynamics",
-  "nest.animation_replay"
+  "nest.animation_replay",
+  "corpus.knowledge_graph"
 ];
 var VIZ_ROUTER_ID = "nest.viz_router";
 var NEST_DEVICE_FAMILIES = [
@@ -548,8 +553,10 @@ var NEST_DEVICE_FAMILIES = [
   "get_connections",
   "get_position",
   "weight_recorder",
-  "computed"
+  "computed",
   // no NEST device — numerically derived (phase plane, replay frames)
+  "corpus"
+  // no NEST device — corpus/KG structural graph (papers, models, families)
 ];
 function isNestSkillId(value) {
   return typeof value === "string" && NEST_SKILL_IDS.includes(value);
@@ -590,7 +597,11 @@ var PROVENANCE_KEYS = [
   "bin_ms",
   "pair_labels",
   "stim_units",
-  "rate_normalization"
+  "rate_normalization",
+  "graph_source",
+  "node_kinds",
+  "edge_kinds",
+  "identity_advisory"
 ];
 var ProvenanceKeyEnum = zod.z.enum(PROVENANCE_KEYS);
 var PROVENANCE_KEY_LABELS = {
@@ -616,7 +627,11 @@ var PROVENANCE_KEY_LABELS = {
   bin_ms: "bin width",
   pair_labels: "pair labels",
   stim_units: "stimulus units",
-  rate_normalization: "rate normalization"
+  rate_normalization: "rate normalization",
+  graph_source: "graph source",
+  node_kinds: "node kinds",
+  edge_kinds: "edge kinds",
+  identity_advisory: "model-identity advisory (structural similarity, not certified sameness)"
 };
 function isProvenanceKey(value) {
   return typeof value === "string" && PROVENANCE_KEYS.includes(value);
@@ -655,6 +670,27 @@ var PhasePlaneParamsSchema = zod.z.object({
 var AstrocyteParamsSchema = zod.z.object({
   ca_trace: numArray.min(1),
   units: zod.z.string().min(1)
+}).passthrough();
+var KnowledgeGraphNodeSchema = zod.z.object({
+  id: zod.z.string().min(1),
+  kind: zod.z.enum(["paper", "model", "family"]),
+  label: zod.z.string().min(1),
+  group: zod.z.string().optional()
+}).strict();
+var KnowledgeGraphEdgeSchema = zod.z.object({
+  source: zod.z.string().min(1),
+  target: zod.z.string().min(1),
+  kind: zod.z.enum([
+    "cites",
+    "same_as",
+    "variant_of",
+    "instantiates",
+    "belongs_to_family"
+  ])
+}).strict();
+var KnowledgeGraph3DParamsSchema = zod.z.object({
+  nodes: zod.z.array(KnowledgeGraphNodeSchema).min(1),
+  edges: zod.z.array(KnowledgeGraphEdgeSchema)
 }).passthrough();
 
 // core/skills/examples.ts
@@ -737,6 +773,32 @@ var SKILL_EXAMPLE_PAYLOADS = {
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({ recorded_variable: "Ca", units: "uM" })
+  },
+  "corpus.knowledge_graph": {
+    scene: "knowledge-graph-3d",
+    params: {
+      nodes: [
+        { id: "p1", kind: "paper", label: "Brunel 2000" },
+        { id: "m1", kind: "model", label: "iaf_psc_delta" },
+        { id: "f1", kind: "family", label: "LIF family" }
+      ],
+      edges: [
+        { source: "p1", target: "m1", kind: "instantiates" },
+        { source: "m1", target: "f1", kind: "belongs_to_family" }
+      ]
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    // advisory_only:true — identity edges are advisory structural similarity.
+    provenance: {
+      ...synthetic({
+        graph_source: "corpus_kg",
+        node_kinds: "paper,model,family",
+        edge_kinds: "instantiates,belongs_to_family",
+        identity_advisory: true
+      }),
+      advisory_only: true
+    }
   }
 };
 function getExamplePayload(id) {
@@ -1038,6 +1100,35 @@ var NEST_SKILL_REGISTRY = {
         dataShape: "frames, entities, metrics, frame rate, annotations",
         output: "Manim storyboard / source \u2014 no live Cortexel scene.",
         note: "scene:null \u2014 offline storyboard, not a real-time render target."
+      }
+    ]
+  },
+  "corpus.knowledge_graph": {
+    id: "corpus.knowledge_graph",
+    version: "1.0.0",
+    title: "Corpus knowledge-graph 3D renderer",
+    description: "Render a cross-paper corpus knowledge graph in 3D: paper/model/family nodes with citation, instantiation and family edges, plus advisory model-identity (same_as/variant_of) edges.",
+    deviceFamily: "corpus",
+    scene: "knowledge-graph-3d",
+    // weak: identity edges are advisory structural similarity, NOT certified
+    // sameness — always carry the derived-view disclosure.
+    weak: true,
+    requiredInputKeys: ["nodes", "edges"],
+    paramsSchema: KnowledgeGraph3DParamsSchema,
+    requiredProvenanceKeys: [
+      "graph_source",
+      "node_kinds",
+      "edge_kinds",
+      "identity_advisory"
+    ],
+    rendererRoutes: ["media.model_graph", "fiber"],
+    examples: [
+      {
+        nestExample: "Cross-paper corpus knowledge graph (papers + models + families)",
+        sourceUrl: "https://github.com/sepahead/Paper2Brain#knowledge-graph",
+        dataShape: "nodes (paper/model/family), edges (cites/same_as/variant_of/instantiates/belongs_to_family)",
+        output: "3D force-directed graph with citation-flow particles and focus labels",
+        note: "weak:true \u2014 same_as/variant_of are advisory structural similarity, never certified sameness."
       }
     ]
   }
@@ -1535,7 +1626,7 @@ function ExpandablePopulation({
   const ringRef = react.useRef(null);
   const scaleRef = react.useRef(1);
   const opacityRef = react.useRef(1);
-  const colorObj = react.useMemo(() => new THREE2__namespace.Color(color), [color]);
+  const colorObj = react.useMemo(() => new THREE3__namespace.Color(color), [color]);
   const voxelColor = react.useMemo(() => colorObj.clone().multiplyScalar(0.82), [colorObj]);
   const ringColor = react.useMemo(
     () => themeMode === "light" ? colorObj.clone().multiplyScalar(0.8) : colorObj.clone().multiplyScalar(1.15),
@@ -1609,7 +1700,7 @@ function ExpandablePopulation({
           color: ringColor,
           transparent: true,
           depthWrite: false,
-          side: THREE2__namespace.DoubleSide
+          side: THREE3__namespace.DoubleSide
         }
       )
     ] })
@@ -1765,28 +1856,28 @@ function ExpandableNeurons({
 }) {
   const grid = react.useMemo(() => neuronLocalGrid(count, spacing), [count, spacing]);
   const geometry = react.useMemo(() => {
-    const g = new THREE2__namespace.BufferGeometry();
-    g.setAttribute("position", new THREE2__namespace.BufferAttribute(grid.positions, 3));
-    g.setAttribute("instancePhase", new THREE2__namespace.BufferAttribute(grid.phases, 1));
-    g.setAttribute("neuronIndex", new THREE2__namespace.BufferAttribute(grid.neuronIndex, 1));
+    const g = new THREE3__namespace.BufferGeometry();
+    g.setAttribute("position", new THREE3__namespace.BufferAttribute(grid.positions, 3));
+    g.setAttribute("instancePhase", new THREE3__namespace.BufferAttribute(grid.phases, 1));
+    g.setAttribute("neuronIndex", new THREE3__namespace.BufferAttribute(grid.neuronIndex, 1));
     return g;
   }, [grid]);
   const resolvedSpike = spikeColor ?? (themeMode === "light" ? "#b45309" : "#fde68a");
   const material = react.useMemo(() => {
-    return new THREE2__namespace.ShaderMaterial({
+    return new THREE3__namespace.ShaderMaterial({
       vertexShader: NEURON_VERT,
       fragmentShader: NEURON_FRAG,
       uniforms: {
         uTime: { value: 0 },
         uExpansion: { value: 0 },
         uSelectedNeuronIndex: { value: -1 },
-        uCenter: { value: new THREE2__namespace.Vector3(center[0], center[1], center[2]) },
-        uBaseColor: { value: new THREE2__namespace.Color(color) },
-        uSpikeColor: { value: new THREE2__namespace.Color(resolvedSpike) }
+        uCenter: { value: new THREE3__namespace.Vector3(center[0], center[1], center[2]) },
+        uBaseColor: { value: new THREE3__namespace.Color(color) },
+        uSpikeColor: { value: new THREE3__namespace.Color(resolvedSpike) }
       },
       transparent: true,
       depthWrite: false,
-      blending: THREE2__namespace.NormalBlending
+      blending: THREE3__namespace.NormalBlending
     });
   }, [color, resolvedSpike]);
   const timeRef = react.useRef(0);
@@ -1827,6 +1918,305 @@ function ExpandableNeurons({
       }
     }
   );
+}
+var PARTICLES_PER_EDGE = 4;
+var MAX_PARTICLES = 4e3;
+var LABEL_OUTLINE = "#030711";
+var _dummy = new THREE3__namespace.Object3D();
+var _color = new THREE3__namespace.Color();
+var _dimTarget = new THREE3__namespace.Color("#030711");
+var _a = new THREE3__namespace.Vector3();
+var _b = new THREE3__namespace.Vector3();
+var _box = new THREE3__namespace.Box3();
+var _sphere = new THREE3__namespace.Sphere();
+function dim(hex, amount) {
+  return _color.set(hex).lerp(_dimTarget, amount).clone();
+}
+function KnowledgeGraph3DScene({
+  nodes,
+  edges,
+  selectedId,
+  query,
+  onSelect,
+  hoverId,
+  onHover,
+  controlsRef,
+  labelColor = "#e2e8f0"
+}) {
+  const meshRef = react.useRef(null);
+  const linesRef = react.useRef(null);
+  const particlesRef = react.useRef(null);
+  const labelGroupRef = react.useRef(null);
+  const { camera } = fiber.useThree();
+  drei.useCursor(hoverId != null);
+  const posMap = react.useRef(/* @__PURE__ */ new Map());
+  const framedRef = react.useRef(false);
+  const flyToRef = react.useRef(null);
+  const { simNodes, simLinks, index } = react.useMemo(() => {
+    const index2 = /* @__PURE__ */ new Map();
+    const simNodes2 = nodes.map((n, i) => {
+      index2.set(n.id, i);
+      const prev = posMap.current.get(n.id);
+      const spread = 90;
+      return {
+        id: n.id,
+        r: n.radius,
+        x: prev ? prev[0] : (Math.random() * 2 - 1) * spread,
+        y: prev ? prev[1] : (Math.random() * 2 - 1) * spread,
+        z: prev ? prev[2] : (Math.random() * 2 - 1) * spread
+      };
+    });
+    const simLinks2 = edges.filter((e) => index2.has(e.source) && index2.has(e.target)).map((e) => ({ source: e.source, target: e.target }));
+    return { simNodes: simNodes2, simLinks: simLinks2, index: index2 };
+  }, [nodes, edges]);
+  const neighbors = react.useMemo(() => {
+    const m = /* @__PURE__ */ new Map();
+    nodes.forEach((n) => m.set(n.id, /* @__PURE__ */ new Set()));
+    edges.forEach((e) => {
+      m.get(e.source)?.add(e.target);
+      m.get(e.target)?.add(e.source);
+    });
+    return m;
+  }, [nodes, edges]);
+  const flowEdges = react.useMemo(
+    () => edges.filter((e) => e.particles && index.has(e.source) && index.has(e.target)),
+    [edges, index]
+  );
+  const particleCount = Math.min(MAX_PARTICLES, flowEdges.length * PARTICLES_PER_EDGE);
+  const linePos = react.useMemo(() => new Float32Array(simLinks.length * 6), [simLinks]);
+  const lineCol = react.useMemo(() => new Float32Array(simLinks.length * 6), [simLinks]);
+  const simRef = react.useRef(null);
+  react.useEffect(() => {
+    const linkForce = d3Force3d.forceLink(simLinks).id((d) => d.id).distance(34).strength(0.35);
+    const sim = d3Force3d.forceSimulation(simNodes, 3).force("charge", d3Force3d.forceManyBody().strength(-140).distanceMax(600)).force("link", linkForce).force("center", d3Force3d.forceCenter(0, 0, 0).strength(0.04)).force("collide", d3Force3d.forceCollide((d) => d.r + 3).iterations(2)).alpha(1).alphaDecay(0.018).velocityDecay(0.42).stop();
+    simRef.current = sim;
+    framedRef.current = false;
+    return () => {
+      sim.stop();
+      simRef.current = null;
+    };
+  }, [simNodes, simLinks]);
+  const applyEmphasis = react.useCallback(() => {
+    const mesh = meshRef.current;
+    const focus = hoverId ?? selectedId;
+    const focusSet = focus ? neighbors.get(focus) : null;
+    const q = query.trim().toLowerCase();
+    const isDimmed = (id, label) => {
+      if (focus && id !== focus && !focusSet?.has(id)) return 0.8;
+      if (!focus && q && !label.toLowerCase().includes(q)) return 0.82;
+      return 0;
+    };
+    if (mesh) {
+      nodes.forEach((n, i) => {
+        mesh.setColorAt(i, dim(n.color, isDimmed(n.id, n.label)));
+      });
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
+    let k = 0;
+    for (const e of edges) {
+      if (!index.has(e.source) || !index.has(e.target)) continue;
+      const incident = !focus || e.source === focus || e.target === focus;
+      const c = dim(e.color, incident ? 0.25 : 0.86);
+      lineCol[k] = c.r;
+      lineCol[k + 1] = c.g;
+      lineCol[k + 2] = c.b;
+      lineCol[k + 3] = c.r;
+      lineCol[k + 4] = c.g;
+      lineCol[k + 5] = c.b;
+      k += 6;
+    }
+    const geom = linesRef.current?.geometry;
+    const attr = geom?.getAttribute("color");
+    if (attr) attr.needsUpdate = true;
+  }, [nodes, edges, index, neighbors, hoverId, selectedId, query, lineCol]);
+  react.useEffect(() => {
+    applyEmphasis();
+  }, [applyEmphasis]);
+  react.useEffect(() => {
+    if (!selectedId) return;
+    const i = index.get(selectedId);
+    if (i == null) return;
+    const n = simNodes[i];
+    flyToRef.current = new THREE3__namespace.Vector3(n.x, n.y, n.z);
+  }, [selectedId, index, simNodes]);
+  fiber.useFrame((_, delta) => {
+    const sim = simRef.current;
+    const mesh = meshRef.current;
+    if (!sim || !mesh) return;
+    if (sim.alpha() > 8e-3) sim.tick();
+    const focus = hoverId ?? selectedId;
+    const focusSet = focus ? neighbors.get(focus) : null;
+    for (let i = 0; i < simNodes.length; i++) {
+      const n = simNodes[i];
+      const x = n.x ?? 0;
+      const y = n.y ?? 0;
+      const z5 = n.z ?? 0;
+      posMap.current.set(n.id, [x, y, z5]);
+      _dummy.position.set(x, y, z5);
+      const pop = focus && (n.id === focus || focusSet?.has(n.id)) ? 1.28 : 1;
+      _dummy.scale.setScalar(n.r * pop);
+      _dummy.updateMatrix();
+      mesh.setMatrixAt(i, _dummy.matrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    let k = 0;
+    for (const e of edges) {
+      const si = index.get(e.source);
+      const ti = index.get(e.target);
+      if (si == null || ti == null) continue;
+      const s = simNodes[si];
+      const t = simNodes[ti];
+      linePos[k] = s.x ?? 0;
+      linePos[k + 1] = s.y ?? 0;
+      linePos[k + 2] = s.z ?? 0;
+      linePos[k + 3] = t.x ?? 0;
+      linePos[k + 4] = t.y ?? 0;
+      linePos[k + 5] = t.z ?? 0;
+      k += 6;
+    }
+    const posAttr = linesRef.current?.geometry.getAttribute("position");
+    if (posAttr) posAttr.needsUpdate = true;
+    const pmesh = particlesRef.current;
+    if (pmesh && particleCount > 0) {
+      const speed = 0.28;
+      const base = performance.now() / 1e3 * speed;
+      let p = 0;
+      for (let fe = 0; fe < flowEdges.length && p < particleCount; fe++) {
+        const e = flowEdges[fe];
+        const s = simNodes[index.get(e.source)];
+        const t = simNodes[index.get(e.target)];
+        _a.set(s.x ?? 0, s.y ?? 0, s.z ?? 0);
+        _b.set(t.x ?? 0, t.y ?? 0, t.z ?? 0);
+        for (let q = 0; q < PARTICLES_PER_EDGE && p < particleCount; q++) {
+          const frac = ((base + q / PARTICLES_PER_EDGE) % 1 + 1) % 1;
+          _dummy.position.copy(_a).lerp(_b, frac);
+          _dummy.scale.setScalar(1.3);
+          _dummy.updateMatrix();
+          pmesh.setMatrixAt(p, _dummy.matrix);
+          p++;
+        }
+      }
+      pmesh.instanceMatrix.needsUpdate = true;
+    }
+    const label = labelGroupRef.current;
+    if (label) {
+      if (focus) {
+        const fi = index.get(focus);
+        if (fi != null) {
+          const n = simNodes[fi];
+          label.position.set(n.x ?? 0, (n.y ?? 0) + n.r + 4, n.z ?? 0);
+          label.visible = true;
+        }
+      } else {
+        label.visible = false;
+      }
+    }
+    const controls = controlsRef?.current;
+    if (!framedRef.current && sim.alpha() < 0.25) {
+      framedRef.current = true;
+      _box.makeEmpty();
+      for (const n of simNodes) _box.expandByPoint(_a.set(n.x ?? 0, n.y ?? 0, n.z ?? 0));
+      const sphere = _box.getBoundingSphere(_sphere);
+      const dist = Math.max(120, sphere.radius * 2.4);
+      camera.position.set(sphere.center.x, sphere.center.y, sphere.center.z + dist);
+      if (controls) {
+        controls.target.copy(sphere.center);
+        controls.update();
+      }
+    }
+    if (flyToRef.current && controls) {
+      controls.target.lerp(flyToRef.current, Math.min(1, delta * 3));
+      if (controls.target.distanceTo(flyToRef.current) < 0.5) flyToRef.current = null;
+      controls.update();
+    }
+  });
+  const focusLabel = react.useMemo(() => {
+    const focus = hoverId ?? selectedId;
+    return focus ? nodes.find((n) => n.id === focus)?.label ?? "" : "";
+  }, [hoverId, selectedId, nodes]);
+  const handleMove = react.useCallback(
+    (e) => {
+      e.stopPropagation();
+      if (e.instanceId != null && e.instanceId < nodes.length) onHover(nodes[e.instanceId].id);
+    },
+    [nodes, onHover]
+  );
+  const handleOut = react.useCallback(() => onHover(null), [onHover]);
+  const handleClick = react.useCallback(
+    (e) => {
+      e.stopPropagation();
+      if (e.instanceId != null && e.instanceId < nodes.length) onSelect(nodes[e.instanceId].id);
+    },
+    [nodes, onSelect]
+  );
+  return /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntime.jsxs(
+      "instancedMesh",
+      {
+        ref: meshRef,
+        args: [void 0, void 0, Math.max(1, nodes.length)],
+        onPointerMove: handleMove,
+        onPointerOut: handleOut,
+        onClick: handleClick,
+        children: [
+          /* @__PURE__ */ jsxRuntime.jsx("sphereGeometry", { args: [1, 20, 20] }),
+          /* @__PURE__ */ jsxRuntime.jsx("meshBasicMaterial", { toneMapped: false })
+        ]
+      },
+      `nodes-${nodes.length}`
+    ),
+    /* @__PURE__ */ jsxRuntime.jsxs("lineSegments", { ref: linesRef, children: [
+      /* @__PURE__ */ jsxRuntime.jsxs("bufferGeometry", { children: [
+        /* @__PURE__ */ jsxRuntime.jsx("bufferAttribute", { attach: "attributes-position", args: [linePos, 3] }),
+        /* @__PURE__ */ jsxRuntime.jsx("bufferAttribute", { attach: "attributes-color", args: [lineCol, 3] })
+      ] }),
+      /* @__PURE__ */ jsxRuntime.jsx(
+        "lineBasicMaterial",
+        {
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.75,
+          toneMapped: false,
+          depthWrite: false,
+          blending: THREE3__namespace.AdditiveBlending
+        }
+      )
+    ] }, `lines-${simLinks.length}`),
+    particleCount > 0 ? /* @__PURE__ */ jsxRuntime.jsxs(
+      "instancedMesh",
+      {
+        ref: particlesRef,
+        args: [void 0, void 0, particleCount],
+        children: [
+          /* @__PURE__ */ jsxRuntime.jsx("sphereGeometry", { args: [0.6, 6, 6] }),
+          /* @__PURE__ */ jsxRuntime.jsx(
+            "meshBasicMaterial",
+            {
+              color: "#8fd3ff",
+              toneMapped: false,
+              transparent: true,
+              opacity: 0.9,
+              blending: THREE3__namespace.AdditiveBlending
+            }
+          )
+        ]
+      },
+      `p-${particleCount}`
+    ) : null,
+    /* @__PURE__ */ jsxRuntime.jsx("group", { ref: labelGroupRef, visible: false, children: /* @__PURE__ */ jsxRuntime.jsx(drei.Billboard, { children: /* @__PURE__ */ jsxRuntime.jsx(
+      drei.Text,
+      {
+        fontSize: 7,
+        color: labelColor,
+        anchorX: "center",
+        anchorY: "bottom",
+        outlineWidth: 0.4,
+        outlineColor: LABEL_OUTLINE,
+        maxWidth: 160,
+        children: focusLabel
+      }
+    ) }) })
+  ] });
 }
 function VizSpecRenderer({
   spec,
@@ -1953,6 +2343,8 @@ exports.ExpandablePopulation = ExpandablePopulation;
 exports.GetConnectionsSchema = GetConnectionsSchema;
 exports.GetPosition2DSchema = GetPosition2DSchema;
 exports.GetPosition3DSchema = GetPosition3DSchema;
+exports.KnowledgeGraph3DParamsSchema = KnowledgeGraph3DParamsSchema;
+exports.KnowledgeGraph3DScene = KnowledgeGraph3DScene;
 exports.MultimeterEventsSchema = MultimeterEventsSchema;
 exports.MultimeterMultiSenderSchema = MultimeterMultiSenderSchema;
 exports.NEST_DEVICE_FAMILIES = NEST_DEVICE_FAMILIES;

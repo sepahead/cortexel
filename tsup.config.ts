@@ -19,6 +19,7 @@ export default defineConfig({
     'three',
     '@react-three/fiber',
     '@react-three/drei',
+    'd3-force-3d',
     'zod',
   ],
 });

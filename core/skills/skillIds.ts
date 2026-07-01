@@ -21,6 +21,7 @@ export const NEST_SKILL_IDS = [
   'nest.astrocyte_dynamics',
   'nest.compartmental_dynamics',
   'nest.animation_replay',
+  'corpus.knowledge_graph',
 ] as const;
 
 export type NestSkillId = (typeof NEST_SKILL_IDS)[number];
@@ -39,6 +40,7 @@ export const NEST_DEVICE_FAMILIES = [
   'get_position',
   'weight_recorder',
   'computed', // no NEST device — numerically derived (phase plane, replay frames)
+  'corpus', // no NEST device — corpus/KG structural graph (papers, models, families)
 ] as const;
 
 export type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];

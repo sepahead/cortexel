@@ -64,6 +64,7 @@
     "three": "^0.184",
     "@react-three/fiber": "^9.6",
     "@react-three/drei": "^10.7",
+    "d3-force-3d": "^3.0.5",
     "zod": "^4"
   },
   "peerDependenciesMeta": {
@@ -77,6 +78,9 @@
       "optional": true
     },
     "@react-three/drei": {
+      "optional": true
+    },
+    "d3-force-3d": {
       "optional": true
     }
   },

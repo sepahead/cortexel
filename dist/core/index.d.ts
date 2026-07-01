@@ -1,5 +1,5 @@
-import { q as SceneName, o as SceneData } from '../designLaws-DNgmp6mG.js';
-export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CAMERA_PRESETS, a as CATEGORICAL, b as CORTEXEL_PALETTE, c as CORTICAL_LAYER_COLORS, d as CameraPreset, e as CameraPresetName, f as ColormapName, L as LayerConfig, N as NeuralSceneHandle, g as NeuralSceneMode, h as NeuralSceneProps, O as OKABE_ITO, P as PaletteEntry, i as PaletteMetadata, j as PaletteName, k as PlaybackState, R as RGB, S as SCENE_FRAMING, l as SCENE_NAMES, m as STDPSynapse, n as SYNAPSE_COLORS, p as SceneFraming, r as SemanticPalette, T as TURBO_GLSL, V as VIK_GLSL, s as VIRIDIS_GLSL, t as categorical, u as colormapGradient, v as colormapHex, w as colormapRgba, x as colormapSvgStops, y as getPalette, z as getPaletteEntry, D as isRegisteredPalette, E as listPalettes, F as registerPalette, G as sampleColormap, H as validatePalette } from '../designLaws-DNgmp6mG.js';
+import { q as SceneName, o as SceneData } from '../designLaws-DmE67pkk.js';
+export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CAMERA_PRESETS, a as CATEGORICAL, b as CORTEXEL_PALETTE, c as CORTICAL_LAYER_COLORS, d as CameraPreset, e as CameraPresetName, f as ColormapName, L as LayerConfig, N as NeuralSceneHandle, g as NeuralSceneMode, h as NeuralSceneProps, O as OKABE_ITO, P as PaletteEntry, i as PaletteMetadata, j as PaletteName, k as PlaybackState, R as RGB, S as SCENE_FRAMING, l as SCENE_NAMES, m as STDPSynapse, n as SYNAPSE_COLORS, p as SceneFraming, r as SemanticPalette, T as TURBO_GLSL, V as VIK_GLSL, s as VIRIDIS_GLSL, t as categorical, u as colormapGradient, v as colormapHex, w as colormapRgba, x as colormapSvgStops, y as getPalette, z as getPaletteEntry, D as isRegisteredPalette, E as listPalettes, F as registerPalette, G as sampleColormap, H as validatePalette } from '../designLaws-DmE67pkk.js';
 import { z } from 'zod';
 
 declare const ProvenanceSchema: z.ZodObject<{
@@ -25,6 +25,7 @@ declare const VizSpecSchema: z.ZodObject<{
         "isi-distribution": "isi-distribution";
         psth: "psth";
         "weight-histogram": "weight-histogram";
+        "knowledge-graph-3d": "knowledge-graph-3d";
     }>;
     params: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     mode: z.ZodDefault<z.ZodEnum<{
@@ -88,18 +89,18 @@ declare function requiresHonestyCaption(p: ProvenanceMetadata): boolean;
 /** Default caption text when none is supplied but a caption is required. */
 declare function defaultHonestyCaption(p: ProvenanceMetadata): string;
 
-declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.rate_response", "nest.connectivity_matrix", "nest.spatial_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay"];
+declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.rate_response", "nest.connectivity_matrix", "nest.spatial_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
 type NestSkillId = (typeof NEST_SKILL_IDS)[number];
 /** The routing meta-skill. Not a renderer — it selects among the 13 above. */
 declare const VIZ_ROUTER_ID: "nest.viz_router";
 type VizRouterId = typeof VIZ_ROUTER_ID;
-declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "get_connections", "get_position", "weight_recorder", "computed"];
+declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "get_connections", "get_position", "weight_recorder", "computed", "corpus"];
 type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];
 declare function isNestSkillId(value: unknown): value is NestSkillId;
 declare const VALID_RENDERER_ROUTES: readonly ["media.trace_figure", "media.model_graph", "media.webgl_scene", "media.react_fiber_scene", "media.manim_storyboard", "media.*", "matplotlib", "d3", "three", "fiber", "manim"];
 type RendererRoute = (typeof VALID_RENDERER_ROUTES)[number];
 
-declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "bin_ms", "pair_labels", "stim_units", "rate_normalization"];
+declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "bin_ms", "pair_labels", "stim_units", "rate_normalization", "graph_source", "node_kinds", "edge_kinds", "identity_advisory"];
 type ProvenanceKey = (typeof PROVENANCE_KEYS)[number];
 declare const ProvenanceKeyEnum: z.ZodEnum<{
     device_id: "device_id";
@@ -125,6 +126,10 @@ declare const ProvenanceKeyEnum: z.ZodEnum<{
     pair_labels: "pair_labels";
     stim_units: "stim_units";
     rate_normalization: "rate_normalization";
+    graph_source: "graph_source";
+    node_kinds: "node_kinds";
+    edge_kinds: "edge_kinds";
+    identity_advisory: "identity_advisory";
 }>;
 declare const PROVENANCE_KEY_LABELS: Record<ProvenanceKey, string>;
 declare function isProvenanceKey(value: unknown): value is ProvenanceKey;
@@ -171,6 +176,30 @@ declare const AstrocyteParamsSchema: z.ZodObject<{
     units: z.ZodString;
 }, z.core.$loose>;
 type AstrocyteParams = z.infer<typeof AstrocyteParamsSchema>;
+declare const KnowledgeGraph3DParamsSchema: z.ZodObject<{
+    nodes: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        kind: z.ZodEnum<{
+            paper: "paper";
+            model: "model";
+            family: "family";
+        }>;
+        label: z.ZodString;
+        group: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>;
+    edges: z.ZodArray<z.ZodObject<{
+        source: z.ZodString;
+        target: z.ZodString;
+        kind: z.ZodEnum<{
+            cites: "cites";
+            same_as: "same_as";
+            variant_of: "variant_of";
+            instantiates: "instantiates";
+            belongs_to_family: "belongs_to_family";
+        }>;
+    }, z.core.$strict>>;
+}, z.core.$loose>;
+type KnowledgeGraph3DParams = z.infer<typeof KnowledgeGraph3DParamsSchema>;
 
 declare const CORTEXEL_SKILL_VERSION = "1.0.0";
 interface SkillExample {
@@ -370,4 +399,4 @@ declare function getPositionToSceneData(positions: unknown, opts?: {
 }): AdapterResult;
 declare function weightRecorderToSceneData(events: unknown): AdapterResult;
 
-export { type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
+export { type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type KnowledgeGraph3DParams, KnowledgeGraph3DParamsSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };

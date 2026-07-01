@@ -16,6 +16,7 @@ export const SCENE_NAMES = [
   'isi-distribution',
   'psth',
   'weight-histogram',
+  'knowledge-graph-3d',
 ] as const;
 
 export type SceneName = (typeof SCENE_NAMES)[number];
@@ -123,6 +124,7 @@ export const SCENE_FRAMING: Record<SceneName, SceneFraming> = {
   'isi-distribution': { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
   'psth':             { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
   'weight-histogram': { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
+  'knowledge-graph-3d': { position: [0, 0, 260],    target: [0, 0, 0],     rotatable: true },
 };
 
 export const CAMERA_PRESETS: Record<CameraPresetName, CameraPreset> = {

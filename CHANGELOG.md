@@ -4,6 +4,26 @@ All notable changes to Cortexel are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- `knowledge-graph-3d` scene + `corpus.knowledge_graph` skill — a first-class
+  cross-paper corpus knowledge graph. The declarative VizSpec contract adds the
+  `KnowledgeGraph3DParamsSchema` (paper/model/family nodes;
+  cites/same_as/variant_of/instantiates/belongs_to_family edges), the
+  `graph_source`/`node_kinds`/`edge_kinds`/`identity_advisory` provenance keys,
+  and a synthetic worked example. The skill is `weak` and the new
+  `identity_advisory` key machine-enforces the honesty boundary: cross-paper
+  model identity (same_as/variant_of) is advisory structural similarity, NOT
+  certified sameness.
+- `KnowledgeGraph3DScene` (`cortexel/react`) — a Canvas-less R3F scene primitive
+  (Design Law #5: host owns Canvas/OrbitControls/bloom/background). A d3-force-3d
+  simulation ticked in an allocation-free `useFrame`, instanced unlit sphere
+  nodes, additive line edges, citation-flow particles, and a Billboard focus
+  label. Exports `KnowledgeGraph3DNode`, `KnowledgeGraph3DEdge` and
+  `KnowledgeGraph3DSceneProps`. Adds `d3-force-3d` as an optional peer
+  (externalized, never bundled) with an ambient type declaration.
+
 ## [0.4.0] — ExpandableNeurons
 
 ### Added

@@ -17,6 +17,7 @@ import type { NestSkillId, NestDeviceFamily, RendererRoute } from './skillIds';
 import type { ProvenanceKey } from './provenanceKeys';
 import {
   AstrocyteParamsSchema,
+  KnowledgeGraph3DParamsSchema,
   NetworkParamsSchema,
   PhasePlaneParamsSchema,
   PlasticityParamsSchema,
@@ -363,6 +364,37 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         dataShape: 'frames, entities, metrics, frame rate, annotations',
         output: 'Manim storyboard / source — no live Cortexel scene.',
         note: 'scene:null — offline storyboard, not a real-time render target.',
+      },
+    ],
+  },
+  'corpus.knowledge_graph': {
+    id: 'corpus.knowledge_graph',
+    version: '1.0.0',
+    title: 'Corpus knowledge-graph 3D renderer',
+    description:
+      'Render a cross-paper corpus knowledge graph in 3D: paper/model/family nodes with citation, instantiation and family edges, plus advisory model-identity (same_as/variant_of) edges.',
+    deviceFamily: 'corpus',
+    scene: 'knowledge-graph-3d',
+    // weak: identity edges are advisory structural similarity, NOT certified
+    // sameness — always carry the derived-view disclosure.
+    weak: true,
+    requiredInputKeys: ['nodes', 'edges'],
+    paramsSchema: KnowledgeGraph3DParamsSchema,
+    requiredProvenanceKeys: [
+      'graph_source',
+      'node_kinds',
+      'edge_kinds',
+      'identity_advisory',
+    ],
+    rendererRoutes: ['media.model_graph', 'fiber'],
+    examples: [
+      {
+        nestExample: 'Cross-paper corpus knowledge graph (papers + models + families)',
+        sourceUrl:
+          'https://github.com/sepahead/Paper2Brain#knowledge-graph',
+        dataShape: 'nodes (paper/model/family), edges (cites/same_as/variant_of/instantiates/belongs_to_family)',
+        output: '3D force-directed graph with citation-flow particles and focus labels',
+        note: 'weak:true — same_as/variant_of are advisory structural similarity, never certified sameness.',
       },
     ],
   },

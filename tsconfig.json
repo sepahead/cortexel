@@ -15,5 +15,5 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["index.ts", "core/**/*", "react/**/*", "test/**/*", "scripts/**/*", "tsup.config.ts"]
+  "include": ["index.ts", "core/**/*", "react/**/*", "test/**/*", "scripts/**/*", "tsup.config.ts", "types/**/*"]
 }

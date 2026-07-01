@@ -4,4 +4,5 @@ export * from './usePopulationExpand';
 export * from './ExpandablePopulation';
 export * from './ExpandableNeurons';
 export * from './neuronShaders';
+export * from './KnowledgeGraph3DScene';
 export * from './VizSpecRenderer';

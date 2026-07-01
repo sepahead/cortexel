@@ -403,7 +403,8 @@ var SCENE_NAMES = [
   "fi-curve",
   "isi-distribution",
   "psth",
-  "weight-histogram"
+  "weight-histogram",
+  "knowledge-graph-3d"
 ];
 var SCENE_FRAMING = {
   "live-activity": { position: [0, 0, 9.4], target: [0, 0, 0], rotatable: false },
@@ -417,7 +418,8 @@ var SCENE_FRAMING = {
   "fi-curve": { position: [0, 0.7, 6.4], target: [0, 0.7, 0], rotatable: false },
   "isi-distribution": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false },
   "psth": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false },
-  "weight-histogram": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false }
+  "weight-histogram": { position: [0, 0.6, 7.4], target: [0, 0.6, 0], rotatable: false },
+  "knowledge-graph-3d": { position: [0, 0, 260], target: [0, 0, 0], rotatable: true }
 };
 var CAMERA_PRESETS = {
   default: { name: "default", position: [0, 0, 8], target: [0, 0, 0], fov: 50 },
@@ -513,7 +515,8 @@ var NEST_SKILL_IDS = [
   "nest.stimulus_response",
   "nest.astrocyte_dynamics",
   "nest.compartmental_dynamics",
-  "nest.animation_replay"
+  "nest.animation_replay",
+  "corpus.knowledge_graph"
 ];
 var VIZ_ROUTER_ID = "nest.viz_router";
 var NEST_DEVICE_FAMILIES = [
@@ -522,8 +525,10 @@ var NEST_DEVICE_FAMILIES = [
   "get_connections",
   "get_position",
   "weight_recorder",
-  "computed"
+  "computed",
   // no NEST device — numerically derived (phase plane, replay frames)
+  "corpus"
+  // no NEST device — corpus/KG structural graph (papers, models, families)
 ];
 function isNestSkillId(value) {
   return typeof value === "string" && NEST_SKILL_IDS.includes(value);
@@ -575,6 +580,27 @@ var PhasePlaneParamsSchema = z.object({
 var AstrocyteParamsSchema = z.object({
   ca_trace: numArray.min(1),
   units: z.string().min(1)
+}).passthrough();
+var KnowledgeGraphNodeSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["paper", "model", "family"]),
+  label: z.string().min(1),
+  group: z.string().optional()
+}).strict();
+var KnowledgeGraphEdgeSchema = z.object({
+  source: z.string().min(1),
+  target: z.string().min(1),
+  kind: z.enum([
+    "cites",
+    "same_as",
+    "variant_of",
+    "instantiates",
+    "belongs_to_family"
+  ])
+}).strict();
+var KnowledgeGraph3DParamsSchema = z.object({
+  nodes: z.array(KnowledgeGraphNodeSchema).min(1),
+  edges: z.array(KnowledgeGraphEdgeSchema)
 }).passthrough();
 
 // core/skills/examples.ts
@@ -657,6 +683,32 @@ var SKILL_EXAMPLE_PAYLOADS = {
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({ recorded_variable: "Ca", units: "uM" })
+  },
+  "corpus.knowledge_graph": {
+    scene: "knowledge-graph-3d",
+    params: {
+      nodes: [
+        { id: "p1", kind: "paper", label: "Brunel 2000" },
+        { id: "m1", kind: "model", label: "iaf_psc_delta" },
+        { id: "f1", kind: "family", label: "LIF family" }
+      ],
+      edges: [
+        { source: "p1", target: "m1", kind: "instantiates" },
+        { source: "m1", target: "f1", kind: "belongs_to_family" }
+      ]
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    // advisory_only:true — identity edges are advisory structural similarity.
+    provenance: {
+      ...synthetic({
+        graph_source: "corpus_kg",
+        node_kinds: "paper,model,family",
+        edge_kinds: "instantiates,belongs_to_family",
+        identity_advisory: true
+      }),
+      advisory_only: true
+    }
   }
 };
 function getExamplePayload(id) {
@@ -960,6 +1012,35 @@ var NEST_SKILL_REGISTRY = {
         note: "scene:null \u2014 offline storyboard, not a real-time render target."
       }
     ]
+  },
+  "corpus.knowledge_graph": {
+    id: "corpus.knowledge_graph",
+    version: "1.0.0",
+    title: "Corpus knowledge-graph 3D renderer",
+    description: "Render a cross-paper corpus knowledge graph in 3D: paper/model/family nodes with citation, instantiation and family edges, plus advisory model-identity (same_as/variant_of) edges.",
+    deviceFamily: "corpus",
+    scene: "knowledge-graph-3d",
+    // weak: identity edges are advisory structural similarity, NOT certified
+    // sameness — always carry the derived-view disclosure.
+    weak: true,
+    requiredInputKeys: ["nodes", "edges"],
+    paramsSchema: KnowledgeGraph3DParamsSchema,
+    requiredProvenanceKeys: [
+      "graph_source",
+      "node_kinds",
+      "edge_kinds",
+      "identity_advisory"
+    ],
+    rendererRoutes: ["media.model_graph", "fiber"],
+    examples: [
+      {
+        nestExample: "Cross-paper corpus knowledge graph (papers + models + families)",
+        sourceUrl: "https://github.com/sepahead/Paper2Brain#knowledge-graph",
+        dataShape: "nodes (paper/model/family), edges (cites/same_as/variant_of/instantiates/belongs_to_family)",
+        output: "3D force-directed graph with citation-flow particles and focus labels",
+        note: "weak:true \u2014 same_as/variant_of are advisory structural similarity, never certified sameness."
+      }
+    ]
   }
 };
 function listSkills() {
@@ -1099,6 +1180,6 @@ function validateSkillInvocation(skillId, payload) {
   return { ok: true, spec, scene: contract.scene, caption };
 }
 
-export { AXIS_COLORS, AstrocyteParamsSchema, BATLOW_GLSL, CAMERA_PRESETS, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, NetworkParamsSchema, OKABE_ITO, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, Spatial3DParamsSchema, SpikeRasterParamsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIK_GLSL, VIRIDIS_GLSL, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, getExamplePayload, getPalette, getPaletteEntry, getSkill, isNestSkillId, isRegisteredPalette, listPalettes, listSkills, registerPalette, requiresHonestyCaption, sampleColormap, validatePalette, validateSkillInvocation, validateVizSpec };
-//# sourceMappingURL=chunk-GWWXJ7YG.js.map
-//# sourceMappingURL=chunk-GWWXJ7YG.js.map
+export { AXIS_COLORS, AstrocyteParamsSchema, BATLOW_GLSL, CAMERA_PRESETS, CATEGORICAL, CONSERVATIVE_PROVENANCE, CORTEXEL_PALETTE, CORTEXEL_SKILL_VERSION, CORTICAL_LAYER_COLORS, KnowledgeGraph3DParamsSchema, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, NetworkParamsSchema, OKABE_ITO, PhasePlaneParamsSchema, PlasticityParamsSchema, ProvenanceSchema, RateResponseParamsSchema, SCENE_FRAMING, SCENE_NAMES, SKILL_EXAMPLE_PAYLOADS, SYNAPSE_COLORS, Spatial3DParamsSchema, SpikeRasterParamsSchema, TURBO_GLSL, VALID_RENDERER_ROUTES, VIK_GLSL, VIRIDIS_GLSL, VIZ_ROUTER_ID, VizSpecSchema, VoltageTraceParamsSchema, categorical, colormapGradient, colormapHex, colormapRgba, colormapSvgStops, defaultHonestyCaption, describeSkill, describeSkills, getExamplePayload, getPalette, getPaletteEntry, getSkill, isNestSkillId, isRegisteredPalette, listPalettes, listSkills, registerPalette, requiresHonestyCaption, sampleColormap, validatePalette, validateSkillInvocation, validateVizSpec };
+//# sourceMappingURL=chunk-2XFQVRBH.js.map
+//# sourceMappingURL=chunk-2XFQVRBH.js.map

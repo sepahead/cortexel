@@ -27,12 +27,13 @@ const EXPECTED_PROVENANCE: Record<NestSkillId, string[]> = {
   'nest.astrocyte_dynamics': ['recorded_variable', 'units'],
   'nest.compartmental_dynamics': ['morphology_disclaimer', 'recorded_variable'],
   'nest.animation_replay': ['frame_rate'],
+  'corpus.knowledge_graph': ['graph_source', 'node_kinds', 'edge_kinds', 'identity_advisory'],
 };
 
 describe('skill discovery', () => {
-  it('describeSkills covers all 13 skills with renderable flags', () => {
+  it('describeSkills covers all 14 skills with renderable flags', () => {
     const d = describeSkills();
-    expect(d.length).toBe(13);
+    expect(d.length).toBe(14);
     expect(d.filter((s) => s.renderable).length).toBeGreaterThan(0);
   });
 

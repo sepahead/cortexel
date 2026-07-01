@@ -113,7 +113,7 @@ declare const BATLOW_GLSL = "\nvec3 batlow(float t) {\n  t = clamp(t, 0.0, 1.0);
 declare const VIK_GLSL = "\nvec3 vik(float t) {\n  t = clamp(t, 0.0, 1.0);\n  const vec3 stops[11] = vec3[11](\n    vec3(0.001,0.070,0.380), vec3(0.009,0.193,0.458), vec3(0.075,0.398,0.591),\n    vec3(0.236,0.522,0.674), vec3(0.483,0.713,0.784), vec3(0.858,0.897,0.915),\n    vec3(0.859,0.647,0.518), vec3(0.728,0.368,0.166), vec3(0.596,0.199,0.028),\n    vec3(0.436,0.068,0.026), vec3(0.350,0.000,0.030)\n  );\n  float x = t * 10.0;\n  int i = int(floor(x));\n  float f = x - float(i);\n  if (i >= 10) return stops[10];\n  return mix(stops[i], stops[i + 1], f);\n}\n";
 
 type NeuralSceneMode = 'hero' | 'background' | 'standalone';
-declare const SCENE_NAMES: readonly ["live-activity", "cortical-column", "stdp", "spike-raster", "network-topology", "voltage-trace", "phase-plane", "brunel-network", "fi-curve", "isi-distribution", "psth", "weight-histogram"];
+declare const SCENE_NAMES: readonly ["live-activity", "cortical-column", "stdp", "spike-raster", "network-topology", "voltage-trace", "phase-plane", "brunel-network", "fi-curve", "isi-distribution", "psth", "weight-histogram", "knowledge-graph-3d"];
 type SceneName = (typeof SCENE_NAMES)[number];
 interface NeuralSceneHandle {
     nextScene: () => void;

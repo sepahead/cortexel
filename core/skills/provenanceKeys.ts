@@ -33,6 +33,10 @@ export const PROVENANCE_KEYS = [
   'pair_labels',
   'stim_units',
   'rate_normalization',
+  'graph_source',
+  'node_kinds',
+  'edge_kinds',
+  'identity_advisory',
 ] as const;
 
 export type ProvenanceKey = (typeof PROVENANCE_KEYS)[number];
@@ -63,6 +67,10 @@ export const PROVENANCE_KEY_LABELS: Record<ProvenanceKey, string> = {
   pair_labels: 'pair labels',
   stim_units: 'stimulus units',
   rate_normalization: 'rate normalization',
+  graph_source: 'graph source',
+  node_kinds: 'node kinds',
+  edge_kinds: 'edge kinds',
+  identity_advisory: 'model-identity advisory (structural similarity, not certified sameness)',
 };
 
 export function isProvenanceKey(value: unknown): value is ProvenanceKey {

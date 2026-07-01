@@ -78,3 +78,39 @@ export const AstrocyteParamsSchema = z
   .passthrough();
 export type AstrocyteParams = z.infer<typeof AstrocyteParamsSchema>;
 
+// Corpus knowledge-graph. Nodes/edges are a closed structural graph of papers,
+// models and families. Node/edge item schemas are strict (closed) so a stray
+// key is a validation error, not silently rendered — the cross-paper identity
+// edges (same_as/variant_of) are advisory structural similarity, never certified
+// sameness (the honesty boundary is enforced via requiredProvenanceKeys).
+const KnowledgeGraphNodeSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(['paper', 'model', 'family']),
+    label: z.string().min(1),
+    group: z.string().optional(),
+  })
+  .strict();
+
+const KnowledgeGraphEdgeSchema = z
+  .object({
+    source: z.string().min(1),
+    target: z.string().min(1),
+    kind: z.enum([
+      'cites',
+      'same_as',
+      'variant_of',
+      'instantiates',
+      'belongs_to_family',
+    ]),
+  })
+  .strict();
+
+export const KnowledgeGraph3DParamsSchema = z
+  .object({
+    nodes: z.array(KnowledgeGraphNodeSchema).min(1),
+    edges: z.array(KnowledgeGraphEdgeSchema),
+  })
+  .passthrough();
+export type KnowledgeGraph3DParams = z.infer<typeof KnowledgeGraph3DParamsSchema>;
+

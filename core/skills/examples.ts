@@ -94,6 +94,32 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
     themeMode: 'dark',
     provenance: synthetic({ recorded_variable: 'Ca', units: 'uM' }),
   },
+  'corpus.knowledge_graph': {
+    scene: 'knowledge-graph-3d',
+    params: {
+      nodes: [
+        { id: 'p1', kind: 'paper', label: 'Brunel 2000' },
+        { id: 'm1', kind: 'model', label: 'iaf_psc_delta' },
+        { id: 'f1', kind: 'family', label: 'LIF family' },
+      ],
+      edges: [
+        { source: 'p1', target: 'm1', kind: 'instantiates' },
+        { source: 'm1', target: 'f1', kind: 'belongs_to_family' },
+      ],
+    },
+    mode: 'interactive',
+    themeMode: 'dark',
+    // advisory_only:true — identity edges are advisory structural similarity.
+    provenance: {
+      ...synthetic({
+        graph_source: 'corpus_kg',
+        node_kinds: 'paper,model,family',
+        edge_kinds: 'instantiates,belongs_to_family',
+        identity_advisory: true,
+      }),
+      advisory_only: true,
+    },
+  },
 };
 
 export function getExamplePayload(id: string): VizSpec | undefined {
