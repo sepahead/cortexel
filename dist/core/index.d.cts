@@ -1,106 +1,10 @@
-import { q as SceneName, o as SceneData } from '../designLaws-DmE67pkk.cjs';
-export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CAMERA_PRESETS, a as CATEGORICAL, b as CORTEXEL_PALETTE, c as CORTICAL_LAYER_COLORS, d as CameraPreset, e as CameraPresetName, f as ColormapName, L as LayerConfig, N as NeuralSceneHandle, g as NeuralSceneMode, h as NeuralSceneProps, O as OKABE_ITO, P as PaletteEntry, i as PaletteMetadata, j as PaletteName, k as PlaybackState, R as RGB, S as SCENE_FRAMING, l as SCENE_NAMES, m as STDPSynapse, n as SYNAPSE_COLORS, p as SceneFraming, r as SemanticPalette, T as TURBO_GLSL, V as VIK_GLSL, s as VIRIDIS_GLSL, t as categorical, u as colormapGradient, v as colormapHex, w as colormapRgba, x as colormapSvgStops, y as getPalette, z as getPaletteEntry, D as isRegisteredPalette, E as listPalettes, F as registerPalette, G as sampleColormap, H as validatePalette } from '../designLaws-DmE67pkk.cjs';
+export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CATEGORICAL, a as CORTEXEL_PALETTE, b as CORTICAL_LAYER_COLORS, c as ColormapName, O as OKABE_ITO, P as PALETTE_REGISTRY_POLICY, d as PaletteEntry, e as PaletteMetadata, f as PaletteName, g as RGB, h as ReadonlyPaletteMetadata, R as ReadonlySemanticPalette, S as SEMANTIC_PALETTE_KEYS, i as SYNAPSE_COLORS, j as SemanticPalette, T as TURBO_GLSL, V as VIK_GLSL, k as VIRIDIS_GLSL, l as categorical, m as colormapGradient, n as colormapHex, o as colormapRgba, p as colormapSvgStops, q as getPalette, r as getPaletteEntry, s as isRegisteredPalette, t as listPalettes, u as registerPalette, v as sampleColormap, w as validatePalette } from '../colormaps-CZ6XejJa.cjs';
+import { N as NestSkillId, b as NestDeviceFamily, S as SceneName, R as RendererRoute, V as VizSpec, H as HostRendererInvocation, c as HostRendererInvocationResult, d as SkillInvocationResult, a as SkillInvocationError, e as SceneData } from '../hostInvocation-WskS3C9x.cjs';
+export { C as CAMERA_PRESETS, f as CONSERVATIVE_PROVENANCE, g as CORTEXEL_JSON_LIMITS, h as CORTEXEL_JSON_POLICY, i as CORTEXEL_SPEC_VERSION, j as CameraPreset, k as CameraPresetName, D as DECLARED_INPUTS_PORTABLE_SCHEMA, E as ENVELOPE_NORMALIZATION_POLICY, l as HONESTY_POLICY, m as HostRendererInvocationSchema, J as JSON_BUDGET_SEMANTICS, n as JSON_PARAMS_PORTABLE_SCHEMA, o as JsonParamsSchema, L as LayerConfig, p as NEST_DEVICE_FAMILIES, q as NEST_SKILL_IDS, r as NUMERIC_MODEL_POLICY, s as NeuralSceneHandle, t as NeuralSceneMode, u as NeuralSceneProps, v as PlaybackState, P as ProvenanceMetadata, w as ProvenanceSchema, x as SCENE_FRAMING, y as SCENE_NAMES, z as SKILL_IDS, A as STDPSynapse, B as STRING_NORMALIZATION_POLICY, F as SceneFraming, G as SkillId, I as SkillParamsResult, K as VALID_RENDERER_ROUTES, M as VIZ_ROUTER_ID, O as VizRouterId, Q as VizSpecSchema, T as VizSpecValidation, U as defaultHonestyCaption, W as isNestSkillId, X as isSkillId, Y as mandatoryDisclosure, Z as requiresHonestyCaption, _ as validateHostRendererInvocation, $ as validateHostRendererSpec, a0 as validateSkillInvocation, a1 as validateSkillParams, a2 as validateVizSpec } from '../hostInvocation-WskS3C9x.cjs';
+export { A as AnimationReplayParams, a as AnimationReplayParamsSchema, b as AstrocyteParams, c as AstrocyteParamsSchema, C as CompartmentalParams, d as CompartmentalParamsSchema, e as CorrelogramParams, f as CorrelogramParamsSchema, K as KnowledgeGraph3DParams, g as KnowledgeGraph3DParamsSchema, N as NetworkParams, h as NetworkParamsSchema, P as PARAM_LIMITS, i as PhasePlaneParams, j as PhasePlaneParamsSchema, k as PlasticityParams, l as PlasticityParamsSchema, R as RateResponseParams, m as RateResponseParamsSchema, S as Spatial2DParams, n as Spatial2DParamsSchema, o as Spatial3DParams, p as Spatial3DParamsSchema, q as SpikeRasterParams, r as SpikeRasterParamsSchema, s as StimulusResponseParams, t as StimulusResponseParamsSchema, V as VoltageTraceParams, u as VoltageTraceParamsSchema } from '../params-wRfhrStj.cjs';
 import { z } from 'zod';
 
-declare const ProvenanceSchema: z.ZodObject<{
-    source: z.ZodString;
-    calibrated_posterior: z.ZodDefault<z.ZodBoolean>;
-    advisory_only: z.ZodDefault<z.ZodBoolean>;
-    is_paper_local_evidence: z.ZodDefault<z.ZodBoolean>;
-    caption: z.ZodOptional<z.ZodString>;
-    declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
-    synthetic: z.ZodDefault<z.ZodBoolean>;
-}, z.core.$strip>;
-declare const VizSpecSchema: z.ZodObject<{
-    scene: z.ZodEnum<{
-        "live-activity": "live-activity";
-        "cortical-column": "cortical-column";
-        stdp: "stdp";
-        "spike-raster": "spike-raster";
-        "network-topology": "network-topology";
-        "voltage-trace": "voltage-trace";
-        "phase-plane": "phase-plane";
-        "brunel-network": "brunel-network";
-        "fi-curve": "fi-curve";
-        "isi-distribution": "isi-distribution";
-        psth: "psth";
-        "weight-histogram": "weight-histogram";
-        "knowledge-graph-3d": "knowledge-graph-3d";
-    }>;
-    params: z.ZodDefault<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
-    mode: z.ZodDefault<z.ZodEnum<{
-        interactive: "interactive";
-        export: "export";
-    }>>;
-    themeMode: z.ZodDefault<z.ZodEnum<{
-        dark: "dark";
-        light: "light";
-    }>>;
-    camera: z.ZodOptional<z.ZodEnum<{
-        default: "default";
-        top: "top";
-        side: "side";
-        close: "close";
-        cinematic: "cinematic";
-    }>>;
-    palette: z.ZodOptional<z.ZodString>;
-    provenance: z.ZodObject<{
-        source: z.ZodString;
-        calibrated_posterior: z.ZodDefault<z.ZodBoolean>;
-        advisory_only: z.ZodDefault<z.ZodBoolean>;
-        is_paper_local_evidence: z.ZodDefault<z.ZodBoolean>;
-        caption: z.ZodOptional<z.ZodString>;
-        declared_inputs: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodLiteral<true>]>>>;
-        synthetic: z.ZodDefault<z.ZodBoolean>;
-    }, z.core.$strip>;
-}, z.core.$strip>;
-type VizSpec = z.infer<typeof VizSpecSchema>;
-type VizSpecValidation = {
-    ok: true;
-    spec: VizSpec;
-} | {
-    ok: false;
-    errors: string[];
-};
-/** Validate untrusted input (e.g. an agent payload) into a typed VizSpec. */
-declare function validateVizSpec(input: unknown): VizSpecValidation;
-
-interface ProvenanceMetadata {
-    /** Origin of the data: a nest_simulation id, a paper id, or synthetic_test. */
-    source: string;
-    /** True ONLY when a calibrated Bayesian posterior backs the figure. Never set
-     *  by the current pipeline — validation/search is candidate ranking. */
-    calibrated_posterior: boolean;
-    /** True when the figure is advisory evidence only (does not mutate state). */
-    advisory_only: boolean;
-    /** True only when the data is paper-local evidence (not corpus/global KG). */
-    is_paper_local_evidence: boolean;
-    /** Optional human-readable caption (e.g. "Illustrative — not measured"). */
-    caption?: string;
-    /** Explicit synthetic/illustrative flag — forces the schematic caption. */
-    synthetic?: boolean;
-}
-declare const CONSERVATIVE_PROVENANCE: Readonly<Pick<ProvenanceMetadata, 'calibrated_posterior' | 'advisory_only' | 'is_paper_local_evidence'>>;
-/**
- * Whether the renderer must show a non-dismissible "illustrative / not measured"
- * honesty caption. Fail-closed: any non-rigorous flag forces the caption on.
- */
-declare function requiresHonestyCaption(p: ProvenanceMetadata): boolean;
-/** Default caption text when none is supplied but a caption is required. */
-declare function defaultHonestyCaption(p: ProvenanceMetadata): string;
-
-declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.rate_response", "nest.connectivity_matrix", "nest.spatial_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
-type NestSkillId = (typeof NEST_SKILL_IDS)[number];
-/** The routing meta-skill. Not a renderer — it selects among the 13 above. */
-declare const VIZ_ROUTER_ID: "nest.viz_router";
-type VizRouterId = typeof VIZ_ROUTER_ID;
-declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "get_connections", "get_position", "weight_recorder", "computed", "corpus"];
-type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];
-declare function isNestSkillId(value: unknown): value is NestSkillId;
-declare const VALID_RENDERER_ROUTES: readonly ["media.trace_figure", "media.model_graph", "media.webgl_scene", "media.react_fiber_scene", "media.manim_storyboard", "media.*", "matplotlib", "d3", "three", "fiber", "manim"];
-type RendererRoute = (typeof VALID_RENDERER_ROUTES)[number];
-
-declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "bin_ms", "pair_labels", "stim_units", "rate_normalization", "graph_source", "node_kinds", "edge_kinds", "identity_advisory"];
+declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "spatial_units", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "derivation_method", "model_context", "fixed_parameters", "bin_ms", "pair_labels", "correlation_normalization", "correlation_units", "stim_units", "rate_normalization", "graph_source", "node_kinds", "edge_kinds", "identity_advisory"];
 type ProvenanceKey = (typeof PROVENANCE_KEYS)[number];
 declare const ProvenanceKeyEnum: z.ZodEnum<{
     device_id: "device_id";
@@ -116,14 +20,20 @@ declare const ProvenanceKeyEnum: z.ZodEnum<{
     synapse_model: "synapse_model";
     weight_units: "weight_units";
     extent: "extent";
+    spatial_units: "spatial_units";
     mask: "mask";
     kernel: "kernel";
     projection_sample_policy: "projection_sample_policy";
     morphology_disclaimer: "morphology_disclaimer";
     frame_rate: "frame_rate";
     state_variables: "state_variables";
+    derivation_method: "derivation_method";
+    model_context: "model_context";
+    fixed_parameters: "fixed_parameters";
     bin_ms: "bin_ms";
     pair_labels: "pair_labels";
+    correlation_normalization: "correlation_normalization";
+    correlation_units: "correlation_units";
     stim_units: "stim_units";
     rate_normalization: "rate_normalization";
     graph_source: "graph_source";
@@ -131,83 +41,100 @@ declare const ProvenanceKeyEnum: z.ZodEnum<{
     edge_kinds: "edge_kinds";
     identity_advisory: "identity_advisory";
 }>;
-declare const PROVENANCE_KEY_LABELS: Record<ProvenanceKey, string>;
+declare const STRICT_PROVENANCE_POLICY: Readonly<{
+    unknownDeclaredInputKeys: "reject";
+    allowedDeclaredInputKeys: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "spatial_units", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "derivation_method", "model_context", "fixed_parameters", "bin_ms", "pair_labels", "correlation_normalization", "correlation_units", "stim_units", "rate_normalization", "graph_source", "node_kinds", "edge_kinds", "identity_advisory"];
+    requiredKeysSource: "skill.requiredProvenanceKeys";
+    presentKnownValues: "validate every present known key with provenanceValueConstraints";
+    requiredKeysControl: "presence only; value rules apply whether required or extra";
+    normalizeBeforeValidation: true;
+}>;
+declare const PROVENANCE_KEY_LABELS: Readonly<Record<ProvenanceKey, string>>;
 declare function isProvenanceKey(value: unknown): value is ProvenanceKey;
+type ProvenanceValueConstraint = {
+    kind: 'positive_finite_number';
+} | {
+    kind: 'literal_true';
+} | {
+    kind: 'nonnegative_safe_integer_or_nonblank_string';
+    normalize: 'trim';
+} | {
+    kind: 'string';
+    allowEmpty: true;
+} | {
+    kind: 'nonblank_string';
+    normalize: 'trim';
+};
+/** Machine-verifiable relationships between checked params and declared
+ *  provenance. They do not prove a claim true, but prevent the gate from
+ *  blessing contradictions such as params.units='mV' with declared units='pA'. */
+type ProvenanceParamConstraint = {
+    kind: 'equals_param';
+    provenanceKey: ProvenanceKey;
+    paramKey: string;
+    description: string;
+} | {
+    kind: 'equals_literal';
+    provenanceKey: ProvenanceKey;
+    value: string | number | true;
+    description: string;
+};
+declare const PROVENANCE_PARAM_CONSTRAINT_LANGUAGE: Readonly<{
+    version: "1";
+    evaluationOrder: readonly string[];
+    kinds: readonly ["equals_param", "equals_literal"];
+}>;
+/** Exact semantic rule applied to every required declared-input value. Non-TS
+ *  hosts consume the same table from skills.manifest.json. */
+declare const PROVENANCE_VALUE_CONSTRAINTS: Readonly<Record<ProvenanceKey, ProvenanceValueConstraint>>;
+/** Basic semantic validation for declared provenance. This cannot prove an
+ *  assertion is true, but it prevents meaningless declarations such as
+ *  `units:true`, a negative sampling interval, or identity_advisory:"false". */
+declare function declaredProvenanceValueError(key: ProvenanceKey, value: string | number | true): string | null;
+/** Apply the normalization declared in the portable constraint table. Strict
+ *  gates return this normalized value so TypeScript and non-TypeScript hosts do
+ *  not disagree about whether whitespace is preserved. */
+declare function normalizeDeclaredProvenanceValue(key: ProvenanceKey, value: string | number | true): string | number | true;
+declare function normalizeDeclaredProvenanceInputs(inputs: Record<string, string | number | true>): Record<string, string | number | true>;
+declare function provenanceParamConstraintError(constraint: ProvenanceParamConstraint, params: Record<string, unknown>, declared: Record<string, string | number | true>): string | null;
 
-declare const VoltageTraceParamsSchema: z.ZodObject<{
-    times_ms: z.ZodArray<z.ZodNumber>;
-    series: z.ZodArray<z.ZodArray<z.ZodNumber>>;
-    units: z.ZodString;
-}, z.core.$loose>;
-type VoltageTraceParams = z.infer<typeof VoltageTraceParamsSchema>;
-declare const SpikeRasterParamsSchema: z.ZodObject<{
-    times_ms: z.ZodArray<z.ZodNumber>;
-    senders: z.ZodArray<z.ZodNumber>;
-}, z.core.$loose>;
-type SpikeRasterParams = z.infer<typeof SpikeRasterParamsSchema>;
-declare const RateResponseParamsSchema: z.ZodObject<{
-    stimulus_amplitudes: z.ZodArray<z.ZodNumber>;
-    rates_hz: z.ZodArray<z.ZodNumber>;
-    units: z.ZodString;
-}, z.core.$loose>;
-type RateResponseParams = z.infer<typeof RateResponseParamsSchema>;
-declare const NetworkParamsSchema: z.ZodObject<{
-    sources: z.ZodArray<z.ZodNumber>;
-    targets: z.ZodArray<z.ZodNumber>;
-    weights: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
-}, z.core.$loose>;
-type NetworkParams = z.infer<typeof NetworkParamsSchema>;
-declare const Spatial3DParamsSchema: z.ZodObject<{
-    objects: z.ZodArray<z.ZodUnknown>;
-}, z.core.$loose>;
-type Spatial3DParams = z.infer<typeof Spatial3DParamsSchema>;
-declare const PlasticityParamsSchema: z.ZodObject<{
-    times_ms: z.ZodArray<z.ZodNumber>;
-    weights: z.ZodArray<z.ZodNumber>;
-    weight_units: z.ZodString;
-}, z.core.$loose>;
-type PlasticityParams = z.infer<typeof PlasticityParamsSchema>;
-declare const PhasePlaneParamsSchema: z.ZodObject<{
-    grid: z.ZodRecord<z.ZodString, z.ZodUnknown>;
-}, z.core.$loose>;
-type PhasePlaneParams = z.infer<typeof PhasePlaneParamsSchema>;
-declare const AstrocyteParamsSchema: z.ZodObject<{
-    ca_trace: z.ZodArray<z.ZodNumber>;
-    units: z.ZodString;
-}, z.core.$loose>;
-type AstrocyteParams = z.infer<typeof AstrocyteParamsSchema>;
-declare const KnowledgeGraph3DParamsSchema: z.ZodObject<{
-    nodes: z.ZodArray<z.ZodObject<{
-        id: z.ZodString;
-        kind: z.ZodEnum<{
-            paper: "paper";
-            model: "model";
-            family: "family";
-        }>;
-        label: z.ZodString;
-        group: z.ZodOptional<z.ZodString>;
-    }, z.core.$strict>>;
-    edges: z.ZodArray<z.ZodObject<{
-        source: z.ZodString;
-        target: z.ZodString;
-        kind: z.ZodEnum<{
-            cites: "cites";
-            same_as: "same_as";
-            variant_of: "variant_of";
-            instantiates: "instantiates";
-            belongs_to_family: "belongs_to_family";
-        }>;
-    }, z.core.$strict>>;
-}, z.core.$loose>;
-type KnowledgeGraph3DParams = z.infer<typeof KnowledgeGraph3DParamsSchema>;
-
-declare const CORTEXEL_SKILL_VERSION = "1.0.0";
+declare const CORTEXEL_SKILL_VERSION = "1.2.0";
+declare const STRICT_INVOCATION_POLICY: Readonly<{
+    version: "1";
+    externalSelection: "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present";
+    selfDescribingSelection: "validateSpec(payload): payload.skill is required and selects the contract";
+    hostSelection: "host envelopes require payload.skill; explicit id and payload.skill must match";
+    unknownSkillIds: "reject";
+    cortexelEnvelope: "allowed iff contract.scene is non-null; payload.scene must equal contract.scene";
+    hostEnvelope: "allowed iff contract.scene is null; scene is forbidden";
+    rendererRoute: "when selected, must occur in contract.rendererRoutes";
+    params: "validate paramsJsonSchema then every paramConstraint";
+    provenance: "apply strictProvenancePolicy and every provenanceParamConstraint";
+}>;
 interface SkillExample {
     nestExample: string;
     sourceUrl: string;
     dataShape: string;
     output: string;
     note: string;
+}
+/** Cross-field rules JSON Schema cannot express (such as two arrays having the
+ *  same length). Non-TypeScript hosts apply these after paramsJsonSchema. */
+interface ParamValidationConstraint {
+    kind: 'equal_length' | 'each_length_matches' | 'monotonic_non_decreasing' | 'non_negative' | 'property_count' | 'unique_field' | 'unique_tuple' | 'references_exist' | 'no_self_loops' | 'same_keys' | 'cartesian_product_length' | 'permutation_of_keys' | 'endpoint_kinds' | 'mapped_value' | 'conditional_numeric_domain' | 'acyclic';
+    paths: readonly string[];
+    field?: string;
+    min?: number;
+    max?: number;
+    symmetricKinds?: readonly string[];
+    allowedEndpointKinds?: Readonly<Record<string, readonly [string, string]>>;
+    allowedValues?: Readonly<Record<string, string>>;
+    numericDomains?: Readonly<Record<string, Readonly<{
+        min: number;
+        max?: number;
+        integer?: boolean;
+    }>>>;
+    description: string;
 }
 interface SkillContract {
     id: NestSkillId;
@@ -217,20 +144,117 @@ interface SkillContract {
     deviceFamily: NestDeviceFamily;
     /** Cortexel scene this skill renders to, or null when none is honest yet. */
     scene: SceneName | null;
-    /** When true, the scene is a derived/approximate target, not a clean 1:1. */
+    /** When true, the render carries a mandatory derived-view disclosure. NOTE:
+     *  `weak` does NOT always mean "approximate reuse of another scene" — see
+     *  `weakDisclosure`. Some skills are weak because the DATA semantics are
+     *  advisory (e.g. corpus identity edges), not because the scene is borrowed. */
     weak?: boolean;
+    /** The exact honesty sentence shown when `weak` is true. Declared per-skill
+     *  because the REASON differs: astrocyte reuses the analog-trace scene (Ca/IP3
+     *  ≠ voltage), while the knowledge graph renders in its OWN native scene but its
+     *  identity edges are advisory. A single hard-coded "reuses the scene" template
+     *  would state a falsehood for the latter. When omitted (but weak), a generic
+     *  scene-reuse sentence is used. */
+    weakDisclosure?: string;
     /** Top-level param keys an invocation must supply (subset of paramsSchema). */
-    requiredInputKeys: string[];
-    /** Per-skill zod schema for `params` (undefined when scene is null). */
+    requiredInputKeys: readonly string[];
+    /** Per-skill zod schema for `params` (including scene-less host routes). */
     paramsSchema?: z.ZodType;
+    /** Portable cross-field rules that complement paramsJsonSchema. */
+    paramConstraints?: readonly ParamValidationConstraint[];
     /** Provenance keys the agent must declare for this skill to render. */
-    requiredProvenanceKeys: ProvenanceKey[];
-    rendererRoutes: RendererRoute[];
-    examples: SkillExample[];
+    requiredProvenanceKeys: readonly ProvenanceKey[];
+    /** Deterministic params↔provenance consistency checks. */
+    provenanceParamConstraints?: readonly ProvenanceParamConstraint[];
+    rendererRoutes: readonly RendererRoute[];
+    examples: readonly SkillExample[];
 }
+/** Versioned evaluator contract for ParamValidationConstraint paths. This is a
+ *  deliberately tiny JSONPath subset so non-TS hosts do not have to guess how
+ *  `[*]`, `*`, or `?` are interpreted. */
+declare const PARAM_CONSTRAINT_LANGUAGE: Readonly<{
+    version: "2";
+    pathSyntax: "dot-separated object keys";
+    arrayWildcard: "[*]";
+    objectValueWildcard: "*";
+    optionalSuffix: "?";
+    evaluationOrder: readonly string[];
+    kinds: readonly ["equal_length", "each_length_matches", "monotonic_non_decreasing", "non_negative", "property_count", "unique_field", "unique_tuple", "references_exist", "no_self_loops", "same_keys", "cartesian_product_length", "permutation_of_keys", "endpoint_kinds", "mapped_value", "conditional_numeric_domain", "acyclic"];
+    semantics: Readonly<{
+        equal_length: Readonly<{
+            pathRoles: "all paths resolve to arrays";
+            rule: "all present arrays have identical length";
+            optionalAbsent: "skip a path ending in ?";
+        }>;
+        each_length_matches: Readonly<{
+            pathRoles: "first path resolves zero or more arrays; last path is the reference array";
+            rule: "every first-path array length equals the reference-array length";
+        }>;
+        monotonic_non_decreasing: Readonly<{
+            pathRoles: "each path resolves an ordered numeric sequence";
+            rule: "for every adjacent pair previous <= next";
+        }>;
+        non_negative: Readonly<{
+            pathRoles: "each path resolves numeric values";
+            rule: "every resolved number is >= 0";
+        }>;
+        property_count: Readonly<{
+            pathRoles: "each path resolves objects";
+            rule: "own enumerable property count is within optional min/max inclusive";
+        }>;
+        unique_field: Readonly<{
+            pathRoles: "the first path resolves an array of objects; field names the key";
+            rule: "field values are unique under JSON scalar equality";
+        }>;
+        unique_tuple: Readonly<{
+            pathRoles: "paths resolve equal-length scalar sequences zipped by index";
+            rule: "zipped JSON tuples are unique; when the final kind value is in symmetricKinds, canonicalize the first two tuple values lexicographically";
+        }>;
+        references_exist: Readonly<{
+            pathRoles: "all paths except the last resolve references; the last resolves the allowed-id set";
+            rule: "every non-null reference occurs in the allowed-id set";
+        }>;
+        no_self_loops: Readonly<{
+            pathRoles: "first and second paths resolve equal-length source and target sequences";
+            rule: "source[index] !== target[index] for every index";
+        }>;
+        same_keys: Readonly<{
+            pathRoles: "paths resolve objects";
+            rule: "all objects have exactly the same own enumerable string-key set";
+        }>;
+        cartesian_product_length: Readonly<{
+            pathRoles: "first path resolves axis arrays; second path resolves output arrays";
+            rule: "every output-array length equals the product of all axis-array lengths";
+        }>;
+        permutation_of_keys: Readonly<{
+            pathRoles: "first path resolves a scalar sequence; second path resolves an object";
+            rule: "the sequence contains every object key exactly once";
+        }>;
+        endpoint_kinds: Readonly<{
+            pathRoles: "first path resolves edges with source/target/kind; second resolves nodes with id/kind";
+            rule: "each edge endpoint node kind equals allowedEndpointKinds[edge.kind]";
+        }>;
+        mapped_value: Readonly<{
+            pathRoles: "first path resolves a discriminator scalar; second path resolves its dependent scalar";
+            rule: "the second value equals allowedValues[first value]";
+        }>;
+        conditional_numeric_domain: Readonly<{
+            pathRoles: "first path resolves a discriminator scalar; second path resolves numeric values";
+            rule: "every numeric value satisfies numericDomains[discriminator] inclusive min/max and optional integer requirement";
+        }>;
+        acyclic: Readonly<{
+            pathRoles: "first path resolves node ids; second resolves each node parent id or null";
+            rule: "following parent links from any id never revisits an id";
+        }>;
+    }>;
+}>;
 declare const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract>;
+declare const PARAM_VALIDATION_CONSTRAINTS: Readonly<Partial<Record<NestSkillId, readonly ParamValidationConstraint[]>>>;
+/** Neutral alias for the skill registry (the axis is not NEST-only — see
+ *  corpus.knowledge_graph). Prefer this in new code. */
+declare const SKILL_REGISTRY: Record<"nest.voltage_trace" | "nest.spike_raster" | "nest.rate_response" | "nest.connectivity_matrix" | "nest.spatial_2d" | "nest.spatial_3d" | "nest.plasticity_dynamics" | "nest.phase_plane" | "nest.correlogram" | "nest.stimulus_response" | "nest.astrocyte_dynamics" | "nest.compartmental_dynamics" | "nest.animation_replay" | "corpus.knowledge_graph", SkillContract>;
 declare function listSkills(): SkillContract[];
-declare function getSkill(id: string): SkillContract | undefined;
+declare function getSkill(id: unknown): SkillContract | undefined;
 interface SkillDescriptor {
     id: NestSkillId;
     title: string;
@@ -239,17 +263,32 @@ interface SkillDescriptor {
     scene: SceneName | null;
     renderable: boolean;
     weak: boolean;
+    weakDisclosure?: string;
     requiredInputKeys: string[];
     requiredProvenanceKeys: ProvenanceKey[];
+    provenanceParamConstraints: ProvenanceParamConstraint[];
+    /** Machine-readable JSON Schema for `params` (JSON Schema draft 2020-12),
+     *  derived from the skill's zod schema. Agents and non-TS hosts can validate
+     *  params locally and generate conformant payloads without reading TS or
+     *  reverse-engineering types from the example. Scene-less skills publish a
+     *  schema too because their host-renderer payload still needs validation. */
+    paramsJsonSchema?: Record<string, unknown>;
+    /** Portable rules for cross-field invariants JSON Schema cannot express. */
+    paramConstraints: ParamValidationConstraint[];
     rendererRoutes: RendererRoute[];
-    examplePayload?: VizSpec;
+    examplePayload?: VizSpec | HostRendererInvocation;
     examples: SkillExample[];
 }
-declare function describeSkill(id: string): SkillDescriptor | undefined;
+declare function toPortableJsonSchema(schemaSource: z.ZodType): Record<string, unknown>;
+declare function skillParamsJsonSchema(c: SkillContract): Record<string, unknown> | undefined;
+declare function describeSkill(id: unknown): SkillDescriptor | undefined;
 declare function describeSkills(): SkillDescriptor[];
 
 declare const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>>;
-declare function getExamplePayload(id: string): VizSpec | undefined;
+declare const HOST_RENDERER_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, HostRendererInvocation>>;
+declare function getExamplePayload(id: unknown): VizSpec | undefined;
+declare function getHostRendererExamplePayload(id: unknown): HostRendererInvocation | undefined;
+declare function getInvocationExamplePayload(id: unknown): VizSpec | HostRendererInvocation | undefined;
 
 type SpikeDataKind = 'events' | 'rates' | 'correlation';
 interface RouteInput {
@@ -259,7 +298,7 @@ interface RouteInput {
         kind?: SpikeDataKind;
     };
     /** General disambiguator for any many-to-one family: name the skill directly.
-     *  Must belong to `deviceFamily` or it is ignored. */
+     *  Must belong to `deviceFamily` or routing fails explicitly. */
     skill?: NestSkillId;
 }
 interface Disambiguator {
@@ -274,95 +313,162 @@ type RouteResult = {
     scene: SceneName;
 } | {
     ok: false;
-    reason: 'unknown_family' | 'no_cortexel_scene' | 'ambiguous';
+    reason: 'invalid_input' | 'unknown_family' | 'no_cortexel_scene' | 'ambiguous' | 'invalid_discriminator' | 'skill_family_mismatch';
     candidates?: NestSkillId[];
     disambiguateBy?: Disambiguator;
+    rendererRoutes?: readonly RendererRoute[];
+    field?: string;
+    message?: string;
 };
 declare function routeToScene(input: RouteInput): RouteResult;
+declare function routeToScene(input: unknown): RouteResult;
 
-interface SkillInvocationError {
-    code: 'unknown_skill' | 'invalid_envelope' | 'no_cortexel_scene' | 'scene_mismatch' | 'invalid_params' | 'missing_provenance' | 'calibrated_posterior_unsupported' | 'unknown_palette';
-    path: string;
-    message: string;
-    hint?: string;
-    validScenes?: readonly SceneName[];
-    validSkills?: readonly string[];
-    validPalettes?: string[];
-    /** A copyable valid payload for this skill, attached to actionable errors so
-     *  an autonomous agent can self-repair without reading source. */
-    example?: VizSpec;
+/** Machine-checkable declared inputs (the values an agent asserts it used).
+ * Strict gates validate every known value and required-key presence; factual
+ * truth still remains the caller's responsibility. */
+type DeclaredInputs = Record<string, string | number | true>;
+/** Provenance overrides an agent may raise ABOVE the conservative baseline.
+ *  `source`/`declared_inputs` are set from buildVizSpec's own args, and
+ *  `calibrated_posterior` is deliberately omitted — it is rejected at every
+ *  entrypoint, so it can never be set here. */
+type ProvenanceOverrides = Partial<Pick<VizSpec['provenance'], 'advisory_only' | 'is_paper_local_evidence' | 'synthetic' | 'caption'>>;
+/**
+ * A fail-closed provenance object: the conservative defaults (nothing asserted
+ * rigorous) plus the given source and declared inputs. Because the honesty
+ * caption is derived from these flags, an agent that starts here can only ever
+ * ADD rigor — it can never accidentally clear the disclosure.
+ */
+declare function conservativeProvenance(source: string, declaredInputs?: DeclaredInputs): VizSpec['provenance'];
+interface BuildVizSpecInput {
+    /** The skill id this data renders through (see SKILL_IDS). */
+    skill: string;
+    /** Scene-specific data/options. Validated against the skill's param schema. */
+    params: Record<string, unknown>;
+    /** Where the data came from (a nest_simulation id, a paper id, synthetic_test…). */
+    source: string;
+    /** The inputs this skill's honesty contract requires declared. Missing keys
+     *  surface as `missing_provenance` errors naming exactly what to add. */
+    declaredInputs?: DeclaredInputs;
+    /** Raise provenance above the conservative baseline (advisory_only,
+     *  is_paper_local_evidence, synthetic, caption). calibrated_posterior can't be
+     *  set — it is rejected at the boundary. */
+    provenance?: ProvenanceOverrides;
+    /** Override the scene (defaults to the skill's contract scene). */
+    scene?: VizSpec['scene'];
+    themeMode?: 'dark' | 'light';
+    camera?: NonNullable<VizSpec['camera']>;
+    /** Named palette hint; rejected with `unknown_palette` if not registered. */
+    palette?: string;
+    mode?: 'interactive' | 'export';
 }
-type SkillInvocationResult = {
-    ok: true;
-    spec: VizSpec;
-    scene: SceneName;
-    caption: string | null;
-} | {
-    ok: false;
-    errors: SkillInvocationError[];
-};
-declare function validateSkillInvocation(skillId: string, payload: unknown): SkillInvocationResult;
+interface BuildHostRendererInvocationInput {
+    /** A skill whose contract declares `scene:null`. */
+    skill: string;
+    params: Record<string, unknown>;
+    source: string;
+    declaredInputs?: DeclaredInputs;
+    provenance?: ProvenanceOverrides;
+    /** Optional concrete route; omitted means the validated result returns all
+     *  routes allowed by the skill contract. */
+    rendererRoute?: RendererRoute;
+}
+/** Author and strictly validate a scene-less host-renderer invocation. */
+declare function buildHostRendererInvocation(input: BuildHostRendererInvocationInput): HostRendererInvocationResult;
+/** Author + validate without throwing on malformed runtime input. */
+declare function buildVizSpec(input: BuildVizSpecInput): SkillInvocationResult;
+/**
+ * Validate a SELF-DESCRIBING spec (one that carries a `skill` field) through the
+ * strict gate, without passing the id separately — the core-level equivalent of
+ * what VizSpecRenderer does when no `skillId` prop is given. Fail-closed: a spec
+ * with no `skill` is rejected (use `validateSkillInvocation(id, spec)` with an
+ * explicit id, or `validateVizSpec` for the lenient envelope-only path).
+ */
+declare function validateSpec(payload: unknown): SkillInvocationResult;
+/**
+ * Render structured skill-invocation errors as a compact, deterministic block an
+ * agent can feed straight back to a model to self-repair: each error's code, path,
+ * message and hint (plus any nearest-match / allowed-value list), then ONE copyable
+ * example payload when the errors carry one. Pure text, no ANSI, no timestamps —
+ * safe to drop into a tool result or a prompt.
+ */
+declare function formatInvocationErrors(errors: SkillInvocationError[]): string;
 
 interface EmptySceneResult {
+    /** False means the input was not safely inspectable SceneData. Invalid input
+     *  is never conflated with a legitimate, empty render. */
+    valid: boolean;
     empty: boolean;
     /** Which channels carried data (for an actionable message). */
     populated: string[];
     reason?: string;
 }
-/** Detect whether adapted SceneData has any renderable content. */
-declare function detectEmptyScene(data: SceneData): EmptySceneResult;
+/** Detect whether adapted SceneData has any renderable content. No-throw even
+ *  when an agent accidentally supplies null, accessors, or a hostile Proxy. */
+declare function detectEmptyScene(data: unknown): EmptySceneResult;
 
+declare const NEST_INPUT_LIMITS: Readonly<{
+    maxSamples: 100000;
+    maxPositions: 50000;
+}>;
 /** spike_recorder events: nest.GetStatus(sr, 'events') → {senders, times}. */
 declare const SpikeRecorderEventsSchema: z.ZodObject<{
-    senders: z.ZodArray<z.ZodNumber>;
-    times: z.ZodArray<z.ZodNumber>;
-}, z.core.$strip>;
+    senders: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    times: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+}, z.core.$strict>;
 type SpikeRecorderEvents = z.infer<typeof SpikeRecorderEventsSchema>;
 /** multimeter events: {times, <variable>: values}. The host names the variable;
  *  Cortexel takes a normalized {times, values}. */
 declare const MultimeterEventsSchema: z.ZodObject<{
-    times: z.ZodArray<z.ZodNumber>;
-    values: z.ZodArray<z.ZodNumber>;
-}, z.core.$strip>;
+    times: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    values: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    sender: z.ZodOptional<z.ZodNumber>;
+}, z.core.$strict>;
 type MultimeterEvents = z.infer<typeof MultimeterEventsSchema>;
 /** A multimeter recording multiple senders: {times, values, senders} parallel
  *  arrays (the flattened form a single multimeter actually returns). Split per
  *  sender before rendering — each sender's sub-series must be monotonic. */
 declare const MultimeterMultiSenderSchema: z.ZodObject<{
-    times: z.ZodArray<z.ZodNumber>;
-    values: z.ZodArray<z.ZodNumber>;
-    senders: z.ZodArray<z.ZodNumber>;
-}, z.core.$strip>;
+    times: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    values: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    senders: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+}, z.core.$strict>;
 type MultimeterMultiSender = z.infer<typeof MultimeterMultiSenderSchema>;
 /** nest.GetConnections() → parallel source/target/weight/delay arrays. */
 declare const GetConnectionsSchema: z.ZodObject<{
-    sources: z.ZodArray<z.ZodNumber>;
-    targets: z.ZodArray<z.ZodNumber>;
-    weights: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
-    delays: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
-}, z.core.$strip>;
+    sources: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    targets: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    weights: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
+    delays: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
+}, z.core.$strict>;
 type GetConnections = z.infer<typeof GetConnectionsSchema>;
 /** nest.GetPosition(nodes) in 2D → ((x,y), ...). */
 declare const GetPosition2DSchema: z.ZodObject<{
-    positions: z.ZodArray<z.ZodTuple<[z.ZodNumber, z.ZodNumber], null>>;
-}, z.core.$strip>;
+    positions: z.ZodType<[number, number][], unknown, z.core.$ZodTypeInternals<[number, number][], unknown>>;
+    node_ids: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
+}, z.core.$strict>;
 type GetPosition2D = z.infer<typeof GetPosition2DSchema>;
 /** nest.GetPosition(nodes) in 3D → ((x,y,z), ...). */
 declare const GetPosition3DSchema: z.ZodObject<{
-    positions: z.ZodArray<z.ZodTuple<[z.ZodNumber, z.ZodNumber, z.ZodNumber], null>>;
-    edges: z.ZodOptional<z.ZodArray<z.ZodObject<{
-        source: z.ZodNumber;
-        target: z.ZodNumber;
-    }, z.core.$strip>>>;
-}, z.core.$strip>;
+    positions: z.ZodType<[number, number, number][], unknown, z.core.$ZodTypeInternals<[number, number, number][], unknown>>;
+    node_ids: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
+    edges: z.ZodOptional<z.ZodType<{
+        source: number;
+        target: number;
+    }[], unknown, z.core.$ZodTypeInternals<{
+        source: number;
+        target: number;
+    }[], unknown>>>;
+}, z.core.$strict>;
 type GetPosition3D = z.infer<typeof GetPosition3DSchema>;
 /** weight_recorder events: {times, weights, senders?, targets?}. */
 declare const WeightRecorderEventsSchema: z.ZodObject<{
-    times: z.ZodArray<z.ZodNumber>;
-    weights: z.ZodArray<z.ZodNumber>;
-    senders: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
-    targets: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
-}, z.core.$strip>;
+    times: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    weights: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
+    senders: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
+    targets: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
+    sender: z.ZodOptional<z.ZodNumber>;
+    target: z.ZodOptional<z.ZodNumber>;
+}, z.core.$strict>;
 type WeightRecorderEvents = z.infer<typeof WeightRecorderEventsSchema>;
 
 type AdapterResult = {
@@ -373,6 +479,16 @@ type AdapterResult = {
     ok: false;
     errors: string[];
 };
+/** Object-producing adapters intentionally use tighter budgets than raw typed
+ * device channels. Large simulations should be aggregated or referenced by a
+ * host-side handle instead of expanding millions of JS objects/typed arrays. */
+declare const NEST_ADAPTER_LIMITS: Readonly<{
+    maxRootKeys: 32;
+    maxConnections: 20000;
+    maxNetworkNodes: 25000;
+    maxSplitSeries: 4096;
+    maxUniqueSpikeSenders: 50000;
+}>;
 declare function spikeRecorderToSceneData(events: unknown): AdapterResult;
 declare function multimeterToSceneData(events: unknown, opts?: {
     variable?: string;
@@ -393,10 +509,33 @@ type MultimeterSplitResult = {
 /** Split a flattened multi-sender multimeter dump ({times,values,senders}) into
  *  one monotonic series per sender — the honest alternative to rejecting it. */
 declare function splitMultimeterBySender(events: unknown): MultimeterSplitResult;
-declare function getConnectionsToSceneData(conns: unknown): AdapterResult;
-declare function getPositionToSceneData(positions: unknown, opts?: {
-    dims: 2 | 3;
+declare function getConnectionsToSceneData(conns: unknown, opts?: {
+    weightUnits?: string;
+    delayUnits?: string;
 }): AdapterResult;
-declare function weightRecorderToSceneData(events: unknown): AdapterResult;
+declare function getPositionToSceneData(positions: unknown, opts: {
+    dims?: 2 | 3;
+    coordinateUnits: string;
+}): AdapterResult;
+declare function weightRecorderToSceneData(events: unknown, opts?: {
+    weightUnits?: string;
+}): AdapterResult;
+interface WeightSynapseSeries {
+    sender: number;
+    target: number;
+    times: number[];
+    weights: Float32Array;
+}
+type WeightRecorderSplitResult = {
+    ok: true;
+    series: WeightSynapseSeries[];
+} | {
+    ok: false;
+    errors: string[];
+};
+/** Split a multi-synapse weight_recorder dump into one honest trace per
+ *  (sender,target) pair. The single-trace adapter deliberately refuses to merge
+ *  these series because doing so invents discontinuous plasticity dynamics. */
+declare function splitWeightRecorderBySynapse(events: unknown): WeightRecorderSplitResult;
 
-export { type AdapterResult, type AstrocyteParams, AstrocyteParamsSchema, CONSERVATIVE_PROVENANCE, CORTEXEL_SKILL_VERSION, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type KnowledgeGraph3DParams, KnowledgeGraph3DParamsSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_DEVICE_FAMILIES, NEST_SKILL_IDS, NEST_SKILL_REGISTRY, type NestDeviceFamily, type NestSkillId, type NetworkParams, NetworkParamsSchema, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceMetadata, ProvenanceSchema, type RateResponseParams, RateResponseParamsSchema, type RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, type SkillInvocationError, type SkillInvocationResult, type Spatial3DParams, Spatial3DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VALID_RENDERER_ROUTES, VIZ_ROUTER_ID, type VizRouterId, type VizSpec, VizSpecSchema, type VizSpecValidation, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, defaultHonestyCaption, describeSkill, describeSkills, detectEmptyScene, getConnectionsToSceneData, getExamplePayload, getPositionToSceneData, getSkill, isNestSkillId, isProvenanceKey, listSkills, multimeterToSceneData, requiresHonestyCaption, routeToScene, spikeRecorderToSceneData, splitMultimeterBySender, validateSkillInvocation, validateVizSpec, weightRecorderToSceneData };
+export { type AdapterResult, type BuildHostRendererInvocationInput, type BuildVizSpecInput, CORTEXEL_SKILL_VERSION, type DeclaredInputs, type Disambiguator, type EmptySceneResult, type GetConnections, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, HOST_RENDERER_EXAMPLE_PAYLOADS, HostRendererInvocation, HostRendererInvocationResult, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_ADAPTER_LIMITS, NEST_INPUT_LIMITS, NEST_SKILL_REGISTRY, NestDeviceFamily, NestSkillId, PARAM_CONSTRAINT_LANGUAGE, PARAM_VALIDATION_CONSTRAINTS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE, PROVENANCE_VALUE_CONSTRAINTS, type ParamValidationConstraint, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceOverrides, type ProvenanceParamConstraint, type ProvenanceValueConstraint, RendererRoute, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SKILL_REGISTRY, STRICT_INVOCATION_POLICY, STRICT_PROVENANCE_POLICY, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, SkillInvocationError, SkillInvocationResult, type SpikeDataKind, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VizSpec, type WeightRecorderEvents, WeightRecorderEventsSchema, type WeightRecorderSplitResult, type WeightSynapseSeries, buildHostRendererInvocation, buildVizSpec, conservativeProvenance, declaredProvenanceValueError, describeSkill, describeSkills, detectEmptyScene, formatInvocationErrors, getConnectionsToSceneData, getExamplePayload, getHostRendererExamplePayload, getInvocationExamplePayload, getPositionToSceneData, getSkill, isProvenanceKey, listSkills, multimeterToSceneData, normalizeDeclaredProvenanceInputs, normalizeDeclaredProvenanceValue, provenanceParamConstraintError, routeToScene, skillParamsJsonSchema, spikeRecorderToSceneData, splitMultimeterBySender, splitWeightRecorderBySynapse, toPortableJsonSchema, validateSpec, weightRecorderToSceneData };

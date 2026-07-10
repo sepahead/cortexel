@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import ts from 'typescript';
 
 // Executable guards for the Cortexel design law (previously prose-only):
 //   * useFrame must be allocation-free (no `new THREE.*` per frame),
@@ -22,30 +23,40 @@ function walk(dir: string): string[] {
   });
 }
 
-/** Extract each useFrame callback body via brace matching. */
-function useFrameBodies(src: string): string[] {
-  const bodies: string[] = [];
-  let idx = src.indexOf('useFrame(');
-  while (idx !== -1) {
-    const open = src.indexOf('{', idx);
-    if (open !== -1) {
-      let depth = 0;
-      let end = open;
-      for (let i = open; i < src.length; i++) {
-        if (src[i] === '{') depth++;
-        else if (src[i] === '}') {
-          depth--;
-          if (depth === 0) {
-            end = i;
-            break;
-          }
-        }
-      }
-      bodies.push(src.slice(open, end + 1));
-    }
-    idx = src.indexOf('useFrame(', idx + 1);
+/** Find actual allocation AST nodes inside useFrame callbacks. This catches the
+ *  array/object literals the previous regex claimed to cover but missed. */
+function useFrameAllocations(src: string, file: string): string[] {
+  const source = ts.createSourceFile(
+    file,
+    src,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const allocations: string[] = [];
+
+  function inspectCallback(node: ts.Node): void {
+    if (ts.isNewExpression(node)) allocations.push('new expression');
+    if (ts.isArrayLiteralExpression(node)) allocations.push('array literal');
+    if (ts.isObjectLiteralExpression(node)) allocations.push('object literal');
+    if (ts.isForOfStatement(node)) allocations.push('for-of iterator');
+    ts.forEachChild(node, inspectCallback);
   }
-  return bodies;
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'useFrame'
+    ) {
+      const callback = node.arguments[0];
+      if (callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))) {
+        inspectCallback(callback.body);
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return allocations;
 }
 
 describe('design law (executable)', () => {
@@ -54,12 +65,22 @@ describe('design law (executable)', () => {
   it('useFrame callbacks allocate nothing per frame', () => {
     const offenders: string[] = [];
     for (const f of files) {
-      for (const body of useFrameBodies(readFileSync(f, 'utf8'))) {
-        // `new THREE.X`, `new Vector3`, array/object literals assigned each frame
-        if (/\bnew\s+(THREE\.)?[A-Z]\w*/.test(body)) {
-          offenders.push(`${f}: allocation inside useFrame`);
-        }
+      for (const kind of useFrameAllocations(readFileSync(f, 'utf8'), f)) {
+        offenders.push(`${f}: ${kind} inside useFrame`);
       }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('shipped React code has no implicit network/worker loader path', () => {
+    const offenders: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      if (/from\s+['"]@react-three\/drei/.test(src)) offenders.push(`${f}: drei import`);
+      if (/\b(fetch|XMLHttpRequest|Worker)\s*\(/.test(src)) {
+        offenders.push(`${f}: network/worker constructor`);
+      }
+      if (/fonts\.gstatic|cdn\.jsdelivr/.test(src)) offenders.push(`${f}: CDN URL`);
     }
     expect(offenders).toEqual([]);
   });
@@ -87,5 +108,11 @@ describe('design law (executable)', () => {
         `${f} uses an emissive standard material`,
       ).toBe(false);
     }
+  });
+
+  it('directed knowledge-graph edges have a static, reduced-motion-safe cue', () => {
+    const source = readFileSync(join(reactDir, 'KnowledgeGraph3DScene.tsx'), 'utf8');
+    expect(source).toContain('<coneGeometry');
+    expect(source).toContain('directedEdges');
   });
 });

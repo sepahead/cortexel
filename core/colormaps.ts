@@ -85,6 +85,7 @@ const STOP_RGB: Record<Exclude<ColormapName, 'turbo'>, RGB[]> = {
 };
 
 function clamp01(t: number): number {
+  if (!Number.isFinite(t)) throw new RangeError('colormap sample t must be finite');
   return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
@@ -92,7 +93,10 @@ function sampleStops(stops: readonly RGB[], t: number): RGB {
   const x = clamp01(t) * (stops.length - 1);
   const i = Math.floor(x);
   const f = x - i;
-  if (i >= stops.length - 1) return stops[stops.length - 1];
+  if (i >= stops.length - 1) {
+    const endpoint = stops[stops.length - 1];
+    return [endpoint[0], endpoint[1], endpoint[2]];
+  }
   const a = stops[i];
   const b = stops[i + 1];
   return [
@@ -130,6 +134,9 @@ function turbo(t: number): RGB {
 
 /** Sample a perceptually-uniform colormap at `t ∈ [0, 1]` → RGB (0–255). */
 export function sampleColormap(name: ColormapName, t: number): RGB {
+  if (name !== 'turbo' && !Object.hasOwn(STOP_RGB, name)) {
+    throw new RangeError(`unknown colormap '${String(name)}'`);
+  }
   if (name === 'turbo') return turbo(t);
   return sampleStops(STOP_RGB[name], t);
 }
@@ -142,12 +149,19 @@ export function colormapHex(name: ColormapName, t: number): string {
 
 /** Sample a colormap → `rgba(r, g, b, a)` with explicit alpha. */
 export function colormapRgba(name: ColormapName, t: number, alpha = 1): string {
+  if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
+    throw new RangeError('alpha must be a finite number in [0, 1]');
+  }
   const [r, g, b] = sampleColormap(name, t);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 /** A CSS `linear-gradient(...)` spanning a colormap, for legends and bars. */
 export function colormapGradient(name: ColormapName, angle = 90, stops = 12): string {
+  if (!Number.isFinite(angle)) throw new RangeError('gradient angle must be finite');
+  if (!Number.isSafeInteger(stops) || stops < 2 || stops > 256) {
+    throw new RangeError('gradient stops must be an integer in [2, 256]');
+  }
   const parts: string[] = [];
   for (let i = 0; i < stops; i++) {
     const t = i / (stops - 1);
@@ -158,6 +172,9 @@ export function colormapGradient(name: ColormapName, angle = 90, stops = 12): st
 
 /** SVG `<stop>` entries for a `<linearGradient>` spanning a colormap. */
 export function colormapSvgStops(name: ColormapName, stops = 8): string {
+  if (!Number.isSafeInteger(stops) || stops < 2 || stops > 256) {
+    throw new RangeError('SVG stops must be an integer in [2, 256]');
+  }
   let out = '';
   for (let i = 0; i < stops; i++) {
     const t = i / (stops - 1);
@@ -236,17 +253,29 @@ export interface SemanticPalette {
   inkFaint: string;
 }
 
+export type ReadonlySemanticPalette = Readonly<SemanticPalette>;
+export type ReadonlyPaletteMetadata = Readonly<PaletteMetadata>;
+
 /** A registered palette entry: the colors plus metadata. */
 export interface PaletteEntry {
-  palette: SemanticPalette;
-  metadata: PaletteMetadata;
+  readonly palette: ReadonlySemanticPalette;
+  readonly metadata: ReadonlyPaletteMetadata;
 }
+
+export const PALETTE_REGISTRY_POLICY = Object.freeze({
+  version: '1',
+  validation: 'selected palette name must exist in the active runtime registry' as const,
+  manifestPalettes: 'build-time discovery snapshot only' as const,
+  runtimeExtensionsAllowed: true,
+  registration: 'strict descriptor snapshot, validated then frozen' as const,
+  fallbackIsNotValidation: true,
+});
 
 // Internal registry — starts with the default, hosts add more at runtime.
 const _paletteRegistry = new Map<PaletteName, PaletteEntry>();
 
 /** Default palette — Crameri scientific colour maps (batlow + vik). */
-export const CORTEXEL_PALETTE: SemanticPalette = {
+export const CORTEXEL_PALETTE: ReadonlySemanticPalette = {
   // Canvas / surfaces — the deep navy lets colors pop
   voidNavy: '#030711',
   deepNavy: '#050816',
@@ -275,55 +304,145 @@ export const CORTEXEL_PALETTE: SemanticPalette = {
   inkDim: '#94a3b8',
   inkFaint: '#64748b',
 };
+Object.freeze(CORTEXEL_PALETTE);
+
+export const SEMANTIC_PALETTE_KEYS = Object.freeze(
+  Object.keys(CORTEXEL_PALETTE) as (keyof SemanticPalette)[],
+);
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-/** Validate a palette's hex values and E/I distinctness. Throws on invalid. */
-export function validatePalette(p: SemanticPalette): void {
-  for (const [key, val] of Object.entries(p)) {
+function snapshotPalette(p: unknown): SemanticPalette {
+  if (p === null || typeof p !== 'object' || Array.isArray(p)) {
+    throw new TypeError('palette must be an object');
+  }
+  const prototype = Object.getPrototypeOf(p);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('palette must be a plain object');
+  }
+  const ownKeys = Reflect.ownKeys(p);
+  if (ownKeys.some((key) => typeof key === 'symbol')) {
+    throw new Error('Palette may not contain symbol keys');
+  }
+  const keys = ownKeys as string[];
+  const missing = SEMANTIC_PALETTE_KEYS.filter((key) => !keys.includes(key));
+  const extra = keys.filter(
+    (key) => !(SEMANTIC_PALETTE_KEYS as readonly string[]).includes(key),
+  );
+  if (missing.length > 0) throw new Error(`Palette is missing colors: ${missing.join(', ')}`);
+  if (extra.length > 0) throw new Error(`Palette has unknown colors: ${extra.join(', ')}`);
+  const snapshot = {} as SemanticPalette;
+  for (const key of SEMANTIC_PALETTE_KEYS) {
+    const descriptor = Object.getOwnPropertyDescriptor(p, key);
+    if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) {
+      throw new Error(`Palette color '${key}' must be an enumerable data property`);
+    }
+    const val = descriptor.value;
+    if (typeof val !== 'string') {
+      throw new Error(`Palette color '${key}' must be a string`);
+    }
     if (!HEX_RE.test(val)) {
       throw new Error(`Palette color '${key}' is not a valid #rrggbb hex: '${val}'`);
     }
+    snapshot[key] = val;
   }
   // E/I and LTP/LTD must be perceptually distinct (not identical).
-  if (p.excitatory.toLowerCase() === p.inhibitory.toLowerCase()) {
+  if (snapshot.excitatory.toLowerCase() === snapshot.inhibitory.toLowerCase()) {
     throw new Error('Palette excitatory and inhibitory colors must differ');
   }
-  if (p.ltp.toLowerCase() === p.ltd.toLowerCase()) {
+  if (snapshot.ltp.toLowerCase() === snapshot.ltd.toLowerCase()) {
     throw new Error('Palette ltp and ltd colors must differ');
   }
+  return snapshot;
+}
+
+function snapshotPaletteMetadata(metadata: unknown): PaletteMetadata {
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('palette metadata must be an object');
+  }
+  const prototype = Object.getPrototypeOf(metadata);
+  const keys = Reflect.ownKeys(metadata);
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    keys.length !== 3 ||
+    keys.some((key) => typeof key !== 'string' || !['label', 'source', 'diverging'].includes(key))
+  ) {
+    throw new Error('palette metadata must be a strict plain {label,source,diverging} object');
+  }
+  const values: Record<string, unknown> = {};
+  for (const key of keys as string[]) {
+    const descriptor = Object.getOwnPropertyDescriptor(metadata, key);
+    if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) {
+      throw new Error(`palette metadata '${key}' must be an enumerable data property`);
+    }
+    values[key] = descriptor.value;
+  }
+  if (
+    typeof values.label !== 'string' ||
+    values.label.trim().length === 0 ||
+    values.label.length > 120 ||
+    typeof values.source !== 'string' ||
+    values.source.trim().length === 0 ||
+    values.source.length > 500 ||
+    typeof values.diverging !== 'boolean'
+  ) {
+    throw new Error('palette metadata requires bounded label/source strings and diverging boolean');
+  }
+  return {
+    label: values.label.trim(),
+    source: values.source.trim(),
+    diverging: values.diverging,
+  };
+}
+
+/** Validate a palette's exact shape, hex values and E/I distinctness. */
+export function validatePalette(p: ReadonlySemanticPalette): void {
+  snapshotPalette(p);
 }
 
 // Register the default at module load. Hosts add more via registerPalette().
-_paletteRegistry.set('crameri', {
+_paletteRegistry.set('crameri', Object.freeze({
   palette: CORTEXEL_PALETTE,
-  metadata: {
+  metadata: Object.freeze({
     label: 'Crameri',
     source: 'Crameri 2018, Nature Comms 2020 (batlow + vik)',
     diverging: true,
-  },
-});
+  }),
+}));
 
 /** Register a palette at runtime. Hosts call this at app startup to add their
  *  color identities. Validates hex format and E/I distinctness. Throws on
  *  invalid input. Overwriting an existing name is allowed (for hot-reload). */
 export function registerPalette(
   name: PaletteName,
-  palette: SemanticPalette,
-  metadata: PaletteMetadata,
+  palette: ReadonlySemanticPalette,
+  metadata: ReadonlyPaletteMetadata,
 ): void {
-  validatePalette(palette);
-  _paletteRegistry.set(name, { palette, metadata });
+  if (typeof name !== 'string') {
+    throw new TypeError('palette name must be a string');
+  }
+  const normalizedName = name.trim();
+  if (normalizedName.length === 0 || normalizedName.length > 60) {
+    throw new Error('palette name must contain 1–60 non-whitespace characters');
+  }
+  const storedPalette = Object.freeze(snapshotPalette(palette));
+  const storedMetadata = Object.freeze(snapshotPaletteMetadata(metadata));
+  _paletteRegistry.set(normalizedName, Object.freeze({
+    palette: storedPalette,
+    metadata: storedMetadata,
+  }));
 }
 
 /** Select a semantic palette by name. Falls back to the default ('crameri')
  *  if the name is not registered. In dev mode, warns on non-default fallback
  *  so missing registrations surface during development instead of silently
  *  producing the wrong colors. */
-export function getPalette(name: PaletteName = 'crameri'): SemanticPalette {
+export function getPalette(name: PaletteName = 'crameri'): ReadonlySemanticPalette {
   const entry = _paletteRegistry.get(name);
   if (entry) return entry.palette;
-  if (name && name !== 'crameri') {
+  const isProduction =
+    typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
+  if (name && name !== 'crameri' && !isProduction) {
     // Dev-mode warning — silent in production (crameri is a valid fallback).
     try {
       if (typeof console !== 'undefined' && console.warn) {
@@ -346,7 +465,10 @@ export function getPaletteEntry(name: PaletteName): PaletteEntry | undefined {
 
 /** List all registered palette names with their metadata. Agents use this for
  *  discoverability; the manifest serializes it for non-TS hosts. */
-export function listPalettes(): { name: PaletteName; metadata: PaletteMetadata }[] {
+export function listPalettes(): {
+  readonly name: PaletteName;
+  readonly metadata: ReadonlyPaletteMetadata;
+}[] {
   return [..._paletteRegistry.entries()].map(([name, entry]) => ({
     name,
     metadata: entry.metadata,
@@ -378,7 +500,11 @@ export const CATEGORICAL: readonly string[] = [
 ];
 
 export function categorical(i: number): string {
-  return CATEGORICAL[((i % CATEGORICAL.length) + CATEGORICAL.length) % CATEGORICAL.length];
+  if (!Number.isFinite(i)) throw new RangeError('categorical index must be finite');
+  const index = Math.trunc(i);
+  return CATEGORICAL[
+    ((index % CATEGORICAL.length) + CATEGORICAL.length) % CATEGORICAL.length
+  ];
 }
 
 // Okabe & Ito (2008) — the reference colorblind-safe categorical set: eight
@@ -441,11 +567,11 @@ vec3 turbo(float x) {
   x = clamp(x, 0.0, 1.0);
   vec4 v4 = vec4(1.0, x, x * x, x * x * x);
   vec2 v2 = v4.zw * v4.z;
-  return vec3(
+  return clamp(vec3(
     dot(v4, vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234)) + dot(v2, vec2(-152.94239396, 59.28637943)),
     dot(v4, vec4(0.09140261, 2.19418839,   4.84296658, -14.18503333)) + dot(v2, vec2(  4.27729857,  2.82956604)),
     dot(v4, vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771)) + dot(v2, vec2(-89.90310912, 27.34824973))
-  );
+  ), 0.0, 1.0);
 }
 `;
 

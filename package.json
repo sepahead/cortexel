@@ -1,7 +1,7 @@
 {
   "name": "cortexel",
-  "version": "0.4.0",
-  "description": "Agent-consumable scientific-visualization library for neural simulations. Emit a declarative VizSpec; render spike rasters, Brunel networks, STDP curves and more, with scientific-honesty provenance enforced fail-closed.",
+  "version": "0.5.0",
+  "description": "Agent-consumable scientific-visualization contract for neural simulations: validate and route declarative VizSpecs with fail-closed provenance, then render through host-injected scenes.",
   "license": "MIT",
   "author": "Sepehr Mahmoudian",
   "homepage": "https://github.com/sepahead/cortexel#readme",
@@ -11,6 +11,7 @@
     "url": "git+https://github.com/sepahead/cortexel.git"
   },
   "type": "module",
+  "packageManager": "bun@1.3.14",
   "sideEffects": false,
   "keywords": [
     "visualization",
@@ -27,25 +28,55 @@
   "files": [
     "dist",
     "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./core": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js",
-      "require": "./dist/core/index.cjs"
+      "import": {
+        "types": "./dist/core/index.d.ts",
+        "default": "./dist/core/index.js"
+      },
+      "require": {
+        "types": "./dist/core/index.d.cts",
+        "default": "./dist/core/index.cjs"
+      }
     },
     "./react": {
-      "types": "./dist/react/index.d.ts",
-      "import": "./dist/react/index.js",
-      "require": "./dist/react/index.cjs"
-    }
+      "import": {
+        "types": "./dist/react/index.d.ts",
+        "default": "./dist/react/index.js"
+      },
+      "require": {
+        "types": "./dist/react/index.d.cts",
+        "default": "./dist/react/index.cjs"
+      }
+    },
+    "./react/knowledge-graph": {
+      "import": {
+        "types": "./dist/react/knowledge-graph.d.ts",
+        "default": "./dist/react/knowledge-graph.js"
+      },
+      "require": {
+        "types": "./dist/react/knowledge-graph.d.cts",
+        "default": "./dist/react/knowledge-graph.cjs"
+      }
+    },
+    "./skills.manifest.json": "./dist/skills.manifest.json"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -57,18 +88,37 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "tsc --noEmit && vitest run",
-    "prepublishOnly": "npm run check && npm run build"
+    "audit": "bun audit",
+    "lint:package": "publint",
+    "test:package": "bun scripts/smoke-package.ts",
+    "prepublishOnly": "bun run build && bun run check && bun run audit && bun run lint:package && bun run test:package"
   },
-  "peerDependencies": {
-    "react": "^19",
-    "three": "^0.184",
-    "@react-three/fiber": "^9.6",
-    "@react-three/drei": "^10.7",
-    "d3-force-3d": "^3.0.5",
+  "dependencies": {
     "zod": "^4"
   },
+  "overrides": {
+    "esbuild": "0.28.1"
+  },
+  "peerDependencies": {
+    "@types/react": "^19",
+    "@types/three": ">=0.184 <0.186",
+    "react": "^19",
+    "react-dom": "^19",
+    "three": ">=0.184 <0.186",
+    "@react-three/fiber": "^9.6",
+    "d3-force-3d": "^3.0.5"
+  },
   "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    },
+    "@types/three": {
+      "optional": true
+    },
     "react": {
+      "optional": true
+    },
+    "react-dom": {
       "optional": true
     },
     "three": {
@@ -77,27 +127,29 @@
     "@react-three/fiber": {
       "optional": true
     },
-    "@react-three/drei": {
-      "optional": true
-    },
     "d3-force-3d": {
       "optional": true
     }
   },
-  "_peerNote": "zod is required (the `cortexel/core` VizSpec contract needs it at runtime). react/three/@react-three/* are optional peers — only the `cortexel/react` entry needs them; `cortexel/core` is dependency-free beyond zod.",
+  "_peerNote": "zod is a normal dependency — the `cortexel/core` VizSpec contract needs it at runtime, so it is installed automatically. react/react-dom/three/@react-three/fiber are optional runtime peers needed by `cortexel/react`; @types/react/@types/three are optional declaration peers for TypeScript consumers; d3-force-3d is needed only by `cortexel/react/knowledge-graph`.",
   "devDependencies": {
-    "@react-three/drei": "^10.7.0",
     "@react-three/fiber": "^9.6.1",
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.1.1",
     "@types/react": "^19.0.0",
-    "@types/three": "^0.184.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/react-test-renderer": "^19.0.0",
+    "@types/three": "^0.185.1",
+    "ajv": "^8.17.1",
+    "d3-force-3d": "^3.0.5",
+    "publint": "^0.3.15",
     "react": "^19.0.0",
-    "three": "^0.184.0",
+    "react-dom": "^19.0.0",
+    "react-test-renderer": "^19.0.0",
+    "three": "^0.185.1",
     "tsup": "^8.3.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
-    "zod": "^4.0.0"
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=20"

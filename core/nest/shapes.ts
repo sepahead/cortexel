@@ -10,28 +10,224 @@
 
 import { z } from 'zod';
 
-const finiteNumberArray = z
-  .array(z.number())
-  .refine((a) => a.every((v) => Number.isFinite(v)), {
-    message: 'array contains non-finite values (NaN/Inf) — unusable evidence',
-  });
+export const NEST_INPUT_LIMITS = Object.freeze({
+  maxSamples: 100_000,
+  maxPositions: 50_000,
+});
 
-const nonEmptyFinite = finiteNumberArray.min(
-  1,
-  'empty array — no samples to render',
-);
+const FLOAT32_MAX = 3.4028234663852886e38;
+const OVERSIZED_ARRAY_INPUT = Object.freeze({ oversizedArray: true });
+const INVALID_ARRAY_INPUT = Object.freeze({ invalidArray: true });
 
-// A single finite number (for tuple coordinates that become GPU geometry).
-const finiteNum = z
+function boundedArrayInput(value: unknown, max: number): unknown {
+  if (Array.isArray(value)) {
+    const length = Object.getOwnPropertyDescriptor(value, 'length');
+    if (!length || !('value' in length) || length.value > max) {
+      return OVERSIZED_ARRAY_INPUT;
+    }
+    const itemCount = length.value as number;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== itemCount + 1) return INVALID_ARRAY_INPUT;
+    const snapshot = new Array<unknown>(itemCount);
+    for (let index = 0; index < itemCount; index++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) {
+        return INVALID_ARRAY_INPUT;
+      }
+      snapshot[index] = descriptor.value;
+    }
+    return snapshot;
+  }
+  if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
+    return (value as unknown as ArrayLike<number>).length <= max
+      ? value
+      : OVERSIZED_ARRAY_INPUT;
+  }
+  return value;
+}
+
+function typedNumbersToArray(value: unknown): unknown {
+  value = boundedArrayInput(value, NEST_INPUT_LIMITS.maxSamples);
+  if (!ArrayBuffer.isView(value) || value instanceof DataView) return value;
+  return Array.from(value as unknown as ArrayLike<number>);
+}
+
+function numberArray(options: {
+  min?: number;
+  minMessage?: string;
+  float32?: boolean;
+  integerId?: boolean;
+} = {}): z.ZodType<number[], unknown> {
+  const array = z
+    .array(z.unknown())
+    .min(options.min ?? 0, options.minMessage)
+    .max(NEST_INPUT_LIMITS.maxSamples)
+    .superRefine((values, ctx) => {
+      for (let index = 0; index < values.length; index++) {
+        const value = values[index];
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index],
+            message: 'expected a finite number (NaN/Inf is unusable evidence)',
+          });
+          return;
+        }
+        if (options.float32 && Math.abs(value) > FLOAT32_MAX) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index],
+            message: 'value is outside the Float32 range used by GPU buffers',
+          });
+          return;
+        }
+        if (
+          options.integerId &&
+          (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0))
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index],
+            message: 'node/sender ids must be non-negative safe integers',
+          });
+          return;
+        }
+      }
+    })
+    .transform((values) => values as number[]);
+  return z.preprocess(typedNumbersToArray, array);
+}
+
+const finiteNumberArray = numberArray();
+const float32NumberArray = numberArray({ float32: true });
+const nonEmptyFloat32Input = numberArray({
+  min: 1,
+  minMessage: 'empty array — no samples to render',
+  float32: true,
+});
+
+const finiteIntegerArray = numberArray({ integerId: true });
+const nonEmptyFiniteIntegerArray = numberArray({
+  min: 1,
+  minMessage: 'no senders',
+  integerId: true,
+});
+const finiteInteger = z
   .number()
-  .refine((v) => Number.isFinite(v), 'non-finite value (NaN/Inf)');
+  .int()
+  .nonnegative()
+  .max(Number.MAX_SAFE_INTEGER)
+  .refine((value) => !Object.is(value, -0), 'ids must not be negative zero');
+
+const nonEmptyFinite = numberArray({
+  min: 1,
+  minMessage: 'empty array — no samples to render',
+});
+const nonEmptyFloat32Array = numberArray({
+  min: 1,
+  minMessage: 'empty array — no samples to render',
+  float32: true,
+});
+const nonEmptyFiniteIdArray = numberArray({
+  min: 1,
+  minMessage: 'no connections',
+  integerId: true,
+});
+
+function positionArray<const D extends 2 | 3>(
+  dimensions: D,
+): z.ZodType<(D extends 2 ? [number, number] : [number, number, number])[], unknown> {
+  return z.preprocess(
+    (value) => boundedArrayInput(value, NEST_INPUT_LIMITS.maxPositions),
+    z.array(z.unknown())
+    .min(1, 'no positions')
+    .max(NEST_INPUT_LIMITS.maxPositions)
+    .transform((positions, ctx) => {
+      const output: number[][] = [];
+      for (let index = 0; index < positions.length; index++) {
+        const position = positions[index];
+        if (!Array.isArray(position) || position.length !== dimensions) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [index],
+            message: `position must be an exact ${dimensions}D coordinate tuple`,
+          });
+          return z.NEVER;
+        }
+        const tuple: number[] = [];
+        for (let axis = 0; axis < dimensions; axis++) {
+          const descriptor = Object.getOwnPropertyDescriptor(position, String(axis));
+          const value = descriptor && 'value' in descriptor ? descriptor.value : undefined;
+          if (
+            !descriptor ||
+            !descriptor.enumerable ||
+            typeof value !== 'number' ||
+            !Number.isFinite(value) ||
+            Math.abs(value) > FLOAT32_MAX
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [index, axis],
+              message: 'coordinate must be a finite Float32-range number',
+            });
+            return z.NEVER;
+          }
+          tuple.push(value);
+        }
+        output.push(tuple);
+      }
+      return output as (D extends 2
+        ? [number, number]
+        : [number, number, number])[];
+    }),
+  );
+}
+
+const localEdgeArray: z.ZodType<{ source: number; target: number }[], unknown> = z
+  .preprocess(
+    (value) => boundedArrayInput(value, NEST_INPUT_LIMITS.maxSamples),
+    z.array(z.unknown()).max(NEST_INPUT_LIMITS.maxSamples).transform((edges, ctx) => {
+    const output: { source: number; target: number }[] = [];
+    for (let index = 0; index < edges.length; index++) {
+      const edge = edges[index];
+      if (
+        edge === null ||
+        typeof edge !== 'object' ||
+        Array.isArray(edge) ||
+        Reflect.ownKeys(edge).some((key) => key !== 'source' && key !== 'target')
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index],
+          message: 'edge must be a strict {source,target} object',
+        });
+        return z.NEVER;
+      }
+      const source = Object.getOwnPropertyDescriptor(edge, 'source');
+      const target = Object.getOwnPropertyDescriptor(edge, 'target');
+      const sourceValue = source && 'value' in source ? source.value : undefined;
+      const targetValue = target && 'value' in target ? target.value : undefined;
+      if (!source?.enumerable || !target?.enumerable || !finiteInteger.safeParse(sourceValue).success || !finiteInteger.safeParse(targetValue).success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index],
+          message: 'edge source/target must be non-negative safe integers',
+        });
+        return z.NEVER;
+      }
+      output.push({ source: sourceValue as number, target: targetValue as number });
+    }
+      return output;
+    }),
+  );
 
 /** spike_recorder events: nest.GetStatus(sr, 'events') → {senders, times}. */
 export const SpikeRecorderEventsSchema = z
   .object({
-    senders: finiteNumberArray, // becomes denseIndex Map keys — reject NaN/Inf
+    senders: finiteIntegerArray, // becomes denseIndex Map keys — reject NaN/Inf
     times: finiteNumberArray,
   })
+  .strict()
   .superRefine((v, ctx) => {
     if (v.senders.length !== v.times.length) {
       ctx.addIssue({
@@ -47,8 +243,13 @@ export type SpikeRecorderEvents = z.infer<typeof SpikeRecorderEventsSchema>;
 export const MultimeterEventsSchema = z
   .object({
     times: nonEmptyFinite,
-    values: nonEmptyFinite,
+    values: nonEmptyFloat32Input,
+    /** Present on a series returned by splitMultimeterBySender. */
+    sender: finiteInteger.optional(),
   })
+  // A caller must normalize the raw dict and must not accidentally pass the
+  // multi-sender form; strictness makes a supplied `senders` field an error.
+  .strict()
   .superRefine((v, ctx) => {
     if (v.times.length !== v.values.length) {
       ctx.addIssue({
@@ -78,9 +279,10 @@ export type MultimeterEvents = z.infer<typeof MultimeterEventsSchema>;
 export const MultimeterMultiSenderSchema = z
   .object({
     times: nonEmptyFinite,
-    values: nonEmptyFinite,
-    senders: finiteNumberArray.min(1, 'no senders'),
+    values: nonEmptyFloat32Array,
+    senders: nonEmptyFiniteIntegerArray,
   })
+  .strict()
   .superRefine((v, ctx) => {
     const n = v.times.length;
     if (v.values.length !== n || v.senders.length !== n) {
@@ -95,11 +297,12 @@ export type MultimeterMultiSender = z.infer<typeof MultimeterMultiSenderSchema>;
 /** nest.GetConnections() → parallel source/target/weight/delay arrays. */
 export const GetConnectionsSchema = z
   .object({
-    sources: finiteNumberArray.min(1, 'no connections'),
-    targets: finiteNumberArray.min(1, 'no connections'),
-    weights: finiteNumberArray.optional(),
-    delays: finiteNumberArray.optional(),
+    sources: nonEmptyFiniteIdArray,
+    targets: nonEmptyFiniteIdArray,
+    weights: float32NumberArray.optional(),
+    delays: float32NumberArray.optional(),
   })
+  .strict()
   .superRefine((v, ctx) => {
     if (v.sources.length !== v.targets.length) {
       ctx.addIssue({
@@ -113,24 +316,88 @@ export const GetConnectionsSchema = z
         message: 'weights length does not match connection count',
       });
     }
+    if (v.delays && v.delays.length !== v.sources.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'delays length does not match connection count',
+      });
+    }
+    if (v.delays) {
+      for (let index = 0; index < v.delays.length; index++) {
+        if (v.delays[index] <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['delays', index],
+            message: 'synaptic delays must be strictly positive durations',
+          });
+          break;
+        }
+      }
+    }
   });
 export type GetConnections = z.infer<typeof GetConnectionsSchema>;
 
-const xyz = z.tuple([finiteNum, finiteNum, finiteNum]);
-const xy = z.tuple([finiteNum, finiteNum]);
-
 /** nest.GetPosition(nodes) in 2D → ((x,y), ...). */
 export const GetPosition2DSchema = z.object({
-  positions: z.array(xy).min(1, 'no positions'),
+  positions: positionArray(2),
+  node_ids: finiteIntegerArray.optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.node_ids && value.node_ids.length !== value.positions.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['node_ids'],
+      message: 'node_ids length must match positions length',
+    });
+  }
+  if (value.node_ids && new Set(value.node_ids).size !== value.node_ids.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['node_ids'],
+      message: 'node_ids must be unique',
+    });
+  }
 });
 export type GetPosition2D = z.infer<typeof GetPosition2DSchema>;
 
 /** nest.GetPosition(nodes) in 3D → ((x,y,z), ...). */
 export const GetPosition3DSchema = z.object({
-  positions: z.array(xyz).min(1, 'no positions'),
-  edges: z
-    .array(z.object({ source: z.number(), target: z.number() }))
-    .optional(),
+  positions: positionArray(3),
+  node_ids: finiteIntegerArray.optional(),
+  edges: localEdgeArray.optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.node_ids && value.node_ids.length !== value.positions.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['node_ids'],
+      message: 'node_ids length must match positions length',
+    });
+  }
+  if (value.node_ids && new Set(value.node_ids).size !== value.node_ids.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['node_ids'],
+      message: 'node_ids must be unique',
+    });
+  }
+  for (let index = 0; index < (value.edges?.length ?? 0); index++) {
+    const edge = value.edges![index];
+    if (edge.source >= value.positions.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['edges', index, 'source'],
+        message: `source index ${edge.source} is outside positions[0..${value.positions.length - 1}]`,
+      });
+      return;
+    }
+    if (edge.target >= value.positions.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['edges', index, 'target'],
+        message: `target index ${edge.target} is outside positions[0..${value.positions.length - 1}]`,
+      });
+      return;
+    }
+  }
 });
 export type GetPosition3D = z.infer<typeof GetPosition3DSchema>;
 
@@ -138,10 +405,14 @@ export type GetPosition3D = z.infer<typeof GetPosition3DSchema>;
 export const WeightRecorderEventsSchema = z
   .object({
     times: nonEmptyFinite,
-    weights: nonEmptyFinite,
-    senders: finiteNumberArray.optional(),
-    targets: finiteNumberArray.optional(),
+    weights: nonEmptyFloat32Input,
+    senders: finiteIntegerArray.optional(),
+    targets: finiteIntegerArray.optional(),
+    /** Present on a single series returned by splitWeightRecorderBySynapse. */
+    sender: finiteInteger.optional(),
+    target: finiteInteger.optional(),
   })
+  .strict()
   .superRefine((v, ctx) => {
     if (v.times.length !== v.weights.length) {
       ctx.addIssue({
@@ -149,5 +420,40 @@ export const WeightRecorderEventsSchema = z
         message: `times (${v.times.length}) and weights (${v.weights.length}) length mismatch`,
       });
     }
+    if ((v.senders === undefined) !== (v.targets === undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'senders and targets must either both be present or both be omitted',
+      });
+    }
+    if ((v.sender === undefined) !== (v.target === undefined)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'sender and target must either both be present or both be omitted',
+      });
+    }
+    if (v.sender !== undefined && v.senders !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'use singular sender/target or parallel senders/targets, not both',
+      });
+    }
+    if (v.senders && v.senders.length !== v.times.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['senders'],
+        message: 'senders length does not match weight sample count',
+      });
+    }
+    if (v.targets && v.targets.length !== v.times.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targets'],
+        message: 'targets length does not match weight sample count',
+      });
+    }
+    // Do not impose global monotonicity here: a multi-synapse recorder may
+    // interleave individually-monotonic series whose combined time axis resets.
+    // The single-trace adapter and split helper validate the appropriate axis.
   });
 export type WeightRecorderEvents = z.infer<typeof WeightRecorderEventsSchema>;

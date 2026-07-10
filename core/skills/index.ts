@@ -8,6 +8,8 @@ export * from './registry';
 export * from './examples';
 export * from './router';
 export * from './validateSkillInvocation';
+export * from './hostInvocation';
+export * from './authoring';
 export * from './verify';
 
 // NEST device-dict shapes + host-agnostic adapters (dict → SceneData).

@@ -3,7 +3,7 @@ export type NeuralSceneMode = 'hero' | 'background' | 'standalone';
 // Single source of truth for the closed set of Cortexel scenes. The TS union
 // `SceneName` and the runtime Zod enum (core/vizSpec.ts) both derive from this
 // tuple, so they can never drift.
-export const SCENE_NAMES = [
+export const SCENE_NAMES = Object.freeze([
   'live-activity',
   'cortical-column',
   'stdp',
@@ -17,7 +17,7 @@ export const SCENE_NAMES = [
   'psth',
   'weight-histogram',
   'knowledge-graph-3d',
-] as const;
+] as const);
 
 export type SceneName = (typeof SCENE_NAMES)[number];
 
@@ -84,20 +84,46 @@ export interface PlaybackState {
 }
 
 export interface SceneData {
-  spikeTimes?: Float32Array;
+  // Time axes stay float64: long simulations can differ by sub-ms increments
+  // that collapse when absolute timestamps are narrowed to Float32.
+  spikeTimes?: Float64Array;
   spikeSenders?: Float32Array;
+  timeUnits?: string;
   voltageTraces?: Float32Array;
-  traceTimes?: Float32Array;
+  voltageUnits?: string;
+  traceTimes?: Float64Array;
+  traceSender?: number;
   // Synaptic weight time-series (plasticity / weight_recorder). Kept distinct
   // from voltageTraces so a renderer never mislabels weights as membrane voltage
   // and weight_units provenance is not lost at the SceneData boundary.
   weightSeries?: Float32Array;
+  weightUnits?: string;
+  weightSynapse?: { sender: number; target: number };
   // Non-voltage analog recordings (e.g. astrocyte Ca²⁺/IP₃) that share the
   // analog-trace scene but are NOT membrane voltage. Self-labeling so the
   // renderer never presents Ca/IP3 as mV — the same separation as weightSeries.
   analogTraces?: { values: Float32Array; variable: string; units: string };
-  networkNodes?: { id: number; x: number; y: number; z: number; label: string }[];
-  networkEdges?: { source: number; target: number; weight: number }[];
+  /** Connectivity dumps do not contain coordinates; absent x/y/z means the
+   *  renderer may derive a disclosed layout but must not present it as data. */
+  networkNodes?: {
+    id: number;
+    x?: number;
+    y?: number;
+    z?: number;
+    label: string;
+  }[];
+  networkEdges?: {
+    source: number;
+    target: number;
+    weight?: number;
+    delay?: number;
+  }[];
+  /** Present whenever networkEdges carry the corresponding measurement. */
+  networkWeightUnits?: string;
+  networkDelayUnits?: string;
+  /** Units for provided network x/y/z coordinates (never inferred). */
+  networkCoordinateUnits?: string;
+  networkLayout?: 'unpositioned' | 'provided-2d' | 'provided-3d';
   vectorField?: { x: number; y: number; z: number; dx: number; dy: number; dz: number }[];
 }
 

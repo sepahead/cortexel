@@ -1,4 +1,5 @@
-// Worked example payloads — one valid VizSpec per renderable skill. These are
+// Worked example payloads — one valid envelope per skill. Renderable skills use
+// VizSpec; scene-less skills use the parallel HostRendererInvocation envelope.
 // the agent's few-shot grounding (Vega-Lite gallery pattern): a discovery call
 // returns them, and validateSkillInvocation attaches the matching example to a
 // params/scene error so an autonomous agent can self-repair in one shot.
@@ -8,15 +9,16 @@
 // Provenance is deliberately synthetic (source 'synthetic_test', synthetic:true)
 // so an example is honestly captioned as illustrative, never mistaken for data.
 
-import type { VizSpec } from '../vizSpec';
-import type { NestSkillId } from './skillIds';
+import { CORTEXEL_SPEC_VERSION, type VizSpec } from '../vizSpec';
+import { isSkillId, type NestSkillId } from './skillIds';
+import type { HostRendererInvocation } from './hostInvocation';
 
 const synthetic = (
   declared_inputs: Record<string, string | number | true>,
 ): VizSpec['provenance'] => ({
   source: 'synthetic_test',
   calibrated_posterior: false,
-  advisory_only: false,
+  advisory_only: true,
   is_paper_local_evidence: false,
   synthetic: true,
   declared_inputs,
@@ -25,7 +27,12 @@ const synthetic = (
 export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
   'nest.voltage_trace': {
     scene: 'voltage-trace',
-    params: { times_ms: [0, 1, 2], series: [[-65, -64, -63]], units: 'mV' },
+    params: {
+      times_ms: [0, 1, 2],
+      series: [[-65, -64, -63]],
+      series_labels: ['neuron 1 · V_m'],
+      units: 'mV',
+    },
     mode: 'interactive',
     themeMode: 'dark',
     provenance: synthetic({
@@ -49,7 +56,11 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
   },
   'nest.rate_response': {
     scene: 'fi-curve',
-    params: { stimulus_amplitudes: [0, 100, 200], rates_hz: [0, 12, 31], units: 'Hz' },
+    params: {
+      stimulus_amplitudes: [0, 100, 200],
+      rates_hz: [0, 12, 31],
+      stimulus_units: 'pA',
+    },
     mode: 'interactive',
     themeMode: 'dark',
     provenance: synthetic({ stim_units: 'pA', bin_ms: 100, rate_normalization: 'spikes/s' }),
@@ -68,10 +79,17 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
   },
   'nest.spatial_3d': {
     scene: 'network-topology',
-    params: { objects: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }] },
+    params: {
+      objects: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }],
+      coordinate_units: 'mm',
+    },
     mode: 'interactive',
     themeMode: 'dark',
-    provenance: synthetic({ extent: '[1,1,1]', projection_sample_policy: 'all' }),
+    provenance: synthetic({
+      extent: '[1,1,1]',
+      spatial_units: 'mm',
+      projection_sample_policy: 'all',
+    }),
   },
   'nest.plasticity_dynamics': {
     scene: 'stdp',
@@ -82,17 +100,37 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
   },
   'nest.phase_plane': {
     scene: 'phase-plane',
-    params: { grid: { v: [-70, -50], w: [0, 1] } },
+    params: {
+      grid: { v: [-70, -50], w: [0, 1] },
+      derivatives: {
+        v: [0.2, 0.1, -0.1, -0.2],
+        w: [-0.05, 0.05, -0.05, 0.05],
+      },
+      axis_units: { v: 'mV', w: '1' },
+      derivative_units: { v: 'mV/ms', w: '1/ms' },
+      axis_order: ['v', 'w'],
+      flattening: 'row-major-last-axis-fastest',
+    },
     mode: 'interactive',
     themeMode: 'dark',
-    provenance: synthetic({ state_variables: 'V,w' }),
+    provenance: synthetic({
+      state_variables: 'V,w',
+      derivation_method: 'model equations evaluated on Cartesian grid',
+      model_context: 'Hodgkin-Huxley reduced phase plane',
+      fixed_parameters: 'all non-plotted state variables clamped to declared values',
+    }),
   },
   'nest.astrocyte_dynamics': {
     scene: 'voltage-trace',
-    params: { ca_trace: [0.1, 0.2, 0.15], units: 'uM' },
+    params: { times_ms: [0, 1, 2], ca_trace: [0.1, 0.2, 0.15], units: 'uM' },
     mode: 'interactive',
     themeMode: 'dark',
-    provenance: synthetic({ recorded_variable: 'Ca', units: 'uM' }),
+    provenance: synthetic({
+      recorded_variable: 'Ca',
+      units: 'uM',
+      time_units: 'ms',
+      sampling_interval: 1,
+    }),
   },
   'corpus.knowledge_graph': {
     scene: 'knowledge-graph-3d',
@@ -122,6 +160,125 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
   },
 };
 
-export function getExamplePayload(id: string): VizSpec | undefined {
-  return SKILL_EXAMPLE_PAYLOADS[id as NestSkillId];
+export const HOST_RENDERER_EXAMPLE_PAYLOADS: Partial<
+  Record<NestSkillId, HostRendererInvocation>
+> = {
+  'nest.spatial_2d': {
+    skill: 'nest.spatial_2d',
+    specVersion: CORTEXEL_SPEC_VERSION,
+    rendererRoute: 'd3',
+    params: { positions: [[0, 0], [1, 1]], coordinate_units: 'mm' },
+    provenance: synthetic({
+      extent: '[1,1]',
+      spatial_units: 'mm',
+      mask: 'none',
+      kernel: 'none',
+    }),
+  },
+  'nest.correlogram': {
+    skill: 'nest.correlogram',
+    specVersion: CORTEXEL_SPEC_VERSION,
+    rendererRoute: 'd3',
+    params: {
+      lags_ms: [-2, -1, 0, 1, 2],
+      correlation: [0.1, 0.4, 1, 0.4, 0.1],
+      normalization: 'pearson_coefficient',
+      correlation_units: '1',
+    },
+    provenance: synthetic({
+      bin_ms: 1,
+      pair_labels: 'E×E',
+      correlation_normalization: 'pearson_coefficient',
+      correlation_units: '1',
+    }),
+  },
+  'nest.stimulus_response': {
+    skill: 'nest.stimulus_response',
+    specVersion: CORTEXEL_SPEC_VERSION,
+    rendererRoute: 'matplotlib',
+    params: {
+      times_ms: [0, 1, 2],
+      stimulus: [0, 1, 0],
+      response: [-65, -60, -64],
+    },
+    provenance: synthetic({ stim_units: 'pA', units: 'mV', time_units: 'ms' }),
+  },
+  'nest.compartmental_dynamics': {
+    skill: 'nest.compartmental_dynamics',
+    specVersion: CORTEXEL_SPEC_VERSION,
+    rendererRoute: 'd3',
+    params: {
+      times_ms: [0, 1, 2],
+      compartments: [
+        {
+          id: 'soma',
+          parent_id: null,
+          label: 'soma',
+          values: [-65, -64, -63],
+        },
+      ],
+    },
+    provenance: synthetic({
+      morphology_disclaimer: 'schematic topology; no inferred geometry',
+      recorded_variable: 'V_m',
+      units: 'mV',
+      time_units: 'ms',
+      sampling_interval: 1,
+    }),
+  },
+  'nest.animation_replay': {
+    skill: 'nest.animation_replay',
+    specVersion: CORTEXEL_SPEC_VERSION,
+    rendererRoute: 'manim',
+    params: { frames: [{ time_ms: 0, state: { status: 'initial' } }] },
+    provenance: synthetic({ frame_rate: 30 }),
+  },
+};
+
+function deepFreezeJson(value: unknown): void {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return;
+  for (const child of Object.values(value)) deepFreezeJson(child);
+  Object.freeze(value);
+}
+
+// Worked examples are self-describing and immutable at rest. A caller receives
+// a defensive JSON clone from getExamplePayload, so mutating discovery output
+// cannot poison future repair prompts.
+for (const [skill, payload] of Object.entries(SKILL_EXAMPLE_PAYLOADS)) {
+  if (!payload) continue;
+  payload.skill = skill;
+  payload.specVersion = CORTEXEL_SPEC_VERSION;
+  deepFreezeJson(payload);
+}
+Object.setPrototypeOf(SKILL_EXAMPLE_PAYLOADS, null);
+Object.freeze(SKILL_EXAMPLE_PAYLOADS);
+
+for (const payload of Object.values(HOST_RENDERER_EXAMPLE_PAYLOADS)) {
+  if (payload) deepFreezeJson(payload);
+}
+Object.setPrototypeOf(HOST_RENDERER_EXAMPLE_PAYLOADS, null);
+Object.freeze(HOST_RENDERER_EXAMPLE_PAYLOADS);
+
+export function getExamplePayload(id: unknown): VizSpec | undefined {
+  if (!isSkillId(id)) return undefined;
+  const payload = SKILL_EXAMPLE_PAYLOADS[id];
+  return payload
+    ? (JSON.parse(JSON.stringify(payload)) as VizSpec)
+    : undefined;
+}
+
+export function getHostRendererExamplePayload(
+  id: unknown,
+): HostRendererInvocation | undefined {
+  if (!isSkillId(id)) return undefined;
+  const payload = HOST_RENDERER_EXAMPLE_PAYLOADS[id];
+  return payload
+    ? (JSON.parse(JSON.stringify(payload)) as HostRendererInvocation)
+    : undefined;
+}
+
+export function getInvocationExamplePayload(
+  id: unknown,
+): VizSpec | HostRendererInvocation | undefined {
+  return getExamplePayload(id) ?? getHostRendererExamplePayload(id);
 }

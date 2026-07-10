@@ -1,6 +1,7 @@
 {
-  "manifestVersion": "1",
-  "skillAxisVersion": "1.0.0",
+  "manifestVersion": "4",
+  "skillAxisVersion": "1.2.0",
+  "specVersion": "1.1.0",
   "vizRouterId": "nest.viz_router",
   "sceneNames": [
     "live-activity",
@@ -31,14 +32,20 @@
     "synapse_model",
     "weight_units",
     "extent",
+    "spatial_units",
     "mask",
     "kernel",
     "projection_sample_policy",
     "morphology_disclaimer",
     "frame_rate",
     "state_variables",
+    "derivation_method",
+    "model_context",
+    "fixed_parameters",
     "bin_ms",
     "pair_labels",
+    "correlation_normalization",
+    "correlation_units",
     "stim_units",
     "rate_normalization",
     "graph_source",
@@ -68,6 +75,728 @@
     "fiber",
     "manim"
   ],
+  "jsonLimits": {
+    "maxDepth": 32,
+    "maxNodes": 500000,
+    "maxObjectKeys": 10000,
+    "maxStringLength": 100000,
+    "maxTotalStringLength": 5000000
+  },
+  "jsonExactnessPolicy": {
+    "finiteNumbersOnly": true,
+    "rejectNegativeZero": true,
+    "plainObjectsOnly": true,
+    "enumerableDataPropertiesOnly": true,
+    "rejectAccessors": true,
+    "rejectSymbolKeys": true,
+    "rejectSparseArrays": true,
+    "rejectNamedArrayProperties": true,
+    "rejectCircularReferences": true,
+    "rejectRawJson": true,
+    "duplicateObjectMemberNames": "reject before materialization",
+    "rawJsonParsingPrecondition": "detect duplicate member names in raw JSON text before converting to an object",
+    "rejectedObjectKeys": [
+      "__proto__"
+    ]
+  },
+  "provenanceValueConstraints": {
+    "device_id": {
+      "kind": "nonnegative_safe_integer_or_nonblank_string",
+      "normalize": "trim"
+    },
+    "recorded_variable": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "units": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "sampling_interval": {
+      "kind": "positive_finite_number"
+    },
+    "recorder_id": {
+      "kind": "nonnegative_safe_integer_or_nonblank_string",
+      "normalize": "trim"
+    },
+    "sender_ids": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "population_labels": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "time_units": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "source_ids": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "target_ids": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "synapse_model": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "weight_units": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "extent": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "spatial_units": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "mask": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "kernel": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "projection_sample_policy": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "morphology_disclaimer": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "frame_rate": {
+      "kind": "positive_finite_number"
+    },
+    "state_variables": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "derivation_method": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "model_context": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "fixed_parameters": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "bin_ms": {
+      "kind": "positive_finite_number"
+    },
+    "pair_labels": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "correlation_normalization": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "correlation_units": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "stim_units": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "rate_normalization": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "graph_source": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "node_kinds": {
+      "kind": "nonblank_string",
+      "normalize": "trim"
+    },
+    "edge_kinds": {
+      "kind": "string",
+      "allowEmpty": true
+    },
+    "identity_advisory": {
+      "kind": "literal_true"
+    }
+  },
+  "honestyPolicy": {
+    "version": "2",
+    "calibratedPosteriorAccepted": false,
+    "captionRequiredWhenAny": [
+      "synthetic=true",
+      "calibrated_posterior=false",
+      "advisory_only=true",
+      "is_paper_local_evidence=false"
+    ],
+    "syntheticSourceMatch": {
+      "caseInsensitive": true,
+      "equals": [
+        "synthetic_test"
+      ],
+      "prefixes": [
+        "synthetic"
+      ]
+    },
+    "precedence": [
+      "synthetic",
+      "advisory_only",
+      "not_paper_local",
+      "not_calibrated"
+    ],
+    "templates": {
+      "synthetic": "Schematic — illustrative synthetic data, not measured.",
+      "advisory_only": "Advisory — advisory evidence only; not a calibrated posterior.",
+      "not_paper_local": "Advisory — not paper-local evidence; candidate ranking only.",
+      "not_calibrated": "Illustrative — not a calibrated posterior."
+    },
+    "callerCaption": "append_only_unverified",
+    "callerCaptionLabel": "Caller note (unverified):",
+    "callerCaptionControls": "escape C0/C1, bidi, zero-width, and BOM controls",
+    "bidiIsolationRequired": true,
+    "weakSkillDisclosure": "prepend"
+  },
+  "envelopeNormalizationPolicy": {
+    "version": "1",
+    "evaluationOrder": [
+      "parse/coerce every JSON number to IEEE-754 binary64",
+      "validate and snapshot the raw envelope with exact-JSON budgets",
+      "normalize fields carrying x-cortexel-normalize",
+      "materialize envelope defaults",
+      "validate the envelope JSON Schema",
+      "validate skill params, provenance values, and portable constraints",
+      "derive and display the mandatory honesty caption"
+    ],
+    "vizSpecDefaults": {
+      "params": {},
+      "mode": "interactive",
+      "themeMode": "dark"
+    },
+    "honestyDefaults": {
+      "calibrated_posterior": false,
+      "advisory_only": true,
+      "is_paper_local_evidence": false,
+      "synthetic": false
+    },
+    "jsonSchemaDefaultsAreAnnotations": true,
+    "missingHonestyFlagsMustUseConservativeDefaults": true
+  },
+  "provenanceParamConstraintLanguage": {
+    "version": "1",
+    "evaluationOrder": [
+      "apply provenanceValueConstraints normalization",
+      "validate every present known provenance value",
+      "check required provenance-key presence",
+      "evaluate provenanceParamConstraints in listed order"
+    ],
+    "kinds": [
+      "equals_param",
+      "equals_literal"
+    ]
+  },
+  "strictProvenancePolicy": {
+    "unknownDeclaredInputKeys": "reject",
+    "allowedDeclaredInputKeys": [
+      "device_id",
+      "recorded_variable",
+      "units",
+      "sampling_interval",
+      "recorder_id",
+      "sender_ids",
+      "population_labels",
+      "time_units",
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "weight_units",
+      "extent",
+      "spatial_units",
+      "mask",
+      "kernel",
+      "projection_sample_policy",
+      "morphology_disclaimer",
+      "frame_rate",
+      "state_variables",
+      "derivation_method",
+      "model_context",
+      "fixed_parameters",
+      "bin_ms",
+      "pair_labels",
+      "correlation_normalization",
+      "correlation_units",
+      "stim_units",
+      "rate_normalization",
+      "graph_source",
+      "node_kinds",
+      "edge_kinds",
+      "identity_advisory"
+    ],
+    "requiredKeysSource": "skill.requiredProvenanceKeys",
+    "presentKnownValues": "validate every present known key with provenanceValueConstraints",
+    "requiredKeysControl": "presence only; value rules apply whether required or extra",
+    "normalizeBeforeValidation": true
+  },
+  "strictInvocationPolicy": {
+    "version": "1",
+    "externalSelection": "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present",
+    "selfDescribingSelection": "validateSpec(payload): payload.skill is required and selects the contract",
+    "hostSelection": "host envelopes require payload.skill; explicit id and payload.skill must match",
+    "unknownSkillIds": "reject",
+    "cortexelEnvelope": "allowed iff contract.scene is non-null; payload.scene must equal contract.scene",
+    "hostEnvelope": "allowed iff contract.scene is null; scene is forbidden",
+    "rendererRoute": "when selected, must occur in contract.rendererRoutes",
+    "params": "validate paramsJsonSchema then every paramConstraint",
+    "provenance": "apply strictProvenancePolicy and every provenanceParamConstraint"
+  },
+  "stringNormalizationPolicy": {
+    "version": "1",
+    "lengthModel": "ECMAScript UTF-16 code units",
+    "portableLengthKeyword": "x-cortexel-max-utf16-code-units",
+    "trimAlgorithm": "ECMA-262 String.prototype.trim / TrimString",
+    "trimCodePointsHex": [
+      "0009-000D",
+      "0020",
+      "00A0",
+      "1680",
+      "2000-200A",
+      "2028",
+      "2029",
+      "202F",
+      "205F",
+      "3000",
+      "FEFF"
+    ],
+    "regexDialect": "ECMA-262 Unicode-aware regular expressions",
+    "unicodeNormalization": "none",
+    "wellFormedUnicodeOnly": true,
+    "displayStringPattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+    "displayStringControls": "reject C0/C1, bidi, zero-width, and BOM controls"
+  },
+  "numericModelPolicy": {
+    "version": "1",
+    "representation": "IEEE-754 binary64",
+    "coerceBeforeValidation": true,
+    "finiteOnly": true,
+    "negativeZeroRejected": true,
+    "integerIdentityFields": "safe integers only",
+    "constraintEvaluationUsesCoercedValues": true
+  },
+  "jsonBudgetSemantics": {
+    "version": "1",
+    "scope": "one snapshot of the complete invocation envelope",
+    "rootDepth": 0,
+    "nodeCount": "every scalar, array, and object value; property names are not nodes",
+    "objectKeyCount": "per object",
+    "stringLengthModel": "UTF-16 code units",
+    "totalStringLength": "all string values plus every object property name",
+    "repeatedReference": "counted once per JSON occurrence; cycles reject"
+  },
+  "paletteRegistryPolicy": {
+    "version": "1",
+    "validation": "selected palette name must exist in the active runtime registry",
+    "manifestPalettes": "build-time discovery snapshot only",
+    "runtimeExtensionsAllowed": true,
+    "registration": "strict descriptor snapshot, validated then frozen",
+    "fallbackIsNotValidation": true
+  },
+  "paramConstraintLanguage": {
+    "version": "2",
+    "pathSyntax": "dot-separated object keys",
+    "arrayWildcard": "[*]",
+    "objectValueWildcard": "*",
+    "optionalSuffix": "?",
+    "evaluationOrder": [
+      "normalize fields carrying x-cortexel-normalize",
+      "validate paramsJsonSchema",
+      "evaluate paramConstraints in listed order"
+    ],
+    "kinds": [
+      "equal_length",
+      "each_length_matches",
+      "monotonic_non_decreasing",
+      "non_negative",
+      "property_count",
+      "unique_field",
+      "unique_tuple",
+      "references_exist",
+      "no_self_loops",
+      "same_keys",
+      "cartesian_product_length",
+      "permutation_of_keys",
+      "endpoint_kinds",
+      "mapped_value",
+      "conditional_numeric_domain",
+      "acyclic"
+    ],
+    "semantics": {
+      "equal_length": {
+        "pathRoles": "all paths resolve to arrays",
+        "rule": "all present arrays have identical length",
+        "optionalAbsent": "skip a path ending in ?"
+      },
+      "each_length_matches": {
+        "pathRoles": "first path resolves zero or more arrays; last path is the reference array",
+        "rule": "every first-path array length equals the reference-array length"
+      },
+      "monotonic_non_decreasing": {
+        "pathRoles": "each path resolves an ordered numeric sequence",
+        "rule": "for every adjacent pair previous <= next"
+      },
+      "non_negative": {
+        "pathRoles": "each path resolves numeric values",
+        "rule": "every resolved number is >= 0"
+      },
+      "property_count": {
+        "pathRoles": "each path resolves objects",
+        "rule": "own enumerable property count is within optional min/max inclusive"
+      },
+      "unique_field": {
+        "pathRoles": "the first path resolves an array of objects; field names the key",
+        "rule": "field values are unique under JSON scalar equality"
+      },
+      "unique_tuple": {
+        "pathRoles": "paths resolve equal-length scalar sequences zipped by index",
+        "rule": "zipped JSON tuples are unique; when the final kind value is in symmetricKinds, canonicalize the first two tuple values lexicographically"
+      },
+      "references_exist": {
+        "pathRoles": "all paths except the last resolve references; the last resolves the allowed-id set",
+        "rule": "every non-null reference occurs in the allowed-id set"
+      },
+      "no_self_loops": {
+        "pathRoles": "first and second paths resolve equal-length source and target sequences",
+        "rule": "source[index] !== target[index] for every index"
+      },
+      "same_keys": {
+        "pathRoles": "paths resolve objects",
+        "rule": "all objects have exactly the same own enumerable string-key set"
+      },
+      "cartesian_product_length": {
+        "pathRoles": "first path resolves axis arrays; second path resolves output arrays",
+        "rule": "every output-array length equals the product of all axis-array lengths"
+      },
+      "permutation_of_keys": {
+        "pathRoles": "first path resolves a scalar sequence; second path resolves an object",
+        "rule": "the sequence contains every object key exactly once"
+      },
+      "endpoint_kinds": {
+        "pathRoles": "first path resolves edges with source/target/kind; second resolves nodes with id/kind",
+        "rule": "each edge endpoint node kind equals allowedEndpointKinds[edge.kind]"
+      },
+      "mapped_value": {
+        "pathRoles": "first path resolves a discriminator scalar; second path resolves its dependent scalar",
+        "rule": "the second value equals allowedValues[first value]"
+      },
+      "conditional_numeric_domain": {
+        "pathRoles": "first path resolves a discriminator scalar; second path resolves numeric values",
+        "rule": "every numeric value satisfies numericDomains[discriminator] inclusive min/max and optional integer requirement"
+      },
+      "acyclic": {
+        "pathRoles": "first path resolves node ids; second resolves each node parent id or null",
+        "rule": "following parent links from any id never revisits an id"
+      }
+    }
+  },
+  "vizSpecJsonSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "scene": {
+        "type": "string",
+        "enum": [
+          "live-activity",
+          "cortical-column",
+          "stdp",
+          "spike-raster",
+          "network-topology",
+          "voltage-trace",
+          "phase-plane",
+          "brunel-network",
+          "fi-curve",
+          "isi-distribution",
+          "psth",
+          "weight-histogram",
+          "knowledge-graph-3d"
+        ]
+      },
+      "skill": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "x-cortexel-max-utf16-code-units": 80,
+        "pattern": "\\S",
+        "x-cortexel-normalize": "trim"
+      },
+      "specVersion": {
+        "type": "string",
+        "const": "1.1.0"
+      },
+      "params": {
+        "type": "object",
+        "maxProperties": 10000,
+        "propertyNames": {
+          "type": "string",
+          "maxLength": 100000,
+          "x-cortexel-max-utf16-code-units": 100000,
+          "not": {
+            "const": "__proto__"
+          }
+        },
+        "additionalProperties": true,
+        "default": {}
+      },
+      "mode": {
+        "default": "interactive",
+        "type": "string",
+        "enum": [
+          "interactive",
+          "export"
+        ]
+      },
+      "themeMode": {
+        "default": "dark",
+        "type": "string",
+        "enum": [
+          "dark",
+          "light"
+        ]
+      },
+      "camera": {
+        "type": "string",
+        "enum": [
+          "default",
+          "top",
+          "side",
+          "close",
+          "cinematic"
+        ]
+      },
+      "palette": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60,
+        "x-cortexel-max-utf16-code-units": 60,
+        "pattern": "\\S",
+        "x-cortexel-normalize": "trim"
+      },
+      "provenance": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-max-utf16-code-units": 200
+          },
+          "calibrated_posterior": {
+            "default": false,
+            "type": "boolean",
+            "const": false
+          },
+          "advisory_only": {
+            "default": true,
+            "type": "boolean"
+          },
+          "is_paper_local_evidence": {
+            "default": false,
+            "type": "boolean"
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 500,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-max-utf16-code-units": 500,
+            "x-cortexel-normalize": "trim"
+          },
+          "declared_inputs": {
+            "type": "object",
+            "maxProperties": 64,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "x-cortexel-max-utf16-code-units": 80,
+              "allOf": [
+                {
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                {
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                }
+              ]
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 5000,
+                  "x-cortexel-max-utf16-code-units": 5000,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean",
+                  "const": true
+                }
+              ]
+            }
+          },
+          "synthetic": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "scene",
+      "provenance"
+    ],
+    "additionalProperties": false
+  },
+  "hostRendererInvocationJsonSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "skill": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "x-cortexel-max-utf16-code-units": 80,
+        "pattern": "\\S",
+        "x-cortexel-normalize": "trim"
+      },
+      "specVersion": {
+        "type": "string",
+        "const": "1.1.0"
+      },
+      "params": {
+        "type": "object",
+        "maxProperties": 10000,
+        "propertyNames": {
+          "type": "string",
+          "maxLength": 100000,
+          "x-cortexel-max-utf16-code-units": 100000,
+          "not": {
+            "const": "__proto__"
+          }
+        },
+        "additionalProperties": true
+      },
+      "provenance": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-max-utf16-code-units": 200
+          },
+          "calibrated_posterior": {
+            "default": false,
+            "type": "boolean",
+            "const": false
+          },
+          "advisory_only": {
+            "default": true,
+            "type": "boolean"
+          },
+          "is_paper_local_evidence": {
+            "default": false,
+            "type": "boolean"
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 500,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-max-utf16-code-units": 500,
+            "x-cortexel-normalize": "trim"
+          },
+          "declared_inputs": {
+            "type": "object",
+            "maxProperties": 64,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "x-cortexel-max-utf16-code-units": 80,
+              "allOf": [
+                {
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                {
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                }
+              ]
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 5000,
+                  "x-cortexel-max-utf16-code-units": 5000,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean",
+                  "const": true
+                }
+              ]
+            }
+          },
+          "synthetic": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "rendererRoute": {
+        "type": "string",
+        "enum": [
+          "media.trace_figure",
+          "media.model_graph",
+          "media.webgl_scene",
+          "media.react_fiber_scene",
+          "media.manim_storyboard",
+          "media.*",
+          "matplotlib",
+          "d3",
+          "three",
+          "fiber",
+          "manim"
+        ]
+      }
+    },
+    "required": [
+      "skill",
+      "params",
+      "provenance"
+    ],
+    "additionalProperties": false
+  },
   "palettes": [
     {
       "name": "crameri",
@@ -79,15 +808,16 @@
   "skills": [
     {
       "id": "nest.voltage_trace",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST voltage trace renderer",
-      "description": "Render multimeter/voltmeter analog traces (V_m, currents, conductances).",
+      "description": "Render labeled multimeter/voltmeter series for one recorded variable and unit.",
       "deviceFamily": "multimeter",
       "scene": "voltage-trace",
       "weak": false,
       "requiredInputKeys": [
         "times_ms",
         "series",
+        "series_labels",
         "units"
       ],
       "requiredProvenanceKeys": [
@@ -96,24 +826,152 @@
         "units",
         "sampling_interval"
       ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_param",
+          "provenanceKey": "units",
+          "paramKey": "units",
+          "description": "Declared units must match the rendered trace-axis units."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "times_ms": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "series": {
+            "minItems": 1,
+            "maxItems": 256,
+            "type": "array",
+            "items": {
+              "minItems": 1,
+              "maxItems": 50000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -3.4028234663852886e+38,
+                "maximum": 3.4028234663852886e+38
+              }
+            }
+          },
+          "series_labels": {
+            "minItems": 1,
+            "maxItems": 256,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+              "x-cortexel-normalize": "trim",
+              "x-cortexel-max-utf16-code-units": 120
+            }
+          },
+          "units": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-normalize": "trim",
+            "x-cortexel-max-utf16-code-units": 80
+          }
+        },
+        "required": [
+          "times_ms",
+          "series",
+          "series_labels",
+          "units"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "series",
+            "series_labels"
+          ],
+          "description": "Every trace series must have one non-empty label."
+        },
+        {
+          "kind": "each_length_matches",
+          "paths": [
+            "series[*]",
+            "times_ms"
+          ],
+          "description": "Every trace series must contain one value per times_ms sample."
+        },
+        {
+          "kind": "monotonic_non_decreasing",
+          "paths": [
+            "times_ms"
+          ],
+          "description": "Trace timestamps must be monotonically non-decreasing."
+        }
+      ],
       "rendererRoutes": [
         "media.trace_figure",
         "matplotlib",
         "d3"
       ],
+      "examplePayload": {
+        "scene": "voltage-trace",
+        "params": {
+          "times_ms": [
+            0,
+            1,
+            2
+          ],
+          "series": [
+            [
+              -65,
+              -64,
+              -63
+            ]
+          ],
+          "series_labels": [
+            "neuron 1 · V_m"
+          ],
+          "units": "mV"
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "device_id": "mm_1",
+            "recorded_variable": "V_m",
+            "units": "mV",
+            "sampling_interval": 0.1
+          }
+        },
+        "skill": "nest.voltage_trace",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "One neuron example / multimeter recording",
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/one_neuron.html",
-          "dataShape": "times_ms + V_m/current/conductance series split by sender",
+          "dataShape": "times_ms + same-unit series split and labeled by sender",
           "output": "Selectable trace, spike markers, JSON + SVG export",
-          "note": "Mirrors NEST voltage_trace while keeping data provenance inspectable."
+          "note": "Use one invocation per variable/unit; never mix mV, pA and nS on one axis."
         }
       ]
     },
     {
       "id": "nest.spike_raster",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST spike raster renderer",
       "description": "Render spike_recorder events as rasters, spike trains and population plots.",
       "deviceFamily": "spike_recorder",
@@ -129,10 +987,89 @@
         "population_labels",
         "time_units"
       ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_literal",
+          "provenanceKey": "time_units",
+          "value": "ms",
+          "description": "The times_ms axis is expressed in milliseconds."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "times_ms": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "senders": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "required": [
+          "times_ms",
+          "senders"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "times_ms",
+            "senders"
+          ],
+          "description": "Every spike timestamp must have one sender id."
+        }
+      ],
       "rendererRoutes": [
         "media.model_graph",
         "d3"
       ],
+      "examplePayload": {
+        "scene": "spike-raster",
+        "params": {
+          "times_ms": [
+            1,
+            2,
+            3
+          ],
+          "senders": [
+            1,
+            2,
+            1
+          ]
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "recorder_id": "sr_1",
+            "sender_ids": "[1,2]",
+            "population_labels": "E",
+            "time_units": "ms"
+          }
+        },
+        "skill": "nest.spike_raster",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "Random balanced Brunel network",
@@ -145,7 +1082,7 @@
     },
     {
       "id": "nest.rate_response",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST rate / IF response renderer",
       "description": "Render firing-rate / IF curves and population rates derived from spike counts.",
       "deviceFamily": "spike_recorder",
@@ -154,18 +1091,115 @@
       "requiredInputKeys": [
         "stimulus_amplitudes",
         "rates_hz",
-        "units"
+        "stimulus_units"
       ],
       "requiredProvenanceKeys": [
         "stim_units",
         "bin_ms",
         "rate_normalization"
       ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_param",
+          "provenanceKey": "stim_units",
+          "paramKey": "stimulus_units",
+          "description": "Declared stimulus units must match params.stimulus_units."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "stimulus_amplitudes": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          },
+          "rates_hz": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          },
+          "stimulus_units": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-normalize": "trim",
+            "x-cortexel-max-utf16-code-units": 80
+          }
+        },
+        "required": [
+          "stimulus_amplitudes",
+          "rates_hz",
+          "stimulus_units"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "stimulus_amplitudes",
+            "rates_hz"
+          ],
+          "description": "Every stimulus amplitude must have one firing-rate value."
+        },
+        {
+          "kind": "non_negative",
+          "paths": [
+            "rates_hz[*]"
+          ],
+          "description": "Firing rates cannot be negative."
+        }
+      ],
       "rendererRoutes": [
         "media.trace_figure",
         "matplotlib",
         "d3"
       ],
+      "examplePayload": {
+        "scene": "fi-curve",
+        "params": {
+          "stimulus_amplitudes": [
+            0,
+            100,
+            200
+          ],
+          "rates_hz": [
+            0,
+            12,
+            31
+          ],
+          "stimulus_units": "pA"
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "stim_units": "pA",
+            "bin_ms": 100,
+            "rate_normalization": "spikes/s"
+          }
+        },
+        "skill": "nest.rate_response",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "IF curve example",
@@ -178,12 +1212,13 @@
     },
     {
       "id": "nest.connectivity_matrix",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST connectivity matrix renderer",
       "description": "Render SynapseCollection connectivity, weights and population blocks.",
       "deviceFamily": "get_connections",
       "scene": "network-topology",
-      "weak": false,
+      "weak": true,
+      "weakDisclosure": "Schematic topology layout — node positions and distances are derived for readability; only the declared edges and weights are evidence.",
       "requiredInputKeys": [
         "sources",
         "targets"
@@ -194,40 +1229,210 @@
         "synapse_model",
         "weight_units"
       ],
+      "provenanceParamConstraints": [],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "sources": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "targets": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "weights": {
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          }
+        },
+        "required": [
+          "sources",
+          "targets"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "sources",
+            "targets",
+            "weights?"
+          ],
+          "description": "Connection endpoints and optional weights are parallel arrays."
+        }
+      ],
       "rendererRoutes": [
         "media.model_graph",
         "d3"
       ],
+      "examplePayload": {
+        "scene": "network-topology",
+        "params": {
+          "sources": [
+            1,
+            2
+          ],
+          "targets": [
+            2,
+            3
+          ],
+          "weights": [
+            1,
+            0.5
+          ]
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "source_ids": "[1,2]",
+            "target_ids": "[2,3]",
+            "synapse_model": "static_synapse",
+            "weight_units": "pA"
+          }
+        },
+        "skill": "nest.connectivity_matrix",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "Plot weight matrices example / SynapseCollection",
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
           "dataShape": "sources, targets, weights, delays, source/target populations",
           "output": "Topology node-edge view, selected block stats, weight histogram",
-          "note": "Keep absent connections distinct from zero-weight connections."
+          "note": "Keep absent connections distinct from zero-weight connections; topology positions/distances are schematic."
         }
       ]
     },
     {
       "id": "nest.spatial_2d",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST 2D spatial renderer",
       "description": "Render 2D layer positions, masks, kernels and sampled projections.",
       "deviceFamily": "get_position",
       "scene": null,
       "weak": false,
       "requiredInputKeys": [
-        "positions"
+        "positions",
+        "coordinate_units"
       ],
       "requiredProvenanceKeys": [
         "extent",
+        "spatial_units",
         "mask",
         "kernel"
       ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_param",
+          "provenanceKey": "spatial_units",
+          "paramKey": "coordinate_units",
+          "description": "Declared spatial units must match the coordinate axis units."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "positions": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "minimum": -3.4028234663852886e+38,
+                  "maximum": 3.4028234663852886e+38
+                },
+                {
+                  "type": "number",
+                  "minimum": -3.4028234663852886e+38,
+                  "maximum": 3.4028234663852886e+38
+                }
+              ],
+              "minItems": 2,
+              "maxItems": 2,
+              "items": false
+            }
+          },
+          "coordinate_units": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-normalize": "trim",
+            "x-cortexel-max-utf16-code-units": 80
+          }
+        },
+        "required": [
+          "positions",
+          "coordinate_units"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [],
       "rendererRoutes": [
         "media.model_graph",
         "d3"
       ],
+      "examplePayload": {
+        "skill": "nest.spatial_2d",
+        "specVersion": "1.1.0",
+        "rendererRoute": "d3",
+        "params": {
+          "positions": [
+            [
+              0,
+              0
+            ],
+            [
+              1,
+              1
+            ]
+          ],
+          "coordinate_units": "mm"
+        },
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "extent": "[1,1]",
+            "spatial_units": "mm",
+            "mask": "none",
+            "kernel": "none"
+          }
+        }
+      },
       "examples": [
         {
           "nestExample": "Circular mask, Gaussian kernel, grid/free spatial examples",
@@ -240,25 +1445,120 @@
     },
     {
       "id": "nest.spatial_3d",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST 3D spatial renderer",
       "description": "Render 3D population/node positions for spatial inspection.",
       "deviceFamily": "get_position",
       "scene": "network-topology",
       "weak": false,
       "requiredInputKeys": [
-        "objects"
+        "objects",
+        "coordinate_units"
       ],
       "requiredProvenanceKeys": [
         "extent",
+        "spatial_units",
         "projection_sample_policy"
       ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_param",
+          "provenanceKey": "spatial_units",
+          "paramKey": "coordinate_units",
+          "description": "Declared spatial units must match the coordinate axis units."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "objects": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number",
+                  "minimum": -3.4028234663852886e+38,
+                  "maximum": 3.4028234663852886e+38
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": -3.4028234663852886e+38,
+                  "maximum": 3.4028234663852886e+38
+                },
+                "z": {
+                  "type": "number",
+                  "minimum": -3.4028234663852886e+38,
+                  "maximum": 3.4028234663852886e+38
+                }
+              },
+              "required": [
+                "x",
+                "y",
+                "z"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "coordinate_units": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-normalize": "trim",
+            "x-cortexel-max-utf16-code-units": 80
+          }
+        },
+        "required": [
+          "objects",
+          "coordinate_units"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [],
       "rendererRoutes": [
         "media.webgl_scene",
         "media.react_fiber_scene",
         "three",
         "fiber"
       ],
+      "examplePayload": {
+        "scene": "network-topology",
+        "params": {
+          "objects": [
+            {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": 1,
+              "y": 0,
+              "z": 0
+            }
+          ],
+          "coordinate_units": "mm"
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "extent": "[1,1,1]",
+            "spatial_units": "mm",
+            "projection_sample_policy": "all"
+          }
+        },
+        "skill": "nest.spatial_3d",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "3D spatial network with exponential/Gaussian probabilities",
@@ -271,7 +1571,7 @@
     },
     {
       "id": "nest.plasticity_dynamics",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST plasticity dynamics renderer",
       "description": "Render STDP windows, weight adaptation and short-term dynamics.",
       "deviceFamily": "weight_recorder",
@@ -286,10 +1586,104 @@
         "synapse_model",
         "weight_units"
       ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_param",
+          "provenanceKey": "weight_units",
+          "paramKey": "weight_units",
+          "description": "Declared weight units must match the rendered weight axis."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "times_ms": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "weights": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          },
+          "weight_units": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-normalize": "trim",
+            "x-cortexel-max-utf16-code-units": 80
+          }
+        },
+        "required": [
+          "times_ms",
+          "weights",
+          "weight_units"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "times_ms",
+            "weights"
+          ],
+          "description": "Every plasticity timestamp must have one weight value."
+        },
+        {
+          "kind": "monotonic_non_decreasing",
+          "paths": [
+            "times_ms"
+          ],
+          "description": "Plasticity timestamps must be monotonically non-decreasing."
+        }
+      ],
       "rendererRoutes": [
         "media.trace_figure",
         "matplotlib"
       ],
+      "examplePayload": {
+        "scene": "stdp",
+        "params": {
+          "times_ms": [
+            0,
+            10,
+            20
+          ],
+          "weights": [
+            1,
+            1.1,
+            1.05
+          ],
+          "weight_units": "nS"
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "synapse_model": "stdp_synapse",
+            "weight_units": "nS"
+          }
+        },
+        "skill": "nest.plasticity_dynamics",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
@@ -302,22 +1696,312 @@
     },
     {
       "id": "nest.phase_plane",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST phase-plane renderer",
       "description": "Render phase planes, vector fields, nullclines and trajectories.",
       "deviceFamily": "computed",
       "scene": "phase-plane",
       "weak": false,
       "requiredInputKeys": [
-        "grid"
+        "grid",
+        "derivatives",
+        "axis_units",
+        "derivative_units",
+        "axis_order",
+        "flattening"
       ],
       "requiredProvenanceKeys": [
-        "state_variables"
+        "state_variables",
+        "derivation_method",
+        "model_context",
+        "fixed_parameters"
+      ],
+      "provenanceParamConstraints": [],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "grid": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "allOf": [
+                {
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                {
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                }
+              ],
+              "x-cortexel-max-utf16-code-units": 80,
+              "pattern": "\\S",
+              "x-cortexel-normalize": "trim"
+            },
+            "additionalProperties": {
+              "minItems": 1,
+              "maxItems": 50000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -3.4028234663852886e+38,
+                "maximum": 3.4028234663852886e+38
+              }
+            }
+          },
+          "derivatives": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "allOf": [
+                {
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                {
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                }
+              ],
+              "x-cortexel-max-utf16-code-units": 80,
+              "pattern": "\\S",
+              "x-cortexel-normalize": "trim"
+            },
+            "additionalProperties": {
+              "minItems": 1,
+              "maxItems": 50000,
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -3.4028234663852886e+38,
+                "maximum": 3.4028234663852886e+38
+              }
+            }
+          },
+          "axis_units": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "allOf": [
+                {
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                {
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                }
+              ],
+              "x-cortexel-max-utf16-code-units": 80,
+              "pattern": "\\S",
+              "x-cortexel-normalize": "trim"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+              "x-cortexel-normalize": "trim",
+              "x-cortexel-max-utf16-code-units": 80
+            }
+          },
+          "derivative_units": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "allOf": [
+                {
+                  "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                },
+                {
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                }
+              ],
+              "x-cortexel-max-utf16-code-units": 80,
+              "pattern": "\\S",
+              "x-cortexel-normalize": "trim"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+              "x-cortexel-normalize": "trim",
+              "x-cortexel-max-utf16-code-units": 80
+            }
+          },
+          "axis_order": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "allOf": [
+                  {
+                    "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                  },
+                  {
+                    "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                  }
+                ],
+                "x-cortexel-max-utf16-code-units": 80,
+                "pattern": "\\S",
+                "x-cortexel-normalize": "trim"
+              },
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "allOf": [
+                  {
+                    "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                  },
+                  {
+                    "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                  }
+                ],
+                "x-cortexel-max-utf16-code-units": 80,
+                "pattern": "\\S",
+                "x-cortexel-normalize": "trim"
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": false
+          },
+          "flattening": {
+            "type": "string",
+            "const": "row-major-last-axis-fastest"
+          }
+        },
+        "required": [
+          "grid",
+          "derivatives",
+          "axis_units",
+          "derivative_units",
+          "axis_order",
+          "flattening"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "property_count",
+          "paths": [
+            "grid"
+          ],
+          "min": 2,
+          "max": 2,
+          "description": "A phase plane has exactly two state-variable axes."
+        },
+        {
+          "kind": "same_keys",
+          "paths": [
+            "grid",
+            "derivatives"
+          ],
+          "description": "Derivative fields must use the same state-variable names as the grid."
+        },
+        {
+          "kind": "same_keys",
+          "paths": [
+            "grid",
+            "axis_units"
+          ],
+          "description": "Every phase-plane axis must declare its coordinate units."
+        },
+        {
+          "kind": "same_keys",
+          "paths": [
+            "grid",
+            "derivative_units"
+          ],
+          "description": "Every phase-plane derivative field must declare its units."
+        },
+        {
+          "kind": "cartesian_product_length",
+          "paths": [
+            "grid.*",
+            "derivatives.*"
+          ],
+          "description": "Each derivative field has one value per Cartesian grid point."
+        },
+        {
+          "kind": "permutation_of_keys",
+          "paths": [
+            "axis_order",
+            "grid"
+          ],
+          "description": "axis_order must contain every grid key exactly once, in flattening order."
+        }
       ],
       "rendererRoutes": [
         "media.model_graph",
         "d3"
       ],
+      "examplePayload": {
+        "scene": "phase-plane",
+        "params": {
+          "grid": {
+            "v": [
+              -70,
+              -50
+            ],
+            "w": [
+              0,
+              1
+            ]
+          },
+          "derivatives": {
+            "v": [
+              0.2,
+              0.1,
+              -0.1,
+              -0.2
+            ],
+            "w": [
+              -0.05,
+              0.05,
+              -0.05,
+              0.05
+            ]
+          },
+          "axis_units": {
+            "v": "mV",
+            "w": "1"
+          },
+          "derivative_units": {
+            "v": "mV/ms",
+            "w": "1/ms"
+          },
+          "axis_order": [
+            "v",
+            "w"
+          ],
+          "flattening": "row-major-last-axis-fastest"
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "state_variables": "V,w",
+            "derivation_method": "model equations evaluated on Cartesian grid",
+            "model_context": "Hodgkin-Huxley reduced phase plane",
+            "fixed_parameters": "all non-plotted state variables clamped to declared values"
+          }
+        },
+        "skill": "nest.phase_plane",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
@@ -330,7 +2014,7 @@
     },
     {
       "id": "nest.correlogram",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST correlogram / synchrony renderer",
       "description": "Render auto/cross-correlation functions for spike trains.",
       "deviceFamily": "spike_recorder",
@@ -338,16 +2022,177 @@
       "weak": false,
       "requiredInputKeys": [
         "lags_ms",
-        "correlation"
+        "correlation",
+        "normalization",
+        "correlation_units"
       ],
       "requiredProvenanceKeys": [
         "bin_ms",
-        "pair_labels"
+        "pair_labels",
+        "correlation_normalization",
+        "correlation_units"
+      ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_param",
+          "provenanceKey": "correlation_normalization",
+          "paramKey": "normalization",
+          "description": "Declared normalization must match the correlogram value semantics."
+        },
+        {
+          "kind": "equals_param",
+          "provenanceKey": "correlation_units",
+          "paramKey": "correlation_units",
+          "description": "Declared value units must match the correlogram y axis."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "lags_ms": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "correlation": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          },
+          "normalization": {
+            "type": "string",
+            "enum": [
+              "pearson_coefficient",
+              "raw_pair_count",
+              "count_per_bin",
+              "rate_hz"
+            ]
+          },
+          "correlation_units": {
+            "type": "string",
+            "enum": [
+              "1",
+              "count",
+              "count/bin",
+              "Hz"
+            ]
+          }
+        },
+        "required": [
+          "lags_ms",
+          "correlation",
+          "normalization",
+          "correlation_units"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "lags_ms",
+            "correlation"
+          ],
+          "description": "Every lag must have one correlation value."
+        },
+        {
+          "kind": "monotonic_non_decreasing",
+          "paths": [
+            "lags_ms"
+          ],
+          "description": "Correlogram lags must be monotonically non-decreasing."
+        },
+        {
+          "kind": "mapped_value",
+          "paths": [
+            "normalization",
+            "correlation_units"
+          ],
+          "allowedValues": {
+            "pearson_coefficient": "1",
+            "raw_pair_count": "count",
+            "count_per_bin": "count/bin",
+            "rate_hz": "Hz"
+          },
+          "description": "Each correlogram normalization has one unambiguous y-axis unit."
+        },
+        {
+          "kind": "conditional_numeric_domain",
+          "paths": [
+            "normalization",
+            "correlation[*]"
+          ],
+          "numericDomains": {
+            "pearson_coefficient": {
+              "min": -1,
+              "max": 1
+            },
+            "raw_pair_count": {
+              "min": 0,
+              "max": 9007199254740991,
+              "integer": true
+            },
+            "count_per_bin": {
+              "min": 0,
+              "max": 9007199254740991,
+              "integer": true
+            },
+            "rate_hz": {
+              "min": 0
+            }
+          },
+          "description": "Correlogram values must obey the numeric domain implied by their normalization."
+        }
       ],
       "rendererRoutes": [
         "media.model_graph",
         "d3"
       ],
+      "examplePayload": {
+        "skill": "nest.correlogram",
+        "specVersion": "1.1.0",
+        "rendererRoute": "d3",
+        "params": {
+          "lags_ms": [
+            -2,
+            -1,
+            0,
+            1,
+            2
+          ],
+          "correlation": [
+            0.1,
+            0.4,
+            1,
+            0.4,
+            0.1
+          ],
+          "normalization": "pearson_coefficient",
+          "correlation_units": "1"
+        },
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "bin_ms": 1,
+            "pair_labels": "E×E",
+            "correlation_normalization": "pearson_coefficient",
+            "correlation_units": "1"
+          }
+        }
+      },
       "examples": [
         {
           "nestExample": "Auto- and crosscorrelation functions for spike trains",
@@ -360,24 +2205,126 @@
     },
     {
       "id": "nest.stimulus_response",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST stimulus-response protocol renderer",
       "description": "Render aligned stimulus waveforms, responses, spikes and protocol epochs.",
       "deviceFamily": "multimeter",
       "scene": null,
       "weak": false,
       "requiredInputKeys": [
+        "times_ms",
         "stimulus",
         "response"
       ],
       "requiredProvenanceKeys": [
         "stim_units",
-        "units"
+        "units",
+        "time_units"
+      ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_literal",
+          "provenanceKey": "time_units",
+          "value": "ms",
+          "description": "The times_ms axis is expressed in milliseconds."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "times_ms": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "stimulus": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          },
+          "response": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          }
+        },
+        "required": [
+          "times_ms",
+          "stimulus",
+          "response"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "times_ms",
+            "stimulus",
+            "response"
+          ],
+          "description": "Time, stimulus, and response samples must align one-to-one."
+        },
+        {
+          "kind": "monotonic_non_decreasing",
+          "paths": [
+            "times_ms"
+          ],
+          "description": "Stimulus-response timestamps must be monotonically non-decreasing."
+        }
       ],
       "rendererRoutes": [
         "media.trace_figure",
         "matplotlib"
       ],
+      "examplePayload": {
+        "skill": "nest.stimulus_response",
+        "specVersion": "1.1.0",
+        "rendererRoute": "matplotlib",
+        "params": {
+          "times_ms": [
+            0,
+            1,
+            2
+          ],
+          "stimulus": [
+            0,
+            1,
+            0
+          ],
+          "response": [
+            -65,
+            -60,
+            -64
+          ]
+        },
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "stim_units": "pA",
+            "units": "mV",
+            "time_units": "ms"
+          }
+        }
+      },
       "examples": [
         {
           "nestExample": "Sinusoidal generator / pulse packet / repeated stimulation",
@@ -390,24 +2337,137 @@
     },
     {
       "id": "nest.astrocyte_dynamics",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST astrocyte Ca²⁺/IP₃ dynamics renderer",
       "description": "Render tripartite-synapse calcium/IP3 state-variable traces.",
       "deviceFamily": "multimeter",
       "scene": "voltage-trace",
       "weak": true,
+      "weakDisclosure": "Derived view — Ca²⁺/IP₃ shown through the analog-trace scene; these are glial signals, not membrane voltage.",
       "requiredInputKeys": [
+        "times_ms",
         "ca_trace",
         "units"
       ],
       "requiredProvenanceKeys": [
         "recorded_variable",
-        "units"
+        "units",
+        "time_units",
+        "sampling_interval"
+      ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_param",
+          "provenanceKey": "units",
+          "paramKey": "units",
+          "description": "Declared units must match the rendered glial trace units."
+        },
+        {
+          "kind": "equals_literal",
+          "provenanceKey": "time_units",
+          "value": "ms",
+          "description": "The times_ms axis is expressed in milliseconds."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "times_ms": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "ca_trace": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -3.4028234663852886e+38,
+              "maximum": 3.4028234663852886e+38
+            }
+          },
+          "units": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+            "x-cortexel-normalize": "trim",
+            "x-cortexel-max-utf16-code-units": 80
+          }
+        },
+        "required": [
+          "times_ms",
+          "ca_trace",
+          "units"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "equal_length",
+          "paths": [
+            "times_ms",
+            "ca_trace"
+          ],
+          "description": "Every glial sample must have one timestamp."
+        },
+        {
+          "kind": "monotonic_non_decreasing",
+          "paths": [
+            "times_ms"
+          ],
+          "description": "Glial timestamps must be monotonically non-decreasing."
+        },
+        {
+          "kind": "non_negative",
+          "paths": [
+            "ca_trace[*]"
+          ],
+          "description": "The declared Ca²⁺ concentration trace cannot be negative."
+        }
       ],
       "rendererRoutes": [
         "media.trace_figure",
         "matplotlib"
       ],
+      "examplePayload": {
+        "scene": "voltage-trace",
+        "params": {
+          "times_ms": [
+            0,
+            1,
+            2
+          ],
+          "ca_trace": [
+            0.1,
+            0.2,
+            0.15
+          ],
+          "units": "uM"
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "recorded_variable": "Ca",
+            "units": "uM",
+            "time_units": "ms",
+            "sampling_interval": 1
+          }
+        },
+        "skill": "nest.astrocyte_dynamics",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "Single astrocyte / tripartite interaction examples",
@@ -420,23 +2480,190 @@
     },
     {
       "id": "nest.compartmental_dynamics",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST compartmental morphology + dynamics renderer",
       "description": "Render multi-compartment morphologies, receptor ports and soma/dendrite traces.",
       "deviceFamily": "multimeter",
       "scene": null,
       "weak": false,
       "requiredInputKeys": [
+        "times_ms",
         "compartments"
       ],
       "requiredProvenanceKeys": [
         "morphology_disclaimer",
-        "recorded_variable"
+        "recorded_variable",
+        "units",
+        "time_units",
+        "sampling_interval"
+      ],
+      "provenanceParamConstraints": [
+        {
+          "kind": "equals_literal",
+          "provenanceKey": "time_units",
+          "value": "ms",
+          "description": "The times_ms axis is expressed in milliseconds."
+        }
+      ],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "times_ms": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "compartments": {
+            "minItems": 1,
+            "maxItems": 256,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                  "x-cortexel-normalize": "trim",
+                  "x-cortexel-max-utf16-code-units": 120
+                },
+                "parent_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120,
+                      "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                      "x-cortexel-normalize": "trim",
+                      "x-cortexel-max-utf16-code-units": 120
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                  "x-cortexel-normalize": "trim",
+                  "x-cortexel-max-utf16-code-units": 240
+                },
+                "values": {
+                  "minItems": 1,
+                  "maxItems": 50000,
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -3.4028234663852886e+38,
+                    "maximum": 3.4028234663852886e+38
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "parent_id",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "times_ms",
+          "compartments"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "each_length_matches",
+          "paths": [
+            "compartments[*].values",
+            "times_ms"
+          ],
+          "description": "Every compartment trace has one value per timestamp."
+        },
+        {
+          "kind": "unique_field",
+          "paths": [
+            "compartments"
+          ],
+          "field": "id",
+          "description": "Compartment ids must be unique."
+        },
+        {
+          "kind": "references_exist",
+          "paths": [
+            "compartments[*].parent_id",
+            "compartments[*].id"
+          ],
+          "description": "Every non-null parent id must reference a declared compartment."
+        },
+        {
+          "kind": "acyclic",
+          "paths": [
+            "compartments[*].id",
+            "compartments[*].parent_id"
+          ],
+          "description": "The compartment parent graph must be acyclic."
+        },
+        {
+          "kind": "monotonic_non_decreasing",
+          "paths": [
+            "times_ms"
+          ],
+          "description": "Compartment timestamps must be monotonically non-decreasing."
+        }
       ],
       "rendererRoutes": [
         "media.model_graph",
         "d3"
       ],
+      "examplePayload": {
+        "skill": "nest.compartmental_dynamics",
+        "specVersion": "1.1.0",
+        "rendererRoute": "d3",
+        "params": {
+          "times_ms": [
+            0,
+            1,
+            2
+          ],
+          "compartments": [
+            {
+              "id": "soma",
+              "parent_id": null,
+              "label": "soma",
+              "values": [
+                -65,
+                -64,
+                -63
+              ]
+            }
+          ]
+        },
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "morphology_disclaimer": "schematic topology; no inferred geometry",
+            "recorded_variable": "V_m",
+            "units": "mV",
+            "time_units": "ms",
+            "sampling_interval": 1
+          }
+        }
+      },
       "examples": [
         {
           "nestExample": "Receptors/current and two-compartment neuron examples",
@@ -449,7 +2676,7 @@
     },
     {
       "id": "nest.animation_replay",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "NEST state replay / animation storyboard renderer",
       "description": "Render time-evolution storyboards and inspectable state replays.",
       "deviceFamily": "computed",
@@ -461,10 +2688,110 @@
       "requiredProvenanceKeys": [
         "frame_rate"
       ],
+      "provenanceParamConstraints": [],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "frames": {
+            "minItems": 1,
+            "maxItems": 10000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time_ms": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "state": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "allOf": [
+                      {
+                        "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+                      },
+                      {
+                        "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+                      }
+                    ],
+                    "x-cortexel-max-utf16-code-units": 80,
+                    "pattern": "\\S",
+                    "x-cortexel-normalize": "trim"
+                  },
+                  "additionalProperties": {}
+                },
+                "annotation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                  "x-cortexel-normalize": "trim",
+                  "x-cortexel-max-utf16-code-units": 500
+                }
+              },
+              "required": [
+                "time_ms",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "frames"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "monotonic_non_decreasing",
+          "paths": [
+            "frames[*].time_ms"
+          ],
+          "description": "Replay frame timestamps must be monotonically non-decreasing."
+        },
+        {
+          "kind": "property_count",
+          "paths": [
+            "frames[*].state"
+          ],
+          "min": 1,
+          "description": "Every replay frame state must contain at least one field."
+        }
+      ],
       "rendererRoutes": [
         "media.manim_storyboard",
         "manim"
       ],
+      "examplePayload": {
+        "skill": "nest.animation_replay",
+        "specVersion": "1.1.0",
+        "rendererRoute": "manim",
+        "params": {
+          "frames": [
+            {
+              "time_ms": 0,
+              "state": {
+                "status": "initial"
+              }
+            }
+          ]
+        },
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "frame_rate": 30
+          }
+        }
+      },
       "examples": [
         {
           "nestExample": "Sudoku progress GIF / Pong replay",
@@ -477,12 +2804,13 @@
     },
     {
       "id": "corpus.knowledge_graph",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "title": "Corpus knowledge-graph 3D renderer",
       "description": "Render a cross-paper corpus knowledge graph in 3D: paper/model/family nodes with citation, instantiation and family edges, plus advisory model-identity (same_as/variant_of) edges.",
       "deviceFamily": "corpus",
       "scene": "knowledge-graph-3d",
       "weak": true,
+      "weakDisclosure": "Advisory graph — same_as/variant_of edges are structural similarity, not certified sameness; force-layout positions and distances are schematic, not quantitative evidence.",
       "requiredInputKeys": [
         "nodes",
         "edges"
@@ -493,17 +2821,230 @@
         "edge_kinds",
         "identity_advisory"
       ],
+      "provenanceParamConstraints": [],
+      "paramsJsonSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                  "x-cortexel-normalize": "trim",
+                  "x-cortexel-max-utf16-code-units": 120
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "paper",
+                    "model",
+                    "family"
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                  "x-cortexel-normalize": "trim",
+                  "x-cortexel-max-utf16-code-units": 240
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "label"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "edges": {
+            "maxItems": 4000,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                  "x-cortexel-normalize": "trim",
+                  "x-cortexel-max-utf16-code-units": 120
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
+                  "x-cortexel-normalize": "trim",
+                  "x-cortexel-max-utf16-code-units": 120
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "cites",
+                    "same_as",
+                    "variant_of",
+                    "instantiates",
+                    "belongs_to_family"
+                  ]
+                }
+              },
+              "required": [
+                "source",
+                "target",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "additionalProperties": false
+      },
+      "paramConstraints": [
+        {
+          "kind": "unique_field",
+          "paths": [
+            "nodes"
+          ],
+          "field": "id",
+          "description": "Node ids must be unique."
+        },
+        {
+          "kind": "unique_tuple",
+          "paths": [
+            "edges[*].source",
+            "edges[*].target",
+            "edges[*].kind"
+          ],
+          "symmetricKinds": [
+            "same_as"
+          ],
+          "description": "Duplicate source/target/kind relationships are not allowed."
+        },
+        {
+          "kind": "references_exist",
+          "paths": [
+            "edges[*].source",
+            "edges[*].target",
+            "nodes[*].id"
+          ],
+          "description": "Every edge endpoint must reference a declared node id."
+        },
+        {
+          "kind": "no_self_loops",
+          "paths": [
+            "edges[*].source",
+            "edges[*].target"
+          ],
+          "description": "Self-loop edges are not renderable by this scene."
+        },
+        {
+          "kind": "endpoint_kinds",
+          "paths": [
+            "edges",
+            "nodes"
+          ],
+          "allowedEndpointKinds": {
+            "cites": [
+              "paper",
+              "paper"
+            ],
+            "same_as": [
+              "model",
+              "model"
+            ],
+            "variant_of": [
+              "model",
+              "model"
+            ],
+            "instantiates": [
+              "paper",
+              "model"
+            ],
+            "belongs_to_family": [
+              "model",
+              "family"
+            ]
+          },
+          "description": "Each semantic edge kind has a fixed source-kind and target-kind contract."
+        }
+      ],
       "rendererRoutes": [
         "media.model_graph",
         "fiber"
       ],
+      "examplePayload": {
+        "scene": "knowledge-graph-3d",
+        "params": {
+          "nodes": [
+            {
+              "id": "p1",
+              "kind": "paper",
+              "label": "Brunel 2000"
+            },
+            {
+              "id": "m1",
+              "kind": "model",
+              "label": "iaf_psc_delta"
+            },
+            {
+              "id": "f1",
+              "kind": "family",
+              "label": "LIF family"
+            }
+          ],
+          "edges": [
+            {
+              "source": "p1",
+              "target": "m1",
+              "kind": "instantiates"
+            },
+            {
+              "source": "m1",
+              "target": "f1",
+              "kind": "belongs_to_family"
+            }
+          ]
+        },
+        "mode": "interactive",
+        "themeMode": "dark",
+        "provenance": {
+          "source": "synthetic_test",
+          "calibrated_posterior": false,
+          "advisory_only": true,
+          "is_paper_local_evidence": false,
+          "synthetic": true,
+          "declared_inputs": {
+            "graph_source": "corpus_kg",
+            "node_kinds": "paper,model,family",
+            "edge_kinds": "instantiates,belongs_to_family",
+            "identity_advisory": true
+          }
+        },
+        "skill": "corpus.knowledge_graph",
+        "specVersion": "1.1.0"
+      },
       "examples": [
         {
           "nestExample": "Cross-paper corpus knowledge graph (papers + models + families)",
           "sourceUrl": "https://github.com/sepahead/Paper2Brain#knowledge-graph",
           "dataShape": "nodes (paper/model/family), edges (cites/same_as/variant_of/instantiates/belongs_to_family)",
           "output": "3D force-directed graph with citation-flow particles and focus labels",
-          "note": "weak:true — same_as/variant_of are advisory structural similarity, never certified sameness."
+          "note": "weak:true — model-identity edges are advisory and force-layout geometry is non-evidentiary."
         }
       ]
     }

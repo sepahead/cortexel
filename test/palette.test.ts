@@ -7,6 +7,12 @@ import {
   registerPalette,
   isRegisteredPalette,
   validatePalette,
+  categorical,
+  colormapGradient,
+  colormapRgba,
+  colormapSvgStops,
+  sampleColormap,
+  TURBO_GLSL,
   type SemanticPalette,
   type PaletteMetadata,
 } from '../core/colormaps';
@@ -67,12 +73,65 @@ describe('semantic palettes', () => {
     expect(entry?.metadata.diverging).toBe(true);
   });
 
+  it('never exposes a mutable internal colormap endpoint tuple', () => {
+    const endpoint = sampleColormap('batlow', 1) as unknown as number[];
+    const expected = [...endpoint];
+    endpoint[0] = 0;
+    expect(sampleColormap('batlow', 1)).toEqual(expected);
+  });
+
+  it('keeps CPU and GLSL Turbo output explicitly in gamut', () => {
+    expect(TURBO_GLSL).toContain('return clamp(vec3(');
+    expect(TURBO_GLSL).toContain('), 0.0, 1.0);');
+    for (let index = 0; index <= 1_000; index++) {
+      for (const channel of sampleColormap('turbo', index / 1_000)) {
+        expect(channel).toBeGreaterThanOrEqual(0);
+        expect(channel).toBeLessThanOrEqual(255);
+      }
+    }
+  });
+
   it('registerPalette adds a new palette to the registry', () => {
     registerPalette('test-custom', TEST_PALETTE, TEST_METADATA);
     expect(isRegisteredPalette('test-custom')).toBe(true);
     expect(getPalette('test-custom')).toEqual(TEST_PALETTE);
     const entry = getPaletteEntry('test-custom');
     expect(entry?.metadata.label).toBe('Test');
+  });
+
+  it('defensively clones and freezes registered colors + metadata', () => {
+    const palette = { ...TEST_PALETTE };
+    const metadata = { ...TEST_METADATA };
+    registerPalette('test-immutable', palette, metadata);
+    palette.cyan = '#ffffff';
+    metadata.label = 'mutated';
+    expect(getPalette('test-immutable').cyan).toBe(TEST_PALETTE.cyan);
+    expect(getPaletteEntry('test-immutable')?.metadata.label).toBe('Test');
+    expect(Object.isFrozen(getPalette('test-immutable'))).toBe(true);
+  });
+
+  it('rejects descriptor tricks instead of storing a different palette than it validated', () => {
+    const hidden = { ...TEST_PALETTE };
+    Object.defineProperty(hidden, 'ink', {
+      value: '#ffffff',
+      enumerable: false,
+    });
+    expect(() => registerPalette('hidden-field', hidden, TEST_METADATA)).toThrow(
+      /enumerable data property/,
+    );
+
+    const changing = { ...TEST_PALETTE } as Record<string, unknown>;
+    Object.defineProperty(changing, 'ink', {
+      enumerable: true,
+      get: () => '#ffffff',
+    });
+    expect(() => registerPalette(
+      'accessor-field',
+      changing as unknown as SemanticPalette,
+      TEST_METADATA,
+    )).toThrow(/enumerable data property/);
+    expect(getPaletteEntry('hidden-field')).toBeUndefined();
+    expect(getPaletteEntry('accessor-field')).toBeUndefined();
   });
 
   it('registerPalette overwrites existing name (hot-reload)', () => {
@@ -125,6 +184,38 @@ describe('validatePalette', () => {
   it('registerPalette throws on invalid palette', () => {
     const bad = { ...TEST_PALETTE, cyan: 'xyz' };
     expect(() => registerPalette('test-bad', bad, TEST_METADATA)).toThrow();
+  });
+
+  it('rejects missing/extra palette keys with a precise error', () => {
+    const { cyan: _cyan, ...missing } = TEST_PALETTE;
+    expect(() => validatePalette(missing as SemanticPalette)).toThrow(/missing colors: cyan/);
+    expect(() =>
+      validatePalette({ ...TEST_PALETTE, surprise: '#ffffff' } as SemanticPalette),
+    ).toThrow(/unknown colors: surprise/);
+  });
+
+  it('rejects invalid names and metadata before registration', () => {
+    expect(() => registerPalette('   ', TEST_PALETTE, TEST_METADATA)).toThrow(/name/);
+    expect(() =>
+      registerPalette('bad-metadata', TEST_PALETTE, {
+        ...TEST_METADATA,
+        label: ' ',
+      }),
+    ).toThrow(/metadata/);
+  });
+});
+
+describe('colormap runtime arguments', () => {
+  it('rejects non-finite samples and unknown runtime names', () => {
+    expect(() => sampleColormap('batlow', NaN)).toThrow(/finite/);
+    expect(() => sampleColormap('unknown' as never, 0.5)).toThrow(/unknown colormap/);
+    expect(() => colormapRgba('batlow', 0.5, 2)).toThrow(/alpha/);
+  });
+
+  it('requires bounded stop counts and finite categorical indices', () => {
+    expect(() => colormapGradient('batlow', 90, 1)).toThrow(/stops/);
+    expect(() => colormapSvgStops('batlow', 1)).toThrow(/stops/);
+    expect(() => categorical(NaN)).toThrow(/finite/);
   });
 });
 

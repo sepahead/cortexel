@@ -5,6 +5,7 @@ import {
   listSkills,
   SKILL_EXAMPLE_PAYLOADS,
   validateSkillInvocation,
+  validateSpec,
   detectEmptyScene,
   spikeRecorderToSceneData,
   splitMultimeterBySender,
@@ -18,14 +19,35 @@ const EXPECTED_PROVENANCE: Record<NestSkillId, string[]> = {
   'nest.spike_raster': ['recorder_id', 'sender_ids', 'population_labels', 'time_units'],
   'nest.rate_response': ['stim_units', 'bin_ms', 'rate_normalization'],
   'nest.connectivity_matrix': ['source_ids', 'target_ids', 'synapse_model', 'weight_units'],
-  'nest.spatial_2d': ['extent', 'mask', 'kernel'],
-  'nest.spatial_3d': ['extent', 'projection_sample_policy'],
+  'nest.spatial_2d': ['extent', 'spatial_units', 'mask', 'kernel'],
+  'nest.spatial_3d': ['extent', 'spatial_units', 'projection_sample_policy'],
   'nest.plasticity_dynamics': ['synapse_model', 'weight_units'],
-  'nest.phase_plane': ['state_variables'],
-  'nest.correlogram': ['bin_ms', 'pair_labels'],
-  'nest.stimulus_response': ['stim_units', 'units'],
-  'nest.astrocyte_dynamics': ['recorded_variable', 'units'],
-  'nest.compartmental_dynamics': ['morphology_disclaimer', 'recorded_variable'],
+  'nest.phase_plane': [
+    'state_variables',
+    'derivation_method',
+    'model_context',
+    'fixed_parameters',
+  ],
+  'nest.correlogram': [
+    'bin_ms',
+    'pair_labels',
+    'correlation_normalization',
+    'correlation_units',
+  ],
+  'nest.stimulus_response': ['stim_units', 'units', 'time_units'],
+  'nest.astrocyte_dynamics': [
+    'recorded_variable',
+    'units',
+    'time_units',
+    'sampling_interval',
+  ],
+  'nest.compartmental_dynamics': [
+    'morphology_disclaimer',
+    'recorded_variable',
+    'units',
+    'time_units',
+    'sampling_interval',
+  ],
   'nest.animation_replay': ['frame_rate'],
   'corpus.knowledge_graph': ['graph_source', 'node_kinds', 'edge_kinds', 'identity_advisory'],
 };
@@ -60,6 +82,13 @@ describe('example payloads are living fixtures', () => {
     }
   });
 
+  it('every renderable example is self-describing and passes validateSpec', () => {
+    for (const [id, payload] of Object.entries(SKILL_EXAMPLE_PAYLOADS)) {
+      expect(payload?.skill).toBe(id);
+      expect(validateSpec(payload).ok, id).toBe(true);
+    }
+  });
+
   it('every renderable skill has an example payload', () => {
     for (const c of listSkills()) {
       if (c.scene !== null) {
@@ -84,7 +113,7 @@ describe('example payloads are living fixtures', () => {
 
 describe('headless verification', () => {
   it('flags an empty SceneData as blank', () => {
-    expect(detectEmptyScene({}).empty).toBe(true);
+    expect(detectEmptyScene({})).toMatchObject({ valid: true, empty: true });
   });
 
   it('reports populated channels for real data', () => {
@@ -95,6 +124,62 @@ describe('headless verification', () => {
       expect(v.empty).toBe(false);
       expect(v.populated).toContain('spikeTimes');
     }
+  });
+
+  it('distinguishes hostile input from a legitimately empty scene', () => {
+    expect(detectEmptyScene(null)).toMatchObject({ valid: false, empty: false });
+    const toxic: Record<string, unknown> = {};
+    Object.defineProperty(toxic, 'spikeTimes', {
+      enumerable: true,
+      get() {
+        throw new Error('must not run');
+      },
+    });
+    expect(detectEmptyScene(toxic)).toMatchObject({ valid: false, empty: false });
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(() => detectEmptyScene(revoked.proxy)).not.toThrow();
+    expect(detectEmptyScene(revoked.proxy)).toMatchObject({ valid: false, empty: false });
+  });
+
+  it('rejects malformed or misaligned render channels rather than calling them valid', () => {
+    expect(detectEmptyScene({ spikeTimes: ['not-a-number'] })).toMatchObject({
+      valid: false,
+      empty: false,
+    });
+    expect(detectEmptyScene({ networkNodes: [null] })).toMatchObject({
+      valid: false,
+      empty: false,
+    });
+    expect(detectEmptyScene({
+      spikeTimes: new Float64Array(0),
+      spikeSenders: new Float32Array([1]),
+      timeUnits: 'ms',
+    })).toMatchObject({ valid: false, empty: false });
+    expect(detectEmptyScene({ unknownChannel: [] })).toMatchObject({
+      valid: false,
+      empty: false,
+    });
+    expect(detectEmptyScene({
+      networkNodes: [{ id: 1, label: 'one' }],
+      networkLayout: 'provided-3d',
+      networkCoordinateUnits: 'mm',
+    })).toMatchObject({ valid: false, empty: false });
+    expect(detectEmptyScene({
+      networkNodes: [{ id: 1, label: 'one', x: 0, y: 0, z: 0 }],
+      networkLayout: 'unpositioned',
+    })).toMatchObject({ valid: false, empty: false });
+    expect(detectEmptyScene({
+      networkNodes: [
+        { id: 1, label: 'one' },
+        { id: 2, label: 'two' },
+      ],
+      networkLayout: 'unpositioned',
+      networkEdges: [{ source: 1, target: 2, weight: 0.5 }],
+    })).toMatchObject({ valid: false, empty: false });
+    expect(detectEmptyScene({
+      vectorField: [{ x: Number.MAX_VALUE, y: 0, z: 0, dx: 0, dy: 0, dz: 0 }],
+    })).toMatchObject({ valid: false, empty: false });
   });
 });
 

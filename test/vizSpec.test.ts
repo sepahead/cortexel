@@ -15,7 +15,7 @@ describe('VizSpec validation', () => {
       expect(r.spec.params).toEqual({});
       // fail-closed provenance defaults
       expect(r.spec.provenance.calibrated_posterior).toBe(false);
-      expect(r.spec.provenance.advisory_only).toBe(false);
+      expect(r.spec.provenance.advisory_only).toBe(true);
       expect(r.spec.provenance.is_paper_local_evidence).toBe(false);
     }
   });
