@@ -21,9 +21,9 @@
       <stop offset="100%" stop-color="#10131a"/>
     </radialGradient>
     <radialGradient id="crebGrad" cx="50%" cy="40%" r="70%">
-      <stop offset="0%" stop-color="#3c4d21"/>
-      <stop offset="62%" stop-color="#26311a"/>
-      <stop offset="100%" stop-color="#161c10"/>
+      <stop offset="0%" stop-color="#293716"/>
+      <stop offset="62%" stop-color="#19230f"/>
+      <stop offset="100%" stop-color="#0d1208"/>
     </radialGradient>
     <filter id="nodeShadow" x="-40%" y="-40%" width="180%" height="180%">
       <feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#000000" flood-opacity="0.38"/>
@@ -44,19 +44,19 @@
       <feGaussianBlur stdDeviation="1.4" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <linearGradient id="eg0" gradientUnits="userSpaceOnUse" x1="147" y1="230" x2="209" y2="230"><stop offset="0%" stop-color="#bcc6d1"/><stop offset="100%" stop-color="#fbbf24"/></linearGradient>
+    <linearGradient id="eg0" gradientUnits="userSpaceOnUse" x1="163" y1="230" x2="209" y2="230"><stop offset="0%" stop-color="#bcc6d1"/><stop offset="100%" stop-color="#fbbf24"/></linearGradient>
     <linearGradient id="eg1" gradientUnits="userSpaceOnUse" x1="287" y1="212.4" x2="411.5" y2="153.1"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient>
-    <linearGradient id="eg2" gradientUnits="userSpaceOnUse" x1="286.9" y1="247.9" x2="423.1" y2="314.1"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#9caf88"/></linearGradient>
+    <linearGradient id="eg2" gradientUnits="userSpaceOnUse" x1="286.9" y1="247.9" x2="414.1" y2="309.7"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#9caf88"/></linearGradient>
     <linearGradient id="eg3" gradientUnits="userSpaceOnUse" x1="214.8" y1="107.9" x2="423.9" y2="126.7"><stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient>
     <linearGradient id="eg4" gradientUnits="userSpaceOnUse" x1="608.5" y1="142.9" x2="499.2" y2="133.4"><stop offset="0%" stop-color="#60a5fa"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient>
     <linearGradient id="eg5" gradientUnits="userSpaceOnUse" x1="641.2" y1="224.6" x2="510" y2="156.1"><stop offset="0%" stop-color="#fb923c"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient>
     <linearGradient id="eg6" gradientUnits="userSpaceOnUse" x1="668.2" y1="329.2" x2="492.8" y2="161.3"><stop offset="0%" stop-color="#fb7185"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient>
-    <linearGradient id="eg7" gradientUnits="userSpaceOnUse" x1="492.2" y1="306.6" x2="664.3" y2="170.3"><stop offset="0%" stop-color="#9caf88"/><stop offset="100%" stop-color="#60a5fa"/></linearGradient>
-    <linearGradient id="eg8" gradientUnits="userSpaceOnUse" x1="498.6" y1="318.2" x2="638.2" y2="268.5"><stop offset="0%" stop-color="#9caf88"/><stop offset="100%" stop-color="#fb923c"/></linearGradient>
-    <linearGradient id="eg9" gradientUnits="userSpaceOnUse" x1="500.9" y1="335.2" x2="603" y2="343.2"><stop offset="0%" stop-color="#9caf88"/><stop offset="100%" stop-color="#fb7185"/></linearGradient>
-    <linearGradient id="eg10" gradientUnits="userSpaceOnUse" x1="110" y1="319" x2="110" y2="267"><stop offset="0%" stop-color="#e879f9"/><stop offset="100%" stop-color="#bcc6d1"/></linearGradient>
-    <linearGradient id="eg11" gradientUnits="userSpaceOnUse" x1="336.9" y1="373" x2="421.1" y2="345"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#9caf88"/></linearGradient>
-    <linearGradient id="eg12" gradientUnits="userSpaceOnUse" x1="446.1" y1="287.2" x2="447.9" y2="292.8"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#9caf88"/></linearGradient>
+    <linearGradient id="eg7" gradientUnits="userSpaceOnUse" x1="500" y1="300.4" x2="664.3" y2="170.3"><stop offset="0%" stop-color="#9caf88"/><stop offset="100%" stop-color="#60a5fa"/></linearGradient>
+    <linearGradient id="eg8" gradientUnits="userSpaceOnUse" x1="508" y1="314.9" x2="638.2" y2="268.5"><stop offset="0%" stop-color="#9caf88"/><stop offset="100%" stop-color="#fb923c"/></linearGradient>
+    <linearGradient id="eg9" gradientUnits="userSpaceOnUse" x1="510.8" y1="336" x2="603" y2="343.2"><stop offset="0%" stop-color="#9caf88"/><stop offset="100%" stop-color="#fb7185"/></linearGradient>
+    <linearGradient id="eg10" gradientUnits="userSpaceOnUse" x1="110" y1="319" x2="110" y2="283"><stop offset="0%" stop-color="#e879f9"/><stop offset="100%" stop-color="#bcc6d1"/></linearGradient>
+    <linearGradient id="eg11" gradientUnits="userSpaceOnUse" x1="336.9" y1="373" x2="411.6" y2="348.1"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#9caf88"/></linearGradient>
+    <linearGradient id="eg12" gradientUnits="userSpaceOnUse" x1="446.1" y1="287.2" x2="444.9" y2="283.3"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#9caf88"/></linearGradient>
     <linearGradient id="eg13" gradientUnits="userSpaceOnUse" x1="398.1" y1="228.3" x2="209.7" y2="124.7"><stop offset="0%" stop-color="#ef4444"/><stop offset="100%" stop-color="#34d399"/></linearGradient>
     <linearGradient id="eg14" gradientUnits="userSpaceOnUse" x1="284.1" y1="207.3" x2="287.9" y2="204.7"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#2dd4bf"/></linearGradient>
     <linearGradient id="eg15" gradientUnits="userSpaceOnUse" x1="357.3" y1="202.8" x2="398.7" y2="227.2"><stop offset="0%" stop-color="#2dd4bf"/><stop offset="100%" stop-color="#ef4444"/></linearGradient>
@@ -102,11 +102,12 @@
     .seat-gate     { fill: url(#gateGrad); }
     .seat-vox      { fill: url(#voxGrad); }
     .mel-plate    { fill: url(#melPlate); }
-    .mel-rock     { fill: #050302; }
+    .mel-rock     { fill: url(#melRock); }
+    .mel-fog-g    { opacity: 0.42; }
     .mel-ridge    { fill: none; stroke: #fdba74; stroke-opacity: 0.7; stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
-    .mel-facet    { fill: #070302; }
-    .mel-tin      { stroke: #000000; stroke-opacity: 0.4; stroke-width: 0.6; stroke-linejoin: round; }
-    .mel-splat    { fill: url(#melSplat); }
+    .mel-facet    { fill: #1a0e08; }
+    .mel-tin      { stroke: #000000; stroke-opacity: 0.35; stroke-width: 0.6; stroke-linejoin: round; }
+    .mel-front    { fill: #ffedd5; filter: url(#edgeGlow); }
     .mel-edge     { fill: none; stroke: url(#melBezel); stroke-width: 2.4; stroke-linejoin: miter; }
     .mel-groove   { fill: none; stroke: #05070b; stroke-opacity: 0.5; stroke-width: 1; }
     .mel-hairline { fill: none; stroke: #2b333d; stroke-opacity: 0.55; stroke-width: 1; }
@@ -145,10 +146,8 @@
     .flag-edge  { fill: none; stroke: #ffffff; stroke-opacity: 0.16; stroke-width: 0.6; }
     .vox-label  { font: 400 12px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #f0abfc; }
     .vox-net    { color: #e879f9; }
-    .vox-code   { fill: none; stroke: #f0abfc; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
     .seat-creb     { fill: url(#crebGrad); }
     .creb-signal   { fill: none; stroke: #b6cf86; stroke-opacity: 0.7; stroke-width: 1.2; }
-    .creb-tick     { fill: none; stroke: #b6cf86; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     .creb-xhair    { fill: none; stroke: #a8c07a; stroke-opacity: 0.7; stroke-width: 1.3; stroke-linecap: round; }
     .creb-eye-core { fill: #ff6b5e; }
     .creb-eye-hot  { fill: #fff1f0; }
@@ -163,6 +162,8 @@
     .mw-blade-sh  { fill: none; stroke: #05070b; stroke-opacity: 0.7; stroke-width: 1.2; }
     .mw-inner     { fill: none; stroke: url(#mwBezel); stroke-width: 1.6; stroke-opacity: 0.9; stroke-linecap: round; }
     .mw-notch     { fill: none; stroke: #bae6fd; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+    .mw-tick      { stroke: #38bdf8; stroke-opacity: 0.4; stroke-width: 1; }
+    .mw-dot       { fill: #7dd3fc; fill-opacity: 0.16; }
     .mw-lock      { fill: none; stroke: #ef4444; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
     .mw-lock-dot  { fill: #ff6b5e; }
     .mw-drone-arm { fill: none; stroke: #7dd3fc; stroke-width: 1.4; stroke-linecap: round; }
@@ -217,7 +218,6 @@
     <circle cx="110" cy="360" r="34" stroke="url(#voxBezel)" class="seat-ring"/>
     <circle cx="110" cy="360" r="31.8" class="seat-groove"/>
     <circle cx="110" cy="360" r="35.4" class="seat-hairline"/>
-    <path class="vox-code" d="M84 321 L75 329 L84 337"/><path class="vox-code" d="M136 383 L145 391 L136 399"/>
     <defs><linearGradient id="voxCalli0" gradientUnits="userSpaceOnUse" x1="110" y1="338" x2="93" y2="371"><stop offset="0" stop-color="currentColor" stop-opacity="0.45"/><stop offset="1" stop-color="currentColor" stop-opacity="0.725"/></linearGradient><linearGradient id="voxCalli1" gradientUnits="userSpaceOnUse" x1="110" y1="338" x2="127" y2="371"><stop offset="0" stop-color="currentColor" stop-opacity="0.45"/><stop offset="1" stop-color="currentColor" stop-opacity="1"/></linearGradient><linearGradient id="voxCalli2" gradientUnits="userSpaceOnUse" x1="93" y1="371" x2="127" y2="371"><stop offset="0" stop-color="currentColor" stop-opacity="0.725"/><stop offset="1" stop-color="currentColor" stop-opacity="1"/></linearGradient>
       <radialGradient id="voxFire"><stop offset="0%" stop-color="#fbcfe8" stop-opacity="0.95"/><stop offset="45%" stop-color="#e879f9" stop-opacity="0.4"/><stop offset="100%" stop-color="#e879f9" stop-opacity="0"/></radialGradient>
     </defs>
