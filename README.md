@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img alt="Cortexel logo" src="assets/logo-light.svg" width="200">
+  </picture>
+</p>
+
 # Cortexel
 
 [![CI](https://github.com/sepahead/cortexel/actions/workflows/ci.yml/badge.svg)](https://github.com/sepahead/cortexel/actions/workflows/ci.yml)
@@ -7,9 +14,10 @@
 **Cortexel** is an agent-consumable scientific-visualization *contract* for neural
 simulations. An AI agent emits a declarative **`VizSpec`** (plain JSON); Cortexel
 validates it, routes it to a scene, and enforces **scientific-honesty provenance
-fail-closed** — then a host-injected renderer draws it. Cortexel ships the reusable
-scene primitives (a population voxel hub, a point-neuron cloud, a complete 3D
-knowledge graph) plus the design-law and colour system those renderers share.
+fail-closed** — then a checked renderer draws it. Cortexel ships canonical,
+accessible SVG figures for nineteen native analysis/topology skills, reusable 3D
+scene primitives (a population voxel hub and point-neuron cloud), and a complete
+evidence-carrying 3D knowledge graph.
 
 It is built for AI agents — with a custom harness and skills — that need a *typed,
 honest path* from simulator output to a figure without hand-rolling validation or
@@ -18,10 +26,10 @@ API lives in `cortexel/core`, which is dependency-free beyond `zod` and runs
 server-side.
 
 > **What Cortexel is (and isn't).** It is the validation, routing, honesty and
-> design-contract layer — not a batteries-included chart library. The `react` layer
-> ships shared scene *primitives* and one complete scene (the 3D knowledge graph);
-> the concrete per-scene r3f components (spike raster, Brunel network, STDP, …) are
-> injected by the host via `renderScene`. Headless render-to-image/video is on the
+> design-contract layer with a canonical SVG figure path for analysis charts. The
+> host still owns WebGL framing and injects application-specific 3D scenes; Cortexel
+> does not invent a matrix, morphology, protocol panel, or animation for a contract
+> that lacks the necessary data. Headless render-to-image/video remains on the
 > roadmap. `0.5.0` — pre-`1.0`, APIs may still change.
 
 **New here?**
@@ -41,31 +49,42 @@ flowchart LR
   F -- Invalid --> G["Structured repair JSON<br/>hint + example + didYouMean"]
   G --> B
   F -- Valid --> H["Checked payload<br/>mandatory honesty caption"]
-  H --> I["Host-injected R3F scene"]
-  H --> J["Host D3 / matplotlib / Manim route"]
+  H --> I["Canonical accessible SVG chart"]
+  H --> J["Host-injected R3F scene"]
+  H --> K["Checked host D3 / matplotlib / Manim route"]
 ```
 
 ### Visualization coverage
 
 | Visualization | Skill or primitive | Render target | Typical use | Shipping status |
 |---------------|--------------------|---------------|-------------|-----------------|
-| Spike raster | `nest.spike_raster` | `spike-raster` | Population timing, synchrony, burst structure | Contract + host-injected scene |
-| Voltage or analog trace | `nest.voltage_trace`, `nest.astrocyte_dynamics` | `voltage-trace` | Membrane dynamics or explicitly disclosed glial signals | Contract + host-injected scene |
-| F-I / rate-response curve | `nest.rate_response` | `fi-curve` | Excitability and stimulus-response comparison | Contract + host-injected scene |
-| Connectivity or spatial network | `nest.connectivity_matrix`, `nest.spatial_3d` | `network-topology` | Synaptic structure or unit-labelled 3D positions | Contract + host-injected scene |
-| Plasticity dynamics | `nest.plasticity_dynamics` | `stdp` | Weight evolution and learning-window analysis | Contract + host-injected scene |
-| Phase plane | `nest.phase_plane` | `phase-plane` | State-space flow and fixed-point reasoning | Contract + host-injected scene |
-| Corpus knowledge graph | `corpus.knowledge_graph` | `knowledge-graph-3d` | Paper → model → family evidence exploration | Complete Canvas-less R3F scene + DOM companion |
+| Spike raster | `nest.spike_raster` | `spike-raster` | Population timing, synchrony, burst structure | Canonical accessible SVG figure |
+| ISI and peri-stimulus histograms | `nest.isi_distribution`, `nest.psth` | `isi-distribution`, `psth` | Spike-train regularity and trial-aligned aggregate response across selected senders | Canonical accessible SVG figures |
+| Population rate over time | `nest.population_rate` | `population-rate` | Auditable mean rate from raw bin counts and recorded-sender denominators | Canonical accessible SVG step figure |
+| Correlogram | `nest.correlogram` | `correlogram` | Oriented raw/weighted/rate/Pearson lag statistics | Canonical accessible SVG stem figure |
+| Voltage or analog trace | `nest.voltage_trace`, `nest.astrocyte_dynamics` | `voltage-trace` | Membrane dynamics or explicitly disclosed glial signals | Canonical accessible SVG figures |
+| F-I / rate-response curve | `nest.rate_response` | `fi-curve` | Excitability and stimulus-response comparison | Canonical accessible SVG figure |
+| Connection topology | `nest.connection_graph` | `network-topology` | Directed synapses with isolates, autapses, multapses, snapshot scope and honest schematic layout | Canonical accessible SVG figure + host scene route |
+| Connection matrices | `nest.adjacency_matrix`, `nest.weight_matrix`, `nest.delay_matrix` | `connection-matrix` | Target-row/source-column presence, weight and delay snapshots with explicit aggregation | Canonical accessible sparse SVG heatmaps |
+| In/out degree distributions | `nest.in_degree_distribution`, `nest.out_degree_distribution` | `degree-distribution` | Exact zero-inclusive node-degree counts from a declared node universe | Canonical accessible SVG figures |
+| Connection-delay distribution | `nest.delay_distribution` | `delay-distribution` | Auditable count/probability/density views over positive NEST delays | Canonical accessible SVG figure |
+| Measured 2D spatial map | `nest.spatial_map_2d` | `spatial-map-2d` | Identified positions with units, center/extent, edge wrap and MPI scope | Canonical equal-aspect accessible SVG figure |
+| 3D spatial network | `nest.spatial_3d` | `network-topology` | Unit-labelled 3D positions | Contract + host-injected scene |
+| Plasticity dynamics | `nest.plasticity_dynamics` | `stdp` | Measured weight evolution over time | Canonical accessible SVG figure |
+| Synaptic-weight distribution | `nest.weight_histogram` | `weight-histogram` | Unit-labelled connection-weight snapshots with explicit sampling policy | Canonical accessible SVG figure |
+| Phase plane | `nest.phase_plane` | `phase-plane` | Checked state-space vector field | Canonical accessible SVG figure |
+| Corpus knowledge graph | `corpus.knowledge_graph` | `knowledge-graph-3d` | Snapshot-bound paper → model → family evidence exploration | Complete routed-multigraph R3F scene + full DOM evidence companion |
 | Population and neuron expansion | `ExpandablePopulation`, `ExpandableNeurons` | Host Canvas | Interactive multiscale neural explainers | Reusable R3F primitives + DOM companions |
-| Correlogram, 2D spatial, protocol, morphology, replay | Five `scene:null` skills | D3 / matplotlib / Manim | Analyses with no honest Cortexel scene yet | Strict checked host-renderer route |
+| Legacy 2D spatial, protocol, morphology, replay | Four `scene:null` skills | D3 / matplotlib / Manim | Stored legacy envelopes and analyses with no native scene yet | Strict checked host-renderer route |
 
 ## Use cases
 
 | Goal | Cortexel workflow | Why it helps |
 |------|-------------------|--------------|
-| Autonomous NEST report generation | Normalize a raw device dict into host `SceneData` as needed, route its family, then author matching skill params with `buildVizSpec`. | The adapter and VizSpec gate stay distinct, and the agent never invents a scene, units, or provenance shape. |
+| Autonomous NEST report generation | Normalize a raw device dict into host `SceneData`, or derive checked spike, connection-snapshot, degree, matrix, delay and spatial params, then author the matching skill with `buildVizSpec`. | Deterministic transforms and the VizSpec gate stay distinct, and the agent never invents a scene, units, bins, node universes, aggregation, or provenance shape. |
 | Simulation QA and regression figures | Validate axes and identities, call `detectEmptyScene`, and reject malformed or blank render data before pixels exist. | Broken recorder output fails before it becomes a convincing but empty figure. |
-| Paper-to-simulation evidence maps | Author `corpus.knowledge_graph`, map its validated params with `mapCorpusKnowledgeGraph`, and render the supplied 3D graph plus `KnowledgeGraphA11yList`. | Advisory identity edges and force-layout geometry remain explicitly non-evidentiary. |
+| Paper-to-simulation evidence maps | Adapt an Engram entity graph with `adaptEngramCorpusEntityGraph`, author `corpus.knowledge_graph`, map it with `mapCorpusKnowledgeGraph`, and render the supplied 3D graph plus its DOM companions. | Snapshot identity, typed evidence, uncalibrated scores, advisory assertions, and schematic layout stay machine-checkable. |
+| Agent-to-figure analysis charts | Pass a validated or raw self-describing agent spec to `ReferenceVizSpecFigure` from `cortexel/react/charts`. | The strict gate, exact skill dispatch, accessible SVG, and non-dismissible caption are supplied together. |
 | Safety gateway for LLM-generated visuals | Put `validateSpec` or `validateHostRendererSpec` between agent output and every renderer. | Unknown fields, contradictory units, oversized inputs, and unsupported claims fail closed. |
 | Python or Rust visualization backends | Consume `cortexel/skills.manifest.json` and implement its JSON Schemas, defaults, portable constraints, and honesty policy. | Non-TypeScript agents share the same versioned contract as the TypeScript runtime. |
 | Interactive neural explainers | Combine population/neuron primitives with host-owned Canvas controls and the exported DOM selection companions. | One interaction model serves pointer, keyboard, screen-reader, and reduced-motion users. |
@@ -80,7 +99,10 @@ npm install github:sepahead/cortexel
 # Once the registry package is published:
 npm install cortexel                 # pulls zod automatically
 
-# The react rendering layer needs these peers:
+# The canonical SVG chart subpath needs only React:
+npm install react react-dom
+
+# The 3D react rendering layer additionally needs these peers:
 npm install react react-dom three @react-three/fiber
 
 # TypeScript projects also need the React/three declarations:
@@ -91,8 +113,9 @@ npm install d3-force-3d
 ```
 
 `cortexel/core` is dependency-free beyond `zod` and safe to import server-side.
-`cortexel/react` needs the react / react-dom / three / react-three-fiber peers. `d3-force-3d` is needed
-**only** by the `cortexel/react/knowledge-graph` subpath.
+`cortexel/react/charts` needs only React. `cortexel/react` needs React, Three and
+React Three Fiber; `d3-force-3d` is needed **only** by
+`cortexel/react/knowledge-graph`.
 
 ## Quickstart
 
@@ -122,27 +145,26 @@ if (result.ok) {
 }
 ```
 
-**Render it** (react). The spec is self-describing (`skill` + `specVersion`), so
-`VizSpecRenderer` re-runs the same strict gate and overlays the caption — you inject
-the concrete scene; Cortexel enforces the contract and stays host-agnostic:
+**Render a canonical analysis figure** (react). The spec is self-describing
+(`skill` + `specVersion`), so this wrapper re-runs the strict gate, dispatches by
+the exact skill (not only its scene), and keeps the bound caption in the figure
+footer. It supports voltage/glial traces, rasters, F-I, ISI, PSTH,
+population-rate steps, correlograms, weight/delay histograms, plasticity traces,
+phase planes, connection graphs, adjacency/weight/delay matrices, in/out-degree
+distributions, and measured 2D spatial maps:
 
 ```tsx
-import { VizSpecRenderer } from 'cortexel/react';
+import { ReferenceVizSpecFigure } from 'cortexel/react/charts';
 
 export function Figure({ spec }) {
-  return (
-    <VizSpecRenderer
-      spec={spec}                          // self-describing → strict gate runs automatically
-      // Cortexel is host-agnostic: YOU inject the scene. It receives the VALIDATED
-      // params + provenance + resolved palette.
-      renderScene={({ skill, scene, themeMode, params, palette }) => (
-        <MySpikeRaster skill={skill} data={params} themeMode={themeMode} palette={palette} />
-      )}
-      onError={(errors) => console.warn('Invalid VizSpec', errors)}
-    />
-  );
+  return <ReferenceVizSpecFigure spec={spec} width={960} height={540} />;
 }
 ```
+
+Legacy topology, 3D spatial, knowledge-graph and host-only skills return an
+explicit alert rather than borrowing a misleading chart. A host that owns a
+custom/WebGL surface uses `VizSpecRenderer` from `cortexel/react` and injects
+`renderScene` as before.
 
 ## The agent loop
 
@@ -159,6 +181,11 @@ import {
   formatInvocationErrors,  // 3. prompt-safe structured JSON repair block
   validateSpec,            // 4. re-validate a stored self-describing spec (reads spec.skill)
   validateHostRendererSpec,//    re-validate a stored scene:null envelope
+  spikeRecorderToIsiParams,
+  spikeTrialsToPsthParams,
+  spikeRecorderToPopulationRateParams,
+  correlationDetectorToCorrelogramParams,
+  adaptEngramCorpusEntityGraph, // Engram response → strict snapshot-bound KG params
 } from 'cortexel/core';
 ```
 
@@ -184,7 +211,12 @@ sequenceDiagram
   **JSON Schema**), cross-field constraints, provenance keys, and a worked example.
   `routeToScene({ deviceFamily, … })` maps a NEST device family to a skill/scene and
   fails closed on unknown, mismatched, or ambiguous discriminators, handing back
-  exactly what's needed to retry.
+  exactly what's needed to retry. Spike-recorder routing distinguishes
+  `population_rate` from `fi_response` (the ambiguous legacy `rates` value fails),
+  while `correlation_detector` routes directly to the correlogram. GetConnections
+  routing distinguishes graph, adjacency/weight/delay matrix, in/out degree,
+  weight-distribution and delay-distribution requests; GetPosition distinguishes
+  measured 2D maps from 3D positions. Raw field presence never guesses the view.
 - **Author + validate** — `buildVizSpec` (above), or the lower-level
   `validateSkillInvocation(skillId, payload)` if you assemble the envelope yourself.
   For a `scene: null` skill, use `buildHostRendererInvocation` (or
@@ -201,11 +233,39 @@ sequenceDiagram
   cross-field constraints for every skill, complete examples, exact-JSON budgets,
   envelope/default/normalization rules, binary64 + UTF-16 semantics, strict
   invocation/provenance policy, palette policy, and the caption derivation policy.
+  Manifest v8 additionally exposes per-skill deprecation, router eligibility and
+  raw-output transform metadata, with the authoritative family/shape routing map
+  in `routingDiscriminators` for Engram and other non-TypeScript agents.
 
-There are **14 skills** (13 `nest.*` device-output skills + `corpus.knowledge_graph`);
-**9 render to a Cortexel scene**, and 5 declare `scene: null` because no honest scene
-exists yet (2D spatial, correlogram, morphology, …) — those route to a host renderer
-rather than being mis-drawn. See the full catalog in [AGENTS.md](./AGENTS.md).
+There are **26 skills** (25 `nest.*` simulation/analysis skills + `corpus.knowledge_graph`);
+**22 render to a Cortexel scene**, and 4 declare `scene: null` because no honest scene
+matches those specific payload contracts (legacy 2D spatial, protocol, morphology,
+replay) — those route to a host renderer rather than being mis-drawn. See the full
+catalog in [AGENTS.md](./AGENTS.md).
+
+PSTH normalization is mechanically auditable: bins aggregate raw events from all
+selected senders across `trial_count`; `count_per_trial` divides that integer total
+by the trial count, and `rate_hz` additionally divides by the bin duration in
+seconds. Cortexel recovers and verifies the underlying integer count before a PSTH
+payload can render.
+
+Population-rate normalization is equally mechanical: each series retains its raw
+integer bin counts and exact recorded-sender denominator, and the gate verifies
+`rate_hz = count × 1000 / (sender_count × bin_width_ms)` for every value. The
+transform layer accepts NEST's nonchronological recorder output and supplies exact
+half-open bins for ISI, PSTH and population-rate params; the correlation-detector
+adapter preserves NEST's positive-lag orientation and raw-versus-weighted statistic.
+
+Connection transforms accept either the official singular/scalar SynapseCollection
+shape or canonical plural arrays, require one form consistently per snapshot, and
+never broadcast scalars or deduplicate rows.
+Agents must supply the complete source/target node universes so isolates and
+zero-degree nodes survive. Every result carries simulation snapshot time and a
+typed single-process, MPI target-rank-local, or all-ranks-merged scope. Matrices
+freeze NEST's target-row/source-column convention and explicit multapse aggregation;
+rank-local evidence may render with disclosure, but cannot produce a supposedly
+global out-degree distribution. Spatial maps likewise require matching node ids,
+position scope, center, extent, edge-wrap metadata and units.
 
 > **Naming.** The axis is not NEST-only (`corpus.knowledge_graph` has no NEST device).
 > Prefer the neutral aliases `SKILL_IDS` / `SkillId` / `SKILL_REGISTRY` / `isSkillId`;
@@ -299,7 +359,7 @@ graph's identity edges plus force-layout geometry are advisory/non-evidentiary.
 Both paths always show the fail-closed caption; only the agent path additionally
 enforces per-skill params and the derived-view disclosure.
 
-The five `scene:null` skills do not use `VizSpecRenderer`; their strict equivalent is
+The four `scene:null` skills do not use `VizSpecRenderer`; their strict equivalent is
 `validateHostRendererInvocation`, whose successful result carries the checked host
 envelope, allowed `rendererRoutes`, and the same mandatory caption. Hosts must display
 that caption alongside their D3/matplotlib/Manim output.
@@ -338,6 +398,7 @@ Dependency-ascending layers, each its own entrypoint:
 | Entry | Deps | Contents | Status |
 |-------|------|----------|--------|
 | `cortexel/core` (and the root `cortexel`) | `zod` | VizSpec contract, skill axis (registry/router/validate/**author**/adapters), colormaps + palettes, GLSL strings, design-law types, provenance/honesty model, manifest | available |
+| `cortexel/react/charts` | + react | Strict canonical SVG analysis, matrix, topology and spatial figures | available |
 | `cortexel/react` | + react / react-dom / three / r3f | `VizSpecRenderer`, `usePopulationExpand`, `ExpandablePopulation`, `ExpandableNeurons`, DOM selection companions, `neuronShaders` | available |
 | `cortexel/react/knowledge-graph` | + d3-force-3d | `KnowledgeGraph3DScene`, `KnowledgeGraphA11yList`, `mapCorpusKnowledgeGraph` | available |
 | `cortexel/three` | three only | headless `Scene*Builder → THREE.Group` | planned |
@@ -351,6 +412,13 @@ from `cortexel/react`.
 
 The `react` layer ships the reusable pieces the concrete scenes are built from:
 
+- **`ReferenceVizSpecFigure`** (`cortexel/react/charts`) — the strict
+  agent-spec→accessible-SVG path for nineteen analysis/topology skills. It reuses
+  `VizSpecRenderer`, has no trusted-envelope bypass, dispatches by skill, combines
+  large series/events into bounded SVG paths, discloses units/normalization,
+  preserves literal population-rate bins and oriented correlogram semantics, and
+  keeps the mandatory caption in normal document flow. The subpath imports no
+  Three, R3F or d3.
 - **`ExpandablePopulation`** — the population voxel hub. Click/tap selects it; the
   owning scene collapses the hub and expands the constituent neurons. Honors
   `prefers-reduced-motion` and demand rendering. Pair it with the exported
@@ -367,8 +435,9 @@ The `react` layer ships the reusable pieces the concrete scenes are built from:
 - **`usePopulationExpand`** — THREE-free selection/hover state (with an optional
   controlled override so a scene that already owns the state doesn't get a second owner).
 - **`KnowledgeGraph3DScene`** (`cortexel/react/knowledge-graph`) — a complete,
-  Canvas-less 3D force-directed graph: instanced unlit nodes, additive edges with
-  persistent arrowheads, citation-flow particles, hover/selection emphasis and a network-free canvas-texture
+  Canvas-less 3D force-directed multigraph: instanced unlit nodes, deterministic
+  routed lanes for parallel assertions, additive edges with persistent arrowheads,
+  citation-flow particles, hover/selection emphasis and a network-free canvas-texture
   focus label, all
   ticked in an allocation-free `useFrame`. Layouts are deterministic (the same graph
   reproduces the same shape on every mount) and keyed on graph *content*, so hosts that
@@ -376,11 +445,22 @@ The `react` layer ships the reusable pieces the concrete scenes are built from:
   camera ownership stays with the host unless it explicitly opts into `autoFrame` or
   selection fly-to; honors `reducedMotion`.
   Its companion **`mapCorpusKnowledgeGraph(params, palette)`** turns validated
-  `corpus.knowledge_graph` params into the scene's node/edge props (colour by kind,
-  radius by degree, flow particles on citations), so the graph renders end-to-end from
-  an agent's VizSpec. `KnowledgeGraphA11yList` provides the required keyboard- and
-  screen-reader-accessible, node/relationship-paginated DOM mirror for the otherwise
-  pointer-driven WebGL graph.
+  `corpus.knowledge_graph` params into the scene's node/edge props while preserving
+  stable assertion ids, typed evidence, bounded attributes, epistemic status and
+  explicitly uncalibrated scores. Search uses one metadata-aware predicate across
+  nodes, routed edges, arrows, particles, and the DOM mirror. Duplicate identities,
+  dangling/self-loop relationships and unreadable edge bundles fail closed; the
+  schematic force simulation uses one spring per unordered node pair rather than
+  overweighting repeated evidence. `KnowledgeGraphLegend` decodes node/edge
+  colors, direction, flow and counts while repeating the schematic-layout note;
+  pass it the mapper's snapshot context to expose the graph id, source, immutable
+  snapshot id, scope and RFC-3339 generation time in the DOM. Every element must
+  carry a direct snapshot/citation/external-source anchor (node references are
+  supplemental), node scores are extraction-confidence only, and the strict gate
+  fixes the envelope itself to advisory, non-paper-local provenance.
+  `KnowledgeGraphA11yList` provides the required
+  keyboard- and screen-reader-accessible, paginated evidence/relationship mirror for
+  the otherwise pointer-driven WebGL graph.
 
 ## Roadmap
 
@@ -389,8 +469,12 @@ Known gaps, roughly in priority order — contributions welcome:
 - **Headless export** (`mode: 'export'`, `cortexel/three`, `cortexel/headless`) — render
   a VizSpec to PNG/MP4/SVG without a browser, so an autonomous agent can produce a
   figure *artifact*. Today `export` returns an explicit 501-style notice.
-- **Reference scenes** — ship a canonical `renderScene` implementation per scene so
-  Cortexel is "emit a VizSpec, get a figure" out of the box, not only a contract.
+- **Spatial probability and projection diagnostics** — separately contract NEST
+  masks, kernels, connection-probability-versus-distance plots and sampled spatial
+  projections. They are intentionally not inferred from measured GetPosition data.
+- **Interactive large-network topology** — add an optional isolated R3F topology
+  subpath with instanced nodes, deterministic parallel/self-edge routing and a full
+  DOM companion. The canonical static SVG graph remains the render/export baseline.
 - **Simulator-neutral axis** — a `generic` data-source family (plain `{times,senders}` /
   `{times,values}` arrays) so Brian2 / NEURON / arbitrary data route without claiming to
   be NEST.
