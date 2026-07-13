@@ -7,7 +7,7 @@
 // while time axes stay float64. No host/NEST import — plain dicts only.
 
 import type { SceneData } from '../designLaws';
-import { z, type ZodType } from 'zod';
+import { z } from 'zod';
 import {
   GetConnectionsSchema,
   GetPosition2DSchema,
@@ -20,9 +20,10 @@ import {
 } from './shapes';
 import {
   SAFE_DISPLAY_STRING_PATTERN,
-  formatValidationIssues,
+  intrinsicTypedArrayLength,
   safeDiagnosticText,
 } from '../safeRuntime';
+import { parseNestInput } from './safeInput';
 
 export type AdapterResult =
   | { ok: true; data: SceneData; senderIndexMap?: Map<number, number> }
@@ -55,73 +56,6 @@ const WeightOptionsSchema = z.object({
   weightUnits: z.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
 }).strict();
 
-function zerr(error: {
-  issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>;
-}): { ok: false; errors: string[] } {
-  return {
-    ok: false,
-    errors: formatValidationIssues(error.issues),
-  };
-}
-
-function snapshotAdapterRecord(
-  input: unknown,
-): { ok: true; value: unknown } | { ok: false; errors: string[] } {
-  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
-    return { ok: true, value: input };
-  }
-  try {
-    const prototype = Object.getPrototypeOf(input);
-    if (prototype !== Object.prototype && prototype !== null) {
-      return { ok: false, errors: ['(root): device payload must be a plain object'] };
-    }
-    const keys = Reflect.ownKeys(input);
-    if (keys.length > NEST_ADAPTER_LIMITS.maxRootKeys) {
-      const samples = keys.slice(0, 8).map((key) => safeDiagnosticText(
-        JSON.stringify(typeof key === 'string' ? key.slice(0, 60) : '<symbol>'),
-        80,
-      ));
-      return {
-        ok: false,
-        errors: [
-          `(root): payload has ${keys.length} fields; at most ${NEST_ADAPTER_LIMITS.maxRootKeys} are allowed (sample: ${samples.join(', ')})`,
-        ],
-      };
-    }
-    const snapshot: Record<string, unknown> = {};
-    for (const key of keys) {
-      if (typeof key !== 'string') {
-        return { ok: false, errors: ['(root): symbol fields are not allowed'] };
-      }
-      if (key.length > 120) {
-        return { ok: false, errors: ['(root): field names may contain at most 120 characters'] };
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(input, key);
-      if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) {
-        return {
-          ok: false,
-          errors: [`field ${safeDiagnosticText(JSON.stringify(key), 140)} must be an enumerable data property`],
-        };
-      }
-      if (typeof descriptor.value === 'string' && descriptor.value.length > 5_000) {
-        return {
-          ok: false,
-          errors: [`field ${safeDiagnosticText(JSON.stringify(key), 140)} has a string value exceeding 5000 characters`],
-        };
-      }
-      Object.defineProperty(snapshot, key, {
-        value: descriptor.value,
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      });
-    }
-    return { ok: true, value: snapshot };
-  } catch {
-    return { ok: false, errors: ['(root): device payload could not be safely inspected'] };
-  }
-}
-
 function preflightArrayFields(
   input: unknown,
   fields: readonly string[],
@@ -138,7 +72,7 @@ function preflightArrayFields(
         const length = Object.getOwnPropertyDescriptor(value, 'length');
         itemCount = length && 'value' in length ? length.value as number : undefined;
       } else if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
-        itemCount = (value as unknown as ArrayLike<unknown>).length;
+        itemCount = intrinsicTypedArrayLength(value);
       }
       if (itemCount !== undefined && itemCount > max) {
         return {
@@ -151,23 +85,6 @@ function preflightArrayFields(
     return { ok: false, errors: ['(root): device payload could not be safely inspected'] };
   }
   return null;
-}
-
-function parseInput<T>(
-  schema: ZodType<T>,
-  input: unknown,
-): { ok: true; data: T } | { ok: false; errors: string[] } {
-  try {
-    const snapshot = snapshotAdapterRecord(input);
-    if (!snapshot.ok) return snapshot;
-    const parsed = schema.safeParse(snapshot.value);
-    return parsed.success ? { ok: true, data: parsed.data } : zerr(parsed.error);
-  } catch {
-    return {
-      ok: false,
-      errors: ['input validation could not safely inspect the device payload'],
-    };
-  }
 }
 
 /** Re-index arbitrary global NEST sender ids onto a dense 0..N-1 range, keeping
@@ -193,7 +110,7 @@ function denseIndex(senders: number[]): {
 }
 
 export function spikeRecorderToSceneData(events: unknown): AdapterResult {
-  const parsed = parseInput(SpikeRecorderEventsSchema, events);
+  const parsed = parseNestInput(SpikeRecorderEventsSchema, events);
   if (!parsed.ok) return parsed;
   const { senders, times } = parsed.data;
   const indexed = denseIndex(senders);
@@ -219,9 +136,9 @@ export function multimeterToSceneData(
   events: unknown,
   opts: { variable?: string; units?: string } = {},
 ): AdapterResult {
-  const parsedOptions = parseInput(MultimeterOptionsSchema, opts);
+  const parsedOptions = parseNestInput(MultimeterOptionsSchema, opts);
   if (!parsedOptions.ok) return parsedOptions;
-  const parsed = parseInput(MultimeterEventsSchema, events);
+  const parsed = parseNestInput(MultimeterEventsSchema, events);
   if (!parsed.ok) return parsed;
   const { times, values, sender } = parsed.data;
   const traceTimes = Float64Array.from(times);
@@ -271,7 +188,7 @@ export type MultimeterSplitResult =
 /** Split a flattened multi-sender multimeter dump ({times,values,senders}) into
  *  one monotonic series per sender — the honest alternative to rejecting it. */
 export function splitMultimeterBySender(events: unknown): MultimeterSplitResult {
-  const parsed = parseInput(MultimeterMultiSenderSchema, events);
+  const parsed = parseNestInput(MultimeterMultiSenderSchema, events);
   if (!parsed.ok) return parsed;
   const { times, values, senders } = parsed.data;
   const byId = new Map<number, { times: number[]; values: number[] }>();
@@ -286,10 +203,10 @@ export function splitMultimeterBySender(events: unknown): MultimeterSplitResult 
       }
       bucket = { times: [], values: [] };
       byId.set(senders[i], bucket);
-    } else if (times[i] < bucket.times[bucket.times.length - 1]) {
+    } else if (times[i] <= bucket.times[bucket.times.length - 1]) {
       return {
         ok: false,
-        errors: [`sender ${senders[i]}: times are non-monotonic after split`],
+        errors: [`sender ${senders[i]}: times must be strictly increasing after split`],
       };
     }
     bucket.times.push(times[i]);
@@ -312,9 +229,9 @@ export function getConnectionsToSceneData(
     NEST_ADAPTER_LIMITS.maxConnections,
   );
   if (sizePreflight) return sizePreflight;
-  const parsedOptions = parseInput(ConnectionOptionsSchema, opts);
+  const parsedOptions = parseNestInput(ConnectionOptionsSchema, opts);
   if (!parsedOptions.ok) return parsedOptions;
-  const parsed = parseInput(GetConnectionsSchema, conns);
+  const parsed = parseNestInput(GetConnectionsSchema, conns);
   if (!parsed.ok) return parsed;
   const { sources, targets, weights, delays } = parsed.data;
   if (
@@ -389,10 +306,10 @@ export function getPositionToSceneData(
     NEST_ADAPTER_LIMITS.maxConnections,
   );
   if (sizePreflight) return sizePreflight;
-  const parsedOptions = parseInput(PositionOptionsSchema, opts);
+  const parsedOptions = parseNestInput(PositionOptionsSchema, opts);
   if (!parsedOptions.ok) return parsedOptions;
   if (parsedOptions.data.dims === 2) {
-    const parsed = parseInput(GetPosition2DSchema, positions);
+    const parsed = parseNestInput(GetPosition2DSchema, positions);
     if (!parsed.ok) return parsed;
     return {
       ok: true,
@@ -409,7 +326,7 @@ export function getPositionToSceneData(
       },
     };
   }
-  const parsed = parseInput(GetPosition3DSchema, positions);
+  const parsed = parseNestInput(GetPosition3DSchema, positions);
   if (!parsed.ok) return parsed;
   if ((parsed.data.edges?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections) {
     return {
@@ -443,7 +360,7 @@ export function weightRecorderToSceneData(
   events: unknown,
   opts: { weightUnits?: string } = {},
 ): AdapterResult {
-  const parsedOptions = parseInput(WeightOptionsSchema, opts);
+  const parsedOptions = parseNestInput(WeightOptionsSchema, opts);
   if (!parsedOptions.ok) return parsedOptions;
   const weightUnits = parsedOptions.data.weightUnits?.trim();
   if (!weightUnits) {
@@ -452,7 +369,7 @@ export function weightRecorderToSceneData(
       errors: ['weightUnits is required so a weight trace is never rendered unitless'],
     };
   }
-  const parsed = parseInput(WeightRecorderEventsSchema, events);
+  const parsed = parseNestInput(WeightRecorderEventsSchema, events);
   if (!parsed.ok) return parsed;
   const { times, weights, senders, targets, sender, target } = parsed.data;
   let pairFromArrays: { sender: number; target: number } | undefined;
@@ -472,11 +389,11 @@ export function weightRecorderToSceneData(
     pairFromArrays = { sender: senders[0], target: targets[0] };
   }
   for (let i = 1; i < times.length; i++) {
-    if (times[i] < times[i - 1]) {
+    if (times[i] <= times[i - 1]) {
       return {
         ok: false,
         errors: [
-          'weight times are non-monotonic; split a multi-synapse recorder before adapting a single trace',
+          'weight times must be strictly increasing; split a multi-synapse recorder before adapting a single trace',
         ],
       };
     }
@@ -514,7 +431,7 @@ export type WeightRecorderSplitResult =
 export function splitWeightRecorderBySynapse(
   events: unknown,
 ): WeightRecorderSplitResult {
-  const parsed = parseInput(WeightRecorderEventsSchema, events);
+  const parsed = parseNestInput(WeightRecorderEventsSchema, events);
   if (!parsed.ok) return parsed;
   const { times, weights, senders, targets } = parsed.data;
   if (!senders || !targets) {
@@ -545,11 +462,11 @@ export function splitWeightRecorderBySynapse(
         weights: [],
       };
       buckets.set(key, bucket);
-    } else if (times[i] < bucket.times[bucket.times.length - 1]) {
+    } else if (times[i] <= bucket.times[bucket.times.length - 1]) {
       return {
         ok: false,
         errors: [
-          `synapse ${senders[i]}→${targets[i]}: times are non-monotonic after split`,
+          `synapse ${senders[i]}→${targets[i]}: times must be strictly increasing after split`,
         ],
       };
     }

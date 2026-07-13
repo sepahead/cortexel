@@ -5,6 +5,7 @@ import {
   CORTEXEL_JSON_LIMITS,
   CORTEXEL_SPEC_VERSION,
   PARAM_LIMITS,
+  getHostRendererExamplePayload,
   getExamplePayload,
   getSkill,
   routeToScene,
@@ -124,15 +125,143 @@ describe('public agent boundaries never trust JavaScript object prototypes', () 
     });
   });
 
-  it('never re-throws while formatting a hostile thrown Proxy', () => {
+  it('never invokes hostile object conversion hooks while formatting diagnostics', () => {
+    let toStringReads = 0;
+    let toStringCalls = 0;
+    let primitiveReads = 0;
+    const hostileValue: Record<PropertyKey, unknown> = {};
+    Object.defineProperty(hostileValue, 'toString', {
+      get() {
+        toStringReads += 1;
+        return () => {
+          toStringCalls += 1;
+          return 'spoofed';
+        };
+      },
+    });
+    Object.defineProperty(hostileValue, Symbol.toPrimitive, {
+      get() {
+        primitiveReads += 1;
+        return () => 'spoofed';
+      },
+    });
+
+    const skillParams = validateSkillParams(hostileValue, {});
+    const skillInvocation = validateSkillInvocation(hostileValue, {});
+    const route = routeToScene({ deviceFamily: hostileValue });
+    const host = getHostRendererExamplePayload('nest.spatial_2d')!;
+    (host as Record<string, unknown>).specVersion = hostileValue;
+    const hostInvocation = validateHostRendererInvocation('nest.spatial_2d', host);
+
+    expect(skillParams).toMatchObject({
+      ok: false,
+      errors: [{ message: "unknown skill '<object>'" }],
+    });
+    expect(skillInvocation).toMatchObject({
+      ok: false,
+      errors: [{ message: "unknown skill '<object>'" }],
+    });
+    expect(route).toMatchObject({
+      ok: false,
+      message: "unknown device family '<object>'",
+    });
+    expect(hostInvocation).toMatchObject({
+      ok: false,
+      errors: [{ message: "unsupported spec version '<object>'" }],
+    });
+    expect({ toStringReads, toStringCalls, primitiveReads }).toEqual({
+      toStringReads: 0,
+      toStringCalls: 0,
+      primitiveReads: 0,
+    });
+  });
+
+  it('escapes bidi controls in diagnostics and rejects them in display identifiers', () => {
+    const bidiOverride = '\u202e';
+    const spoofed = `nest.${bidiOverride}spike_raster`;
+    const unknown = validateSkillParams(spoofed, {});
+    expect(unknown.ok).toBe(false);
+    if (!unknown.ok) {
+      expect(unknown.errors[0].message).toContain('\\u202e');
+      expect(unknown.errors[0].message).not.toContain(bidiOverride);
+    }
+    const routed = routeToScene({ deviceFamily: spoofed });
+    expect(routed.ok).toBe(false);
+    if (!routed.ok) {
+      expect(routed.message).toContain('\\u202e');
+      expect(routed.message).not.toContain(bidiOverride);
+    }
+
+    const spec = getExamplePayload('nest.spike_raster')!;
+    spec.skill = spoofed;
+    expect(validateVizSpec(spec).ok).toBe(false);
+
+    const paletteSpec = getExamplePayload('nest.spike_raster')!;
+    paletteSpec.palette = `crameri${bidiOverride}`;
+    expect(validateVizSpec(paletteSpec).ok).toBe(false);
+
+    const host = getHostRendererExamplePayload('nest.spatial_2d')!;
+    host.skill = `nest.spatial_2d${bidiOverride}`;
+    expect(validateHostRendererInvocation('nest.spatial_2d', host).ok).toBe(false);
+
+    const hostileField = `evil${bidiOverride}\n${'x'.repeat(1_000)}`;
+    const routedField = routeToScene({
+      deviceFamily: 'multimeter',
+      [hostileField]: true,
+    });
+    expect(routedField.ok).toBe(false);
+    if (!routedField.ok) {
+      expect(routedField.field).toContain('\\u202e\\u000a');
+      expect(routedField.field).not.toMatch(/[\u0000-\u001f\u202e]/u);
+      expect(routedField.field!.length).toBeLessThanOrEqual(240);
+    }
+
+    for (const authored of [
+      buildVizSpec({
+        skill: 'nest.spike_raster',
+        params: spikeParams(),
+        source: 'run:hostile-field',
+        [hostileField]: true,
+      } as never),
+      buildHostRendererInvocation({
+        skill: 'nest.spatial_2d',
+        params: { positions: [[0, 0]], coordinate_units: 'mm' },
+        source: 'run:hostile-field',
+        [hostileField]: true,
+      } as never),
+    ]) {
+      expect(authored.ok).toBe(false);
+      if (!authored.ok) {
+        const error = authored.errors[0];
+        expect(error.path).toContain('\\u202e\\u000a');
+        expect(error.message).toContain('\\u202e\\u000a');
+        expect(`${error.path}${error.message}`).not.toMatch(/[\u0000-\u001f\u202e]/u);
+        expect(error.path.length).toBeLessThanOrEqual(240);
+        expect(error.message.length).toBeLessThanOrEqual(500);
+      }
+    }
+  });
+
+  it('never invokes a getter/conversion hook or re-throws while formatting a hostile thrown Proxy', () => {
+    let messageGetterCalls = 0;
+    let proxyGetCalls = 0;
+    const toxicTarget = {};
+    Object.defineProperty(toxicTarget, 'message', {
+      configurable: true,
+      get() {
+        messageGetterCalls += 1;
+        return 'hostile message getter';
+      },
+    });
     const toxicError = new Proxy(
-      {},
+      toxicTarget,
       {
         getPrototypeOf() {
           throw new Error('prototype trap');
         },
         get() {
-          throw new Error('message trap');
+          proxyGetCalls += 1;
+          throw new Error('get trap');
         },
       },
     );
@@ -152,7 +281,7 @@ describe('public agent boundaries never trust JavaScript object prototypes', () 
       () => validateSkillInvocation('nest.spike_raster', toxicPayload),
       () => validateSkillParams('nest.spike_raster', toxicPayload),
       () => validateSpec(toxicPayload),
-      () => validateHostRendererInvocation('nest.correlogram', toxicPayload),
+      () => validateHostRendererInvocation('nest.spatial_2d', toxicPayload),
       () => validateHostRendererSpec(toxicPayload),
       () => routeToScene(toxicPayload),
       () => buildVizSpec(toxicPayload as never),
@@ -162,6 +291,14 @@ describe('public agent boundaries never trust JavaScript object prototypes', () 
       expect(call).not.toThrow();
       expect(call().ok).toBe(false);
     }
+    expect(routeToScene(toxicPayload)).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('unknown error'),
+    });
+    expect({ messageGetterCalls, proxyGetCalls }).toEqual({
+      messageGetterCalls: 0,
+      proxyGetCalls: 0,
+    });
   });
 });
 
@@ -372,19 +509,17 @@ describe('strict envelope and version contract', () => {
       pallete: 'crameri',
     } as never).ok).toBe(false);
     expect(buildHostRendererInvocation({
-      skill: 'nest.correlogram',
+      skill: 'nest.spatial_2d',
       params: {
-        lags_ms: [-1, 0, 1],
-        correlation: [0, 1, 0],
-        normalization: 'pearson_coefficient',
-        correlation_units: '1',
+        positions: [[0, 0]],
+        coordinate_units: 'mm',
       },
       source: 'run:1',
       declaredInputs: {
-        bin_ms: 1,
-        pair_labels: 'E×E',
-        correlation_normalization: 'pearson_coefficient',
-        correlation_units: '1',
+        extent: '[1,1]',
+        spatial_units: 'mm',
+        mask: 'none',
+        kernel: 'none',
       },
       renderRoute: 'd3',
     } as never).ok).toBe(false);
@@ -460,6 +595,37 @@ describe('scientific array and graph invariants', () => {
     });
     expect(trace.ok).toBe(false);
     if (!trace.ok) expect(trace.errors[0].path).toBe('params.series.0');
+    for (const [skill, params, path] of [
+      [
+        'nest.isi_distribution',
+        { bin_centers_ms: oversized, values: [1] },
+        'params.bin_centers_ms',
+      ],
+      [
+        'nest.psth',
+        { bin_centers_ms: [0], values: oversized },
+        'params.values',
+      ],
+      [
+        'nest.population_rate',
+        { bin_centers_ms: [0], series: [{ spike_counts: oversized }] },
+        'params.series.0.spike_counts',
+      ],
+      [
+        'nest.correlogram',
+        { lags_ms: oversized, values: [1] },
+        'params.lags_ms',
+      ],
+      [
+        'nest.weight_histogram',
+        { bin_centers: oversized, values: [1] },
+        'params.bin_centers',
+      ],
+    ] as const) {
+      const result = validateSkillParams(skill, params);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors[0].path).toBe(path);
+    }
   });
 
   it('bounds strict unknown-key diagnostics by count and text size', () => {
@@ -499,6 +665,34 @@ describe('scientific array and graph invariants', () => {
     }
   });
 
+  it('preflights nested graph attribute and evidence budgets before exact-JSON cloning', () => {
+    const attributeArray = getExamplePayload('corpus.knowledge_graph')!;
+    const attributeNode = (attributeArray.params.nodes as Array<Record<string, unknown>>)[0];
+    attributeNode.attributes = { huge: new Array(5_000_000) };
+    const attributeResult = validateSkillInvocation('corpus.knowledge_graph', attributeArray);
+    expect(attributeResult.ok).toBe(false);
+    if (!attributeResult.ok) {
+      expect(attributeResult.errors).toHaveLength(1);
+      expect(attributeResult.errors[0]).toMatchObject({
+        code: 'invalid_params',
+        path: 'params.nodes.0.attributes.huge',
+      });
+    }
+
+    const evidenceArray = getExamplePayload('corpus.knowledge_graph')!;
+    (evidenceArray.params.edges as Array<Record<string, unknown>>)[0].evidence =
+      new Array(5_000_000);
+    const evidenceResult = validateSkillInvocation('corpus.knowledge_graph', evidenceArray);
+    expect(evidenceResult.ok).toBe(false);
+    if (!evidenceResult.ok) {
+      expect(evidenceResult.errors).toHaveLength(1);
+      expect(evidenceResult.errors[0]).toMatchObject({
+        code: 'invalid_params',
+        path: 'params.edges.0.evidence',
+      });
+    }
+  });
+
   it('never invokes raw param accessors during the early size preflight', () => {
     let reads = 0;
     const params: Record<string, unknown> = { senders: [1] };
@@ -535,18 +729,20 @@ describe('scientific array and graph invariants', () => {
 
     let hostReads = 0;
     const host = {
-      skill: 'nest.correlogram',
-      params: { lags_ms: [0], correlation: [1] },
+      skill: 'nest.spatial_2d',
+      params: { positions: [[0, 0]], coordinate_units: 'mm' },
       provenance: {
         source: 'x',
-        declared_inputs: { bin_ms: 1, pair_labels: 'E×E' },
+        declared_inputs: {
+          extent: '[1,1]', spatial_units: 'mm', mask: 'none', kernel: 'none',
+        },
       },
     } as Record<string, unknown>;
     Object.defineProperty(host, 'skill', {
       enumerable: true,
       get() {
         hostReads += 1;
-        return 'nest.correlogram';
+        return 'nest.spatial_2d';
       },
     });
     expect(validateHostRendererSpec(host).ok).toBe(false);
@@ -635,65 +831,74 @@ describe('scientific array and graph invariants', () => {
     ).toBe(false);
   });
 
-  it('validates scene-less host-renderer params without inventing a Cortexel scene', () => {
+  it('validates promoted correlogram params without weakening its strict shape', () => {
     expect(
       validateSkillParams('nest.correlogram', {
         lags_ms: [-1, 0, 1],
-        correlation: [0.1, 1, 0.1],
-        normalization: 'pearson_coefficient',
-        correlation_units: '1',
+        values: [0.1, 1, 0.1],
+        bin_width_ms: 1,
+        tau_max_ms: 1,
+        counting_start_ms: 0,
+        counting_stop_ms: 100,
+        pair: { reference_label: 'E', target_label: 'E' },
+        lag_convention: 'positive_target_after_reference',
+        binning: 'left_closed_right_open',
+        zero_lag_policy: 'included',
+        statistic: { kind: 'pearson_coefficient', units: '1', sample_count: 100 },
       }).ok,
     ).toBe(true);
     expect(
       validateSkillParams('nest.correlogram', {
         lags_ms: [-1, 0],
-        correlation: [1],
-        normalization: 'pearson_coefficient',
-        correlation_units: '1',
+        values: [1],
+        bin_width_ms: 1,
+        tau_max_ms: 1,
+        counting_start_ms: 0,
+        counting_stop_ms: 100,
+        pair: { reference_label: 'E', target_label: 'E' },
+        lag_convention: 'positive_target_after_reference',
+        binning: 'left_closed_right_open',
+        zero_lag_policy: 'included',
+        statistic: { kind: 'pearson_coefficient', units: '1', sample_count: 100 },
       }).ok,
     ).toBe(false);
   });
 
-  it.each([
-    {
-      nodes: [
-        { id: 'a', kind: 'paper', label: 'A' },
-        { id: 'a', kind: 'model', label: 'duplicate' },
-      ],
-      edges: [],
-    },
-    {
-      nodes: [{ id: 'a', kind: 'paper', label: 'A' }],
-      edges: [{ source: 'a', target: 'missing', kind: 'cites' }],
-    },
-    {
-      nodes: [{ id: 'a', kind: 'paper', label: 'A' }],
-      edges: [{ source: 'a', target: 'a', kind: 'cites' }],
-    },
-    {
-      nodes: [
-        { id: 'a', kind: 'paper', label: 'A' },
-        { id: 'b', kind: 'paper', label: 'B' },
-      ],
-      edges: [
-        { source: 'a', target: 'b', kind: 'cites' },
-        { source: 'a', target: 'b', kind: 'cites' },
-      ],
-    },
-    {
-      nodes: [
-        { id: 'a', kind: 'model', label: 'A' },
-        { id: 'b', kind: 'model', label: 'B' },
-      ],
-      edges: [
-        { source: 'a', target: 'b', kind: 'same_as' },
-        { source: 'b', target: 'a', kind: 'same_as' },
-      ],
-    },
-  ])('rejects graph identities that the scene cannot faithfully render', (params) => {
-    const example = getExamplePayload('corpus.knowledge_graph')!;
-    expect(
-      validateSkillInvocation('corpus.knowledge_graph', { ...example, params }).ok,
-    ).toBe(false);
+  it('rejects ambiguous graph identities and endpoints without collapsing parallel assertions', () => {
+    const mutations: Array<(params: Record<string, unknown>) => void> = [
+      (params) => {
+        const nodes = params.nodes as Array<Record<string, unknown>>;
+        nodes[1].id = nodes[0].id;
+      },
+      (params) => {
+        (params.edges as Array<Record<string, unknown>>)[0].target = 'missing';
+      },
+      (params) => {
+        const edge = (params.edges as Array<Record<string, unknown>>)[0];
+        edge.target = edge.source;
+      },
+      (params) => {
+        const edges = params.edges as Array<Record<string, unknown>>;
+        edges[1].id = edges[0].id;
+      },
+    ];
+    for (const mutate of mutations) {
+      const example = getExamplePayload('corpus.knowledge_graph')!;
+      mutate(example.params as Record<string, unknown>);
+      expect(validateSkillInvocation('corpus.knowledge_graph', example).ok).toBe(false);
+    }
+
+    const parallel = getExamplePayload('corpus.knowledge_graph')!;
+    const edges = parallel.params.edges as Array<Record<string, unknown>>;
+    edges.push({
+      ...structuredClone(edges[1]),
+      id: 'independent-variant-assertion',
+      evidence: [{
+        kind: 'graph_snapshot_record',
+        evidence_id: 'independent-variant-evidence',
+        record_id: 'independent-variant-assertion',
+      }],
+    });
+    expect(validateSkillInvocation('corpus.knowledge_graph', parallel).ok).toBe(true);
   });
 });

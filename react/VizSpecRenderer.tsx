@@ -92,6 +92,11 @@ export interface VizSpecRendererProps {
    *  hint. Defaults to the Cortexel default ('crameri'). The resolved palette
    *  (spec hint or host active) is passed to renderScene via RenderSceneArgs. */
   activePalette?: ReadonlySemanticPalette;
+  /** Honesty caption layout. Overlay preserves the historical scene behavior;
+   * footer keeps the same mandatory caption in normal flow for charts or other
+   * figures whose axes/data must never be covered. This changes placement only
+   * and cannot suppress, replace, or reorder disclosure text. */
+  captionPlacement?: 'overlay' | 'footer';
   onError?: (errors: string[]) => void;
   /** Structured strict-gate errors for agent repair tooling. */
   onInvocationError?: (errors: readonly SkillInvocationError[]) => void;
@@ -104,6 +109,7 @@ export function VizSpecRenderer({
   trustedEnvelope = false,
   active = true,
   activePalette,
+  captionPlacement = 'overlay',
   onError,
   onInvocationError,
 }: VizSpecRendererProps) {
@@ -187,6 +193,7 @@ export function VizSpecRenderer({
         // Honesty is bound here: the gate already resolved the caption (fail-
         // closed), so the renderer cannot "forget" it.
         caption={gated.caption}
+        captionPlacement={captionPlacement}
         active={active}
         renderScene={renderScene}
       />
@@ -223,6 +230,7 @@ export function VizSpecRenderer({
       params={params}
       provenance={provenance}
       caption={caption}
+      captionPlacement={captionPlacement}
       active={active}
       renderScene={renderScene}
     />
@@ -289,6 +297,7 @@ interface SceneFrameProps {
   params: Readonly<Record<string, unknown>>;
   provenance: Readonly<ProvenanceMetadata>;
   caption: string | null;
+  captionPlacement: 'overlay' | 'footer';
   active: boolean;
   renderScene: (args: RenderSceneArgs) => ReactNode;
 }
@@ -303,6 +312,7 @@ function SceneFrame({
   params,
   provenance,
   caption,
+  captionPlacement,
   active,
   renderScene,
 }: SceneFrameProps) {
@@ -318,7 +328,11 @@ function SceneFrame({
   return (
     <div
       className="cortexel-vizspec"
-      style={{ position: 'relative', width: '100%', height: '100%' }}
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: captionPlacement === 'footer' ? 'auto' : '100%',
+      }}
     >
       {renderScene({
         skill,
@@ -337,10 +351,13 @@ function SceneFrame({
           aria-live="polite"
           aria-label="Scientific provenance disclosure"
           style={{
-            position: 'absolute',
-            left: 12,
-            bottom: 12,
-            maxWidth: '70%',
+            position: captionPlacement === 'footer' ? 'relative' : 'absolute',
+            left: captionPlacement === 'footer' ? 0 : 12,
+            bottom: captionPlacement === 'footer' ? 'auto' : 12,
+            maxWidth: captionPlacement === 'footer' ? '100%' : '70%',
+            width: captionPlacement === 'footer' ? '100%' : 'auto',
+            boxSizing: 'border-box',
+            marginTop: captionPlacement === 'footer' ? 8 : 0,
             padding: '4px 10px',
             borderRadius: 6,
             // Okabe-Ito amber on opaque dark — bloom-safe (DOM, not emissive).

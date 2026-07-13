@@ -28,6 +28,7 @@ import {
   toPortableJsonSchema,
   type ParamValidationConstraint,
 } from '../core/skills/registry';
+import { ROUTING_DISCRIMINATORS } from '../core/skills/router';
 import {
   CORTEXEL_JSON_LIMITS,
   CORTEXEL_JSON_POLICY,
@@ -64,8 +65,27 @@ export interface SkillManifestEntry {
   weak: boolean;
   /** The mandatory derived-view disclosure shown when weak (present iff weak). */
   weakDisclosure?: string;
+  /** Lifecycle metadata for stored-but-superseded skills. */
+  deprecation?: {
+    since: string;
+    replacement: string;
+    message: string;
+  };
+  /** Whether derived routing may select the skill, plus its explicit shape key. */
+  routerEligibility: {
+    bareFamilyCandidate: boolean;
+    dataShapeKind?: string;
+  };
+  /** Deterministic raw simulator-output transform advertised to non-TS agents. */
+  transform?: {
+    id: string;
+    rawFields: string[];
+    requiredOptions: string[];
+    outputSkill: string;
+  };
   requiredInputKeys: string[];
   requiredProvenanceKeys: string[];
+  requiredProvenanceFlags: Record<string, boolean>;
   provenanceParamConstraints: ProvenanceParamConstraint[];
   /** JSON Schema (draft 2020-12) for `params`, so non-TS hosts validate/generate
    *  params structurally. Cross-field parity comes from paramConstraints. */
@@ -96,6 +116,8 @@ export interface SkillsManifest {
   skillAxisVersion: string;
   specVersion: string;
   vizRouterId: string;
+  /** JSON-friendly family → dataShape.kind → skill routing map. */
+  routingDiscriminators: Record<string, Record<string, string>>;
   sceneNames: string[];
   provenanceKeys: string[];
   deviceFamilies: string[];
@@ -195,8 +217,26 @@ export function buildManifest(): SkillsManifest {
       scene: c.scene,
       weak: c.weak ?? false,
       ...(c.weakDisclosure ? { weakDisclosure: c.weakDisclosure } : {}),
+      ...(c.deprecation ? { deprecation: { ...c.deprecation } } : {}),
+      routerEligibility: {
+        bareFamilyCandidate: c.routerEligibility?.bareFamilyCandidate ?? true,
+        ...(c.routerEligibility?.dataShapeKind
+          ? { dataShapeKind: c.routerEligibility.dataShapeKind }
+          : {}),
+      },
+      ...(c.transform
+        ? {
+            transform: {
+              id: c.transform.id,
+              rawFields: [...c.transform.rawFields],
+              requiredOptions: [...c.transform.requiredOptions],
+              outputSkill: c.transform.outputSkill,
+            },
+          }
+        : {}),
       requiredInputKeys: [...c.requiredInputKeys],
       requiredProvenanceKeys: [...c.requiredProvenanceKeys],
+      requiredProvenanceFlags: { ...(c.requiredProvenanceFlags ?? {}) },
       provenanceParamConstraints: (c.provenanceParamConstraints ?? []).map(
         (constraint) => ({ ...constraint }),
       ),
@@ -217,6 +257,19 @@ export function buildManifest(): SkillsManifest {
               ) as Record<string, [string, string]>,
             }
           : {}),
+        ...(constraint.allowedScoreKinds
+          ? {
+              allowedScoreKinds: Object.fromEntries(
+                Object.entries(constraint.allowedScoreKinds).map(([kind, scoreKinds]) => [
+                  kind,
+                  [...scoreKinds],
+                ]),
+              ),
+          }
+          : {}),
+        ...(constraint.allowedFieldValues
+          ? { allowedFieldValues: [...constraint.allowedFieldValues] }
+          : {}),
         ...(constraint.allowedValues
           ? { allowedValues: { ...constraint.allowedValues } }
           : {}),
@@ -226,6 +279,16 @@ export function buildManifest(): SkillsManifest {
                 Object.entries(constraint.numericDomains).map(([key, domain]) => [
                   key,
                   { ...domain },
+                ]),
+              ),
+            }
+          : {}),
+        ...(constraint.normalizationRules
+          ? {
+              normalizationRules: Object.fromEntries(
+                Object.entries(constraint.normalizationRules).map(([mode, rule]) => [
+                  mode,
+                  { ...rule },
                 ]),
               ),
             }
@@ -274,12 +337,18 @@ export function buildManifest(): SkillsManifest {
     64,
   );
   return {
-    // v4: exact tuple/envelope schemas plus explicit cross-language normalization
-    // and params↔provenance consistency policies.
-    manifestVersion: '4',
+    // v8: agent-discoverable topology transforms, deprecation/routing metadata,
+    // MPI-scoped snapshots, and portable matrix/degree/delay/spatial constraints.
+    manifestVersion: '8',
     skillAxisVersion: CORTEXEL_SKILL_VERSION,
     specVersion: CORTEXEL_SPEC_VERSION,
     vizRouterId: VIZ_ROUTER_ID,
+    routingDiscriminators: Object.fromEntries(
+      Object.entries(ROUTING_DISCRIMINATORS).map(([family, map]) => [
+        family,
+        { ...map },
+      ]),
+    ),
     sceneNames: [...SCENE_NAMES],
     provenanceKeys: [...PROVENANCE_KEYS],
     deviceFamilies: [...NEST_DEVICE_FAMILIES],

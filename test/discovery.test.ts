@@ -9,6 +9,8 @@ import {
   detectEmptyScene,
   spikeRecorderToSceneData,
   splitMultimeterBySender,
+  PROVENANCE_KEYS,
+  PROVENANCE_KEY_LABELS,
 } from '../core/skills';
 import type { NestSkillId } from '../core/skills';
 
@@ -17,9 +19,84 @@ import type { NestSkillId } from '../core/skills';
 const EXPECTED_PROVENANCE: Record<NestSkillId, string[]> = {
   'nest.voltage_trace': ['device_id', 'recorded_variable', 'units', 'sampling_interval'],
   'nest.spike_raster': ['recorder_id', 'sender_ids', 'population_labels', 'time_units'],
+  'nest.isi_distribution': [
+    'recorder_id',
+    'sender_ids',
+    'population_labels',
+    'time_units',
+    'bin_ms',
+    'histogram_normalization',
+    'interval_scope',
+  ],
+  'nest.psth': [
+    'recorder_id',
+    'sender_ids',
+    'population_labels',
+    'time_units',
+    'bin_ms',
+    'histogram_normalization',
+    'event_alignment',
+    'psth_aggregation',
+  ],
+  'nest.population_rate': [
+    'recorder_id',
+    'sender_ids',
+    'population_labels',
+    'time_units',
+    'bin_ms',
+    'rate_normalization',
+    'binning_policy',
+  ],
   'nest.rate_response': ['stim_units', 'bin_ms', 'rate_normalization'],
-  'nest.connectivity_matrix': ['source_ids', 'target_ids', 'synapse_model', 'weight_units'],
+  'nest.connectivity_matrix': [
+    'source_ids', 'target_ids', 'synapse_model', 'connection_sample_policy',
+  ],
+  'nest.connection_graph': [
+    'source_ids', 'target_ids', 'synapse_model', 'connection_sample_policy',
+    'snapshot_time_ms', 'snapshot_scope', 'parallel_edge_policy',
+  ],
+  'nest.adjacency_matrix': [
+    'source_ids', 'target_ids', 'synapse_model', 'connection_sample_policy',
+    'snapshot_time_ms', 'snapshot_scope', 'parallel_edge_policy',
+    'matrix_axis_order', 'matrix_aggregation',
+  ],
+  'nest.weight_matrix': [
+    'source_ids', 'target_ids', 'synapse_model', 'weight_units',
+    'connection_sample_policy', 'snapshot_time_ms', 'snapshot_scope',
+    'parallel_edge_policy', 'matrix_axis_order', 'matrix_aggregation',
+  ],
+  'nest.delay_matrix': [
+    'source_ids', 'target_ids', 'synapse_model', 'delay_units',
+    'connection_sample_policy', 'snapshot_time_ms', 'snapshot_scope',
+    'parallel_edge_policy', 'matrix_axis_order', 'matrix_aggregation',
+  ],
+  'nest.in_degree_distribution': [
+    'source_ids', 'target_ids', 'synapse_model', 'connection_sample_policy',
+    'snapshot_time_ms', 'snapshot_scope', 'parallel_edge_policy',
+    'degree_direction', 'degree_counting', 'zero_degree_policy',
+    'histogram_normalization',
+  ],
+  'nest.out_degree_distribution': [
+    'source_ids', 'target_ids', 'synapse_model', 'connection_sample_policy',
+    'snapshot_time_ms', 'snapshot_scope', 'parallel_edge_policy',
+    'degree_direction', 'degree_counting', 'zero_degree_policy',
+    'histogram_normalization',
+  ],
+  'nest.delay_distribution': [
+    'source_ids', 'target_ids', 'synapse_model', 'delay_units',
+    'connection_sample_policy', 'snapshot_time_ms', 'snapshot_scope',
+    'parallel_edge_policy', 'bin_ms', 'histogram_normalization', 'binning_policy',
+  ],
+  'nest.weight_histogram': [
+    'source_ids',
+    'target_ids',
+    'synapse_model',
+    'weight_units',
+    'histogram_normalization',
+    'connection_sample_policy',
+  ],
   'nest.spatial_2d': ['extent', 'spatial_units', 'mask', 'kernel'],
+  'nest.spatial_map_2d': ['node_ids', 'spatial_units', 'extent', 'position_scope'],
   'nest.spatial_3d': ['extent', 'spatial_units', 'projection_sample_policy'],
   'nest.plasticity_dynamics': ['synapse_model', 'weight_units'],
   'nest.phase_plane': [
@@ -29,10 +106,14 @@ const EXPECTED_PROVENANCE: Record<NestSkillId, string[]> = {
     'fixed_parameters',
   ],
   'nest.correlogram': [
+    'detector_id',
+    'reference_population',
+    'target_population',
     'bin_ms',
-    'pair_labels',
     'correlation_normalization',
     'correlation_units',
+    'lag_convention',
+    'binning_policy',
   ],
   'nest.stimulus_response': ['stim_units', 'units', 'time_units'],
   'nest.astrocyte_dynamics': [
@@ -49,14 +130,31 @@ const EXPECTED_PROVENANCE: Record<NestSkillId, string[]> = {
     'sampling_interval',
   ],
   'nest.animation_replay': ['frame_rate'],
-  'corpus.knowledge_graph': ['graph_source', 'node_kinds', 'edge_kinds', 'identity_advisory'],
+  'corpus.knowledge_graph': [
+    'graph_source',
+    'graph_snapshot_id',
+    'graph_scope',
+    'identity_advisory',
+  ],
 };
 
 describe('skill discovery', () => {
-  it('describeSkills covers all 14 skills with renderable flags', () => {
+  it('describeSkills covers all 26 skills with renderable flags', () => {
     const d = describeSkills();
-    expect(d.length).toBe(14);
-    expect(d.filter((s) => s.renderable).length).toBeGreaterThan(0);
+    expect(d.length).toBe(26);
+    expect(d.filter((s) => s.renderable)).toHaveLength(22);
+  });
+
+  it('publishes topology transforms and deprecation without routing the legacy alias', () => {
+    const legacy = describeSkill('nest.connectivity_matrix')!;
+    expect(legacy.deprecation?.replacement).toBe('nest.connection_graph');
+    expect(legacy.routerEligibility.bareFamilyCandidate).toBe(false);
+    const graph = describeSkill('nest.connection_graph')!;
+    expect(graph.transform).toMatchObject({
+      id: 'synapseCollectionToConnectionGraphParams',
+      outputSkill: 'nest.connection_graph',
+    });
+    expect(graph.routerEligibility.dataShapeKind).toBe('connection_graph');
   });
 
   it('describeSkill exposes scene + required keys + example for an agent', () => {
@@ -71,6 +169,15 @@ describe('skill discovery', () => {
     for (const c of listSkills()) {
       expect(c.requiredProvenanceKeys, c.id).toEqual(EXPECTED_PROVENANCE[c.id]);
     }
+  });
+
+  it('does not publish obsolete unbound corpus kind claims', () => {
+    expect(PROVENANCE_KEYS).not.toContain('node_kinds');
+    expect(PROVENANCE_KEYS).not.toContain('edge_kinds');
+    expect(PROVENANCE_KEYS).not.toContain('pair_labels');
+    expect(Object.hasOwn(PROVENANCE_KEY_LABELS, 'node_kinds')).toBe(false);
+    expect(Object.hasOwn(PROVENANCE_KEY_LABELS, 'edge_kinds')).toBe(false);
+    expect(Object.hasOwn(PROVENANCE_KEY_LABELS, 'pair_labels')).toBe(false);
   });
 });
 

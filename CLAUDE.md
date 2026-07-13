@@ -31,15 +31,17 @@ Use `bun`. Node ≥ 20. There is no lint step; TypeScript strict mode is the gat
 |------|------------------|
 | `core/` | zero-dep (beyond `zod`) contract: `vizSpec`, `provenance`, `designLaws`, `colormaps`, `skills/*`, `nest/*` |
 | `core/skills/` | the skill axis: ids/registry/router, strict params/provenance, Cortexel + host invocation gates, authoring, examples, verification |
-| `react/` | r3f/three render layer: `VizSpecRenderer`, `Expandable*`, `neuronShaders`, and (subpath-only) `KnowledgeGraph3DScene` + `knowledgeGraph` |
+| `react/` | render layer: strict `VizSpecRenderer`, React-only canonical SVG charts, `Expandable*`, `neuronShaders`, and (subpath-only) `KnowledgeGraph3DScene` + `knowledgeGraph` |
 | `types/` | ambient shims for deps that ship none (`d3-force-3d`) |
 | `scripts/emit-manifest.ts` | generates `dist/skills.manifest.json` from the registry |
 | `test/` | vitest; several tests are *executable guards* for the invariants below |
 | `dist/` | **committed build output** (see below) |
 
-Entrypoints ascend in dependency weight: `cortexel/core` (zod only) → `cortexel/react`
-(+ react/react-dom/three/r3f) → `cortexel/react/knowledge-graph` (+ d3-force-3d). The root
-`cortexel` re-exports **only** `core`, so a server import never pulls in three.
+Entrypoints ascend in dependency weight: `cortexel/core` (zod only) →
+`cortexel/react/charts` (+ React only) → `cortexel/react`
+(+ react/react-dom/three/r3f) → `cortexel/react/knowledge-graph` (+ d3-force-3d).
+The root `cortexel` re-exports **only** `core`, so a server import never pulls in
+React or Three.
 
 ## Non-negotiables
 
@@ -113,6 +115,46 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   scene needing the d3 peer, so it lives at `cortexel/react/knowledge-graph` to keep
   the base react entry d3-free. Its pure logic is in `react/knowledgeGraph.ts`
   (THREE-free, unit-tested) — put testable graph logic there, not in the GPU scene.
+- **Canonical charts have their own light subpath.** `cortexel/react/charts` must
+  stay free of Three, R3F and d3 imports. `ReferenceVizSpecFigure` always routes
+  through the strict `VizSpecRenderer`; it exposes no `trustedEnvelope` escape
+  hatch and uses normal-flow caption placement so disclosure cannot cover data.
+  Dispatch by `skill`, not `scene`, because multiple skills may share a scene.
+- **Binned charts render literal bins.** Population-rate traces use horizontal
+  steps; correlograms use independent stems/points. Bounded compaction may retain
+  exact extrema, but nonadjacent retained bins must start new subpaths and the DOM
+  must disclose source/rendered counts—never interpolate, smooth, bridge, mirror,
+  or invent a lag-zero bin.
+- **Topology figures preserve structural absence.** Connection matrices use NEST's
+  target-row/source-column convention and sparse present-cell geometry; a missing
+  cell is never painted as a measured zero, while a present zero-valued weight sum
+  remains visible. Value quantization may group paint paths but must retain every
+  cell. Graph layouts are explicitly schematic, preserve isolates, directed
+  arrowheads, autapses and deterministic parallel lanes, and disclose any sampled
+  edge subset.
+- **Distribution compaction preserves mass.** Degree and delay histograms may merge
+  only adjacent bins, summing raw counts and count/probability mass (or integrating
+  density before re-normalizing by the wider bin). Extrema sampling is invalid for
+  distributions. Spatial maps use one equal x/y scale, never jitter measured
+  positions, and disclose that marker radius is fixed screen-space decoration.
+  Spatial bound tolerance is extent-relative per axis with only a bounded
+  binary64 allowance for `center ± extent/2`; it must never grow with the
+  absolute coordinate origin.
+- **NEST analyses share one hostile-input boundary.** Raw recorder/detector
+  transforms go through `core/nest/safeInput.ts`: typed numeric arrays are allowed,
+  accessors are rejected without invocation, output amplification is preflighted,
+  and recorder order is never assumed. Sort only within the scientific group
+  that owns ordering (for example, within sender for ISI), and keep half-open bin
+  semantics plus binary64 tolerance in transform/schema/manifest parity. Boundary
+  repair must be bounded to plausible arithmetic roundoff; never scale a snapping
+  tolerance with the bin index, because that moves real sub-boundary samples.
+- **Connection snapshots carry scope.** SynapseCollection transforms accept the
+  official singular/scalar form or canonical plural arrays, never both, never
+  broadcast an optional scalar across rows, and never deduplicate multapses. A
+  declared node universe is required so isolates and zero-degree nodes survive.
+  MPI target-rank-local output remains explicitly local; it cannot produce a
+  global out-degree claim. GetPosition transforms likewise bind node ids to the
+  matching position order and retain single-process/rank-local/merged scope.
 - **three caches bounding spheres once.** Any object whose geometry/instance matrices
   stream every frame must set `frustumCulled={false}` (and invalidate
   `mesh.boundingSphere` after matrix writes if it needs raycasting), or drifted
@@ -126,9 +168,22 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   when `autoFrame` / `flyToSelection` is explicitly enabled.
 - **Direction cannot depend on motion.** Directed knowledge-graph edges retain
   arrowheads under reduced motion and in still exports.
+- **Evidence cannot terminate inside the graph.** Every corpus node/edge evidence
+  list needs a direct snapshot-record, citation, or external-source anchor;
+  `graph_node` references are supplemental. Keep top-level advisory/paper-local
+  flags bound to the element epistemic contract, preserve immutable snapshot
+  context in the DOM legend, and reject accessor-bearing adapter input before any
+  getter can run.
 - Pair every interactive WebGL graph with `KnowledgeGraphA11yList`; meshes do not
   enter the browser accessibility tree on their own. Keep per-node announcements
   bounded and paginate nodes plus full relationship detail.
+- Evidence-bearing multiedges need stable assertion ids. Render each assertion on
+  its deterministic routed lane, use one force spring per unordered endpoint pair,
+  and keep the core/React maximum parallel-edge bundle in parity. Typed evidence
+  and bounded attributes must remain reachable from the DOM companion; a compact
+  summary may not be the only route to omitted evidence.
+- Direct knowledge-graph scene and DOM entrypoints reject duplicate node ids; an
+  ambiguous identity must fail before selection, edge binding, or search can diverge.
 - `VizSpecRenderer` is strict/self-describing by default and memoizes a detached
   validated snapshot by spec identity. Envelope-only rendering requires explicit
   `trustedEnvelope`; never use that opt-in for untrusted payloads.
@@ -153,9 +208,11 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
 
 ## Source of truth & mirroring
 
-Cortexel is developed inside the Engram monorepo (`frontend/app/cortexel/`) and
-**mirrored** here via `git subtree`. The monorepo directory is canonical; open code
-PRs there. This standalone repo is the publish mirror (issues/discussion welcome).
+This standalone repository is Cortexel's canonical, writable source. Engram consumes
+published Cortexel commits as a pinned git dependency and may carry a generated
+manifest snapshot for backend validation. Never recreate or edit an Engram
+`frontend/app/cortexel/` copy; no in-tree source copy is authoritative. Open Cortexel
+code PRs here, then update downstream pins and generated snapshots deliberately.
 
 ## Commits & PRs
 

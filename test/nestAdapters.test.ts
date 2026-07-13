@@ -8,6 +8,7 @@ import {
   splitWeightRecorderBySynapse,
   splitMultimeterBySender,
 } from '../core/nest/adapters';
+import { MultimeterEventsSchema } from '../core/nest/shapes';
 import { routeToScene } from '../core/skills/router';
 
 describe('NEST adapters', () => {
@@ -143,7 +144,13 @@ describe('routeToScene', () => {
     if (!r.ok) {
       expect(r.reason).toBe('ambiguous');
       expect(r.disambiguateBy!.field).toBe('dataShape.kind');
-      expect(r.disambiguateBy!.maps.events).toBe('nest.spike_raster');
+      expect(r.disambiguateBy!.maps).toEqual({
+        events: 'nest.spike_raster',
+        isi: 'nest.isi_distribution',
+        psth: 'nest.psth',
+        population_rate: 'nest.population_rate',
+        fi_response: 'nest.rate_response',
+      });
     }
   });
 
@@ -151,16 +158,103 @@ describe('routeToScene', () => {
     expect(routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'events' } })).toEqual(
       { ok: true, skill: 'nest.spike_raster', scene: 'spike-raster' },
     );
+    expect(routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'isi' } })).toEqual(
+      { ok: true, skill: 'nest.isi_distribution', scene: 'isi-distribution' },
+    );
+    expect(routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'psth' } })).toEqual(
+      { ok: true, skill: 'nest.psth', scene: 'psth' },
+    );
+    expect(routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'population_rate' } })).toEqual(
+      { ok: true, skill: 'nest.population_rate', scene: 'population-rate' },
+    );
+    expect(routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'fi_response' } })).toEqual(
+      { ok: true, skill: 'nest.rate_response', scene: 'fi-curve' },
+    );
   });
 
-  it('refuses correlation (no honest scene)', () => {
-    const r = routeToScene({ deviceFamily: 'spike_recorder', dataShape: { kind: 'correlation' } });
+  it('makes GetConnections ambiguity explicit after adding snapshot distributions', () => {
+    const r = routeToScene({ deviceFamily: 'get_connections' });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('no_cortexel_scene');
+    if (!r.ok) {
+      expect(r.reason).toBe('ambiguous');
+      expect(r.disambiguateBy).toEqual({
+        field: 'dataShape.kind',
+        maps: {
+          connection_graph: 'nest.connection_graph',
+          adjacency_matrix: 'nest.adjacency_matrix',
+          weight_matrix: 'nest.weight_matrix',
+          delay_matrix: 'nest.delay_matrix',
+          in_degree_distribution: 'nest.in_degree_distribution',
+          out_degree_distribution: 'nest.out_degree_distribution',
+          delay_distribution: 'nest.delay_distribution',
+          weight_distribution: 'nest.weight_histogram',
+        },
+      });
+    }
+  });
+
+  it('routes explicit GetConnections and GetPosition analysis kinds', () => {
+    expect(routeToScene({
+      deviceFamily: 'get_connections',
+      dataShape: { kind: 'connection_graph' },
+    })).toEqual({ ok: true, skill: 'nest.connection_graph', scene: 'network-topology' });
+    expect(routeToScene({
+      deviceFamily: 'get_connections',
+      dataShape: { kind: 'adjacency_matrix' },
+    })).toEqual({ ok: true, skill: 'nest.adjacency_matrix', scene: 'connection-matrix' });
+    expect(routeToScene({
+      deviceFamily: 'get_connections',
+      dataShape: { kind: 'in_degree_distribution' },
+    })).toEqual({ ok: true, skill: 'nest.in_degree_distribution', scene: 'degree-distribution' });
+    expect(routeToScene({
+      deviceFamily: 'get_connections',
+      dataShape: { kind: 'delay_distribution' },
+    })).toEqual({ ok: true, skill: 'nest.delay_distribution', scene: 'delay-distribution' });
+    expect(routeToScene({
+      deviceFamily: 'get_position',
+      dataShape: { kind: 'positions_2d' },
+    })).toEqual({ ok: true, skill: 'nest.spatial_map_2d', scene: 'spatial-map-2d' });
+  });
+
+  it('keeps deprecated topology ids explicitly valid but out of derived routing', () => {
+    expect(routeToScene({
+      deviceFamily: 'get_connections',
+      skill: 'nest.connectivity_matrix',
+    })).toEqual({ ok: true, skill: 'nest.connectivity_matrix', scene: 'network-topology' });
+    expect(routeToScene({
+      deviceFamily: 'get_position',
+      skill: 'nest.spatial_2d',
+    })).toMatchObject({ ok: false, reason: 'no_cortexel_scene' });
+  });
+
+  it('routes correlation_detector unambiguously and rejects ambiguous legacy rates', () => {
+    expect(routeToScene({ deviceFamily: 'correlation_detector' })).toEqual({
+      ok: true,
+      skill: 'nest.correlogram',
+      scene: 'correlogram',
+    });
+    expect(
+      routeToScene({
+        deviceFamily: 'spike_recorder',
+        dataShape: { kind: 'rates' as never },
+      }),
+    ).toMatchObject({ ok: false, reason: 'invalid_discriminator' });
+    expect(
+      routeToScene({
+        deviceFamily: 'spike_recorder',
+        dataShape: { kind: 'correlation' as never },
+      }),
+    ).toMatchObject({ ok: false, reason: 'invalid_discriminator' });
   });
 
   it('every multi-member family is ambiguous without a discriminator', () => {
-    for (const fam of ['spike_recorder', 'multimeter', 'computed'] as const) {
+    for (const fam of [
+      'spike_recorder',
+      'multimeter',
+      'get_connections',
+      'get_position',
+      'computed',
+    ] as const) {
       const r = routeToScene({ deviceFamily: fam });
       expect(r.ok).toBe(false);
     }
@@ -170,14 +264,14 @@ describe('routeToScene', () => {
     expect(
       routeToScene({
         deviceFamily: 'get_connections',
-        dataShape: { kind: 'rates' },
+        dataShape: { kind: 'population_rate' },
       }),
     ).toMatchObject({ ok: false, reason: 'invalid_discriminator' });
     expect(
       routeToScene({
         deviceFamily: 'spike_recorder',
         skill: 'nest.spike_raster',
-        dataShape: { kind: 'rates' },
+        dataShape: { kind: 'fi_response' },
       }),
     ).toMatchObject({ ok: false, reason: 'invalid_discriminator' });
   });
@@ -258,6 +352,32 @@ describe('NEST input hardening', () => {
     times.length = 1;
     expect(spikeRecorderToSceneData({ senders: [1], times }).ok).toBe(false);
     expect(reads).toBe(0);
+  });
+
+  it('reads typed-array lengths intrinsically without invoking subclass getters', () => {
+    let lengthReads = 0;
+    class HostileFloat64Array extends Float64Array {
+      get length(): number {
+        lengthReads += 1;
+        throw new Error('subclass length getter must not execute');
+      }
+    }
+    class HostileUint32Array extends Uint32Array {
+      get length(): number {
+        lengthReads += 1;
+        throw new Error('subclass length getter must not execute');
+      }
+    }
+
+    const times = new HostileFloat64Array([0, 1]);
+    const values = new HostileFloat64Array([-65, -64]);
+    expect(MultimeterEventsSchema.safeParse({ times, values }).success).toBe(true);
+    expect(multimeterToSceneData({ times, values }).ok).toBe(true);
+    expect(getConnectionsToSceneData({
+      sources: new HostileUint32Array([1]),
+      targets: new HostileUint32Array([2]),
+    }).ok).toBe(true);
+    expect(lengthReads).toBe(0);
   });
 
   it('bounds split-helper errors by the public adapter budget', () => {
@@ -348,6 +468,29 @@ describe('NEST input hardening', () => {
 
   it('rejects a flattened multi-sender multimeter dump (non-monotonic times)', () => {
     expect(multimeterToSceneData({ times: [0, 1, 0, 1], values: [1, 2, 3, 4] }).ok).toBe(false);
+  });
+
+  it('requires strictly increasing shared and per-sender multimeter time axes', () => {
+    expect(multimeterToSceneData({
+      times: [0, 0, 1, 1],
+      values: [1, 2, 3, 4],
+    }).ok).toBe(false);
+    expect(splitMultimeterBySender({
+      times: [0, 0],
+      values: [1, 2],
+      senders: [7, 7],
+    }).ok).toBe(false);
+
+    expect(multimeterToSceneData({ times: [0, 1], values: [1, 2] }).ok).toBe(true);
+    const split = splitMultimeterBySender({
+      times: [0, 0, 1, 1],
+      values: [1, 2, 3, 4],
+      senders: [7, 8, 7, 8],
+    });
+    expect(split.ok).toBe(true);
+    if (split.ok) {
+      expect(split.series.map((series) => series.times)).toEqual([[0, 1], [0, 1]]);
+    }
   });
 
   it('rejects a flattened multi-sender dump even when its global times are monotonic', () => {
@@ -572,6 +715,38 @@ describe('weight recorder identity', () => {
         { weightUnits: 'nS' },
       ).ok,
     ).toBe(false);
+  });
+
+  it('requires strictly increasing shared and per-synapse weight time axes', () => {
+    expect(
+      weightRecorderToSceneData(
+        { times: [0, 0], weights: [0.5, 0.6] },
+        { weightUnits: 'nS' },
+      ).ok,
+    ).toBe(false);
+    expect(
+      splitWeightRecorderBySynapse({
+        times: [0, 0],
+        weights: [0.5, 0.6],
+        senders: [1, 1],
+        targets: [3, 3],
+      }).ok,
+    ).toBe(false);
+
+    expect(
+      weightRecorderToSceneData(
+        { times: [0, 1], weights: [0.5, 0.6] },
+        { weightUnits: 'nS' },
+      ).ok,
+    ).toBe(true);
+    expect(
+      splitWeightRecorderBySynapse({
+        times: [0, 0, 1, 1],
+        weights: [0.5, 0.8, 0.6, 0.9],
+        senders: [1, 2, 1, 2],
+        targets: [3, 4, 3, 4],
+      }).ok,
+    ).toBe(true);
   });
 
   it('feeds split helper output directly into the single-series adapters', () => {

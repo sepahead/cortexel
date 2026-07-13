@@ -22,7 +22,7 @@ import {
 /** The VizSpec contract version. Bumped when the envelope shape changes in a way
  *  a host may need to migrate. A stored payload MAY omit `specVersion` for legacy
  *  compatibility; when stamped, the runtime enforces an exact match. */
-export const CORTEXEL_SPEC_VERSION = '1.1.0';
+export const CORTEXEL_SPEC_VERSION = '1.3.0';
 
 /** Resource ceilings for the plain-JSON envelope. Per-skill schemas impose
  *  tighter array limits where the renderer has a smaller practical budget. */
@@ -449,7 +449,13 @@ export const VizSpecSchema = z.object({
    *  uses it when no explicit `skillId` prop is passed. Scene→skill is many-to-one
    *  (voltage-trace ← voltage_trace AND astrocyte_dynamics), so the scene alone
    *  cannot recover the skill — this field closes that gap. */
-  skill: z.string().trim().min(1).max(80).optional(),
+  skill: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(SAFE_DISPLAY_STRING_PATTERN, 'skill must not contain display control characters')
+    .optional(),
   /** Optional contract version this spec targets (see CORTEXEL_SPEC_VERSION). */
   specVersion: z.literal(CORTEXEL_SPEC_VERSION).optional(),
   // Scene-specific data/options. The envelope path guarantees bounded literal
@@ -466,7 +472,13 @@ export const VizSpecSchema = z.object({
    *  is rejected with 'unknown_palette'; on the lenient validateVizSpec path an
    *  unregistered name is tolerated and getPalette falls back to the default (with
    *  a dev-mode warning). When absent, the host's active palette is used. */
-  palette: z.string().trim().min(1).max(60).optional(),
+  palette: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .regex(SAFE_DISPLAY_STRING_PATTERN, 'palette must not contain display control characters')
+    .optional(),
   provenance: ProvenanceSchema,
 }).strict();
 

@@ -1,18 +1,19 @@
 /** Extract a bounded diagnostic without invoking instanceof, coercion, or an
- *  unguarded property access on hostile thrown values/Proxies. */
+ *  accessor on hostile thrown values/Proxies. Only an own primitive data
+ *  property is eligible; inherited/accessor messages are deliberately opaque. */
 export function safeErrorMessage(error: unknown): string {
   try {
     if (typeof error === 'string') {
       return safeDiagnosticText(error, 240);
     }
     if (error !== null && (typeof error === 'object' || typeof error === 'function')) {
-      const message = Reflect.get(error, 'message');
-      if (typeof message === 'string') {
-        return safeDiagnosticText(message, 240);
+      const message = Object.getOwnPropertyDescriptor(error, 'message');
+      if (message && 'value' in message && typeof message.value === 'string') {
+        return safeDiagnosticText(message.value, 240);
       }
     }
   } catch {
-    // A revoked/hostile Proxy may throw from get/getPrototypeOf. Never inspect it again.
+    // A revoked/hostile Proxy may throw from its descriptor trap. Never inspect it again.
   }
   return 'unknown error';
 }
@@ -33,6 +34,29 @@ export const PUBLIC_DIAGNOSTIC_LIMITS = Object.freeze({
  * bidi-override characters that can visually spoof axes, nodes, or captions. */
 export const SAFE_DISPLAY_STRING_PATTERN =
   /^[^\u0000-\u001f\u061c\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]*$/u;
+
+const TYPED_ARRAY_LENGTH_GETTER = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  'length',
+)?.get;
+
+/** Read a typed array's internal length without consulting an overridable
+ * subclass `length` accessor. DataView and non-typed-array inputs return
+ * undefined. This is the single length primitive for hostile-input boundaries
+ * that intentionally accept numeric typed arrays. */
+export function intrinsicTypedArrayLength(value: unknown): number | undefined {
+  if (!ArrayBuffer.isView(value) || typeof TYPED_ARRAY_LENGTH_GETTER !== 'function') {
+    return undefined;
+  }
+  try {
+    const length: unknown = Reflect.apply(TYPED_ARRAY_LENGTH_GETTER, value, []);
+    return typeof length === 'number' && Number.isSafeInteger(length) && length >= 0
+      ? length
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface ValidationIssueLike {
   path?: readonly PropertyKey[];
@@ -56,12 +80,47 @@ export function safeDiagnosticText(value: string, max: number): string {
   return clipText(escaped, max);
 }
 
-function printablePathSegment(value: PropertyKey): string {
-  try {
-    return safeDiagnosticText(typeof value === 'symbol' ? String(value) : `${value}`, 80);
-  } catch {
-    return '<unprintable>';
+/** Render an untrusted value for a public diagnostic without invoking any
+ * user-defined conversion hook. Objects/functions are deliberately opaque:
+ * calling String(value), value.toString(), or Symbol.toPrimitive at this
+ * boundary would execute attacker-controlled code while handling an error. */
+export function safePrimitiveDiagnostic(value: unknown, max = 120): string {
+  let text: string;
+  switch (typeof value) {
+    case 'string':
+      text = value;
+      break;
+    case 'number':
+      text = Object.is(value, -0) ? '-0' : `${value}`;
+      break;
+    case 'bigint':
+      text = `${value}`;
+      break;
+    case 'boolean':
+      text = value ? 'true' : 'false';
+      break;
+    case 'undefined':
+      text = 'undefined';
+      break;
+    case 'symbol':
+      // Even a symbol description is unnecessary disclosure for a repair hint.
+      // Keeping it opaque also avoids relying on a mutable global String.
+      text = '<symbol>';
+      break;
+    case 'function':
+      text = '<function>';
+      break;
+    case 'object':
+      text = value === null ? 'null' : '<object>';
+      break;
+    default:
+      text = '<unknown>';
   }
+  return safeDiagnosticText(text, max);
+}
+
+function printablePathSegment(value: PropertyKey): string {
+  return safePrimitiveDiagnostic(value, 80);
 }
 
 /** Convert one trusted validator issue to a bounded public path/message pair. */
@@ -76,16 +135,7 @@ export function boundValidationIssue(
   if (issue.code === 'unrecognized_keys' && Array.isArray(issue.keys)) {
     const samples = issue.keys
       .slice(0, PUBLIC_DIAGNOSTIC_LIMITS.maxUnknownKeySamples)
-      .map((key) => {
-        try {
-          return safeDiagnosticText(
-            JSON.stringify(clipText(typeof key === 'string' ? key : String(key), 60)),
-            80,
-          );
-        } catch {
-          return '"<unprintable>"';
-        }
-      });
+      .map((key) => JSON.stringify(safePrimitiveDiagnostic(key, 60)));
     const omitted = issue.keys.length - samples.length;
     message = `unrecognized keys (${issue.keys.length}): ${samples.join(', ')}` +
       (omitted > 0 ? `; ${omitted} more omitted` : '');

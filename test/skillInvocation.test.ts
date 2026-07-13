@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateSkillInvocation } from '../core/skills/validateSkillInvocation';
 import { getExamplePayload } from '../core/skills/examples';
+import { provenanceParamConstraintError } from '../core/skills/provenanceKeys';
 
 const goodProv = {
   source: 'nest_simulation:run42',
@@ -22,6 +23,30 @@ function spikeSpec(overrides: Record<string, unknown> = {}) {
 }
 
 describe('validateSkillInvocation', () => {
+  it('resolves only safe own-property paths for nested provenance bindings', () => {
+    const constraint = {
+      kind: 'equals_param_path' as const,
+      provenanceKey: 'reference_population' as const,
+      paramPath: 'pair.reference_label',
+      description: 'test binding',
+    };
+    expect(provenanceParamConstraintError(
+      constraint,
+      { pair: { reference_label: 'E' } },
+      { reference_population: 'E' },
+    )).toBeNull();
+    expect(provenanceParamConstraintError(
+      constraint,
+      { pair: { reference_label: 'E' } },
+      { reference_population: 'I' },
+    )).toContain('params.pair.reference_label');
+    expect(provenanceParamConstraintError(
+      { ...constraint, paramPath: '__proto__.spoof' },
+      {},
+      { reference_population: 'E' },
+    )).toContain('not a safe parameter path');
+  });
+
   it('accepts a well-formed spike_raster invocation and returns a caption', () => {
     const r = validateSkillInvocation('nest.spike_raster', spikeSpec());
     expect(r.ok).toBe(true);
@@ -138,6 +163,146 @@ describe('validateSkillInvocation', () => {
     expect(validateSkillInvocation('nest.spike_raster', extraKnown).ok).toBe(false);
   });
 
+  it('binds histogram provenance to binning, normalization, scope/alignment, and units', () => {
+    const cases: Array<[
+      'nest.isi_distribution' | 'nest.psth' | 'nest.weight_histogram',
+      string,
+      string | number,
+    ]> = [
+      ['nest.isi_distribution', 'bin_ms', 2],
+      ['nest.isi_distribution', 'histogram_normalization', 'probability'],
+      ['nest.isi_distribution', 'interval_scope', 'single_train'],
+      ['nest.psth', 'event_alignment', 'response onset'],
+      ['nest.psth', 'psth_aggregation', 'mean_per_sender'],
+      ['nest.weight_histogram', 'weight_units', 'nS'],
+      ['nest.weight_histogram', 'histogram_normalization', 'probability'],
+    ];
+    for (const [skill, key, value] of cases) {
+      const example = structuredClone(getExamplePayload(skill)!);
+      example.provenance.declared_inputs![key] = value;
+      const result = validateSkillInvocation(skill, example);
+      expect(result.ok, `${skill}:${key}`).toBe(false);
+      if (!result.ok) {
+        expect(result.errors).toContainEqual(
+          expect.objectContaining({ code: 'invalid_provenance' }),
+        );
+      }
+    }
+  });
+
+  it('binds population-rate and nested correlogram semantics into provenance', () => {
+    const cases: Array<[
+      'nest.population_rate' | 'nest.correlogram',
+      string,
+      string | number,
+    ]> = [
+      ['nest.population_rate', 'bin_ms', 10],
+      ['nest.population_rate', 'rate_normalization', 'aggregate_rate_hz'],
+      ['nest.population_rate', 'binning_policy', 'right_closed'],
+      ['nest.correlogram', 'reference_population', 'different reference'],
+      ['nest.correlogram', 'target_population', 'different target'],
+      ['nest.correlogram', 'bin_ms', 2],
+      ['nest.correlogram', 'correlation_normalization', 'pearson_coefficient'],
+      ['nest.correlogram', 'correlation_units', 'Hz'],
+      ['nest.correlogram', 'lag_convention', 'positive_reference_after_target'],
+      ['nest.correlogram', 'binning_policy', 'closed'],
+    ];
+    for (const [skill, key, value] of cases) {
+      const example = getExamplePayload(skill)!;
+      example.provenance.declared_inputs![key] = value;
+      const result = validateSkillInvocation(skill, example);
+      expect(result.ok, `${skill}:${key}`).toBe(false);
+      if (!result.ok) {
+        expect(result.errors).toContainEqual(expect.objectContaining({
+          code: 'invalid_provenance',
+          path: `provenance.declared_inputs.${key}`,
+        }));
+      }
+    }
+  });
+
+  it('binds corpus graph source, immutable snapshot, and scope into provenance', () => {
+    for (const [key, value] of [
+      ['graph_source', 'different-source'],
+      ['graph_snapshot_id', 'different-snapshot'],
+      ['graph_scope', 'paper_evidence'],
+    ] as const) {
+      const example = getExamplePayload('corpus.knowledge_graph')!;
+      example.provenance.declared_inputs![key] = value;
+      const result = validateSkillInvocation('corpus.knowledge_graph', example);
+      expect(result.ok, key).toBe(false);
+      if (!result.ok) {
+        expect(result.errors).toContainEqual(
+          expect.objectContaining({
+            code: 'invalid_provenance',
+            path: `provenance.declared_inputs.${key}`,
+          }),
+        );
+      }
+    }
+  });
+
+  it('rejects corpus provenance flags that contradict derived/advisory elements', () => {
+    for (const [flag, value] of [
+      ['advisory_only', false],
+      ['is_paper_local_evidence', true],
+    ] as const) {
+      const example = getExamplePayload('corpus.knowledge_graph')!;
+      example.provenance[flag] = value;
+      const result = validateSkillInvocation('corpus.knowledge_graph', example);
+      expect(result.ok, flag).toBe(false);
+      if (!result.ok) {
+        expect(result.errors).toContainEqual(expect.objectContaining({
+          code: 'invalid_provenance',
+          path: `provenance.${flag}`,
+        }));
+      }
+    }
+  });
+
+  it('rejects a corpus graph whose evidence is entirely self/internal references', () => {
+    const example = getExamplePayload('corpus.knowledge_graph')!;
+    for (const node of example.params.nodes as Array<Record<string, unknown>>) {
+      node.evidence = [{
+        kind: 'graph_node',
+        evidence_id: `internal-node:${node.id}`,
+        node_id: node.id,
+      }];
+    }
+    for (const edge of example.params.edges as Array<Record<string, unknown>>) {
+      edge.evidence = [{
+        kind: 'graph_node',
+        evidence_id: `internal-edge:${edge.id}`,
+        node_id: edge.source,
+      }];
+    }
+    const result = validateSkillInvocation('corpus.knowledge_graph', example);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(expect.objectContaining({
+        code: 'invalid_params',
+        path: 'params.nodes.0.evidence',
+      }));
+      expect(result.errors).toContainEqual(expect.objectContaining({
+        code: 'invalid_params',
+        path: 'params.edges.0.evidence',
+      }));
+    }
+  });
+
+  it('requires an RFC3339 corpus graph generation timestamp', () => {
+    const example = getExamplePayload('corpus.knowledge_graph')!;
+    example.params.generated_at = '2026-07-11T12:00:00';
+    const result = validateSkillInvocation('corpus.knowledge_graph', example);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors).toContainEqual(expect.objectContaining({
+        code: 'invalid_params',
+        path: 'params.generated_at',
+      }));
+    }
+  });
+
   it('rejects unknown claim-like provenance keys', () => {
     const result = validateSkillInvocation(
       'nest.spike_raster',
@@ -159,6 +324,21 @@ describe('validateSkillInvocation', () => {
     }
   });
 
+  it('rejects obsolete unbound provenance claims', () => {
+    for (const key of ['node_kinds', 'edge_kinds', 'pair_labels']) {
+      const example = getExamplePayload('corpus.knowledge_graph')!;
+      example.provenance.declared_inputs![key] = 'obsolete';
+      const result = validateSkillInvocation('corpus.knowledge_graph', example);
+      expect(result.ok, key).toBe(false);
+      if (!result.ok) {
+        expect(result.errors).toContainEqual(expect.objectContaining({
+          code: 'invalid_provenance',
+          path: `provenance.declared_inputs.${key}`,
+        }));
+      }
+    }
+  });
+
   it('requires an explicit phase-plane flattening convention', () => {
     const example = getExamplePayload('nest.phase_plane')!;
     expect(validateSkillInvocation('nest.phase_plane', example).ok).toBe(true);
@@ -169,11 +349,10 @@ describe('validateSkillInvocation', () => {
 
   it('enforces semantic endpoint kinds in knowledge graphs', () => {
     const graph = getExamplePayload('corpus.knowledge_graph')!;
-    (graph.params.edges as Array<Record<string, unknown>>)[0] = {
-      source: 'm1',
-      target: 'f1',
-      kind: 'cites',
-    };
+    const edge = (graph.params.edges as Array<Record<string, unknown>>)[0];
+    edge.source = 'm1';
+    edge.target = 'f1';
+    edge.kind = 'cites';
     const result = validateSkillInvocation('corpus.knowledge_graph', graph);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -236,23 +415,10 @@ describe('validateSkillInvocation', () => {
   });
 
   it("knowledge-graph weak disclosure states the ADVISORY-IDENTITY reason, not a false 'scene reuse' claim", () => {
-    const r = validateSkillInvocation('corpus.knowledge_graph', {
-      scene: 'knowledge-graph-3d',
-      params: {
-        nodes: [{ id: 'p1', kind: 'paper', label: 'Brunel 2000' }],
-        edges: [],
-      },
-      provenance: {
-        source: 'corpus_kg',
-        advisory_only: true,
-        declared_inputs: {
-          graph_source: 'corpus_kg',
-          node_kinds: 'paper',
-          edge_kinds: '',
-          identity_advisory: true,
-        },
-      },
-    });
+    const r = validateSkillInvocation(
+      'corpus.knowledge_graph',
+      getExamplePayload('corpus.knowledge_graph')!,
+    );
     expect(r.ok).toBe(true);
     if (r.ok) {
       // Must NOT claim it reuses/approximates some other scene (knowledge-graph-3d

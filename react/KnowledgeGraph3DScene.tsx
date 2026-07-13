@@ -35,28 +35,55 @@ import {
   type SimNode,
 } from 'd3-force-3d';
 import {
-  advanceGraphLayoutClock,
+  advanceGraphLayoutClockInto,
+  assignGraphEdgeLanes,
   assertKnowledgeGraphBudget,
+  assertRenderableGraphEdges,
+  assertUniqueGraphNodeIds,
   buildAdjacency,
   filterGraphEdges,
   flowParticleCount,
+  GRAPH_EDGE_CURVE_SEGMENTS,
+  graphEdgeControlPointInto,
+  graphEdgeCurvePointInto,
+  graphEdgeMatchesQuery,
+  graphQueryMatchIds,
   graphSignature,
   normalizeGraphNodeRadius,
   normalizeGraphQuery,
-  matchesGraphQuery,
   reducedMotionLayoutTickBudget,
+  uniqueGraphTopologyLinks,
+  type KnowledgeGraphAttributes,
+  type KnowledgeGraphEpistemic,
+  type KnowledgeGraphEvidenceRef,
+  type KnowledgeGraphUncalibratedScore,
+  type GraphEdgeLane,
 } from './knowledgeGraph';
 import { safeDiagnosticText } from '../core/safeRuntime';
 
 export interface KnowledgeGraph3DNode {
   id: string;
   label: string;
+  detail?: string;
+  attributes?: Readonly<KnowledgeGraphAttributes>;
+  epistemic?: Readonly<KnowledgeGraphEpistemic>;
+  evidence?: readonly KnowledgeGraphEvidenceRef[];
+  uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
   color: string; // hex string — the node carries its own color (not host palette)
   radius: number; // invalid/out-of-range values fall back to a safe scene radius
+  /** Human-readable semantics for radius. Omitted means caller-defined visual size. */
+  radiusMeaning?: string;
   kind: string; // 'paper' | 'model' | 'family' | …
 }
 
 export interface KnowledgeGraph3DEdge {
+  /** Stable assertion identity. Distinct ids may share endpoints and kind. */
+  id?: string;
+  label?: string;
+  attributes?: Readonly<KnowledgeGraphAttributes>;
+  epistemic?: Readonly<KnowledgeGraphEpistemic>;
+  evidence?: readonly KnowledgeGraphEvidenceRef[];
+  uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
   source: string;
   target: string;
   color: string; // hex string
@@ -118,10 +145,14 @@ const _color = new THREE.Color();
 const _dimTarget = new THREE.Color('#030711');
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
+const _curveControl = new THREE.Vector3();
+const _curvePoint = new THREE.Vector3();
+const _curveNext = new THREE.Vector3();
 const _direction = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _box = new THREE.Box3();
 const _sphere = new THREE.Sphere();
+const _layoutClockResult = { ticks: 0, remainderSeconds: 0 };
 
 /** Dev-only console warning (stripped by the consumer's production bundler). */
 function devWarn(msg: string): void {
@@ -200,6 +231,18 @@ interface SimGraphNode extends SimNode {
   r: number;
 }
 
+/** Populate the one shared quadratic path definition consumed by lines,
+ * arrowheads, and flow particles. Module-scope vectors keep useFrame allocation-free. */
+function setEdgeCurve(
+  source: SimGraphNode,
+  target: SimGraphNode,
+  lane: Pick<GraphEdgeLane, 'laneOffset' | 'canonicalDirectionSign'>,
+): void {
+  _a.set(source.x ?? 0, source.y ?? 0, source.z ?? 0);
+  _b.set(target.x ?? 0, target.y ?? 0, target.z ?? 0);
+  graphEdgeControlPointInto(_a, _b, lane, _curveControl);
+}
+
 export function KnowledgeGraph3DScene({
   nodes,
   edges,
@@ -216,6 +259,8 @@ export function KnowledgeGraph3DScene({
   reducedMotion = false,
 }: KnowledgeGraph3DSceneProps) {
   assertKnowledgeGraphBudget(nodes.length, edges.length);
+  assertUniqueGraphNodeIds(nodes);
+  assertRenderableGraphEdges(nodes, edges);
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
   const particlesRef = useRef<THREE.InstancedMesh>(null);
@@ -259,11 +304,17 @@ export function KnowledgeGraph3DScene({
   // common React pattern) never restarts a settled layout. Any REAL change —
   // structure, radius, edge styling — still yields a new key (warm restart).
   const graphKey = useMemo(() => graphSignature(nodes, edges), [nodes, edges]);
+  const normalizedQuery = useMemo(() => normalizeGraphQuery(query), [query]);
+  const queryMatchIds = useMemo(
+    () => graphQueryMatchIds(nodes, normalizedQuery, edges),
+    [nodes, edges, normalizedQuery],
+  );
+  const queryActive = normalizedQuery.length > 0;
 
   // Build simulation node/link arrays (seeded from remembered positions), the
   // fast id→index map, and the VALID edge set (both endpoints present, no
   // self-loops) that every render path shares. Recomputed only on CONTENT change.
-  const { simNodes, simLinks, validEdges, index, warmStart } = useMemo(() => {
+  const { simNodes, simLinks, validEdges, edgeLanes, index, warmStart } = useMemo(() => {
     const index = new Map<string, number>();
     let warmStart = false;
     const simNodes: SimGraphNode[] = nodes.map((n, i) => {
@@ -278,17 +329,12 @@ export function KnowledgeGraph3DScene({
       // d3-force-3d places them on its deterministic phyllotaxis sphere.
       return prev ? { id: n.id, r, x: prev[0], y: prev[1], z: prev[2] } : { id: n.id, r };
     });
-    if (index.size !== nodes.length) {
-      devWarn(
-        `KnowledgeGraph3DScene: ${nodes.length - index.size} duplicate node id(s); ` +
-          `edges, labels and the camera will bind to the last occurrence.`,
-      );
-    }
     // One valid-edge set for ALL paths (layout, adjacency, buffers, endpoints,
-    // particles, emphasis) so their element counts can never disagree. Drops
-    // dangling endpoints and self-loops (zero-length lines / stacked particles).
+    // particles, emphasis) so their element counts can never disagree. Direct
+    // inputs already failed closed above; the filter remains defensive/shared.
     const validEdges = filterGraphEdges(new Set(index.keys()), edges);
-    const simLinks = validEdges.map((e) => ({ source: e.source, target: e.target }));
+    const edgeLanes = assignGraphEdgeLanes(validEdges);
+    const simLinks = uniqueGraphTopologyLinks(validEdges);
     // Bound the remembered-position cache in long high-churn sessions (only prune
     // ids no longer present, and only once the cache is large — so ordinary
     // filter/toggle still restores positions).
@@ -297,7 +343,7 @@ export function KnowledgeGraph3DScene({
         if (!index.has(key)) posMap.current.delete(key);
       }
     }
-    return { simNodes, simLinks, validEdges, index, warmStart };
+    return { simNodes, simLinks, validEdges, edgeLanes, index, warmStart };
     // Keyed on content, not identity: content-equal snapshots are interchangeable
     // everywhere these outputs flow (graphSignature covers every field they use).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -322,10 +368,13 @@ export function KnowledgeGraph3DScene({
   }, [gl, hoverId, index]);
 
   // The (few) edges that carry animated flow particles.
-  const flowEdges = useMemo(() => validEdges.filter((e) => e.particles), [validEdges]);
+  const flowEdges = useMemo(
+    () => edgeLanes.filter(({ edge }) => edge.particles),
+    [edgeLanes],
+  );
   const directedEdges = useMemo(
-    () => validEdges.filter((edge) => edge.directed !== false),
-    [validEdges],
+    () => edgeLanes.filter(({ edge }) => edge.directed !== false),
+    [edgeLanes],
   );
   const particleCount = flowParticleCount(
     flowEdges.length,
@@ -341,9 +390,15 @@ export function KnowledgeGraph3DScene({
     }
   }, [flowEdges.length]);
 
-  // Buffers for the line segments (2 verts/edge × 3 floats), rebuilt on change.
-  const linePos = useMemo(() => new Float32Array(validEdges.length * 6), [validEdges]);
-  const lineCol = useMemo(() => new Float32Array(validEdges.length * 6), [validEdges]);
+  // Exact buffers: four quadratic chords × two vertices × three floats per edge.
+  const linePos = useMemo(
+    () => new Float32Array(validEdges.length * GRAPH_EDGE_CURVE_SEGMENTS * 6),
+    [validEdges],
+  );
+  const lineCol = useMemo(
+    () => new Float32Array(validEdges.length * GRAPH_EDGE_CURVE_SEGMENTS * 6),
+    [validEdges],
+  );
 
   // (Re)create the 3D force simulation whenever the graph changes.
   const simRef = useRef<Simulation<SimGraphNode> | null>(null);
@@ -397,38 +452,48 @@ export function KnowledgeGraph3DScene({
     // stale selection never dims the whole graph or pins an empty label.
     const focus = raw != null && index.has(raw) ? raw : null;
     const focusSet = focus ? neighbors.get(focus) : null;
-    const q = normalizeGraphQuery(query);
-    const isDimmed = (id: string, label: string, kind: string): number => {
+    const isDimmed = (id: string): number => {
       if (focus && id !== focus && !focusSet?.has(id)) return 0.8;
-      if (!focus && !matchesGraphQuery(label, kind, q)) return 0.82;
+      if (!focus && queryActive && !queryMatchIds.has(id)) return 0.82;
       return 0;
     };
     if (mesh) {
       nodes.forEach((n, i) => {
-        mesh.setColorAt(i, dim(n.color, isDimmed(n.id, n.label, n.kind)));
+        mesh.setColorAt(i, dim(n.color, isDimmed(n.id)));
       });
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
     // Link colors: dim edges not incident to the focus node.
     let k = 0;
     for (const e of validEdges) {
-      const incident = !focus || e.source === focus || e.target === focus;
+      const incident = focus
+        ? e.source === focus || e.target === focus
+        : graphEdgeMatchesQuery(e.source, e.target, queryMatchIds, normalizedQuery);
       const c = dim(e.color, incident ? 0.25 : 0.86);
-      lineCol[k] = c.r;
-      lineCol[k + 1] = c.g;
-      lineCol[k + 2] = c.b;
-      lineCol[k + 3] = c.r;
-      lineCol[k + 4] = c.g;
-      lineCol[k + 5] = c.b;
-      k += 6;
+      for (let chord = 0; chord < GRAPH_EDGE_CURVE_SEGMENTS; chord++) {
+        lineCol[k] = c.r;
+        lineCol[k + 1] = c.g;
+        lineCol[k + 2] = c.b;
+        lineCol[k + 3] = c.r;
+        lineCol[k + 4] = c.g;
+        lineCol[k + 5] = c.b;
+        k += 6;
+      }
     }
     const geom = linesRef.current?.geometry;
     const attr = geom?.getAttribute('color') as THREE.BufferAttribute | undefined;
     if (attr) attr.needsUpdate = true;
     const arrows = arrowsRef.current;
     if (arrows) {
-      directedEdges.forEach((edge, arrowIndex) => {
-        const incident = !focus || edge.source === focus || edge.target === focus;
+      directedEdges.forEach(({ edge }, arrowIndex) => {
+        const incident = focus
+          ? edge.source === focus || edge.target === focus
+          : graphEdgeMatchesQuery(
+              edge.source,
+              edge.target,
+              queryMatchIds,
+              normalizedQuery,
+            );
         arrows.setColorAt(arrowIndex, dim(edge.color, incident ? 0.15 : 0.86));
       });
       if (arrows.instanceColor) arrows.instanceColor.needsUpdate = true;
@@ -441,7 +506,9 @@ export function KnowledgeGraph3DScene({
     neighbors,
     hoverId,
     selectedId,
-    query,
+    queryActive,
+    queryMatchIds,
+    normalizedQuery,
     lineCol,
   ]);
 
@@ -482,7 +549,11 @@ export function KnowledgeGraph3DScene({
 
     let positionsChanged = geometryDirtyRef.current;
     if (sim.alpha() > 0.008) {
-      const advanced = advanceGraphLayoutClock(layoutTickAccumulatorRef.current, delta);
+      const advanced = advanceGraphLayoutClockInto(
+        layoutTickAccumulatorRef.current,
+        delta,
+        _layoutClockResult,
+      );
       layoutTickAccumulatorRef.current = advanced.remainderSeconds;
       for (let tick = 0; tick < advanced.ticks && sim.alpha() > 0.008; tick++) {
         sim.tick();
@@ -520,19 +591,32 @@ export function KnowledgeGraph3DScene({
       // raycast recomputes them — a stale sphere makes drifted nodes unhittable.
       mesh.boundingSphere = null;
 
-      // Edge endpoints (valid edges only, so counts match the buffers exactly).
+      // Routed edge chords (valid edges only, so counts match the buffers exactly).
       let k = 0;
-      for (let edgeIndex = 0; edgeIndex < validEdges.length; edgeIndex++) {
-        const e = validEdges[edgeIndex];
+      for (let edgeIndex = 0; edgeIndex < edgeLanes.length; edgeIndex++) {
+        const lane = edgeLanes[edgeIndex];
+        const e = lane.edge;
         const s = simNodes[index.get(e.source) as number];
         const t = simNodes[index.get(e.target) as number];
-        linePos[k] = s.x ?? 0;
-        linePos[k + 1] = s.y ?? 0;
-        linePos[k + 2] = s.z ?? 0;
-        linePos[k + 3] = t.x ?? 0;
-        linePos[k + 4] = t.y ?? 0;
-        linePos[k + 5] = t.z ?? 0;
-        k += 6;
+        setEdgeCurve(s, t, lane);
+        _curvePoint.copy(_a);
+        for (let chord = 0; chord < GRAPH_EDGE_CURVE_SEGMENTS; chord++) {
+          graphEdgeCurvePointInto(
+            _a,
+            _curveControl,
+            _b,
+            (chord + 1) / GRAPH_EDGE_CURVE_SEGMENTS,
+            _curveNext,
+          );
+          linePos[k] = _curvePoint.x;
+          linePos[k + 1] = _curvePoint.y;
+          linePos[k + 2] = _curvePoint.z;
+          linePos[k + 3] = _curveNext.x;
+          linePos[k + 4] = _curveNext.y;
+          linePos[k + 5] = _curveNext.z;
+          _curvePoint.copy(_curveNext);
+          k += 6;
+        }
       }
       const posAttr = linesRef.current?.geometry.getAttribute('position') as
         | THREE.BufferAttribute
@@ -544,12 +628,13 @@ export function KnowledgeGraph3DScene({
       const arrows = arrowsRef.current;
       if (arrows) {
         for (let i = 0; i < directedEdges.length; i++) {
-          const edge = directedEdges[i];
+          const lane = directedEdges[i];
+          const edge = lane.edge;
           const source = simNodes[index.get(edge.source) as number];
           const target = simNodes[index.get(edge.target) as number];
-          _a.set(source.x ?? 0, source.y ?? 0, source.z ?? 0);
-          _b.set(target.x ?? 0, target.y ?? 0, target.z ?? 0);
-          _direction.subVectors(_b, _a);
+          setEdgeCurve(source, target, lane);
+          // The derivative at t=1 points from the control point to the target.
+          _direction.subVectors(_b, _curveControl);
           if (_direction.lengthSq() <= 1e-12) {
             _dummy.position.copy(_b);
             _dummy.quaternion.identity();
@@ -582,19 +667,30 @@ export function KnowledgeGraph3DScene({
       const base = reducedMotion ? 0 : flowTimeRef.current * speed;
       let p = 0;
       for (let fe = 0; fe < flowEdges.length && p < particleCount; fe++) {
-        const e = flowEdges[fe];
+        const lane = flowEdges[fe];
+        const e = lane.edge;
         const s = simNodes[index.get(e.source) as number];
         const t = simNodes[index.get(e.target) as number];
-        _a.set(s.x ?? 0, s.y ?? 0, s.z ?? 0);
-        _b.set(t.x ?? 0, t.y ?? 0, t.z ?? 0);
-        // Focus dims peripheral edges to near-black; their particles collapse
-        // to zero size so the dimmed periphery doesn't keep sparkling.
-        const size = focus && e.source !== focus && e.target !== focus ? 0 : 1.3;
+        setEdgeCurve(s, t, lane);
+        // Focus/query-dimmed edges collapse their particles to zero size so the
+        // subdued periphery does not keep sparkling through the emphasis state.
+        const queryIncident = graphEdgeMatchesQuery(
+          e.source,
+          e.target,
+          queryMatchIds,
+          normalizedQuery,
+        );
+        let size = 1.3;
+        if (focus) {
+          if (e.source !== focus && e.target !== focus) size = 0;
+        } else if (!queryIncident) {
+          size = 0;
+        }
         // Golden-ratio phase per edge — flows don't pulse in lockstep.
         const phase = fe * 0.618034;
         for (let q = 0; q < PARTICLES_PER_EDGE && p < particleCount; q++) {
           const frac = (base + phase + q / PARTICLES_PER_EDGE) % 1;
-          _dummy.position.copy(_a).lerp(_b, frac);
+          graphEdgeCurvePointInto(_a, _curveControl, _b, frac, _dummy.position);
           _dummy.scale.setScalar(size);
           _dummy.updateMatrix();
           pmesh.setMatrixAt(p, _dummy.matrix);
@@ -668,7 +764,8 @@ export function KnowledgeGraph3DScene({
   const focusLabel = useMemo(() => {
     const raw = hoverId ?? selectedId;
     const focus = raw != null && index.has(raw) ? raw : null;
-    return focus ? nodes.find((n) => n.id === focus)?.label ?? '' : '';
+    const focusIndex = focus ? index.get(focus) : undefined;
+    return focusIndex == null ? '' : nodes[focusIndex]?.label ?? '';
   }, [hoverId, selectedId, index, nodes]);
 
   const handleMove = useCallback(

@@ -542,9 +542,9 @@ function safeErrorMessage(error) {
       return safeDiagnosticText(error, 240);
     }
     if (error !== null && (typeof error === "object" || typeof error === "function")) {
-      const message = Reflect.get(error, "message");
-      if (typeof message === "string") {
-        return safeDiagnosticText(message, 240);
+      const message = Object.getOwnPropertyDescriptor(error, "message");
+      if (message && "value" in message && typeof message.value === "string") {
+        return safeDiagnosticText(message.value, 240);
       }
     }
   } catch {
@@ -559,6 +559,10 @@ var PUBLIC_DIAGNOSTIC_LIMITS = Object.freeze({
   maxUnknownKeySamples: 8
 });
 var SAFE_DISPLAY_STRING_PATTERN = /^[^\u0000-\u001f\u061c\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]*$/u;
+var TYPED_ARRAY_LENGTH_GETTER = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  "length"
+)?.get;
 function clipText(value, max) {
   return value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1))}\u2026`;
 }
@@ -570,12 +574,40 @@ function safeDiagnosticText(value, max) {
   );
   return clipText(escaped, max);
 }
-function printablePathSegment(value) {
-  try {
-    return safeDiagnosticText(typeof value === "symbol" ? String(value) : `${value}`, 80);
-  } catch {
-    return "<unprintable>";
+function safePrimitiveDiagnostic(value, max = 120) {
+  let text;
+  switch (typeof value) {
+    case "string":
+      text = value;
+      break;
+    case "number":
+      text = Object.is(value, -0) ? "-0" : `${value}`;
+      break;
+    case "bigint":
+      text = `${value}`;
+      break;
+    case "boolean":
+      text = value ? "true" : "false";
+      break;
+    case "undefined":
+      text = "undefined";
+      break;
+    case "symbol":
+      text = "<symbol>";
+      break;
+    case "function":
+      text = "<function>";
+      break;
+    case "object":
+      text = value === null ? "null" : "<object>";
+      break;
+    default:
+      text = "<unknown>";
   }
+  return safeDiagnosticText(text, max);
+}
+function printablePathSegment(value) {
+  return safePrimitiveDiagnostic(value, 80);
 }
 function boundValidationIssue(issue) {
   const path = clipText(
@@ -584,16 +616,7 @@ function boundValidationIssue(issue) {
   );
   let message;
   if (issue.code === "unrecognized_keys" && Array.isArray(issue.keys)) {
-    const samples = issue.keys.slice(0, PUBLIC_DIAGNOSTIC_LIMITS.maxUnknownKeySamples).map((key) => {
-      try {
-        return safeDiagnosticText(
-          JSON.stringify(clipText(typeof key === "string" ? key : String(key), 60)),
-          80
-        );
-      } catch {
-        return '"<unprintable>"';
-      }
-    });
+    const samples = issue.keys.slice(0, PUBLIC_DIAGNOSTIC_LIMITS.maxUnknownKeySamples).map((key) => JSON.stringify(safePrimitiveDiagnostic(key, 60)));
     const omitted = issue.keys.length - samples.length;
     message = `unrecognized keys (${issue.keys.length}): ${samples.join(", ")}` + (omitted > 0 ? `; ${omitted} more omitted` : "");
   } else {
@@ -805,12 +828,18 @@ var SCENE_NAMES = Object.freeze([
   "fi-curve",
   "isi-distribution",
   "psth",
+  "population-rate",
+  "correlogram",
   "weight-histogram",
+  "connection-matrix",
+  "degree-distribution",
+  "delay-distribution",
+  "spatial-map-2d",
   "knowledge-graph-3d"
 ]);
 
 // core/vizSpec.ts
-var CORTEXEL_SPEC_VERSION = "1.1.0";
+var CORTEXEL_SPEC_VERSION = "1.3.0";
 var CORTEXEL_JSON_LIMITS = Object.freeze({
   maxDepth: 32,
   maxNodes: 5e5,
@@ -1149,7 +1178,7 @@ var VizSpecSchema = import_zod.z.object({
    *  uses it when no explicit `skillId` prop is passed. Scene→skill is many-to-one
    *  (voltage-trace ← voltage_trace AND astrocyte_dynamics), so the scene alone
    *  cannot recover the skill — this field closes that gap. */
-  skill: import_zod.z.string().trim().min(1).max(80).optional(),
+  skill: import_zod.z.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN, "skill must not contain display control characters").optional(),
   /** Optional contract version this spec targets (see CORTEXEL_SPEC_VERSION). */
   specVersion: import_zod.z.literal(CORTEXEL_SPEC_VERSION).optional(),
   // Scene-specific data/options. The envelope path guarantees bounded literal
@@ -1164,7 +1193,7 @@ var VizSpecSchema = import_zod.z.object({
    *  is rejected with 'unknown_palette'; on the lenient validateVizSpec path an
    *  unregistered name is tolerated and getPalette falls back to the default (with
    *  a dev-mode warning). When absent, the host's active palette is used. */
-  palette: import_zod.z.string().trim().min(1).max(60).optional(),
+  palette: import_zod.z.string().trim().min(1).max(60).regex(SAFE_DISPLAY_STRING_PATTERN, "palette must not contain display control characters").optional(),
   provenance: ProvenanceSchema
 }).strict();
 function validateVizSpec(input) {
@@ -1199,9 +1228,21 @@ var import_zod3 = require("zod");
 var NEST_SKILL_IDS = Object.freeze([
   "nest.voltage_trace",
   "nest.spike_raster",
+  "nest.isi_distribution",
+  "nest.psth",
+  "nest.population_rate",
   "nest.rate_response",
   "nest.connectivity_matrix",
+  "nest.connection_graph",
+  "nest.adjacency_matrix",
+  "nest.weight_matrix",
+  "nest.delay_matrix",
+  "nest.in_degree_distribution",
+  "nest.out_degree_distribution",
+  "nest.delay_distribution",
+  "nest.weight_histogram",
   "nest.spatial_2d",
+  "nest.spatial_map_2d",
   "nest.spatial_3d",
   "nest.plasticity_dynamics",
   "nest.phase_plane",
@@ -1216,6 +1257,7 @@ var SKILL_IDS = NEST_SKILL_IDS;
 var NEST_DEVICE_FAMILIES = Object.freeze([
   "multimeter",
   "spike_recorder",
+  "correlation_detector",
   "get_connections",
   "get_position",
   "weight_recorder",
@@ -1249,6 +1291,8 @@ var PARAM_LIMITS = Object.freeze({
   // referenced out-of-band instead of freezing a browser render.
   maxSamples: 5e4,
   maxSeries: 256,
+  maxTopologyNodes: 25e3,
+  maxTopologyEdges: 2e4,
   maxSpatialObjects: 5e4,
   maxGraphNodes: 1e3,
   maxGraphEdges: 4e3
@@ -1261,6 +1305,10 @@ var idArray = import_zod2.z.array(
   import_zod2.z.number().int("node/sender ids must be integers").nonnegative("node/sender ids must be non-negative").max(Number.MAX_SAFE_INTEGER, "node/sender ids must be safe integers")
 ).max(PARAM_LIMITS.maxSamples);
 var displayText = (max) => import_zod2.z.string().trim().min(1).max(max).regex(SAFE_DISPLAY_STRING_PATTERN, "display text must not contain control or bidi characters").meta({ "x-cortexel-normalize": "trim" });
+var Rfc3339TimestampSchema = import_zod2.z.iso.datetime({ offset: true }).max(80).regex(
+  /T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
+  "timestamp must be RFC 3339 with seconds and an explicit UTC/numeric offset"
+);
 var units = displayText(80);
 var normalizedRecordKey2 = import_zod2.z.string().min(1).max(80).regex(
   /^\S(?:[\s\S]*\S)?$/,
@@ -1325,6 +1373,377 @@ var SpikeRasterParamsSchema = import_zod2.z.object({
     value.senders.length
   );
 });
+var HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE = 0;
+var HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE = 1e-9;
+var HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS = 4;
+var GEOMETRY_MAX_ROUNDOFF_FRACTION = 1e-7;
+var HISTOGRAM_MASS_TOLERANCE = 1e-6;
+var PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE = 1e-6;
+var POPULATION_RATE_ABSOLUTE_TOLERANCE = 1e-9;
+var POPULATION_RATE_RELATIVE_TOLERANCE = 1e-9;
+function approximatelyEqual(actual, expected, absoluteTolerance, relativeTolerance) {
+  if (!Number.isFinite(actual) || !Number.isFinite(expected)) return false;
+  return Math.abs(actual - expected) <= absoluteTolerance + relativeTolerance * Math.max(Math.abs(actual), Math.abs(expected));
+}
+function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativeLowerEdge = false) {
+  if (!Number.isFinite(width) || width <= 0) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: [centerPath],
+      message: "histogram bin width must be a positive finite number"
+    });
+    return;
+  }
+  if (nonNegativeLowerEdge && centers.length > 0) {
+    const halfWidth = width / 2;
+    const lowerEdge = centers[0] - halfWidth;
+    const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(centers[0]), Math.abs(halfWidth));
+    if (!Number.isFinite(lowerEdge) || lowerEdge < -tolerance) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: [centerPath, 0],
+        message: "the first ISI bin lower edge cannot be negative"
+      });
+      return;
+    }
+  }
+  for (let index = 1; index < centers.length; index++) {
+    if (!(centers[index] > centers[index - 1])) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: [centerPath, index],
+        message: "histogram bin centers must be strictly increasing"
+      });
+      return;
+    }
+    const delta = centers[index] - centers[index - 1];
+    if (!approximatelyEqual(
+      delta,
+      width,
+      HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
+    )) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: [centerPath, index],
+        message: "adjacent histogram bin centers must differ by the declared bin width"
+      });
+      return;
+    }
+  }
+}
+function requireNormalizedHistogramMass(normalization, values, width, rules, ctx) {
+  const rule = rules[normalization];
+  if (!rule) return;
+  let mass = 0;
+  for (const value of values) {
+    if (!Number.isFinite(value) || value < 0) return;
+    mass += value;
+  }
+  if (rule.measure === "density_integral") mass *= width;
+  if (!approximatelyEqual(
+    mass,
+    rule.target,
+    HISTOGRAM_MASS_TOLERANCE,
+    HISTOGRAM_MASS_TOLERANCE
+  )) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["values"],
+      message: rule.measure === "density_integral" ? "probability-density values times bin width must integrate to 1" : "probability values must sum to 1"
+    });
+  }
+}
+var isiValueUnits = {
+  count: "count",
+  probability: "probability",
+  probability_density: "1/ms"
+};
+var IsiDistributionParamsSchema = import_zod2.z.object({
+  bin_centers_ms: timeArray.min(1),
+  values: gpuArray.min(1),
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  normalization: import_zod2.z.enum(["count", "probability", "probability_density"]),
+  value_units: import_zod2.z.enum(["count", "probability", "1/ms"]),
+  interval_scope: import_zod2.z.enum(["per_sender", "single_train"])
+}).strict().superRefine((value, ctx) => {
+  equalLengthIssue(
+    ctx,
+    "values",
+    "bin_centers_ms",
+    value.bin_centers_ms.length,
+    value.values.length
+  );
+  requireMonotonic(value.bin_centers_ms, ctx, "bin_centers_ms");
+  requireUniformHistogramBins(
+    value.bin_centers_ms,
+    value.bin_width_ms,
+    ctx,
+    "bin_centers_ms",
+    true
+  );
+  for (let index = 0; index < value.bin_centers_ms.length; index++) {
+    if (value.bin_centers_ms[index] < 0) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["bin_centers_ms", index],
+        message: "inter-spike interval bin centers cannot be negative"
+      });
+      break;
+    }
+  }
+  if (value.value_units !== isiValueUnits[value.normalization]) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["value_units"],
+      message: `value_units must be '${isiValueUnits[value.normalization]}' for ${value.normalization}`
+    });
+  }
+  for (let index = 0; index < value.values.length; index++) {
+    const sample = value.values[index];
+    if (sample < 0 || value.normalization === "probability" && sample > 1 || value.normalization === "count" && !Number.isSafeInteger(sample)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values", index],
+        message: value.normalization === "count" ? "histogram counts must be non-negative safe integers" : value.normalization === "probability" ? "probability values must lie in [0, 1]" : "histogram values cannot be negative"
+      });
+      break;
+    }
+  }
+  requireNormalizedHistogramMass(
+    value.normalization,
+    value.values,
+    value.bin_width_ms,
+    {
+      probability: { measure: "sum", target: 1 },
+      probability_density: { measure: "density_integral", target: 1 }
+    },
+    ctx
+  );
+});
+var psthValueUnits = {
+  count: "count",
+  count_per_trial: "count/trial",
+  rate_hz: "Hz"
+};
+function requirePsthDerivedCounts(normalization, values, trialCount, binWidthMs, ctx) {
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    let rawCount;
+    switch (normalization) {
+      case "count":
+        rawCount = value;
+        break;
+      case "count_per_trial":
+        rawCount = value * trialCount;
+        break;
+      case "rate_hz":
+        rawCount = value * trialCount;
+        rawCount *= binWidthMs;
+        rawCount /= 1e3;
+        break;
+    }
+    const rounded = Math.round(rawCount);
+    const exactCount = normalization === "count";
+    if (!Number.isFinite(rawCount) || rawCount < 0 || !Number.isSafeInteger(rounded) || (exactCount ? !Number.isSafeInteger(rawCount) : Math.abs(rawCount - rounded) > PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values", index],
+        message: exactCount ? "aggregate PSTH counts must be non-negative safe integers" : "normalized PSTH values must recover a non-negative safe-integer aggregate spike count"
+      });
+      return;
+    }
+  }
+}
+var PsthParamsSchema = import_zod2.z.object({
+  bin_centers_ms: timeArray.min(1),
+  values: gpuArray.min(1),
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  normalization: import_zod2.z.enum(["count", "count_per_trial", "rate_hz"]),
+  value_units: import_zod2.z.enum(["count", "count/trial", "Hz"]),
+  trial_count: import_zod2.z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  alignment_event: displayText(240),
+  aggregation: import_zod2.z.literal("selected_senders_per_trial")
+}).strict().superRefine((value, ctx) => {
+  equalLengthIssue(
+    ctx,
+    "values",
+    "bin_centers_ms",
+    value.bin_centers_ms.length,
+    value.values.length
+  );
+  requireMonotonic(value.bin_centers_ms, ctx, "bin_centers_ms");
+  requireUniformHistogramBins(
+    value.bin_centers_ms,
+    value.bin_width_ms,
+    ctx,
+    "bin_centers_ms"
+  );
+  if (value.value_units !== psthValueUnits[value.normalization]) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["value_units"],
+      message: `value_units must be '${psthValueUnits[value.normalization]}' for ${value.normalization}`
+    });
+  }
+  for (let index = 0; index < value.values.length; index++) {
+    const sample = value.values[index];
+    if (sample < 0) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values", index],
+        message: "histogram values cannot be negative"
+      });
+      break;
+    }
+  }
+  requirePsthDerivedCounts(
+    value.normalization,
+    value.values,
+    value.trial_count,
+    value.bin_width_ms,
+    ctx
+  );
+});
+var PopulationRateSeriesSchema = import_zod2.z.object({
+  id: displayText(120),
+  label: displayText(240),
+  recorded_sender_count: import_zod2.z.number().int("recorded_sender_count must be an integer").positive("recorded_sender_count must be positive").max(Number.MAX_SAFE_INTEGER, "recorded_sender_count must be a safe integer"),
+  spike_counts: import_zod2.z.array(
+    import_zod2.z.number().int("spike counts must be integers").nonnegative("spike counts cannot be negative").max(Number.MAX_SAFE_INTEGER, "spike counts must be safe integers")
+  ).min(1).max(PARAM_LIMITS.maxSamples),
+  rates_hz: gpuArray.min(1)
+}).strict();
+function requirePopulationRateWindow(centers, width, start, stop, ctx) {
+  if (!(stop > start)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["window_stop_ms"],
+      message: "window_stop_ms must be greater than window_start_ms"
+    });
+    return;
+  }
+  if (centers.length === 0 || !Number.isFinite(width) || width <= 0) return;
+  const halfWidth = width / 2;
+  const firstCenter = centers[0];
+  const lastCenter = centers[centers.length - 1];
+  const firstEdge = firstCenter - halfWidth;
+  const lastEdge = lastCenter + halfWidth;
+  const edgeMatches = (edge, expected, center) => {
+    const difference = Math.abs(edge - expected);
+    if (difference === 0) return true;
+    const arithmeticTolerance = HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS * Number.EPSILON * Math.max(
+      Math.abs(center),
+      Math.abs(halfWidth),
+      Math.abs(edge),
+      Math.abs(expected)
+    );
+    if (arithmeticTolerance > GEOMETRY_MAX_ROUNDOFF_FRACTION * Math.abs(width)) {
+      return false;
+    }
+    const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.abs(width) + arithmeticTolerance;
+    return Number.isFinite(edge) && Number.isFinite(expected) && difference <= tolerance;
+  };
+  if (!edgeMatches(firstEdge, start, firstCenter)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["bin_centers_ms", 0],
+      message: "the first left-closed bin edge must equal window_start_ms"
+    });
+  }
+  if (!edgeMatches(lastEdge, stop, lastCenter)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["bin_centers_ms", centers.length - 1],
+      message: "the final right-open bin edge must equal window_stop_ms"
+    });
+  }
+}
+function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
+  const ids = /* @__PURE__ */ new Set();
+  for (let seriesIndex = 0; seriesIndex < series.length; seriesIndex++) {
+    const item = series[seriesIndex];
+    if (ids.has(item.id)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["series", seriesIndex, "id"],
+        message: `duplicate population-rate series id '${item.id}'`
+      });
+    }
+    ids.add(item.id);
+    equalLengthIssue(
+      ctx,
+      `series.${seriesIndex}.spike_counts`,
+      "bin_centers_ms",
+      binCount,
+      item.spike_counts.length
+    );
+    equalLengthIssue(
+      ctx,
+      `series.${seriesIndex}.rates_hz`,
+      "bin_centers_ms",
+      binCount,
+      item.rates_hz.length
+    );
+    const sampleCount = Math.min(item.spike_counts.length, item.rates_hz.length);
+    for (let binIndex = 0; binIndex < sampleCount; binIndex++) {
+      const rate = item.rates_hz[binIndex];
+      if (rate < 0) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["series", seriesIndex, "rates_hz", binIndex],
+          message: "population rates cannot be negative"
+        });
+        continue;
+      }
+      let expected = item.spike_counts[binIndex] * 1e3;
+      const denominator = item.recorded_sender_count * binWidthMs;
+      expected /= denominator;
+      if (!Number.isFinite(denominator) || !approximatelyEqual(
+        rate,
+        expected,
+        POPULATION_RATE_ABSOLUTE_TOLERANCE,
+        POPULATION_RATE_RELATIVE_TOLERANCE
+      )) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["series", seriesIndex, "rates_hz", binIndex],
+          message: "rate must equal spike_count \xD7 1000 / (recorded_sender_count \xD7 bin_width_ms)"
+        });
+      }
+    }
+  }
+}
+var PopulationRateParamsSchema = import_zod2.z.object({
+  bin_centers_ms: timeArray.min(1),
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  window_start_ms: import_zod2.z.number(),
+  window_stop_ms: import_zod2.z.number(),
+  series: import_zod2.z.array(PopulationRateSeriesSchema).min(1).max(PARAM_LIMITS.maxSeries),
+  normalization: import_zod2.z.literal("mean_per_recorded_sender_hz"),
+  aggregation: import_zod2.z.literal("selected_senders"),
+  binning: import_zod2.z.literal("left_closed_right_open")
+}).strict().superRefine((value, ctx) => {
+  requireUniformHistogramBins(
+    value.bin_centers_ms,
+    value.bin_width_ms,
+    ctx,
+    "bin_centers_ms"
+  );
+  requirePopulationRateWindow(
+    value.bin_centers_ms,
+    value.bin_width_ms,
+    value.window_start_ms,
+    value.window_stop_ms,
+    ctx
+  );
+  requirePopulationRateValues(
+    value.series,
+    value.bin_centers_ms.length,
+    value.bin_width_ms,
+    ctx
+  );
+});
 var RateResponseParamsSchema = import_zod2.z.object({
   stimulus_amplitudes: gpuArray.min(1),
   rates_hz: gpuArray.min(1),
@@ -1352,7 +1771,10 @@ var RateResponseParamsSchema = import_zod2.z.object({
 var NetworkParamsSchema = import_zod2.z.object({
   sources: idArray.min(1),
   targets: idArray.min(1),
-  weights: gpuArray.optional()
+  weights: gpuArray.optional(),
+  delays: gpuArray.optional(),
+  weight_units: units.optional(),
+  delay_units: units.optional()
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -1370,6 +1792,668 @@ var NetworkParamsSchema = import_zod2.z.object({
       value.weights.length
     );
   }
+  if (value.delays) {
+    equalLengthIssue(
+      ctx,
+      "delays",
+      "sources",
+      value.sources.length,
+      value.delays.length
+    );
+    const index = value.delays.findIndex((delay) => delay <= 0);
+    if (index >= 0) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["delays", index],
+        message: "connection delays must be strictly positive"
+      });
+    }
+  }
+  if (value.weights !== void 0 !== (value.weight_units !== void 0)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["weight_units"],
+      message: "weight_units must be present exactly when weights are present"
+    });
+  }
+  if (value.delays !== void 0 !== (value.delay_units !== void 0)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["delay_units"],
+      message: "delay_units must be present exactly when delays are present"
+    });
+  }
+});
+var topologyCount = import_zod2.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "topology counts and ranks must not be negative zero");
+var topologyPositiveCount = topologyCount.positive();
+var MpiTargetRankLocalScopeSchema = import_zod2.z.object({
+  kind: import_zod2.z.literal("mpi_target_rank_local"),
+  rank: topologyCount,
+  world_size: topologyPositiveCount
+}).strict().superRefine((value, ctx) => {
+  if (value.rank >= value.world_size) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["rank"],
+      message: "MPI rank must be smaller than world_size"
+    });
+  }
+});
+var SnapshotScopeSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({ kind: import_zod2.z.literal("single_process_complete") }).strict(),
+  MpiTargetRankLocalScopeSchema,
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("mpi_all_ranks_merged"),
+    world_size: topologyPositiveCount
+  }).strict()
+]);
+var MpiRankLocalPositionScopeSchema = import_zod2.z.object({
+  kind: import_zod2.z.literal("mpi_rank_local"),
+  rank: topologyCount,
+  world_size: topologyPositiveCount
+}).strict().superRefine((value, ctx) => {
+  if (value.rank >= value.world_size) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["rank"],
+      message: "MPI rank must be smaller than world_size"
+    });
+  }
+});
+var PositionScopeSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({ kind: import_zod2.z.literal("single_process_complete") }).strict(),
+  MpiRankLocalPositionScopeSchema,
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("mpi_all_ranks_merged"),
+    world_size: topologyPositiveCount
+  }).strict()
+]);
+var ConnectionGraphNodeSchema = import_zod2.z.object({
+  id: idArray.element,
+  label: displayText(120)
+}).strict();
+var ConnectionGraphEdgeSchema = import_zod2.z.object({
+  id: displayText(240),
+  source: idArray.element,
+  target: idArray.element,
+  weight: gpuNumber.optional(),
+  delay_ms: gpuNumber.positive().optional(),
+  synapse_model: displayText(120).optional()
+}).strict();
+function canonicalEdgeIdInteger(value) {
+  if (!/^(?:0|[1-9][0-9]*)$/.test(value)) return void 0;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 && String(parsed) === value ? parsed : void 0;
+}
+var ConnectionGraphParamsSchema = import_zod2.z.object({
+  nodes: import_zod2.z.array(ConnectionGraphNodeSchema).min(1).max(PARAM_LIMITS.maxTopologyNodes),
+  edges: import_zod2.z.array(ConnectionGraphEdgeSchema).max(PARAM_LIMITS.maxTopologyEdges),
+  weight_units: units.optional(),
+  delay_units: import_zod2.z.literal("ms").optional(),
+  layout: import_zod2.z.literal("schematic_circle"),
+  parallel_edges: import_zod2.z.literal("preserved"),
+  self_connections: import_zod2.z.literal("preserved"),
+  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+  snapshot_scope: SnapshotScopeSchema,
+  sample_policy: import_zod2.z.enum(["complete", "deterministic_even_stride"]),
+  source_connection_count: topologyCount,
+  edge_identity: import_zod2.z.enum(["nest_connection_identifier", "canonical_sorted_ordinal"])
+}).strict().superRefine((value, ctx) => {
+  const nodeIds = /* @__PURE__ */ new Set();
+  for (let index = 0; index < value.nodes.length; index++) {
+    const id2 = value.nodes[index].id;
+    if (nodeIds.has(id2)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["nodes", index, "id"],
+        message: "graph node ids must be unique"
+      });
+    }
+    nodeIds.add(id2);
+  }
+  const edgeIds = /* @__PURE__ */ new Set();
+  let weightCount = 0;
+  let delayCount = 0;
+  let modelCount = 0;
+  for (let index = 0; index < value.edges.length; index++) {
+    const edge = value.edges[index];
+    if (edgeIds.has(edge.id)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["edges", index, "id"],
+        message: "graph edge ids must be unique"
+      });
+    }
+    edgeIds.add(edge.id);
+    if (!nodeIds.has(edge.source)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["edges", index, "source"],
+        message: "graph edge source must reference a declared node"
+      });
+    }
+    if (!nodeIds.has(edge.target)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["edges", index, "target"],
+        message: "graph edge target must reference a declared node"
+      });
+    }
+    if (edge.weight !== void 0) weightCount += 1;
+    if (edge.delay_ms !== void 0) delayCount += 1;
+    if (edge.synapse_model !== void 0) modelCount += 1;
+    const idParts = edge.id.split(":");
+    if (value.edge_identity === "canonical_sorted_ordinal") {
+      const ordinal = idParts.length === 2 && idParts[0] === "connection" ? canonicalEdgeIdInteger(idParts[1]) : void 0;
+      if (ordinal === void 0 || ordinal >= value.source_connection_count) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["edges", index, "id"],
+          message: "canonical edge ids must be connection:<source ordinal> within source_connection_count"
+        });
+      }
+    } else {
+      const components = idParts.length === 6 && idParts[0] === "connection" ? idParts.slice(1).map(canonicalEdgeIdInteger) : [];
+      if (components.length !== 5 || components.some((component) => component === void 0) || components[0] !== edge.source || components[1] !== edge.target) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["edges", index, "id"],
+          message: "NEST edge ids must be connection:source:target:target_thread:synapse_id:port and match the edge endpoints"
+        });
+      }
+    }
+  }
+  for (const [field, count] of [
+    ["weight", weightCount],
+    ["delay_ms", delayCount],
+    ["synapse_model", modelCount]
+  ]) {
+    if (count !== 0 && count !== value.edges.length) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["edges"],
+        message: `${field} must be present on every graph edge or none`
+      });
+    }
+  }
+  if (weightCount > 0 !== (value.weight_units !== void 0)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["weight_units"],
+      message: "weight_units must be present exactly when every edge carries weight"
+    });
+  }
+  if (delayCount > 0 !== (value.delay_units !== void 0)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["delay_units"],
+      message: "delay_units must be present exactly when every edge carries delay_ms"
+    });
+  }
+  if (value.sample_policy === "complete") {
+    if (value.source_connection_count !== value.edges.length) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["source_connection_count"],
+        message: "complete graph output must contain every source connection"
+      });
+    }
+  } else if (value.edges.length === 0 || value.source_connection_count <= value.edges.length) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["source_connection_count"],
+      message: "deterministic_even_stride requires a non-empty strict subset of source connections"
+    });
+  }
+});
+var MatrixCellBaseSchema = import_zod2.z.object({
+  source_id: idArray.element,
+  target_id: idArray.element,
+  connection_count: topologyPositiveCount
+}).strict();
+var AdjacencyMatrixCellSchema = MatrixCellBaseSchema;
+var WeightMatrixCellSchema = MatrixCellBaseSchema.extend({ value: gpuNumber }).strict();
+var DelayMatrixCellSchema = MatrixCellBaseSchema.extend({ value: gpuNumber.positive() }).strict();
+var matrixBaseShape = {
+  source_ids: idArray.min(1),
+  target_ids: idArray.min(1),
+  axis_order: import_zod2.z.literal("target_rows_source_columns"),
+  absent_cell: import_zod2.z.literal("no_connection"),
+  sample_policy: import_zod2.z.literal("complete"),
+  connection_count: topologyCount,
+  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+  snapshot_scope: SnapshotScopeSchema
+};
+function refineSparseMatrix(value, ctx) {
+  const sourceIds = new Set(value.source_ids);
+  const targetIds = new Set(value.target_ids);
+  if (sourceIds.size !== value.source_ids.length) {
+    ctx.addIssue({ code: import_zod2.z.ZodIssueCode.custom, path: ["source_ids"], message: "source_ids must be unique" });
+  }
+  if (targetIds.size !== value.target_ids.length) {
+    ctx.addIssue({ code: import_zod2.z.ZodIssueCode.custom, path: ["target_ids"], message: "target_ids must be unique" });
+  }
+  const pairs = /* @__PURE__ */ new Set();
+  let total = 0;
+  for (let index = 0; index < value.cells.length; index++) {
+    const cell = value.cells[index];
+    if (!sourceIds.has(cell.source_id)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["cells", index, "source_id"],
+        message: "matrix cell source_id must occur in source_ids"
+      });
+    }
+    if (!targetIds.has(cell.target_id)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["cells", index, "target_id"],
+        message: "matrix cell target_id must occur in target_ids"
+      });
+    }
+    const pair = `${cell.source_id}\0${cell.target_id}`;
+    if (pairs.has(pair)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["cells", index],
+        message: "matrix cells must contain at most one entry per source-target pair"
+      });
+    }
+    pairs.add(pair);
+    total += cell.connection_count;
+    if (!Number.isSafeInteger(total)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["connection_count"],
+        message: "matrix connection count sum exceeds the safe-integer range"
+      });
+      return;
+    }
+  }
+  if (total !== value.connection_count) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["connection_count"],
+      message: "connection_count must equal the sum of sparse cell connection_count values"
+    });
+  }
+}
+var AdjacencyMatrixParamsSchema = import_zod2.z.object({
+  ...matrixBaseShape,
+  cells: import_zod2.z.array(AdjacencyMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  display: import_zod2.z.literal("binary_presence"),
+  aggregation: import_zod2.z.literal("any_connection")
+}).strict().superRefine(refineSparseMatrix);
+var WeightMatrixParamsSchema = import_zod2.z.object({
+  ...matrixBaseShape,
+  cells: import_zod2.z.array(WeightMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  weight_units: units,
+  aggregation: import_zod2.z.enum(["sum", "mean", "minimum", "maximum", "single_connection"])
+}).strict().superRefine((value, ctx) => {
+  refineSparseMatrix(value, ctx);
+  if (value.aggregation === "single_connection") {
+    const index = value.cells.findIndex((cell) => cell.connection_count !== 1);
+    if (index >= 0) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["cells", index, "connection_count"],
+        message: "single_connection aggregation requires exactly one connection per cell"
+      });
+    }
+  }
+});
+var DelayMatrixParamsSchema = import_zod2.z.object({
+  ...matrixBaseShape,
+  cells: import_zod2.z.array(DelayMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  delay_units: import_zod2.z.literal("ms"),
+  aggregation: import_zod2.z.enum(["mean", "minimum", "maximum", "single_connection"])
+}).strict().superRefine((value, ctx) => {
+  refineSparseMatrix(value, ctx);
+  if (value.aggregation === "single_connection") {
+    const index = value.cells.findIndex((cell) => cell.connection_count !== 1);
+    if (index >= 0) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["cells", index, "connection_count"],
+        message: "single_connection aggregation requires exactly one connection per cell"
+      });
+    }
+  }
+});
+var DEGREE_VALUE_ABSOLUTE_TOLERANCE = 1e-12;
+var DEGREE_VALUE_RELATIVE_TOLERANCE = 1e-12;
+function degreeDistributionSchema(direction) {
+  return import_zod2.z.object({
+    degrees: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+    node_counts: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+    values: gpuArray.min(1),
+    node_count: topologyPositiveCount,
+    connection_count: topologyCount,
+    direction: import_zod2.z.literal(direction),
+    normalization: import_zod2.z.enum(["count", "probability"]),
+    value_units: import_zod2.z.enum(["count", "probability"]),
+    edge_counting: import_zod2.z.literal("each_synapse_collection_entry"),
+    zero_degree_policy: import_zod2.z.literal("include_declared_universe"),
+    sample_policy: import_zod2.z.literal("complete"),
+    snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+    snapshot_scope: SnapshotScopeSchema
+  }).strict().superRefine((value, ctx) => {
+    equalLengthIssue(ctx, "node_counts", "degrees", value.degrees.length, value.node_counts.length);
+    equalLengthIssue(ctx, "values", "degrees", value.degrees.length, value.values.length);
+    for (let index = 0; index < value.degrees.length; index++) {
+      if (value.degrees[index] !== index) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["degrees", index],
+          message: "degrees must be the contiguous integer range beginning at zero"
+        });
+        break;
+      }
+    }
+    let countedNodes = 0;
+    let countedConnections = 0;
+    for (let index = 0; index < value.node_counts.length; index++) {
+      countedNodes += value.node_counts[index];
+      countedConnections += index * value.node_counts[index];
+    }
+    if (!Number.isSafeInteger(countedNodes) || countedNodes !== value.node_count) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["node_count"],
+        message: "node_count must equal the sum of node_counts"
+      });
+    }
+    if (!Number.isSafeInteger(countedConnections) || countedConnections !== value.connection_count) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["connection_count"],
+        message: "connection_count must equal the degree-weighted sum of node_counts"
+      });
+    }
+    const expectedUnits = value.normalization === "count" ? "count" : "probability";
+    if (value.value_units !== expectedUnits) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["value_units"],
+        message: `value_units must be '${expectedUnits}' for ${value.normalization}`
+      });
+    }
+    let displayedMass = 0;
+    for (let index = 0; index < Math.min(value.values.length, value.node_counts.length); index++) {
+      const displayed = value.values[index];
+      if (displayed < 0) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["values", index],
+          message: "displayed degree values cannot be negative"
+        });
+        break;
+      }
+      const expected = value.normalization === "count" ? value.node_counts[index] : value.node_counts[index] / value.node_count;
+      const matches = value.normalization === "count" ? Number.isSafeInteger(displayed) && displayed === expected : approximatelyEqual(
+        displayed,
+        expected,
+        DEGREE_VALUE_ABSOLUTE_TOLERANCE,
+        DEGREE_VALUE_RELATIVE_TOLERANCE
+      );
+      if (!matches) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["values", index],
+          message: "displayed degree value must be derived from node_counts and node_count"
+        });
+        break;
+      }
+      displayedMass += displayed;
+    }
+    if (value.normalization === "probability" && !approximatelyEqual(
+      displayedMass,
+      1,
+      DEGREE_VALUE_ABSOLUTE_TOLERANCE,
+      DEGREE_VALUE_RELATIVE_TOLERANCE
+    )) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values"],
+        message: "displayed degree probabilities must sum to one"
+      });
+    }
+    if (direction === "out" && value.snapshot_scope.kind === "mpi_target_rank_local") {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["snapshot_scope", "kind"],
+        message: "out-degree requires a complete single-process or all-ranks-merged snapshot"
+      });
+    }
+  });
+}
+var InDegreeDistributionParamsSchema = degreeDistributionSchema("in");
+var OutDegreeDistributionParamsSchema = degreeDistributionSchema("out");
+var delayDistributionValueUnits = {
+  count: "count",
+  probability: "probability",
+  probability_density: "1/ms"
+};
+var DelayDistributionParamsSchema = import_zod2.z.object({
+  bin_centers_ms: timeArray.min(1),
+  delay_counts: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+  values: gpuArray.min(1),
+  bin_width_ms: import_zod2.z.number().finite().positive(),
+  window_start_ms: import_zod2.z.number().finite().nonnegative(),
+  window_stop_ms: import_zod2.z.number().finite().positive(),
+  normalization: import_zod2.z.enum(["count", "probability", "probability_density"]),
+  value_units: import_zod2.z.enum(["count", "probability", "1/ms"]),
+  delay_units: import_zod2.z.literal("ms"),
+  aggregation: import_zod2.z.literal("each_connection"),
+  binning: import_zod2.z.literal("left_closed_right_open"),
+  sample_policy: import_zod2.z.literal("complete"),
+  connection_count: topologyCount,
+  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+  snapshot_scope: SnapshotScopeSchema
+}).strict().superRefine((value, ctx) => {
+  equalLengthIssue(ctx, "delay_counts", "bin_centers_ms", value.bin_centers_ms.length, value.delay_counts.length);
+  equalLengthIssue(ctx, "values", "bin_centers_ms", value.bin_centers_ms.length, value.values.length);
+  requireUniformHistogramBins(value.bin_centers_ms, value.bin_width_ms, ctx, "bin_centers_ms", true);
+  requirePopulationRateWindow(
+    value.bin_centers_ms,
+    value.bin_width_ms,
+    value.window_start_ms,
+    value.window_stop_ms,
+    ctx
+  );
+  const expectedUnits = delayDistributionValueUnits[value.normalization];
+  if (value.value_units !== expectedUnits) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["value_units"],
+      message: `value_units must be '${expectedUnits}' for ${value.normalization}`
+    });
+  }
+  let total = 0;
+  for (const count of value.delay_counts) total += count;
+  if (!Number.isSafeInteger(total) || total !== value.connection_count) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["connection_count"],
+      message: "connection_count must equal the sum of delay_counts"
+    });
+  }
+  if (value.connection_count === 0 && value.normalization !== "count") {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["normalization"],
+      message: "an empty delay snapshot cannot be probability-normalized"
+    });
+  }
+  const densityDenominator = value.connection_count * value.bin_width_ms;
+  if (value.normalization === "probability_density" && (!Number.isFinite(densityDenominator) || densityDenominator <= 0)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["bin_width_ms"],
+      message: "connection_count \xD7 bin_width_ms must be finite for probability density"
+    });
+  }
+  let displayedMass = 0;
+  for (let index = 0; index < Math.min(value.values.length, value.delay_counts.length); index++) {
+    const count = value.delay_counts[index];
+    const displayed = value.values[index];
+    if (displayed < 0) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values", index],
+        message: "displayed delay values cannot be negative"
+      });
+      break;
+    }
+    const expected = value.normalization === "count" ? count : value.normalization === "probability" ? count / value.connection_count : count / densityDenominator;
+    const matches = value.normalization === "count" ? Number.isSafeInteger(displayed) && displayed === expected : Object.is(displayed, expected);
+    if (!matches) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values", index],
+        message: "displayed delay value must be recoverable from delay_counts"
+      });
+      break;
+    }
+    displayedMass += displayed;
+  }
+  if (value.normalization !== "count") {
+    const normalizedMass = value.normalization === "probability_density" ? displayedMass * value.bin_width_ms : displayedMass;
+    if (!approximatelyEqual(
+      normalizedMass,
+      1,
+      HISTOGRAM_MASS_TOLERANCE,
+      HISTOGRAM_MASS_TOLERANCE
+    )) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values"],
+        message: value.normalization === "probability_density" ? "displayed delay density must integrate to one" : "displayed delay probabilities must sum to one"
+      });
+    }
+  }
+});
+var SpatialMap2DNodeSchema = import_zod2.z.object({
+  id: idArray.element,
+  label: displayText(120),
+  x: gpuNumber,
+  y: gpuNumber
+}).strict();
+var SPATIAL_BOUNDS_ROUNDOFF_ULPS = 2;
+function spatialBoundsTolerance(center, halfExtent, minimum, maximum) {
+  const extentTolerance = HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.abs(halfExtent);
+  const arithmeticTolerance = SPATIAL_BOUNDS_ROUNDOFF_ULPS * Number.EPSILON * Math.max(
+    Math.abs(center),
+    Math.abs(halfExtent),
+    Math.abs(minimum),
+    Math.abs(maximum)
+  );
+  const boundedArithmeticTolerance = arithmeticTolerance <= GEOMETRY_MAX_ROUNDOFF_FRACTION * Math.abs(halfExtent) ? arithmeticTolerance : 0;
+  return extentTolerance + boundedArithmeticTolerance;
+}
+var SpatialMap2DParamsSchema = import_zod2.z.object({
+  nodes: import_zod2.z.array(SpatialMap2DNodeSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
+  coordinate_units: units,
+  extent: import_zod2.z.tuple([gpuNumber.positive(), gpuNumber.positive()]),
+  center: import_zod2.z.tuple([gpuNumber, gpuNumber]),
+  edge_wrap: import_zod2.z.boolean(),
+  position_scope: PositionScopeSchema,
+  marker_size: import_zod2.z.literal("fixed_screen_space")
+}).strict().superRefine((value, ctx) => {
+  const ids = /* @__PURE__ */ new Set();
+  const halfWidth = value.extent[0] / 2;
+  const halfHeight = value.extent[1] / 2;
+  const minX = value.center[0] - halfWidth;
+  const maxX = value.center[0] + halfWidth;
+  const minY = value.center[1] - halfHeight;
+  const maxY = value.center[1] + halfHeight;
+  if (!(minX < maxX)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["extent", 0],
+      message: "x extent must remain representable at the declared center"
+    });
+  }
+  if (!(minY < maxY)) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["extent", 1],
+      message: "y extent must remain representable at the declared center"
+    });
+  }
+  const xTolerance = spatialBoundsTolerance(value.center[0], halfWidth, minX, maxX);
+  const yTolerance = spatialBoundsTolerance(value.center[1], halfHeight, minY, maxY);
+  for (let index = 0; index < value.nodes.length; index++) {
+    const node = value.nodes[index];
+    if (ids.has(node.id)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["nodes", index, "id"],
+        message: "spatial node ids must be unique"
+      });
+    }
+    ids.add(node.id);
+    if (node.x < minX - xTolerance || node.x > maxX + xTolerance || node.y < minY - yTolerance || node.y > maxY + yTolerance) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["nodes", index],
+        message: "spatial node coordinates must lie inside center \xB1 extent/2"
+      });
+    }
+  }
+});
+var weightHistogramValueUnits = {
+  count: "count",
+  probability: "probability"
+};
+var WeightHistogramParamsSchema = import_zod2.z.object({
+  bin_centers: gpuArray.min(1),
+  values: gpuArray.min(1),
+  bin_width: gpuNumber.positive(),
+  weight_units: units,
+  normalization: import_zod2.z.enum(["count", "probability"]),
+  value_units: import_zod2.z.enum(["count", "probability"]),
+  snapshot_time_ms: import_zod2.z.number().nonnegative()
+}).strict().superRefine((value, ctx) => {
+  equalLengthIssue(
+    ctx,
+    "values",
+    "bin_centers",
+    value.bin_centers.length,
+    value.values.length
+  );
+  requireMonotonic(value.bin_centers, ctx, "bin_centers");
+  requireUniformHistogramBins(
+    value.bin_centers,
+    value.bin_width,
+    ctx,
+    "bin_centers"
+  );
+  if (value.value_units !== weightHistogramValueUnits[value.normalization]) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["value_units"],
+      message: `value_units must be '${weightHistogramValueUnits[value.normalization]}' for ${value.normalization}`
+    });
+  }
+  for (let index = 0; index < value.values.length; index++) {
+    const sample = value.values[index];
+    if (sample < 0 || value.normalization === "probability" && sample > 1 || value.normalization === "count" && !Number.isSafeInteger(sample)) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["values", index],
+        message: value.normalization === "count" ? "histogram counts must be non-negative safe integers" : value.normalization === "probability" ? "probability values must lie in [0, 1]" : "histogram values cannot be negative"
+      });
+      break;
+    }
+  }
+  requireNormalizedHistogramMass(
+    value.normalization,
+    value.values,
+    value.bin_width,
+    { probability: { measure: "sum", target: 1 } },
+    ctx
+  );
 });
 var Spatial3DObjectSchema = import_zod2.z.object({
   x: gpuNumber,
@@ -1471,29 +2555,139 @@ var AstrocyteParamsSchema = import_zod2.z.object({
     }
   }
 });
+var CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS = [
+  "paper",
+  "model",
+  "family"
+];
+var CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS = [
+  "cites",
+  "same_as",
+  "variant_of",
+  "instantiates",
+  "belongs_to_family"
+];
+var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
+  maxAttributes: 24,
+  maxAttributeArrayItems: 16,
+  maxEvidenceRefsPerElement: 8,
+  maxParallelEdgesPerPair: 9,
+  maxDetailLength: 1e3,
+  maxAttributeStringLength: 500,
+  maxExcerptLength: 1e3
+});
+var KnowledgeGraphAttributeScalarSchema = import_zod2.z.union([
+  import_zod2.z.string().max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength).regex(
+    SAFE_DISPLAY_STRING_PATTERN,
+    "attribute strings must not contain control or bidi characters"
+  ),
+  import_zod2.z.number(),
+  import_zod2.z.boolean(),
+  import_zod2.z.null()
+]);
+var KnowledgeGraphAttributeValueSchema = import_zod2.z.union([
+  KnowledgeGraphAttributeScalarSchema,
+  import_zod2.z.array(KnowledgeGraphAttributeScalarSchema).max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems)
+]);
+var KnowledgeGraphAttributesSchema = import_zod2.z.record(normalizedRecordKey2, KnowledgeGraphAttributeValueSchema).superRefine((value, ctx) => {
+  if (Object.keys(value).length > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      message: `knowledge-graph attributes may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxAttributes} keys`
+    });
+  }
+});
+var KnowledgeGraphEvidenceRefSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("graph_snapshot_record"),
+    evidence_id: displayText(384),
+    record_id: displayText(320),
+    locator: displayText(240).optional()
+  }).strict(),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("graph_node"),
+    evidence_id: displayText(384),
+    node_id: displayText(120),
+    locator: displayText(240).optional(),
+    excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
+  }).strict(),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("citation"),
+    evidence_id: displayText(384),
+    paper_id: displayText(160),
+    citation_id: displayText(160),
+    page: import_zod2.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    locator: displayText(240).optional(),
+    excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
+    doi: displayText(240).optional()
+  }).strict(),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("external_source"),
+    evidence_id: displayText(384),
+    source_id: displayText(240),
+    locator: displayText(240).optional(),
+    excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
+  }).strict()
+]);
+var KnowledgeGraphEvidenceRefsSchema = import_zod2.z.array(KnowledgeGraphEvidenceRefSchema).min(1).max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement).superRefine((evidence, ctx) => {
+  if (!evidence.some((reference) => reference.kind !== "graph_node")) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      message: "evidence must contain at least one direct source anchor (graph_snapshot_record, citation, or external_source); graph_node references are supplemental only"
+    });
+  }
+});
+var KnowledgeGraphUncalibratedScoreSchema = import_zod2.z.object({
+  kind: import_zod2.z.enum([
+    "extraction_confidence",
+    "citation_resolution_confidence",
+    "structural_similarity",
+    "behavioral_agreement",
+    "retrieval_relevance"
+  ]),
+  value: import_zod2.z.number().min(0).max(1),
+  calibrated_posterior: import_zod2.z.literal(false)
+}).strict();
+var DerivedAdvisoryEpistemicSchema = import_zod2.z.object({
+  status: import_zod2.z.literal("derived_advisory"),
+  advisory_only: import_zod2.z.literal(true),
+  is_paper_local_evidence: import_zod2.z.literal(false),
+  calibrated_posterior: import_zod2.z.literal(false)
+}).strict();
 var KnowledgeGraphNodeSchema = import_zod2.z.object({
   id: displayText(120),
-  kind: import_zod2.z.enum(["paper", "model", "family"]),
-  label: displayText(240)
+  kind: import_zod2.z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
+  label: displayText(240),
+  detail: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDetailLength).optional(),
+  attributes: KnowledgeGraphAttributesSchema,
+  epistemic: DerivedAdvisoryEpistemicSchema,
+  evidence: KnowledgeGraphEvidenceRefsSchema,
+  uncalibrated_score: KnowledgeGraphUncalibratedScoreSchema.optional()
 }).strict();
 var KnowledgeGraphEdgeSchema = import_zod2.z.object({
+  id: displayText(320),
   source: displayText(120),
   target: displayText(120),
-  kind: import_zod2.z.enum([
-    "cites",
-    "same_as",
-    "variant_of",
-    "instantiates",
-    "belongs_to_family"
-  ])
+  kind: import_zod2.z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
+  label: displayText(160),
+  attributes: KnowledgeGraphAttributesSchema,
+  epistemic: DerivedAdvisoryEpistemicSchema,
+  evidence: KnowledgeGraphEvidenceRefsSchema,
+  uncalibrated_score: KnowledgeGraphUncalibratedScoreSchema.optional()
 }).strict();
 var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
+  graph_id: displayText(160),
+  graph_source: displayText(200),
+  graph_snapshot_id: displayText(200),
+  graph_scope: import_zod2.z.literal("corpus_entity"),
+  generated_at: Rfc3339TimestampSchema,
   nodes: import_zod2.z.array(KnowledgeGraphNodeSchema).min(1).max(PARAM_LIMITS.maxGraphNodes),
   edges: import_zod2.z.array(KnowledgeGraphEdgeSchema).max(PARAM_LIMITS.maxGraphEdges)
 }).strict().superRefine((value, ctx) => {
   const ids = /* @__PURE__ */ new Set();
   const nodeKinds = /* @__PURE__ */ new Map();
-  const relationships = /* @__PURE__ */ new Set();
+  const edgeIds = /* @__PURE__ */ new Set();
+  const parallelCounts = /* @__PURE__ */ new Map();
   let issueCount = 0;
   const addIssue = (issue) => {
     if (issueCount >= 16) return;
@@ -1512,18 +2706,26 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
     nodeKinds.set(node.id, node.kind);
   });
   value.edges.forEach((edge, index) => {
-    const symmetric = edge.kind === "same_as";
-    const source = symmetric && edge.source > edge.target ? edge.target : edge.source;
-    const target = symmetric && edge.source > edge.target ? edge.source : edge.target;
-    const relationship = JSON.stringify([source, target, edge.kind]);
-    if (relationships.has(relationship)) {
+    if (edgeIds.has(edge.id)) {
+      addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["edges", index, "id"],
+        message: `duplicate edge id '${edge.id}'`
+      });
+    }
+    edgeIds.add(edge.id);
+    const pairSource = edge.source > edge.target ? edge.target : edge.source;
+    const pairTarget = edge.source > edge.target ? edge.source : edge.target;
+    const pairKey = JSON.stringify([pairSource, pairTarget]);
+    const parallelCount = (parallelCounts.get(pairKey) ?? 0) + 1;
+    parallelCounts.set(pairKey, parallelCount);
+    if (parallelCount > KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair) {
       addIssue({
         code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index],
-        message: `duplicate ${edge.kind} edge '${edge.source}' \u2192 '${edge.target}'`
+        message: `at most ${KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair} parallel edges may connect one unordered node pair`
       });
     }
-    relationships.add(relationship);
     if (!ids.has(edge.source)) {
       addIssue({
         code: import_zod2.z.ZodIssueCode.custom,
@@ -1562,52 +2764,197 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
         message: `${edge.kind} requires ${expectedSource} \u2192 ${expectedTarget} endpoints`
       });
     }
+    const allowedScoreKinds = {
+      cites: ["citation_resolution_confidence"],
+      same_as: ["structural_similarity"],
+      variant_of: ["structural_similarity"],
+      instantiates: [],
+      belongs_to_family: []
+    };
+    if (edge.uncalibrated_score && !allowedScoreKinds[edge.kind].includes(edge.uncalibrated_score.kind)) {
+      addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["edges", index, "uncalibrated_score", "kind"],
+        message: `${edge.kind} does not allow score kind '${edge.uncalibrated_score.kind}'`
+      });
+    }
+    const evidenceIds = /* @__PURE__ */ new Set();
+    for (let evidenceIndex = 0; evidenceIndex < edge.evidence.length; evidenceIndex++) {
+      const evidence = edge.evidence[evidenceIndex];
+      if (evidenceIds.has(evidence.evidence_id)) {
+        addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["edges", index, "evidence", evidenceIndex, "evidence_id"],
+          message: `duplicate evidence id '${evidence.evidence_id}' on edge '${edge.id}'`
+        });
+      }
+      evidenceIds.add(evidence.evidence_id);
+      if (evidence.kind === "graph_node" && !ids.has(evidence.node_id)) {
+        addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["edges", index, "evidence", evidenceIndex, "node_id"],
+          message: `edge evidence node '${evidence.node_id}' does not reference a node`
+        });
+      }
+    }
+  });
+  value.nodes.forEach((node, nodeIndex) => {
+    if (node.uncalibrated_score && node.uncalibrated_score.kind !== "extraction_confidence") {
+      addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["nodes", nodeIndex, "uncalibrated_score", "kind"],
+        message: `knowledge-graph nodes only allow score kind 'extraction_confidence'; received '${node.uncalibrated_score.kind}'`
+      });
+    }
+    const evidenceIds = /* @__PURE__ */ new Set();
+    for (let evidenceIndex = 0; evidenceIndex < node.evidence.length; evidenceIndex++) {
+      const evidence = node.evidence[evidenceIndex];
+      if (evidenceIds.has(evidence.evidence_id)) {
+        addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["nodes", nodeIndex, "evidence", evidenceIndex, "evidence_id"],
+          message: `duplicate evidence id '${evidence.evidence_id}' on node '${node.id}'`
+        });
+      }
+      evidenceIds.add(evidence.evidence_id);
+      if (evidence.kind === "graph_node" && !ids.has(evidence.node_id)) {
+        addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["nodes", nodeIndex, "evidence", evidenceIndex, "node_id"],
+          message: `node evidence node '${evidence.node_id}' does not reference a node`
+        });
+      }
+    }
   });
 });
 var Spatial2DParamsSchema = import_zod2.z.object({
   positions: import_zod2.z.array(import_zod2.z.tuple([gpuNumber, gpuNumber])).min(1).max(PARAM_LIMITS.maxSpatialObjects),
   coordinate_units: units
 }).strict();
-var correlogramUnits = {
-  pearson_coefficient: "1",
-  raw_pair_count: "count",
-  count_per_bin: "count/bin",
-  rate_hz: "Hz"
-};
+var CorrelogramPairSchema = import_zod2.z.object({
+  reference_label: displayText(240),
+  target_label: displayText(240)
+}).strict();
+var CorrelogramStatisticSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({ kind: import_zod2.z.literal("raw_pair_count"), units: import_zod2.z.literal("count") }).strict(),
+  import_zod2.z.object({ kind: import_zod2.z.literal("weighted_pair_sum"), units }).strict(),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("pair_rate_hz"),
+    units: import_zod2.z.literal("Hz"),
+    exposure_s: import_zod2.z.number().positive().max(Number.MAX_VALUE)
+  }).strict(),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("pearson_coefficient"),
+    units: import_zod2.z.literal("1"),
+    sample_count: import_zod2.z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+  }).strict()
+]);
+function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
+  requireUniformHistogramBins(lags, width, ctx, "lags_ms");
+  if (lags.length === 0 || !Number.isFinite(tauMax) || tauMax <= 0) return;
+  if (lags.length % 2 === 0) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["lags_ms"],
+      message: "a symmetric correlogram axis must contain an odd number of lag centers"
+    });
+    return;
+  }
+  if (!approximatelyEqual(
+    lags[0],
+    -tauMax,
+    HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+    HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
+  )) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["lags_ms", 0],
+      message: "the first lag center must equal -tau_max_ms"
+    });
+  }
+  const lastIndex = lags.length - 1;
+  if (!approximatelyEqual(
+    lags[lastIndex],
+    tauMax,
+    HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+    HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
+  )) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["lags_ms", lastIndex],
+      message: "the final lag center must equal tau_max_ms"
+    });
+  }
+  const middle = Math.floor(lags.length / 2);
+  if (!approximatelyEqual(
+    lags[middle],
+    0,
+    HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+    HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
+  )) {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["lags_ms", middle],
+      message: "the middle lag center must be zero"
+    });
+  }
+  for (let index = 0; index < middle; index++) {
+    if (!approximatelyEqual(
+      lags[index],
+      -lags[lastIndex - index],
+      HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
+    )) {
+      ctx.addIssue({
+        code: import_zod2.z.ZodIssueCode.custom,
+        path: ["lags_ms", index],
+        message: "lag centers must be pairwise symmetric around zero"
+      });
+      break;
+    }
+  }
+}
 var CorrelogramParamsSchema = import_zod2.z.object({
   lags_ms: timeArray.min(1),
-  correlation: gpuArray.min(1),
-  normalization: import_zod2.z.enum([
-    "pearson_coefficient",
-    "raw_pair_count",
-    "count_per_bin",
-    "rate_hz"
-  ]),
-  correlation_units: import_zod2.z.enum(["1", "count", "count/bin", "Hz"])
+  values: gpuArray.min(1),
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  tau_max_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  counting_start_ms: import_zod2.z.number(),
+  counting_stop_ms: import_zod2.z.number(),
+  pair: CorrelogramPairSchema,
+  lag_convention: import_zod2.z.literal("positive_target_after_reference"),
+  binning: import_zod2.z.literal("left_closed_right_open"),
+  zero_lag_policy: import_zod2.z.enum(["included", "excluded_self_pairs"]),
+  statistic: CorrelogramStatisticSchema
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
-    "correlation",
+    "values",
     "lags_ms",
     value.lags_ms.length,
-    value.correlation.length
+    value.values.length
   );
-  requireMonotonic(value.lags_ms, ctx, "lags_ms");
-  if (value.correlation_units !== correlogramUnits[value.normalization]) {
+  requireSymmetricLagAxis(
+    value.lags_ms,
+    value.bin_width_ms,
+    value.tau_max_ms,
+    ctx
+  );
+  if (!(value.counting_stop_ms > value.counting_start_ms)) {
     ctx.addIssue({
       code: import_zod2.z.ZodIssueCode.custom,
-      path: ["correlation_units"],
-      message: `correlation_units must be '${correlogramUnits[value.normalization]}' for ${value.normalization}`
+      path: ["counting_stop_ms"],
+      message: "counting_stop_ms must be greater than counting_start_ms"
     });
   }
-  for (let index = 0; index < value.correlation.length; index++) {
-    const sample = value.correlation[index];
-    const invalid = value.normalization === "pearson_coefficient" ? sample < -1 || sample > 1 : value.normalization === "rate_hz" ? sample < 0 : sample < 0 || !Number.isSafeInteger(sample);
+  for (let index = 0; index < value.values.length; index++) {
+    const sample = value.values[index];
+    const invalid = value.statistic.kind === "pearson_coefficient" ? sample < -1 || sample > 1 : value.statistic.kind === "raw_pair_count" ? sample < 0 || !Number.isSafeInteger(sample) : value.statistic.kind === "pair_rate_hz" ? sample < 0 : false;
     if (invalid) {
       ctx.addIssue({
         code: import_zod2.z.ZodIssueCode.custom,
-        path: ["correlation", index],
-        message: value.normalization === "pearson_coefficient" ? "Pearson coefficients must lie in [-1, 1]" : value.normalization === "rate_hz" ? "correlation rates cannot be negative" : "pair counts must be non-negative safe integers"
+        path: ["values", index],
+        message: value.statistic.kind === "pearson_coefficient" ? "Pearson coefficients must lie in [-1, 1]" : value.statistic.kind === "raw_pair_count" ? "raw pair counts must be non-negative safe integers" : "pair rates cannot be negative"
       });
       break;
     }
@@ -1756,6 +3103,117 @@ var SKILL_EXAMPLE_PAYLOADS = {
       time_units: "ms"
     })
   },
+  "nest.isi_distribution": {
+    scene: "isi-distribution",
+    params: {
+      bin_centers_ms: [0.5, 1.5, 2.5],
+      values: [2, 5, 1],
+      bin_width_ms: 1,
+      normalization: "count",
+      value_units: "count",
+      interval_scope: "per_sender"
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      recorder_id: "sr_1",
+      sender_ids: "[1,2]",
+      population_labels: "E",
+      time_units: "ms",
+      bin_ms: 1,
+      histogram_normalization: "count",
+      interval_scope: "per_sender"
+    })
+  },
+  "nest.psth": {
+    scene: "psth",
+    params: {
+      bin_centers_ms: [2.5, 7.5, 12.5],
+      values: [200, 800, 400],
+      bin_width_ms: 5,
+      normalization: "rate_hz",
+      value_units: "Hz",
+      trial_count: 1,
+      alignment_event: "simulation origin",
+      aggregation: "selected_senders_per_trial"
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      recorder_id: "sr_1",
+      sender_ids: "[1]",
+      population_labels: "gamma generator",
+      time_units: "ms",
+      bin_ms: 5,
+      histogram_normalization: "rate_hz",
+      event_alignment: "simulation origin",
+      psth_aggregation: "selected_senders_per_trial"
+    })
+  },
+  "nest.population_rate": {
+    scene: "population-rate",
+    params: {
+      bin_centers_ms: [2.5, 7.5, 12.5],
+      bin_width_ms: 5,
+      window_start_ms: 0,
+      window_stop_ms: 15,
+      series: [{
+        id: "E",
+        label: "Excitatory population",
+        recorded_sender_count: 2,
+        spike_counts: [1, 4, 2],
+        rates_hz: [100, 400, 200]
+      }],
+      normalization: "mean_per_recorded_sender_hz",
+      aggregation: "selected_senders",
+      binning: "left_closed_right_open"
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      recorder_id: "sr_1",
+      sender_ids: "[1,2]",
+      population_labels: "E",
+      time_units: "ms",
+      bin_ms: 5,
+      rate_normalization: "mean_per_recorded_sender_hz",
+      binning_policy: "left_closed_right_open"
+    })
+  },
+  "nest.correlogram": {
+    scene: "correlogram",
+    params: {
+      lags_ms: [-2, -1, 0, 1, 2],
+      values: [1, 4, 10, 4, 1],
+      bin_width_ms: 1,
+      tau_max_ms: 2,
+      counting_start_ms: 0,
+      counting_stop_ms: 1e3,
+      pair: {
+        reference_label: "E",
+        target_label: "E"
+      },
+      lag_convention: "positive_target_after_reference",
+      binning: "left_closed_right_open",
+      zero_lag_policy: "included",
+      statistic: {
+        kind: "raw_pair_count",
+        units: "count"
+      }
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      detector_id: "cd_1",
+      reference_population: "E",
+      target_population: "E",
+      bin_ms: 1,
+      correlation_normalization: "raw_pair_count",
+      correlation_units: "count",
+      lag_convention: "positive_target_after_reference",
+      binning_policy: "left_closed_right_open"
+    })
+  },
   "nest.rate_response": {
     scene: "fi-curve",
     params: {
@@ -1769,14 +3227,292 @@ var SKILL_EXAMPLE_PAYLOADS = {
   },
   "nest.connectivity_matrix": {
     scene: "network-topology",
-    params: { sources: [1, 2], targets: [2, 3], weights: [1, 0.5] },
+    params: {
+      sources: [1, 2],
+      targets: [2, 3],
+      weights: [1, 0.5],
+      weight_units: "pA"
+    },
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({
       source_ids: "[1,2]",
       target_ids: "[2,3]",
       synapse_model: "static_synapse",
-      weight_units: "pA"
+      weight_units: "pA",
+      connection_sample_policy: "complete"
+    })
+  },
+  "nest.connection_graph": {
+    scene: "network-topology",
+    params: {
+      nodes: [
+        { id: 1, label: "1" },
+        { id: 2, label: "2" },
+        { id: 3, label: "3" }
+      ],
+      edges: [
+        { id: "connection:0", source: 1, target: 2, weight: 1, delay_ms: 1.5, synapse_model: "static_synapse" },
+        { id: "connection:1", source: 1, target: 2, weight: 0.5, delay_ms: 2, synapse_model: "static_synapse" }
+      ],
+      weight_units: "pA",
+      delay_units: "ms",
+      layout: "schematic_circle",
+      parallel_edges: "preserved",
+      self_connections: "preserved",
+      snapshot_time_ms: 100,
+      snapshot_scope: { kind: "single_process_complete" },
+      sample_policy: "complete",
+      source_connection_count: 2,
+      edge_identity: "canonical_sorted_ordinal"
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,3]",
+      target_ids: "[2,3]",
+      synapse_model: "static_synapse",
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "preserved",
+      weight_units: "pA",
+      delay_units: "ms"
+    })
+  },
+  "nest.adjacency_matrix": {
+    scene: "connection-matrix",
+    params: {
+      source_ids: [1, 2],
+      target_ids: [3, 4],
+      cells: [{ source_id: 1, target_id: 3, connection_count: 2 }],
+      axis_order: "target_rows_source_columns",
+      absent_cell: "no_connection",
+      sample_policy: "complete",
+      connection_count: 2,
+      snapshot_time_ms: 100,
+      snapshot_scope: { kind: "single_process_complete" },
+      display: "binary_presence",
+      aggregation: "any_connection"
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[3,4]",
+      synapse_model: "static_synapse",
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "preserved_as_connection_count",
+      matrix_axis_order: "target_rows_source_columns",
+      matrix_aggregation: "any_connection"
+    })
+  },
+  "nest.weight_matrix": {
+    scene: "connection-matrix",
+    params: {
+      source_ids: [1, 2],
+      target_ids: [3, 4],
+      cells: [{ source_id: 1, target_id: 3, connection_count: 2, value: 0 }],
+      weight_units: "pA",
+      aggregation: "sum",
+      axis_order: "target_rows_source_columns",
+      absent_cell: "no_connection",
+      sample_policy: "complete",
+      connection_count: 2,
+      snapshot_time_ms: 100,
+      snapshot_scope: { kind: "single_process_complete" }
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[3,4]",
+      synapse_model: "static_synapse",
+      weight_units: "pA",
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "preserved_as_connection_count",
+      matrix_axis_order: "target_rows_source_columns",
+      matrix_aggregation: "sum"
+    })
+  },
+  "nest.delay_matrix": {
+    scene: "connection-matrix",
+    params: {
+      source_ids: [1, 2],
+      target_ids: [3, 4],
+      cells: [{ source_id: 1, target_id: 3, connection_count: 2, value: 1.5 }],
+      delay_units: "ms",
+      aggregation: "mean",
+      axis_order: "target_rows_source_columns",
+      absent_cell: "no_connection",
+      sample_policy: "complete",
+      connection_count: 2,
+      snapshot_time_ms: 100,
+      snapshot_scope: { kind: "single_process_complete" }
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[3,4]",
+      synapse_model: "static_synapse",
+      delay_units: "ms",
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "preserved_as_connection_count",
+      matrix_axis_order: "target_rows_source_columns",
+      matrix_aggregation: "mean"
+    })
+  },
+  "nest.in_degree_distribution": {
+    scene: "degree-distribution",
+    params: {
+      degrees: [0, 1, 2],
+      node_counts: [1, 0, 1],
+      values: [1, 0, 1],
+      node_count: 2,
+      connection_count: 2,
+      direction: "in",
+      normalization: "count",
+      value_units: "count",
+      edge_counting: "each_synapse_collection_entry",
+      zero_degree_policy: "include_declared_universe",
+      sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: { kind: "single_process_complete" }
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[3,4]",
+      synapse_model: "static_synapse",
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "count_each_connection",
+      degree_direction: "in",
+      degree_counting: "each_synapse_collection_entry",
+      zero_degree_policy: "include_declared_universe",
+      histogram_normalization: "count"
+    })
+  },
+  "nest.out_degree_distribution": {
+    scene: "degree-distribution",
+    params: {
+      degrees: [0, 1],
+      node_counts: [1, 2],
+      values: [1, 2],
+      node_count: 3,
+      connection_count: 2,
+      direction: "out",
+      normalization: "count",
+      value_units: "count",
+      edge_counting: "each_synapse_collection_entry",
+      zero_degree_policy: "include_declared_universe",
+      sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: { kind: "single_process_complete" }
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,3]",
+      target_ids: "[4,5]",
+      synapse_model: "static_synapse",
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "count_each_connection",
+      degree_direction: "out",
+      degree_counting: "each_synapse_collection_entry",
+      zero_degree_policy: "include_declared_universe",
+      histogram_normalization: "count"
+    })
+  },
+  "nest.delay_distribution": {
+    scene: "delay-distribution",
+    params: {
+      bin_centers_ms: [0.5, 1.5, 2.5],
+      delay_counts: [0, 1, 1],
+      values: [0, 1, 1],
+      bin_width_ms: 1,
+      window_start_ms: 0,
+      window_stop_ms: 3,
+      normalization: "count",
+      value_units: "count",
+      delay_units: "ms",
+      aggregation: "each_connection",
+      binning: "left_closed_right_open",
+      sample_policy: "complete",
+      connection_count: 2,
+      snapshot_time_ms: 100,
+      snapshot_scope: { kind: "single_process_complete" }
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[3,4]",
+      synapse_model: "static_synapse",
+      delay_units: "ms",
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 100,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "count_each_connection",
+      bin_ms: 1,
+      histogram_normalization: "count",
+      binning_policy: "left_closed_right_open"
+    })
+  },
+  "nest.weight_histogram": {
+    scene: "weight-histogram",
+    params: {
+      bin_centers: [-2, -1, 0, 1, 2],
+      values: [3, 5, 0, 7, 2],
+      bin_width: 1,
+      weight_units: "pA",
+      normalization: "count",
+      value_units: "count",
+      snapshot_time_ms: 1e3
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      source_ids: "[1,2]",
+      target_ids: "[3,4]",
+      synapse_model: "static_synapse",
+      weight_units: "pA",
+      histogram_normalization: "count",
+      connection_sample_policy: "all matching connections at snapshot_time_ms"
+    })
+  },
+  "nest.spatial_map_2d": {
+    scene: "spatial-map-2d",
+    params: {
+      nodes: [
+        { id: 41, label: "41", x: -0.5, y: 0 },
+        { id: 99, label: "99", x: 0.5, y: 0 }
+      ],
+      coordinate_units: "model units",
+      extent: [2, 1],
+      center: [0, 0],
+      edge_wrap: false,
+      position_scope: { kind: "single_process_complete" },
+      marker_size: "fixed_screen_space"
+    },
+    mode: "interactive",
+    themeMode: "dark",
+    provenance: synthetic({
+      node_ids: "[41,99]",
+      spatial_units: "model units",
+      extent: "[2,1]",
+      position_scope: "single_process_complete"
     })
   },
   "nest.spatial_3d": {
@@ -1837,14 +3573,145 @@ var SKILL_EXAMPLE_PAYLOADS = {
   "corpus.knowledge_graph": {
     scene: "knowledge-graph-3d",
     params: {
+      graph_id: "corpus-entity-graph",
+      graph_source: "engram:corpus_entity_graph",
+      graph_snapshot_id: "sha256:example-corpus-snapshot",
+      graph_scope: "corpus_entity",
+      generated_at: "2026-07-11T00:00:00Z",
       nodes: [
-        { id: "p1", kind: "paper", label: "Brunel 2000" },
-        { id: "m1", kind: "model", label: "iaf_psc_delta" },
-        { id: "f1", kind: "family", label: "LIF family" }
+        {
+          id: "p1",
+          kind: "paper",
+          label: "Brunel 2000",
+          detail: "Balanced random network paper",
+          attributes: { family: "LIF", n_neurons: 2, n_synapses: 2 },
+          epistemic: {
+            status: "derived_advisory",
+            advisory_only: true,
+            is_paper_local_evidence: false,
+            calibrated_posterior: false
+          },
+          evidence: [{
+            kind: "graph_snapshot_record",
+            evidence_id: "snapshot-node-p1",
+            record_id: "node:p1"
+          }]
+        },
+        {
+          id: "m1",
+          kind: "model",
+          label: "iaf_psc_delta",
+          attributes: { family: "LIF", paper_count: 1 },
+          epistemic: {
+            status: "derived_advisory",
+            advisory_only: true,
+            is_paper_local_evidence: false,
+            calibrated_posterior: false
+          },
+          evidence: [{
+            kind: "graph_snapshot_record",
+            evidence_id: "snapshot-node-m1",
+            record_id: "node:m1"
+          }]
+        },
+        {
+          id: "m2",
+          kind: "model",
+          label: "iaf_psc_alpha",
+          attributes: { family: "LIF", paper_count: 1 },
+          epistemic: {
+            status: "derived_advisory",
+            advisory_only: true,
+            is_paper_local_evidence: false,
+            calibrated_posterior: false
+          },
+          evidence: [{
+            kind: "graph_snapshot_record",
+            evidence_id: "snapshot-node-m2",
+            record_id: "node:m2"
+          }]
+        },
+        {
+          id: "f1",
+          kind: "family",
+          label: "LIF family",
+          attributes: { paper_count: 2 },
+          epistemic: {
+            status: "derived_advisory",
+            advisory_only: true,
+            is_paper_local_evidence: false,
+            calibrated_posterior: false
+          },
+          evidence: [{
+            kind: "graph_snapshot_record",
+            evidence_id: "snapshot-node-f1",
+            record_id: "node:f1"
+          }]
+        }
       ],
       edges: [
-        { source: "p1", target: "m1", kind: "instantiates" },
-        { source: "m1", target: "f1", kind: "belongs_to_family" }
+        {
+          id: "edge:p1-instantiates-m1",
+          source: "p1",
+          target: "m1",
+          kind: "instantiates",
+          label: "instantiates",
+          attributes: {},
+          epistemic: {
+            status: "derived_advisory",
+            advisory_only: true,
+            is_paper_local_evidence: false,
+            calibrated_posterior: false
+          },
+          evidence: [{
+            kind: "graph_snapshot_record",
+            evidence_id: "snapshot-edge-p1-m1",
+            record_id: "edge:p1-instantiates-m1"
+          }]
+        },
+        {
+          id: "edge:m2-variant-m1",
+          source: "m2",
+          target: "m1",
+          kind: "variant_of",
+          label: "variant of",
+          attributes: { delta_summary: "alpha-shaped postsynaptic current" },
+          epistemic: {
+            status: "derived_advisory",
+            advisory_only: true,
+            is_paper_local_evidence: false,
+            calibrated_posterior: false
+          },
+          evidence: [{
+            kind: "graph_snapshot_record",
+            evidence_id: "snapshot-edge-m2-m1",
+            record_id: "edge:m2-variant-m1"
+          }],
+          uncalibrated_score: {
+            kind: "structural_similarity",
+            value: 0.72,
+            calibrated_posterior: false
+          }
+        },
+        {
+          id: "edge:m1-family-f1",
+          source: "m1",
+          target: "f1",
+          kind: "belongs_to_family",
+          label: "belongs to family",
+          attributes: {},
+          epistemic: {
+            status: "derived_advisory",
+            advisory_only: true,
+            is_paper_local_evidence: false,
+            calibrated_posterior: false
+          },
+          evidence: [{
+            kind: "graph_snapshot_record",
+            evidence_id: "snapshot-edge-m1-f1",
+            record_id: "edge:m1-family-f1"
+          }]
+        }
       ]
     },
     mode: "interactive",
@@ -1852,9 +3719,9 @@ var SKILL_EXAMPLE_PAYLOADS = {
     // advisory_only:true — identity edges are advisory structural similarity.
     provenance: {
       ...synthetic({
-        graph_source: "corpus_kg",
-        node_kinds: "paper,model,family",
-        edge_kinds: "instantiates,belongs_to_family",
+        graph_source: "engram:corpus_entity_graph",
+        graph_snapshot_id: "sha256:example-corpus-snapshot",
+        graph_scope: "corpus_entity",
         identity_advisory: true
       }),
       advisory_only: true
@@ -1872,23 +3739,6 @@ var HOST_RENDERER_EXAMPLE_PAYLOADS = {
       spatial_units: "mm",
       mask: "none",
       kernel: "none"
-    })
-  },
-  "nest.correlogram": {
-    skill: "nest.correlogram",
-    specVersion: CORTEXEL_SPEC_VERSION,
-    rendererRoute: "d3",
-    params: {
-      lags_ms: [-2, -1, 0, 1, 2],
-      correlation: [0.1, 0.4, 1, 0.4, 0.1],
-      normalization: "pearson_coefficient",
-      correlation_units: "1"
-    },
-    provenance: synthetic({
-      bin_ms: 1,
-      pair_labels: "E\xD7E",
-      correlation_normalization: "pearson_coefficient",
-      correlation_units: "1"
     })
   },
   "nest.stimulus_response": {
@@ -1966,8 +3816,9 @@ function getInvocationExamplePayload(id2) {
 }
 
 // core/skills/registry.ts
+var CORTEXEL_SKILL_VERSION = "1.6.0";
 var STRICT_INVOCATION_POLICY = Object.freeze({
-  version: "1",
+  version: "2",
   externalSelection: "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present",
   selfDescribingSelection: "validateSpec(payload): payload.skill is required and selects the contract",
   hostSelection: "host envelopes require payload.skill; explicit id and payload.skill must match",
@@ -1976,10 +3827,10 @@ var STRICT_INVOCATION_POLICY = Object.freeze({
   hostEnvelope: "allowed iff contract.scene is null; scene is forbidden",
   rendererRoute: "when selected, must occur in contract.rendererRoutes",
   params: "validate paramsJsonSchema then every paramConstraint",
-  provenance: "apply strictProvenancePolicy and every provenanceParamConstraint"
+  provenance: "apply strictProvenancePolicy, require every contract.requiredProvenanceFlags value, then evaluate every provenanceParamConstraint"
 });
 var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: "2",
+  version: "8",
   pathSyntax: "dot-separated object keys",
   arrayWildcard: "[*]",
   objectValueWildcard: "*",
@@ -2005,6 +3856,25 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     "endpoint_kinds",
     "mapped_value",
     "conditional_numeric_domain",
+    "uniform_histogram_bins",
+    "normalized_histogram_mass",
+    "psth_derived_counts",
+    "max_parallel_edges",
+    "each_unique_field",
+    "each_contains_field_value",
+    "node_score_kind",
+    "edge_score_kind",
+    "ordered_interval",
+    "uniform_bin_window",
+    "population_rate_derived_values",
+    "symmetric_lag_axis",
+    "legacy_connection_channels",
+    "connection_graph_snapshot",
+    "matrix_connection_counts",
+    "degree_distribution_consistency",
+    "delay_distribution_consistency",
+    "spatial_extent_bounds",
+    "scope_compatibility",
     "acyclic"
   ]),
   semantics: Object.freeze({
@@ -2069,6 +3939,118 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
       pathRoles: "first path resolves a discriminator scalar; second path resolves numeric values",
       rule: "every numeric value satisfies numericDomains[discriminator] inclusive min/max and optional integer requirement"
     }),
+    uniform_histogram_bins: Object.freeze({
+      pathRoles: "first path resolves the ordered bin-center array; second path resolves one numeric bin width",
+      rule: "width is positive and finite; centers are strictly increasing; each adjacent delta approximately equals width",
+      comparison: "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))",
+      nonNegativeLowerEdge: "when true, firstCenter-width/2 must be >= -tolerance, where tolerance uses firstCenter and width/2 in the same comparison formula"
+    }),
+    normalized_histogram_mass: Object.freeze({
+      pathRoles: "first path resolves normalization mode; second resolves histogram values; third resolves bin width",
+      absentMode: "when normalizationRules has no entry for the selected mode, skip the constraint",
+      accumulation: "values must be finite and non-negative and are summed from index 0 to length-1 using IEEE-754 binary64 addition",
+      measures: Object.freeze({
+        sum: "compare the left-to-right value sum with target",
+        density_integral: "multiply the left-to-right value sum by the positive finite width, then compare with target"
+      }),
+      comparison: "abs(actual-target) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(target))"
+    }),
+    psth_derived_counts: Object.freeze({
+      pathRoles: "normalization mode, values array, positive safe-integer trial count, positive finite bin width in ms, and aggregation literal in that order",
+      aggregation: "selected_senders_per_trial means each bin count is the aggregate number of raw spike events from all selected senders across the declared trials",
+      recovery: Object.freeze({
+        count: "rawCount = value",
+        count_per_trial: "rawCount = value * trialCount",
+        rate_hz: "rawCount = ((value * trialCount) * binWidthMs) / 1000"
+      }),
+      operationOrder: "evaluate the displayed rate_hz expression left-to-right with IEEE-754 binary64 operations; do not fuse or algebraically reorder it",
+      nearestInteger: "round rawCount to the nearest mathematical integer; exact half ties go toward positive infinity (half ties necessarily fail the 1e-6 recovery tolerance)",
+      rule: "count values are exact non-negative safe integers; normalized values pass only when rawCount and rounded are finite, rounded is a non-negative safe integer, and abs(rawCount-rounded) <= absoluteTolerance",
+      relativeTolerance: "none; this constraint uses absoluteTolerance only"
+    }),
+    max_parallel_edges: Object.freeze({
+      pathRoles: "the first path resolves an array of edges with source and target ids",
+      pairIdentity: "source/target direction is ignored; canonicalize each pair by ECMAScript UTF-16 lexicographic order",
+      rule: "the number of edges for every canonical unordered endpoint pair is <= max"
+    }),
+    each_unique_field: Object.freeze({
+      pathRoles: "the first path resolves zero or more arrays of objects; field names the key",
+      rule: "within each resolved array, field values are unique under JSON scalar equality"
+    }),
+    each_contains_field_value: Object.freeze({
+      pathRoles: "the first path resolves zero or more arrays of objects; field names the key",
+      rule: "within each resolved array, at least one object field value occurs in allowedFieldValues under JSON string equality"
+    }),
+    node_score_kind: Object.freeze({
+      pathRoles: "the first path resolves an array of nodes with kind and optional uncalibrated_score.kind",
+      absentScore: "an absent uncalibrated_score passes",
+      rule: "a present score discriminator occurs in allowedScoreKinds[node.kind]"
+    }),
+    edge_score_kind: Object.freeze({
+      pathRoles: "the first path resolves an array of edges with kind and optional uncalibrated_score.kind",
+      absentScore: "an absent uncalibrated_score passes",
+      rule: "a present score discriminator occurs in allowedScoreKinds[edge.kind]; an empty allowed list forbids scores for that edge kind"
+    }),
+    ordered_interval: Object.freeze({
+      pathRoles: "first path resolves one finite interval start; second resolves one finite interval stop",
+      rule: "stop is strictly greater than start"
+    }),
+    uniform_bin_window: Object.freeze({
+      pathRoles: "ordered bin-center array, positive finite bin width, finite window start, finite window stop in that order",
+      rule: "centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop",
+      binning: "left-closed, right-open bins exactly tile [start,stop)",
+      spacingComparison: "adjacent center deltas use abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual),abs(expected))",
+      edgeComparison: "exact edge equality passes; otherwise the binary64 allowance must be <= maxRoundoffFraction * abs(binWidth), then abs(edge-expected) <= absoluteTolerance + relativeTolerance * abs(binWidth) + roundoffUlps * 2^-52 * max(abs(center),abs(binWidth/2),abs(edge),abs(expected)); an unresolved absolute origin fails closed"
+    }),
+    population_rate_derived_values: Object.freeze({
+      pathRoles: "series array, shared bin-center array, positive finite bin width, normalization, aggregation, and binning literals in that order",
+      fixedSemantics: "normalization=mean_per_recorded_sender_hz; aggregation=selected_senders; binning=left_closed_right_open",
+      seriesRule: "series ids are unique; recorded_sender_count is a positive safe integer; spike_counts are non-negative safe integers; spike_counts and rates_hz each match the shared bin count",
+      rateFormula: "expected = (spikeCount * 1000) / (recordedSenderCount * binWidthMs)",
+      operationOrder: "multiply spikeCount by 1000; multiply recordedSenderCount by binWidthMs; divide the first result by the second using IEEE-754 binary64; do not fuse or algebraically reorder",
+      comparison: "abs(rate-expected) <= absoluteTolerance + relativeTolerance * max(abs(rate), abs(expected))"
+    }),
+    symmetric_lag_axis: Object.freeze({
+      pathRoles: "ordered lag-center array, positive finite bin width, positive finite tau_max_ms in that order",
+      rule: "lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span exactly [-tau_max_ms,+tau_max_ms]",
+      comparison: "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))"
+    }),
+    legacy_connection_channels: Object.freeze({
+      pathRoles: "optional weights array, optional weight_units, optional delays array, and optional delay_units in that order",
+      rule: "weights and weight_units occur together; delays and delay_units occur together; every present delay is finite and strictly positive",
+      emptyChannels: "a present empty measurement array still requires its matching unit"
+    }),
+    connection_graph_snapshot: Object.freeze({
+      pathRoles: "nodes array, edges array, sample_policy, source_connection_count, optional weight_units, optional delay_units, and edge_identity in that order",
+      rule: "node and edge ids are unique; every edge endpoint exists; weight, delay_ms, and synapse_model are each present on every edge or none; measurement units occur exactly with their channel; complete output has edges.length=source_connection_count; deterministic_even_stride is a non-empty strict subset",
+      identity: "canonical_sorted_ordinal requires connection:<safe ordinal> with ordinal < source_connection_count; nest_connection_identifier requires connection:source:target:target_thread:synapse_id:port with canonical nonnegative safe-integer components and endpoint correlation"
+    }),
+    matrix_connection_counts: Object.freeze({
+      pathRoles: "ordered source_ids, ordered target_ids, sparse cells, total connection_count, and aggregation in that order",
+      rule: "axis ids are unique; every cell has a unique in-universe source/target pair and positive safe-integer connection_count; the left-to-right safe-integer cell-count sum equals connection_count; single_connection requires every cell count to equal one",
+      absence: "a missing sparse cell means no_connection; a present zero-valued weight cell remains a connection because connection_count is positive"
+    }),
+    degree_distribution_consistency: Object.freeze({
+      pathRoles: "degrees, node_counts, displayed values, node_count, connection_count, direction, normalization, value_units, edge_counting, and zero_degree_policy in that order",
+      rule: "degrees equal contiguous integers 0..N; counts and nonnegative values match their length; sum(node_counts)=node_count; sum(degree*node_count)=connection_count; displayed counts equal raw counts exactly; probabilities match raw count/node_count and sum to one",
+      fixedSemantics: "edge_counting=each_synapse_collection_entry and zero_degree_policy=include_declared_universe"
+    }),
+    delay_distribution_consistency: Object.freeze({
+      pathRoles: "bin centers, raw delay_counts, displayed values, bin width, connection_count, normalization, value units, delay units, aggregation, and binning in that order",
+      rule: "the three bin arrays have equal length; displayed values are finite and nonnegative; sum(delay_counts)=connection_count; displayed counts equal raw counts exactly; probabilities or densities exactly equal the published binary64 recovery result and globally sum or integrate to one within the accumulated-mass tolerance; non-count normalization requires a non-empty snapshot and finite density denominator",
+      operationOrder: "probability=count/connection_count; probability_density=count/(connection_count*bin_width_ms) using IEEE-754 binary64; per-bin comparison uses exact Object.is-equivalent binary64 identity, while absoluteTolerance/relativeTolerance apply only to accumulated normalized mass",
+      geometry: "a separate uniform_bin_window constraint publishes and evaluates exact [start,stop) bin geometry"
+    }),
+    spatial_extent_bounds: Object.freeze({
+      pathRoles: "nodes array, extent tuple, and center tuple in that order",
+      rule: "center \xB1 extent/2 must produce a strictly ordered representable interval on each axis; node ids are unique and every coordinate lies within those bounds using a separate tolerance for each axis",
+      comparison: "axisTolerance = absoluteTolerance + relativeTolerance * abs(halfExtent) + boundedRoundoff; boundedRoundoff is the roundoffUlps * 2^-52 arithmetic allowance only when it is <= maxRoundoffFraction * abs(halfExtent), otherwise zero; the large absolute spatial origin never multiplies relativeTolerance",
+      roundoff: "roundoffUlps and maxRoundoffFraction bound IEEE-754 binary64 repair for deriving center \xB1 extent/2; exact in-bound comparisons remain valid when repair is disabled"
+    }),
+    scope_compatibility: Object.freeze({
+      pathRoles: "scope object and optional degree direction in that order",
+      rule: "rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; out-degree forbids mpi_target_rank_local"
+    }),
     acyclic: Object.freeze({
       pathRoles: "first path resolves node ids; second resolves each node parent id or null",
       rule: "following parent links from any id never revisits an id"
@@ -2078,7 +4060,7 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
 var NEST_SKILL_REGISTRY = {
   "nest.voltage_trace": {
     id: "nest.voltage_trace",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST voltage trace renderer",
     description: "Render labeled multimeter/voltmeter series for one recorded variable and unit.",
     deviceFamily: "multimeter",
@@ -2105,18 +4087,19 @@ var NEST_SKILL_REGISTRY = {
         nestExample: "One neuron example / multimeter recording",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/one_neuron.html",
         dataShape: "times_ms + same-unit series split and labeled by sender",
-        output: "Selectable trace, spike markers, JSON + SVG export",
+        output: "Labeled same-unit trace series over the checked millisecond axis",
         note: "Use one invocation per variable/unit; never mix mV, pA and nS on one axis."
       }
     ]
   },
   "nest.spike_raster": {
     id: "nest.spike_raster",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST spike raster renderer",
-    description: "Render spike_recorder events as rasters, spike trains and population plots.",
+    description: "Render exact spike_recorder event times and sender ids as a sender-time raster.",
     deviceFamily: "spike_recorder",
     scene: "spike-raster",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "events" },
     requiredInputKeys: ["times_ms", "senders"],
     paramsSchema: SpikeRasterParamsSchema,
     requiredProvenanceKeys: [
@@ -2139,18 +4122,219 @@ var NEST_SKILL_REGISTRY = {
         nestExample: "Random balanced Brunel network",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/brunel_alpha_nest.html",
         dataShape: "spike_recorder events: times_ms, senders, population labels",
-        output: "Sender-time raster, population rate strip, selectable windows",
+        output: "Exact sender-time raster with no invented rate bins or synthetic events",
         note: "Use exact spike times first; aggregate only when too dense to read."
+      }
+    ]
+  },
+  "nest.isi_distribution": {
+    id: "nest.isi_distribution",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST inter-spike interval distribution renderer",
+    description: "Render an explicitly normalized histogram of within-sender or single-train inter-spike intervals.",
+    deviceFamily: "spike_recorder",
+    scene: "isi-distribution",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "isi" },
+    requiredInputKeys: [
+      "bin_centers_ms",
+      "values",
+      "bin_width_ms",
+      "normalization",
+      "value_units",
+      "interval_scope"
+    ],
+    paramsSchema: IsiDistributionParamsSchema,
+    requiredProvenanceKeys: [
+      "recorder_id",
+      "sender_ids",
+      "population_labels",
+      "time_units",
+      "bin_ms",
+      "histogram_normalization",
+      "interval_scope"
+    ],
+    provenanceParamConstraints: [
+      {
+        kind: "equals_literal",
+        provenanceKey: "time_units",
+        value: "ms",
+        description: "Inter-spike interval bin centers and widths are expressed in milliseconds."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "bin_ms",
+        paramKey: "bin_width_ms",
+        description: "Declared bin width must match params.bin_width_ms."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "histogram_normalization",
+        paramKey: "normalization",
+        description: "Declared histogram normalization must match params.normalization."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "interval_scope",
+        paramKey: "interval_scope",
+        description: "Declared interval scope must match the rendered interval calculation."
+      }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [
+      {
+        nestExample: "Sinusoidal gamma generator example",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/sinusoidal_gamma_generator.html",
+        dataShape: "ordered ISI bin centers plus counts, probabilities, or probability density",
+        output: "Inter-spike interval histogram with explicit scope and normalization",
+        note: "Compute intervals within each sender; never difference a globally interleaved recorder stream."
+      }
+    ]
+  },
+  "nest.psth": {
+    id: "nest.psth",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST peri-stimulus time histogram renderer",
+    description: "Render trial-aligned aggregate spike counts across selected senders, counts per trial, or firing rates around a declared event.",
+    deviceFamily: "spike_recorder",
+    scene: "psth",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "psth" },
+    requiredInputKeys: [
+      "bin_centers_ms",
+      "values",
+      "bin_width_ms",
+      "normalization",
+      "value_units",
+      "trial_count",
+      "alignment_event",
+      "aggregation"
+    ],
+    paramsSchema: PsthParamsSchema,
+    requiredProvenanceKeys: [
+      "recorder_id",
+      "sender_ids",
+      "population_labels",
+      "time_units",
+      "bin_ms",
+      "histogram_normalization",
+      "event_alignment",
+      "psth_aggregation"
+    ],
+    provenanceParamConstraints: [
+      {
+        kind: "equals_literal",
+        provenanceKey: "time_units",
+        value: "ms",
+        description: "PSTH bin centers and widths are expressed in milliseconds."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "bin_ms",
+        paramKey: "bin_width_ms",
+        description: "Declared bin width must match params.bin_width_ms."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "histogram_normalization",
+        paramKey: "normalization",
+        description: "Declared histogram normalization must match params.normalization."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "event_alignment",
+        paramKey: "alignment_event",
+        description: "Declared event alignment must match params.alignment_event."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "psth_aggregation",
+        paramKey: "aggregation",
+        description: "Declared PSTH aggregation must match params.aggregation."
+      }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [
+      {
+        nestExample: "Sinusoidal gamma generator example (one selected sender, one trial)",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/sinusoidal_gamma_generator.html",
+        dataShape: "single-trial time bins aggregated across the selected sender set",
+        output: "Peri-stimulus time histogram with auditable normalization",
+        note: "The linked example is one trial; keep sender aggregation, trial count, bin width and alignment event in the checked payload."
+      }
+    ]
+  },
+  "nest.population_rate": {
+    id: "nest.population_rate",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST population-rate renderer",
+    description: "Render auditable mean firing-rate series derived from raw per-bin spike counts and the exact recorded-sender denominator.",
+    deviceFamily: "spike_recorder",
+    scene: "population-rate",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "population_rate" },
+    requiredInputKeys: [
+      "bin_centers_ms",
+      "bin_width_ms",
+      "window_start_ms",
+      "window_stop_ms",
+      "series",
+      "normalization",
+      "aggregation",
+      "binning"
+    ],
+    paramsSchema: PopulationRateParamsSchema,
+    requiredProvenanceKeys: [
+      "recorder_id",
+      "sender_ids",
+      "population_labels",
+      "time_units",
+      "bin_ms",
+      "rate_normalization",
+      "binning_policy"
+    ],
+    provenanceParamConstraints: [
+      {
+        kind: "equals_literal",
+        provenanceKey: "time_units",
+        value: "ms",
+        description: "Population-rate bin centers, widths, and window bounds are expressed in milliseconds."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "bin_ms",
+        paramKey: "bin_width_ms",
+        description: "Declared bin width must match params.bin_width_ms."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "rate_normalization",
+        paramKey: "normalization",
+        description: "Declared rate normalization must match params.normalization."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "binning_policy",
+        paramKey: "binning",
+        description: "Declared bin interval policy must match params.binning."
+      }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [
+      {
+        nestExample: "Population firing-rate trace derived from spike_recorder events",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/brunel_alpha_nest.html",
+        dataShape: "uniform [start,stop) bins, raw population spike counts, sender denominator, and derived mean rates",
+        output: "One or more auditable mean-per-recorded-sender population-rate traces",
+        note: "Preserve raw counts and the exact recorded sender count; never divide by an undeclared population size."
       }
     ]
   },
   "nest.rate_response": {
     id: "nest.rate_response",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST rate / IF response renderer",
-    description: "Render firing-rate / IF curves and population rates derived from spike counts.",
+    description: "Render firing-rate / IF response points against declared stimulus amplitudes.",
     deviceFamily: "spike_recorder",
     scene: "fi-curve",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "fi_response" },
     requiredInputKeys: ["stimulus_amplitudes", "rates_hz", "stimulus_units"],
     paramsSchema: RateResponseParamsSchema,
     requiredProvenanceKeys: ["stim_units", "bin_ms", "rate_normalization"],
@@ -2167,50 +4351,605 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "IF curve example",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/if_curve.html",
-        dataShape: "stimulus amplitudes, rates_hz, spike counts",
-        output: "IF curve, population-rate trace, decision crossing markers",
+        dataShape: "stimulus amplitudes and rates_hz with a declared counting window",
+        output: "F-I response line and points with declared stimulus and rate units",
         note: "Always show bin width / counting window so rates stay auditable."
       }
     ]
   },
   "nest.connectivity_matrix": {
     id: "nest.connectivity_matrix",
-    version: "1.2.0",
-    title: "NEST connectivity matrix renderer",
-    description: "Render SynapseCollection connectivity, weights and population blocks.",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST connectivity edge-list topology renderer",
+    description: "Render SynapseCollection endpoint pairs and optional weights as schematic node-link topology (legacy skill id; not a literal matrix heatmap).",
     deviceFamily: "get_connections",
     scene: "network-topology",
     // Connectivity evidence contains endpoints/weights, not measured spatial
     // coordinates. Any node placement in the topology scene is schematic.
     weak: true,
     weakDisclosure: "Schematic topology layout \u2014 node positions and distances are derived for readability; only the declared edges and weights are evidence.",
+    deprecation: {
+      since: "1.6.0",
+      replacement: "nest.connection_graph",
+      message: "Legacy edge-list skill id; use nest.connection_graph for explicit graph, snapshot, sampling, and multapse semantics."
+    },
+    routerEligibility: { bareFamilyCandidate: false },
     requiredInputKeys: ["sources", "targets"],
     paramsSchema: NetworkParamsSchema,
     requiredProvenanceKeys: [
       "source_ids",
       "target_ids",
       "synapse_model",
-      "weight_units"
+      "connection_sample_policy"
+    ],
+    provenanceParamConstraints: [
+      {
+        kind: "equals_param",
+        provenanceKey: "weight_units",
+        paramKey: "weight_units",
+        description: "When declared, legacy graph weight units must match params.weight_units."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "delay_units",
+        paramKey: "delay_units",
+        description: "When declared, legacy graph delay units must match params.delay_units."
+      }
     ],
     rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
         nestExample: "Plot weight matrices example / SynapseCollection",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
-        dataShape: "sources, targets, weights, delays, source/target populations",
-        output: "Topology node-edge view, selected block stats, weight histogram",
+        dataShape: "parallel source/target endpoint arrays plus optional weights",
+        output: "Schematic node-edge topology from the checked edge list",
         note: "Keep absent connections distinct from zero-weight connections; topology positions/distances are schematic."
+      }
+    ]
+  },
+  "nest.connection_graph": {
+    id: "nest.connection_graph",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST connection topology graph renderer",
+    description: "Render a complete or explicitly deterministic sample of a SynapseCollection snapshot while preserving isolates, autapses, multapses, and measured channels.",
+    deviceFamily: "get_connections",
+    scene: "network-topology",
+    weak: true,
+    weakDisclosure: "Schematic topology layout \u2014 circle positions and distances are derived for readability; edges are complete or deterministically sampled exactly as declared.",
+    routerEligibility: {
+      bareFamilyCandidate: true,
+      dataShapeKind: "connection_graph"
+    },
+    transform: {
+      id: "synapseCollectionToConnectionGraphParams",
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "weight|weights?",
+        "delay|delays?",
+        "synapse_model|synapse_models?",
+        "target_thread|target_threads?",
+        "synapse_id|synapse_ids?",
+        "port|ports?"
+      ],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "samplePolicy",
+        "weightUnits when weight is present",
+        "delayUnits='ms' when delay is present"
+      ],
+      outputSkill: "nest.connection_graph"
+    },
+    requiredInputKeys: [
+      "nodes",
+      "edges",
+      "layout",
+      "parallel_edges",
+      "self_connections",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "sample_policy",
+      "source_connection_count",
+      "edge_identity"
+    ],
+    paramsSchema: ConnectionGraphParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy"
+    ],
+    provenanceParamConstraints: [
+      {
+        kind: "equals_param",
+        provenanceKey: "connection_sample_policy",
+        paramKey: "sample_policy",
+        description: "Declared graph sampling must match params.sample_policy."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "snapshot_time_ms",
+        paramKey: "snapshot_time_ms",
+        description: "Declared snapshot time must match params.snapshot_time_ms."
+      },
+      {
+        kind: "equals_param_path",
+        provenanceKey: "snapshot_scope",
+        paramPath: "snapshot_scope.kind",
+        description: "Declared snapshot scope must match params.snapshot_scope.kind."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "parallel_edge_policy",
+        paramKey: "parallel_edges",
+        description: "Declared parallel-edge policy must match params.parallel_edges."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "weight_units",
+        paramKey: "weight_units",
+        description: "When declared, graph weight units must match params.weight_units."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "delay_units",
+        paramKey: "delay_units",
+        description: "When declared, graph delay units must match params.delay_units."
+      }
+    ],
+    rendererRoutes: ["media.model_graph", "d3"],
+    examples: [{
+      nestExample: "SynapseCollection connection inspection",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
+      dataShape: "explicit node universe plus one preserved graph edge per selected SynapseCollection entry",
+      output: "Schematic directed topology graph with disclosed completeness and snapshot scope",
+      note: "Circle placement is schematic; complete and deterministic samples are never conflated."
+    }]
+  },
+  "nest.adjacency_matrix": {
+    id: "nest.adjacency_matrix",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST binary adjacency matrix renderer",
+    description: "Render sparse connection presence with target rows, source columns, and explicit multapse counts.",
+    deviceFamily: "get_connections",
+    scene: "connection-matrix",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "adjacency_matrix" },
+    transform: {
+      id: "synapseCollectionToAdjacencyMatrixParams",
+      rawFields: ["source|sources", "target|targets"],
+      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope"],
+      outputSkill: "nest.adjacency_matrix"
+    },
+    requiredInputKeys: [
+      "source_ids",
+      "target_ids",
+      "cells",
+      "axis_order",
+      "absent_cell",
+      "sample_policy",
+      "connection_count",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "display",
+      "aggregation"
+    ],
+    paramsSchema: AdjacencyMatrixParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy",
+      "matrix_axis_order",
+      "matrix_aggregation"
+    ],
+    provenanceParamConstraints: [
+      { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Only complete connection snapshots may form a literal matrix." },
+      { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Declared snapshot time must match params." },
+      { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Declared snapshot scope must match params." },
+      { kind: "equals_literal", provenanceKey: "parallel_edge_policy", value: "preserved_as_connection_count", description: "Parallel connections are preserved as each sparse cell count." },
+      { kind: "equals_param", provenanceKey: "matrix_axis_order", paramKey: "axis_order", description: "Declared matrix axes must match params." },
+      { kind: "equals_param", provenanceKey: "matrix_aggregation", paramKey: "aggregation", description: "Declared matrix aggregation must match params." }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [{
+      nestExample: "Explicit adjacency representation",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html#explicit-connections",
+      dataShape: "ordered source/target axes plus sparse positive connection-count cells",
+      output: "Binary adjacency heatmap with target rows and source columns",
+      note: "Absent cells mean no connection; multapses remain visible through connection_count."
+    }]
+  },
+  "nest.weight_matrix": {
+    id: "nest.weight_matrix",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST connection-weight matrix renderer",
+    description: "Render explicitly aggregated SynapseCollection weights without conflating absent and zero-valued cells.",
+    deviceFamily: "get_connections",
+    scene: "connection-matrix",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "weight_matrix" },
+    transform: {
+      id: "synapseCollectionToWeightMatrixParams",
+      rawFields: ["source|sources", "target|targets", "weight|weights"],
+      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "weightUnits", "aggregation"],
+      outputSkill: "nest.weight_matrix"
+    },
+    requiredInputKeys: [
+      "source_ids",
+      "target_ids",
+      "cells",
+      "weight_units",
+      "aggregation",
+      "axis_order",
+      "absent_cell",
+      "sample_policy",
+      "connection_count",
+      "snapshot_time_ms",
+      "snapshot_scope"
+    ],
+    paramsSchema: WeightMatrixParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "weight_units",
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy",
+      "matrix_axis_order",
+      "matrix_aggregation"
+    ],
+    provenanceParamConstraints: [
+      { kind: "equals_param", provenanceKey: "weight_units", paramKey: "weight_units", description: "Weight units must match params." },
+      { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Only complete connection snapshots may form a literal matrix." },
+      { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
+      { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Snapshot scope must match params." },
+      { kind: "equals_literal", provenanceKey: "parallel_edge_policy", value: "preserved_as_connection_count", description: "Parallel connections remain auditable via connection_count." },
+      { kind: "equals_param", provenanceKey: "matrix_axis_order", paramKey: "axis_order", description: "Matrix axis order must match params." },
+      { kind: "equals_param", provenanceKey: "matrix_aggregation", paramKey: "aggregation", description: "Weight aggregation must match params." }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [{
+      nestExample: "Plot weight matrices example",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/auto_examples/plot_weight_matrices.html",
+      dataShape: "ordered node axes plus sparse measured-weight cells and multapse counts",
+      output: "Unit-labelled weight heatmap",
+      note: "A present zero/cancelled cell remains distinct from an absent connection."
+    }]
+  },
+  "nest.delay_matrix": {
+    id: "nest.delay_matrix",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST synaptic-delay matrix renderer",
+    description: "Render explicitly aggregated positive synaptic delays in milliseconds.",
+    deviceFamily: "get_connections",
+    scene: "connection-matrix",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "delay_matrix" },
+    transform: {
+      id: "synapseCollectionToDelayMatrixParams",
+      rawFields: ["source|sources", "target|targets", "delay|delays"],
+      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "delayUnits='ms'", "aggregation"],
+      outputSkill: "nest.delay_matrix"
+    },
+    requiredInputKeys: [
+      "source_ids",
+      "target_ids",
+      "cells",
+      "delay_units",
+      "aggregation",
+      "axis_order",
+      "absent_cell",
+      "sample_policy",
+      "connection_count",
+      "snapshot_time_ms",
+      "snapshot_scope"
+    ],
+    paramsSchema: DelayMatrixParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "delay_units",
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy",
+      "matrix_axis_order",
+      "matrix_aggregation"
+    ],
+    provenanceParamConstraints: [
+      { kind: "equals_param", provenanceKey: "delay_units", paramKey: "delay_units", description: "Delay units must match params." },
+      { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Only complete connection snapshots may form a literal matrix." },
+      { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
+      { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Snapshot scope must match params." },
+      { kind: "equals_literal", provenanceKey: "parallel_edge_policy", value: "preserved_as_connection_count", description: "Parallel connections remain auditable via connection_count." },
+      { kind: "equals_param", provenanceKey: "matrix_axis_order", paramKey: "axis_order", description: "Matrix axis order must match params." },
+      { kind: "equals_param", provenanceKey: "matrix_aggregation", paramKey: "aggregation", description: "Delay aggregation must match params." }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [{
+      nestExample: "SynapseCollection delay inspection",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
+      dataShape: "ordered node axes plus sparse positive delay cells and multapse counts",
+      output: "Millisecond delay heatmap",
+      note: "Parallel-delay aggregation is always explicit."
+    }]
+  },
+  "nest.in_degree_distribution": {
+    id: "nest.in_degree_distribution",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST in-degree distribution renderer",
+    description: "Render the measured incoming-edge distribution over the complete declared target universe.",
+    deviceFamily: "get_connections",
+    scene: "degree-distribution",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "in_degree_distribution" },
+    transform: {
+      id: "synapseCollectionToInDegreeDistributionParams",
+      rawFields: ["source|sources", "target|targets"],
+      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "normalization"],
+      outputSkill: "nest.in_degree_distribution"
+    },
+    requiredInputKeys: [
+      "degrees",
+      "node_counts",
+      "values",
+      "node_count",
+      "connection_count",
+      "direction",
+      "normalization",
+      "value_units",
+      "edge_counting",
+      "zero_degree_policy",
+      "sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope"
+    ],
+    paramsSchema: InDegreeDistributionParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy",
+      "degree_direction",
+      "degree_counting",
+      "zero_degree_policy",
+      "histogram_normalization"
+    ],
+    provenanceParamConstraints: [
+      { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Degree input must be complete for its declared scope." },
+      { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
+      { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Snapshot scope must match params." },
+      { kind: "equals_literal", provenanceKey: "parallel_edge_policy", value: "count_each_connection", description: "Every multapse contributes one degree edge." },
+      { kind: "equals_param", provenanceKey: "degree_direction", paramKey: "direction", description: "Degree direction must match params." },
+      { kind: "equals_param", provenanceKey: "degree_counting", paramKey: "edge_counting", description: "Degree counting must match params." },
+      { kind: "equals_param", provenanceKey: "zero_degree_policy", paramKey: "zero_degree_policy", description: "Zero-degree policy must match params." },
+      { kind: "equals_param", provenanceKey: "histogram_normalization", paramKey: "normalization", description: "Degree normalization must match params." }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [{
+      nestExample: "Directed connectivity degree concepts",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html",
+      dataShape: "contiguous degree bins, exact node counts, and explicit zero-degree inclusion",
+      output: "In-degree count or probability distribution",
+      note: "Each SynapseCollection entry counts, including multapses."
+    }]
+  },
+  "nest.out_degree_distribution": {
+    id: "nest.out_degree_distribution",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST out-degree distribution renderer",
+    description: "Render the measured outgoing-edge distribution over the complete declared source universe.",
+    deviceFamily: "get_connections",
+    scene: "degree-distribution",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "out_degree_distribution" },
+    transform: {
+      id: "synapseCollectionToOutDegreeDistributionParams",
+      rawFields: ["source|sources", "target|targets"],
+      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope (not target-rank-local)", "normalization"],
+      outputSkill: "nest.out_degree_distribution"
+    },
+    requiredInputKeys: [
+      "degrees",
+      "node_counts",
+      "values",
+      "node_count",
+      "connection_count",
+      "direction",
+      "normalization",
+      "value_units",
+      "edge_counting",
+      "zero_degree_policy",
+      "sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope"
+    ],
+    paramsSchema: OutDegreeDistributionParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy",
+      "degree_direction",
+      "degree_counting",
+      "zero_degree_policy",
+      "histogram_normalization"
+    ],
+    provenanceParamConstraints: [
+      { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Degree input must be complete for its declared scope." },
+      { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
+      { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Snapshot scope must match params." },
+      { kind: "equals_literal", provenanceKey: "parallel_edge_policy", value: "count_each_connection", description: "Every multapse contributes one degree edge." },
+      { kind: "equals_param", provenanceKey: "degree_direction", paramKey: "direction", description: "Degree direction must match params." },
+      { kind: "equals_param", provenanceKey: "degree_counting", paramKey: "edge_counting", description: "Degree counting must match params." },
+      { kind: "equals_param", provenanceKey: "zero_degree_policy", paramKey: "zero_degree_policy", description: "Zero-degree policy must match params." },
+      { kind: "equals_param", provenanceKey: "histogram_normalization", paramKey: "normalization", description: "Degree normalization must match params." }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [{
+      nestExample: "Directed connectivity degree concepts",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html",
+      dataShape: "contiguous degree bins, exact node counts, and explicit zero-degree inclusion",
+      output: "Out-degree count or probability distribution",
+      note: "Target-rank-local GetConnections evidence is rejected for out-degree."
+    }]
+  },
+  "nest.delay_distribution": {
+    id: "nest.delay_distribution",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST synaptic-delay distribution renderer",
+    description: "Render exact half-open bins over one delay value per selected connection.",
+    deviceFamily: "get_connections",
+    scene: "delay-distribution",
+    routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "delay_distribution" },
+    transform: {
+      id: "synapseCollectionToDelayDistributionParams",
+      rawFields: ["source|sources", "target|targets", "delay|delays"],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "delayUnits='ms'",
+        "binWidthMs",
+        "windowStartMs",
+        "windowStopMs",
+        "normalization"
+      ],
+      outputSkill: "nest.delay_distribution"
+    },
+    requiredInputKeys: [
+      "bin_centers_ms",
+      "delay_counts",
+      "values",
+      "bin_width_ms",
+      "window_start_ms",
+      "window_stop_ms",
+      "normalization",
+      "value_units",
+      "delay_units",
+      "aggregation",
+      "binning",
+      "sample_policy",
+      "connection_count",
+      "snapshot_time_ms",
+      "snapshot_scope"
+    ],
+    paramsSchema: DelayDistributionParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "delay_units",
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy",
+      "bin_ms",
+      "histogram_normalization",
+      "binning_policy"
+    ],
+    provenanceParamConstraints: [
+      { kind: "equals_param", provenanceKey: "delay_units", paramKey: "delay_units", description: "Delay units must match params." },
+      { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Delay histogram input must be complete for its scope." },
+      { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
+      { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Snapshot scope must match params." },
+      { kind: "equals_literal", provenanceKey: "parallel_edge_policy", value: "count_each_connection", description: "Every selected connection contributes one delay." },
+      { kind: "equals_param", provenanceKey: "bin_ms", paramKey: "bin_width_ms", description: "Delay bin width must match params." },
+      { kind: "equals_param", provenanceKey: "histogram_normalization", paramKey: "normalization", description: "Delay normalization must match params." },
+      { kind: "equals_param", provenanceKey: "binning_policy", paramKey: "binning", description: "Delay binning policy must match params." }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [{
+      nestExample: "SynapseCollection delay inspection",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
+      dataShape: "one positive millisecond delay per selected connection in exact uniform bins",
+      output: "Delay count, probability, or probability-density histogram",
+      note: "Out-of-window delays are transform errors, never silently discarded."
+    }]
+  },
+  "nest.weight_histogram": {
+    id: "nest.weight_histogram",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST connection-weight histogram renderer",
+    description: "Render the measured weight distribution of a declared GetConnections snapshot.",
+    deviceFamily: "get_connections",
+    scene: "weight-histogram",
+    routerEligibility: {
+      bareFamilyCandidate: true,
+      dataShapeKind: "weight_distribution"
+    },
+    requiredInputKeys: [
+      "bin_centers",
+      "values",
+      "bin_width",
+      "weight_units",
+      "normalization",
+      "value_units",
+      "snapshot_time_ms"
+    ],
+    paramsSchema: WeightHistogramParamsSchema,
+    requiredProvenanceKeys: [
+      "source_ids",
+      "target_ids",
+      "synapse_model",
+      "weight_units",
+      "histogram_normalization",
+      "connection_sample_policy"
+    ],
+    provenanceParamConstraints: [
+      {
+        kind: "equals_param",
+        provenanceKey: "weight_units",
+        paramKey: "weight_units",
+        description: "Declared weight units must match params.weight_units."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "histogram_normalization",
+        paramKey: "normalization",
+        description: "Declared histogram normalization must match params.normalization."
+      }
+    ],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
+    examples: [
+      {
+        nestExample: "Plot weight matrices example / SynapseCollection snapshot",
+        sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
+        dataShape: "binned GetConnections weights at one declared simulation time",
+        output: "Connection-weight count or probability histogram",
+        note: "Use a GetConnections snapshot; weight_recorder events are update-event samples and bias distributions."
       }
     ]
   },
   "nest.spatial_2d": {
     id: "nest.spatial_2d",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST 2D spatial renderer",
     description: "Render 2D layer positions, masks, kernels and sampled projections.",
     deviceFamily: "get_position",
     scene: null,
     // no honest 2D-spatial scene yet (would violate sphere/voxel law)
+    deprecation: {
+      since: "1.6.0",
+      replacement: "nest.spatial_map_2d",
+      message: "Legacy host-only coordinate list; use nest.spatial_map_2d for identified nodes and explicit layer/MPI semantics."
+    },
+    routerEligibility: { bareFamilyCandidate: false },
     requiredInputKeys: ["positions", "coordinate_units"],
     paramsSchema: Spatial2DParamsSchema,
     requiredProvenanceKeys: ["extent", "spatial_units", "mask", "kernel"],
@@ -2233,13 +4972,80 @@ var NEST_SKILL_REGISTRY = {
       }
     ]
   },
+  "nest.spatial_map_2d": {
+    id: "nest.spatial_map_2d",
+    version: CORTEXEL_SKILL_VERSION,
+    title: "NEST measured 2D spatial map renderer",
+    description: "Render identified 2D GetPosition coordinates inside the declared layer extent with explicit periodic-boundary and MPI completeness semantics.",
+    deviceFamily: "get_position",
+    scene: "spatial-map-2d",
+    routerEligibility: {
+      bareFamilyCandidate: true,
+      dataShapeKind: "positions_2d"
+    },
+    transform: {
+      id: "getPositionToSpatialMap2DParams",
+      rawFields: ["positions", "node_ids?"],
+      requiredOptions: [
+        "nodeIds",
+        "coordinateUnits",
+        "extent",
+        "center",
+        "edgeWrap",
+        "positionScope"
+      ],
+      outputSkill: "nest.spatial_map_2d"
+    },
+    requiredInputKeys: [
+      "nodes",
+      "coordinate_units",
+      "extent",
+      "center",
+      "edge_wrap",
+      "position_scope",
+      "marker_size"
+    ],
+    paramsSchema: SpatialMap2DParamsSchema,
+    requiredProvenanceKeys: [
+      "node_ids",
+      "spatial_units",
+      "extent",
+      "position_scope"
+    ],
+    provenanceParamConstraints: [
+      {
+        kind: "equals_param",
+        provenanceKey: "spatial_units",
+        paramKey: "coordinate_units",
+        description: "Declared spatial units must match params.coordinate_units."
+      },
+      {
+        kind: "equals_param_path",
+        provenanceKey: "position_scope",
+        paramPath: "position_scope.kind",
+        description: "Declared position scope must match params.position_scope.kind."
+      }
+    ],
+    rendererRoutes: ["media.model_graph", "d3"],
+    examples: [{
+      nestExample: "Spatial layer and GetPosition",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/ref_material/pynest_api/nest.lib.hl_api_spatial.html#nest.lib.hl_api_spatial.GetPosition",
+      dataShape: "identified x/y coordinates plus layer extent, center, edge-wrap, units, and completeness scope",
+      output: "Equal-aspect measured spatial node map",
+      note: "Masks and probability kernels are separate analyses and are not invented from GetPosition."
+    }]
+  },
   "nest.spatial_3d": {
     id: "nest.spatial_3d",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST 3D spatial renderer",
     description: "Render 3D population/node positions for spatial inspection.",
     deviceFamily: "get_position",
     scene: "network-topology",
+    routerEligibility: {
+      bareFamilyCandidate: true,
+      dataShapeKind: "positions_3d"
+    },
     requiredInputKeys: ["objects", "coordinate_units"],
     paramsSchema: Spatial3DParamsSchema,
     requiredProvenanceKeys: ["extent", "spatial_units", "projection_sample_policy"],
@@ -2262,16 +5068,16 @@ var NEST_SKILL_REGISTRY = {
         nestExample: "3D spatial network with exponential/Gaussian probabilities",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/test_3d.html",
         dataShape: "node x/y/z positions, extent, sampled edges",
-        output: "Selectable 3D scene plus SVG projection fallback",
+        output: "Unit-labelled 3D positioned-node scene for host rendering",
         note: "Use 3D as inspection aid; do not imply biological geometry."
       }
     ]
   },
   "nest.plasticity_dynamics": {
     id: "nest.plasticity_dynamics",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST plasticity dynamics renderer",
-    description: "Render STDP windows, weight adaptation and short-term dynamics.",
+    description: "Render recorded synaptic-weight samples over time.",
     deviceFamily: "weight_recorder",
     scene: "stdp",
     requiredInputKeys: ["times_ms", "weights", "weight_units"],
@@ -2290,17 +5096,17 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Urbanczik-Senn / Clopath / Tsodyks short-term plasticity",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/urbanczik_synapse_example.html",
-        dataShape: "weights, u/x resources, pre/post spikes, delta_t, delta_weight",
-        output: "Weight trace, STDP window, spike protocol rugs",
-        note: "Preserve pre/post sign convention; label all plasticity parameters."
+        dataShape: "weight-recorder times_ms and weights in one declared unit",
+        output: "Measured synaptic-weight trace over time",
+        note: "This contract does not contain an STDP window or pre/post spike protocol; do not invent either."
       }
     ]
   },
   "nest.phase_plane": {
     id: "nest.phase_plane",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST phase-plane renderer",
-    description: "Render phase planes, vector fields, nullclines and trajectories.",
+    description: "Render a checked Cartesian phase-plane vector field.",
     deviceFamily: "computed",
     scene: "phase-plane",
     requiredInputKeys: [
@@ -2323,61 +5129,101 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/hh_phaseplane.html",
-        dataShape: "state variable grid, derivatives, nullcline points, trajectory",
-        output: "Vector field, nullclines, trajectory, equilibrium annotations",
-        note: "Distinguish clamped state variables from simulated dynamic ones."
+        dataShape: "state-variable axes plus flattened derivative arrays and explicit ordering",
+        output: "Unit-labelled phase-plane vector field",
+        note: "No nullcline, trajectory, or equilibrium is present in this contract; do not invent one."
       }
     ]
   },
   "nest.correlogram": {
     id: "nest.correlogram",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST correlogram / synchrony renderer",
-    description: "Render auto/cross-correlation functions for spike trains.",
-    deviceFamily: "spike_recorder",
-    scene: null,
-    // ISI-histogram scene exists but the math differs — no honest reuse
+    description: "Render a symmetric correlation_detector lag histogram with explicit pair orientation, interval policy, counting window, zero-lag handling, and statistic semantics.",
+    deviceFamily: "correlation_detector",
+    scene: "correlogram",
     requiredInputKeys: [
       "lags_ms",
-      "correlation",
-      "normalization",
-      "correlation_units"
+      "values",
+      "bin_width_ms",
+      "tau_max_ms",
+      "counting_start_ms",
+      "counting_stop_ms",
+      "pair",
+      "lag_convention",
+      "binning",
+      "zero_lag_policy",
+      "statistic"
     ],
     paramsSchema: CorrelogramParamsSchema,
     requiredProvenanceKeys: [
+      "detector_id",
+      "reference_population",
+      "target_population",
       "bin_ms",
-      "pair_labels",
       "correlation_normalization",
-      "correlation_units"
+      "correlation_units",
+      "lag_convention",
+      "binning_policy"
     ],
     provenanceParamConstraints: [
       {
         kind: "equals_param",
+        provenanceKey: "bin_ms",
+        paramKey: "bin_width_ms",
+        description: "Declared bin width must match params.bin_width_ms."
+      },
+      {
+        kind: "equals_param_path",
+        provenanceKey: "reference_population",
+        paramPath: "pair.reference_label",
+        description: "Declared reference population must match params.pair.reference_label."
+      },
+      {
+        kind: "equals_param_path",
+        provenanceKey: "target_population",
+        paramPath: "pair.target_label",
+        description: "Declared target population must match params.pair.target_label."
+      },
+      {
+        kind: "equals_param_path",
         provenanceKey: "correlation_normalization",
-        paramKey: "normalization",
-        description: "Declared normalization must match the correlogram value semantics."
+        paramPath: "statistic.kind",
+        description: "Declared normalization/statistic must match params.statistic.kind."
+      },
+      {
+        kind: "equals_param_path",
+        provenanceKey: "correlation_units",
+        paramPath: "statistic.units",
+        description: "Declared value units must match params.statistic.units."
       },
       {
         kind: "equals_param",
-        provenanceKey: "correlation_units",
-        paramKey: "correlation_units",
-        description: "Declared value units must match the correlogram y axis."
+        provenanceKey: "lag_convention",
+        paramKey: "lag_convention",
+        description: "Declared lag convention must match params.lag_convention."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "binning_policy",
+        paramKey: "binning",
+        description: "Declared bin interval policy must match params.binning."
       }
     ],
-    rendererRoutes: ["media.model_graph", "d3"],
+    rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [
       {
         nestExample: "Auto- and crosscorrelation functions for spike trains",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/cross_check_mip_corrdet.html",
-        dataShape: "lags_ms, correlation values, pair labels, bin width",
-        output: "No Cortexel scene (distinct from ISI) \u2014 route to host d3.",
-        note: "scene:null \u2014 correlogram math differs from the ISI histogram scene."
+        dataShape: "symmetric lag centers, values, bin/tau/counting-window semantics, oriented population pair, and discriminated statistic",
+        output: "Canonical correlogram distinct from ISI and other time histograms",
+        note: "Positive lag means the target population spikes after the reference population; never infer orientation from a display label."
       }
     ]
   },
   "nest.stimulus_response": {
     id: "nest.stimulus_response",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST stimulus-response protocol renderer",
     description: "Render aligned stimulus waveforms, responses, spikes and protocol epochs.",
     deviceFamily: "multimeter",
@@ -2407,7 +5253,7 @@ var NEST_SKILL_REGISTRY = {
   },
   "nest.astrocyte_dynamics": {
     id: "nest.astrocyte_dynamics",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST astrocyte Ca\xB2\u207A/IP\u2083 dynamics renderer",
     description: "Render tripartite-synapse calcium/IP3 state-variable traces.",
     deviceFamily: "multimeter",
@@ -2450,7 +5296,7 @@ var NEST_SKILL_REGISTRY = {
   },
   "nest.compartmental_dynamics": {
     id: "nest.compartmental_dynamics",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST compartmental morphology + dynamics renderer",
     description: "Render multi-compartment morphologies, receptor ports and soma/dendrite traces.",
     deviceFamily: "multimeter",
@@ -2486,7 +5332,7 @@ var NEST_SKILL_REGISTRY = {
   },
   "nest.animation_replay": {
     id: "nest.animation_replay",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "NEST state replay / animation storyboard renderer",
     description: "Render time-evolution storyboards and inspectable state replays.",
     deviceFamily: "computed",
@@ -2508,9 +5354,9 @@ var NEST_SKILL_REGISTRY = {
   },
   "corpus.knowledge_graph": {
     id: "corpus.knowledge_graph",
-    version: "1.2.0",
+    version: CORTEXEL_SKILL_VERSION,
     title: "Corpus knowledge-graph 3D renderer",
-    description: "Render a cross-paper corpus knowledge graph in 3D: paper/model/family nodes with citation, instantiation and family edges, plus advisory model-identity (same_as/variant_of) edges.",
+    description: "Render a bounded, traceable cross-paper entity multigraph: paper/model/family nodes plus identified citation, instantiation, family and advisory identity assertions. Every element carries typed source evidence; every numeric score is discriminated and explicitly uncalibrated.",
     deviceFamily: "corpus",
     scene: "knowledge-graph-3d",
     // weak: identity edges are advisory structural similarity, NOT certified
@@ -2518,23 +5364,61 @@ var NEST_SKILL_REGISTRY = {
     // This is NOT scene reuse — knowledge-graph-3d is the native scene — so the
     // disclosure is about DATA semantics, not fidelity of the renderer.
     weak: true,
-    weakDisclosure: "Advisory graph \u2014 same_as/variant_of edges are structural similarity, not certified sameness; force-layout positions and distances are schematic, not quantitative evidence.",
-    requiredInputKeys: ["nodes", "edges"],
+    weakDisclosure: "Advisory graph \u2014 every corpus-entity assertion is derived; same_as/variant_of edges are structural similarity, not certified sameness; force-layout positions and distances are schematic, not quantitative evidence.",
+    requiredInputKeys: [
+      "graph_id",
+      "graph_source",
+      "graph_snapshot_id",
+      "graph_scope",
+      "generated_at",
+      "nodes",
+      "edges"
+    ],
     paramsSchema: KnowledgeGraph3DParamsSchema,
     requiredProvenanceKeys: [
       "graph_source",
-      "node_kinds",
-      "edge_kinds",
+      "graph_snapshot_id",
+      "graph_scope",
       "identity_advisory"
+    ],
+    requiredProvenanceFlags: {
+      advisory_only: true,
+      is_paper_local_evidence: false
+    },
+    provenanceParamConstraints: [
+      {
+        kind: "equals_param",
+        provenanceKey: "graph_source",
+        paramKey: "graph_source",
+        description: "The declared graph source must match params.graph_source."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "graph_snapshot_id",
+        paramKey: "graph_snapshot_id",
+        description: "The declared immutable snapshot must match params.graph_snapshot_id."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "graph_scope",
+        paramKey: "graph_scope",
+        description: "The declared graph scope must match params.graph_scope."
+      },
+      {
+        kind: "equals_literal",
+        provenanceKey: "identity_advisory",
+        value: true,
+        description: "Corpus identity and genealogy assertions are always advisory."
+      }
     ],
     rendererRoutes: ["media.model_graph", "fiber"],
     examples: [
       {
         nestExample: "Cross-paper corpus knowledge graph (papers + models + families)",
         sourceUrl: "https://github.com/sepahead/Paper2Brain#knowledge-graph",
-        dataShape: "nodes (paper/model/family), edges (cites/same_as/variant_of/instantiates/belongs_to_family)",
-        output: "3D force-directed graph with citation-flow particles and focus labels",
-        note: "weak:true \u2014 model-identity edges are advisory and force-layout geometry is non-evidentiary."
+        dataShape: "snapshot-bound paper/model/family nodes and stable-id multigraph edges, each with typed evidence, bounded attributes, derived/advisory epistemic status and optional uncalibrated scores",
+        output: "Traceable 3D force-directed multigraph with citation-flow particles and accessible evidence detail",
+        note: "1.4 contract: every assertion is traceable; identity edges are advisory and force-layout geometry is non-evidentiary."
       }
     ]
   }
@@ -2564,6 +5448,158 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       description: "Every spike timestamp must have one sender id."
     }
   ],
+  "nest.isi_distribution": [
+    {
+      kind: "equal_length",
+      paths: ["bin_centers_ms", "values"],
+      description: "Every ISI histogram bin center must have one value."
+    },
+    {
+      kind: "monotonic_non_decreasing",
+      paths: ["bin_centers_ms"],
+      description: "ISI bin centers must be monotonically non-decreasing."
+    },
+    {
+      kind: "uniform_histogram_bins",
+      paths: ["bin_centers_ms", "bin_width_ms"],
+      absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      nonNegativeLowerEdge: true,
+      description: "ISI bins must be strictly increasing, uniformly spaced by bin_width_ms, and have a non-negative lower edge."
+    },
+    {
+      kind: "non_negative",
+      paths: ["bin_centers_ms[*]", "values[*]"],
+      description: "ISI bin centers and histogram values cannot be negative."
+    },
+    {
+      kind: "mapped_value",
+      paths: ["normalization", "value_units"],
+      allowedValues: {
+        count: "count",
+        probability: "probability",
+        probability_density: "1/ms"
+      },
+      description: "Each ISI normalization has one unambiguous value unit."
+    },
+    {
+      kind: "conditional_numeric_domain",
+      paths: ["normalization", "values[*]"],
+      numericDomains: {
+        count: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
+        probability: { min: 0, max: 1 },
+        probability_density: { min: 0 }
+      },
+      description: "ISI counts are safe integers, probabilities lie in [0,1], and density values are non-negative."
+    },
+    {
+      kind: "normalized_histogram_mass",
+      paths: ["normalization", "values", "bin_width_ms"],
+      absoluteTolerance: HISTOGRAM_MASS_TOLERANCE,
+      relativeTolerance: HISTOGRAM_MASS_TOLERANCE,
+      normalizationRules: {
+        probability: { measure: "sum", target: 1 },
+        probability_density: { measure: "density_integral", target: 1 }
+      },
+      description: "ISI probability mass must sum to one and probability density must integrate to one."
+    }
+  ],
+  "nest.psth": [
+    {
+      kind: "equal_length",
+      paths: ["bin_centers_ms", "values"],
+      description: "Every PSTH bin center must have one value."
+    },
+    {
+      kind: "monotonic_non_decreasing",
+      paths: ["bin_centers_ms"],
+      description: "PSTH bin centers must be monotonically non-decreasing."
+    },
+    {
+      kind: "uniform_histogram_bins",
+      paths: ["bin_centers_ms", "bin_width_ms"],
+      absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      description: "PSTH bins must be strictly increasing and uniformly spaced by bin_width_ms."
+    },
+    {
+      kind: "non_negative",
+      paths: ["values[*]"],
+      description: "PSTH values cannot be negative."
+    },
+    {
+      kind: "mapped_value",
+      paths: ["normalization", "value_units"],
+      allowedValues: {
+        count: "count",
+        count_per_trial: "count/trial",
+        rate_hz: "Hz"
+      },
+      description: "Each PSTH normalization has one unambiguous value unit."
+    },
+    {
+      kind: "conditional_numeric_domain",
+      paths: ["normalization", "values[*]"],
+      numericDomains: {
+        count: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
+        count_per_trial: { min: 0 },
+        rate_hz: { min: 0 }
+      },
+      description: "PSTH counts are safe integers and all normalized values are non-negative."
+    },
+    {
+      kind: "psth_derived_counts",
+      paths: ["normalization", "values", "trial_count", "bin_width_ms", "aggregation"],
+      absoluteTolerance: PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE,
+      description: "Every displayed PSTH value must recover an integer aggregate spike-event count across the selected senders and trials."
+    }
+  ],
+  "nest.population_rate": [
+    {
+      kind: "each_length_matches",
+      paths: ["series[*].spike_counts", "bin_centers_ms"],
+      description: "Every population spike-count series has one value per shared time bin."
+    },
+    {
+      kind: "each_length_matches",
+      paths: ["series[*].rates_hz", "bin_centers_ms"],
+      description: "Every population-rate series has one value per shared time bin."
+    },
+    {
+      kind: "unique_field",
+      paths: ["series"],
+      field: "id",
+      description: "Population-rate series ids must be unique."
+    },
+    {
+      kind: "ordered_interval",
+      paths: ["window_start_ms", "window_stop_ms"],
+      description: "The population-rate counting window must have positive duration."
+    },
+    {
+      kind: "uniform_bin_window",
+      paths: ["bin_centers_ms", "bin_width_ms", "window_start_ms", "window_stop_ms"],
+      absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
+      description: "Uniform left-closed/right-open bins must exactly cover the declared [window_start_ms,window_stop_ms) interval."
+    },
+    {
+      kind: "population_rate_derived_values",
+      paths: [
+        "series",
+        "bin_centers_ms",
+        "bin_width_ms",
+        "normalization",
+        "aggregation",
+        "binning"
+      ],
+      absoluteTolerance: POPULATION_RATE_ABSOLUTE_TOLERANCE,
+      relativeTolerance: POPULATION_RATE_RELATIVE_TOLERANCE,
+      description: "Every mean-per-recorded-sender rate must be recoverable from its raw integer spike count, sender denominator, and bin width."
+    }
+  ],
   "nest.rate_response": [
     {
       kind: "equal_length",
@@ -2579,8 +5615,221 @@ var PARAM_VALIDATION_CONSTRAINTS = {
   "nest.connectivity_matrix": [
     {
       kind: "equal_length",
-      paths: ["sources", "targets", "weights?"],
-      description: "Connection endpoints and optional weights are parallel arrays."
+      paths: ["sources", "targets", "weights?", "delays?"],
+      description: "Connection endpoints and optional measurement channels are parallel arrays."
+    },
+    {
+      kind: "legacy_connection_channels",
+      paths: ["weights?", "weight_units?", "delays?", "delay_units?"],
+      description: "Legacy optional measurement channels remain unit-bound and delays remain strictly positive."
+    }
+  ],
+  "nest.connection_graph": [
+    {
+      kind: "connection_graph_snapshot",
+      paths: [
+        "nodes",
+        "edges",
+        "sample_policy",
+        "source_connection_count",
+        "weight_units?",
+        "delay_units?",
+        "edge_identity"
+      ],
+      description: "Graph identity, endpoint, optional-channel, unit, and sample-count semantics remain auditable."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope"],
+      description: "Snapshot MPI rank metadata must be internally valid."
+    }
+  ],
+  "nest.adjacency_matrix": [
+    {
+      kind: "matrix_connection_counts",
+      paths: ["source_ids", "target_ids", "cells", "connection_count", "aggregation"],
+      description: "Sparse adjacency cells are unique, in-universe, positive-count entries whose counts recover the snapshot total."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope"],
+      description: "Snapshot MPI rank metadata must be internally valid."
+    }
+  ],
+  "nest.weight_matrix": [
+    {
+      kind: "matrix_connection_counts",
+      paths: ["source_ids", "target_ids", "cells", "connection_count", "aggregation"],
+      description: "Sparse weight cells are unique, in-universe, positive-count entries whose counts recover the snapshot total."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope"],
+      description: "Snapshot MPI rank metadata must be internally valid."
+    }
+  ],
+  "nest.delay_matrix": [
+    {
+      kind: "matrix_connection_counts",
+      paths: ["source_ids", "target_ids", "cells", "connection_count", "aggregation"],
+      description: "Sparse delay cells are unique, in-universe, positive-count entries whose counts recover the snapshot total."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope"],
+      description: "Snapshot MPI rank metadata must be internally valid."
+    }
+  ],
+  "nest.in_degree_distribution": [
+    {
+      kind: "degree_distribution_consistency",
+      paths: [
+        "degrees",
+        "node_counts",
+        "values",
+        "node_count",
+        "connection_count",
+        "direction",
+        "normalization",
+        "value_units",
+        "edge_counting",
+        "zero_degree_policy"
+      ],
+      absoluteTolerance: 1e-12,
+      relativeTolerance: 1e-12,
+      description: "In-degree bins, raw node counts, totals, normalization, and displayed values agree exactly."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope", "direction"],
+      description: "In-degree accepts valid complete or target-rank-local snapshot scope."
+    }
+  ],
+  "nest.out_degree_distribution": [
+    {
+      kind: "degree_distribution_consistency",
+      paths: [
+        "degrees",
+        "node_counts",
+        "values",
+        "node_count",
+        "connection_count",
+        "direction",
+        "normalization",
+        "value_units",
+        "edge_counting",
+        "zero_degree_policy"
+      ],
+      absoluteTolerance: 1e-12,
+      relativeTolerance: 1e-12,
+      description: "Out-degree bins, raw node counts, totals, normalization, and displayed values agree exactly."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope", "direction"],
+      description: "Out-degree rejects target-rank-local evidence and validates merged-rank metadata."
+    }
+  ],
+  "nest.delay_distribution": [
+    {
+      kind: "uniform_bin_window",
+      paths: ["bin_centers_ms", "bin_width_ms", "window_start_ms", "window_stop_ms"],
+      absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
+      description: "Uniform left-closed/right-open delay bins exactly cover the declared window."
+    },
+    {
+      kind: "delay_distribution_consistency",
+      paths: [
+        "bin_centers_ms",
+        "delay_counts",
+        "values",
+        "bin_width_ms",
+        "connection_count",
+        "normalization",
+        "value_units",
+        "delay_units",
+        "aggregation",
+        "binning"
+      ],
+      absoluteTolerance: HISTOGRAM_MASS_TOLERANCE,
+      relativeTolerance: HISTOGRAM_MASS_TOLERANCE,
+      description: "Raw delay counts, normalization, and displayed values recover one another."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope"],
+      description: "Snapshot MPI rank metadata must be internally valid."
+    }
+  ],
+  "nest.spatial_map_2d": [
+    {
+      kind: "spatial_extent_bounds",
+      paths: ["nodes", "extent", "center"],
+      absoluteTolerance: 0,
+      relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: SPATIAL_BOUNDS_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
+      description: "Every identified 2D node lies within the declared center \xB1 extent/2 bounds."
+    },
+    {
+      kind: "scope_compatibility",
+      paths: ["position_scope"],
+      description: "Position MPI rank metadata must be internally valid."
+    }
+  ],
+  "nest.weight_histogram": [
+    {
+      kind: "equal_length",
+      paths: ["bin_centers", "values"],
+      description: "Every weight histogram bin center must have one value."
+    },
+    {
+      kind: "monotonic_non_decreasing",
+      paths: ["bin_centers"],
+      description: "Weight histogram bin centers must be monotonically non-decreasing."
+    },
+    {
+      kind: "uniform_histogram_bins",
+      paths: ["bin_centers", "bin_width"],
+      absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      description: "Weight histogram bins must be strictly increasing and uniformly spaced by bin_width."
+    },
+    {
+      kind: "non_negative",
+      paths: ["values[*]"],
+      description: "Weight histogram values cannot be negative."
+    },
+    {
+      kind: "mapped_value",
+      paths: ["normalization", "value_units"],
+      allowedValues: {
+        count: "count",
+        probability: "probability"
+      },
+      description: "Each weight histogram normalization has one unambiguous value unit."
+    },
+    {
+      kind: "conditional_numeric_domain",
+      paths: ["normalization", "values[*]"],
+      numericDomains: {
+        count: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
+        probability: { min: 0, max: 1 }
+      },
+      description: "Weight counts are safe integers and probabilities lie in [0,1]."
+    },
+    {
+      kind: "normalized_histogram_mass",
+      paths: ["normalization", "values", "bin_width"],
+      absoluteTolerance: HISTOGRAM_MASS_TOLERANCE,
+      relativeTolerance: HISTOGRAM_MASS_TOLERANCE,
+      normalizationRules: {
+        probability: { measure: "sum", target: 1 }
+      },
+      description: "Weight-histogram probability mass must sum to one."
     }
   ],
   "nest.plasticity_dynamics": [
@@ -2632,35 +5881,31 @@ var PARAM_VALIDATION_CONSTRAINTS = {
   "nest.correlogram": [
     {
       kind: "equal_length",
-      paths: ["lags_ms", "correlation"],
-      description: "Every lag must have one correlation value."
+      paths: ["lags_ms", "values"],
+      description: "Every lag must have one correlogram value."
     },
     {
-      kind: "monotonic_non_decreasing",
-      paths: ["lags_ms"],
-      description: "Correlogram lags must be monotonically non-decreasing."
+      kind: "symmetric_lag_axis",
+      paths: ["lags_ms", "bin_width_ms", "tau_max_ms"],
+      absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      description: "Correlogram lag centers must be strictly increasing, uniform, odd, zero-centered, symmetric, and span [-tau_max_ms,+tau_max_ms]."
     },
     {
-      kind: "mapped_value",
-      paths: ["normalization", "correlation_units"],
-      allowedValues: {
-        pearson_coefficient: "1",
-        raw_pair_count: "count",
-        count_per_bin: "count/bin",
-        rate_hz: "Hz"
-      },
-      description: "Each correlogram normalization has one unambiguous y-axis unit."
+      kind: "ordered_interval",
+      paths: ["counting_start_ms", "counting_stop_ms"],
+      description: "The correlogram counting window must have positive duration."
     },
     {
       kind: "conditional_numeric_domain",
-      paths: ["normalization", "correlation[*]"],
+      paths: ["statistic.kind", "values[*]"],
       numericDomains: {
-        pearson_coefficient: { min: -1, max: 1 },
         raw_pair_count: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
-        count_per_bin: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
-        rate_hz: { min: 0 }
+        weighted_pair_sum: { min: -34028234663852886e22, max: 34028234663852886e22 },
+        pair_rate_hz: { min: 0, max: 34028234663852886e22 },
+        pearson_coefficient: { min: -1, max: 1 }
       },
-      description: "Correlogram values must obey the numeric domain implied by their normalization."
+      description: "Correlogram values must obey the numeric domain implied by their discriminated statistic."
     }
   ],
   "nest.stimulus_response": [
@@ -2741,10 +5986,16 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       description: "Node ids must be unique."
     },
     {
-      kind: "unique_tuple",
-      paths: ["edges[*].source", "edges[*].target", "edges[*].kind"],
-      symmetricKinds: ["same_as"],
-      description: "Duplicate source/target/kind relationships are not allowed."
+      kind: "unique_field",
+      paths: ["edges"],
+      field: "id",
+      description: "Edge assertion ids must be unique; parallel assertions remain distinct by id."
+    },
+    {
+      kind: "max_parallel_edges",
+      paths: ["edges"],
+      max: KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair,
+      description: "At most nine identified assertions may connect one unordered node pair."
     },
     {
       kind: "references_exist",
@@ -2755,6 +6006,84 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       kind: "no_self_loops",
       paths: ["edges[*].source", "edges[*].target"],
       description: "Self-loop edges are not renderable by this scene."
+    },
+    {
+      kind: "property_count",
+      paths: ["nodes[*].attributes"],
+      max: KNOWLEDGE_GRAPH_LIMITS.maxAttributes,
+      description: "Node attribute maps are bounded."
+    },
+    {
+      kind: "property_count",
+      paths: ["edges[*].attributes"],
+      max: KNOWLEDGE_GRAPH_LIMITS.maxAttributes,
+      description: "Edge attribute maps are bounded."
+    },
+    {
+      kind: "each_unique_field",
+      paths: ["nodes[*].evidence"],
+      field: "evidence_id",
+      description: "Evidence ids must be unique within each node evidence bundle."
+    },
+    {
+      kind: "each_contains_field_value",
+      paths: ["nodes[*].evidence"],
+      field: "kind",
+      allowedFieldValues: [
+        "graph_snapshot_record",
+        "citation",
+        "external_source"
+      ],
+      description: "Every node evidence bundle must contain a direct source anchor; graph_node references may only supplement it."
+    },
+    {
+      kind: "each_unique_field",
+      paths: ["edges[*].evidence"],
+      field: "evidence_id",
+      description: "Evidence ids must be unique within each edge evidence bundle."
+    },
+    {
+      kind: "each_contains_field_value",
+      paths: ["edges[*].evidence"],
+      field: "kind",
+      allowedFieldValues: [
+        "graph_snapshot_record",
+        "citation",
+        "external_source"
+      ],
+      description: "Every edge evidence bundle must contain a direct source anchor; graph_node references may only supplement it."
+    },
+    {
+      kind: "references_exist",
+      paths: ["nodes[*].evidence[*].node_id?", "nodes[*].id"],
+      description: "Every graph_node evidence reference on a node must resolve."
+    },
+    {
+      kind: "references_exist",
+      paths: ["edges[*].evidence[*].node_id?", "nodes[*].id"],
+      description: "Every graph_node evidence reference on an edge must resolve."
+    },
+    {
+      kind: "node_score_kind",
+      paths: ["nodes"],
+      allowedScoreKinds: {
+        paper: ["extraction_confidence"],
+        model: ["extraction_confidence"],
+        family: ["extraction_confidence"]
+      },
+      description: "An optional node score may only report extraction confidence; other quantities lack a node-kind context."
+    },
+    {
+      kind: "edge_score_kind",
+      paths: ["edges"],
+      allowedScoreKinds: {
+        cites: ["citation_resolution_confidence"],
+        same_as: ["structural_similarity"],
+        variant_of: ["structural_similarity"],
+        instantiates: [],
+        belongs_to_family: []
+      },
+      description: "An optional edge score must state the quantity that edge kind actually computes."
     },
     {
       kind: "endpoint_kinds",
@@ -2784,6 +6113,15 @@ for (const constraints of Object.values(PARAM_VALIDATION_CONSTRAINTS)) {
       Object.values(constraint.numericDomains).forEach(Object.freeze);
       Object.freeze(constraint.numericDomains);
     }
+    if (constraint.normalizationRules) {
+      Object.values(constraint.normalizationRules).forEach(Object.freeze);
+      Object.freeze(constraint.normalizationRules);
+    }
+    if (constraint.allowedScoreKinds) {
+      Object.values(constraint.allowedScoreKinds).forEach(Object.freeze);
+      Object.freeze(constraint.allowedScoreKinds);
+    }
+    if (constraint.allowedFieldValues) Object.freeze(constraint.allowedFieldValues);
     Object.freeze(constraint);
   });
   if (constraints) Object.freeze(constraints);
@@ -2796,6 +6134,14 @@ Object.setPrototypeOf(NEST_SKILL_REGISTRY, null);
 for (const contract of Object.values(NEST_SKILL_REGISTRY)) {
   Object.freeze(contract.requiredInputKeys);
   Object.freeze(contract.requiredProvenanceKeys);
+  if (contract.requiredProvenanceFlags) Object.freeze(contract.requiredProvenanceFlags);
+  if (contract.deprecation) Object.freeze(contract.deprecation);
+  if (contract.routerEligibility) Object.freeze(contract.routerEligibility);
+  if (contract.transform) {
+    Object.freeze(contract.transform.rawFields);
+    Object.freeze(contract.transform.requiredOptions);
+    Object.freeze(contract.transform);
+  }
   contract.provenanceParamConstraints?.forEach(Object.freeze);
   if (contract.provenanceParamConstraints) {
     Object.freeze(contract.provenanceParamConstraints);
@@ -3084,14 +6430,34 @@ var PROVENANCE_KEYS = Object.freeze([
   "model_context",
   "fixed_parameters",
   "bin_ms",
-  "pair_labels",
+  "histogram_normalization",
+  "interval_scope",
+  "event_alignment",
+  "psth_aggregation",
+  "connection_sample_policy",
+  "snapshot_time_ms",
+  "snapshot_scope",
+  "parallel_edge_policy",
+  "matrix_axis_order",
+  "matrix_aggregation",
+  "delay_units",
+  "degree_direction",
+  "degree_counting",
+  "zero_degree_policy",
+  "node_ids",
+  "position_scope",
+  "detector_id",
+  "reference_population",
+  "target_population",
   "correlation_normalization",
   "correlation_units",
+  "lag_convention",
+  "binning_policy",
   "stim_units",
   "rate_normalization",
   "graph_source",
-  "node_kinds",
-  "edge_kinds",
+  "graph_snapshot_id",
+  "graph_scope",
   "identity_advisory"
 ]);
 var ProvenanceKeyEnum = import_zod4.z.enum(PROVENANCE_KEYS);
@@ -3128,28 +6494,53 @@ var PROVENANCE_KEY_LABELS = Object.freeze({
   model_context: "phase-plane model context",
   fixed_parameters: "phase-plane fixed parameters",
   bin_ms: "bin width",
-  pair_labels: "pair labels",
+  histogram_normalization: "histogram normalization",
+  interval_scope: "inter-spike interval scope",
+  event_alignment: "event alignment",
+  psth_aggregation: "PSTH sender/trial aggregation",
+  connection_sample_policy: "connection sample policy",
+  snapshot_time_ms: "connection snapshot time in ms",
+  snapshot_scope: "connection snapshot completeness / MPI scope",
+  parallel_edge_policy: "parallel-edge handling policy",
+  matrix_axis_order: "matrix source/target axis order",
+  matrix_aggregation: "parallel-connection matrix aggregation",
+  delay_units: "synaptic delay units",
+  degree_direction: "directed degree orientation",
+  degree_counting: "degree edge-counting policy",
+  zero_degree_policy: "zero-degree node inclusion policy",
+  node_ids: "spatial node ids",
+  position_scope: "spatial position completeness / MPI scope",
+  detector_id: "correlation_detector id",
+  reference_population: "correlogram reference population",
+  target_population: "correlogram target population",
   correlation_normalization: "correlogram normalization",
   correlation_units: "correlogram value units",
+  lag_convention: "correlogram lag convention",
+  binning_policy: "bin interval policy",
   stim_units: "stimulus units",
   rate_normalization: "rate normalization",
   graph_source: "graph source",
-  node_kinds: "node kinds",
-  edge_kinds: "edge kinds",
+  graph_snapshot_id: "immutable graph snapshot id",
+  graph_scope: "graph scope",
   identity_advisory: "model-identity advisory (structural similarity, not certified sameness)"
 });
 function isProvenanceKey(value) {
   return typeof value === "string" && PROVENANCE_KEYS.includes(value);
 }
 var PROVENANCE_PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: "1",
+  version: "2",
   evaluationOrder: Object.freeze([
     "apply provenanceValueConstraints normalization",
     "validate every present known provenance value",
     "check required provenance-key presence",
     "evaluate provenanceParamConstraints in listed order"
   ]),
-  kinds: Object.freeze(["equals_param", "equals_literal"])
+  kinds: Object.freeze(["equals_param", "equals_param_path", "equals_literal"]),
+  semantics: Object.freeze({
+    equals_param: "declared value must equal one checked top-level params property under Object.is",
+    equals_param_path: "declared value must equal the checked scalar reached through a dot-separated sequence of safe own data-property names under Object.is",
+    equals_literal: "declared value must equal the contract literal under Object.is"
+  })
 });
 var PROVENANCE_VALUE_CONSTRAINTS = (() => {
   const constraints = /* @__PURE__ */ Object.create(null);
@@ -3159,14 +6550,14 @@ var PROVENANCE_VALUE_CONSTRAINTS = (() => {
   for (const key of ["sampling_interval", "bin_ms", "frame_rate"]) {
     constraints[key] = { kind: "positive_finite_number" };
   }
-  for (const key of ["device_id", "recorder_id"]) {
+  constraints.snapshot_time_ms = { kind: "nonnegative_finite_number" };
+  for (const key of ["device_id", "recorder_id", "detector_id"]) {
     constraints[key] = {
       kind: "nonnegative_safe_integer_or_nonblank_string",
       normalize: "trim"
     };
   }
   constraints.identity_advisory = { kind: "literal_true" };
-  constraints.edge_kinds = { kind: "string", allowEmpty: true };
   for (const constraint of Object.values(constraints)) Object.freeze(constraint);
   return Object.freeze(constraints);
 })();
@@ -3175,6 +6566,8 @@ function declaredProvenanceValueError(key, value) {
   switch (constraint.kind) {
     case "positive_finite_number":
       return typeof value === "number" && Number.isFinite(value) && value > 0 ? null : `${key} must be a positive finite number`;
+    case "nonnegative_finite_number":
+      return typeof value === "number" && Number.isFinite(value) && value >= 0 && !Object.is(value, -0) ? null : `${key} must be a non-negative finite number`;
     case "literal_true":
       return value === true ? null : "identity_advisory must be literal true (model identity is advisory)";
     case "nonnegative_safe_integer_or_nonblank_string":
@@ -3211,11 +6604,23 @@ function provenanceParamConstraintError(constraint, params, declared) {
   if (constraint.kind === "equals_literal") {
     return Object.is(actual, constraint.value) ? null : `${constraint.provenanceKey} must equal ${JSON.stringify(constraint.value)}`;
   }
-  if (!Object.hasOwn(params, constraint.paramKey)) {
-    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramKey} is absent`;
+  const paramPath = constraint.kind === "equals_param_path" ? constraint.paramPath : constraint.paramKey;
+  const segments = paramPath.split(".");
+  if (segments.length === 0 || segments.some((segment) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(segment) || segment === "__proto__" || segment === "prototype" || segment === "constructor")) {
+    return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is not a safe parameter path`;
   }
-  const expected = params[constraint.paramKey];
-  return Object.is(actual, expected) ? null : `${constraint.provenanceKey} (${JSON.stringify(actual)}) must match params.${constraint.paramKey} (${JSON.stringify(expected)})`;
+  let expected = params;
+  for (const segment of segments) {
+    if (expected === null || typeof expected !== "object" || Array.isArray(expected) || !Object.hasOwn(expected, segment)) {
+      return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is absent`;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(expected, segment);
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is not an enumerable data property`;
+    }
+    expected = descriptor.value;
+  }
+  return Object.is(actual, expected) ? null : `${constraint.provenanceKey} (${JSON.stringify(actual)}) must match params.${paramPath} (${JSON.stringify(expected)})`;
 }
 
 // core/skills/paramPreflight.ts
@@ -3224,9 +6629,162 @@ var MAX_SAMPLES = PARAM_LIMITS.maxSamples;
 var ALLOWED_PARAM_FIELDS = Object.freeze({
   "nest.voltage_trace": ["times_ms", "series", "series_labels", "units"],
   "nest.spike_raster": ["times_ms", "senders"],
+  "nest.isi_distribution": [
+    "bin_centers_ms",
+    "values",
+    "bin_width_ms",
+    "normalization",
+    "value_units",
+    "interval_scope"
+  ],
+  "nest.psth": [
+    "bin_centers_ms",
+    "values",
+    "bin_width_ms",
+    "normalization",
+    "value_units",
+    "trial_count",
+    "alignment_event",
+    "aggregation"
+  ],
+  "nest.population_rate": [
+    "bin_centers_ms",
+    "bin_width_ms",
+    "window_start_ms",
+    "window_stop_ms",
+    "series",
+    "normalization",
+    "aggregation",
+    "binning"
+  ],
   "nest.rate_response": ["stimulus_amplitudes", "rates_hz", "stimulus_units"],
-  "nest.connectivity_matrix": ["sources", "targets", "weights"],
+  "nest.connectivity_matrix": [
+    "sources",
+    "targets",
+    "weights",
+    "delays",
+    "weight_units",
+    "delay_units"
+  ],
+  "nest.connection_graph": [
+    "nodes",
+    "edges",
+    "weight_units",
+    "delay_units",
+    "layout",
+    "parallel_edges",
+    "self_connections",
+    "snapshot_time_ms",
+    "snapshot_scope",
+    "sample_policy",
+    "source_connection_count",
+    "edge_identity"
+  ],
+  "nest.adjacency_matrix": [
+    "source_ids",
+    "target_ids",
+    "cells",
+    "axis_order",
+    "absent_cell",
+    "sample_policy",
+    "connection_count",
+    "snapshot_time_ms",
+    "snapshot_scope",
+    "display",
+    "aggregation"
+  ],
+  "nest.weight_matrix": [
+    "source_ids",
+    "target_ids",
+    "cells",
+    "weight_units",
+    "aggregation",
+    "axis_order",
+    "absent_cell",
+    "sample_policy",
+    "connection_count",
+    "snapshot_time_ms",
+    "snapshot_scope"
+  ],
+  "nest.delay_matrix": [
+    "source_ids",
+    "target_ids",
+    "cells",
+    "delay_units",
+    "aggregation",
+    "axis_order",
+    "absent_cell",
+    "sample_policy",
+    "connection_count",
+    "snapshot_time_ms",
+    "snapshot_scope"
+  ],
+  "nest.in_degree_distribution": [
+    "degrees",
+    "node_counts",
+    "values",
+    "node_count",
+    "connection_count",
+    "direction",
+    "normalization",
+    "value_units",
+    "edge_counting",
+    "zero_degree_policy",
+    "sample_policy",
+    "snapshot_time_ms",
+    "snapshot_scope"
+  ],
+  "nest.out_degree_distribution": [
+    "degrees",
+    "node_counts",
+    "values",
+    "node_count",
+    "connection_count",
+    "direction",
+    "normalization",
+    "value_units",
+    "edge_counting",
+    "zero_degree_policy",
+    "sample_policy",
+    "snapshot_time_ms",
+    "snapshot_scope"
+  ],
+  "nest.delay_distribution": [
+    "bin_centers_ms",
+    "delay_counts",
+    "values",
+    "bin_width_ms",
+    "window_start_ms",
+    "window_stop_ms",
+    "normalization",
+    "value_units",
+    "delay_units",
+    "aggregation",
+    "binning",
+    "sample_policy",
+    "connection_count",
+    "snapshot_time_ms",
+    "snapshot_scope"
+  ],
+  "nest.weight_histogram": [
+    "bin_centers",
+    "values",
+    "bin_width",
+    "weight_units",
+    "normalization",
+    "value_units",
+    "snapshot_time_ms"
+  ],
   "nest.spatial_2d": ["positions", "coordinate_units"],
+  "nest.spatial_map_2d": [
+    "nodes",
+    "coordinate_units",
+    "extent",
+    "center",
+    "edge_wrap",
+    "position_scope",
+    "marker_size"
+  ],
   "nest.spatial_3d": ["objects", "coordinate_units"],
   "nest.plasticity_dynamics": ["times_ms", "weights", "weight_units"],
   "nest.phase_plane": [
@@ -3237,12 +6795,32 @@ var ALLOWED_PARAM_FIELDS = Object.freeze({
     "axis_order",
     "flattening"
   ],
-  "nest.correlogram": ["lags_ms", "correlation", "normalization", "correlation_units"],
+  "nest.correlogram": [
+    "lags_ms",
+    "values",
+    "bin_width_ms",
+    "tau_max_ms",
+    "counting_start_ms",
+    "counting_stop_ms",
+    "pair",
+    "lag_convention",
+    "binning",
+    "zero_lag_policy",
+    "statistic"
+  ],
   "nest.stimulus_response": ["times_ms", "stimulus", "response"],
   "nest.astrocyte_dynamics": ["times_ms", "ca_trace", "units"],
   "nest.compartmental_dynamics": ["times_ms", "compartments"],
   "nest.animation_replay": ["frames"],
-  "corpus.knowledge_graph": ["nodes", "edges"]
+  "corpus.knowledge_graph": [
+    "graph_id",
+    "graph_source",
+    "graph_snapshot_id",
+    "graph_scope",
+    "generated_at",
+    "nodes",
+    "edges"
+  ]
 });
 var INVOCATION_FIELDS = /* @__PURE__ */ new Set([
   "scene",
@@ -3305,6 +6883,78 @@ function preflightLargeSkillParams(skillId, params) {
   switch (skillId) {
     case "nest.spike_raster":
       return numericFields(params, [time(), idField("senders")]);
+    case "nest.isi_distribution": {
+      const issue = numericFields(params, [
+        time("bin_centers_ms"),
+        gpuField("values")
+      ]);
+      if (issue) return issue;
+      for (const [field, message] of [
+        ["bin_centers_ms", "inter-spike interval bin centers cannot be negative"],
+        ["values", "histogram values cannot be negative"]
+      ]) {
+        const values = params[field];
+        if (Array.isArray(values)) {
+          const index = values.findIndex(
+            (value) => typeof value === "number" && value < 0
+          );
+          if (index >= 0) return { path: `${field}.${index}`, message };
+        }
+      }
+      return null;
+    }
+    case "nest.psth": {
+      const issue = numericFields(params, [
+        time("bin_centers_ms"),
+        gpuField("values")
+      ]);
+      if (issue) return issue;
+      const values = params.values;
+      if (Array.isArray(values)) {
+        const index = values.findIndex(
+          (value) => typeof value === "number" && value < 0
+        );
+        if (index >= 0) {
+          return { path: `values.${index}`, message: "histogram values cannot be negative" };
+        }
+      }
+      return null;
+    }
+    case "nest.population_rate": {
+      const issue = numericFields(params, [time("bin_centers_ms")]);
+      if (issue) return issue;
+      if (!Array.isArray(params.series)) return null;
+      const outer = largeArray(
+        params.series,
+        "series",
+        (series) => {
+          const item = record(series);
+          return !!item && Object.keys(item).every((key) => ["id", "label", "recorded_sender_count", "spike_counts", "rates_hz"].includes(key)) && boundedText(item.id, 120) && boundedText(item.label, 240) && typeof item.recorded_sender_count === "number" && Number.isSafeInteger(item.recorded_sender_count) && item.recorded_sender_count > 0 && Array.isArray(item.spike_counts) && item.spike_counts.length >= 1 && Array.isArray(item.rates_hz) && item.rates_hz.length >= 1;
+        },
+        "a closed population-rate series with id, label, sender count, spike counts, and rates",
+        { max: PARAM_LIMITS.maxSeries }
+      );
+      if (outer) return outer;
+      for (let index = 0; index < params.series.length; index++) {
+        const item = record(params.series[index]);
+        if (!item) continue;
+        const counts = largeArray(
+          item.spike_counts,
+          `series.${index}.spike_counts`,
+          (value) => id(value),
+          "a non-negative safe-integer spike count"
+        );
+        if (counts) return counts;
+        const rates = largeArray(
+          item.rates_hz,
+          `series.${index}.rates_hz`,
+          (value) => gpu(value) && value >= 0,
+          "a non-negative finite Float32-range rate"
+        );
+        if (rates) return rates;
+      }
+      return null;
+    }
     case "nest.rate_response": {
       const issue = numericFields(params, [
         gpuField("stimulus_amplitudes"),
@@ -3322,8 +6972,78 @@ function preflightLargeSkillParams(skillId, params) {
       return numericFields(params, [
         idField("sources"),
         idField("targets"),
-        gpuField("weights")
+        gpuField("weights"),
+        gpuField("delays")
       ]);
+    case "nest.connection_graph": {
+      const nodes = largeArray(
+        params.nodes,
+        "nodes",
+        (value) => {
+          const node = record(value);
+          return !!node && id(node.id) && boundedText(node.label, 120);
+        },
+        "a closed graph node with a safe id and bounded label",
+        { max: PARAM_LIMITS.maxTopologyNodes }
+      );
+      if (nodes) return nodes;
+      return largeArray(
+        params.edges,
+        "edges",
+        (value) => {
+          const edge = record(value);
+          return !!edge && boundedText(edge.id, 240) && id(edge.source) && id(edge.target) && (edge.weight === void 0 || gpu(edge.weight)) && (edge.delay_ms === void 0 || gpu(edge.delay_ms) && edge.delay_ms > 0);
+        },
+        "a closed graph edge with safe endpoints and optional finite measurements",
+        { max: PARAM_LIMITS.maxTopologyEdges }
+      );
+    }
+    case "nest.adjacency_matrix":
+    case "nest.weight_matrix":
+    case "nest.delay_matrix": {
+      const axes = numericFields(params, [idField("source_ids"), idField("target_ids")]);
+      if (axes) return axes;
+      return largeArray(
+        params.cells,
+        "cells",
+        (value) => {
+          const cell = record(value);
+          return !!cell && id(cell.source_id) && id(cell.target_id) && id(cell.connection_count) && cell.connection_count > 0 && (cell.value === void 0 || gpu(cell.value));
+        },
+        "a sparse matrix cell with safe endpoint ids and positive connection count",
+        { max: PARAM_LIMITS.maxSamples }
+      );
+    }
+    case "nest.in_degree_distribution":
+    case "nest.out_degree_distribution":
+      return numericFields(params, [
+        idField("degrees"),
+        idField("node_counts"),
+        gpuField("values")
+      ]);
+    case "nest.delay_distribution":
+      return numericFields(params, [
+        time("bin_centers_ms"),
+        idField("delay_counts"),
+        gpuField("values")
+      ]);
+    case "nest.weight_histogram": {
+      const issue = numericFields(params, [
+        gpuField("bin_centers"),
+        gpuField("values")
+      ]);
+      if (issue) return issue;
+      const values = params.values;
+      if (Array.isArray(values)) {
+        const index = values.findIndex(
+          (value) => typeof value === "number" && value < 0
+        );
+        if (index >= 0) {
+          return { path: `values.${index}`, message: "histogram values cannot be negative" };
+        }
+      }
+      return null;
+    }
     case "nest.plasticity_dynamics":
       return numericFields(params, [time(), gpuField("weights")]);
     case "nest.astrocyte_dynamics": {
@@ -3339,7 +7059,7 @@ function preflightLargeSkillParams(skillId, params) {
       return null;
     }
     case "nest.correlogram":
-      return numericFields(params, [time("lags_ms"), gpuField("correlation")]);
+      return numericFields(params, [time("lags_ms"), gpuField("values")]);
     case "nest.stimulus_response":
       return numericFields(params, [
         time(),
@@ -3402,6 +7122,17 @@ function preflightLargeSkillParams(skillId, params) {
         "an exact [x,y] Float32-range tuple",
         { max: PARAM_LIMITS.maxSpatialObjects }
       );
+    case "nest.spatial_map_2d":
+      return largeArray(
+        params.nodes,
+        "nodes",
+        (value) => {
+          const node = record(value);
+          return !!node && id(node.id) && boundedText(node.label, 120) && gpu(node.x) && gpu(node.y);
+        },
+        "an identified 2D node with finite coordinates",
+        { max: PARAM_LIMITS.maxSpatialObjects }
+      );
     case "nest.spatial_3d":
       return largeArray(
         params.objects,
@@ -3459,31 +7190,58 @@ function preflightLargeSkillParams(skillId, params) {
         { max: 1e4 }
       );
     case "corpus.knowledge_graph": {
-      const nodeKinds = /* @__PURE__ */ new Set(["paper", "model", "family"]);
-      const edgeKinds = /* @__PURE__ */ new Set([
-        "cites",
-        "same_as",
-        "variant_of",
-        "instantiates",
-        "belongs_to_family"
-      ]);
+      const nodeKinds = new Set(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS);
+      const edgeKinds = new Set(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS);
+      const attributesAreBounded = (value) => {
+        const attributes = record(value);
+        if (!attributes || Object.keys(attributes).length > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
+          return false;
+        }
+        return Object.values(attributes).every(
+          (attribute) => !Array.isArray(attribute) || attribute.length <= KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems
+        );
+      };
+      const evidenceIsBounded = (value) => Array.isArray(value) && value.length >= 1 && value.length <= KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement;
+      const epistemicIsDerived = (value) => {
+        const epistemic = record(value);
+        return !!epistemic && epistemic.status === "derived_advisory" && epistemic.advisory_only === true && epistemic.is_paper_local_evidence === false && epistemic.calibrated_posterior === false;
+      };
       return largeArray(
         params.nodes,
         "nodes",
         (node) => {
           const item = record(node);
-          return !!item && Object.keys(item).every((key) => ["id", "kind", "label"].includes(key)) && Object.keys(item).length === 3 && boundedText(item.id, 120) && boundedText(item.label, 240) && nodeKinds.has(item.kind);
+          return !!item && Object.keys(item).every((key) => [
+            "id",
+            "kind",
+            "label",
+            "detail",
+            "attributes",
+            "epistemic",
+            "evidence",
+            "uncalibrated_score"
+          ].includes(key)) && boundedText(item.id, 120) && boundedText(item.label, 240) && (item.detail === void 0 || boundedText(item.detail, KNOWLEDGE_GRAPH_LIMITS.maxDetailLength)) && attributesAreBounded(item.attributes) && epistemicIsDerived(item.epistemic) && evidenceIsBounded(item.evidence) && nodeKinds.has(item.kind);
         },
-        "a bounded paper/model/family node",
+        "a bounded, evidence-carrying paper/model/family node",
         { max: PARAM_LIMITS.maxGraphNodes }
       ) ?? largeArray(
         params.edges,
         "edges",
         (edge) => {
           const item = record(edge);
-          return !!item && Object.keys(item).every((key) => ["source", "target", "kind"].includes(key)) && Object.keys(item).length === 3 && boundedText(item.source, 120) && boundedText(item.target, 120) && edgeKinds.has(item.kind);
+          return !!item && Object.keys(item).every((key) => [
+            "id",
+            "source",
+            "target",
+            "kind",
+            "label",
+            "attributes",
+            "epistemic",
+            "evidence",
+            "uncalibrated_score"
+          ].includes(key)) && boundedText(item.id, 320) && boundedText(item.source, 120) && boundedText(item.target, 120) && boundedText(item.label, 160) && attributesAreBounded(item.attributes) && epistemicIsDerived(item.epistemic) && evidenceIsBounded(item.evidence) && edgeKinds.has(item.kind);
         },
-        "a bounded knowledge-graph edge",
+        "a bounded, identified, evidence-carrying knowledge-graph edge",
         { min: 0, max: PARAM_LIMITS.maxGraphEdges }
       );
     }
@@ -3581,17 +7339,84 @@ function preflightRawSkillParams(skillId, params) {
     }
     return null;
   };
+  const graphElementBudgets = (key, max) => {
+    const collection = ownValue(key);
+    const outerIssue = tooLongValue(collection, key, max);
+    if (outerIssue || !Array.isArray(collection)) return outerIssue;
+    const length = arrayLength(collection);
+    if (length === void 0 || length > max) return null;
+    for (let index = 0; index < length; index++) {
+      const itemDescriptor = Object.getOwnPropertyDescriptor(collection, String(index));
+      if (!itemDescriptor || !("value" in itemDescriptor) || !itemDescriptor.enumerable) {
+        continue;
+      }
+      const item = itemDescriptor.value;
+      if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+      const attributesDescriptor = Object.getOwnPropertyDescriptor(item, "attributes");
+      const attributes = attributesDescriptor && "value" in attributesDescriptor && attributesDescriptor.enumerable ? attributesDescriptor.value : void 0;
+      if (attributes !== null && typeof attributes === "object" && !Array.isArray(attributes)) {
+        let attributeCount = 0;
+        for (const attributeKey in attributes) {
+          if (!Object.hasOwn(attributes, attributeKey)) continue;
+          attributeCount += 1;
+          if (attributeCount > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
+            return {
+              path: `${key}.${index}.attributes`,
+              message: `attributes may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxAttributes} properties`
+            };
+          }
+          const attributeDescriptor = Object.getOwnPropertyDescriptor(attributes, attributeKey);
+          if (!attributeDescriptor || !("value" in attributeDescriptor) || !attributeDescriptor.enumerable) continue;
+          const valueIssue = tooLongValue(
+            attributeDescriptor.value,
+            `${key}.${index}.attributes.${attributeKey}`,
+            KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems
+          );
+          if (valueIssue) return valueIssue;
+        }
+      }
+      const evidenceDescriptor = Object.getOwnPropertyDescriptor(item, "evidence");
+      const evidence = evidenceDescriptor && "value" in evidenceDescriptor && evidenceDescriptor.enumerable ? evidenceDescriptor.value : void 0;
+      const evidenceIssue = tooLongValue(
+        evidence,
+        `${key}.${index}.evidence`,
+        KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement
+      );
+      if (evidenceIssue) return evidenceIssue;
+    }
+    return null;
+  };
   switch (skillId) {
     case "nest.voltage_trace":
       return directArrays(["times_ms"]) ?? nestedArrays("series", PARAM_LIMITS.maxSeries) ?? tooLong("series_labels", PARAM_LIMITS.maxSeries);
     case "nest.spike_raster":
       return directArrays(["times_ms", "senders"]);
+    case "nest.isi_distribution":
+    case "nest.psth":
+      return directArrays(["bin_centers_ms", "values"]);
+    case "nest.population_rate":
+      return directArrays(["bin_centers_ms"]) ?? nestedArrays("series", PARAM_LIMITS.maxSeries, "spike_counts") ?? nestedArrays("series", PARAM_LIMITS.maxSeries, "rates_hz");
     case "nest.rate_response":
       return directArrays(["stimulus_amplitudes", "rates_hz"]);
     case "nest.connectivity_matrix":
-      return directArrays(["sources", "targets", "weights"]);
+      return directArrays(["sources", "targets", "weights", "delays"]);
+    case "nest.connection_graph":
+      return tooLong("nodes", PARAM_LIMITS.maxTopologyNodes) ?? tooLong("edges", PARAM_LIMITS.maxTopologyEdges);
+    case "nest.adjacency_matrix":
+    case "nest.weight_matrix":
+    case "nest.delay_matrix":
+      return directArrays(["source_ids", "target_ids"]) ?? tooLong("cells", PARAM_LIMITS.maxSamples);
+    case "nest.in_degree_distribution":
+    case "nest.out_degree_distribution":
+      return directArrays(["degrees", "node_counts", "values"]);
+    case "nest.delay_distribution":
+      return directArrays(["bin_centers_ms", "delay_counts", "values"]);
+    case "nest.weight_histogram":
+      return directArrays(["bin_centers", "values"]);
     case "nest.spatial_2d":
       return tooLong("positions", PARAM_LIMITS.maxSpatialObjects);
+    case "nest.spatial_map_2d":
+      return tooLong("nodes", PARAM_LIMITS.maxSpatialObjects);
     case "nest.spatial_3d":
       return tooLong("objects", PARAM_LIMITS.maxSpatialObjects);
     case "nest.plasticity_dynamics":
@@ -3599,7 +7424,7 @@ function preflightRawSkillParams(skillId, params) {
     case "nest.compartmental_dynamics":
       return directArrays(["times_ms"]) ?? nestedArrays("compartments", PARAM_LIMITS.maxSeries, "values");
     case "nest.correlogram":
-      return directArrays(["lags_ms", "correlation"]);
+      return directArrays(["lags_ms", "values"]);
     case "nest.stimulus_response":
       return directArrays(["times_ms", "stimulus", "response"]);
     case "nest.astrocyte_dynamics":
@@ -3607,7 +7432,7 @@ function preflightRawSkillParams(skillId, params) {
     case "nest.animation_replay":
       return tooLong("frames", 1e4);
     case "corpus.knowledge_graph":
-      return tooLong("nodes", PARAM_LIMITS.maxGraphNodes) ?? tooLong("edges", PARAM_LIMITS.maxGraphEdges);
+      return graphElementBudgets("nodes", PARAM_LIMITS.maxGraphNodes) ?? graphElementBudgets("edges", PARAM_LIMITS.maxGraphEdges);
     case "nest.phase_plane":
       return tooManyKeys("grid", 2) ?? tooManyKeys("derivatives", 2) ?? tooManyKeys("axis_units", 2) ?? tooManyKeys("derivative_units", 2) ?? recordValueArrays("grid") ?? recordValueArrays("derivatives") ?? tooLong("axis_order", 2);
     default:
@@ -3679,14 +7504,6 @@ function nearestSkill(id2) {
   return best !== void 0 && bestD <= Math.max(3, Math.ceil(id2.length * 0.4)) ? best : void 0;
 }
 var MAX_INVOCATION_ERRORS = 32;
-function printable(value) {
-  try {
-    const text = typeof value === "string" ? value : String(value);
-    return text.length <= 120 ? text : `${text.slice(0, 117)}\u2026`;
-  } catch {
-    return "<unprintable value>";
-  }
-}
 function validateSkillInvocationUnsafe(skillId, payload) {
   const errors = [];
   const contract = getSkill(skillId);
@@ -3698,7 +7515,7 @@ function validateSkillInvocationUnsafe(skillId, payload) {
         {
           code: "unknown_skill",
           path: "skillId",
-          message: `unknown skill '${printable(skillId)}'`,
+          message: `unknown skill '${safePrimitiveDiagnostic(skillId)}'`,
           hint: suggestion ? `Did you mean '${suggestion}'? Otherwise use one of the ids in validSkills.` : "Use one of the ids in validSkills (nest.* and corpus.*).",
           validSkills: NEST_SKILL_IDS,
           didYouMean: suggestion,
@@ -3761,7 +7578,7 @@ function validateSkillInvocationUnsafe(skillId, payload) {
         {
           code: "unsupported_spec_version",
           path: "specVersion",
-          message: `unsupported spec version '${printable(rawVersion)}'`,
+          message: `unsupported spec version '${safePrimitiveDiagnostic(rawVersion)}'`,
           hint: `Use '${CORTEXEL_SPEC_VERSION}', or omit specVersion for a legacy envelope.`,
           example
         }
@@ -3847,6 +7664,23 @@ function validateSkillInvocationUnsafe(skillId, payload) {
     }
   }
   let prov = spec.provenance;
+  for (const flag of [
+    "advisory_only",
+    "is_paper_local_evidence",
+    "synthetic"
+  ]) {
+    if (errors.length >= MAX_INVOCATION_ERRORS) break;
+    const required = contract.requiredProvenanceFlags?.[flag];
+    if (required !== void 0 && prov[flag] !== required) {
+      errors.push({
+        code: "invalid_provenance",
+        path: `provenance.${flag}`,
+        message: `skill '${skillId}' requires provenance.${flag}=${required}; received ${prov[flag]}`,
+        hint: "Use the skill contract requiredProvenanceFlags value; element-level epistemic status cannot be overridden by the envelope.",
+        example: errors.some((error) => error.example) ? void 0 : example
+      });
+    }
+  }
   const declared = normalizeDeclaredProvenanceInputs(
     prov.declared_inputs ?? {}
   );
@@ -4006,6 +7840,7 @@ function VizSpecRenderer({
   trustedEnvelope = false,
   active = true,
   activePalette,
+  captionPlacement = "overlay",
   onError,
   onInvocationError
 }) {
@@ -4056,6 +7891,7 @@ function VizSpecRenderer({
         params: gated.spec.params,
         provenance: gated.spec.provenance,
         caption: gated.caption,
+        captionPlacement,
         active,
         renderScene
       }
@@ -4087,6 +7923,7 @@ function VizSpecRenderer({
       params,
       provenance,
       caption,
+      captionPlacement,
       active,
       renderScene
     }
@@ -4129,6 +7966,7 @@ function SceneFrame({
   params,
   provenance,
   caption,
+  captionPlacement,
   active,
   renderScene
 }) {
@@ -4139,7 +7977,11 @@ function SceneFrame({
     "div",
     {
       className: "cortexel-vizspec",
-      style: { position: "relative", width: "100%", height: "100%" },
+      style: {
+        position: "relative",
+        width: "100%",
+        height: captionPlacement === "footer" ? "auto" : "100%"
+      },
       children: [
         renderScene({
           skill,
@@ -4159,10 +8001,13 @@ function SceneFrame({
             "aria-live": "polite",
             "aria-label": "Scientific provenance disclosure",
             style: {
-              position: "absolute",
-              left: 12,
-              bottom: 12,
-              maxWidth: "70%",
+              position: captionPlacement === "footer" ? "relative" : "absolute",
+              left: captionPlacement === "footer" ? 0 : 12,
+              bottom: captionPlacement === "footer" ? "auto" : 12,
+              maxWidth: captionPlacement === "footer" ? "100%" : "70%",
+              width: captionPlacement === "footer" ? "100%" : "auto",
+              boxSizing: "border-box",
+              marginTop: captionPlacement === "footer" ? 8 : 0,
               padding: "4px 10px",
               borderRadius: 6,
               // Okabe-Ito amber on opaque dark — bloom-safe (DOM, not emissive).

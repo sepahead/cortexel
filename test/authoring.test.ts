@@ -72,8 +72,8 @@ describe('buildVizSpec', () => {
 
   it('rejects a scene-less skill with the precise no_cortexel_scene reason', () => {
     const r = buildVizSpec({
-      skill: 'nest.correlogram', // scene: null
-      params: { lags_ms: [0], correlation: [1] },
+      skill: 'nest.animation_replay', // scene: null
+      params: { frames: [{ time_ms: 0, state: { status: 'initial' } }] },
       source: 'x',
     });
     expect(r.ok).toBe(false);

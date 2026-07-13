@@ -40,6 +40,7 @@ import {
   boundValidationIssue,
   readOwnEnumerableDataProperty,
   safeErrorMessage,
+  safePrimitiveDiagnostic,
 } from '../safeRuntime';
 import {
   preflightLargeSkillParams,
@@ -132,15 +133,6 @@ export type SkillParamsResult =
 
 const MAX_INVOCATION_ERRORS = 32;
 
-function printable(value: unknown): string {
-  try {
-    const text = typeof value === 'string' ? value : String(value);
-    return text.length <= 120 ? text : `${text.slice(0, 117)}…`;
-  } catch {
-    return '<unprintable value>';
-  }
-}
-
 /** Validate params for any registered skill, including scene-less skills that
  *  route to a host renderer. This is the language-level counterpart to the
  *  manifest's paramsJsonSchema + paramConstraints pair. */
@@ -158,7 +150,7 @@ export function validateSkillParams(
           {
             code: 'unknown_skill',
             path: 'skillId',
-            message: `unknown skill '${printable(skillId)}'`,
+            message: `unknown skill '${safePrimitiveDiagnostic(skillId)}'`,
             hint: suggestion
               ? `Did you mean '${suggestion}'?`
               : 'Use one of the ids in validSkills.',
@@ -282,7 +274,7 @@ function validateSkillInvocationUnsafe(
         {
           code: 'unknown_skill',
           path: 'skillId',
-          message: `unknown skill '${printable(skillId)}'`,
+          message: `unknown skill '${safePrimitiveDiagnostic(skillId)}'`,
           hint: suggestion
             ? `Did you mean '${suggestion}'? Otherwise use one of the ids in validSkills.`
             : 'Use one of the ids in validSkills (nest.* and corpus.*).',
@@ -368,7 +360,7 @@ function validateSkillInvocationUnsafe(
         {
           code: 'unsupported_spec_version',
           path: 'specVersion',
-          message: `unsupported spec version '${printable(rawVersion)}'`,
+          message: `unsupported spec version '${safePrimitiveDiagnostic(rawVersion)}'`,
           hint: `Use '${CORTEXEL_SPEC_VERSION}', or omit specVersion for a legacy envelope.`,
           example,
         },
@@ -468,6 +460,23 @@ function validateSkillInvocationUnsafe(
 
   // 5. Required provenance keys must be declared.
   let prov = spec.provenance;
+  for (const flag of [
+    'advisory_only',
+    'is_paper_local_evidence',
+    'synthetic',
+  ] as const) {
+    if (errors.length >= MAX_INVOCATION_ERRORS) break;
+    const required = contract.requiredProvenanceFlags?.[flag];
+    if (required !== undefined && prov[flag] !== required) {
+      errors.push({
+        code: 'invalid_provenance',
+        path: `provenance.${flag}`,
+        message: `skill '${skillId}' requires provenance.${flag}=${required}; received ${prov[flag]}`,
+        hint: 'Use the skill contract requiredProvenanceFlags value; element-level epistemic status cannot be overridden by the envelope.',
+        example: errors.some((error) => error.example) ? undefined : example,
+      });
+    }
+  }
   const declared = normalizeDeclaredProvenanceInputs(
     prov.declared_inputs ?? {},
   );

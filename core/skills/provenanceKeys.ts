@@ -34,14 +34,34 @@ export const PROVENANCE_KEYS = Object.freeze([
   'model_context',
   'fixed_parameters',
   'bin_ms',
-  'pair_labels',
+  'histogram_normalization',
+  'interval_scope',
+  'event_alignment',
+  'psth_aggregation',
+  'connection_sample_policy',
+  'snapshot_time_ms',
+  'snapshot_scope',
+  'parallel_edge_policy',
+  'matrix_axis_order',
+  'matrix_aggregation',
+  'delay_units',
+  'degree_direction',
+  'degree_counting',
+  'zero_degree_policy',
+  'node_ids',
+  'position_scope',
+  'detector_id',
+  'reference_population',
+  'target_population',
   'correlation_normalization',
   'correlation_units',
+  'lag_convention',
+  'binning_policy',
   'stim_units',
   'rate_normalization',
   'graph_source',
-  'node_kinds',
-  'edge_kinds',
+  'graph_snapshot_id',
+  'graph_scope',
   'identity_advisory',
 ] as const);
 
@@ -83,14 +103,34 @@ export const PROVENANCE_KEY_LABELS: Readonly<Record<ProvenanceKey, string>> = Ob
   model_context: 'phase-plane model context',
   fixed_parameters: 'phase-plane fixed parameters',
   bin_ms: 'bin width',
-  pair_labels: 'pair labels',
+  histogram_normalization: 'histogram normalization',
+  interval_scope: 'inter-spike interval scope',
+  event_alignment: 'event alignment',
+  psth_aggregation: 'PSTH sender/trial aggregation',
+  connection_sample_policy: 'connection sample policy',
+  snapshot_time_ms: 'connection snapshot time in ms',
+  snapshot_scope: 'connection snapshot completeness / MPI scope',
+  parallel_edge_policy: 'parallel-edge handling policy',
+  matrix_axis_order: 'matrix source/target axis order',
+  matrix_aggregation: 'parallel-connection matrix aggregation',
+  delay_units: 'synaptic delay units',
+  degree_direction: 'directed degree orientation',
+  degree_counting: 'degree edge-counting policy',
+  zero_degree_policy: 'zero-degree node inclusion policy',
+  node_ids: 'spatial node ids',
+  position_scope: 'spatial position completeness / MPI scope',
+  detector_id: 'correlation_detector id',
+  reference_population: 'correlogram reference population',
+  target_population: 'correlogram target population',
   correlation_normalization: 'correlogram normalization',
   correlation_units: 'correlogram value units',
+  lag_convention: 'correlogram lag convention',
+  binning_policy: 'bin interval policy',
   stim_units: 'stimulus units',
   rate_normalization: 'rate normalization',
   graph_source: 'graph source',
-  node_kinds: 'node kinds',
-  edge_kinds: 'edge kinds',
+  graph_snapshot_id: 'immutable graph snapshot id',
+  graph_scope: 'graph scope',
   identity_advisory: 'model-identity advisory (structural similarity, not certified sameness)',
 });
 
@@ -103,6 +143,7 @@ export function isProvenanceKey(value: unknown): value is ProvenanceKey {
 
 export type ProvenanceValueConstraint =
   | { kind: 'positive_finite_number' }
+  | { kind: 'nonnegative_finite_number' }
   | { kind: 'literal_true' }
   | { kind: 'nonnegative_safe_integer_or_nonblank_string'; normalize: 'trim' }
   | { kind: 'string'; allowEmpty: true }
@@ -119,6 +160,13 @@ export type ProvenanceParamConstraint =
       description: string;
     }
   | {
+      kind: 'equals_param_path';
+      provenanceKey: ProvenanceKey;
+      /** Dot-separated own-property path through already checked params. */
+      paramPath: string;
+      description: string;
+    }
+  | {
       kind: 'equals_literal';
       provenanceKey: ProvenanceKey;
       value: string | number | true;
@@ -126,14 +174,19 @@ export type ProvenanceParamConstraint =
     };
 
 export const PROVENANCE_PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: '1',
+  version: '2',
   evaluationOrder: Object.freeze([
     'apply provenanceValueConstraints normalization',
     'validate every present known provenance value',
     'check required provenance-key presence',
     'evaluate provenanceParamConstraints in listed order',
   ]),
-  kinds: Object.freeze(['equals_param', 'equals_literal'] as const),
+  kinds: Object.freeze(['equals_param', 'equals_param_path', 'equals_literal'] as const),
+  semantics: Object.freeze({
+    equals_param: 'declared value must equal one checked top-level params property under Object.is',
+    equals_param_path: 'declared value must equal the checked scalar reached through a dot-separated sequence of safe own data-property names under Object.is',
+    equals_literal: 'declared value must equal the contract literal under Object.is',
+  }),
 });
 
 /** Exact semantic rule applied to every required declared-input value. Non-TS
@@ -151,14 +204,14 @@ export const PROVENANCE_VALUE_CONSTRAINTS: Readonly<
   for (const key of ['sampling_interval', 'bin_ms', 'frame_rate'] as const) {
     constraints[key] = { kind: 'positive_finite_number' };
   }
-  for (const key of ['device_id', 'recorder_id'] as const) {
+  constraints.snapshot_time_ms = { kind: 'nonnegative_finite_number' };
+  for (const key of ['device_id', 'recorder_id', 'detector_id'] as const) {
     constraints[key] = {
       kind: 'nonnegative_safe_integer_or_nonblank_string',
       normalize: 'trim',
     };
   }
   constraints.identity_advisory = { kind: 'literal_true' };
-  constraints.edge_kinds = { kind: 'string', allowEmpty: true };
   for (const constraint of Object.values(constraints)) Object.freeze(constraint);
   return Object.freeze(constraints);
 })();
@@ -176,6 +229,10 @@ export function declaredProvenanceValueError(
       return typeof value === 'number' && Number.isFinite(value) && value > 0
         ? null
         : `${key} must be a positive finite number`;
+    case 'nonnegative_finite_number':
+      return typeof value === 'number' && Number.isFinite(value) && value >= 0 && !Object.is(value, -0)
+        ? null
+        : `${key} must be a non-negative finite number`;
     case 'literal_true':
       return value === true
         ? null
@@ -241,11 +298,31 @@ export function provenanceParamConstraintError(
       ? null
       : `${constraint.provenanceKey} must equal ${JSON.stringify(constraint.value)}`;
   }
-  if (!Object.hasOwn(params, constraint.paramKey)) {
-    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramKey} is absent`;
+  const paramPath = constraint.kind === 'equals_param_path'
+    ? constraint.paramPath
+    : constraint.paramKey;
+  const segments = paramPath.split('.');
+  if (
+    segments.length === 0 ||
+    segments.some((segment) =>
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(segment) ||
+      segment === '__proto__' || segment === 'prototype' || segment === 'constructor')
+  ) {
+    return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is not a safe parameter path`;
   }
-  const expected = params[constraint.paramKey];
+  let expected: unknown = params;
+  for (const segment of segments) {
+    if (expected === null || typeof expected !== 'object' || Array.isArray(expected) ||
+        !Object.hasOwn(expected, segment)) {
+      return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is absent`;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(expected, segment);
+    if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) {
+      return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is not an enumerable data property`;
+    }
+    expected = descriptor.value;
+  }
   return Object.is(actual, expected)
     ? null
-    : `${constraint.provenanceKey} (${JSON.stringify(actual)}) must match params.${constraint.paramKey} (${JSON.stringify(expected)})`;
+    : `${constraint.provenanceKey} (${JSON.stringify(actual)}) must match params.${paramPath} (${JSON.stringify(expected)})`;
 }

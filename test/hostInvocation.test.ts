@@ -25,37 +25,33 @@ describe('scene-less skills keep the full honesty contract', () => {
 
   it('authors, serializes, and re-validates a host-renderer envelope in one loop', () => {
     const result = buildHostRendererInvocation({
-      skill: 'nest.correlogram',
+      skill: 'nest.spatial_2d',
       params: {
-        lags_ms: [-1, 0, 1],
-        correlation: [0.1, 1, 0.1],
-        normalization: 'pearson_coefficient',
-        correlation_units: '1',
+        positions: [[0, 0], [1, 1]],
+        coordinate_units: 'mm',
       },
       source: 'nest_simulation:run-7',
       declaredInputs: {
-        bin_ms: 1,
-        pair_labels: 'E×E',
-        correlation_normalization: 'pearson_coefficient',
-        correlation_units: '1',
+        extent: '[1,1]',
+        spatial_units: 'mm',
+        mask: 'none',
+        kernel: 'none',
       },
       rendererRoute: 'd3',
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.spec.skill).toBe('nest.correlogram');
+    expect(result.spec.skill).toBe('nest.spatial_2d');
     expect(result.rendererRoutes).toContain('d3');
     expect(validateHostRendererSpec(JSON.parse(JSON.stringify(result.spec))).ok).toBe(true);
   });
 
   it('rejects missing provenance and returns a copyable host example', () => {
-    const result = validateHostRendererInvocation('nest.correlogram', {
-      skill: 'nest.correlogram',
+    const result = validateHostRendererInvocation('nest.spatial_2d', {
+      skill: 'nest.spatial_2d',
       params: {
-        lags_ms: [-1, 0, 1],
-        correlation: [0.1, 1, 0.1],
-        normalization: 'pearson_coefficient',
-        correlation_units: '1',
+        positions: [[0, 0], [1, 1]],
+        coordinate_units: 'mm',
       },
       provenance: { source: 'run:7' },
     });
@@ -66,9 +62,9 @@ describe('scene-less skills keep the full honesty contract', () => {
   });
 
   it('rejects a route outside the selected skill contract', () => {
-    const example = structuredClone(HOST_RENDERER_EXAMPLE_PAYLOADS['nest.correlogram']!);
+    const example = structuredClone(HOST_RENDERER_EXAMPLE_PAYLOADS['nest.spatial_2d']!);
     example.rendererRoute = 'fiber';
-    const result = validateHostRendererInvocation('nest.correlogram', example);
+    const result = validateHostRendererInvocation('nest.spatial_2d', example);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.errors.some((error) => error.code === 'invalid_renderer_route')).toBe(true);
@@ -76,11 +72,11 @@ describe('scene-less skills keep the full honesty contract', () => {
   });
 
   it('rejects calibrated posteriors and the wrong renderer boundary', () => {
-    const example = structuredClone(HOST_RENDERER_EXAMPLE_PAYLOADS['nest.correlogram']!);
+    const example = structuredClone(HOST_RENDERER_EXAMPLE_PAYLOADS['nest.spatial_2d']!);
     (
       example.provenance as unknown as { calibrated_posterior: boolean }
     ).calibrated_posterior = true;
-    const posterior = validateHostRendererInvocation('nest.correlogram', example);
+    const posterior = validateHostRendererInvocation('nest.spatial_2d', example);
     expect(posterior.ok).toBe(false);
     if (!posterior.ok) {
       expect(posterior.errors[0].code).toBe('calibrated_posterior_unsupported');
@@ -97,24 +93,22 @@ describe('scene-less skills keep the full honesty contract', () => {
   });
 
   it('normalizes a stored skill consistently and rejects a supplied blank route', () => {
-    const example = structuredClone(HOST_RENDERER_EXAMPLE_PAYLOADS['nest.correlogram']!);
-    example.skill = '  nest.correlogram  ';
+    const example = structuredClone(HOST_RENDERER_EXAMPLE_PAYLOADS['nest.spatial_2d']!);
+    example.skill = '  nest.spatial_2d  ';
     expect(validateHostRendererSpec(example).ok).toBe(true);
     expect(
       buildHostRendererInvocation({
-        skill: 'nest.correlogram',
+        skill: 'nest.spatial_2d',
         params: {
-          lags_ms: [0],
-          correlation: [1],
-          normalization: 'pearson_coefficient',
-          correlation_units: '1',
+          positions: [[0, 0]],
+          coordinate_units: 'mm',
         },
         source: 'x',
         declaredInputs: {
-          bin_ms: 1,
-          pair_labels: 'E×E',
-          correlation_normalization: 'pearson_coefficient',
-          correlation_units: '1',
+          extent: '[1,1]',
+          spatial_units: 'mm',
+          mask: 'none',
+          kernel: 'none',
         },
         rendererRoute: '',
       } as never).ok,
@@ -127,10 +121,19 @@ describe('scene-less skills keep the full honesty contract', () => {
       ['sampling_interval', -1],
     ] as const) {
       const example = structuredClone(
-        HOST_RENDERER_EXAMPLE_PAYLOADS['nest.correlogram']!,
+        HOST_RENDERER_EXAMPLE_PAYLOADS['nest.spatial_2d']!,
       );
       example.provenance.declared_inputs![key] = value;
-      expect(validateHostRendererInvocation('nest.correlogram', example).ok).toBe(false);
+      expect(validateHostRendererInvocation('nest.spatial_2d', example).ok).toBe(false);
     }
+  });
+
+  it('rejects the promoted correlogram at the host-only boundary', () => {
+    const result = validateHostRendererInvocation(
+      'nest.correlogram',
+      { skill: 'nest.correlogram' },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors[0].code).toBe('cortexel_scene_available');
   });
 });

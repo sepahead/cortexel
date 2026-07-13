@@ -7,7 +7,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 Repository-wide contract, renderer, and release hardening for agent-authored
-visualizations. The skill-axis contract version is now `1.2.0`; callers should
+visualizations. The skill-axis contract version is now `1.6.0`; callers should
 regenerate cached descriptors/manifests before adopting this release.
 
 ### Security
@@ -24,6 +24,10 @@ regenerate cached descriptors/manifests before adopting this release.
   `advisory_only` defaults to `true`, and unsupported/mismatched contract versions
   receive structured errors. Free-text captions are sanitized and labeled
   `Caller note (unverified)` rather than blending into the mandatory disclosure.
+- Per-skill `requiredProvenanceFlags` now bind machine-readable envelope flags in
+  both strict gates and the portable manifest. Corpus graphs therefore cannot
+  contradict their derived/advisory elements by claiming non-advisory or
+  paper-local provenance.
 - Added practical and aggregate limits across device dumps, inline skill arrays,
   adapter object/fan-out output, split series, knowledge-graph size, diagnostics,
   strings, edit-distance repairs, and palette registration. Oversized arrays are
@@ -35,6 +39,9 @@ regenerate cached descriptors/manifests before adopting this release.
 - `formatInvocationErrors` now emits deterministic structured JSON marked as
   untrusted data; control/bidi characters and prompt-shaped ids cannot escape into
   instruction-looking repair lines.
+- Public repair diagnostics never invoke object conversion hooks or thrown-value
+  accessors. Display-facing skill, palette, host, route-field, and authoring-error
+  identifiers reject or directly escape/bound control/bidi spoofing characters.
 - `VizSpecRenderer` is strict/self-describing by default; deleting `spec.skill`
   cannot downgrade validation. The envelope-only path requires explicit
   `trustedEnvelope`, and unchanged spec identities reuse a detached validated
@@ -44,8 +51,14 @@ regenerate cached descriptors/manifests before adopting this release.
 
 - Per-skill schemas now enforce paired-axis lengths, monotonic time axes, finite and
   non-negative domains where required, integer ids, non-empty phase-plane axes, and
-  graph identity/reference invariants. Every one of the 14 skills, including the
-  five host-rendered skills, has a real params schema.
+  graph identity/reference invariants. Every one of the 26 skills, including the
+  four host-rendered skills, has a real params schema.
+- Knowledge-graph evidence now requires a direct snapshot-record, citation, or
+  external-source anchor for every node and edge; graph-node references alone
+  cannot form a self-referential proof chain. Generation time is RFC 3339, node
+  scores are restricted to extraction confidence, stable endpoint ids remain in
+  accessible relationship prose, and the legend can disclose immutable graph
+  context. The Engram adapter rejects accessors before invoking them.
 - Spatial skills now require coordinate units; phase planes require per-axis and
   derivative units plus derivation/model/fixed-parameter context; correlograms bind
   normalization to y-axis units and a conditional numeric domain; Ca²⁺ traces are
@@ -58,6 +71,14 @@ regenerate cached descriptors/manifests before adopting this release.
   Connectivity no longer invents ring coordinates or default weights; unit labels,
   global position ids, delays, and unpositioned/provided layout status survive.
   Negative-zero identities and non-positive delays fail consistently.
+- Raw NEST adapters and derived spike analyses now share one deep, accessor-safe,
+  typed-array-aware input snapshot. Recorder output is never assumed chronological;
+  sorting occurs only within the relevant sender/trial group, decimal bin geometry
+  follows the published binary64 tolerance, and transform output amplification is
+  bounded before allocation.
+- Shared single-source and per-sender/per-synapse time axes reject duplicate as well
+  as descending timestamps. Typed-array preflight reads the intrinsic length slot,
+  never an overridable subclass getter.
 - `ExpandableNeurons` allocates exactly the requested count, keeps picking aligned
   with its shader transform, disposes GPU resources, bounds inputs, fixes hidden-point
   clipping and reversed smoothing, and uses frame-rate-independent damping. Procedural
@@ -83,6 +104,47 @@ regenerate cached descriptors/manifests before adopting this release.
 
 ### Added
 
+- Clarified standalone repository governance: this repository is the canonical
+  writable source; downstream Engram pins released commits and generated contracts.
+
+- Added an agentic NEST connection-snapshot axis with distinct
+  `nest.connection_graph`, `nest.adjacency_matrix`, `nest.weight_matrix`,
+  `nest.delay_matrix`, `nest.in_degree_distribution`,
+  `nest.out_degree_distribution`, and `nest.delay_distribution` contracts.
+  Ordered node universes retain isolates, every multapse remains countable,
+  matrices use NEST's target-row/source-column convention, absent cells remain
+  distinct from present zero-valued aggregates, and typed snapshot scope prevents
+  MPI-local evidence from masquerading as a complete global network. The legacy
+  edge-list skill `nest.connectivity_matrix` remains valid but is deprecated and
+  excluded from automatic routing in favor of `nest.connection_graph`.
+- Added `nest.spatial_map_2d`, a measured-position contract with stable node ids,
+  explicit center/extent/edge-wrap metadata, MPI position scope, coordinate units,
+  equal-aspect rendering, origin-independent extent-relative bounds, and
+  fixed-screen-space marker disclosure. Masks and
+  probability kernels remain separate future contracts rather than free-text
+  geometry claims.
+- Added no-throw, accessor-safe transforms for official scalar/singular and
+  plural-array SynapseCollection output, graph/matrix/degree/delay derivation, and
+  identified 2D GetPosition output. Transform discovery metadata is published to
+  agents alongside each applicable skill.
+- `cortexel/react/charts` now provides the strict `ReferenceVizSpecFigure`
+  agent-spec→accessible-SVG path for nineteen native analysis/topology skills: voltage and
+  disclosed astrocyte traces, spike raster, population rate, F-I response, ISI,
+  PSTH, correlogram, weight/delay histograms, plasticity dynamics, phase plane,
+  connection graph, adjacency/weight/delay matrices, in/out degree distributions,
+  and measured 2D spatial maps. Exact
+  skill dispatch prevents
+  misleading scene reuse; large series/events share compact SVG paths; units,
+  normalization, alignment and vector semantics remain visible; unsupported
+  topology/KG/host-only skills return an explicit alert.
+- Added `adaptEngramCorpusEntityGraph`, a no-guess projection from Engram's
+  corpus entity response into the snapshot-bound knowledge-graph params contract.
+  It verifies response summaries and conservative scientific flags before the
+  resulting params enter the ordinary strict VizSpec gate.
+- Added non-suppressing `captionPlacement="footer"` support to
+  `VizSpecRenderer`. The chart wrapper forces this layout so mandatory disclosure
+  remains part of the rendered figure without covering axes or data; existing
+  scene overlays remain the default.
 - `validateSkillParams(skillId, params)` provides a low-level structural check for
   every skill without inventing a scene.
 - `buildHostRendererInvocation`, `validateHostRendererInvocation`, and
@@ -90,7 +152,7 @@ regenerate cached descriptors/manifests before adopting this release.
   provenance, version, route-membership, repair-example, serialization, and caption
   guarantees as a VizSpec.
 - Machine-readable `paramConstraints` accompany JSON Schema in discovery and the
-  version-4 skills manifest. It now covers every skill and publishes envelope schemas,
+  version-8 skills manifest. It now covers every skill and publishes envelope schemas,
   defaults/normalization order, exact-JSON limits + duplicate-member precondition,
   binary64 and UTF-16 semantics, strict invocation/provenance/palette policies,
   caption derivation, versioned params/provenance constraint languages, and complete
@@ -98,6 +160,33 @@ regenerate cached descriptors/manifests before adopting this release.
 - `KnowledgeGraphA11yList`, a keyboard- and screen-reader-accessible DOM mirror with
   paginated nodes, node kinds, and separately paginated directed relationship detail
   for the WebGL graph.
+- Native, agent-invocable `nest.isi_distribution`, `nest.psth`, and
+  `nest.weight_histogram` contracts for the three previously orphaned analysis
+  scenes. Their checked payloads bind bin width, uniform non-overlapping bin
+  geometry, normalization, displayed units, trial/alignment or interval scope,
+  connection sampling, and source provenance. Probability mass must sum to one,
+  ISI density must integrate to one, and ISI bins cannot extend below zero;
+  histogram geometry now uses a zero absolute tolerance so tiny physical units
+  cannot make a false bin-width claim pass. PSTH bins explicitly aggregate all
+  selected senders per trial; count/trial and Hz values must recover a
+  non-negative safe-integer raw event count, and the aggregation claim is bound
+  into provenance. The portable parameter-constraint language retains those
+  derived-count recovery formulas in version 8 alongside the topology rules. Router discovery exposes
+  ISI/PSTH as explicit spike-recorder shapes.
+- Added `nest.population_rate`, an evidence-preserving time-varying rate contract
+  and canonical step chart. Each series carries exact integer spike counts,
+  recorded-sender denominator and checked Hz values; uniform half-open bins exactly
+  cover the declared window and the gate recomputes every displayed rate.
+- Promoted `nest.correlogram` from a host-only envelope to its own canonical scene.
+  The redesigned contract binds detector identity, oriented source/target labels,
+  symmetric lag geometry, bin width, τ range, counting window, lag convention,
+  zero-lag policy, binning, statistic kind and units. Raw counts, weighted sums,
+  pair rates and Pearson coefficients have separate closed domains.
+- Added no-throw `spikeRecorderToIsiParams`, `spikeTrialsToPsthParams`,
+  `spikeRecorderToPopulationRateParams`, and
+  `correlationDetectorToCorrelogramParams` transforms for raw NEST/NumPy-style
+  arrays. They preserve integer evidence, silent-sender denominators, explicit
+  trial alignment and the correlation detector's documented lag orientation.
 - `PopulationA11yList` and the paginated `NeuronA11yPager` provide operable DOM
   companions for pointer-driven population and neuron WebGL primitives.
 - README visual workflow and agent-repair diagrams, a visualization coverage map,
@@ -109,6 +198,30 @@ regenerate cached descriptors/manifests before adopting this release.
   22, and 24.
 
 ### Changed
+
+- `corpus.knowledge_graph` is now a breaking, evidence-grade `1.4.0` contract:
+  immutable graph/source/snapshot identity, stable edge assertion ids, bounded
+  attributes, typed evidence references, derived/advisory epistemic records and
+  discriminated scores that are explicitly not calibrated posteriors. Edge-kind
+  score semantics and endpoint kinds are checked portably; repeated evidence is
+  preserved as identified multiedges, capped at nine assertions per unordered
+  pair; its language-neutral rules remain represented in the current version-8
+  constraint language.
+- The skill axis is now `1.6.0` and the self-describing envelope contract is
+  `1.3.0`. Spike routing distinguishes `population_rate` from `fi_response`,
+  rejects the ambiguous legacy `rates` discriminator, and routes
+  `correlation_detector` directly to the native correlogram.
+- The 3D graph routes parallel assertions on deterministic quadratic lanes while
+  its force layout uses one spring per unordered pair. Lines, arrowheads and flow
+  particles consume the same path; direct React entrypoints reject invalid or
+  unreadable relationships; metadata-aware search and the DOM companion preserve
+  assertion ids, evidence, attributes, epistemic status and uncalibrated scores.
+- Knowledge-graph search now uses the same bounded metadata-aware matcher in WebGL
+  and the DOM companion, and applies the query coherently to nodes, edges,
+  arrowheads, and flow particles instead of leaving a bright unrelated edge field behind. Selected
+  nodes remain available to assistive technology through filtered views, duplicate
+  ids fail closed at both direct React entrypoints, relationship disclosures have a
+  touch-sized target, and the force-layout clock no longer allocates from `useFrame`.
 
 - The React peer set is now `react`, `react-dom`, `three`, and
   `@react-three/fiber`; `@react-three/drei` is no longer required.

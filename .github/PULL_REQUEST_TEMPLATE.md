@@ -1,7 +1,4 @@
-<!--
-Cortexel is developed in the Engram monorepo and mirrored here. For code changes,
-prefer opening a PR against the monorepo. See CONTRIBUTING.md.
--->
+<!-- This repository is Cortexel's canonical source. See CONTRIBUTING.md. -->
 
 ## Summary
 

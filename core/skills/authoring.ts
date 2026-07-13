@@ -83,6 +83,21 @@ const BUILD_HOST_FIELDS = new Set([
   'rendererRoute',
 ]);
 
+function safeAuthoringField(value: string): string {
+  return safeDiagnosticText(value, 120);
+}
+
+function safeAuthoringPath(path: string, field?: string): string {
+  return safeDiagnosticText(
+    field === undefined ? path : `${path}.${safeAuthoringField(field)}`,
+    PUBLIC_DIAGNOSTIC_LIMITS.maxPathLength,
+  );
+}
+
+function safeAuthoringMessage(value: string): string {
+  return safeDiagnosticText(value, PUBLIC_DIAGNOSTIC_LIMITS.maxMessageLength);
+}
+
 function snapshotAuthoringObject(
   value: unknown,
   allowed: ReadonlySet<string>,
@@ -125,6 +140,7 @@ function snapshotAuthoringObject(
     }
     if (!allowed.has(key)) {
       const calibrated = path === 'provenance' && key === 'calibrated_posterior';
+      const field = safeAuthoringField(key);
       return {
         ok: false,
         errors: [
@@ -132,10 +148,10 @@ function snapshotAuthoringObject(
             code: calibrated
               ? 'calibrated_posterior_unsupported'
               : 'invalid_envelope',
-            path: `${path}.${key}`,
+            path: safeAuthoringPath(path, key),
             message: calibrated
               ? 'calibrated_posterior cannot be overridden and is unsupported'
-              : `unknown ${path} field '${key}'`,
+              : safeAuthoringMessage(`unknown ${path} field '${field}'`),
             hint: `Allowed fields: ${[...allowed].join(', ')}.`,
           },
         ],
@@ -148,7 +164,7 @@ function snapshotAuthoringObject(
         errors: [
           {
             code: 'invalid_envelope',
-            path: `${path}.${key}`,
+            path: safeAuthoringPath(path, key),
             message: `${path} fields must be enumerable data properties, not accessors`,
           },
         ],

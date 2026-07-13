@@ -13,9 +13,21 @@
 export const NEST_SKILL_IDS = Object.freeze([
   'nest.voltage_trace',
   'nest.spike_raster',
+  'nest.isi_distribution',
+  'nest.psth',
+  'nest.population_rate',
   'nest.rate_response',
   'nest.connectivity_matrix',
+  'nest.connection_graph',
+  'nest.adjacency_matrix',
+  'nest.weight_matrix',
+  'nest.delay_matrix',
+  'nest.in_degree_distribution',
+  'nest.out_degree_distribution',
+  'nest.delay_distribution',
+  'nest.weight_histogram',
   'nest.spatial_2d',
+  'nest.spatial_map_2d',
   'nest.spatial_3d',
   'nest.plasticity_dynamics',
   'nest.phase_plane',
@@ -40,11 +52,13 @@ export const VIZ_ROUTER_ID = 'nest.viz_router' as const;
 export type VizRouterId = typeof VIZ_ROUTER_ID;
 
 // The raw NEST device families a skill draws its data from. Multiple skills can
-// share one family (spike_recorder feeds raster + rate + correlogram), so this
+// share one family (spike_recorder feeds raster, ISI, PSTH, population-rate and
+// F-I response views), so this
 // is the join key between agent skills and the dict→SceneData adapters.
 export const NEST_DEVICE_FAMILIES = Object.freeze([
   'multimeter',
   'spike_recorder',
+  'correlation_detector',
   'get_connections',
   'get_position',
   'weight_recorder',

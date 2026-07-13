@@ -5,13 +5,14 @@ and propose changes.
 
 ## Source of truth
 
-Cortexel is developed inside the [Engram Neural Labs](https://github.com/sepahead/Paper2Brain)
-monorepo at `frontend/app/cortexel/` and **mirrored** to this standalone
-repository via `git subtree`. The monorepo directory is the canonical, writable
-source; this repo is a downstream publish mirror.
+This standalone repository is the canonical, writable source for Cortexel.
+[Engram Neural Labs](https://github.com/sepahead/Paper2Brain) consumes Cortexel as a
+pinned git dependency and may vendor generated contract artifacts for backend
+validation; it does not own a writable Cortexel source copy.
 
-- **Open PRs against the monorepo** for code changes. Maintainers sync them out.
-- Issues and discussion are welcome here.
+- **Open Cortexel code PRs here.**
+- After a Cortexel release, downstream consumers update their commit pins and
+  generated contract snapshots in separate, reviewable changes.
 
 ## Development
 

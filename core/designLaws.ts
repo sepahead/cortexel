@@ -15,7 +15,13 @@ export const SCENE_NAMES = Object.freeze([
   'fi-curve',
   'isi-distribution',
   'psth',
+  'population-rate',
+  'correlogram',
   'weight-histogram',
+  'connection-matrix',
+  'degree-distribution',
+  'delay-distribution',
+  'spatial-map-2d',
   'knowledge-graph-3d',
 ] as const);
 
@@ -149,7 +155,13 @@ export const SCENE_FRAMING: Record<SceneName, SceneFraming> = {
   'fi-curve':         { position: [0, 0.7, 6.4],    target: [0, 0.7, 0],   rotatable: false },
   'isi-distribution': { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
   'psth':             { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
+  'population-rate':  { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
+  'correlogram':      { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
   'weight-histogram': { position: [0, 0.6, 7.4],    target: [0, 0.6, 0],   rotatable: false },
+  'connection-matrix': { position: [0, 0.6, 7.4],   target: [0, 0.6, 0],   rotatable: false },
+  'degree-distribution': { position: [0, 0.6, 7.4], target: [0, 0.6, 0],   rotatable: false },
+  'delay-distribution': { position: [0, 0.6, 7.4],  target: [0, 0.6, 0],   rotatable: false },
+  'spatial-map-2d':   { position: [0, 0, 8.0],      target: [0, 0, 0],     rotatable: false },
   'knowledge-graph-3d': { position: [0, 0, 260],    target: [0, 0, 0],     rotatable: true },
 };
 

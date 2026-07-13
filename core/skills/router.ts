@@ -5,10 +5,10 @@
 //
 // The family→skill index is DERIVED from NEST_SKILL_REGISTRY (not hand-written),
 // so it can never drift from the registry. Several families are many-to-one —
-// spike_recorder (raster/rate/correlogram), multimeter (voltage/stimulus/
-// astrocyte/compartmental), computed (phase-plane/replay) — so for those a
-// discriminator is REQUIRED; without it the router returns `ambiguous` carrying
-// the exact field + value→skill map an agent needs to retry in one shot.
+// spike_recorder, get_connections, and get_position publish family-specific
+// dataShape.kind maps; other many-to-one families use explicit skill ids.
+// Deprecated aliases remain explicitly invocable but are excluded from bare
+// family candidates and maps.
 
 import type { SceneName } from '../designLaws';
 import {
@@ -19,14 +19,37 @@ import {
   type RendererRoute,
 } from './skillIds';
 import { NEST_SKILL_REGISTRY, listSkills } from './registry';
-import { safeErrorMessage } from '../safeRuntime';
+import {
+  PUBLIC_DIAGNOSTIC_LIMITS,
+  safeErrorMessage,
+  safePrimitiveDiagnostic,
+} from '../safeRuntime';
 
-export type SpikeDataKind = 'events' | 'rates' | 'correlation';
+export type SpikeDataKind =
+  | 'events'
+  | 'isi'
+  | 'psth'
+  | 'population_rate'
+  | 'fi_response';
+
+export type GetConnectionsDataKind =
+  | 'connection_graph'
+  | 'adjacency_matrix'
+  | 'weight_matrix'
+  | 'delay_matrix'
+  | 'weight_distribution'
+  | 'delay_distribution'
+  | 'in_degree_distribution'
+  | 'out_degree_distribution';
+
+export type GetPositionDataKind = 'positions_2d' | 'positions_3d';
+export type RouteDataKind = SpikeDataKind | GetConnectionsDataKind | GetPositionDataKind;
 
 export interface RouteInput {
   deviceFamily: NestDeviceFamily;
-  /** Disambiguator for the spike_recorder family (raster/rate/correlogram). */
-  dataShape?: { kind?: SpikeDataKind };
+  /** Family-specific analysis discriminator. Raw field presence never selects
+   * an analysis because the same simulator snapshot supports many views. */
+  dataShape?: { kind?: RouteDataKind };
   /** General disambiguator for any many-to-one family: name the skill directly.
    *  Must belong to `deviceFamily` or routing fails explicitly. */
   skill?: NestSkillId;
@@ -57,17 +80,39 @@ export type RouteResult =
       message?: string;
     };
 
-const SPIKE_KIND_TO_SKILL = new Map<SpikeDataKind, NestSkillId>([
-  ['events', 'nest.spike_raster'],
-  ['rates', 'nest.rate_response'],
-  ['correlation', 'nest.correlogram'],
-]);
+const FAMILY_KIND_TO_SKILL: ReadonlyMap<
+  NestDeviceFamily,
+  ReadonlyMap<string, NestSkillId>
+> = (() => {
+  const output = new Map<NestDeviceFamily, Map<string, NestSkillId>>();
+  for (const contract of listSkills()) {
+    const kind = contract.routerEligibility?.dataShapeKind;
+    if (!kind) continue;
+    const map = output.get(contract.deviceFamily) ?? new Map<string, NestSkillId>();
+    if (map.has(kind)) {
+      throw new Error(`duplicate route dataShape.kind '${kind}' for '${contract.deviceFamily}'`);
+    }
+    map.set(kind, contract.id);
+    output.set(contract.deviceFamily, map);
+  }
+  return output;
+})();
 
-function spikeDisambiguator(): Disambiguator {
-  return {
-    field: 'dataShape.kind',
-    maps: Object.fromEntries(SPIKE_KIND_TO_SKILL),
-  };
+/** Frozen, JSON-friendly discriminator snapshot for agent and non-TS parity. */
+export const ROUTING_DISCRIMINATORS: Readonly<
+  Partial<Record<NestDeviceFamily, Readonly<Record<string, NestSkillId>>>>
+> = Object.freeze(Object.fromEntries(
+  [...FAMILY_KIND_TO_SKILL].map(([family, map]) => [
+    family,
+    Object.freeze(Object.fromEntries(map)),
+  ]),
+));
+
+function familyDisambiguator(family: NestDeviceFamily): Disambiguator | undefined {
+  const map = FAMILY_KIND_TO_SKILL.get(family);
+  return map && map.size > 0
+    ? { field: 'dataShape.kind', maps: Object.fromEntries(map) }
+    : undefined;
 }
 
 // Derived once from the registry: family → its member skill ids. Keeps the
@@ -98,15 +143,6 @@ function resolve(skill: NestSkillId): RouteResult {
   return { ok: true, skill, scene: contract.scene };
 }
 
-function printable(value: unknown): string {
-  try {
-    const rendered = String(value);
-    return rendered.length <= 120 ? rendered : `${rendered.slice(0, 117)}…`;
-  } catch {
-    return '<unprintable value>';
-  }
-}
-
 function routeToSceneUnsafe(input: unknown): RouteResult {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     return {
@@ -132,8 +168,10 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
       return {
         ok: false,
         reason: 'invalid_input',
-        field: typeof key === 'string' ? key : '(symbol)',
-        message: `unknown route input field '${printable(key)}'`,
+        field: typeof key === 'string'
+          ? safePrimitiveDiagnostic(key, PUBLIC_DIAGNOSTIC_LIMITS.maxPathLength)
+          : '(symbol)',
+        message: `unknown route input field '${safePrimitiveDiagnostic(key)}'`,
       };
     }
     const descriptor = Object.getOwnPropertyDescriptor(input, key);
@@ -164,7 +202,7 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
       ok: false,
       reason: 'unknown_family',
       field: 'deviceFamily',
-      message: `unknown device family '${printable(deviceFamily)}'`,
+      message: `unknown device family '${safePrimitiveDiagnostic(deviceFamily)}'`,
     };
   }
   const family = deviceFamily as NestDeviceFamily;
@@ -172,6 +210,9 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
   if (!members || members.length === 0) {
     return { ok: false, reason: 'unknown_family', field: 'deviceFamily' };
   }
+  const candidates = members.filter(
+    (skill) => NEST_SKILL_REGISTRY[skill].routerEligibility?.bareFamilyCandidate !== false,
+  );
 
   // Validate every supplied discriminator before choosing precedence. A
   // dataShape on another family, or a dataShape that conflicts with skill, is a
@@ -179,13 +220,15 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
   const dataShape = raw.dataShape;
   let shapeSkill: NestSkillId | undefined;
   if (dataShape !== undefined) {
-    if (family !== 'spike_recorder') {
+    const kindMap = FAMILY_KIND_TO_SKILL.get(family);
+    const disambiguator = familyDisambiguator(family);
+    if (!kindMap || !disambiguator) {
       return {
         ok: false,
         reason: 'invalid_discriminator',
         field: 'dataShape',
-        candidates: [...members],
-        message: `dataShape is only valid for device family 'spike_recorder'`,
+        candidates: [...candidates],
+        message: `dataShape is not defined for device family '${family}'`,
       };
     }
     if (
@@ -197,8 +240,8 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
         ok: false,
         reason: 'invalid_discriminator',
         field: 'dataShape',
-        candidates: [...members],
-        disambiguateBy: spikeDisambiguator(),
+        candidates: [...candidates],
+        disambiguateBy: disambiguator,
         message: 'dataShape must be an object containing kind',
       };
     }
@@ -213,8 +256,8 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
         ok: false,
         reason: 'invalid_discriminator',
         field: 'dataShape',
-        candidates: [...members],
-        disambiguateBy: spikeDisambiguator(),
+        candidates: [...candidates],
+        disambiguateBy: disambiguator,
         message: 'dataShape must be a strict plain object containing kind',
       };
     }
@@ -228,23 +271,23 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
         ok: false,
         reason: 'invalid_discriminator',
         field: 'dataShape.kind',
-        candidates: [...members],
-        disambiguateBy: spikeDisambiguator(),
+        candidates: [...candidates],
+        disambiguateBy: disambiguator,
         message: 'dataShape.kind must be an enumerable data property',
       };
     }
     const kind = kindDescriptor.value;
     shapeSkill = typeof kind === 'string'
-      ? SPIKE_KIND_TO_SKILL.get(kind as SpikeDataKind)
+      ? kindMap.get(kind)
       : undefined;
     if (!shapeSkill) {
       return {
         ok: false,
         reason: 'invalid_discriminator',
         field: 'dataShape.kind',
-        candidates: [...members],
-        disambiguateBy: spikeDisambiguator(),
-        message: `unknown spike data kind '${printable(kind)}'`,
+        candidates: [...candidates],
+        disambiguateBy: disambiguator,
+        message: `unknown ${family} data kind '${safePrimitiveDiagnostic(kind)}'`,
       };
     }
   }
@@ -258,11 +301,11 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
         ok: false,
         reason: 'invalid_discriminator',
         field: 'skill',
-        candidates: [...members],
-        message: `unknown skill discriminator '${printable(suppliedSkill)}'`,
+        candidates: [...candidates],
+        message: `unknown skill discriminator '${safePrimitiveDiagnostic(suppliedSkill)}'`,
         disambiguateBy: {
           field: 'skill',
-          maps: Object.fromEntries(members.map((skill) => [skill, skill])),
+          maps: Object.fromEntries(candidates.map((skill) => [skill, skill])),
         },
       };
     }
@@ -271,11 +314,11 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
         ok: false,
         reason: 'skill_family_mismatch',
         field: 'skill',
-        candidates: [...members],
+        candidates: [...candidates],
         message: `skill '${suppliedSkill}' does not belong to device family '${family}'`,
         disambiguateBy: {
           field: 'skill',
-          maps: Object.fromEntries(members.map((skill) => [skill, skill])),
+          maps: Object.fromEntries(candidates.map((skill) => [skill, skill])),
         },
       };
     }
@@ -284,31 +327,29 @@ function routeToSceneUnsafe(input: unknown): RouteResult {
         ok: false,
         reason: 'invalid_discriminator',
         field: 'dataShape.kind',
-        candidates: [...members],
-        disambiguateBy: spikeDisambiguator(),
+        candidates: [...candidates],
+        disambiguateBy: familyDisambiguator(family),
         message: `dataShape resolves to '${shapeSkill}' but skill is '${suppliedSkill}'`,
       };
     }
     return resolve(suppliedSkill);
   }
 
-  // Single-member family: unambiguous.
-  if (members.length === 1) return resolve(members[0]);
+  // Single eligible family member: unambiguous. Explicit deprecated aliases
+  // remain valid above but never make bare-family discovery ambiguous.
+  if (candidates.length === 1) return resolve(candidates[0]);
 
   if (shapeSkill) return resolve(shapeSkill);
 
   // Ambiguous — hand back exactly what is needed to retry deterministically.
-  const disambiguateBy: Disambiguator =
-    family === 'spike_recorder'
-      ? spikeDisambiguator()
-      : {
-          field: 'skill',
-          maps: Object.fromEntries(members.map((s) => [s, s])),
-        };
+  const disambiguateBy: Disambiguator = familyDisambiguator(family) ?? {
+    field: 'skill',
+    maps: Object.fromEntries(candidates.map((s) => [s, s])),
+  };
   return {
     ok: false,
     reason: 'ambiguous',
-    candidates: [...members],
+    candidates: [...candidates],
     disambiguateBy,
   };
 }

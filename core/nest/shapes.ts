@@ -9,6 +9,7 @@
 // narrowed to Float32 — because ms timestamps lose precision at float32 scale.
 
 import { z } from 'zod';
+import { intrinsicTypedArrayLength } from '../safeRuntime';
 
 export const NEST_INPUT_LIMITS = Object.freeze({
   maxSamples: 100_000,
@@ -39,9 +40,9 @@ function boundedArrayInput(value: unknown, max: number): unknown {
     return snapshot;
   }
   if (ArrayBuffer.isView(value) && !(value instanceof DataView)) {
-    return (value as unknown as ArrayLike<number>).length <= max
-      ? value
-      : OVERSIZED_ARRAY_INPUT;
+    const length = intrinsicTypedArrayLength(value);
+    if (length === undefined) return INVALID_ARRAY_INPUT;
+    return length <= max ? value : OVERSIZED_ARRAY_INPUT;
   }
   return value;
 }
@@ -49,7 +50,12 @@ function boundedArrayInput(value: unknown, max: number): unknown {
 function typedNumbersToArray(value: unknown): unknown {
   value = boundedArrayInput(value, NEST_INPUT_LIMITS.maxSamples);
   if (!ArrayBuffer.isView(value) || value instanceof DataView) return value;
-  return Array.from(value as unknown as ArrayLike<number>);
+  const length = intrinsicTypedArrayLength(value);
+  if (length === undefined) return INVALID_ARRAY_INPUT;
+  const typed = value as unknown as ArrayLike<number>;
+  const snapshot = new Array<number>(length);
+  for (let index = 0; index < length; index++) snapshot[index] = typed[index];
+  return snapshot;
 }
 
 function numberArray(options: {
@@ -57,6 +63,7 @@ function numberArray(options: {
   minMessage?: string;
   float32?: boolean;
   integerId?: boolean;
+  nonnegativeInteger?: boolean;
 } = {}): z.ZodType<number[], unknown> {
   const array = z
     .array(z.unknown())
@@ -82,13 +89,15 @@ function numberArray(options: {
           return;
         }
         if (
-          options.integerId &&
+          (options.integerId || options.nonnegativeInteger) &&
           (!Number.isSafeInteger(value) || value < 0 || Object.is(value, -0))
         ) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: [index],
-            message: 'node/sender ids must be non-negative safe integers',
+            message: options.integerId
+              ? 'node/sender ids must be non-negative safe integers'
+              : 'counts must be non-negative safe integers',
           });
           return;
         }
@@ -107,6 +116,11 @@ const nonEmptyFloat32Input = numberArray({
 });
 
 const finiteIntegerArray = numberArray({ integerId: true });
+const nonEmptyNonnegativeSafeIntegerArray = numberArray({
+  min: 1,
+  minMessage: 'histogram must contain at least one bin',
+  nonnegativeInteger: true,
+});
 const nonEmptyFiniteIntegerArray = numberArray({
   min: 1,
   minMessage: 'no senders',
@@ -261,11 +275,11 @@ export const MultimeterEventsSchema = z
     // times reset and are non-monotonic. Reject fail-closed: the caller must
     // split per sender before adapting, else the trace is a meaningless zigzag.
     for (let i = 1; i < v.times.length; i++) {
-      if (v.times[i] < v.times[i - 1]) {
+      if (v.times[i] <= v.times[i - 1]) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message:
-            'multimeter times are non-monotonic — likely multiple senders flattened together; split per sender before adapting',
+            'multimeter times must be strictly increasing — likely multiple senders flattened together; split per sender before adapting',
         });
         break;
       }
@@ -457,3 +471,35 @@ export const WeightRecorderEventsSchema = z
     // The single-trace adapter and split helper validate the appropriate axis.
   });
 export type WeightRecorderEvents = z.infer<typeof WeightRecorderEventsSchema>;
+
+/**
+ * Strict internal projection of the documented correlation_detector fields.
+ * The public adapter descriptor-projects these from a full device status before
+ * applying this schema, so unrelated NEST metadata is accepted but never read.
+ */
+export const CorrelationDetectorStatusSchema = z
+  .object({
+    delta_tau: z.number().finite().positive(),
+    tau_max: z.number().finite().positive(),
+    Tstart: z.number().finite(),
+    Tstop: z.number().finite(),
+    count_histogram: nonEmptyNonnegativeSafeIntegerArray.optional(),
+    histogram: nonEmptyFloat32Input.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!(value.Tstop > value.Tstart)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['Tstop'],
+        message: 'Tstop must be greater than Tstart',
+      });
+    }
+    if (value.count_histogram === undefined && value.histogram === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'count_histogram or histogram is required',
+      });
+    }
+  });
+export type CorrelationDetectorStatus = z.infer<typeof CorrelationDetectorStatusSchema>;

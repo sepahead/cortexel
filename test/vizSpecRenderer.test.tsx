@@ -189,6 +189,25 @@ describe('VizSpecRenderer binds the strict gate at the DOM boundary', () => {
     expect(html).toContain('role="status"');
     expect(html).toContain('Headless export rendering is not available');
   });
+
+  it('can place the same mandatory caption in flow without suppressing disclosure', () => {
+    const spec = getExamplePayload('nest.spike_raster')!;
+    const html = renderToStaticMarkup(
+      <VizSpecRenderer
+        spec={spec}
+        captionPlacement="footer"
+        renderScene={() => <div>scene</div>}
+      />,
+    );
+    expect(html).toContain('scene');
+    expect(html).toContain('role="note"');
+    expect(html).toContain('Schematic');
+    expect(html).toMatch(
+      /class="cortexel-honesty-caption"[^>]*style="[^"]*position:relative/,
+    );
+    expect(html).toContain('width:100%');
+    expect(html).toContain('box-sizing:border-box');
+  });
 });
 
 describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () => {

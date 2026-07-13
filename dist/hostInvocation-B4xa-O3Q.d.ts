@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 type NeuralSceneMode = 'hero' | 'background' | 'standalone';
-declare const SCENE_NAMES: readonly ["live-activity", "cortical-column", "stdp", "spike-raster", "network-topology", "voltage-trace", "phase-plane", "brunel-network", "fi-curve", "isi-distribution", "psth", "weight-histogram", "knowledge-graph-3d"];
+declare const SCENE_NAMES: readonly ["live-activity", "cortical-column", "stdp", "spike-raster", "network-topology", "voltage-trace", "phase-plane", "brunel-network", "fi-curve", "isi-distribution", "psth", "population-rate", "correlogram", "weight-histogram", "connection-matrix", "degree-distribution", "delay-distribution", "spatial-map-2d", "knowledge-graph-3d"];
 type SceneName = (typeof SCENE_NAMES)[number];
 interface NeuralSceneHandle {
     nextScene: () => void;
@@ -113,7 +113,7 @@ declare const CAMERA_PRESETS: Record<CameraPresetName, CameraPreset>;
 /** The VizSpec contract version. Bumped when the envelope shape changes in a way
  *  a host may need to migrate. A stored payload MAY omit `specVersion` for legacy
  *  compatibility; when stamped, the runtime enforces an exact match. */
-declare const CORTEXEL_SPEC_VERSION = "1.1.0";
+declare const CORTEXEL_SPEC_VERSION = "1.3.0";
 /** Resource ceilings for the plain-JSON envelope. Per-skill schemas impose
  *  tighter array limits where the renderer has a smaller practical budget. */
 declare const CORTEXEL_JSON_LIMITS: Readonly<{
@@ -254,11 +254,17 @@ declare const VizSpecSchema: z.ZodObject<{
         "fi-curve": "fi-curve";
         "isi-distribution": "isi-distribution";
         psth: "psth";
+        "population-rate": "population-rate";
+        correlogram: "correlogram";
         "weight-histogram": "weight-histogram";
+        "connection-matrix": "connection-matrix";
+        "degree-distribution": "degree-distribution";
+        "delay-distribution": "delay-distribution";
+        "spatial-map-2d": "spatial-map-2d";
         "knowledge-graph-3d": "knowledge-graph-3d";
     }>;
     skill: z.ZodOptional<z.ZodString>;
-    specVersion: z.ZodOptional<z.ZodLiteral<"1.1.0">>;
+    specVersion: z.ZodOptional<z.ZodLiteral<"1.3.0">>;
     params: z.ZodDefault<z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>>;
     mode: z.ZodDefault<z.ZodEnum<{
         interactive: "interactive";
@@ -347,17 +353,17 @@ declare function mandatoryDisclosure(p: ProvenanceMetadata): string;
  */
 declare function defaultHonestyCaption(p: ProvenanceMetadata): string;
 
-declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.rate_response", "nest.connectivity_matrix", "nest.spatial_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
+declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.isi_distribution", "nest.psth", "nest.population_rate", "nest.rate_response", "nest.connectivity_matrix", "nest.connection_graph", "nest.adjacency_matrix", "nest.weight_matrix", "nest.delay_matrix", "nest.in_degree_distribution", "nest.out_degree_distribution", "nest.delay_distribution", "nest.weight_histogram", "nest.spatial_2d", "nest.spatial_map_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
 type NestSkillId = (typeof NEST_SKILL_IDS)[number];
 /** Neutral aliases — the axis is not NEST-only (see corpus.knowledge_graph).
  *  Prefer these in new code; the NEST_-prefixed names remain for back-compat. */
-declare const SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.rate_response", "nest.connectivity_matrix", "nest.spatial_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
+declare const SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.isi_distribution", "nest.psth", "nest.population_rate", "nest.rate_response", "nest.connectivity_matrix", "nest.connection_graph", "nest.adjacency_matrix", "nest.weight_matrix", "nest.delay_matrix", "nest.in_degree_distribution", "nest.out_degree_distribution", "nest.delay_distribution", "nest.weight_histogram", "nest.spatial_2d", "nest.spatial_map_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
 type SkillId = NestSkillId;
 /** The routing meta-skill. Not a renderer — it selects among the skills above
  *  (count derives from SKILL_IDS.length, so this can never drift again). */
 declare const VIZ_ROUTER_ID: "nest.viz_router";
 type VizRouterId = typeof VIZ_ROUTER_ID;
-declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "get_connections", "get_position", "weight_recorder", "computed", "corpus"];
+declare const NEST_DEVICE_FAMILIES: readonly ["multimeter", "spike_recorder", "correlation_detector", "get_connections", "get_position", "weight_recorder", "computed", "corpus"];
 type NestDeviceFamily = (typeof NEST_DEVICE_FAMILIES)[number];
 /** Membership guard for the closed skill set. Note the set includes non-NEST
  *  skills (corpus.knowledge_graph), so `isSkillId` is the accurate name. */
@@ -408,7 +414,7 @@ declare function validateSkillInvocation(skillId: unknown, payload: unknown): Sk
 
 declare const HostRendererInvocationSchema: z.ZodObject<{
     skill: z.ZodString;
-    specVersion: z.ZodOptional<z.ZodLiteral<"1.1.0">>;
+    specVersion: z.ZodOptional<z.ZodLiteral<"1.3.0">>;
     params: z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>;
     provenance: z.ZodObject<{
         source: z.ZodString;

@@ -4,6 +4,7 @@
 export * from './skillIds';
 export * from './provenanceKeys';
 export * from './params';
+export * from './corpusKnowledgeGraph';
 export * from './registry';
 export * from './examples';
 export * from './router';
@@ -12,6 +13,7 @@ export * from './hostInvocation';
 export * from './authoring';
 export * from './verify';
 
-// NEST device-dict shapes + host-agnostic adapters (dict → SceneData).
-export * from '../nest/shapes';
-export * from '../nest/adapters';
+// NEST device boundaries and deterministic analysis transforms are also
+// available from the core entrypoint. Keep this compatibility re-export while
+// `core/nest/index.ts` remains the source-level NEST module boundary.
+export * from '../nest';

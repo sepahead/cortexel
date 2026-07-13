@@ -32,15 +32,22 @@ import {
   type SkillInvocationError,
 } from './validateSkillInvocation';
 import {
+  SAFE_DISPLAY_STRING_PATTERN,
   boundValidationIssue,
   readOwnEnumerableDataProperty,
   safeErrorMessage,
+  safePrimitiveDiagnostic,
 } from '../safeRuntime';
 import { preflightRawEnvelopeParams } from './paramPreflight';
 
 export const HostRendererInvocationSchema = z
   .object({
-    skill: z.string().trim().min(1).max(80),
+    skill: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .regex(SAFE_DISPLAY_STRING_PATTERN, 'skill must not contain display control characters'),
     specVersion: z.literal(CORTEXEL_SPEC_VERSION).optional(),
     params: JsonParamsSchema,
     provenance: ProvenanceSchema,
@@ -62,15 +69,6 @@ export type HostRendererInvocationResult =
   | { ok: false; errors: SkillInvocationError[] };
 
 const MAX_HOST_ERRORS = 32;
-
-function printable(value: unknown): string {
-  try {
-    const rendered = typeof value === 'string' ? value : String(value);
-    return rendered.length <= 120 ? rendered : `${rendered.slice(0, 117)}…`;
-  } catch {
-    return '<unprintable value>';
-  }
-}
 
 function validateHostRendererInvocationUnsafe(
   skillId: unknown,
@@ -149,7 +147,7 @@ function validateHostRendererInvocationUnsafe(
         {
           code: 'unsupported_spec_version',
           path: 'specVersion',
-          message: `unsupported spec version '${printable(rawVersion)}'`,
+          message: `unsupported spec version '${safePrimitiveDiagnostic(rawVersion)}'`,
           hint: `Use '${CORTEXEL_SPEC_VERSION}', or omit specVersion for a legacy envelope.`,
           example: getHostRendererExamplePayload(contract.id),
         },
@@ -212,6 +210,24 @@ function validateHostRendererInvocationUnsafe(
     }
   } else {
     spec = { ...spec, params: params.params };
+  }
+
+  for (const flag of [
+    'advisory_only',
+    'is_paper_local_evidence',
+    'synthetic',
+  ] as const) {
+    if (errors.length >= MAX_HOST_ERRORS) break;
+    const required = contract.requiredProvenanceFlags?.[flag];
+    if (required !== undefined && spec.provenance[flag] !== required) {
+      errors.push({
+        code: 'invalid_provenance',
+        path: `provenance.${flag}`,
+        message: `skill '${contract.id}' requires provenance.${flag}=${required}; received ${spec.provenance[flag]}`,
+        hint: 'Use the skill contract requiredProvenanceFlags value; element-level epistemic status cannot be overridden by the envelope.',
+        example: errors.some((item) => item.example) ? undefined : example,
+      });
+    }
   }
 
   const declared = normalizeDeclaredProvenanceInputs(

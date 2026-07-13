@@ -23,6 +23,17 @@ Cortexel renders untrusted, agent-emitted `VizSpec` payloads. Relevant concerns:
   boundary **should** mirror the strict skill schema, provenance requirements,
   resource ceilings, exact-JSON policy, manifest `paramConstraints`, and
   params↔provenance constraints server-side.
+- **Raw simulator input.** NEST device/detector transforms use a separate
+  typed-array-aware snapshot boundary because NumPy-adjacent arrays are not JSON.
+  It rejects accessors without invoking them, bounds nesting/input/output
+  amplification, and never assumes recorder event order. A successful transform
+  produces params only; the result must still pass the ordinary strict VizSpec
+  gate with truthful provenance before rendering.
+  SynapseCollection normalization accepts either official singular/scalar fields
+  or canonical plural arrays, rejects mixed forms and scalar broadcasting, and
+  preserves every autapse/multapse row. Connection and position transforms require
+  typed single-process/MPI-local/all-ranks-merged scope; rank-local evidence is not
+  silently promoted to a complete-network claim.
 - **Raw JSON parsing.** Object-level gates cannot detect duplicate member names
   after a normal parser has overwritten earlier values. Network/text boundaries
   must reject duplicate names before materialization, then apply the manifest's
