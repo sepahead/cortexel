@@ -1,0 +1,388 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_distribution.request.v1.schema.json",
+  "title": "network.delay_distribution request",
+  "description": "GENERATED from contract/skills/network.delay_distribution.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.delay_distribution"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "Either the connection rows themselves, or a histogram the caller already binned. `mode` is the discriminator, and the fields of the other mode are REFUSED rather than ignored -- a field Cortexel cannot check must not be accepted as though it had been checked.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "connections",
+            "prebinned"
+          ],
+          "description": "connections: Cortexel counts and bins the delays itself from the rows. prebinned: the caller supplies bin counts and Cortexel verifies the normalization and the conservation identity instead of observing the rows. There is deliberately no raw delay-values mode: a bag of numbers with no edge linkage cannot be checked against a counting policy or an edge selection, and it offers nothing that connection rows do not."
+        },
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The nodes permitted at EITHER endpoint of a counted connection: the source and the target ends are both bound to this one declared universe, and a row whose source or target is not a member is refused with SEMANTIC_UNKNOWN_REFERENCE. It need not be complete -- this figure makes no isolate or zero-degree claim, so a node that contributes no connection contributes nothing at all. Its job is to catch a row that does not belong to the selection, such as an external generator left in a recurrent figure; under an mpi_target_rank_local scope it holds the local targets the rank owns."
+        },
+        "connections": {
+          "description": "Exactly the connections in the selection. Every multapse is its own row and is never deduplicated. A delay is REQUIRED on every row: a connection whose delay was not read cannot enter a delay histogram, and skipping it would shrink the population by an amount nobody sees.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows"
+            },
+            {
+              "type": "object",
+              "required": [
+                "delays"
+              ],
+              "properties": {
+                "delays": {
+                  "type": "object",
+                  "description": "The delay of each connection, parallel to sourceIds. No lower bound is imposed structurally: a zero or negative delay is refused by the semantic layer with SCIENCE_DELAY_NONPOSITIVE, which names the science, rather than by a bare type constraint. null is not accepted -- a missing delay is not a delay.",
+                  "properties": {
+                    "kind": {
+                      "const": "delay"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "maxItems": 500000
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "unit",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        },
+        "groupBy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "synapse_model"
+          ],
+          "description": "How the supplied rows are partitioned into histograms. It lives in `data` because it is a claim about the rows themselves: a partition Cortexel cannot see in the rows is not a partition it can verify. `synapse_model` therefore REQUIRES `connections.synapseModels`. Delays of different models may legitimately be pooled -- a NEST delay is always a time -- so grouping is optional here, unlike for weights."
+        },
+        "histogram": {
+          "type": "object",
+          "description": "A histogram the caller already computed, on the bin edges declared in `parameters.bins`. The edges are NOT restated here: two copies of one fact are two facts that can drift. `values` are the per-bin quantity named by `parameters.normalization` -- the exact integer counts under `count`, the per-group probabilities under `probability`, or the densities under `density` -- and the semantic validator `histogram.normalization_consistent` re-derives that normalization from them and refuses a set that does not sum or integrate to one; it never takes the numbers on trust.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "count",
+                "probability",
+                "probability_density"
+              ]
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 100000,
+              "description": "One value per bin; its length must equal the bin count derived from parameters.bins."
+            }
+          },
+          "required": [
+            "kind",
+            "unit",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "consideredConnectionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The number of connection rows the caller considered before binning. It reaches the summary and the table as declared context: Cortexel never saw the rows in prebinned mode, so it cannot reconcile sum(counts) + underRangeCount + overRangeCount against it -- that conservation identity is stated by the caller, not machine-checked here."
+        },
+        "underRangeCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Observations below the first bin edge. Under `outOfRangeDelays: reject` this must be 0; a nonzero value means the bins do not cover the data the histogram claims to describe. Declared context only."
+        },
+        "overRangeCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Observations above the last bin edge. Under `outOfRangeDelays: reject` this must be 0. Declared context only."
+        },
+        "sourceResolution": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+          "description": "The simulator's time resolution, kind `duration`. Simulator delays are quantized to multiples of it, so it is what tells a reader whether the bin width cuts the lattice evenly. It is a DECLARED fact: registry v1 has no validator that can check a delay against it (see knownLimitations)."
+        },
+        "scope": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+          "description": "What this snapshot actually saw. Every scope is answerable for a delay distribution -- including rank-local and sampled, which a degree distribution cannot support -- but each carries a different claim, and the claim is disclosed rather than assumed."
+        }
+      },
+      "required": [
+        "mode",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "connections"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "connections",
+              "nodeUniverse",
+              "groupBy"
+            ],
+            "not": {
+              "required": [
+                "histogram"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "prebinned"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "histogram"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "connections"
+                  ]
+                },
+                {
+                  "required": [
+                    "groupBy"
+                  ]
+                },
+                {
+                  "required": [
+                    "nodeUniverse"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "groupBy": {
+                "const": "synapse_model"
+              }
+            },
+            "required": [
+              "groupBy"
+            ]
+          },
+          "then": {
+            "required": [
+              "connections"
+            ],
+            "properties": {
+              "connections": {
+                "type": "object",
+                "required": [
+                  "synapseModels"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+          "description": "Names the edge population so two figures of the same run cannot be confused for one another."
+        },
+        "selectionLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "countingPolicy": {
+          "type": "string",
+          "enum": [
+            "per_connection",
+            "per_ordered_pair"
+          ],
+          "description": "Required; there is deliberately no schema default. per_connection: every connection row contributes one delay observation, so a multapse of three contributes three. This is the weighted-by-synapse reading and the conventional one, but it is stated explicitly rather than assumed -- an unstated counting policy is exactly what lets a per-pair figure be read as a per-synapse one. per_ordered_pair: every ordered (source, target) pair contributes one observation, obtained by multapseAggregation. The two answer different questions and diverge wherever multiplicity covaries with delay."
+        },
+        "multapseAggregation": {
+          "description": "How the parallel connections of one ordered pair are reduced to a single delay under per_ordered_pair. Required for per_ordered_pair, forbidden for per_connection. `sum` is excluded: the sum of three 1.5 ms delays is 4.5 ms, which is not a delay any synapse carries. `no_aggregation` asserts at most one row per ordered pair and fails with SCIENCE_AGGREGATION_REQUIRED if that is untrue. This is the field the semantic validator `topology.multapse_aggregation_declared` reads.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation"
+            },
+            {
+              "enum": [
+                "min",
+                "mean",
+                "max",
+                "no_aggregation"
+              ]
+            }
+          ]
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "Required, in both modes, and the single source of truth for the bin edges. Cortexel does not choose them: for a grid-quantized delay the choice is unusually consequential, because a width that is not an integer multiple of the simulator resolution draws a uniform population as an alternating comb."
+        },
+        "normalization": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",
+          "description": "count: exact integers. probability: sums to 1 over the binned observations of each group. density: integrates to 1 over the LINEAR bin widths, with a unit reciprocal to the bin unit. All three are admissible because a delay is a continuous physical quantity."
+        },
+        "outOfRangeDelays": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "exclude_and_report"
+          ],
+          "description": "What happens to a contributing delay outside [firstEdge, lastEdge]. `reject` requires the bins to cover the data. `exclude_and_report` excludes it, counts it, and discloses the under-range and over-range totals -- after which the drawn values describe only the binned subset, not the population."
+        },
+        "xScale": {
+          "type": "string",
+          "enum": [
+            "linear",
+            "log"
+          ],
+          "default": "linear",
+          "description": "Presentation only; it never changes a derived value. A delay is strictly positive, so a log axis is always defined -- but the density denominator remains the LINEAR bin width."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Dispersion across REALIZATIONS of the network. Within one realization a bin count is an exact enumeration of connections and has no sampling uncertainty, so a basis of `trials` or `neurons` is refused: delays do not vary across trials of one network."
+        }
+      },
+      "required": [
+        "selectionId",
+        "countingPolicy",
+        "bins",
+        "normalization",
+        "outOfRangeDelays"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "countingPolicy": {
+                "const": "per_ordered_pair"
+              }
+            },
+            "required": [
+              "countingPolicy"
+            ]
+          },
+          "then": {
+            "required": [
+              "multapseAggregation"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "countingPolicy": {
+                "const": "per_connection"
+              }
+            },
+            "required": [
+              "countingPolicy"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "multapseAggregation"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

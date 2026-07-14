@@ -1,0 +1,204 @@
+{
+  "registry": "cortexel-disclosures",
+  "version": "1.0",
+  "description": "Closed registry of disclosure rules. This is where honesty is MECHANIZED.\n\nEvery rule fires from a machine-checkable fact in the artifact — never from caller text, and never from a caller flag. That is the whole design: a caller cannot suppress a disclosure by omitting a field, cannot weaken one by rewording it, and cannot promote its data by setting a boolean. The only way to remove a disclosure is to remove the fact that causes it.\n\nThe rendered text is generated from `text` here. It appears identically in four places — the artifact JSON, the visible SVG footer, the SVG accessible description, and the table metadata — and a test asserts all four agree.",
+
+  "policy": {
+    "orderingBySeverity": "critical, then important, then informational; within a severity, by rule id. A compact footer shows the highest-priority disclosures and an overflow count; the sidecar and accessible description always contain ALL of them.",
+    "neverSuppressible": "In stable mode no disclosure can be suppressed, reordered below a caller note, or visually dominated by one.",
+    "callerNoteIsNotADisclosure": "A caller's declared note is rendered separately, bidi-isolated, under an attribution that marks it unverified. It is never merged into the mandatory disclosure text."
+  },
+
+  "rules": [
+    {
+      "id": "SOURCE_SIMULATION",
+      "severity": "important",
+      "trigger": "provenance.source.kind == 'simulation'",
+      "text": "Simulation output. These values were produced by a model, not measured from a biological system."
+    },
+    {
+      "id": "SOURCE_SYNTHETIC_FIXTURE",
+      "severity": "critical",
+      "trigger": "provenance.source.kind == 'synthetic_fixture'",
+      "text": "Synthetic fixture. This data was fabricated to exercise the software and carries no scientific meaning whatsoever."
+    },
+    {
+      "id": "SOURCE_KIND_UNKNOWN",
+      "severity": "critical",
+      "trigger": "provenance.source.kind == 'unknown'",
+      "text": "Source unknown. The origin of this data was not declared, so nothing about its provenance can be relied upon."
+    },
+    {
+      "id": "SOURCE_LITERATURE_EXTRACTION",
+      "severity": "important",
+      "trigger": "provenance.source.kind == 'literature_extraction'",
+      "text": "Extracted from published material. Values were transcribed from a publication and have not been re-derived from primary data."
+    },
+    {
+      "id": "SOURCE_MANUAL_ENTRY",
+      "severity": "important",
+      "trigger": "provenance.source.kind == 'manual_entry'",
+      "text": "Manually entered. These values were typed in by hand rather than exported from an instrument or simulator."
+    },
+    {
+      "id": "SOURCE_AUTHENTICITY_UNVERIFIED",
+      "severity": "important",
+      "trigger": "no attestation with sourceContentVerified == true",
+      "text": "Source authenticity not verified. Cortexel validated the structure and semantics of this request; it did not check that the underlying source bytes are what they claim to be."
+    },
+    {
+      "id": "REFERENCE_COMPARISON_NOT_RUN",
+      "severity": "informational",
+      "trigger": "validation.referenceComparison.status == 'not_run'",
+      "text": "No independent reference comparison was run for this figure."
+    },
+
+    {
+      "id": "PARTIAL_NETWORK_SCOPE",
+      "severity": "critical",
+      "trigger": "scope.kind == 'sampled' || (scope.kind == 'mpi_target_rank_local')",
+      "text": "Partial network view. This is not the complete network: absent connections here have not been shown to be absent globally."
+    },
+    {
+      "id": "RANK_LOCAL_SCOPE",
+      "severity": "critical",
+      "trigger": "scope.kind == 'mpi_target_rank_local'",
+      "text": "Rank-local snapshot (rank {rank} of {worldSize}). Under MPI, a rank holds the connections whose target it owns. In-degree is therefore complete for these local targets; out-degree and global completeness are not."
+    },
+    {
+      "id": "SAMPLED_EDGES",
+      "severity": "critical",
+      "trigger": "scope.kind == 'sampled'",
+      "text": "Edges sampled: {retainedConnectionCount} of {sourceConnectionCount} connections are shown. Degree and completeness cannot be read from this figure."
+    },
+    {
+      "id": "NODE_UNIVERSE_INCOMPLETE",
+      "severity": "critical",
+      "trigger": "nodeUniverse.complete == false",
+      "text": "Node set incomplete. Nodes with no drawn edge may still have connections; a node missing here is not a node with degree zero."
+    },
+    {
+      "id": "MULTAPSE_AGGREGATED",
+      "severity": "important",
+      "trigger": "derivation contains a multapse aggregation with countBefore > cells",
+      "text": "Multiple connections between the same pair were combined using {aggregation}. Each cell shows an aggregate of {contributingCount} connections, not a single synapse."
+    },
+    {
+      "id": "ABSENT_IS_NOT_ZERO",
+      "severity": "important",
+      "trigger": "matrix figures with sparse cells",
+      "text": "An empty cell means no connection was observed. It is distinct from a connection whose weight is zero, which is drawn as a value."
+    },
+    {
+      "id": "SCHEMATIC_LAYOUT",
+      "severity": "important",
+      "trigger": "graph layout is not from measured positions",
+      "text": "Layout is schematic. Node placement was chosen for legibility and carries no spatial meaning."
+    },
+    {
+      "id": "POSITIONS_MISSING",
+      "severity": "important",
+      "trigger": "spatial figures where some selected nodes have no position",
+      "text": "{missingCount} of {totalCount} nodes have no declared position and are omitted from the map rather than placed at the origin."
+    },
+
+    {
+      "id": "DOWNSAMPLED_FOR_RENDERING",
+      "severity": "critical",
+      "trigger": "budgetDecision.outcome == 'accepted_compacted'",
+      "text": "Compacted for display: {countAfter} of {countBefore} observations are drawn, using {policyId}. The complete data is in the attached table and sidecar."
+    },
+    {
+      "id": "COMPACTION_MAY_HIDE_TRANSIENTS",
+      "severity": "critical",
+      "trigger": "budgetDecision.outcome == 'accepted_compacted' && extremaPreserved == false",
+      "text": "This display policy does not guarantee that a brief transient survives compaction. Read exact values from the table, not from the drawn shape."
+    },
+    {
+      "id": "TABLE_EXCERPT_ONLY",
+      "severity": "important",
+      "trigger": "accessibility.tableRowsInline < accessibility.tableRowsTotal",
+      "text": "The inline table shows {tableRowsInline} of {tableRowsTotal} rows. The complete data is in the sidecar identified by digest."
+    },
+
+    {
+      "id": "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+      "severity": "important",
+      "trigger": "derivation receipt reports excludedOutOfWindow > 0",
+      "text": "{excludedCount} events fell outside the declared observation window and are excluded from this analysis."
+    },
+    {
+      "id": "MISSING_VALUES_PRESENT",
+      "severity": "important",
+      "trigger": "any series contains null observations",
+      "text": "{missingCount} observations are missing. Lines are broken at each gap; missing values are never interpolated across or drawn as zero."
+    },
+    {
+      "id": "UNIT_CONVERTED",
+      "severity": "informational",
+      "trigger": "derivation contains a unit conversion operation",
+      "text": "Units were converted during canonicalization: {conversions}. The original values are preserved in the artifact."
+    },
+    {
+      "id": "UNCERTAINTY_NOT_PROVIDED",
+      "severity": "important",
+      "trigger": "uncertainty.kind == 'none'",
+      "text": "No uncertainty is shown ({reason}). The absence of a band means uncertainty was not supplied — not that it is small."
+    },
+    {
+      "id": "AGGREGATE_WITHOUT_RAW_REPEATS",
+      "severity": "important",
+      "trigger": "response curves supplied as aggregates rather than raw repeats",
+      "text": "Points are aggregates ({estimator}, n = {sampleCount}). The individual repeats were not supplied and cannot be shown."
+    },
+    {
+      "id": "KERNEL_SMOOTHED_RATE",
+      "severity": "important",
+      "trigger": "rate mode == 'kernel'",
+      "text": "Kernel-smoothed rate ({kernel}, bandwidth {bandwidth}). This is an estimate, not a literal count per bin, and it is drawn as a continuous line rather than as steps."
+    },
+    {
+      "id": "ZERO_LAG_SELF_PAIRS_EXCLUDED",
+      "severity": "important",
+      "trigger": "autocorrelation: each event's pairing with itself was excluded",
+      "text": "Autocorrelation: each event paired with itself is excluded. Distinct events with identical times are retained, so the zero-lag bin is not necessarily empty."
+    },
+    {
+      "id": "LAG_ORIENTATION",
+      "severity": "informational",
+      "trigger": "always, for correlograms",
+      "text": "Positive lag means the target train follows the reference train by that lag."
+    },
+    {
+      "id": "PRE_BINNED_INPUT",
+      "severity": "informational",
+      "trigger": "the caller supplied pre-binned rows rather than raw events",
+      "text": "Input was pre-binned by the caller. Cortexel re-derived and checked the normalization but did not observe the raw events."
+    },
+    {
+      "id": "DUPLICATE_TIMES_AGGREGATED",
+      "severity": "important",
+      "trigger": "trace.duplicateTimePolicy is an aggregate",
+      "text": "Samples sharing a timestamp were combined using {method}."
+    },
+
+    {
+      "id": "CALLER_NOTE_UNVERIFIED",
+      "severity": "informational",
+      "trigger": "source.declaredNote is present",
+      "text": "The figure carries a note declared by the caller. Cortexel has not verified it."
+    },
+    {
+      "id": "EXPERIMENTAL_RENDERER",
+      "severity": "critical",
+      "trigger": "renderer status == 'experimental'",
+      "text": "Experimental; not a canonical Cortexel figure. Its output is not deterministic, not covered by the stable contract, and not accessibility-conformant."
+    },
+    {
+      "id": "NONSTANDARD_BUDGET_PROFILE",
+      "severity": "important",
+      "trigger": "the active budget profile is not a published default",
+      "text": "Rendered under a non-default budget profile ({profileId}). This figure does not claim default conformance."
+    }
+  ]
+}

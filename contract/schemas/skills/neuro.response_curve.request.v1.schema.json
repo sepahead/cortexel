@@ -1,0 +1,1170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.response_curve.request.v1.schema.json",
+  "title": "neuro.response_curve request",
+  "description": "GENERATED from contract/skills/neuro.response_curve.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.response_curve"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "Either raw repeats (every attempted repeat is a row, including the ones whose response was zero or undefined) or per-condition aggregates (a summary that carries its own sample and exclusion counts). The response METHOD lives on the response object itself, not in parameters, because it states what the numbers ARE — and because it is then bound STRUCTURALLY to the quantity kind and to the basis fields it requires, rather than by a conditional a reader has to reconstruct.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "repeats"
+            },
+            "measurementWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "The interval over which every response was measured. A mean rate without its window is not auditable, and whether a pre-stimulus period is included changes the number."
+            },
+            "conditions": {
+              "type": "object",
+              "description": "The declared condition universe. It is the x-axis domain: a condition with no usable repeat stays on the axis and is drawn as a gap, never removed.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": {
+                      "const": "numeric"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                      },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                      },
+                      "maxItems": 1000
+                    },
+                    "input": {
+                      "type": "object",
+                      "description": "The controlled input level of each condition, parallel to `ids`. Any quantity kind is allowed — an injected current, a drive rate, a conductance, an orientation angle — and the unit's dimension must match the kind.",
+                      "properties": {
+                        "kind": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "label": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                        },
+                        "scale": {
+                          "type": "string",
+                          "enum": [
+                            "linear",
+                            "log10"
+                          ],
+                          "description": "The scale on which the input was meaningfully spaced. `log10` with a zero or negative input is refused (RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN) rather than clipped, because clipping a zero-input control condition deletes the baseline."
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "unit",
+                        "values",
+                        "scale"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "axis",
+                    "ids",
+                    "input"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": {
+                      "type": "string",
+                      "enum": [
+                        "ordinal",
+                        "nominal"
+                      ],
+                      "description": "`ordinal` conditions have a meaningful declared order and may carry a guide line. `nominal` conditions have none and are NEVER connected: a line across unordered categories asserts an order that does not exist."
+                    },
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                      },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                      },
+                      "maxItems": 1000
+                    },
+                    "inputLabel": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                      "description": "What distinguishes the conditions. A categorical axis has no numeric input and therefore no unit; it must not be given one."
+                    }
+                  },
+                  "required": [
+                    "axis",
+                    "ids"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "observations": {
+              "type": "object",
+              "description": "One row per ATTEMPTED repeat. A repeat that produced no event is still a row: for count-like methods its response is a measured 0, for a latency it is null.",
+              "properties": {
+                "conditionIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                  },
+                  "minItems": 1,
+                  "maxItems": 20000
+                },
+                "repeatIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                  },
+                  "minItems": 1,
+                  "maxItems": 20000,
+                  "description": "Replicate identity: a trial, a seed, or a cell. Under a paired design the SAME id recurs across conditions and is how the pairing is expressed, so ids are unique within a condition rather than globally."
+                },
+                "response": {
+                  "type": "object",
+                  "description": "What the response numbers ARE. Each branch binds `method` to the quantity kind it must carry and to the fields that method cannot be interpreted without: a latency is never typed as a rate, and a peak never arrives without the estimator that produced it. There is no branch in which a basis, a latency reference, or a count audit attaches to a method it cannot describe.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "description": "A mean firing rate over the measurement window. Optionally carries the exact integer counts and the recorded-sender denominator so Cortexel can RE-DERIVE each repeat's rate instead of trusting the supplied number.",
+                      "properties": {
+                        "method": {
+                          "const": "mean_firing_rate"
+                        },
+                        "kind": {
+                          "enum": [
+                            "firing_rate"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 20000,
+                          "description": "null means the repeat was attempted and its response is UNDEFINED. It is never a zero, never interpolated, and never dropped from the attempted count. A repeat that fired no spike has response 0, not null."
+                        },
+                        "audit": {
+                          "type": "object",
+                          "description": "Optional per-repeat count audit. It is legal ONLY here, because a count and the request-level `recordedSenderCount` denominator can reconstruct a MEAN rate and cannot reconstruct a peak, a latency, or a voltage.",
+                          "properties": {
+                            "eventCounts": {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "minimum": 0
+                              },
+                              "minItems": 1,
+                              "maxItems": 20000,
+                              "description": "Exact integer counts, parallel to the observation rows. An entry is null exactly where the response is null."
+                            }
+                          },
+                          "required": [
+                            "eventCounts"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "A peak instantaneous rate. The basis is REQUIRED: a peak is a property of the estimator as much as of the system, and halving the bin width can roughly double it.",
+                      "properties": {
+                        "method": {
+                          "const": "peak_firing_rate"
+                        },
+                        "kind": {
+                          "enum": [
+                            "firing_rate"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        },
+                        "basis": {
+                          "type": "object",
+                          "description": "The estimator that produced the peak. Cortexel does not compute the peak and refuses to render one whose basis is undeclared.",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": {
+                                  "const": "binned_count"
+                                },
+                                "binWidth": {
+                                  "type": "object",
+                                  "description": "The bin width whose maximum count produced the peak.",
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "duration"
+                                      ]
+                                    },
+                                    "unit": {
+                                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                                    },
+                                    "value": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "unit",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "estimator",
+                                "binWidth"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": {
+                                  "const": "kernel"
+                                },
+                                "shape": {
+                                  "type": "string",
+                                  "enum": [
+                                    "gaussian",
+                                    "boxcar",
+                                    "exponential"
+                                  ]
+                                },
+                                "bandwidth": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "duration"
+                                      ]
+                                    },
+                                    "unit": {
+                                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                                    },
+                                    "value": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "unit",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "causal": {
+                                  "type": "boolean",
+                                  "description": "A causal kernel uses only the past. A symmetric kernel lets an event raise the estimate before it happened, which moves a peak earlier."
+                                }
+                              },
+                              "required": [
+                                "estimator",
+                                "shape",
+                                "bandwidth",
+                                "causal"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values",
+                        "basis"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "The latency of the first event inside the window. The reference is REQUIRED: a latency is a duration from a reference, and without it the number is not a latency.",
+                      "properties": {
+                        "method": {
+                          "const": "first_spike_latency"
+                        },
+                        "kind": {
+                          "enum": [
+                            "duration"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 20000,
+                          "description": "A repeat with no event is null. It is NEVER 0, which would claim the system responded instantaneously, and it is never dropped from the attempted count."
+                        },
+                        "latencyReference": {
+                          "type": "string",
+                          "enum": [
+                            "stimulus_onset",
+                            "measurement_window_start"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values",
+                        "latencyReference"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "An exact integer event count, not a rate.",
+                      "properties": {
+                        "method": {
+                          "const": "event_count"
+                        },
+                        "kind": {
+                          "enum": [
+                            "count"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "A membrane-voltage response must be declared as a MEMBRANE voltage, not as a generic voltage: only the source can say that the signal IS a membrane potential.",
+                      "properties": {
+                        "method": {
+                          "enum": [
+                            "mean_membrane_voltage",
+                            "peak_membrane_voltage"
+                          ]
+                        },
+                        "kind": {
+                          "enum": [
+                            "membrane_voltage"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "A declared model state variable, which carries its own dimension.",
+                      "properties": {
+                        "method": {
+                          "const": "mean_state_variable"
+                        },
+                        "kind": {
+                          "enum": [
+                            "state_variable"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        },
+                        "variableLabel": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                          "description": "Which state variable it is. A state variable with no name is an unlabelled axis."
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values",
+                        "variableLabel"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "conditionIds",
+                "repeatIds",
+                "response"
+              ],
+              "additionalProperties": false
+            },
+            "recordedSenderCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Optional. The RECORDED sender universe the audited rates were averaged over, including senders that never fired — the denominator for `observations.response.audit`. Counting only the senders that spiked inflates every per-neuron rate, always in the flattering direction. Checked positive by rate.denominator_positive."
+            }
+          },
+          "required": [
+            "mode",
+            "measurementWindow",
+            "conditions",
+            "observations"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "aggregates"
+            },
+            "measurementWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            },
+            "conditions": {
+              "type": "object",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": {
+                      "const": "numeric"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                      },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                      },
+                      "maxItems": 1000
+                    },
+                    "input": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "label": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                        },
+                        "scale": {
+                          "type": "string",
+                          "enum": [
+                            "linear",
+                            "log10"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "unit",
+                        "values",
+                        "scale"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "axis",
+                    "ids",
+                    "input"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": {
+                      "type": "string",
+                      "enum": [
+                        "ordinal",
+                        "nominal"
+                      ]
+                    },
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                      },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                      },
+                      "maxItems": 1000
+                    },
+                    "inputLabel": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                    }
+                  },
+                  "required": [
+                    "axis",
+                    "ids"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "aggregates": {
+              "type": "object",
+              "description": "Exactly one row per declared condition, POSITIONALLY bound to conditions.ids in the declared order. Positional binding is deliberate: it makes it impossible to omit a condition, which is the way an inconvenient low-input point usually disappears.",
+              "properties": {
+                "response": {
+                  "type": "object",
+                  "description": "The per-condition estimate. The method is bound to its quantity kind exactly as it is for raw repeats; a summary does not earn a weaker binding. There is no count audit here: an aggregate cannot be re-derived from per-repeat counts that were not supplied.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "const": "mean_firing_rate"
+                        },
+                        "kind": {
+                          "enum": [
+                            "firing_rate"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "description": "The estimate for each condition. null means no repeat yielded a usable response — the condition keeps its place on the axis with no point drawn."
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "const": "peak_firing_rate"
+                        },
+                        "kind": {
+                          "enum": [
+                            "firing_rate"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "basis": {
+                          "type": "object",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": {
+                                  "const": "binned_count"
+                                },
+                                "binWidth": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "duration"
+                                      ]
+                                    },
+                                    "unit": {
+                                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                                    },
+                                    "value": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "unit",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "estimator",
+                                "binWidth"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": {
+                                  "const": "kernel"
+                                },
+                                "shape": {
+                                  "type": "string",
+                                  "enum": [
+                                    "gaussian",
+                                    "boxcar",
+                                    "exponential"
+                                  ]
+                                },
+                                "bandwidth": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "enum": [
+                                        "duration"
+                                      ]
+                                    },
+                                    "unit": {
+                                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                                    },
+                                    "value": {
+                                      "type": "number",
+                                      "exclusiveMinimum": 0
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "unit",
+                                    "value"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "causal": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "estimator",
+                                "shape",
+                                "bandwidth",
+                                "causal"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values",
+                        "basis"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "const": "first_spike_latency"
+                        },
+                        "kind": {
+                          "enum": [
+                            "duration"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "latencyReference": {
+                          "type": "string",
+                          "enum": [
+                            "stimulus_onset",
+                            "measurement_window_start"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values",
+                        "latencyReference"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "const": "event_count"
+                        },
+                        "kind": {
+                          "enum": [
+                            "count"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "description": "An estimator over exact counts need not itself be an integer: the mean of 3 and 4 counted events is 3.5, and rounding it would be a fabricated measurement."
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "enum": [
+                            "mean_membrane_voltage",
+                            "peak_membrane_voltage"
+                          ]
+                        },
+                        "kind": {
+                          "enum": [
+                            "membrane_voltage"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "const": "mean_state_variable"
+                        },
+                        "kind": {
+                          "enum": [
+                            "state_variable"
+                          ]
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "variableLabel": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "kind",
+                        "unit",
+                        "values",
+                        "variableLabel"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "sampleCounts": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1
+                  },
+                  "minItems": 1,
+                  "maxItems": 1000,
+                  "description": "n RETAINED by the estimator for each condition; null exactly where the response is null. An aggregate without n is uninterpretable: the mean of 1 repeat draws identically to the mean of 50."
+                },
+                "excludedCounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 1,
+                  "maxItems": 1000,
+                  "description": "Repeats ATTEMPTED but excluded because the response was undefined. attempted = sampleCount + excludedCount, so the denominator the caller actually used is auditable instead of assumed."
+                }
+              },
+              "required": [
+                "response",
+                "sampleCounts",
+                "excludedCounts"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "mode",
+            "measurementWindow",
+            "conditions",
+            "aggregates"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "description": "The estimator is a closed union: a trim fraction exists exactly where a trimmed mean does. A trim fraction with no trimmed mean would be an instruction silently ignored, and a trimmed mean with no fraction has no definition.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "curveId": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+            },
+            "curveLabel": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+            },
+            "responseMethod": {
+              "type": "string",
+              "enum": [
+                "mean_firing_rate",
+                "peak_firing_rate",
+                "first_spike_latency",
+                "event_count",
+                "mean_membrane_voltage",
+                "peak_membrane_voltage",
+                "mean_state_variable"
+              ],
+              "description": "What the response VALUE is, declared in parameters so the semantic layer can read it (validator response_curve.estimator_declared). It must name the same method carried by the response object; a curve whose y axis has no defined meaning is not a result."
+            },
+            "estimator": {
+              "type": "string",
+              "enum": [
+                "mean",
+                "median"
+              ],
+              "description": "In repeats mode Cortexel computes this from the retained repeats. In aggregates mode it names the estimator that produced the supplied values. Either way the figure states which one it is, because a mean and a median of a skewed rate distribution are different numbers."
+            },
+            "repeatDesign": {
+              "type": "string",
+              "enum": [
+                "independent",
+                "paired"
+              ],
+              "description": "`paired` means the same replicate (seed, cell, network realization) appears at every condition, so the repeats are not independent samples and an interval computed as if they were is too narrow. Declared, recorded, and rendered; never inferred."
+            },
+            "uncertainty": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+              "description": "Required. Per condition, parallel to conditions.ids. `{kind: none, reason}` is a valid and honest answer; leaving it out is not, because bare points imply a precision nobody stated."
+            }
+          },
+          "required": [
+            "curveId",
+            "estimator",
+            "responseMethod",
+            "repeatDesign",
+            "uncertainty"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "curveId": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+            },
+            "curveLabel": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+            },
+            "responseMethod": {
+              "type": "string",
+              "enum": [
+                "mean_firing_rate",
+                "peak_firing_rate",
+                "first_spike_latency",
+                "event_count",
+                "mean_membrane_voltage",
+                "peak_membrane_voltage",
+                "mean_state_variable"
+              ],
+              "description": "What the response VALUE is, declared in parameters so the semantic layer can read it (validator response_curve.estimator_declared). It must name the same method carried by the response object; a curve whose y axis has no defined meaning is not a result."
+            },
+            "estimator": {
+              "const": "trimmed_mean"
+            },
+            "trimFraction": {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 0.5,
+              "description": "floor(n * trimFraction) values are removed from EACH tail, so 0.1 removes 20% of the repeats in total. The per-tail reading is the scipy convention; the per-total reading would trim half as much."
+            },
+            "repeatDesign": {
+              "type": "string",
+              "enum": [
+                "independent",
+                "paired"
+              ]
+            },
+            "uncertainty": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty"
+            }
+          },
+          "required": [
+            "curveId",
+            "estimator",
+            "responseMethod",
+            "trimFraction",
+            "repeatDesign",
+            "uncertainty"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_matrix.request.v1.schema.json",
+  "title": "network.delay_matrix request",
+  "description": "GENERATED from contract/skills/network.delay_matrix.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.delay_matrix"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE node universe, in the exact order the axes are drawn. Row i is the target and column i is the source of the SAME node, so the matrix is square and its visual diagonal is the self-connection diagonal. Declared so that a node with no observed connection still has a row and a column: an edge list can only show that no edge was observed, never that a neuron receives or sends nothing."
+        },
+        "connections": {
+          "type": "object",
+          "description": "The connection snapshot in parallel-array form. Every multapse is its own row and is never deduplicated.",
+          "properties": {
+            "sourceIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 200000,
+              "description": "The presynaptic node of each connection. These select the COLUMN."
+            },
+            "targetIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 200000,
+              "description": "The postsynaptic node of each connection. These select the ROW. An adapter that swaps this array with sourceIds produces a figure that passes every check and states the opposite of the truth."
+            },
+            "edgeIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 200000,
+              "description": "Optional stable per-connection identity. When absent, a deterministic ordinal identity is assigned after canonical sorting and the assignment method is recorded, so a cell's contributing connections remain addressable."
+            },
+            "delays": {
+              "type": "object",
+              "description": "One delay per connection row. Values are plain numbers: null is not accepted, because a delay is a declared property of a connection rather than a sampled observation.",
+              "properties": {
+                "kind": {
+                  "const": "delay"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 200000,
+                  "description": "Finite and strictly positive. Positivity is enforced by topology.delay_positive so the caller gets SCIENCE_DELAY_NONPOSITIVE and its corrective action, not a bare schema-keyword failure."
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "synapseModels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "maxItems": 200000,
+              "description": "Optional per-connection synapse model. Delays of different models are dimensionally identical and may share one matrix, unlike weights; the model is carried so a reader can see which cells mix models, and so a split axonal/dendritic model is identifiable in the table."
+            }
+          },
+          "required": [
+            "sourceIds",
+            "targetIds",
+            "delays"
+          ],
+          "additionalProperties": false
+        },
+        "scope": {
+          "description": "What this snapshot could see. It, and nothing else, decides whether an empty cell means 'no connection' or 'not observed'. `snapshotTime` is REQUIRED here even though the shared type leaves it optional: a delay can be changed after a connection is created and structural plasticity rewires connections outright, so an undated delay matrix cannot be bound to a moment in the run.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+            },
+            {
+              "type": "object",
+              "required": [
+                "snapshotTime"
+              ]
+            }
+          ]
+        },
+        "observedTargetIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 100000,
+          "description": "The target rows this snapshot could actually observe. REQUIRED when scope.kind is mpi_target_rank_local (the locally owned targets) and forbidden otherwise, where the whole row universe is observed by construction. Rows outside this set render as not_observed."
+        },
+        "simulationResolution": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+          "description": "Optional. The source's simulation timestep, which is the grid every delay must lie on in NEST. It is RECORDED and shown as context; it is not enforced (see knownLimitations). Cortexel does not assume a shared minimum timestep across sources, and hard-codes no 0.1 ms grid."
+        }
+      },
+      "required": [
+        "nodeUniverse",
+        "connections",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "mpi_target_rank_local"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "observedTargetIds"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "observedTargetIds"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "matrixLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "A label for the selection shown. It never renames the axes: 'Target (row)' and 'Source (column)' are contract-owned and are not caller-settable, because a relabelled axis is how a transposed figure gets legitimized."
+        },
+        "multapseAggregation": {
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation"
+            },
+            {
+              "enum": [
+                "mean",
+                "min",
+                "max",
+                "no_aggregation"
+              ],
+              "description": "Mandatory: there is no default and there is no 'last edge wins'. `sum` exists in the shared type but is REFUSED here — parallel synapses are not in series, so the sum of two 5 ms delays is 10 ms, a latency nothing in the network experiences. `no_aggregation` asserts at most one connection per cell and fails if that is untrue."
+            }
+          ]
+        },
+        "delaySemantics": {
+          "type": "string",
+          "enum": [
+            "total_transmission",
+            "dendritic_component_only"
+          ],
+          "description": "Mandatory: what the reported number MEANS. Most synapse models report the full source-to-target transmission delay. Models that split an axonal and a dendritic component report only the dendritic part in their `delay` field, so the true latency is larger by the axonal component. The two are numerically indistinguishable, so Cortexel cannot infer this and refuses to guess; the declaration is rendered in the legend, the summary, and the table."
+        },
+        "displayUnit": {
+          "type": "object",
+          "description": "Optional. The unit the legend and table use, declared as a delay quantity ({kind: delay, unit}) so unit.dimension_match owns it: a non-time code fails with SCIENCE_UNIT_DIMENSION_MISMATCH rather than silently relabelling a millisecond as a millivolt. When omitted, the delays' own declared unit is used and no conversion is performed.",
+          "properties": {
+            "kind": {
+              "const": "delay"
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            }
+          },
+          "required": [
+            "kind",
+            "unit"
+          ],
+          "additionalProperties": false
+        },
+        "scale": {
+          "type": "object",
+          "description": "How the sequential colour ramp maps delay to colour. Optional; the contract default is linear, and changing that default is a MAJOR change. There is no declared or shared colour domain: the domain is always the observed extent of the rendered cells (see knownLimitations).",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "linear",
+                "log"
+              ],
+              "description": "log is safe here because every delay is strictly positive, so RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN cannot arise."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "multapseAggregation",
+        "delaySemantics"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

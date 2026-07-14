@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/figure-request.v1.schema.json",
+  "title": "FigureRequestV1",
+  "description": "What a caller AUTHORS. This is the complete set of fields a caller is permitted to set.\n\nThe defining rule of the contract: a caller declares what its data IS. It never declares what Cortexel concluded about it. There is deliberately no field here for a validation result, a reference-comparison status, an accessibility conformance claim, a completeness assertion, a paper-reproduction claim, a calibrated-posterior claim, an output digest, or the text of a mandatory disclosure. Those are library-generated facts and live only in FigureArtifactV1. Sending one is not ignored — it is rejected with PROVENANCE_CALLER_ASSURANCE_FORBIDDEN.\n\nThis envelope validates the shape common to every skill and lets the router read `skill.id` before dispatch. The per-skill schemas under contract/schemas/skills/ are self-contained and are the actual acceptance authority for `data` and `parameters`.",
+
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional. A versioned schema identifier. A stored artifact must never reference a mutable `latest` URL."
+    },
+    "contract": {
+      "type": "object",
+      "description": "Which contract this request is written against. Required: an undeclared contract is not a 1.0 request.",
+      "properties": {
+        "name": { "const": "cortexel-figure-request" },
+        "version": { "type": "string", "enum": ["1.0"] }
+      },
+      "required": ["name", "version"],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+      "description": "Optional. If present it MUST equal the installed build's contract digest, otherwise CONTRACT_DIGEST_MISMATCH. This lets an agent pin the exact contract it validated against; it can never be used to assert a digest Cortexel does not have."
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/stableSkillId"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional. Omit to accept the installed revision. A revision this build does not provide is refused rather than approximated."
+        }
+      },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "The observations. Closed per skill.",
+      "minProperties": 1
+    },
+    "parameters": {
+      "type": "object",
+      "description": "How to analyse and present the observations. Closed per skill. There is no `.passthrough()`: a typo in a scientific parameter must fail rather than be silently dropped."
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": ["contract", "skill", "data", "parameters", "source"],
+  "additionalProperties": false
+}

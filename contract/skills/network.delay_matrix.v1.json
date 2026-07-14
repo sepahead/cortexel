@@ -1,0 +1,1453 @@
+{
+  "id": "network.delay_matrix",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Transmission-delay matrix over a declared target-row / source-column node universe",
+  "purpose": {
+    "canonicalQuestion": "For each ordered (source, target) pair in a declared node universe, what is the explicitly named aggregate of the positive transmission delays of the connections observed between them, under a declared network scope?",
+    "cannotEstablish": [
+      "That an empty cell is a connection with zero delay. An empty cell means no connection was observed under the declared scope; a zero delay is rejected outright, so no cell in this figure is ever drawn at zero.",
+      "The delay of any single synapse in a cell that aggregates multapses. A mean over parallel synapses of 1 ms and 9 ms reports 5 ms — a latency no spike in this network ever experiences.",
+      "That a source does not connect to a target, when the scope is rank-local or sampled. Those scopes cannot see the whole cross-product, so an empty cell there means 'not observed', not 'not connected'.",
+      "The total source-to-target latency when the synapse model splits axonal and dendritic delays and the source reported only the dendritic component. The two are numerically indistinguishable; only the declared delaySemantics tells them apart.",
+      "The sign, amplitude, or receptor of any connection. Two cells with identical delay may drive their targets in opposite directions; a delay matrix carries no weight information at all.",
+      "Any degree. Row and column marginals of delays are not quantities, are never computed, and are never rendered; a row with three painted cells is not a target with in-degree three, because multapses share a cell.",
+      "That the delays hold at any time other than the declared snapshot time. A network with plastic or rewired delays has a different matrix at every snapshot.",
+      "Any claim about when a target actually fired. A delay is the latency a synapse imposes on transmission, not evidence about spikes, and this figure contains no spike data.",
+      "Any uncertainty or spread within a cell. A cell is one colour; the contributing count, minimum, and maximum are recoverable only from the table and the sidecar."
+    ]
+  },
+  "science": {
+    "normalization": [
+      "Orientation is FROZEN and is not caller-settable: row i is the TARGET, column j is the SOURCE, and cell (i,j) holds the aggregate delay of the connections from source j to target i. This is NEST's convention.",
+      "The orientation is restated on both axes, in the legend, in the table header, and in the accessible summary. A transposed matrix passes every validator and is a plausible lie: a feedforward network would appear to run backwards.",
+      "Row order and column order both follow the single declared node-universe order: row i and column i are the same node, so the visual diagonal is the self-connection diagonal. Neither axis is ever re-sorted by an observed value. Sorting rows by delay would manufacture block structure that the network does not have.",
+      "Connection rows arrive in NO assumed order — NEST's GetConnections output is rank-local and target-ordered, not caller-ordered. Rows are stably sorted by (rowIndex, columnIndex, edgeId when declared, otherwise the original ordinal), and the original ordinal is retained so each cell's contributing rows are reproducible exactly.",
+      "Multapses are NEVER deduplicated. Two rows with the same (source, target) are two connections, not a duplicate-entry error. They map to one cell and therefore require a declared aggregation.",
+      "Autapses (source == target) are legal, occupy the diagonal cell, are never dropped, and are flagged in the table. There is no option to hide them: painting the diagonal as absent while a self-connection exists would be a false statement about that cell.",
+      "Delays are finite, strictly positive binary64 numbers. `null` is NOT accepted. A delay is a declared property of a connection, not a sampled observation: a null would silently shrink a mean's denominator while leaving the cell looking measured. A connection whose delay the source cannot report does not belong in a delay matrix — show its presence with network.adjacency_matrix instead.",
+      "Negative zero is NOT a parse or snapshot error — RFC 8785 canonicalizes -0 to 0 and the error registry deliberately registers no code for it — so a delay of -0 is caught exactly where every other nonpositive delay is caught: topology.delay_positive, which tests strictly against zero.",
+      "The scope declares a snapshotTime. A delay is a property of a connection AT a moment: NEST permits a connection's delay to be changed after creation, and structural plasticity rewires connections outright, so an undated delay matrix cannot be bound to a moment in the run. The shared scope type leaves snapshotTime optional; this figure requires it.",
+      "Unit conversion runs through the typed unit layer: every `time` code (s, ms, us, nest:delay) converts to the display unit by exactly one exact registry factor, never a chain, and is recorded and disclosed. `nest:delay` is a genuine time; the simulator-defined `nest:weight` has no SI mapping and fails dimension matching rather than being read as milliseconds.",
+      "Declared edge ids must be unique. A contributing-edge list is meaningless if two different connections share an identity, and cell provenance would silently collapse.",
+      "Cell state is a closed trichotomy — `present`, `absent`, `not_observed` — decided by the declared scope and the observed rows, never by whether a value happens to be small. `absent` and `not_observed` are visually distinct from each other and from every painted value."
+    ],
+    "derivation": [
+      "Cell assignment: connection row r maps to cell (rowIndex(targetIds[r]), columnIndex(sourceIds[r])), both indices into the single declared node universe. Both endpoints must be members of it; an unknown endpoint fails rather than silently extending the universe the caller declared. Complexity O(e) with hashed index lookups.",
+      "Aggregation runs over a cell's contributing delays d_1..d_k in canonical seconds, by the mandatory declared policy. `min` is the earliest arrival — the only aggregate with a direct mechanistic reading, the first moment the source can influence the target. `max` is the latest arrival.",
+      "`mean` is sum(d)/k, computed with compensated summation so the result cannot depend on row order. It is NOT the delay of any synapse: over parallel connections of 1 ms and 9 ms it reports 5 ms, a latency nothing in the network experiences.",
+      "`no_aggregation` ASSERTS that k <= 1 for every cell and FAILS with SCIENCE_AGGREGATION_REQUIRED if any cell has k >= 2. There is no implicit 'last edge wins': which of two parallel synapses won would depend on the order the rows happened to arrive in, so the same network could produce two different figures.",
+      "`sum` is deliberately NOT offered, although the shared MultapseAggregation type defines it. Parallel synapses are not in series: summing a 5 ms and a 5 ms connection yields 10 ms, a transmission latency that nothing in the network ever experiences. It is meaningful for weights (total drive) and meaningless for delays.",
+      "Whatever the aggregate, every cell retains k (contributing connection count), the minimum, the maximum, and the contributing edge ids. The table and sidecar expose all of them, because one colour cannot show the spread that an aggregate hides — for a bimodal multapse set this spread is the whole story.",
+      "The colour scale is sequential and its domain is the observed extent [min, max] over the rendered present cells. It NEVER begins at zero: zero is not a legal delay, and anchoring a ramp at zero would compress every real delay into the top of the scale and make an absent cell (drawn low) read as the fastest connection.",
+      "No marginal row or column summaries are computed or rendered. A sum or mean of delays across a row is not a quantity, and offering one would invite exactly the misreading the aggregation rules exist to prevent.",
+      "Complexity: O(e) to map rows to cells, O(e) total across all cell aggregations, O(P) to paint P present cells. Cells are held sparsely keyed by (i,j); no dense rows x columns array is materialized.",
+      "Numeric tolerance: unit conversion multiplies once by the exact registry factor. Aggregate comparisons in conformance vectors use a relative binary64 tolerance of 1e-12. Delay positivity is an exact test against zero, not a tolerance test.",
+      "Positivity is enforced by the named scientific validator topology.delay_positive (SCIENCE_DELAY_NONPOSITIVE), not by a schema bound on the value array. The diagnostic must name the science and its corrective action, and the rule must have exactly one owner so two copies cannot drift apart."
+    ],
+    "scopeRules": [
+      "Every request declares a NetworkScopeV1. Scope is required both structurally and semantically, so an adapter path that bypasses the request envelope still cannot produce a scopeless matrix.",
+      "single_process, and global_merged whose mergedRanks cover 0..worldSize-1 exactly once: the cross-product of the declared universes is fully observed, so an empty cell IS 'no connection was observed' and is rendered as `absent`.",
+      "mpi_target_rank_local: a rank holds the connections whose TARGET it owns, so `observedTargetIds` is REQUIRED and must be a subset of the row universe. Rows outside it render `not_observed`, never as an empty row — an empty row reads as 'this neuron receives no input' when the rank simply never held those connections. In a four-rank run three quarters of the rows would be false.",
+      "Within an observed target row, a rank's evidence is complete across ALL sources — that is exactly what makes a local in-degree computable — so a cell in an observed row may legitimately be `absent`. This requires localTargetUniverseComplete == true. When it is false, no cell anywhere may be claimed absent and every empty cell is `not_observed`.",
+      "sampled: no cell may be claimed absent. Every empty cell is `not_observed`, and the retained and source connection counts are disclosed. A sampled matrix shows which connections were drawn, never which were not there.",
+      "A rank-local or sampled delay matrix can never be relabelled, merged, or exported as a global one (SCOPE_LOCAL_CANNOT_CLAIM_GLOBAL). A partial view stays partial.",
+      "The node universe must be declared complete (complete == true): topology.node_universe_declared refuses a matrix whose node set is only partially declared. Cell absence is still governed by the completeness of the EDGE snapshot for that pair through the declared scope, not by whether other nodes exist. No degree may be read from the figure, which is why no marginals exist."
+    ],
+    "uncertaintySupport": [
+      "none"
+    ]
+  },
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE node universe, in the exact order the axes are drawn. Row i is the target and column i is the source of the SAME node, so the matrix is square and its visual diagonal is the self-connection diagonal. Declared so that a node with no observed connection still has a row and a column: an edge list can only show that no edge was observed, never that a neuron receives or sends nothing."
+        },
+        "connections": {
+          "type": "object",
+          "description": "The connection snapshot in parallel-array form. Every multapse is its own row and is never deduplicated.",
+          "properties": {
+            "sourceIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 200000,
+              "description": "The presynaptic node of each connection. These select the COLUMN."
+            },
+            "targetIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 200000,
+              "description": "The postsynaptic node of each connection. These select the ROW. An adapter that swaps this array with sourceIds produces a figure that passes every check and states the opposite of the truth."
+            },
+            "edgeIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 200000,
+              "description": "Optional stable per-connection identity. When absent, a deterministic ordinal identity is assigned after canonical sorting and the assignment method is recorded, so a cell's contributing connections remain addressable."
+            },
+            "delays": {
+              "type": "object",
+              "description": "One delay per connection row. Values are plain numbers: null is not accepted, because a delay is a declared property of a connection rather than a sampled observation.",
+              "properties": {
+                "kind": {
+                  "const": "delay"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 200000,
+                  "description": "Finite and strictly positive. Positivity is enforced by topology.delay_positive so the caller gets SCIENCE_DELAY_NONPOSITIVE and its corrective action, not a bare schema-keyword failure."
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "synapseModels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "maxItems": 200000,
+              "description": "Optional per-connection synapse model. Delays of different models are dimensionally identical and may share one matrix, unlike weights; the model is carried so a reader can see which cells mix models, and so a split axonal/dendritic model is identifiable in the table."
+            }
+          },
+          "required": [
+            "sourceIds",
+            "targetIds",
+            "delays"
+          ],
+          "additionalProperties": false
+        },
+        "scope": {
+          "description": "What this snapshot could see. It, and nothing else, decides whether an empty cell means 'no connection' or 'not observed'. `snapshotTime` is REQUIRED here even though the shared type leaves it optional: a delay can be changed after a connection is created and structural plasticity rewires connections outright, so an undated delay matrix cannot be bound to a moment in the run.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+            },
+            {
+              "type": "object",
+              "required": [
+                "snapshotTime"
+              ]
+            }
+          ]
+        },
+        "observedTargetIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 100000,
+          "description": "The target rows this snapshot could actually observe. REQUIRED when scope.kind is mpi_target_rank_local (the locally owned targets) and forbidden otherwise, where the whole row universe is observed by construction. Rows outside this set render as not_observed."
+        },
+        "simulationResolution": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+          "description": "Optional. The source's simulation timestep, which is the grid every delay must lie on in NEST. It is RECORDED and shown as context; it is not enforced (see knownLimitations). Cortexel does not assume a shared minimum timestep across sources, and hard-codes no 0.1 ms grid."
+        }
+      },
+      "required": [
+        "nodeUniverse",
+        "connections",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "mpi_target_rank_local"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "observedTargetIds"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "observedTargetIds"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "matrixLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "A label for the selection shown. It never renames the axes: 'Target (row)' and 'Source (column)' are contract-owned and are not caller-settable, because a relabelled axis is how a transposed figure gets legitimized."
+        },
+        "multapseAggregation": {
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation"
+            },
+            {
+              "enum": [
+                "mean",
+                "min",
+                "max",
+                "no_aggregation"
+              ],
+              "description": "Mandatory: there is no default and there is no 'last edge wins'. `sum` exists in the shared type but is REFUSED here — parallel synapses are not in series, so the sum of two 5 ms delays is 10 ms, a latency nothing in the network experiences. `no_aggregation` asserts at most one connection per cell and fails if that is untrue."
+            }
+          ]
+        },
+        "delaySemantics": {
+          "type": "string",
+          "enum": [
+            "total_transmission",
+            "dendritic_component_only"
+          ],
+          "description": "Mandatory: what the reported number MEANS. Most synapse models report the full source-to-target transmission delay. Models that split an axonal and a dendritic component report only the dendritic part in their `delay` field, so the true latency is larger by the axonal component. The two are numerically indistinguishable, so Cortexel cannot infer this and refuses to guess; the declaration is rendered in the legend, the summary, and the table."
+        },
+        "displayUnit": {
+          "type": "object",
+          "description": "Optional. The unit the legend and table use, declared as a delay quantity ({kind: delay, unit}) so unit.dimension_match owns it: a non-time code fails with SCIENCE_UNIT_DIMENSION_MISMATCH rather than silently relabelling a millisecond as a millivolt. When omitted, the delays' own declared unit is used and no conversion is performed.",
+          "properties": {
+            "kind": {
+              "const": "delay"
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            }
+          },
+          "required": [
+            "kind",
+            "unit"
+          ],
+          "additionalProperties": false
+        },
+        "scale": {
+          "type": "object",
+          "description": "How the sequential colour ramp maps delay to colour. Optional; the contract default is linear, and changing that default is a MAJOR change. There is no declared or shared colour domain: the domain is always the observed extent of the rendered cells (see knownLimitations).",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "linear",
+                "log"
+              ],
+              "description": "log is safe here because every delay is strictly positive, so RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN cannot arise."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "multapseAggregation",
+        "delaySemantics"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "semanticValidators": [
+    {
+      "id": "provenance.no_caller_assurance"
+    },
+    {
+      "id": "provenance.note_safe_display"
+    },
+    {
+      "id": "unit.canonical_code"
+    },
+    {
+      "id": "unit.dimension_match"
+    },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/delays/values",
+            "/data/connections/synapseModels"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/nodeUniverse/ids",
+          "/data/connections/edgeIds",
+          "/data/observedTargetIds"
+        ]
+      }
+    },
+    {
+      "id": "topology.scope_declared"
+    },
+    {
+      "id": "topology.scope_supports_claim"
+    },
+    {
+      "id": "topology.node_universe_declared"
+    },
+    {
+      "id": "topology.edge_endpoints_in_universe"
+    },
+    {
+      "id": "topology.multapse_aggregation_declared"
+    },
+    {
+      "id": "topology.delay_positive"
+    }
+  ],
+  "renderer": {
+    "id": "figure.matrix",
+    "revision": 1
+  },
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": [
+      "none",
+      "matrix_value_quantize"
+    ],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+  "provenance": {
+    "requiredSourceFields": [
+      "kind"
+    ]
+  },
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE",
+    "RANK_LOCAL_SCOPE",
+    "SAMPLED_EDGES",
+    "NODE_UNIVERSE_INCOMPLETE",
+    "MULTAPSE_AGGREGATED",
+    "ABSENT_IS_NOT_ZERO",
+    "UNIT_CONVERTED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+  "accessibility": {
+    "summaryTemplate": "Delay matrix for {matrixLabel}. Rows are targets ({rowCount} declared), columns are sources ({columnCount} declared). {presentCellCount} cells have at least one observed connection, {absentCellCount} have none observed, and {notObservedCellCount} lie outside the declared scope. Cells show the {multapseAggregation} of {delaySemantics} delays over {connectionCount} connections, in {displayUnit}. Delay ranges from {delayMin} to {delayMax} {displayUnit}; the colour domain is that observed extent and does not include zero. Scope: {scopeKind}, snapshot time {snapshotTime} {snapshotTimeUnit}. No uncertainty is drawn: per-cell contributing count, minimum and maximum are in the table. {compactionStatement}",
+    "tableColumns": [
+      {
+        "key": "rowIndex",
+        "header": "Row",
+        "description": "Zero-based index into the declared target (row) universe."
+      },
+      {
+        "key": "targetId",
+        "header": "Target",
+        "description": "The postsynaptic node. Rows are targets."
+      },
+      {
+        "key": "columnIndex",
+        "header": "Column",
+        "description": "Zero-based index into the declared source (column) universe."
+      },
+      {
+        "key": "sourceId",
+        "header": "Source",
+        "description": "The presynaptic node. Columns are sources."
+      },
+      {
+        "key": "cellStatus",
+        "header": "Cell status",
+        "description": "present, absent (no connection observed under a scope that could have seen one), or not_observed (the scope could not see this cell)."
+      },
+      {
+        "key": "delayAggregate",
+        "header": "Delay",
+        "description": "The declared aggregate. Empty when the cell is absent or not_observed — never zero."
+      },
+      {
+        "key": "displayUnit",
+        "header": "Unit"
+      },
+      {
+        "key": "multapseAggregation",
+        "header": "Aggregation",
+        "description": "The declared policy that produced the cell value."
+      },
+      {
+        "key": "delaySemantics",
+        "header": "Delay meaning",
+        "description": "total_transmission, or dendritic_component_only when the model splits axonal and dendritic delays."
+      },
+      {
+        "key": "contributingConnectionCount",
+        "header": "Connections",
+        "description": "How many connection rows contribute to this cell. Greater than one means a multapse was aggregated."
+      },
+      {
+        "key": "delayMin",
+        "header": "Delay min",
+        "description": "Minimum over the contributing connections. Equal to the aggregate only under min."
+      },
+      {
+        "key": "delayMax",
+        "header": "Delay max",
+        "description": "Maximum over the contributing connections. The spread a single colour cannot show."
+      },
+      {
+        "key": "contributingEdgeIds",
+        "header": "Connection ids",
+        "description": "The exact contributing connections, declared or deterministically assigned. The complete list is in the sidecar when the cell exceeds the inline bound."
+      },
+      {
+        "key": "synapseModels",
+        "header": "Synapse models",
+        "description": "The distinct models contributing to this cell."
+      },
+      {
+        "key": "isAutapse",
+        "header": "Autapse",
+        "description": "True when source == target. Autapses are retained on the diagonal."
+      },
+      {
+        "key": "scope",
+        "header": "Scope",
+        "description": "The scope under which this cell was observed, carried per row so an excerpt cannot lose it."
+      },
+      {
+        "key": "snapshotTime",
+        "header": "Snapshot time",
+        "description": "The declared moment the connection snapshot was taken, with its unit. Carried per row so an excerpt cannot lose the moment the delays belong to."
+      }
+    ]
+  },
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "nest.GetConnections + SynapseCollection.get(['source','target','delay'])",
+      "version": "3.10.0",
+      "status": "not_run",
+      "notes": "The intended differential oracle is NEST itself: build a fixture network with known multapses, an autapse, an isolate target, and known per-connection delays; read the SynapseCollection; and assert that the derived cell set, the contributing counts, and the min/mean/max aggregates match the constructed truth, and that GetConnections' source/target fields land in columns/rows respectively rather than transposed. Under MPI it must also confirm that rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed. The aggregation arithmetic itself is covered by hand vectors, which is the stronger evidence: two libraries can share a convention error, but arithmetic done on paper cannot."
+    }
+  },
+  "adapters": [
+    {
+      "system": "nest.GetConnections",
+      "status": "supported",
+      "notes": "The adapter must map NEST's `target` to rows and `source` to columns, must never deduplicate multapses, must declare the scope (single_process, or mpi_target_rank_local with the locally owned target ids, because GetConnections on rank r returns the connections whose target r owns), and must declare delaySemantics from the synapse model — a model that splits axonal and dendritic delays reports only the dendritic component in its `delay` field. NEST delays are milliseconds and are emitted as `ms` (or the equivalent `nest:delay` code), never as the simulator-defined `nest:weight`. Declaring source.system and source.systemVersion is strongly recommended: the delay grid and the split-delay behaviour are simulator- and version-specific."
+    },
+    {
+      "system": "brian2.Synapses",
+      "status": "partial",
+      "notes": "Brian2 carries a per-synapse `delay` with a real unit, but its i/j indices are array positions, not node ids: the caller must supply the index-to-id mapping explicitly. Brian2's pre/post delay distinction must be resolved into delaySemantics rather than assumed."
+    },
+    {
+      "system": "networkx.DiGraph",
+      "status": "partial",
+      "notes": "The caller must name the edge attribute holding the delay and declare its unit; NetworkX carries neither units nor scope, so both must be supplied. A MultiDiGraph is required if multapses exist — a DiGraph has already destroyed them before Cortexel is reached, and nothing here can recover them."
+    },
+    {
+      "system": "neo",
+      "status": "rejected",
+      "notes": "Neo models recorded signals and spike trains. It has no connectivity object, so there is nothing to map."
+    },
+    {
+      "system": "nwb",
+      "status": "rejected",
+      "notes": "NWB core has no synapse-level connection table carrying delays. A custom extension would be required, and none is certified; a partial or invented mapping would produce a matrix whose absent cells mean nothing."
+    },
+    {
+      "system": "ncp",
+      "status": "planned",
+      "notes": "The narrow NCP adapter surface is not yet certified for connection snapshots. It cannot feed this figure until it declares scope explicitly, because a connection export without scope cannot distinguish an absent cell from an unobserved one — and that distinction is the entire content of a sparse matrix."
+    }
+  ],
+  "migration": {
+    "legacyIds": [
+      "nest.delay_matrix"
+    ],
+    "notes": "The legacy payload declared no multapse aggregation, no node universes, and no scope. Migration therefore BLOCKS with MIGRATION_INFORMATION_MISSING when the aggregation, either universe, the scope, or the delay unit is absent, rather than defaulting to 'last edge wins' (which would have made the figure depend on the order the connection rows happened to arrive in), inferring the universes from the observed endpoints (which would delete every isolate row and column), or assuming milliseconds. delaySemantics is likewise never guessed. Note that `nest.connectivity_matrix` is NOT an alias of this skill: it blocks with MIGRATION_AMBIGUOUS_CONNECTIVITY_MATRIX, because adjacency, weight, and delay matrices differ in how they treat an absent cell, a zero value, and a repeated connection."
+  },
+  "owner": "Sepehr Mahmoudian",
+  "changePolicy": [
+    "Changing the target-row / source-column orientation is MAJOR. It transposes every figure this contract has ever produced.",
+    "Changing the set of permitted multapse aggregations, or the meaning of `no_aggregation`, is MAJOR. Admitting `sum` would be MAJOR and is not planned.",
+    "Changing the present / absent / not_observed cell trichotomy, or the rule that the colour domain never includes zero, is MAJOR.",
+    "Relaxing topology.delay_positive to admit a zero delay is MAJOR, and requires a source that genuinely permits it plus a disclosure that says so.",
+    "Making `delaySemantics` optional, or giving it a default, is MAJOR: a default would silently assert something about a model the caller never declared.",
+    "Making `scope.snapshotTime` optional is MAJOR: an undated matrix cannot be bound to a moment in a run whose delays may have been changed or rewired.",
+    "Changing the default colour scale from linear is MAJOR.",
+    "Adding an aggregation (for example median, with its tie rule for an even contributing count defined exactly) is MINOR.",
+    "Adding an adapter, or a new time unit code, is MINOR."
+  ],
+  "knownLimitations": [
+    "No disclosure id exists for delay semantics. `delaySemantics` is machine-checkable, but disclosures.v1.json has no rule for it, so it is carried in the legend, the accessible summary, and the table rather than the disclosure footer. A DELAY_COMPONENT_SEMANTICS rule is proposed for the registry.",
+    "ABSENT_IS_NOT_ZERO's published text names a zero weight. For this figure that clause is vacuous — a zero delay is rejected — and the real hazard it must cover is an empty cell being read as instantaneous transmission at the fast end of the ramp.",
+    "DOWNSAMPLED_FOR_RENDERING speaks of observations drawn. Under matrix_value_quantize every cell is retained and individually addressable; only paint paths are grouped, so countAfter equals countBefore and the disclosure reports a reduction in paths, not in data.",
+    "`simulationResolution` is recorded but NOT enforced. No registered validator checks that each delay is an integer multiple of the declared resolution, so a delay off the simulator's grid is accepted and displayed.",
+    "There is no declared or shared colour domain, so two delay matrices are NOT comparable by colour — compare the legends or the tables. A shared domain needs a clipping disclosure that does not exist in disclosures.v1.json.",
+    "Cortexel cannot detect a transposed adapter: if the source and target arrays are swapped, every validator passes and the figure is a plausible lie about direction. The defences are the adapter's own vectors and restating orientation on the axes, legend, caption, and table.",
+    "No uncertainty variant is renderable in a cell, so the spread across aggregated multapses is invisible in the colour. It is exact in the table (contributing count, min, max) and never merely summarized.",
+    "Delays of different synapse models share one matrix because they share one dimension. That is dimensionally correct, but a matrix mixing a split-delay model with a total-delay model mixes two meanings. The models are carried per cell; no validator refuses the mix.",
+    "The matrix is square over one declared node universe: rows (targets) and columns (sources) index the same node set. A rectangular/bipartite matrix over two distinct universes is not offered, because topology.edge_endpoints_in_universe binds both endpoints to the single data.nodeUniverse.",
+    "The node universe must be declared complete: topology.node_universe_declared rejects complete == false, so a delay matrix over an explicitly partial node set is not available. Edge-snapshot partiality is expressed through the declared scope instead."
+  ],
+  "examples": {
+    "valid": [
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.delay_matrix"
+        },
+        "data": {
+          "nodeUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "1",
+              "1",
+              "2",
+              "3"
+            ],
+            "targetIds": [
+              "2",
+              "2",
+              "3",
+              "3"
+            ],
+            "edgeIds": [
+              "c1",
+              "c2",
+              "c3",
+              "c4"
+            ],
+            "delays": {
+              "kind": "delay",
+              "unit": "ms",
+              "values": [
+                1.0,
+                9.0,
+                2.5,
+                4.0
+              ]
+            },
+            "synapseModels": [
+              "static_synapse",
+              "static_synapse",
+              "static_synapse",
+              "static_synapse"
+            ]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 1000
+            }
+          },
+          "simulationResolution": {
+            "kind": "duration",
+            "unit": "ms",
+            "value": 0.1
+          }
+        },
+        "parameters": {
+          "matrixLabel": "Excitatory subnetwork",
+          "multapseAggregation": "min",
+          "delaySemantics": "total_transmission",
+          "displayUnit": {
+            "kind": "delay",
+            "unit": "ms"
+          },
+          "scale": {
+            "kind": "linear"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.delay_matrix"
+        },
+        "data": {
+          "nodeUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "2",
+              "4"
+            ],
+            "targetIds": [
+              "1",
+              "3"
+            ],
+            "delays": {
+              "kind": "delay",
+              "unit": "ms",
+              "values": [
+                1.5,
+                3.0
+              ]
+            }
+          },
+          "scope": {
+            "kind": "mpi_target_rank_local",
+            "rank": 0,
+            "worldSize": 2,
+            "localTargetUniverseComplete": true,
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 500
+            }
+          },
+          "observedTargetIds": [
+            "1",
+            "3"
+          ]
+        },
+        "parameters": {
+          "multapseAggregation": "no_aggregation",
+          "delaySemantics": "total_transmission"
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.delay_matrix"
+        },
+        "data": {
+          "nodeUniverse": {
+            "ids": [
+              "1",
+              "2"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "1",
+              "1",
+              "1"
+            ],
+            "targetIds": [
+              "1",
+              "2",
+              "2"
+            ],
+            "edgeIds": [
+              "e1",
+              "e2",
+              "e3"
+            ],
+            "delays": {
+              "kind": "delay",
+              "unit": "us",
+              "values": [
+                1000,
+                1500,
+                4500
+              ]
+            },
+            "synapseModels": [
+              "static_synapse",
+              "static_synapse",
+              "static_synapse"
+            ]
+          },
+          "scope": {
+            "kind": "global_merged",
+            "worldSize": 2,
+            "mergedRanks": [
+              0,
+              1
+            ],
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 2000
+            }
+          }
+        },
+        "parameters": {
+          "matrixLabel": "Merged microcircuit",
+          "multapseAggregation": "mean",
+          "delaySemantics": "dendritic_component_only",
+          "displayUnit": {
+            "kind": "delay",
+            "unit": "ms"
+          },
+          "scale": {
+            "kind": "log"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "why": "`sum` aggregates parallel delays. Two synapses of 5 ms from source 1 to target 2 are in PARALLEL, not in series: a spike arrives at 5 ms, twice. Summing them reports 10 ms — a latency nothing in the network ever experiences — and the cell would read as the slowest connection in the figure. Sum is legal for weights (total drive is real) and is refused here.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "1"
+              ],
+              "targetIds": [
+                "2",
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  5.0,
+                  5.0
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`no_aggregation` asserts at most one connection per cell, and two connections map to cell (target 2, source 1). Without the assertion, 'last edge wins' would draw 9.0 ms or 1.0 ms depending only on which row the recorder happened to emit last — a 9x difference in the same figure, from the same network, decided by array order.",
+        "expectedCode": "SCIENCE_AGGREGATION_REQUIRED",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "1"
+              ],
+              "targetIds": [
+                "2",
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  9.0
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "no_aggregation",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "A delay of 0 is not a fast synapse, it is an impossible one: in NEST a delay is a positive multiple of the resolution (here 0.1 ms), and a zero delay would make the event queue's causal ordering ill-defined. Drawn on a sequential ramp it would sit at the fast end, indistinguishable from the genuine 0.1 ms minimum, and would silently pull the colour domain down to zero.",
+        "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1"
+              ],
+              "targetIds": [
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  0
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            },
+            "simulationResolution": {
+              "kind": "duration",
+              "unit": "ms",
+              "value": 0.1
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`nest:weight` is simulator-defined and dimensionless-by-model; it is not a time. Weight and delay come out of the SAME NEST SynapseCollection status dict, so an adapter that reads the wrong key is an ordinary mistake — and its output would render as a perfectly plausible delay matrix in which 0.5 (a weight) is displayed as 0.5 ms. Cortexel refuses to convert or reinterpret a simulator-defined code.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1"
+              ],
+              "targetIds": [
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "nest:weight",
+                "values": [
+                  0.5
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`mV` is a canonical unit code, so the schema accepts it — and that is exactly why the display unit must be bound to the delay axis by unit.dimension_match. A voltage code on a time axis would relabel a 1.5 ms cell as 1.5 mV, leaving a figure whose colours, legend, and table all agree with each other and none of them with the data.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1"
+              ],
+              "targetIds": [
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission",
+            "displayUnit": {
+              "kind": "delay",
+              "unit": "mV"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "A rank-local snapshot holds only the connections whose TARGET the rank owns, so it cannot say anything about targets 2 and 4 — which live on rank 1. Without observedTargetIds their rows would be drawn empty, and an empty row reads as 'this neuron receives no input'. In this 2-rank example half the rows would be false; in a 4-rank run, three quarters.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "2",
+                "4"
+              ],
+              "targetIds": [
+                "1",
+                "3"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5,
+                  3.0
+                ]
+              }
+            },
+            "scope": {
+              "kind": "mpi_target_rank_local",
+              "rank": 0,
+              "worldSize": 2,
+              "localTargetUniverseComplete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 500
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "no_aggregation",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The merge claims global coverage of a 4-rank run while carrying only ranks 0 and 1. Every target owned by ranks 2 and 3 would then appear as a fully empty row — an absent-cell claim across the whole width of the matrix — when in truth those connections were simply never collected. A partial rank set stays partial and cannot be upgraded.",
+        "expectedCode": "SCOPE_MERGE_INCOMPLETE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "2",
+                "4"
+              ],
+              "targetIds": [
+                "1",
+                "3"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5,
+                  3.0
+                ]
+              }
+            },
+            "scope": {
+              "kind": "global_merged",
+              "worldSize": 4,
+              "mergedRanks": [
+                0,
+                1
+              ],
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "Node 9 is not in the declared column universe. Silently extending the universe would add a column, which changes the denominator of nothing but changes the MEANING of every other cell: absence is a claim about the declared cross-product, so a universe that grows to fit the data can never be wrong, and therefore can never be informative.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "9"
+              ],
+              "targetIds": [
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "Three connections carry two delays. Pairing them by best effort would bind delay 1.5 ms to connection 1 and 3.0 ms to connection 2 and leave connection 3 with nothing — or worse, recycle a value. Every delay would then be attached to a synapse that does not have it, and the matrix would be a permutation of the truth that looks entirely normal.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "1"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5,
+                  3.0
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "Target id 2 appears twice in the row universe, so cell (2, j) is ambiguous: the connections to node 2 would land in whichever duplicate row the index lookup returned first, and the other row would render as an isolate — a neuron that receives nothing. An ambiguous identity must fail before it can diverge cell binding, selection, or the table.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1"
+              ],
+              "targetIds": [
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`ms` is canonical; `milliseconds` is only an alias. A stable request must use the canonical code, and the alias is rejected with a repair rather than silently converted — a silent conversion changes a number the caller never sees, and here a factor of 1000 in either direction turns a 1.5 ms cortical delay into 1.5 s or 1.5 us and still produces a coloured cell that looks fine.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1"
+              ],
+              "targetIds": [
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "milliseconds",
+                "values": [
+                  1.5
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The request tries to assert that Cortexel completed a reference comparison. A completeness or validation result is a library-generated fact; a caller declares what its data IS, never what Cortexel concluded about it. The field is rejected, not ignored — ignoring it would let a stored artifact carry an assurance nobody ever computed.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_matrix"
+          },
+          "data": {
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1"
+              ],
+              "targetIds": [
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5
+                ]
+              }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "min",
+            "delaySemantics": "total_transmission"
+          },
+          "source": {
+            "kind": "simulation"
+          },
+          "validation": {
+            "referenceComparison": {
+              "status": "passed"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

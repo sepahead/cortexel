@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.isi_distribution.request.v1.schema.json",
+  "title": "neuro.isi_distribution request",
+  "description": "GENERATED from contract/skills/neuro.isi_distribution.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.isi_distribution"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "Either raw events with their train linkage, or explicitly supplied intervals with their train linkage. There is deliberately no pre-binned histogram mode: a histogram of numbers the caller calls intervals, with no per-train linkage, cannot be checked for within-train formation — and within-train formation is the one thing this figure exists to guarantee.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "events"
+            },
+            "eventTimes": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "time"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2000000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 2000000,
+              "description": "Which sender produced each event. Parallel to eventTimes.values. Without it no train can be identified and no interval can be formed."
+            },
+            "eventTrialIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 2000000,
+              "description": "Optional. When present, trains are partitioned by (senderId, trialId) and `trialIds` becomes REQUIRED — enforced by the semantic validator events.trial_universe_declared, not by a structural default, so the failure names the scientific reason."
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE selected-sender universe this figure is about — the recorded-sender set the validator events.sender_universe_declared checks. It includes senders that never fired and senders that fired once, cannot be inferred from the events, and is what makes the reported train count truthful."
+            },
+            "trialIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The declared trial universe, as the COMPLETE list of trial ids. Required whenever eventTrialIds is present. It exists only to make the train count and the zero-interval-train count correct; every trial id that appears in eventTrialIds must be a member. The validator events.trial_universe_declared reads this field (or trialCount); it is never inferred from the observed ids, because a trial in which a neuron stayed silent is still a trial."
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "eventTimes",
+            "eventSenderIds",
+            "recordedSenderIds",
+            "window"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "intervals"
+            },
+            "intervals": {
+              "type": "object",
+              "description": "Intervals the caller already formed. No lower bound is imposed structurally: a negative value is refused by the derivation layer with SCIENCE_NEGATIVE_INTERVAL, which names the science, rather than by a bare type constraint.",
+              "properties": {
+                "kind": {
+                  "const": "interspike_interval"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2000000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "intervalSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 2000000,
+              "description": "The train each interval came from. Parallel to intervals.values. This is the source linkage that makes the interval list checkable at all, and the semantic validator series.equal_length requires it to have the same length as intervals.values."
+            },
+            "intervalTrialIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 2000000,
+              "description": "Optional. Required whenever the trains are partitioned by trial. Parallel to intervals.values."
+            },
+            "trains": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Every train in the selection, with its in-window spike count. A train with k spikes can yield exactly max(k - 1, 0) intervals; the supplied intervals are reconciled against that identity in the derivation stage. Trains that produced no interval MUST still appear, otherwise the figure cannot say how much of the selection was silent.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "senderId": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                  },
+                  "trialId": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                  },
+                  "spikeCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The number of spikes of this train INSIDE the declared window. Not the number the recorder emitted, and not the number that survived some other filter."
+                  }
+                },
+                "required": [
+                  "senderId",
+                  "spikeCount"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE selected-sender universe, checked for uniqueness by ids.unique. Every interval sender must be a member."
+            },
+            "trialIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The declared trial universe as the COMPLETE list of trial ids. Required whenever intervalTrialIds is present."
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "Required even here. It fixes the censoring bound: two spikes inside a window of duration D cannot be more than D apart, so an interval exceeding D proves a spike outside the window or a difference taken across trains."
+            }
+          },
+          "required": [
+            "mode",
+            "intervals",
+            "intervalSenderIds",
+            "trains",
+            "recordedSenderIds",
+            "window"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+        },
+        "selectionLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "Required. Cortexel does not choose bin edges for you. Bin width is not a cosmetic setting: with the same intervals, a 1 ms bin can show a bursting peak that a 20 ms bin dissolves entirely, so the choice is the caller's and it is recorded."
+        },
+        "normalization": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",
+          "description": "count: exact integers. probability: sums to 1 over the BINNED intervals. density: integrates to 1 over the linear bin widths, with a unit reciprocal to the bin unit."
+        },
+        "zeroIntervalPolicy": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "retain_as_zero"
+          ],
+          "description": "How a zero-length interval is treated. `reject` refuses it: a 0 ms interval violates the absolute refractory period and is normally a duplicated event. `retain_as_zero` asserts the source may legitimately record duplicate same-sender events at one timestamp and keeps them as measured zeros. There is no discard option, because discarding would hide the corruption and bias the lowest bins. This field is OPTIONAL at the schema level ON PURPOSE: when a zero interval is present and NO policy was declared, the semantic validator isi.zero_interval_policy refuses the request with SCIENCE_ZERO_INTERVAL_POLICY — a required field would instead mask that as a bare structural omission. Declare it whenever coincident same-sender events are possible."
+        },
+        "outOfRangeIntervals": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "exclude_and_report"
+          ],
+          "description": "What happens to a formed interval outside [firstEdge, lastEdge]. `reject` requires the bins to cover the data. `exclude_and_report` excludes it, counts it, and discloses the under-range and over-range totals — after which the plotted probabilities describe only the binned subset, not the distribution."
+        },
+        "xScale": {
+          "type": "string",
+          "enum": [
+            "linear",
+            "log"
+          ],
+          "default": "linear",
+          "description": "Presentation only; it never changes a derived value. `log` requires every bin edge to be strictly positive and no zero-valued interval to exist, because neither has a position on a logarithmic axis and dropping them would delete exactly the shortest intervals. This positivity is a render-stage refusal (RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN), not a request-stage semantic rule."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty"
+        }
+      },
+      "required": [
+        "selectionId",
+        "bins",
+        "normalization",
+        "outOfRangeIntervals"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

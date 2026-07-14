@@ -1,0 +1,561 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.compartment_trace.request.v1.schema.json",
+  "title": "neuro.compartment_trace request",
+  "description": "GENERATED from contract/skills/neuro.compartment_trace.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.compartment_trace"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "One cell, a declared compartment universe, and one series per RECORDED compartment. Each series carries its own time vector and a quantity with a kind and a unit; a compartment listed in the universe with no series was declared but not recorded.",
+      "required": [
+        "cellId",
+        "compartmentIds",
+        "compartmentOrderBasis",
+        "compartmentUniverseComplete",
+        "series",
+        "window"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cellId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+        },
+        "cellLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "compartmentIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 2048,
+          "description": "The DECLARED compartment universe, in the order the rows are drawn. Cortexel never re-orders it. A compartment listed here with no series was declared but not recorded."
+        },
+        "compartmentParentIds": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxItems": 2048,
+          "description": "Parallel to compartmentIds. `null` marks a root. Parent membership in the universe is a declared, disclosed claim (there is no single-cell tree validator), never a rendered edge."
+        },
+        "compartmentLabels": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+          },
+          "maxItems": 2048,
+          "description": "Parallel to compartmentIds."
+        },
+        "compartmentPathDistances": {
+          "type": "object",
+          "description": "Optional path distance from the declared root, parallel to compartmentIds. When supplied it is a caller declaration; a null distance is never defaulted to 0, because 0 is the soma.",
+          "properties": {
+            "kind": {
+              "const": "length"
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "maxItems": 2048
+            }
+          },
+          "required": [
+            "kind",
+            "unit",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "compartmentOrderBasis": {
+          "type": "string",
+          "enum": [
+            "anatomical_declared",
+            "path_distance_ascending",
+            "tree_depth_first",
+            "recorder_input_order",
+            "arbitrary_id_order"
+          ],
+          "description": "What the declared row order MEANS. It is disclosed as a caller declaration and never inferred. `recorder_input_order` and `arbitrary_id_order` carry no anatomical meaning at all."
+        },
+        "compartmentUniverseComplete": {
+          "type": "boolean",
+          "description": "Whether these are ALL the compartments of the model. `false` forbids any claim about the cell as a whole and is disclosed."
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8192,
+          "description": "One series per RECORDED (compartment, signal). Every series shares a quantity dimension. A declared compartment with no series here was not recorded.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "compartmentId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "signalId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "signalLabel": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "time": {
+                "type": "object",
+                "description": "This series' OWN time vector. Two series may carry identical times or differ; Cortexel never resamples them onto a common grid.",
+                "properties": {
+                  "kind": {
+                    "const": "time"
+                  },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 1,
+                    "maxItems": 250000
+                  }
+                },
+                "required": [
+                  "kind",
+                  "unit",
+                  "values"
+                ],
+                "additionalProperties": false
+              },
+              "values": {
+                "type": "object",
+                "description": "The observations, with their REAL quantity kind and unit. A firing rate or a degree is not a compartment state variable. A null is a missing observation and is never zero.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "membrane_voltage",
+                      "voltage",
+                      "current",
+                      "conductance",
+                      "concentration",
+                      "state_variable"
+                    ]
+                  },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 250000
+                  }
+                },
+                "required": [
+                  "kind",
+                  "unit",
+                  "values"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "compartmentId",
+              "signalId",
+              "time",
+              "values"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "window": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "compartmentOrderBasis": {
+                "const": "path_distance_ascending"
+              }
+            },
+            "required": [
+              "compartmentOrderBasis"
+            ]
+          },
+          "then": {
+            "required": [
+              "compartmentPathDistances"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "compartmentOrderBasis": {
+                "const": "tree_depth_first"
+              }
+            },
+            "required": [
+              "compartmentOrderBasis"
+            ]
+          },
+          "then": {
+            "required": [
+              "compartmentParentIds"
+            ]
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": [
+            "small_multiples",
+            "heatmap",
+            "overlay"
+          ],
+          "description": "How the compartment axis is shown. There is no automatic switch: a silent change of representation is a silent change of what the reader is looking at. `small_multiples` requires a `yScale`; `heatmap` a `colorScale`; `overlay` an explicit `overlayCompartmentIds`."
+        },
+        "yScale": {
+          "type": "string",
+          "enum": [
+            "shared",
+            "independent"
+          ],
+          "description": "For small_multiples. `independent` gives every panel its own domain, which makes a 2 mV dendritic EPSP and an 80 mV somatic spike look identical. It is legal, never the default, and the summary always states which was used."
+        },
+        "colorScale": {
+          "type": "object",
+          "description": "For heatmap. The colour domain is global across rows; a diverging family needs a declared reference point.",
+          "properties": {
+            "family": {
+              "type": "string",
+              "enum": [
+                "sequential",
+                "diverging"
+              ]
+            },
+            "center": {
+              "type": "number",
+              "description": "Required for `diverging`. A diverging map with no declared reference point asserts a symmetry the data may not have."
+            }
+          },
+          "required": [
+            "family"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "family": {
+                    "const": "diverging"
+                  }
+                },
+                "required": [
+                  "family"
+                ]
+              },
+              "then": {
+                "required": [
+                  "center"
+                ]
+              }
+            }
+          ]
+        },
+        "overlayCompartmentIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 12,
+          "description": "For overlay. An EXPLICIT bounded selection, because dozens of indistinguishable colours are refused, not minted. Each id is a declared compartment (a claim, not verified against the universe by a network validator this single-cell figure does not run)."
+        },
+        "duplicateTimePolicy": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "keep_replicates",
+            "aggregate"
+          ],
+          "description": "Required whenever any series carries duplicate timestamps; a request with duplicates and no policy is refused with SCIENCE_DUPLICATE_TIME_POLICY. `first`/`last` are deliberately absent: the winner would depend on array order, which is not a scientific fact. It is structurally optional only because a trace with no duplicate timestamps needs no policy."
+        },
+        "duplicateTimeAggregate": {
+          "type": "string",
+          "enum": [
+            "mean",
+            "median",
+            "min",
+            "max"
+          ],
+          "description": "The method used when duplicateTimePolicy is `aggregate`, applied only to the tied samples of one series."
+        },
+        "compartmentAggregate": {
+          "type": "object",
+          "description": "Optional. An aggregate across compartments is drawn as an ADDITIONAL labelled series carrying its compartment count. It never replaces the rows and is never labelled as the cell's value.",
+          "properties": {
+            "compartmentIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 2048,
+              "description": "The EXPLICIT selection the aggregate covers. Required: an aggregate over an implied 'all compartments' would change meaning whenever a compartment is added, removed, or left unrecorded. Each id must be a member of `data.compartmentIds`."
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "mean",
+                "sum",
+                "median",
+                "min",
+                "max"
+              ]
+            },
+            "weighting": {
+              "type": "string",
+              "enum": [
+                "uniform",
+                "declared"
+              ],
+              "description": "`uniform` is a CHOICE, not a physical fact: it weights a spine head equally with the soma. It is stated in the summary."
+            },
+            "weights": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "maxItems": 2048,
+              "description": "Relative weights parallel to this aggregate's `compartmentIds` selection, normalized by their sum. A zero weight is refused: to exclude a compartment, do not select it."
+            },
+            "weightBasis": {
+              "type": "string",
+              "enum": [
+                "surface_area",
+                "volume",
+                "membrane_capacitance",
+                "other_declared"
+              ],
+              "description": "What the weights were derived from. Required whenever weights are declared, because an unexplained weight vector is an unauditable one."
+            },
+            "label": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+            }
+          },
+          "required": [
+            "compartmentIds",
+            "method",
+            "weighting"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "weighting": {
+                    "const": "declared"
+                  }
+                },
+                "required": [
+                  "weighting"
+                ]
+              },
+              "then": {
+                "required": [
+                  "weights",
+                  "weightBasis"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "method": {
+                    "enum": [
+                      "median",
+                      "min",
+                      "max"
+                    ]
+                  }
+                },
+                "required": [
+                  "method"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "weighting": {
+                    "const": "uniform"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Optional, declared once for the figure. `{ \"kind\": \"none\", \"reason\": ... }` is the honest answer for a single deterministic run — a curve with no band must SAY why it has no band, not merely lack one."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "small_multiples"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "required": [
+              "yScale"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "heatmap"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "required": [
+              "colorScale"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "overlay"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "required": [
+              "overlayCompartmentIds"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "duplicateTimePolicy": {
+                "const": "aggregate"
+              }
+            },
+            "required": [
+              "duplicateTimePolicy"
+            ]
+          },
+          "then": {
+            "required": [
+              "duplicateTimeAggregate"
+            ]
+          }
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

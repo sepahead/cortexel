@@ -1,0 +1,473 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_distribution.request.v1.schema.json",
+  "title": "network.weight_distribution request",
+  "description": "GENERATED from contract/skills/network.weight_distribution.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.weight_distribution"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "A connection snapshot with weights, or a pre-binned histogram of those weights, in both cases over an explicitly declared source x target rectangle and an explicit network scope. `mode` is the discriminator; the fields of the other mode are refused rather than ignored.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "connections"
+            },
+            "sourceUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of presynaptic nodes the population was selected from. `complete` must be true: it is half of the statement 'these are the connections from A to B', and without it the histogram describes an unnamed population."
+            },
+            "targetUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of postsynaptic nodes the population was selected from. Under an MPI target-rank-local scope this is exactly the rank's local targets."
+            },
+            "connections": {
+              "description": "Exactly the connections of the declared rectangle. `weights` is REQUIRED and its kind must be `synaptic_weight`: a connection snapshot without weights is a topology figure, not this one. Every multapse is its own row and is never deduplicated.",
+              "allOf": [
+                {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "weights"
+                  ],
+                  "properties": {
+                    "weights": {
+                      "type": "object",
+                      "required": [
+                        "kind"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "synaptic_weight"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "scope": {
+              "description": "What this snapshot actually saw. `snapshotTime` is REQUIRED even though the shared type leaves it optional: a weight is a state variable, and an undated weight distribution cannot be bound to a moment in the run.",
+              "allOf": [
+                {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "snapshotTime"
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "sourceUniverse",
+            "targetUniverse",
+            "connections",
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "prebinned"
+            },
+            "sourceUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of presynaptic nodes the population was selected from. `complete` must be true: it is half of the statement 'these are the connections from A to B', and without it the histogram describes an unnamed population."
+            },
+            "targetUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of postsynaptic nodes the population was selected from. Under an MPI target-rank-local scope this is exactly the rank's local targets."
+            },
+            "binEdges": {
+              "type": "object",
+              "description": "Strictly increasing finite edges, read by `bins.strictly_increasing`. n edges define n-1 bins, half-open with a final-edge-inclusive last bin. When the range spans zero an exact edge at 0 is required.",
+              "properties": {
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 100001
+                }
+              },
+              "required": [
+                "unit",
+                "edges"
+              ],
+              "additionalProperties": false
+            },
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Exact integer observation counts per bin. Length must be edges.length - 1. These are the raw numbers everything else is re-derived from."
+            },
+            "histogram": {
+              "type": "object",
+              "description": "Optional normalized values, read by `histogram.normalization_consistent`. If supplied they are RE-DERIVED from the counts and the denominator and checked within a tight tolerance; they are never taken on trust.",
+              "properties": {
+                "kind": {
+                  "allOf": [
+                    {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                    },
+                    {
+                      "enum": [
+                        "probability",
+                        "probability_density"
+                      ]
+                    }
+                  ]
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "sourceConnectionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of connection ROWS in the declared rectangle, before any aggregation and before any exclusion. It is the top of the conservation chain: every row is either an observation or a missing weight."
+            },
+            "missingWeightCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows whose weight was absent or null. They are excluded from every bin and every denominator and are NEVER counted as zero."
+            },
+            "totalObservationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "All observations formed, in range and out of range. Under `observationUnit: synapse` this plus missingWeightCount must equal sourceConnectionCount exactly."
+            },
+            "excludedUnderRangeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Observations below the first edge. Under outOfRangeWeights `reject` this must be 0."
+            },
+            "excludedOverRangeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Observations above the last edge. Under outOfRangeWeights `reject` this must be 0."
+            },
+            "zeroWeightCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Observations whose value is exactly 0. Reported separately because the half-open convention places them in the first non-negative bin, where they would otherwise be read as weak excitatory synapses."
+            },
+            "contributingSynapseModels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "minItems": 1,
+              "maxItems": 64,
+              "description": "Every distinct synapse model that contributed a weight. Required, because a pre-binned histogram destroys the per-row model and the comparability claim would otherwise be unverifiable against anything at all."
+            },
+            "scope": {
+              "description": "What this snapshot actually saw. `snapshotTime` is REQUIRED even though the shared type leaves it optional: a weight is a state variable, and an undated weight distribution cannot be bound to a moment in the run.",
+              "allOf": [
+                {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "snapshotTime"
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "sourceUniverse",
+            "targetUniverse",
+            "binEdges",
+            "counts",
+            "sourceConnectionCount",
+            "missingWeightCount",
+            "totalObservationCount",
+            "excludedUnderRangeCount",
+            "excludedOverRangeCount",
+            "zeroWeightCount",
+            "contributingSynapseModels",
+            "scope"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+          "description": "Names the edge population so two weight figures of the same run cannot be confused for one another."
+        },
+        "selectionLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "observationUnit": {
+          "type": "string",
+          "enum": [
+            "synapse",
+            "node_pair"
+          ],
+          "description": "What ONE observation is. synapse: every connection row counts once, so a multapse of three contributes three weights — this is the distribution of synaptic weights. node_pair: the rows of an ordered pair are combined by the declared aggregation into one observation — this is the distribution of per-pair drive, which is a different quantity and is labelled as one. There is no default; the two answers differ, and the difference is scientific."
+        },
+        "aggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How the connections of one ordered pair are combined. Required under `node_pair` and REFUSED under `synapse`, where nothing is combined. `no_aggregation` asserts at most one connection per ordered pair and fails if that is untrue; there is no implicit 'last edge wins'."
+        },
+        "weightComparability": {
+          "description": "Why these weights may share one axis at all. Required, because `nest:weight` is one code covering values whose physical meaning depends on the synapse AND the postsynaptic neuron model: the same number 10.0 may be 10 pA of injected current under one model and 10 nS of conductance under another, and a histogram of the two is a histogram of nothing.",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "Every contributing weight comes from one synapse model. If two or more distinct models are present this fails with SCIENCE_WEIGHT_GROUP_INCOMPATIBLE. If the weight unit is `nest:weight` and no model is declared at all, this also fails: under a simulator-defined unit an undeclared model set is an unproven pooling claim, not a homogeneous one.",
+              "properties": {
+                "mode": {
+                  "const": "single_synapse_model"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "The caller declares that the listed synapse models produce weights that mean the same physical thing and may share one axis. The set of distinct models present must equal this list exactly. Cortexel verifies that the claim was made and that it matches the data; it cannot verify that the claim is true, and the declared set is surfaced in the summary and the table.",
+              "properties": {
+                "mode": {
+                  "const": "declared_comparable_models"
+                },
+                "comparableModels": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                  },
+                  "minItems": 2,
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "mode",
+                "comparableModels"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "signTreatment": {
+          "type": "string",
+          "enum": [
+            "preserve",
+            "magnitude"
+          ],
+          "description": "preserve: the observation is the weight, sign and all. It is the only choice that destroys nothing. magnitude: the observation is |w|; a -60 pA inhibitory synapse and a +60 pA excitatory one become the same observation. It is applied only when it is asked for, it is recorded in the derivation receipt, and the axis is labelled |weight|."
+        },
+        "grouping": {
+          "type": "string",
+          "enum": [
+            "none",
+            "by_synapse_model"
+          ],
+          "description": "none: one histogram over the pooled observations. by_synapse_model: one series per distinct synapse model over the SAME bins, which does not pool the counts but still shares an x axis — so it still requires `declared_comparable_models`, and requiring only one model with it is refused as a redundant encoding of one figure. Available only in `connections` mode, where the rows carry a model; series are capped at 8 (RENDER_SERIES_LIMIT_EXCEEDED)."
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "The bin edges, in `connections` mode. Required there and REFUSED in `prebinned` mode, where the edges are data. Cortexel does not choose bin edges: with the same weights, edges that begin at 0 delete every inhibitory synapse, and a bin that straddles 0 merges the two populations into one bar. Both are refused rather than drawn."
+        },
+        "normalization": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",
+          "description": "count: exact integers. probability: sums to 1 over the BINNED observations. density: integrates to 1 over the linear bin widths, with a unit reciprocal to the bin unit — and therefore refused on a `nest:weight` axis, which has no reciprocal code and no dimension a density could carry."
+        },
+        "outOfRangeWeights": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "exclude_and_report"
+          ],
+          "description": "What happens to an observation outside [firstEdge, lastEdge]. reject: the bins must cover the data. exclude_and_report: it is excluded, counted, and the under-range and over-range totals are disclosed — after which the plotted probabilities describe only the binned subset, not the population."
+        },
+        "xScale": {
+          "type": "string",
+          "enum": [
+            "linear",
+            "log"
+          ],
+          "default": "linear",
+          "description": "Presentation only; it never changes a derived value, and density always uses the LINEAR bin width. `log` requires every bin edge and every observation to be strictly positive, because a negative or zero weight has no position on a logarithmic axis and dropping it would delete exactly the inhibitory synapses and the silenced ones."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Required, so that absence cannot masquerade as smallness. Within ONE network realization a bin count is an exact enumeration and carries no sampling uncertainty, so the only meaningful basis is dispersion across realizations: ensemble_members, bootstrap_draws, or replicates. A basis of `neurons` or `trials` is refused."
+        }
+      },
+      "required": [
+        "selectionId",
+        "observationUnit",
+        "weightComparability",
+        "signTreatment",
+        "grouping",
+        "normalization",
+        "outOfRangeWeights",
+        "uncertainty"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "observationUnit": {
+                "const": "node_pair"
+              }
+            },
+            "required": [
+              "observationUnit"
+            ]
+          },
+          "then": {
+            "required": [
+              "aggregation"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "observationUnit": {
+                "const": "synapse"
+              }
+            },
+            "required": [
+              "observationUnit"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "aggregation"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "grouping": {
+                "const": "by_synapse_model"
+              }
+            },
+            "required": [
+              "grouping"
+            ]
+          },
+          "then": {
+            "properties": {
+              "weightComparability": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "const": "declared_comparable_models"
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

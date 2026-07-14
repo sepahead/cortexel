@@ -1,0 +1,679 @@
+{
+  "id": "neuro.analog_trace",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Analog quantities over a declared time axis",
+
+  "purpose": {
+    "canonicalQuestion": "How did one or more declared analog quantities — each with its own kind and unit — evolve over a declared time window, without pretending that every signal is a membrane potential and without inventing values between the samples that were actually taken?",
+    "cannotEstablish": [
+      "What the signal did BETWEEN two samples. The line joining two point samples is a drawing convention, not a measurement: nothing was observed there, and a feature shorter than the sampling interval leaves no trace in the figure at all.",
+      "That an unmarked stretch of trace was quiet. At a 0.1 ms recording interval a 0.05 ms event can fall entirely between two samples; its absence from the line is a statement about the sampler, not about the neuron.",
+      "That a gap (a missing sample) is a measured zero, a silent period, or a baseline. A null is the absence of an observation and is drawn as a break in the path.",
+      "That the declared quantity kind is what the instrument actually recorded. Cortexel verifies that the unit's dimension matches the declared kind; it cannot verify that a channel labelled `V_m` was in fact wired to a membrane potential.",
+      "That a series declared `derived` was produced by the method it names. The method is recorded and displayed; it is never re-derived or verified, and a derived series is never re-labelled as recorded.",
+      "That two series drawn on one axis are causally related, or that their alignment implies any shared clock beyond the one the caller declared.",
+      "Absolute calibration. Any gain, offset, filtering, or reference electrode applied before the data reached Cortexel is invisible here and is not undone.",
+      "A firing rate, a spike count, or any per-neuron claim. Those require a declared denominator or a declared event universe and belong to `neuro.population_rate` and `neuro.spike_raster`."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Parallel-array lengths are checked BEFORE any sort. A time vector and a value vector of different lengths are never paired by best effort: a single off-by-one would shift every sample by one interval and move a peak by a whole sampling step while the figure still looks plausible.",
+      "Recorder output is NOT assumed chronological. Samples are stably sorted by (time, original ordinal within the series). The original ordinal is retained on every row and a digest of the original order is recorded in the artifact, so the drawn order can always be traced back.",
+      "Duplicate timestamps within one series require an explicit policy: `reject`, `keep_replicates`, or `aggregate` with a named method. Last-write-wins is never applied — which sample survived would then depend on the recorder's write order, not on the data.",
+      "`null` in a value array means the observation is MISSING. It is never mapped to zero, never interpolated across, never omitted from the sample count, and it always breaks the drawn path into separate subpaths.",
+      "Non-finite values (NaN, Infinity) are refused at parse and snapshot (JSON_NON_FINITE_NUMBER, SNAPSHOT_NON_FINITE_NUMBER): a non-finite number is not a measurement. Negative zero is ACCEPTED: -0.0 mV IS 0.0 mV, RFC 8785 canonicalizes -0 to 0, and the digest is unchanged. The error registry deliberately carries no code for it; refusing -0 would reject real exported data.",
+      "Every time value is converted to the unit declared on `window`, which is the single analysis frame for the figure. A value is converted only within its own dimension, by one multiplication of `from.toCanonical / to.toCanonical`; a conversion never chains through an intermediate unit and never crosses a dimension.",
+      "The analysis window is half-open [start, stop) by default. A sample exactly at `stop` is EXCLUDED, and the excluded count is recorded per series and disclosed rather than absorbed.",
+      "The declared order of `series` is the canonical order, and it is the order of the parallel `seriesIds` vector. Legend order, small-multiple panel order, palette assignment, and the shared-axis unit choice all derive from it. Series are NEVER reordered by amplitude, variance, or any observed property — a silent sort by what the data did is a claim about the data."
+    ],
+    "derivation": [
+      "No smoothing, no resampling, no filtering, and no interpolation is ever applied. There is no smoothing parameter, because a smoothed trace is a DIFFERENT quantity: it must arrive as a series whose `origin` is `derived` with a named method, so the figure can never present a filtered signal as a recorded one.",
+      "point_sample rendering: consecutive retained samples of one series are joined by a straight segment. This is a stated convention and is disclosed in the accessible summary; it asserts nothing about the values in between.",
+      "piecewise_constant rendering: the value is held from its sample until the next sample of the same series and drawn as a step. A step-held signal (an injected current, a clamped command, an event-updated state) drawn as a sloped line would invent a ramp that never existed, so the two observation kinds are never drawn the same way.",
+      "duplicateTimePolicy=aggregate: at each distinct timestamp the replicates OF THAT SERIES ONLY are combined. mean = sum of non-null replicates / count of non-null replicates. median = the middle order statistic, or for an even count the mean of the two central order statistics — stated, because otherwise the definition is ambiguous. min and max are the extreme non-null replicates.",
+      "Nulls are excluded from every duplicate-time aggregate. If every replicate at a timestamp is null the aggregated sample is null, never 0. The replicate count is recorded on the drawn row and appears in the table, so an aggregate can never be read as a single observation.",
+      "duplicateTimePolicy=keep_replicates: every replicate is drawn, in stable (time, original ordinal) order. The resulting vertical segment at a duplicated timestamp is a literal rendering of two observations, not a discontinuity in the underlying signal.",
+      "Duplicate timestamps are gated at the semantic stage: when a series carries two samples at one timestamp and NO duplicateTimePolicy was declared, the request is refused with SCIENCE_DUPLICATE_TIME_POLICY. Declaring reject, keep_replicates, or aggregate satisfies that gate; the declared reject or aggregate is then carried out in the render plan.",
+      "shared_axis: every series is converted into `valueUnit`, or, when that is omitted, into the unit of the FIRST series in declared order. Conversion is only ever performed within one dimension and every conversion appends a derivation operation recording from, to, and the exact factor.",
+      "small_multiples: one panel per group key, panels ordered by the first appearance of the key in declared series order. Each panel's value unit is the unit of the first series in that panel. With sharedTimeAxis=true every panel uses one identical time domain, so a reader may compare panels horizontally; with false, each panel uses its own covered extent and no horizontal comparison is licensed.",
+      "Samples outside the declared window are excluded from the path and from every derived statistic, counted per series, and disclosed. The path is never extended to the window edge and no sample is ever moved onto it.",
+      "A series with NO sample inside the window must not be drawn as an empty panel — an empty panel is indistinguishable from a signal that was flat or silent, and a reader would take it as evidence about the neuron. Registry 1.0 has no analog-sample within-window validator (events.within_window reads an events shape this figure does not carry), so this refusal lives in the render plan rather than at semantic validation; see knownLimitations.",
+      "A request whose series contain no observations at all reports the explicit empty state RENDER_NO_DATA with a reason. Cortexel never draws a bare coordinate system, which a reader would read as a measured zero.",
+      "Complexity: O(n log n) per series for the stable sort, O(n) for window filtering, duplicate resolution, unit conversion, and path building. Cost is linear in the total number of samples across series."
+    ],
+    "scopeRules": [
+      "A series is one channel from one run. A series is never formed by concatenating two channels, two cells, or two runs; those are separate series with separate ids.",
+      "shared_axis requires every series to share ONE unit dimension. A calcium concentration and a membrane potential are not comparable merely because their arrays are the same length, so a mixed-dimension shared axis is refused and small multiples must be used instead.",
+      "The accepted quantity kinds are narrower than the registry's full set by ROUTING, not by omission. `synaptic_weight` belongs to `network.synaptic_weight_trace`: its samples are event-updated and its unit may be simulator-defined and therefore unconvertible.",
+      "`firing_rate` and `count` belong to `neuro.population_rate`, which requires a declared denominator. Accepting them here would let a per-neuron claim be drawn with nothing to divide by.",
+      "Window coverage may be partial: a series may begin after `window.start` or end before `window.stop`. The covered extent is recorded per series and the path is drawn only where samples exist. Cortexel does not extend, pad, or hold a trace to the window edge.",
+      "On a shared axis the palette must keep the series distinguishable. The palette registry's colour-vision-deficiency-safe set (Okabe-Ito) carries exactly 8 style tuples (`categoricalSeries.maxStableSeries`), so above 8 series on one axis the render plan refuses with RENDER_SERIES_LIMIT_EXCEEDED rather than minting a ninth indistinguishable colour; small multiples are the supported answer for more."
+    ],
+    "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "A declared analysis window, a flat id universe, and a parallel list of series. Each series carries its OWN time vector and its own quantity samples, so channels sampled at different intervals or over different extents are never forced onto a common grid — padding a short channel would fabricate samples. `seriesIds[i]` names `series[i]`; the id vector is kept separate so a single declared identity governs the legend, the table, the palette, and any selection.",
+      "properties": {
+        "window": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow" },
+        "seriesIds": {
+          "type": "array",
+          "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+          "minItems": 1,
+          "maxItems": 16,
+          "description": "The COMPLETE, ordered id universe, one id per series in declared order. Uniqueness is enforced by the semantic validator ids.unique: an ambiguous identity must fail before the legend, the table, the palette, or any selection can bind two series under the same name."
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+              "recordedVariable": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                "description": "The source system's own name for the recorded channel, e.g. NEST's `V_m` or `g_ex`. It is recorded verbatim and shown in the table. It is NEVER used to infer a quantity kind or a unit: `V_m` does not license `membrane_voltage`, the caller must declare it."
+              },
+              "populationId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "cellId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "conditionId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "observationKind": {
+                "type": "string",
+                "enum": ["point_sample", "piecewise_constant"],
+                "description": "point_sample: an instantaneous sample of a continuous value; successive samples are joined by a straight segment. piecewise_constant: the value is HELD until the next sample and is drawn as a step. Drawing a held signal as a sloped line invents a ramp that never existed, so this is a required declaration and never a default."
+              },
+              "origin": {
+                "description": "Whether these values were recorded or computed. A derived series is never re-labelled as recorded, and its method is always visible in the table.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": { "kind": { "const": "recorded" } },
+                    "required": ["kind"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": { "const": "derived" },
+                      "method": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                        "description": "The name of the algorithm that produced these values, e.g. `mean_across_trials` or `lowpass_butterworth_4th_order_200Hz`. Required: a derived series that will not name its method is an unattributable number. Cortexel records and displays it and never re-derives or verifies it."
+                      }
+                    },
+                    "required": ["kind", "method"],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "time": {
+                "type": "object",
+                "description": "This series' own time vector. Every value is a finite number: a sample with an unknown time is not an observation, so `null` is not accepted here (unlike a value, where null is a legitimate missing observation). Its length is checked against the series' value vector by series.equal_length before any sort.",
+                "properties": {
+                  "kind": { "const": "time" },
+                  "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                  "values": { "type": "array", "items": { "type": "number" }, "maxItems": 2000000 }
+                },
+                "required": ["kind", "unit", "values"],
+                "additionalProperties": false
+              },
+              "values": {
+                "type": "object",
+                "description": "The observations for this series. Written out rather than $ref'd to `quantitySeries` because the accepted `kind` set is deliberately narrower here: a synaptic weight or a firing rate on this axis would be a routing error, not a trace. The field is named `values` and read as the series' quantity by trace.axis_dimension_compatible.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["membrane_voltage", "voltage", "current", "conductance", "concentration", "state_variable", "derivative"],
+                    "description": "`membrane_voltage` only when the source declares the signal IS a membrane potential. `state_variable` carries a declared dimension (voltage, current, conductance, concentration, or dimensionless). `derivative` is bound by the unit registry to the per_time dimension, so it can only express the derivative of a DIMENSIONLESS state variable (a gating variable's dn/dt in /ms). A dimensioned derivative such as dV/dt (mV/ms) has no representable kind in registry 1.0 and is refused rather than mislabelled."
+                  },
+                  "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                  "values": {
+                    "type": "array",
+                    "items": { "type": ["number", "null"] },
+                    "maxItems": 2000000,
+                    "description": "`null` is a MISSING observation. It is never zero, never interpolated across, and never dropped from the count."
+                  }
+                },
+                "required": ["kind", "unit", "values"],
+                "additionalProperties": false
+              },
+              "sourceRef": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/dataRef",
+                "description": "Optional content-addressed reference to the bytes this series was extracted from. Cortexel RECORDS it and never resolves it — stable core has no filesystem or network authority — and it never substitutes for the inline samples."
+              }
+            },
+            "required": ["observationKind", "origin", "time", "values"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["window", "seriesIds", "series"],
+      "additionalProperties": false
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": ["shared_axis", "small_multiples"],
+          "description": "How the series are placed. There is no `auto`: whether two signals may share a numeric axis is a scientific judgement, and Cortexel will not make it silently. shared_axis overlays every series on one converted value axis (legal only within one dimension, checked by trace.axis_dimension_compatible); small_multiples gives each group its own panel and exempts that cross-series dimension check."
+        },
+        "valueUnit": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+          "description": "shared_axis only: the unit of the common value axis. Every series is converted into it, which is legal only within one dimension. When omitted, the unit of the FIRST series in declared order is used — a deterministic rule, never a heuristic about which unit 'looks nicer'."
+        },
+        "groupBy": {
+          "type": "string",
+          "enum": ["series", "quantity_kind"],
+          "description": "small_multiples only: one panel per series, or one panel per quantity kind. Only keys guaranteed present on every series are offered: registry 1.0 has no validator that can assert an OPTIONAL key (population, condition, cell) is populated for every series, and a panel silently missing a series would be a lie of omission."
+        },
+        "sharedTimeAxis": {
+          "type": "boolean",
+          "default": true,
+          "description": "small_multiples only: true means every panel spans one identical time domain, so panels may be compared horizontally; false means each panel spans its own covered extent, and no horizontal comparison across panels is licensed."
+        },
+        "duplicateTimePolicy": {
+          "type": "string",
+          "enum": ["reject", "keep_replicates", "aggregate"],
+          "description": "What to do when a series has two samples at one timestamp. Optional in the schema and enforced semantically only when duplicates actually exist: with duplicates present and no policy declared, trace.duplicate_time_policy refuses with SCIENCE_DUPLICATE_TIME_POLICY. Last-write-wins is not on the list and never will be: it makes the drawn value a function of the recorder's write order."
+        },
+        "aggregateMethod": {
+          "type": "string",
+          "enum": ["mean", "median", "min", "max"],
+          "description": "Used only with duplicateTimePolicy=aggregate. Applied within one series at one timestamp, over non-null replicates only. An even-count median is the arithmetic mean of the two central order statistics. The replicate count reaches the table, so an aggregate can never be read as a single observation."
+        },
+        "showSamplePoints": {
+          "type": "boolean",
+          "default": false,
+          "description": "Draw a marker at every retained sample. Presentation only: it changes no value. It is the honest way to reveal where the sampler actually looked, which a bare line conceals."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "The figure-level uncertainty declaration, read by uncertainty.valid and uncertainty.supported_variant. `{\"kind\":\"none\",\"reason\":...}` is the honest answer for a single trial; absence is STATED, never left blank, because a trace with no band and no statement reads as a trace whose uncertainty is small."
+        }
+      },
+      "required": ["layout"],
+      "additionalProperties": false
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          ["/data/seriesIds", "/data/series"],
+          ["/data/series/0/time/values", "/data/series/0/values/values"],
+          ["/data/series/1/time/values", "/data/series/1/values/values"],
+          ["/data/series/2/time/values", "/data/series/2/values/values"],
+          ["/data/series/3/time/values", "/data/series/3/values/values"],
+          ["/data/series/4/time/values", "/data/series/4/values/values"],
+          ["/data/series/5/time/values", "/data/series/5/values/values"],
+          ["/data/series/6/time/values", "/data/series/6/values/values"],
+          ["/data/series/7/time/values", "/data/series/7/values/values"],
+          ["/data/series/8/time/values", "/data/series/8/values/values"],
+          ["/data/series/9/time/values", "/data/series/9/values/values"],
+          ["/data/series/10/time/values", "/data/series/10/values/values"],
+          ["/data/series/11/time/values", "/data/series/11/values/values"],
+          ["/data/series/12/time/values", "/data/series/12/values/values"],
+          ["/data/series/13/time/values", "/data/series/13/values/values"],
+          ["/data/series/14/time/values", "/data/series/14/values/values"],
+          ["/data/series/15/time/values", "/data/series/15/values/values"]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": ["/data/seriesIds"]
+      }
+    },
+    { "id": "window.valid", "parameters": { "pointer": "/data/window" } },
+    { "id": "trace.duplicate_time_policy" },
+    { "id": "trace.axis_dimension_compatible" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.analog_trace", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 2000000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "line_envelope_minmax"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "MISSING_VALUES_PRESENT",
+    "DUPLICATE_TIMES_AGGREGATED",
+    "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+    "UNIT_CONVERTED",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Analog trace. {seriesCount} series over {windowStart} to {windowStop} {timeUnit}, layout {layoutMode}. Quantities: {quantitySummary}. {sampleCount} samples retained, {missingCount} missing (drawn as gaps, never interpolated), {excludedCount} outside the window. Point samples are joined by straight segments; nothing was measured between them. Step series are held between samples. Duplicate timestamps: {duplicateTimePolicy}. {unitConversionStatement} {uncertaintyStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "seriesId", "header": "Series", "description": "The caller's stable id from the seriesIds vector. Unique across the request." },
+      { "key": "seriesLabel", "header": "Label" },
+      { "key": "quantityKind", "header": "Quantity", "description": "The declared kind. `membrane_voltage` is a claim the caller made, not one Cortexel verified." },
+      { "key": "observationKind", "header": "Observation", "description": "point_sample (joined by segments) or piecewise_constant (held, drawn as steps)." },
+      { "key": "origin", "header": "Origin", "description": "recorded, or derived with the method that produced it. A derived value is never presented as a recorded one." },
+      { "key": "time", "header": "Time", "description": "In the window's declared unit, after any recorded conversion." },
+      { "key": "timeUnit", "header": "Time unit" },
+      { "key": "value", "header": "Value", "description": "Empty when the observation is missing. A missing observation is not zero." },
+      { "key": "valueUnit", "header": "Unit", "description": "The unit actually drawn, after any conversion. The original unit is preserved in the artifact." },
+      { "key": "missing", "header": "Missing", "description": "true when this observation was null in the source." },
+      { "key": "replicateCount", "header": "Replicates", "description": "How many samples at this timestamp produced this row. 1 for a single observation; greater than 1 means the row is an aggregate." },
+      { "key": "uncertaintyLower", "header": "Uncertainty lower" },
+      { "key": "uncertaintyUpper", "header": "Uncertainty upper" },
+      { "key": "uncertaintyMethod", "header": "Uncertainty method", "description": "The variant, level, and basis. A dispersion is never relabelled as an interval." },
+      { "key": "sourceOrdinal", "header": "Source row", "description": "The sample's index in the caller's original array, before stable sorting. Every drawn point can be traced back to the row it came from." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "neo.AnalogSignal",
+      "version": "0.13.0",
+      "status": "not_run",
+      "notes": "Neo is the intended differential oracle for the adapter path only. Neo's AnalogSignal models a REGULARLY sampled signal (t_start plus sampling_rate), while this contract models explicit (time, value) pairs that may be irregular; a comparison is therefore meaningful only for regular sampling, and the expansion of t_start/sampling_rate into an explicit time vector must be matched to the last representable binary64 step before the comparison means anything. Neo has no equivalent of the duplicate-time policy or the missing-value break, so those paths have no oracle and rest on the hand vectors. The pinned reference environment has NOT been executed in this environment: the status is not_run, and it is not to be reported as anything else."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.multimeter", "status": "supported", "notes": "The caller must map each recordable to a quantity kind and unit explicitly. NEST records times in ms and V_m in mV, but a recordable named `V_m` does not license the kind `membrane_voltage` — the adapter never infers a kind from a channel name, because `g_ex`, `I_syn`, and a custom model's state variable arrive through the same interface. The multimeter's `interval` gives point samples, not a held signal, so observationKind is `point_sample` unless the caller declares otherwise." },
+    { "system": "neo.AnalogSignal", "status": "supported", "notes": "t_start and sampling_rate expand into an explicit time vector; the unit is taken from the quantity, never guessed. Neo's array_annotations that name a channel are carried into recordedVariable, not into the quantity kind." },
+    { "system": "nwb.TimeSeries", "status": "partial", "notes": "The caller must select `rate` or `timestamps` explicitly — a TimeSeries may carry both, and choosing for them would silently pick a clock. `conversion` and `offset` must be applied by the caller, or the declared unit is a false statement about the stored integers." },
+    { "system": "ncp.observation", "status": "planned", "notes": "An NCP observation adapter must consume an already-authenticated, already-admitted observation from an immutable pinned NCP release. NCP's own declarations are carried, never upgraded: `is_simulation_output=true` becomes `source.kind: simulation`, and the absence of a calibrated-posterior claim stays absent." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.voltage_trace"],
+    "notes": "The legacy id hard-coded two assumptions: that the quantity was a membrane potential and that its unit was millivolts. Neither is recoverable from the payload, and both are frequently false — the same recorder carries synaptic conductances and injected currents. Migration therefore REQUIRES an explicit quantity kind, unit, and observation kind, and blocks with MIGRATION_INFORMATION_MISSING when the legacy payload cannot supply them, rather than defaulting to `membrane_voltage` in mV and producing a figure whose axis label is a guess. The legacy id is accepted only by `cortexel migrate`; in normal validation it fails with MIGRATION_LEGACY_ID_NOT_ACCEPTED."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing what is drawn between two point samples (straight segment) or between two piecewise_constant samples (held step) is MAJOR: it changes what the line CLAIMS about unobserved time.",
+    "Changing null semantics — gap, never zero, never interpolated across — is MAJOR.",
+    "Changing the duplicate-time aggregate definitions, including the even-count median rule, is MAJOR.",
+    "Changing the shared-axis unit selection rule (declared `valueUnit`, else the first series in declared order) is MAJOR: it silently rescales every drawn value.",
+    "Changing the default window boundary convention from half-open [start, stop) is MAJOR.",
+    "Adding a compaction policy that does not preserve extrema is MAJOR, because it changes what a drawn shape is allowed to mean.",
+    "Raising the shared-axis series cap above the palette registry's `categoricalSeries.maxStableSeries` is MAJOR: it would mint colours outside the colour-vision-deficiency-safe set while the legend still claimed the series were distinguishable.",
+    "Adding a quantity kind to the accepted enum is MINOR.",
+    "Adding an uncertainty variant to uncertaintySupport is MINOR.",
+    "Adding a small-multiples group key is MINOR, but only once a validator exists that can prove the key is populated on every series."
+  ],
+
+  "knownLimitations": [
+    "Registry 1.0 has no disclosure for a `derived` series, for the segment drawn between point samples, or for partial window coverage, though the blueprint asks for all three. Those facts reach the artifact, table and summary but raise no footer disclosure. The rules belong in the registry.",
+    "Per-sample out-of-window exclusion has NO semantic validator in registry 1.0: events.within_window reads data.eventTimes, an events shape an analog trace does not carry, so it is not declared here. The exclusion count, its attribution, and the empty-panel refusal live in the render plan. A trace-shaped within-window validator would close this.",
+    "series.equal_length has no index-wildcard pointer in registry 1.0, so the per-series time/value length checks are declared as an explicit enumeration of concrete indices (0..15), capping the figure at 16 series. ids.unique reads one flat id array, so series identity is declared in a single data.seriesIds vector rather than inside each series object.",
+    "Uncertainty is declared once at parameters.uncertainty (figure-level): uncertainty.valid and uncertainty.supported_variant read a single top-level object, so per-series uncertainty bands are outside the registry-1.0 validator surface and would need a per-series uncertainty validator.",
+    "Registry 1.0 binds `derivative` to the per_time dimension, so a dimensioned derivative such as dV/dt (mV/ms) cannot be expressed. Calling it dimensionless or inventing a unit would be a false statement about the dimension, so the trace is refused. A `voltage_per_time` dimension would close this.",
+    "Only extrema-preserving compaction is accepted (`none`, `line_envelope_minmax`), so a one-sample transient always survives and COMPACTION_MAY_HIDE_TRANSIENTS can never fire here. The envelope is still not a resampled signal: marks drawn are not samples taken, and exact values come from the table.",
+    "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that the channel was what the caller says it was, that a gain or reference was applied correctly upstream, or that a `derived` series was produced by the method it names.",
+    "Nothing in this figure can recover a feature shorter than the sampling interval. Cortexel discloses the samples it was given; it cannot disclose what the sampler never saw."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.analog_trace" },
+        "data": {
+          "window": { "start": 0, "stop": 0.5, "unit": "ms", "boundary": "[start,stop)" },
+          "seriesIds": ["cell_1_vm", "cell_2_vm"],
+          "series": [
+            {
+              "label": "Cell 1 membrane potential",
+              "recordedVariable": "V_m",
+              "cellId": "1",
+              "observationKind": "point_sample",
+              "origin": { "kind": "recorded" },
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2, 0.3, 0.4] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -69.2, -68.1, null, -65.4] }
+            },
+            {
+              "label": "Cell 2 membrane potential",
+              "recordedVariable": "V_m",
+              "cellId": "2",
+              "observationKind": "point_sample",
+              "origin": { "kind": "recorded" },
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2, 0.3, 0.4] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -70.1, -69.9, -70.0, -69.8] }
+            }
+          ]
+        },
+        "parameters": {
+          "layout": "shared_axis",
+          "valueUnit": "mV",
+          "duplicateTimePolicy": "reject",
+          "showSamplePoints": true,
+          "uncertainty": { "kind": "none", "reason": "single_trial" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "recorderId": "multimeter_1" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.analog_trace" },
+        "data": {
+          "window": { "start": 0, "stop": 10, "unit": "ms", "boundary": "[start,stop)" },
+          "seriesIds": ["vm_mean", "i_stim"],
+          "series": [
+            {
+              "label": "Membrane potential (mean of 8 trials)",
+              "recordedVariable": "V_m",
+              "populationId": "exc",
+              "observationKind": "point_sample",
+              "origin": { "kind": "derived", "method": "mean_across_trials" },
+              "time": { "kind": "time", "unit": "ms", "values": [0, 2, 4, 6, 8] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -68.5, -55.2, -71.0, -69.4] }
+            },
+            {
+              "label": "Injected current",
+              "recordedVariable": "I_stim",
+              "observationKind": "piecewise_constant",
+              "origin": { "kind": "recorded" },
+              "time": { "kind": "time", "unit": "ms", "values": [0, 3, 6] },
+              "values": { "kind": "current", "unit": "pA", "values": [0, 250, 0] }
+            }
+          ]
+        },
+        "parameters": {
+          "layout": "small_multiples",
+          "groupBy": "quantity_kind",
+          "sharedTimeAxis": true,
+          "duplicateTimePolicy": "reject",
+          "showSamplePoints": false,
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "declaredNote": "Step current 250 pA from 3 to 6 ms." }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.analog_trace" },
+        "data": {
+          "window": { "start": 0, "stop": 3, "unit": "ms", "boundary": "[start,stop)" },
+          "seriesIds": ["cell_1_vm"],
+          "series": [
+            {
+              "label": "Cell 1 membrane potential",
+              "recordedVariable": "V_m",
+              "cellId": "1",
+              "observationKind": "point_sample",
+              "origin": { "kind": "recorded" },
+              "time": { "kind": "time", "unit": "ms", "values": [0, 1, 1, 2] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -68.0, -66.0, -65.0] }
+            }
+          ]
+        },
+        "parameters": {
+          "layout": "shared_axis",
+          "duplicateTimePolicy": "aggregate",
+          "aggregateMethod": "mean",
+          "uncertainty": { "kind": "none", "reason": "single_trial" }
+        },
+        "source": { "kind": "synthetic_fixture" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "Five timestamps, four values in one series. Cortexel refuses to pair them by best effort: a positional pairing would silently shift every sample one step earlier, moving the peak from t = 0.3 ms to t = 0.2 ms — a 0.1 ms error in a figure that would look entirely plausible and would be used to argue about spike timing.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 0.5, "unit": "ms" },
+            "seriesIds": ["cell_1_vm"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2, 0.3, 0.4] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -69.2, -68.1, -20.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "Two samples share t = 1.0 ms and no policy was declared. Under a last-write-wins default the drawn value would be -68.0 mV or -66.0 mV purely according to which row the recorder wrote second — a 2 mV difference decided by array order, not by the neuron. Cortexel refuses until the caller says whether the replicates are kept, aggregated, or an error.",
+        "expectedCode": "SCIENCE_DUPLICATE_TIME_POLICY",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 3, "unit": "ms" },
+            "seriesIds": ["cell_1_vm"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1, 1, 2] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -68.0, -66.0, -65.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "A membrane potential in mV and a calcium concentration in nmol/L are placed on one numeric axis. They are not comparable because their arrays are the same length: 0.05 on a shared axis would be 0.05 mV and 0.05 nmol/L at the same height, a coincidence of the numerals with no physical content. Cortexel refuses the shared axis and requires small multiples.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 3, "unit": "ms" },
+            "seriesIds": ["cell_1_vm", "cell_1_ca"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1, 2] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -55.0, -70.0] }
+              },
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1, 2] },
+                "values": { "kind": "concentration", "unit": "nmol/L", "values": [50.0, 320.0, 180.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "`smoothing` is not a parameter of this figure and never will be. A 5-sample moving average would erase a 0.3 ms spike from a 0.1 ms recording while the figure still claimed to show recorded V_m. A smoothed trace is a different quantity: it must arrive as a series whose origin is `derived` with a named method, so the reader can see that the line is not the recording. The closed schema makes the typo fail rather than be ignored.",
+        "expectedCode": "SCHEMA_UNKNOWN_PROPERTY",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 0.3, "unit": "ms" },
+            "seriesIds": ["cell_1_vm"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -20.0, -70.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis", "smoothing": { "window": 5 } },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "Two series share the id `cell_1_vm` in the seriesIds vector. An ambiguous identity must fail BEFORE the legend, the table, the palette, and any selection can bind to different series under the same name — at which point a reader comparing the legend with the table would be comparing two different neurons.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 2, "unit": "ms" },
+            "seriesIds": ["cell_1_vm", "cell_1_vm"],
+            "series": [
+              {
+                "label": "Cell 1",
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -69.0] }
+              },
+              {
+                "label": "Cell 2",
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-65.0, -64.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "`mV` is canonical; `millivolts` is only an alias. A stable request must use the canonical code and is rejected with a repair rather than silently converted, because a silent conversion changes a number that the caller never sees — and between mV and V that number differs by a factor of 1000.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 2, "unit": "ms" },
+            "seriesIds": ["cell_1_vm"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1] },
+                "values": { "kind": "membrane_voltage", "unit": "millivolts", "values": [-70.0, -69.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "A firing rate is not an analog trace. This figure has no denominator: drawing 8 Hz as a line would present a per-neuron claim with nothing to divide by, and a reader could not tell whether it means 8 spikes per second per recorded neuron or 8 spikes per second in total — a difference of the population size, often two orders of magnitude. `neuro.population_rate` exists precisely because that denominator must be declared, so the kind enum here is closed against it.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 15, "unit": "ms" },
+            "seriesIds": ["exc_rate"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 5, 10] },
+                "values": { "kind": "firing_rate", "unit": "Hz", "values": [8.0, 12.0, 9.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "A credible interval is a claim about a posterior, and this figure does not support it. Structural validity establishes only that the two arrays are ordered; it establishes nothing about calibration, and a shaded band labelled `95% credible` is read as a probability statement about the parameter. The supported variants are refused rather than approximated: use `quantile_interval` for the quantiles you actually computed.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 2, "unit": "ms" },
+            "seriesIds": ["vm_posterior"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "derived", "method": "posterior_mean" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -68.0] }
+              }
+            ]
+          },
+          "parameters": {
+            "layout": "shared_axis",
+            "uncertainty": {
+              "kind": "credible_interval",
+              "unit": "mV",
+              "lower": [-71.0, -69.0],
+              "upper": [-69.0, -67.0],
+              "level": 0.95,
+              "method": "posterior_quantiles",
+              "coverage": "pointwise",
+              "basis": "ensemble_members"
+            }
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The request asserts that Cortexel validated it. A validation result is a library-generated fact: a caller declares what its data IS, never what Cortexel concluded about it. The field is rejected on the raw request, before normalization, so it cannot be smuggled in through a default — otherwise a stored artifact could carry a passing verdict nobody ever computed.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.analog_trace" },
+          "data": {
+            "window": { "start": 0, "stop": 2, "unit": "ms" },
+            "seriesIds": ["cell_1_vm"],
+            "series": [
+              {
+                "observationKind": "point_sample",
+                "origin": { "kind": "recorded" },
+                "time": { "kind": "time", "unit": "ms", "values": [0, 1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70.0, -69.0] }
+              }
+            ]
+          },
+          "parameters": { "layout": "shared_axis" },
+          "source": { "kind": "simulation" },
+          "validation": { "structural": { "result": "passed" } }
+        }
+      }
+    ]
+  }
+}

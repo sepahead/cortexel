@@ -1,0 +1,836 @@
+{
+  "id": "network.connection_graph",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Directed connection graph of a declared network snapshot",
+
+  "purpose": {
+    "canonicalQuestion": "Which connections existed between a COMPLETE declared set of nodes at one snapshot, under one declared scope, with every isolate, autapse, multapse, direction, and edge attribute preserved?",
+    "cannotEstablish": [
+      "That an absent edge does not exist. Under a sampled or rank-local scope, absence in this figure is not evidence of absence in the network. Only a complete scope over a complete node universe supports reading a missing edge as a real one.",
+      "A node's degree, unless a degree annotation is declared AND the scope supports it. A drawn graph shows the connections that are in the snapshot, not a node's connectivity.",
+      "Any spatial or metric relationship under a schematic layout. Distance, angle, adjacency and crossing count are artifacts of the layout construction, not measurements. Two nodes drawn next to each other are not near each other in any space.",
+      "Functional connectivity, causality, or influence. These are structural connections as declared by the source. A drawn edge says a synapse exists, not that it did anything.",
+      "That two weights are comparable across synapse models. A NEST weight's physical meaning depends on the model: the same number may be a current amplitude under one and a conductance under another.",
+      "What the network looks like at any other simulation time. This is a snapshot. Under STDP or structural plasticity the graph changes, and the declared snapshot time is the only time it describes.",
+      "The probability that an edge exists. This figure has no uncertainty channel: an edge is in the snapshot or it is not. A connection rule's `p` is a parameter of a generator, never an uncertainty on a realized edge."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Connection rows are NOT assumed to arrive in any order. They are stably sorted by (index of sourceId in the declared node universe, index of targetId in the declared node universe, original ordinal). The original row order and its digest are retained in the artifact.",
+      "The node universe — not string collation — is the ordering authority for that sort. Sorting the ids as strings would place node \"10\" before node \"9\", so the drawn lane order would depend on how the ids happen to be spelled.",
+      "Multapses are PRESERVED. Two rows with the same (source, target) are two synapses, and deduplicating them would silently delete a real connection and halve the pair's contribution to every count derived from it. There is no deduplication path in this contract.",
+      "Autapses are PRESERVED. A row whose source equals its target is a self-connection, not a malformed row, and it is drawn as a visible loop.",
+      "`edgeIds`, when supplied, must be unique: they are the stable assertion identity that binds a drawn lane to a table row. When absent, ordinal identities are assigned AFTER the canonical sort and the assignment method (`ordinal_after_canonical_sort`) is recorded in the artifact, so the identity is reproducible rather than incidental to the caller's array order.",
+      "Node ordering follows `nodeUniverse.order`. `as_declared` uses the caller's array order verbatim. `canonical_id` sorts ascending by numeric value when EVERY id is a canonical decimal integer string, and ascending by Unicode code point otherwise; which of the two rules applied is recorded, because the answers differ (numerically 9 < 10; by code point \"10\" < \"9\").",
+      "Group memberships must PARTITION the node universe: a node may belong to at most one group. A node listed in two groups has two colors, two shapes and two layout sectors, so it is rejected rather than resolved by array order.",
+      "A null weight or delay is a MISSING attribute, never zero. The edge is still drawn — its existence is a fact independent of its attributes — but it is excluded from the value encoding, drawn with the reserved no-value stroke, and reported as missing in the table.",
+      "Negative zero is rejected at the snapshot stage. A coordinate or weight of exactly 0 is retained and is a value, not an absence.",
+      "Unit conversion is performed only within a dimension and only through the typed unit layer. `nest:weight` is `simulator_defined`: it is never converted, never compared across models, and never pooled with an SI-dimensioned weight.",
+      "Node completeness and connection scope are INDEPENDENT facts. `nodeUniverse.complete` says whether the declared node set is the whole selected universe; `scope` says how much of the connectivity was observed. A complete node universe with a rank-local connection scope is both legal and common, and it means exactly what it says."
+    ],
+    "derivation": [
+      "canonical_sort: stable sort of connection rows by (universeIndex(source), universeIndex(target), originalOrdinal). O(e log e).",
+      "lane_routing: for each UNORDERED endpoint pair {u, v}, every connection in either direction is collected in canonical order and assigned lane index k = 0, 1, 2, .... Lane k is drawn with a perpendicular offset of ((-1)^k * ceil(k / 2)) * laneSpacing from the straight u-v chord. Deterministic, closed form, no seed.",
+      "A->B and B->A therefore occupy DISTINCT lanes and both arrowheads stay visible. A reciprocal pair is never collapsed into one double-headed line: that would draw one connection where there are two, and would hide the case where only one direction exists.",
+      "multapse_aggregation: whenever any unordered pair carries more than one connection, a `multapseAggregation` (sum, mean, min, max) MUST be declared — Cortexel refuses SCIENCE_AGGREGATION_REQUIRED otherwise and never applies 'last edge wins'. Under `separate_lanes` every connection is still drawn on its own routed lane; the aggregation names how any per-pair derived value is summarized.",
+      "Under `bundled`, the pair is drawn as one stroke carrying an explicit count label ('x N') whose encoded value is the declared `multapseAggregation` — never 'last row wins'. Every connection row still appears individually in the table and the sidecar.",
+      "autapse_rendering: a self-connection is drawn as a fixed screen-space loop anchored at the node with an arrowhead. It is never merged into a pair lane and never omitted. Its contribution to a degree annotation is governed by `degreeAnnotation.autapseContribution`.",
+      "direction_encoding: every edge carries an arrowhead at the TARGET end, inset by the node radius. There is no option to disable it. Direction is never carried by color, animation, or curvature alone, because a still export, a grayscale print, and a reduced-motion reader must all read the same direction.",
+      "degree: in_degree(v) counts connection ENTRIES whose target is v under `per_connection_entry` (so a multapse contributes more than one), or distinct source neighbours under `per_unique_neighbour`. out_degree(v) is the mirror image; total_degree is in + out. O(e).",
+      "An autapse contributes 2 to total_degree under `counts_in_and_out`, 1 under `counts_once`, and 0 under `excluded`. The three answers differ, the difference is scientific rather than cosmetic, and there is no default: the caller states which one it means.",
+      "schematic_circular: node k of N sits at angle 2*pi*k/N measured CLOCKWISE from 12 o'clock, on a circle of radius min(width, height)/2 minus the margin, in the declared node order. Closed form, no iteration, no seed.",
+      "schematic_grouped_circular: groups are laid out in declared order, each receiving an angular sector proportional to its member count, separated by a fixed 4-degree gap; members are placed within the sector in declared order; nodes belonging to no group form a final implicit sector labelled 'ungrouped' and are never dropped.",
+      "schematic_layered: one column per group in declared order, left to right; members top to bottom in declared order; ungrouped nodes form a final column.",
+      "measured_positions: x and y map directly to the plot frame with y increasing UPWARD (the scientific convention, not the SVG one) and ONE equal scale on both axes, so an aspect ratio is meaningful. Positions are never jittered: two neurons at identical coordinates stay overlapped, because separating them would invent a distance that was not measured. Coverage of the node universe must be complete.",
+      "edge_value_scale: linear by default. Width encodes |value| over a bounded pixel range stated in the legend. A diverging color scale requires an explicit `center`; without one it is refused (RENDER_DIVERGING_SCALE_NO_CENTER), because a diverging map with no reference point implies a symmetry the data may not have.",
+      "When the encoded values contain BOTH signs, negative edges are additionally drawn dashed. That sign encoding is non-optional and uses no color, so it survives a grayscale print: a width scale can never silently discard the difference between excitation and inhibition.",
+      "node_color: categorical color by declared group is always paired with a distinct marker shape, so group identity is never carried by color alone. More than 8 groups exceeds the distinguishable shape set and is refused (RENDER_SERIES_LIMIT_EXCEEDED) rather than minting indistinguishable colors.",
+      "empty_result: a graph with zero connections is a VALID figure, not an empty state. It asserts that no connection was observed among the declared nodes under the declared scope, which is a finding. Every declared node is still drawn and the summary states the zero explicitly.",
+      "mark_budget: visible marks are counted BEFORE any geometry is emitted as (declared nodes) + (drawn edge strokes, one per lane under `separate_lanes` and one per pair under `bundled`) + (one arrowhead per drawn stroke) + (one loop per autapse). The count is exact, not estimated, because a budget that is checked after drawing is not a budget.",
+      "above_mark_budget: REFUSED with RESOURCE_MARKS_EXCEEDED. No thinning, no top-k-by-weight, no prefix slice: each deletes real synapses and leaves a drawing that still looks complete. The refusal carries a structured repair recommending `network.adjacency_matrix`, which renders the same snapshot at a scale a node-link diagram cannot. Above the cap the honest answer is a different figure.",
+      "The only edge reduction this contract accepts is a CALLER-declared one: the caller narrows the snapshot itself, declares the `sampled` scope with its source/retained counts, and the figure discloses the subset (`graph_declared_subset`) and refuses every degree claim. Cortexel never invents the subset, because choosing which synapses to drop is a scientific decision the caller has to own.",
+      "No force-directed, spring, or stochastic layout exists in this contract. Such layouts are iteration-order and platform dependent, so they cannot produce the byte-identical output a stable figure requires. Complexity overall: O(n + e log e)."
+    ],
+    "scopeRules": [
+      "A NetworkScopeV1 is mandatory. A connection snapshot without scope cannot be interpreted at all.",
+      "single_process: complete by construction. Every degree annotation mode is permitted and absence of an edge is established absence.",
+      "global_merged: `mergedRanks` must cover 0..worldSize-1 exactly once. The check runs on the scope DECLARATION, not on a degree claim: the kind is itself the assertion that the whole world was merged, so a partial rank set is refused (SCOPE_MERGE_INCOMPLETE) with or without a degree annotation, and is never upgraded.",
+      "What global_merged cannot check: that every merged rank came from the SAME run at the SAME snapshot time. `common.v1` carries one snapshotTime for the merged whole and no per-rank run id, so a cross-run or cross-time merge is not visible at this boundary. The obligation is on the adapter, and the limitation is declared rather than papered over with a refusal Cortexel cannot actually make.",
+      "mpi_target_rank_local: under NEST's MPI semantics a rank stores the connections whose TARGET it owns. An `in_degree` annotation over the local target universe is therefore computable, and only when `localTargetUniverseComplete` is true.",
+      "Under that same scope, `out_degree` and `total_degree` are not established facts: the connections leaving a local source toward a remote target live on the other rank. The semantic refusal (SCOPE_OUT_DEGREE_FROM_RANK_LOCAL) is enforced by `network.degree_distribution`; this figure documents the constraint rather than re-checking it, so a caller must not annotate a rank-local out-degree.",
+      "sampled: a degree over the retained edges is a property of the sample, not the network, so no degree claim is meaningful; the retained/source counts are disclosed and a sample that claims to retain more than its source had is refused (SCOPE_MERGE_CONFLICT). The drawn subset is evidence about the edges it contains and nothing else.",
+      "`nodes.complete = false` forbids every degree annotation (SCOPE_NODE_UNIVERSE_REQUIRED) and forbids reading any node as an isolate: a node with no drawn edge may simply have its partners outside the selection.",
+      "Group membership uniqueness is checked across ALL groups, not merely within one group's member list.",
+      "Weights are pooled into one figure only when they share a declared dimension and, when synapse models are declared, a single model. Two numbers are not comparable merely because both are called 'weight'."
+    ],
+    "uncertaintySupport": ["none"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE selected node universe, in a declared order. This is required and cannot be inferred: an edge list can only show that no edge was observed, never that a node has degree zero. Without it, every isolate silently disappears from the figure. The semantic validators read this at `data.nodeUniverse`."
+        },
+        "connections": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+          "description": "One row per connection. Parallel connections between the same pair are distinct rows and are never deduplicated; a row whose source equals its target is an autapse and is never dropped."
+        },
+        "scope": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+          "description": "How much of the connectivity was actually observed. This is a fact about the CONNECTIONS and is independent of whether the node universe is complete."
+        },
+        "positions": {
+          "type": "object",
+          "description": "Measured node coordinates. Required when the layout mode is `measured_positions`, and then required to cover the node universe COMPLETELY: a node with no coordinate can neither be placed at the origin (which invents a measurement) nor dropped (which deletes a node and every edge touching it).",
+          "properties": {
+            "nodeIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Binds each coordinate to a node explicitly. Coordinates are never matched to nodes by position in the array, because a reordered node universe would then silently relocate every neuron."
+            },
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "position" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 100000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "position" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 100000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "frame": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+              "description": "The coordinate frame the positions were measured in. Cortexel does not transform between frames; it records which one was declared."
+            }
+          },
+          "required": ["nodeIds", "x", "y"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["nodeUniverse", "connections", "scope"],
+      "additionalProperties": false
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "graphId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "graphLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "layout": {
+          "type": "object",
+          "description": "Either measured coordinates or a closed-form deterministic schematic construction. There is no force-directed option: a spring layout depends on iteration order and floating-point accumulation, so it cannot produce the byte-identical output a stable figure requires — and its distances mean nothing anyway.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["measured_positions", "schematic_circular", "schematic_grouped_circular", "schematic_layered"],
+              "description": "`measured_positions` is spatial and honours one equal scale on both axes. Every `schematic_*` mode is explicitly NON-SPATIAL: it is labelled as such on the figure and in the summary, because a reader who measures distance in it is measuring the algorithm."
+            }
+          },
+          "required": ["mode"],
+          "additionalProperties": false
+        },
+        "parallelEdges": {
+          "type": "object",
+          "description": "How multiple connections between the same pair are DRAWN. They are never merged in the data: every row survives into the table and the sidecar regardless of this setting.",
+          "properties": {
+            "display": {
+              "type": "string",
+              "enum": ["separate_lanes", "bundled"],
+              "description": "`separate_lanes` draws each connection on its own deterministic routed lane. `bundled` draws one stroke carrying an explicit count label; when an edge value is encoded it additionally requires a declared aggregation."
+            },
+            "maxLanes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "description": "The number of distinct lanes drawn between one pair before lanes would have to be shared — a rendering hint. What fails closed is the multapse-aggregation rule (a declared `parameters.multapseAggregation` for any pair carrying parallel connections); the lane cap itself is not re-checked at the validation boundary."
+            }
+          },
+          "required": ["display", "maxLanes"],
+          "additionalProperties": false
+        },
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How parallel connections between one unordered pair are summarized into a per-pair derived value (a bundled stroke's encoded value, a degree area). REQUIRED whenever any pair carries more than one connection; `no_aggregation` asserts at most one connection per pair and fails if that is untrue. The rows are never merged in the data regardless of this setting. Read by the semantic validator at `parameters.multapseAggregation`."
+        },
+        "edgeValueEncoding": {
+          "type": "object",
+          "description": "Optional. Absent means edges carry no value encoding and are drawn uniformly. Present means an attribute is mapped to stroke geometry, and the legend states the exact mapping.",
+          "properties": {
+            "mode": { "type": "string", "enum": ["weight", "delay"] },
+            "channel": { "type": "string", "enum": ["width", "color", "width_and_color"] },
+            "colorScale": {
+              "type": "string",
+              "enum": ["sequential", "diverging"],
+              "description": "A diverging scale requires an explicit `center` — enforced structurally by the conditional below. Without one the map implies a symmetry the data may not have, and the request is refused."
+            },
+            "center": { "type": "number" },
+            "scale": { "type": "string", "enum": ["linear", "symlog"] }
+          },
+          "required": ["mode", "channel"],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": { "colorScale": { "const": "diverging" } },
+                "required": ["colorScale"]
+              },
+              "then": { "required": ["center"] }
+            }
+          ]
+        },
+        "degreeAnnotation": {
+          "type": "object",
+          "description": "Optional. Absent means the figure makes NO degree claim at all — the safe default. Present means a degree is computed, labelled, and (optionally) encoded as node area, which requires both a complete node universe and a scope that can support the claim.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["in_degree", "out_degree", "total_degree"],
+              "description": "Under a target-rank-local scope only `in_degree` is computable; `out_degree` and `total_degree` are refused, because the connections leaving a local source toward a remote target are stored on the other rank."
+            },
+            "countingPolicy": {
+              "type": "string",
+              "enum": ["per_connection_entry", "per_unique_neighbour"],
+              "description": "`per_connection_entry` counts every synapse, so a multapse contributes more than one. `per_unique_neighbour` counts partners. The two give different numbers and neither is a default."
+            },
+            "autapseContribution": {
+              "type": "string",
+              "enum": ["counts_in_and_out", "counts_once", "excluded"]
+            },
+            "encodeAsNodeArea": {
+              "type": "boolean",
+              "default": false,
+              "description": "When true, node AREA (never radius) is proportional to the degree, and the legend states the reference area. When false, the degree appears only as a label and in the table."
+            }
+          },
+          "required": ["mode", "countingPolicy", "autapseContribution"],
+          "additionalProperties": false
+        },
+        "nodeColorBy": {
+          "type": "string",
+          "enum": ["none", "group"],
+          "default": "none",
+          "description": "Group color is always paired with a distinct marker shape, so group identity never depends on color perception."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Only the `none` variant is renderable here. A drawn edge is a connection that exists in the snapshot; there is no band to draw around it, and any other variant is refused rather than approximated into a shading that would state a probabilistic claim the snapshot cannot support."
+        }
+      },
+      "required": ["graphId", "layout", "parallelEdges"],
+      "additionalProperties": false
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/weights/values",
+            "/data/connections/delays/values",
+            "/data/connections/synapseModels"
+          ],
+          ["/data/positions/nodeIds", "/data/positions/x/values", "/data/positions/y/values"]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": ["/data/nodeUniverse/ids", "/data/connections/edgeIds", "/data/positions/nodeIds"]
+      }
+    },
+    { "id": "topology.scope_declared" },
+    { "id": "topology.scope_supports_claim" },
+    { "id": "topology.node_universe_declared" },
+    { "id": "topology.edge_endpoints_in_universe" },
+    { "id": "topology.delay_positive" },
+    { "id": "topology.weight_group_compatible" },
+    { "id": "topology.multapse_aggregation_declared" },
+    { "id": "spatial.position_coverage_complete" },
+    { "id": "spatial.equal_axis_units" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.connection_graph", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 20000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "graph_declared_subset"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION", "SOURCE_SYNTHETIC_FIXTURE", "SOURCE_KIND_UNKNOWN", "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY", "SOURCE_AUTHENTICITY_UNVERIFIED", "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE", "RANK_LOCAL_SCOPE", "SAMPLED_EDGES", "NODE_UNIVERSE_INCOMPLETE",
+    "MULTAPSE_AGGREGATED", "SCHEMATIC_LAYOUT", "MISSING_VALUES_PRESENT", "UNIT_CONVERTED",
+    "UNCERTAINTY_NOT_PROVIDED", "DOWNSAMPLED_FOR_RENDERING", "COMPACTION_MAY_HIDE_TRANSIENTS",
+    "TABLE_EXCERPT_ONLY", "CALLER_NOTE_UNVERIFIED", "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Directed connection graph {graphLabel}. {nodeCount} declared nodes, {isolateCount} with no drawn connection. {edgeCount} connections: {multapseRowCount} are parallel connections of an already-connected pair and {autapseCount} are self-connections. Scope: {scopeStatement}. Layout: {layoutMode}, {layoutSpatialStatement}. Node order: {nodeOrder}. Edge value: {edgeValueStatement}. Degree: {degreeStatement}. Direction is shown by an arrowhead at the target end of every edge. {missingValueStatement} {compactionStatement} {tableStatement}",
+    "tableColumns": [
+      { "key": "rowKind", "header": "Row", "description": "`node` or `connection`. A cell that does not apply to the row kind is empty; an empty cell is never a zero." },
+      { "key": "id", "header": "Id", "description": "The node id, or the connection's edge id (assigned by ordinal after the canonical sort when the source supplied none)." },
+      { "key": "group", "header": "Group", "description": "The declared group, or empty. A node belongs to at most one group." },
+      { "key": "sourceId", "header": "Source", "description": "Connection rows only." },
+      { "key": "targetId", "header": "Target", "description": "Connection rows only. The arrowhead is drawn at this end." },
+      { "key": "isAutapse", "header": "Self-connection", "description": "True when source equals target." },
+      { "key": "parallelIndex", "header": "Parallel index", "description": "Which of the pair's parallel connections this row is, in canonical order (1-based)." },
+      { "key": "parallelCount", "header": "Parallel count", "description": "How many connections exist between this unordered pair. Greater than 1 means a multapse; every one of them has its own row." },
+      { "key": "weight", "header": "Weight", "description": "Exact declared value, or empty when the source did not supply one. Empty is missing, not zero." },
+      { "key": "weightUnit", "header": "Weight unit", "description": "`nest:weight` is simulator-defined and has no SI meaning; it is never converted or compared across models." },
+      { "key": "delay", "header": "Delay" },
+      { "key": "delayUnit", "header": "Delay unit" },
+      { "key": "synapseModel", "header": "Synapse model", "description": "The declared model. Weights of different models are not pooled." },
+      { "key": "inDegree", "header": "In-degree", "description": "Node rows only, and only when a degree annotation is declared and the scope supports it." },
+      { "key": "outDegree", "header": "Out-degree", "description": "Node rows only. Empty under a target-rank-local scope, where it is not computable." },
+      { "key": "degreeCountingPolicy", "header": "Degree policy", "description": "Whether each connection entry or each unique neighbour was counted, and how an autapse contributed." },
+      { "key": "x", "header": "x", "description": "Measured coordinate, or empty under a schematic layout. A schematic screen position is not a coordinate and is never reported as one." },
+      { "key": "y", "header": "y" },
+      { "key": "positionUnit", "header": "Position unit" },
+      { "key": "layoutStatus", "header": "Layout", "description": "`measured` or `schematic (non-spatial)`." },
+      { "key": "scope", "header": "Scope", "description": "The declared network scope, repeated on every row so an extracted subset cannot lose it." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "networkx.MultiDiGraph",
+      "version": "3.3",
+      "status": "not_run",
+      "notes": "NetworkX is the intended differential oracle for degree counting, multiedge retention, and self-loop handling ONLY — never for layout, because Cortexel's stable layouts are closed-form and NetworkX's are not normative. The comparison MUST use MultiDiGraph: networkx.DiGraph silently collapses parallel edges, so comparing against it would 'confirm' precisely the deduplication bug this contract exists to prevent. NetworkX also counts a self-loop as 2 in Graph.degree but as 1 each in in_degree/out_degree, so the autapse policy must be matched explicitly before any number agrees for the right reason. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.GetConnections", "status": "supported", "notes": "SynapseCollection.get() in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. The adapter MUST additionally supply the node universe from the NodeCollection: GetConnections cannot prove a node has degree zero, only that it returned no row for it. The MPI scope must come from the actual run, not from an assumption. When the adapter merges ranks into a `global_merged` scope it MUST merge one run at one snapshot time and cover every rank exactly once; Cortexel can check the rank cover but has no way to see a cross-run or cross-time merge, so that one is the adapter's obligation." },
+    { "system": "nest.GetPosition", "status": "supported", "notes": "Measured layout. Node ids are bound to the matching position order; the single-process / rank-local / merged scope of the position query is retained and must agree with the connection scope." },
+    { "system": "networkx.MultiDiGraph", "status": "partial", "notes": "Structure maps cleanly (directed, multiedge, self-loop). NetworkX carries no node-universe completeness flag, no MPI scope, and no units, so the caller must declare all three; the adapter never fabricates them." },
+    { "system": "neo", "status": "rejected", "notes": "Neo models recordings, not connectivity. There is no faithful mapping, and an invented one would be worse than none." },
+    { "system": "nwb", "status": "planned", "notes": "NWB core has no connectivity schema. A mapping depends on a community extension (for example ndx-simulation-output); none is certified here, and Cortexel will not invent a table layout." },
+    { "system": "ncp", "status": "planned", "notes": "Pending the narrow NCP adapter and its downstream consumer certification." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.connection_graph"],
+    "notes": "The legacy payload carried an edge list with no node universe, no NetworkScopeV1, and no multapse or autapse policy. Migration REQUIRES all three and blocks with MIGRATION_INFORMATION_MISSING rather than inferring them: inferring the node set from the edge endpoints deletes every isolate, and assuming single-process scope silently upgrades a rank-local snapshot into a false global claim. Legacy ids are never accepted by normal validation (MIGRATION_LEGACY_ID_NOT_ACCEPTED), because a silent alias makes a stored artifact ambiguous about what was actually validated."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the canonical connection sort key is MAJOR: it changes the ordinal edge identities assigned when the source supplies none, and therefore which table row a drawn lane refers to.",
+    "Changing the deterministic lane-offset formula or the lane ordering is MAJOR: a stored figure would no longer reproduce byte-for-byte.",
+    "Changing any schematic layout construction (start angle, rotation direction, sector allocation, gap) is MAJOR for the same reason.",
+    "Changing the arrowhead convention from the target end is MAJOR: it reverses the meaning of every stored figure.",
+    "Changing the default degree counting policy or the autapse contribution is MAJOR: the numbers change.",
+    "Introducing any multapse deduplication is MAJOR and will not be accepted: preserving every connection row is the point of this contract.",
+    "Replacing the above-budget refusal with an automatic edge subset is MAJOR and will not be accepted: a figure that silently drops synapses to fit a cap is not the snapshot, and it looks exactly like one that did not.",
+    "Adding a new schematic layout mode is MINOR. Adding a new edge value channel is MINOR. Adding a new adapter is MINOR.",
+    "Raising a budget ceiling is MINOR; lowering one is MAJOR, because a request that validated yesterday must not fail today."
+  ],
+
+  "knownLimitations": [
+    "No force-directed layout exists in the stable contract. Spring layouts depend on iteration order and floating-point accumulation, so they cannot produce byte-identical output, and their distances carry no meaning even when they are reproducible. They remain behind the experimental boundary.",
+    "A schematic layout is a drawing, not a measurement. Cortexel labels it non-spatial and discloses it; it cannot stop a reader from measuring it anyway.",
+    "`common.v1` connectionRows has no receptor-type field, so a receptor id cannot be carried and two edges differing only in receptor are indistinguishable here. Blueprint 30.11 lists receptor as an optional attribute; closing the gap needs a change to the shared type, not to this skill.",
+    "`common.v1` nodeUniverse carries no per-node label, so nodes are labelled by id. A human-readable neuron name cannot be carried without changing the shared type.",
+    "`NetworkScopeV1.snapshotTime` is optional in `common.v1`, so this contract cannot make it mandatory. A snapshot without a time cannot be aligned to a plasticity phase, and two snapshots without times cannot be shown to be simultaneous. Declaring it is strongly recommended.",
+    "There is no graph-specific budget profile. The `standard` and `agent` profiles' graphNodes/graphEdges ceilings apply, and this contract additionally caps visible marks at 20000 — far below the profile's 100000 — because a node-link diagram with 100000 marks is a hairball that conveys nothing.",
+    "Above the mark budget this skill produces no figure at all: it refuses with RESOURCE_MARKS_EXCEEDED and recommends `network.adjacency_matrix`. There is no large-graph mode. A node-link drawing of that network would not be readable, and saying so is more useful than drawing it.",
+    "The edge-cap-fallback golden is a generated fixture, not an `examples` entry: reproducing it inline needs over 20000 rows, which would bloat this contract by orders of magnitude for one refusal. The test-suite vector asserts the same RESOURCE_MARKS_EXCEEDED code and matrix repair declared here.",
+    "The CROSS-RUN merge conflict is NOT enforced. `global_merged` carries one snapshot time and no per-rank run id, so ranks merged across runs or times are indistinguishable from a legitimate merge; that check is an adapter obligation. The enforced SCOPE_MERGE_CONFLICT triggers are a duplicated merged rank and a sample that retains more connections than its source had; the rank cover is SCOPE_MERGE_INCOMPLETE.",
+    "Node marker radius and arrowhead size are fixed screen-space decoration and encode nothing, unless `degreeAnnotation.encodeAsNodeArea` is explicitly enabled.",
+    "The `POSITIONS_MISSING` disclosure exists for spatial maps that omit an unpositioned node and disclose it. This figure instead fails closed with SCOPE_POSITION_COVERAGE_INCOMPLETE: omitting a node from a graph deletes an isolate and changes the topology, which a footnote cannot repair.",
+    "`ids.unique` enforces per-pointer uniqueness on the node ids, edge ids, and position node ids. The cross-group membership partition (a node in at most one group) is NOT enforced by a semantic validator here: the shared implementation reads only its flat `pointers` list, so group-partition uniqueness is an adapter obligation.",
+    "`degree.counting_policy_declared` is deliberately NOT declared for this figure. That validator requires a top-level `parameters.countingPolicy` unconditionally, but here a degree is an OPTIONAL annotation whose counting policy is structurally required inside `degreeAnnotation`; the nested requirement is what enforces it.",
+    "The scope/degree compatibility refusals (rank-local out-degree, sampled degree) are enforced by the semantic validator only for `network.degree_distribution`. This figure documents the constraints and structurally requires a well-formed `degreeAnnotation`, but does not itself reject a rank-local out-degree annotation at the semantic boundary.",
+    "The <=8 distinguishable-group limit is a render-stage concern (RENDER_SERIES_LIMIT_EXCEEDED) with no semantic validator, so it is not checked during request validation; the shared `nodeUniverse` type caps groups at 64. The diverging-scale center requirement, by contrast, IS enforced structurally (an absent center fails with SCHEMA_REQUIRED_PROPERTY_MISSING).",
+    "The multapse-aggregation rule fires for ANY unordered pair carrying more than one connection, independent of `parallelEdges.display`. A `separate_lanes` figure with parallel edges must therefore still declare `parameters.multapseAggregation`; the aggregation governs any per-pair derived value while every row is still drawn and tabled.",
+    "Bundled parallel edges are drawn as one stroke with a count label. The bundle is a paint decision and every row remains in the table, but a reader who looks only at the drawing sees one stroke where several synapses exist."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.connection_graph" },
+        "data": {
+          "nodeUniverse": {
+            "ids": ["1", "2", "3", "4"],
+            "order": "as_declared",
+            "groups": [
+              { "id": "exc", "label": "Excitatory", "memberIds": ["1", "2", "3"] },
+              { "id": "inh", "label": "Inhibitory", "memberIds": ["4"] }
+            ],
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": ["1", "1", "2", "1", "3"],
+            "targetIds": ["2", "2", "1", "1", "3"],
+            "edgeIds": ["e1", "e2", "e3", "e4", "e5"],
+            "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10.5, 10.5, -3.2, 2, 1] },
+            "delays": { "kind": "delay", "unit": "ms", "values": [1.5, 1.5, 2, 1, 1] },
+            "synapseModels": ["static_synapse", "static_synapse", "static_synapse", "static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 },
+            "complete": true
+          }
+        },
+        "parameters": {
+          "graphId": "microcircuit_snapshot",
+          "graphLabel": "Microcircuit connections at t = 1000 ms",
+          "layout": { "mode": "schematic_grouped_circular" },
+          "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 },
+          "multapseAggregation": "sum",
+          "edgeValueEncoding": { "mode": "weight", "channel": "width_and_color", "colorScale": "diverging", "center": 0, "scale": "linear" },
+          "degreeAnnotation": { "mode": "total_degree", "countingPolicy": "per_connection_entry", "autapseContribution": "counts_in_and_out", "encodeAsNodeArea": true },
+          "nodeColorBy": "group",
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-7" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.connection_graph" },
+        "data": {
+          "nodeUniverse": { "ids": ["10", "11", "12"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["10", "11"],
+            "targetIds": ["12", "12"],
+            "delays": { "kind": "delay", "unit": "ms", "values": [1, 2] }
+          },
+          "scope": {
+            "kind": "mpi_target_rank_local",
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 500 },
+            "rank": 2,
+            "worldSize": 4,
+            "localTargetUniverseComplete": true
+          },
+          "positions": {
+            "nodeIds": ["10", "11", "12"],
+            "x": { "kind": "position", "unit": "um", "values": [0, 100, 200] },
+            "y": { "kind": "position", "unit": "um", "values": [0, 50, 0] },
+            "frame": "layer 2/3 tissue frame"
+          }
+        },
+        "parameters": {
+          "graphId": "rank2_local",
+          "graphLabel": "Connections whose target is owned by rank 2",
+          "layout": { "mode": "measured_positions" },
+          "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 },
+          "degreeAnnotation": { "mode": "in_degree", "countingPolicy": "per_connection_entry", "autapseContribution": "counts_in_and_out" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.connection_graph" },
+        "data": {
+          "nodeUniverse": { "ids": ["1", "2", "3"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["1", "1", "1"],
+            "targetIds": ["2", "2", "2"],
+            "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10, 10, -25] },
+            "delays": { "kind": "delay", "unit": "ms", "values": [1.5, 1.5, 2] },
+            "synapseModels": ["static_synapse", "static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 },
+            "complete": true
+          }
+        },
+        "parameters": {
+          "graphId": "bundled_multapse",
+          "graphLabel": "Three parallel connections from 1 to 2, bundled with a declared sum",
+          "layout": { "mode": "schematic_circular" },
+          "parallelEdges": { "display": "bundled", "maxLanes": 4 },
+          "multapseAggregation": "sum",
+          "edgeValueEncoding": { "mode": "weight", "channel": "width" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "No node universe. An edge list can only establish that no edge was OBSERVED — never that a node has degree zero. Here node 4 sends and receives nothing; inferring the nodes from the edge endpoints yields 3 nodes instead of 4, reporting the network 25% smaller than it is and silently deleting the only isolate, which is frequently the observation that mattered.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "connections": { "sourceIds": ["1", "2"], "targetIds": ["2", "3"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Node 2 is declared twice. Every downstream operation would resolve the ambiguity differently: lane routing binds the edge to the first occurrence, degree counting could credit both, and selection or search would jump to whichever the index happened to keep. An ambiguous identity must fail before it can diverge — a graph in which one neuron exists twice is not a graph of the network.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "2", "3"], "complete": true },
+            "connections": { "sourceIds": ["1"], "targetIds": ["2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A connection targets node 99, which is not in a universe the caller declared COMPLETE. Silently adding 99 would convert a declared-complete claim into a false one, and the smuggled-in node would carry no group, no position and no place in the declared node order — so it would also be drawn wherever the layout happened to put it. Either the universe is wrong or the edge row is; Cortexel will not choose.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "connections": { "sourceIds": ["1", "2"], "targetIds": ["2", "99"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A delay of 0 ms. NEST cannot represent an instantaneous chemical synapse: a delay is at least one resolution step, 0.1 ms by default. A zero here therefore does not describe a fast synapse — it describes an empty column, or a delay recorded in seconds (0.0015 s) that was scaled to zero, a 1000x unit error that arrives looking like a rounding artifact. Drawing it would assert instantaneous transmission.",
+        "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"],
+              "delays": { "kind": "delay", "unit": "ms", "values": [0] }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Two synapse models are pooled onto one weight encoding. `nest:weight` is simulator-defined and has no SI meaning: under a current-based static_synapse a weight of 10 is a current amplitude in pA, while a gap_junction weight of 10 is a conductance in nS. They are not the same physical quantity, so a shared stroke-width scale invites the reader to compare 10 with 10 and conclude the synapses are equally strong. Split the figure by model, or drop the weight encoding.",
+        "expectedCode": "SCIENCE_WEIGHT_GROUP_INCOMPATIBLE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "connections": {
+              "sourceIds": ["1", "2"],
+              "targetIds": ["2", "3"],
+              "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10, 10] },
+              "synapseModels": ["static_synapse", "gap_junction"]
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 },
+            "edgeValueEncoding": { "mode": "weight", "channel": "width" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Three parallel connections from 1 to 2 are bundled into one stroke while weight is encoded, and no aggregation is declared. The weights are 10, 10 and -25: the sum is -5, the mean is -1.67, the max is 10. Painting the last row would show +10 and turn a net-inhibitory pair into a strongly excitatory one. There is no 'last edge wins' — Cortexel refuses to pick a statistic the caller did not state.",
+        "expectedCode": "SCIENCE_AGGREGATION_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "connections": {
+              "sourceIds": ["1", "1", "1"],
+              "targetIds": ["2", "2", "2"],
+              "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10, 10, -25] },
+              "synapseModels": ["static_synapse", "static_synapse", "static_synapse"]
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "bundled", "maxLanes": 4 },
+            "edgeValueEncoding": { "mode": "weight", "channel": "width_and_color", "colorScale": "diverging", "center": 0 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A degree annotation over a node universe the caller declared INCOMPLETE. A drawn node may have partners outside the selection, so a degree computed from the drawn edges is a lower bound, not a degree. Labelling node 2 'in-degree = 1' states a measurement that was not made; the honest options are to complete the universe or to drop the annotation.",
+        "expectedCode": "SCOPE_NODE_UNIVERSE_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": false },
+            "connections": { "sourceIds": ["1"], "targetIds": ["2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 },
+            "degreeAnnotation": { "mode": "in_degree", "countingPolicy": "per_connection_entry", "autapseContribution": "counts_in_and_out" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A measured layout with three nodes and two coordinates. Node 12 has no position. Placing it at the origin invents a measurement — and (0, 0) is exactly where a reader expects a real soma to be. Dropping it deletes a node and both connections that touch it, changing the visible topology from a 2-in convergence to nothing at all. Neither is acceptable, so the request fails closed.",
+        "expectedCode": "SCOPE_POSITION_COVERAGE_INCOMPLETE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["10", "11", "12"], "complete": true },
+            "connections": { "sourceIds": ["10", "11"], "targetIds": ["12", "12"] },
+            "scope": { "kind": "single_process", "complete": true },
+            "positions": {
+              "nodeIds": ["10", "11"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] }
+            }
+          },
+          "parameters": {
+            "graphId": "tissue_map",
+            "layout": { "mode": "measured_positions" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A per-edge confidence interval on edge existence. This figure has no uncertainty channel: a drawn edge is a connection that IS in the snapshot, so there is nothing to put a band around. The number being smuggled in here is the `p` of a connection rule such as pairwise_bernoulli — a parameter of the generator that produced the network, not a property of an edge it realized. Shading the realized edge with it would state a probabilistic claim about a fact that is already settled.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "connections": { "sourceIds": ["1"], "targetIds": ["2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 },
+            "uncertainty": {
+              "kind": "confidence_interval",
+              "unit": "1",
+              "lower": [0.05],
+              "upper": [0.15],
+              "level": 0.95,
+              "method": "wilson",
+              "coverage": "pointwise",
+              "basis": "replicates"
+            }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "`ms` is canonical; `milliseconds` is only an alias. A stable request must use the canonical code and is rejected with a repair rather than silently converted — silent alias conversion is the door through which a wrong-but-plausible factor enters, and a delay is exactly the quantity where an unseen 1000x is invisible on the drawing.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"],
+              "delays": { "kind": "delay", "unit": "milliseconds", "values": [1.5] }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Three parallel connections from 1 to 2 form a multapse, and no `multapseAggregation` was declared. The multapse-aggregation rule fires for any pair carrying parallel connections regardless of the display mode, so even a `separate_lanes` figure must state how the pair's derived value is summarized. Cortexel refuses rather than pick a statistic the caller did not state.",
+        "expectedCode": "SCIENCE_AGGREGATION_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "1"], "targetIds": ["2", "2", "2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 2 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A diverging colour scale with no declared center. A diverging map picks a reference point and paints deviation from it in two hues; with none supplied, any choice Cortexel made would be a claim it invented. The center is the claim, so the caller states it — and the requirement is enforced structurally (an `edgeValueEncoding` with `colorScale: diverging` must carry `center`), so the missing field is refused before any render stage as SCHEMA_REQUIRED_PROPERTY_MISSING.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "connections": {
+              "sourceIds": ["1", "2"],
+              "targetIds": ["2", "3"],
+              "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [12, 2] },
+              "synapseModels": ["static_synapse", "static_synapse"]
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 },
+            "edgeValueEncoding": { "mode": "weight", "channel": "color", "colorScale": "diverging" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A sampled snapshot that claims to have RETAINED more connections (5) than its source pool ever held (2). A sample is a subset, so retaining more than the source is arithmetically impossible; the counts describe a subset that cannot exist, and the scope is refused rather than disclosed as if it were a real narrowing. (A degree over a sample is meaningless for the separate reason that sampling changes every degree, but that refusal is enforced by network.degree_distribution, not here.)",
+        "expectedCode": "SCOPE_MERGE_CONFLICT",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "connections": { "sourceIds": ["1", "2"], "targetIds": ["2", "3"] },
+            "scope": {
+              "kind": "sampled",
+              "parentScope": "single_process",
+              "method": "declared_subset",
+              "sourceConnectionCount": 2,
+              "retainedConnectionCount": 5
+            }
+          },
+          "parameters": {
+            "graphId": "sampled_subset",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A `global_merged` scope whose merged ranks are 0 and 1 out of a world size of 4. The kind IS the claim that the whole world was merged, so this snapshot asserts globality while holding roughly half of it — and under NEST's target-owned MPI distribution the missing ranks hold the connections targeting their own neurons, so the absent half is not random. The rank set is refused rather than relabelled: a partial merge is a partial merge, and `mpi_target_rank_local` is the scope that honestly describes it.",
+        "expectedCode": "SCOPE_MERGE_INCOMPLETE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "connections": { "sourceIds": ["1", "2"], "targetIds": ["2", "3"] },
+            "scope": {
+              "kind": "global_merged",
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 },
+              "worldSize": 4,
+              "mergedRanks": [0, 1]
+            }
+          },
+          "parameters": {
+            "graphId": "partial_merge",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 },
+            "degreeAnnotation": { "mode": "total_degree", "countingPolicy": "per_connection_entry", "autapseContribution": "counts_in_and_out" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The request asserts that Cortexel validated it and that the snapshot is globally complete. Validation results and completeness are library-generated facts: a caller declares what its data IS, never what Cortexel concluded about it. Accepting a caller-set completeness flag would let a rank-local snapshot promote itself to a global claim with one boolean — which is exactly the failure this contract exists to prevent. The field is rejected, not ignored.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.connection_graph" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "connections": { "sourceIds": ["1"], "targetIds": ["2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "graphId": "microcircuit_snapshot",
+            "layout": { "mode": "schematic_circular" },
+            "parallelEdges": { "display": "separate_lanes", "maxLanes": 4 }
+          },
+          "source": { "kind": "simulation", "system": "NEST" },
+          "validation": { "scope": { "result": "passed", "completeness": "global" } }
+        }
+      }
+    ]
+  }
+}

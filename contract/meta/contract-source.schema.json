@@ -1,0 +1,308 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/meta/contract-source.v1.schema.json",
+  "title": "Cortexel skill contract source (meta-schema)",
+  "description": "Every file in contract/skills/ must satisfy this. It is what makes 'one authority' enforceable rather than aspirational: a skill's scientific meaning, request schema, validators, budgets, disclosures, accessibility, evidence, ownership, and migration all live in ONE reviewable document, and every generated artifact is derived from it.\n\nFree-form executable expressions are forbidden anywhere in a contract source. A semantic rule is a NAMED validator id with parameters — never a string of code to evaluate.",
+
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "The catalog id. Simulator-neutral: it names what the figure MEANS, not which simulator produced the data or which technology draws it.",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "maxLength": 64
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Bumped whenever this contract's accepted meaning or output changes."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["stable", "experimental", "deprecated", "removed"],
+      "description": "Closed. There is no `beta`, no `preview`, and no free text: a status is a promise, and an ambiguous promise is a broken one."
+    },
+    "releaseReady": {
+      "type": "boolean",
+      "description": "Whether this contract's evidence is actually complete. Kept SEPARATE from `status` so a label can never substitute for evidence."
+    },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+
+    "purpose": {
+      "type": "object",
+      "properties": {
+        "canonicalQuestion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "The exact scientific question this figure can answer."
+        },
+        "cannotEstablish": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 300 },
+          "minItems": 1,
+          "maxItems": 12,
+          "description": "What it CANNOT establish. Required, and required to be non-empty: a contract that lists no limits is not a scientific contract."
+        }
+      },
+      "required": ["canonicalQuestion", "cannotEstablish"],
+      "additionalProperties": false
+    },
+
+    "science": {
+      "type": "object",
+      "description": "The reviewable scientific specification. Prose here is normative: it is what an independent reviewer reads BEFORE looking at any implementation.",
+      "properties": {
+        "normalization": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 400 },
+          "minItems": 1,
+          "description": "Accepted order, stable sorting, duplicate policy, missing values, signed zero, unit conversion, interval convention, category ordering."
+        },
+        "derivation": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 400 },
+          "minItems": 1,
+          "description": "Each algorithm, its formula, denominators, bins, edge handling, and complexity."
+        },
+        "scopeRules": { "type": "array", "items": { "type": "string", "maxLength": 400 } },
+        "uncertaintySupport": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["none", "standard_deviation", "standard_error", "confidence_interval", "credible_interval", "quantile_interval", "ensemble_range"]
+          },
+          "description": "Exactly which UncertaintyV1 variants this figure can render. Anything else is refused rather than approximated."
+        }
+      },
+      "required": ["normalization", "derivation", "uncertaintySupport"],
+      "additionalProperties": false
+    },
+
+    "requestSchema": {
+      "type": "object",
+      "description": "The Draft 2020-12 schemas for `data` and `parameters`. Both MUST set additionalProperties:false — a mistyped scientific field has to fail closed, not be silently ignored.",
+      "properties": {
+        "data": { "type": "object" },
+        "parameters": { "type": "object" }
+      },
+      "required": ["data", "parameters"],
+      "additionalProperties": false
+    },
+
+    "semanticValidators": {
+      "type": "array",
+      "description": "Named cross-field rules from contract/registries/semantic-validators.v1.json. JSON Schema checks SHAPE; these check MEANING.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "parameters": { "type": "object" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+
+    "renderer": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "revision": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["id", "revision"],
+      "additionalProperties": false,
+      "description": "The render-plan compiler that owns this figure end to end. A stable skill MUST have one: `scene: null` is not a renderer, it is an absence of one."
+    },
+
+    "budgets": {
+      "type": "object",
+      "properties": {
+        "maxObservations": { "type": "integer", "minimum": 1 },
+        "maxVisibleMarks": { "type": "integer", "minimum": 1 },
+        "maxInlineTableRows": { "type": "integer", "minimum": 0 },
+        "compactionPolicies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Which compaction policies are scientifically VALID for this figure. An empty list means the figure refuses to compact — for a distribution, extrema sampling would destroy the mass, so refusing is the only honest option."
+        },
+        "tablePolicy": {
+          "type": "string",
+          "enum": ["complete_inline", "excerpt_inline_with_complete_sidecar", "summary_inline_with_complete_sidecar", "reference_only"]
+        }
+      },
+      "required": ["maxObservations", "maxVisibleMarks", "maxInlineTableRows", "compactionPolicies", "tablePolicy"],
+      "additionalProperties": false
+    },
+
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "requiredSourceFields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Source-declaration fields this figure cannot be interpreted without."
+        }
+      },
+      "required": ["requiredSourceFields"],
+      "additionalProperties": false
+    },
+
+    "disclosures": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Disclosure rule ids this figure may emit. Each is triggered by a machine-checkable artifact fact, never by caller text."
+    },
+
+    "accessibility": {
+      "type": "object",
+      "properties": {
+        "summaryTemplate": {
+          "type": "string",
+          "maxLength": 800,
+          "description": "A deterministic template. It states the quantity, unit, domain, counts, method, and limitations. It contains no interpretive claim such as `significant`, `increased`, or `caused`, and it is never generated by a language model at render time."
+        },
+        "tableColumns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": { "type": "string" },
+              "header": { "type": "string" },
+              "description": { "type": "string" }
+            },
+            "required": ["key", "header"],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "description": "The exact-value alternative. Required for every stable figure: a chart nobody can read the numbers out of is not accessible."
+        }
+      },
+      "required": ["summaryTemplate", "tableColumns"],
+      "additionalProperties": false
+    },
+
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "handVectors": {
+          "type": "boolean",
+          "description": "Whether hand-computable microfixtures exist. MANDATORY for every stable formula — two libraries can share a convention error, but arithmetic you can do on paper cannot."
+        },
+        "externalOracle": {
+          "type": ["object", "null"],
+          "properties": {
+            "name": { "type": "string" },
+            "version": { "type": "string" },
+            "status": { "type": "string", "enum": ["passed", "not_run", "not_applicable"] },
+            "notes": { "type": "string" }
+          },
+          "required": ["name", "status"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["handVectors", "externalOracle"],
+      "additionalProperties": false
+    },
+
+    "adapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "system": { "type": "string" },
+          "status": { "type": "string", "enum": ["supported", "partial", "experimental", "rejected", "planned"] },
+          "notes": { "type": "string" }
+        },
+        "required": ["system", "status"],
+        "additionalProperties": false
+      }
+    },
+
+    "migration": {
+      "type": "object",
+      "properties": {
+        "legacyIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Pre-1.0 ids that migrate HERE. These are accepted only by `cortexel migrate`, never by normal validation: a silent alias makes a stored artifact ambiguous about what was actually validated."
+        },
+        "notes": { "type": "string", "maxLength": 800 }
+      },
+      "required": ["legacyIds"],
+      "additionalProperties": false
+    },
+
+    "owner": {
+      "type": "string",
+      "description": "An accountable person. A team name with no person behind it is not ownership."
+    },
+
+    "changePolicy": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 300 },
+      "minItems": 1,
+      "description": "Which fields, defaults, algorithms, or output facts would make a change MAJOR."
+    },
+
+    "knownLimitations": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 300 },
+      "description": "Precise, non-marketing text."
+    },
+
+    "examples": {
+      "type": "object",
+      "properties": {
+        "valid": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "object" },
+          "description": "Living fixtures. The test suite asserts these validate, so they cannot rot."
+        },
+        "invalid": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "why": { "type": "string" },
+              "expectedCode": { "type": "string" },
+              "request": { "type": "object" }
+            },
+            "required": ["why", "expectedCode", "request"],
+            "additionalProperties": false
+          },
+          "description": "The NEAREST misuse for each rule, with the exact code it must produce. A rule with no invalid vector is not actually enforced."
+        }
+      },
+      "required": ["valid", "invalid"],
+      "additionalProperties": false
+    }
+  },
+
+  "required": [
+    "id",
+    "revision",
+    "status",
+    "releaseReady",
+    "title",
+    "purpose",
+    "science",
+    "requestSchema",
+    "semanticValidators",
+    "renderer",
+    "budgets",
+    "provenance",
+    "disclosures",
+    "accessibility",
+    "evidence",
+    "adapters",
+    "migration",
+    "owner",
+    "changePolicy",
+    "knownLimitations",
+    "examples"
+  ],
+  "additionalProperties": false
+}

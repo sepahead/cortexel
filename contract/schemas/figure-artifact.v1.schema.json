@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/figure-artifact.v1.schema.json",
+  "title": "FigureArtifactV1",
+  "description": "What Cortexel EMITS. Every field here is library-generated; none is caller-settable.\n\nAn artifact is the thing worth archiving. A request records what someone asked for; an artifact records what was actually validated, derived, decided, disclosed, and rendered — and binds all of it to digests so it can be checked later by someone who does not trust the application that produced it.\n\nFour assurance levels are distinguished and never conflated: parsed, structurally valid, semantically valid, and output-integrity verified. None of them is called `scientifically true`, `reproduced`, `paper verified`, or `calibrated`. A structurally and semantically valid figure can still be built on incorrect, incomplete, biased, or mislabelled source data.",
+
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "type": "object",
+      "properties": {
+        "name": { "const": "cortexel-figure-artifact" },
+        "version": { "type": "string", "enum": ["1.0"] }
+      },
+      "required": ["name", "version"],
+      "additionalProperties": false
+    },
+
+    "buildIdentity": {
+      "type": "object",
+      "description": "Every identity axis, named. `specVersion`-style bare tuples are gone: a number is meaningless without the axis it belongs to.",
+      "properties": {
+        "packageVersion": { "type": "string" },
+        "requestContract": { "type": "string" },
+        "artifactContract": { "type": "string" },
+        "contractDigest": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256" },
+        "catalogDigest": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256" },
+        "sourceRevision": {
+          "type": "string",
+          "description": "The release commit, or the literal `unreleased-worktree`. A local build never pretends to know a release commit."
+        },
+        "release": {
+          "type": "boolean",
+          "description": "True only for a clean build from a release tag."
+        }
+      },
+      "required": ["packageVersion", "requestContract", "artifactContract", "contractDigest", "sourceRevision", "release"],
+      "additionalProperties": false
+    },
+
+    "canonicalRequest": {
+      "type": "object",
+      "description": "The request after canonicalization: documented defaults materialized, recognized unit aliases converted (each recorded as a derivation operation), map-like records ordered. Canonicalization is LOSSLESS with respect to scientific data. It never sorts an event sequence, deduplicates a sample, infers a missing population, or drops unknown information."
+    },
+
+    "inputAssurance": {
+      "type": "object",
+      "description": "What the input boundary could actually certify — which is not the same for raw JSON text and for an already-materialized JavaScript value.",
+      "properties": {
+        "boundary": { "type": "string", "enum": ["raw_json_text", "materialized_value"] },
+        "duplicateKeys": {
+          "type": "string",
+          "enum": ["rejected_before_materialization", "not_observable_after_materialization"],
+          "description": "Duplicate object members can only be detected while scanning raw text. Once JSON.parse has run, one value has already silently won. An API that accepts a JavaScript value therefore reports the LOWER assurance rather than implying a check it cannot perform."
+        },
+        "parserProfile": { "type": "string" },
+        "budgetProfile": { "type": "string" }
+      },
+      "required": ["boundary", "duplicateKeys", "parserProfile", "budgetProfile"],
+      "additionalProperties": false
+    },
+
+    "validation": {
+      "type": "object",
+      "description": "What Cortexel actually checked. `referenceComparison` is `not_run` unless an independent oracle was genuinely executed for this artifact — it is never optimistically defaulted.",
+      "properties": {
+        "structural": { "$ref": "#/$defs/validationEntry" },
+        "semantic": { "$ref": "#/$defs/validationEntry" },
+        "resource": { "$ref": "#/$defs/validationEntry" },
+        "referenceComparison": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["not_run", "passed", "failed", "not_applicable"] },
+            "oracle": { "type": ["string", "null"] },
+            "oracleVersion": { "type": ["string", "null"] }
+          },
+          "required": ["status"],
+          "additionalProperties": false
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/validation-error.v1.schema.json" },
+          "maxItems": 32
+        }
+      },
+      "required": ["structural", "semantic", "resource", "referenceComparison", "warnings"],
+      "additionalProperties": false
+    },
+
+    "derivation": {
+      "type": "object",
+      "description": "Every transformation Cortexel performed, in order, with its inputs and outputs bound by digest. A caller cannot append an operation to a certified artifact.",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "algorithm": { "type": "string" },
+              "algorithmRevision": { "type": "integer", "minimum": 1 },
+              "parameters": { "type": "object" },
+              "inputDigest": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256" },
+              "outputDigest": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256" },
+              "receipt": {
+                "type": "object",
+                "description": "Exactly what the operation did: grouping, boundaries, denominators, and how many observations were excluded and why. An excluded event is always counted; it is never silently dropped."
+              }
+            },
+            "required": ["id", "algorithm", "algorithmRevision", "parameters", "receipt"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["operations"],
+      "additionalProperties": false
+    },
+
+    "budgetDecision": {
+      "type": "object",
+      "description": "Whether the data was rendered in full, compacted, or refused — and if compacted, exactly how. The renderer reads this fact and MUST emit the corresponding disclosure.",
+      "properties": {
+        "outcome": { "type": "string", "enum": ["accepted_full", "accepted_compacted", "rejected"] },
+        "profileId": { "type": "string" },
+        "policyId": { "type": ["string", "null"] },
+        "policyRevision": { "type": ["integer", "null"] },
+        "parameters": { "type": "object" },
+        "countBefore": { "type": "integer", "minimum": 0 },
+        "countAfter": { "type": "integer", "minimum": 0 },
+        "extremaPreserved": { "type": ["boolean", "null"] },
+        "massPreserved": { "type": ["boolean", "null"] }
+      },
+      "required": ["outcome", "profileId", "countBefore", "countAfter"],
+      "additionalProperties": false
+    },
+
+    "provenance": {
+      "type": "object",
+      "description": "Source declarations, library assurances, and external attestations kept STRICTLY separate. A signature proves an issuer and integrity — never scientific truth.",
+      "properties": {
+        "source": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration" },
+        "inputDigest": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256" },
+        "assurances": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "issuer": { "type": "string" },
+              "method": { "type": "string" },
+              "result": { "type": "string", "enum": ["passed", "failed", "not_run", "not_applicable"] },
+              "evidenceDigest": { "type": ["string", "null"] }
+            },
+            "required": ["id", "issuer", "method", "result"],
+            "additionalProperties": false
+          }
+        },
+        "attestations": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "issuer": { "type": "string" },
+              "signatureVerified": {
+                "type": "boolean",
+                "description": "Set by Cortexel after verifying the signature. A request can never assert this."
+              },
+              "sourceContentVerified": {
+                "type": "boolean",
+                "description": "Whether the SOURCE BYTES were checked, as opposed to just the signature. Almost always false: verifying a signature does not verify that the data describes reality."
+              }
+            },
+            "required": ["type", "issuer", "signatureVerified", "sourceContentVerified"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["source", "inputDigest", "assurances", "attestations"],
+      "additionalProperties": false
+    },
+
+    "render": {
+      "type": "object",
+      "properties": {
+        "rendererId": { "type": "string" },
+        "rendererRevision": { "type": "integer", "minimum": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "themeId": { "type": "string" },
+        "paletteId": { "type": "string" },
+        "markCount": { "type": "integer", "minimum": 0 },
+        "pathCount": { "type": "integer", "minimum": 0 },
+        "textCount": { "type": "integer", "minimum": 0 },
+        "idSeed": { "type": "string", "description": "Element ids derive from the artifact digest, never from a counter, a UUID, a clock, or React's useId." },
+        "limitations": { "type": "array", "items": { "type": "string" }, "maxItems": 16 }
+      },
+      "required": ["rendererId", "rendererRevision", "width", "height", "themeId", "markCount", "idSeed"],
+      "additionalProperties": false
+    },
+
+    "accessibility": {
+      "type": "object",
+      "description": "EVIDENCE, not a boolean. There is deliberately no `accessible: true`: a conformance claim about a page Cortexel does not own would be a claim it cannot support.",
+      "properties": {
+        "profileId": { "type": "string" },
+        "profileVersion": { "type": "string" },
+        "summary": { "type": "string", "maxLength": 2000 },
+        "tablePolicy": {
+          "type": "string",
+          "enum": ["complete_inline", "excerpt_inline_with_complete_sidecar", "summary_inline_with_complete_sidecar", "reference_only"]
+        },
+        "tableRowsInline": { "type": "integer", "minimum": 0 },
+        "tableRowsTotal": { "type": "integer", "minimum": 0 },
+        "automatedChecks": { "type": "array", "items": { "type": "string" }, "maxItems": 32 },
+        "hostResponsibilities": { "type": "array", "items": { "type": "string" }, "maxItems": 16 },
+        "limitations": { "type": "array", "items": { "type": "string" }, "maxItems": 16 }
+      },
+      "required": ["profileId", "profileVersion", "summary", "tablePolicy", "tableRowsInline", "tableRowsTotal"],
+      "additionalProperties": false
+    },
+
+    "disclosures": {
+      "type": "array",
+      "description": "Derived ONLY from machine-checkable artifact facts through the closed disclosure-rule registry. A caller cannot add, remove, reorder, or reword one. The exact same text appears in the artifact, in the visible SVG footer, in the SVG accessible description, and in the table metadata — a test asserts all four agree.",
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "important", "informational"] },
+          "text": { "type": "string", "maxLength": 400 }
+        },
+        "required": ["id", "severity", "text"],
+        "additionalProperties": false
+      }
+    },
+
+    "outputs": {
+      "type": "array",
+      "description": "Every emitted file, bound by digest. SVG and the JSON/CSV sidecars are normative. A PNG is DERIVED and platform-specific: it is always bound to the source SVG digest and never used as the conformance target.",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": { "type": "string", "enum": ["figure_svg", "artifact_json", "data_table_csv", "data_table_jsonl", "provenance_json", "figure_png"] },
+          "mediaType": { "type": "string" },
+          "filenameHint": { "type": "string" },
+          "sha256": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256" },
+          "byteLength": { "type": "integer", "minimum": 0 },
+          "normative": { "type": "boolean" }
+        },
+        "required": ["role", "mediaType", "sha256", "byteLength", "normative"],
+        "additionalProperties": false
+      }
+    },
+
+    "artifactDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+      "description": "SHA-256 over the RFC 8785 canonical bytes of this artifact with `artifactDigest` itself excluded. No timestamp or other volatile value enters this domain."
+    }
+  },
+
+  "required": [
+    "artifact",
+    "buildIdentity",
+    "canonicalRequest",
+    "inputAssurance",
+    "validation",
+    "derivation",
+    "budgetDecision",
+    "provenance",
+    "disclosures",
+    "artifactDigest"
+  ],
+  "additionalProperties": false,
+
+  "$defs": {
+    "validationEntry": {
+      "type": "object",
+      "properties": {
+        "validatorId": { "type": "string" },
+        "validatorRevision": { "type": "integer", "minimum": 1 },
+        "result": { "type": "string", "enum": ["passed", "failed", "not_run"] },
+        "checkedRuleIds": { "type": "array", "items": { "type": "string" }, "maxItems": 64 }
+      },
+      "required": ["validatorId", "validatorRevision", "result"],
+      "additionalProperties": false
+    }
+  }
+}

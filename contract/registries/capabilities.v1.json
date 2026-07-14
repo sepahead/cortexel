@@ -1,0 +1,97 @@
+{
+  "registry": "cortexel-capabilities",
+  "version": "1.0",
+  "description": "Every capability Cortexel exposes, with exactly one status. This is what makes the stable/experimental boundary enforceable instead of rhetorical.\n\n`status` is a promise. `releaseReady` is whether the evidence for that promise actually exists. They are deliberately separate fields, because a label that can be set without evidence is a marketing label.",
+
+  "statuses": {
+    "stable": "Covered by the contract, the determinism promise, the accessibility profile, and the compatibility policy. Cortexel owns the complete output path end to end.",
+    "experimental": "Available, versioned independently, and explicitly NOT covered by any of the above. Absent from stable counts, default discovery, root exports, and the conformance badge.",
+    "deprecated": "Still present, scheduled for removal, with a named replacement.",
+    "removed": "Gone. Has a deterministic migration outcome — never a silent alias, because a silent alias makes a stored artifact ambiguous about what was actually validated."
+  },
+
+  "capabilities": [
+    { "id": "neuro.analog_trace",            "kind": "skill", "status": "stable", "renderer": "figure.analog_trace",            "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.spike_raster",            "kind": "skill", "status": "stable", "renderer": "figure.spike_raster",            "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.population_rate",         "kind": "skill", "status": "stable", "renderer": "figure.population_rate",         "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.response_curve",          "kind": "skill", "status": "stable", "renderer": "figure.response_curve",          "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.isi_distribution",        "kind": "skill", "status": "stable", "renderer": "figure.distribution",            "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.psth",                    "kind": "skill", "status": "stable", "renderer": "figure.psth",                    "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.correlogram",             "kind": "skill", "status": "stable", "renderer": "figure.correlogram",             "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.phase_plane",             "kind": "skill", "status": "stable", "renderer": "figure.phase_plane",             "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.multisignal_trace",       "kind": "skill", "status": "stable", "renderer": "figure.multisignal_trace",       "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "neuro.compartment_trace",       "kind": "skill", "status": "stable", "renderer": "figure.compartment_trace",       "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.connection_graph",      "kind": "skill", "status": "stable", "renderer": "figure.connection_graph",        "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.adjacency_matrix",      "kind": "skill", "status": "stable", "renderer": "figure.matrix",                  "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.weight_matrix",         "kind": "skill", "status": "stable", "renderer": "figure.matrix",                  "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.delay_matrix",          "kind": "skill", "status": "stable", "renderer": "figure.matrix",                  "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.degree_distribution",   "kind": "skill", "status": "stable", "renderer": "figure.distribution",            "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.delay_distribution",    "kind": "skill", "status": "stable", "renderer": "figure.distribution",            "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.weight_distribution",   "kind": "skill", "status": "stable", "renderer": "figure.distribution",            "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.spatial_map_2d",        "kind": "skill", "status": "stable", "renderer": "figure.spatial_map_2d",          "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "network.synaptic_weight_trace", "kind": "skill", "status": "stable", "renderer": "figure.synaptic_weight_trace",   "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+
+    {
+      "id": "figure.bundle", "kind": "artifact_kind", "status": "stable", "renderer": "figure.bundle",
+      "determinismClass": "deterministic_svg", "exportClass": "svg+table+sidecar", "requiredPeers": [], "owner": "Sepehr Mahmoudian",
+      "limitations": ["At most 8 panels. One level of composition: a bundle may not contain a bundle.", "Composition performs NO analysis. A panel that needs a new derivation must first be produced as its own validated artifact."]
+    },
+
+    {
+      "id": "experimental.network.spatial_3d", "kind": "skill", "status": "experimental", "renderer": "experimental.spatial_3d",
+      "determinismClass": "nondeterministic_webgl", "exportClass": "none", "requiredPeers": ["three", "@react-three/fiber", "react", "react-dom"],
+      "owner": "Sepehr Mahmoudian",
+      "replacement": "network.spatial_map_2d for the stable, exportable, accessible equivalent.",
+      "limitations": [
+        "WebGL pixels depend on GPU and driver. No deterministic output, no byte-stable export, no conformance badge.",
+        "Rendered output must visibly state that it is experimental.",
+        "A complete static 2D alternative plus an exact-value table always exists: a 3D view is never the only route to the data."
+      ],
+      "promotionCriteria": ["A deterministic bounded scene model", "Cross-browser tests", "Proven GPU resource disposal", "An accessible equivalent", "Defined export semantics", "Independent scientific checks"]
+    },
+    {
+      "id": "experimental.evidence.knowledge_graph", "kind": "skill", "status": "experimental", "renderer": "experimental.knowledge_graph",
+      "determinismClass": "nondeterministic_force_layout", "exportClass": "table_only", "requiredPeers": ["three", "@react-three/fiber", "d3-force-3d", "react", "react-dom"],
+      "owner": "Sepehr Mahmoudian",
+      "limitations": [
+        "Force-directed layout is iterative and is not claimed reproducible.",
+        "Geometry is explicitly schematic; node position carries no meaning.",
+        "A stable evidence table/JSON export is always available and is the authoritative view."
+      ],
+      "promotionCriteria": ["A deterministic seeded layout with cross-language reproducibility, or supplied coordinates only", "Full catalog gates"]
+    },
+    {
+      "id": "experimental.neuro.animation_replay", "kind": "skill", "status": "experimental", "renderer": "experimental.animation_replay",
+      "determinismClass": "nondeterministic_animation", "exportClass": "keyframe_summary", "requiredPeers": ["react", "react-dom"],
+      "owner": "Sepehr Mahmoudian",
+      "limitations": [
+        "No deterministic renderer and no safe deterministic export, which is why it is not in the stable catalog.",
+        "Never autoplays; honors prefers-reduced-motion; always offers a static key-frame alternative."
+      ],
+      "promotionCriteria": ["A deterministic bounded frame model", "A byte-stable export", "Accessibility conformance"]
+    },
+
+    { "id": "nest.connectivity_matrix",   "kind": "skill", "status": "removed", "owner": "Sepehr Mahmoudian", "replacement": null,                          "removalVersion": "1.0.0", "limitations": ["Ambiguous by construction: it never said whether it meant adjacency, weight, or delay. Those three have different absence, zero, and aggregation semantics, so Cortexel refuses to guess from the shape of the fields."] },
+    { "id": "nest.spatial_2d",            "kind": "skill", "status": "removed", "owner": "Sepehr Mahmoudian", "replacement": "network.spatial_map_2d",      "removalVersion": "1.0.0", "limitations": ["A host-only (`scene: null`) duplicate. Cortexel could validate the request but could not enforce the caption or own the output, so it was never a stable guarantee."] },
+    { "id": "nest.stimulus_response",     "kind": "skill", "status": "removed", "owner": "Sepehr Mahmoudian", "replacement": "figure.bundle",               "removalVersion": "1.0.0", "limitations": ["Replaced by an explicit multi-panel composition. There is no one-to-one alias: `cortexel migrate` emits a draft bundle and lists what is still unresolved."] },
+    { "id": "nest.animation_replay",      "kind": "skill", "status": "removed", "owner": "Sepehr Mahmoudian", "replacement": "experimental.neuro.animation_replay", "removalVersion": "1.0.0", "limitations": ["Removed from the STABLE catalog. It survives as an experimental capability with a strict event union in place of its former unbounded payload."] },
+
+    { "id": "cortexel",                      "kind": "export", "status": "stable", "requiredPeers": [], "owner": "Sepehr Mahmoudian", "limitations": ["Pure core. Loads no React, Three, R3F, D3, filesystem, or network module."] },
+    { "id": "cortexel/core",                 "kind": "export", "status": "stable", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "cortexel/render-svg",           "kind": "export", "status": "stable", "requiredPeers": [], "owner": "Sepehr Mahmoudian", "limitations": ["Headless. Renders without React, a browser, WebGL, or network access."] },
+    { "id": "cortexel/react",                "kind": "export", "status": "stable", "requiredPeers": ["react", "react-dom"], "owner": "Sepehr Mahmoudian", "limitations": ["A thin adapter over the same render plan. It computes no scientific value."] },
+    { "id": "cortexel/adapters/nest",        "kind": "export", "status": "stable", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "cortexel/adapters/ncp",         "kind": "export", "status": "experimental", "requiredPeers": [], "owner": "Sepehr Mahmoudian", "limitations": ["No immutable NCP release has been certified, so no compatibility claim is made."] },
+    { "id": "cortexel/contract",             "kind": "export", "status": "stable", "requiredPeers": [], "owner": "Sepehr Mahmoudian" },
+    { "id": "cortexel/experimental/3d",              "kind": "export", "status": "experimental", "requiredPeers": ["three", "@react-three/fiber", "react", "react-dom"], "owner": "Sepehr Mahmoudian" },
+    { "id": "cortexel/experimental/knowledge-graph", "kind": "export", "status": "experimental", "requiredPeers": ["three", "@react-three/fiber", "d3-force-3d", "react", "react-dom"], "owner": "Sepehr Mahmoudian" },
+
+    { "id": "cli.identity", "kind": "cli", "status": "stable", "owner": "Sepehr Mahmoudian" },
+    { "id": "cli.catalog",  "kind": "cli", "status": "stable", "owner": "Sepehr Mahmoudian", "limitations": ["Lists stable entries only. `--include-experimental` is required to see the rest, so an agent cannot select an experiment by accident."] },
+    { "id": "cli.validate", "kind": "cli", "status": "stable", "owner": "Sepehr Mahmoudian", "limitations": ["Uses the RAW-TEXT parser, so it can certify duplicate-key rejection."] },
+    { "id": "cli.render",   "kind": "cli", "status": "stable", "owner": "Sepehr Mahmoudian", "limitations": ["Offline. Writes atomically and refuses to overwrite without --force."] },
+    { "id": "cli.inspect",  "kind": "cli", "status": "stable", "owner": "Sepehr Mahmoudian" },
+    { "id": "cli.migrate",  "kind": "cli", "status": "stable", "owner": "Sepehr Mahmoudian" },
+    { "id": "cli.verify",   "kind": "cli", "status": "stable", "owner": "Sepehr Mahmoudian", "limitations": ["Verifies INTEGRITY — digests, sidecars, identity. It does not re-run NEST and it does not establish scientific truth."] }
+  ]
+}

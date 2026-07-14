@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.degree_distribution.request.v1.schema.json",
+  "title": "network.degree_distribution request",
+  "description": "GENERATED from contract/skills/network.degree_distribution.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.degree_distribution"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "A connection snapshot plus the node universe it is drawn over, or one degree per node for that same universe. `mode` is the discriminator, and each mode is a CLOSED object: the fields of the other mode are refused rather than ignored, because a countedConnectionCount supplied beside the rows it is supposed to summarise is an assertion Cortexel would then have to choose between trusting and re-deriving.",
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "connections",
+          "description": "Cortexel counts the degrees itself from the rows.",
+          "properties": {
+            "mode": {
+              "const": "connections"
+            },
+            "nodeUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of nodes under consideration, including every node that has no connection at all. Both endpoints of every counted connection must lie in it. `complete` must be true: this is what makes the zero bin an observation rather than an artifact of which nodes happened to appear in an edge list."
+            },
+            "connections": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+              "description": "Exactly the connections in the selection, every endpoint a member of the node universe. Every multapse is its own row and is never deduplicated. Weights, delays and synapse models may be present; they do not affect a degree and are never used to filter or group one."
+            },
+            "observedTargetIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The targets an MPI rank actually owns, declared under `mpi_target_rank_local` with `direction: in`. It is an ownership declaration, not a filter: it removes no row, and it is meaningful only under a rank-local scope."
+            },
+            "scope": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+              "description": "What this snapshot actually saw. A degree distribution is a completeness claim, so the scope decides which directions are even askable."
+            }
+          },
+          "required": [
+            "mode",
+            "nodeUniverse",
+            "connections",
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "title": "node_degrees",
+          "description": "The caller supplies one degree per node and Cortexel verifies coverage instead of observing the rows.",
+          "properties": {
+            "mode": {
+              "const": "node_degrees"
+            },
+            "nodeUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of nodes whose degree is histogrammed. `complete` must be true, and the supplied degrees must cover it exactly once."
+            },
+            "nodeDegrees": {
+              "type": "object",
+              "description": "One degree per node, for EVERY node of the declared universe — a node omitted here is not a node of degree zero, it is an unverifiable histogram.",
+              "properties": {
+                "nodeIds": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                  },
+                  "minItems": 1,
+                  "maxItems": 100000
+                },
+                "degrees": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 1,
+                  "maxItems": 100000,
+                  "description": "Exact non-negative integer degrees, parallel to nodeIds."
+                }
+              },
+              "required": [
+                "nodeIds",
+                "degrees"
+              ],
+              "additionalProperties": false
+            },
+            "countedConnectionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of connections COUNTED after the autapse policy was applied. It is the conservation target: under count_edges the supplied degrees are asserted to sum to exactly this number, and under count_unique_neighbors not to exceed it."
+            },
+            "excludedAutapseCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many self-connections were removed under `autapsePolicy: exclude` before the degrees were computed. Accepted only in this mode, where Cortexel cannot see the rows; in connections mode it is derived, and a caller-supplied value is refused rather than trusted."
+            },
+            "observedTargetIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The targets an MPI rank actually owns, declared under `mpi_target_rank_local` with `direction: in`. It is an ownership declaration, not a filter."
+            },
+            "scope": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+              "description": "What the snapshot these degrees were counted from actually saw. A degree distribution is a completeness claim, so the scope decides which directions are even askable."
+            }
+          },
+          "required": [
+            "mode",
+            "nodeUniverse",
+            "nodeDegrees",
+            "countedConnectionCount",
+            "scope"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+          "description": "Names the degree-bearing selection so two figures of the same run cannot be confused for one another."
+        },
+        "selectionLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "in",
+            "out"
+          ],
+          "description": "The closed discriminator that replaced the two legacy skills. `in` counts connections arriving at a node; `out` counts connections leaving one. Under a target-rank-local scope only `in` is answerable."
+        },
+        "countingPolicy": {
+          "type": "string",
+          "enum": [
+            "count_edges",
+            "count_unique_neighbors"
+          ],
+          "description": "count_edges: every connection ENTRY counts, so a multapse of three contributes three. count_unique_neighbors: every distinct counterpart node counts once, however many parallel connections join the pair. The two give different answers and the difference is scientific, not cosmetic."
+        },
+        "autapsePolicy": {
+          "type": "string",
+          "enum": [
+            "include",
+            "exclude"
+          ],
+          "description": "include: a self-connection contributes 1 to the node's in-degree and 1 to its out-degree, and under unique-neighbour counting the node is one of its own neighbours. exclude: self-connections are removed before counting and the removed count is reported."
+        },
+        "binning": {
+          "description": "How integer degrees are grouped. Bins are inclusive integer ranges, and each mode is a CLOSED object: `per_integer_degree` is the exact form and makes no decision at all, so it carries no width and no start.",
+          "oneOf": [
+            {
+              "type": "object",
+              "title": "per_integer_degree",
+              "description": "One bin per integer degree in [0, maxObservedDegree]. The exact, decision-free form.",
+              "properties": {
+                "mode": {
+                  "const": "per_integer_degree"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "title": "integer_width",
+              "description": "Consecutive integer degrees merged into inclusive integer ranges anchored at `start`.",
+              "properties": {
+                "mode": {
+                  "const": "integer_width"
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "description": "Consecutive integer degrees per bin. A width of 1 is refused because it is `per_integer_degree` under another name, and two encodings of one figure make the derivation record ambiguous."
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "The inclusive lower degree of the first bin. Bin j covers the inclusive integer range [start + j*width, start + (j+1)*width - 1]."
+                }
+              },
+              "required": [
+                "mode",
+                "width",
+                "start"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "normalization": {
+          "description": "count: the exact integer number of NODES per bin. probability: that count divided by the COMPLETE declared node universe, zero-degree nodes included. `density` is deliberately not accepted — see science.derivation.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization"
+            },
+            {
+              "enum": [
+                "count",
+                "probability"
+              ]
+            }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Dispersion across REALIZATIONS of the network. Within one realization a bin count is an exact enumeration and has no sampling uncertainty, so a basis of `neurons` or `trials` is not meaningful here; the supported variants are listed in science.uncertaintySupport."
+        }
+      },
+      "required": [
+        "selectionId",
+        "direction",
+        "countingPolicy",
+        "autapsePolicy",
+        "binning",
+        "normalization"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

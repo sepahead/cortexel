@@ -1,0 +1,368 @@
+{
+  "id": "neuro.population_rate",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Population firing rate over time",
+
+  "purpose": {
+    "canonicalQuestion": "How does the event rate of a declared population change over time, using auditable raw counts and an explicitly declared denominator?",
+    "cannotEstablish": [
+      "That the recorded senders are representative of any larger population.",
+      "That a rate change was caused by any particular input, manipulation, or mechanism.",
+      "The rate of neurons that were not recorded. A rate is computed over the DECLARED recorded universe and says nothing about anything outside it.",
+      "That a kernel-smoothed estimate reflects a real instantaneous rate rather than the bandwidth that was chosen."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Recorder output is NOT assumed to be chronological. Events are stably sorted by (time, senderId, original ordinal) for analysis; the original order and its digest are retained in the artifact.",
+      "The observation window is half-open [start, stop) by default. An event exactly at `stop` is EXCLUDED, and the count of such excluded events is reported rather than silently absorbed.",
+      "Bins tile the window and are half-open, except that a value exactly at the FINAL edge falls in the final bin — otherwise the last observation would always be silently dropped.",
+      "Duplicate identical event rows are PRESERVED. Two records of the same event are a source-data question, not something the renderer may quietly resolve.",
+      "The denominator is the number of RECORDED senders. It is never the number of senders that happened to spike: a neuron that stayed silent was still recorded, and treating it as absent inflates every per-neuron rate — often dramatically, and always in the flattering direction."
+    ],
+    "derivation": [
+      "binned_count: for each half-open bin, count the events whose time falls in it. Counts are exact non-negative integers.",
+      "mean_rate_per_recorded_sender: rate = count / (recordedSenderCount * binWidth_in_seconds). The bin width is converted to seconds through the typed unit layer, never through a hard-coded factor of 1000.",
+      "total_event_rate: rate = count / binWidth_in_seconds. This carries NO per-neuron claim and is the correct choice when the recorded universe is unknown.",
+      "kernel: a smoothed estimate with a declared kernel shape, bandwidth, edge correction, and causality. It is a DISTINCT derivation mode. It is drawn as a continuous line, never as steps, and may not reuse the step legend — because it is not a count per bin and must not look like one.",
+      "When the caller supplies pre-binned rows containing BOTH a raw count and a rate, the rate is re-derived from the count and the denominator and checked within a tight binary64 tolerance. Cortexel re-computes rather than trusts.",
+      "Complexity: O(n log n) in events for the sort, O(n) for the binning."
+    ],
+    "scopeRules": [
+      "The recorded-sender universe must be declared and non-empty.",
+      "Every event's sender must be a member of that universe: an event from a sender that was supposedly not recorded is a contradiction, not a rounding error."
+    ],
+    "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "events" },
+            "eventTimes": {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "time" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 2000000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "maxItems": 2000000
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE set of senders that were recorded — including any that never fired. This is the denominator basis and it cannot be inferred from the events."
+            },
+            "window": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow" }
+          },
+          "required": ["mode", "eventTimes", "eventSenderIds", "recordedSenderIds", "window"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "prebinned" },
+            "binEdges": {
+              "type": "object",
+              "properties": {
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "edges": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 100001 }
+              },
+              "required": ["unit", "edges"],
+              "additionalProperties": false
+            },
+            "counts": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 0 },
+              "maxItems": 100000,
+              "description": "Exact integer event counts per bin. Length must be edges.length - 1."
+            },
+            "recordedSenderCount": { "type": "integer", "minimum": 1 },
+            "rates": {
+              "type": "object",
+              "description": "Optional. If supplied it is RE-DERIVED from the counts and denominator and checked; it is never taken on trust.",
+              "properties": {
+                "kind": { "const": "firing_rate" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 100000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "window": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow" }
+          },
+          "required": ["mode", "binEdges", "counts", "recordedSenderCount", "window"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "populationId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "populationLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "rateMode": {
+          "type": "string",
+          "enum": ["binned_count", "kernel"],
+          "description": "binned_count produces literal bins drawn as steps. kernel produces a smoothed estimate drawn as a line. They are different quantities and are never drawn the same way."
+        },
+        "bins": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec" },
+        "kernel": {
+          "type": "object",
+          "properties": {
+            "shape": { "type": "string", "enum": ["gaussian", "boxcar", "exponential"] },
+            "bandwidth": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity" },
+            "edgeCorrection": { "type": "string", "enum": ["none", "truncate_and_renormalize"] },
+            "causal": { "type": "boolean", "description": "A causal kernel uses only the past. A symmetric kernel lets a spike influence the estimate BEFORE it happened, which matters if the figure is used to argue about timing." }
+          },
+          "required": ["shape", "bandwidth", "edgeCorrection", "causal"],
+          "additionalProperties": false
+        },
+        "normalization": {
+          "type": "string",
+          "enum": ["mean_rate_per_recorded_sender", "total_event_rate"],
+          "description": "mean_rate_per_recorded_sender divides by the recorded-sender count and IS a per-neuron claim. total_event_rate does not and is NOT. When the recorded universe is unknown, the honest choice is total_event_rate."
+        },
+        "uncertainty": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty" }
+      },
+      "required": ["populationId", "rateMode", "normalization"],
+      "additionalProperties": false
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    { "id": "series.equal_length", "parameters": { "groups": [["/data/eventTimes/values", "/data/eventSenderIds"], ["/data/counts", "/data/rates/values"]] } },
+    { "id": "ids.unique", "parameters": { "pointers": ["/data/recordedSenderIds"] } },
+    { "id": "window.valid", "parameters": { "pointer": "/data/window" } },
+    { "id": "bins.strictly_increasing" },
+    { "id": "events.within_window" },
+    { "id": "events.sender_universe_declared" },
+    { "id": "rate.denominator_positive" },
+    { "id": "rate.verify_normalization" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.population_rate", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 2000000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "line_envelope_minmax"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION", "SOURCE_SYNTHETIC_FIXTURE", "SOURCE_KIND_UNKNOWN", "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN", "EVENTS_EXCLUDED_OUT_OF_WINDOW", "KERNEL_SMOOTHED_RATE",
+    "UNCERTAINTY_NOT_PROVIDED", "PRE_BINNED_INPUT", "DOWNSAMPLED_FOR_RENDERING", "TABLE_EXCERPT_ONLY",
+    "UNIT_CONVERTED", "CALLER_NOTE_UNVERIFIED", "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Population firing rate for {populationLabel} over {windowStart} to {windowStop} {timeUnit}. {binCount} bins of {binWidth} {timeUnit}. {eventCount} events from {recordedSenderCount} recorded senders. Normalization: {normalization}. Rate ranges from {rateMin} to {rateMax} Hz. {uncertaintyStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "binStart", "header": "Bin start", "description": "Inclusive lower edge." },
+      { "key": "binEnd", "header": "Bin end", "description": "Exclusive upper edge, except for the final bin." },
+      { "key": "binWidth", "header": "Bin width" },
+      { "key": "count", "header": "Events", "description": "Exact integer count. This is the raw observation everything else is derived from." },
+      { "key": "recordedSenderCount", "header": "Recorded senders", "description": "The denominator. Includes senders that never fired." },
+      { "key": "rate", "header": "Rate", "description": "Derived and verified from the count and the denominator." },
+      { "key": "rateUnit", "header": "Unit" },
+      { "key": "uncertaintyLower", "header": "Uncertainty lower" },
+      { "key": "uncertaintyUpper", "header": "Uncertainty upper" }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "elephant.statistics.time_histogram",
+      "version": "1.2.1",
+      "status": "not_run",
+      "notes": "Elephant's time_histogram is the intended differential oracle. Its bin edge and t_stop conventions must be matched parameter for parameter before the comparison means anything. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.spike_recorder", "status": "supported", "notes": "Events plus the recorded sender universe. The adapter must supply the RECORDED senders, which NEST knows and the event list does not." },
+    { "system": "neo.SpikeTrain", "status": "supported", "notes": "t_start/t_stop map to the window; the unit is taken from the quantity, never guessed." },
+    { "system": "nwb.Units.spike_times", "status": "partial", "notes": "The caller must select the unit rows explicitly." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.population_rate"],
+    "notes": "The legacy payload did not distinguish recorded senders from senders that fired. Migration therefore REQUIRES a recorded-sender count and blocks without one rather than inferring the denominator from the events — which would have silently inflated every rate."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the default bin boundary convention is MAJOR.",
+    "Changing the rate formula or its denominator is MAJOR.",
+    "Changing the meaning of `mean_rate_per_recorded_sender` is MAJOR.",
+    "Adding a new kernel shape is MINOR.",
+    "Adding a new uncertainty variant is MINOR."
+  ],
+
+  "knownLimitations": [
+    "Kernel-smoothed rates are estimates whose shape depends on the chosen bandwidth. Cortexel renders what was asked for and discloses the parameters; it does not select a bandwidth for you.",
+    "A rate is only as meaningful as the declared recorded universe. Cortexel can verify that the denominator is positive and that events belong to it; it cannot verify that the universe was recorded correctly."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.population_rate" },
+        "data": {
+          "mode": "events",
+          "eventTimes": { "kind": "time", "unit": "ms", "values": [1.0, 1.5, 2.5, 2.5, 3.75, 8.0] },
+          "eventSenderIds": ["1", "2", "1", "3", "2", "3"],
+          "recordedSenderIds": ["1", "2", "3", "4"],
+          "window": { "start": 0, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "populationId": "exc",
+          "populationLabel": "Excitatory",
+          "rateMode": "binned_count",
+          "bins": { "mode": "width", "unit": "ms", "width": 5, "start": 0, "stop": 10 },
+          "normalization": "mean_rate_per_recorded_sender",
+          "uncertainty": { "kind": "none", "reason": "single_trial" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.population_rate" },
+        "data": {
+          "mode": "prebinned",
+          "binEdges": { "unit": "ms", "edges": [0, 5, 10] },
+          "counts": [5, 1],
+          "recordedSenderCount": 4,
+          "rates": { "kind": "firing_rate", "unit": "Hz", "values": [250, 50] },
+          "window": { "start": 0, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "populationId": "exc",
+          "rateMode": "binned_count",
+          "normalization": "mean_rate_per_recorded_sender",
+          "uncertainty": { "kind": "none", "reason": "not_computed" }
+        },
+        "source": { "kind": "simulation", "system": "NEST" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "The recorded-sender universe is absent, so a per-neuron rate has no denominator. Cortexel refuses rather than counting the senders that happened to spike — which would report a rate 33% too high here, since sender 4 never fired.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.population_rate" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1.0, 2.0] },
+            "eventSenderIds": ["1", "2"],
+            "window": { "start": 0, "stop": 10, "unit": "ms" }
+          },
+          "parameters": { "populationId": "exc", "rateMode": "binned_count", "normalization": "mean_rate_per_recorded_sender" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The supplied rate does not follow from the count and the denominator. 5 events / (4 senders x 0.005 s) is 250 Hz, not 999 Hz. Cortexel re-derives and rejects rather than drawing the number it was handed.",
+        "expectedCode": "SCIENCE_NORMALIZATION_UNVERIFIABLE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.population_rate" },
+          "data": {
+            "mode": "prebinned",
+            "binEdges": { "unit": "ms", "edges": [0, 5, 10] },
+            "counts": [5, 1],
+            "recordedSenderCount": 4,
+            "rates": { "kind": "firing_rate", "unit": "Hz", "values": [999, 50] },
+            "window": { "start": 0, "stop": 10, "unit": "ms" }
+          },
+          "parameters": { "populationId": "exc", "rateMode": "binned_count", "normalization": "mean_rate_per_recorded_sender" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "An event's sender is not in the declared recorded universe. A sender that was supposedly not recorded cannot have produced a recorded event; this is a contradiction in the source, not a value to silently include.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.population_rate" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1.0] },
+            "eventSenderIds": ["99"],
+            "recordedSenderIds": ["1", "2"],
+            "window": { "start": 0, "stop": 10, "unit": "ms" }
+          },
+          "parameters": { "populationId": "exc", "rateMode": "binned_count", "normalization": "mean_rate_per_recorded_sender" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "`ms` is canonical but `milliseconds` is only an alias. A stable request must use the canonical code; the alias is rejected with a repair rather than silently converted, because a silent conversion changes a number the caller never sees.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.population_rate" },
+          "data": {
+            "mode": "prebinned",
+            "binEdges": { "unit": "milliseconds", "edges": [0, 5, 10] },
+            "counts": [5, 1],
+            "recordedSenderCount": 4,
+            "window": { "start": 0, "stop": 10, "unit": "ms" }
+          },
+          "parameters": { "populationId": "exc", "rateMode": "binned_count", "normalization": "mean_rate_per_recorded_sender" },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The request tries to assert that Cortexel validated it. Validation results are library-generated facts and are not caller-settable; the field is rejected, not ignored.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.population_rate" },
+          "data": {
+            "mode": "prebinned",
+            "binEdges": { "unit": "ms", "edges": [0, 5, 10] },
+            "counts": [5, 1],
+            "recordedSenderCount": 4,
+            "window": { "start": 0, "stop": 10, "unit": "ms" }
+          },
+          "parameters": { "populationId": "exc", "rateMode": "binned_count", "normalization": "mean_rate_per_recorded_sender" },
+          "source": { "kind": "simulation" },
+          "validation": { "structural": { "result": "passed" } }
+        }
+      }
+    ]
+  }
+}

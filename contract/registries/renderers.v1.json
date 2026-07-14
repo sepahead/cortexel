@@ -1,0 +1,52 @@
+{
+  "registry": "cortexel-renderers",
+  "version": "1.0",
+  "description": "Every render-plan compiler. A STABLE skill must name one of these: Cortexel owns the complete output path or the capability is not stable.\n\n`scene: null` is not a renderer. It is the absence of one, and the pre-1.0 tree's four host-only routes are the reason this registry exists: Cortexel could validate such a request, but it could never force an external Matplotlib, D3, Three, or Manim renderer to display the mandatory disclosures or preserve the validated semantics. A promise you cannot enforce is not a promise.",
+
+  "rules": [
+    "A compiler consumes an already-derived artifact. It never bins, sorts, smooths, aggregates, interpolates, normalizes, or converts a unit — those decisions were made, recorded, and disclosed upstream.",
+    "A compiler is TOTAL over a valid artifact: it returns a bounded plan or a typed error. It never throws because an array was empty, a domain was degenerate, or a label was long.",
+    "A compiler emits no JSX, no DOM node, no callback, no random number, no clock read, and no locale-sensitive value.",
+    "React and the headless SVG writer consume the SAME plan. A test compares their text, disclosures, scale domains, and table rows so they cannot silently diverge."
+  ],
+
+  "renderers": [
+    { "id": "figure.analog_trace",          "revision": 1, "status": "stable", "marks": ["line", "point", "rule", "text"],                  "notes": "Lines with optional points. No smoothing by default — a smoothed trace is a separate derived artifact with a declared method. Paths BREAK at every missing sample." },
+    { "id": "figure.multisignal_trace",     "revision": 1, "status": "stable", "marks": ["line", "point", "rule", "text"],                  "notes": "Aligned small multiples by default. Signals are overlaid only when their dimensions are compatible." },
+    { "id": "figure.compartment_trace",     "revision": 1, "status": "stable", "marks": ["line", "rect", "text"],                           "notes": "Small multiples below a bounded compartment count; a time-by-compartment heatmap above it, with an explicit row order that is disclosed as anatomical, path-distance, or arbitrary." },
+    { "id": "figure.spike_raster",          "revision": 1, "status": "stable", "marks": ["rule", "point", "rect", "text"],                   "notes": "Exact ticks below the mark cap; a count-preserving density grid above it. Y order is explicit and NEVER silently sorted by observed rate." },
+    { "id": "figure.population_rate",       "revision": 1, "status": "stable", "marks": ["path", "line", "rule", "text"],                    "notes": "Literal bins render as horizontal STEPS with visible interval boundaries. A kernel estimate renders as a continuous line and may not reuse the step legend." },
+    { "id": "figure.psth",                  "revision": 1, "status": "stable", "marks": ["rect", "path", "rule", "text"],                    "notes": "Bars or steps with the alignment reference at zero, and the trial and sender denominators stated." },
+    { "id": "figure.correlogram",           "revision": 1, "status": "stable", "marks": ["rule", "point", "rect", "text"],                   "notes": "Independent stems. Nonadjacent retained bins start new subpaths; a lag-zero bin is never invented, mirrored, or bridged." },
+    { "id": "figure.distribution",          "revision": 1, "status": "stable", "marks": ["rect", "path", "rule", "text"],                    "notes": "Shared by ISI, degree, delay, and weight distributions. Renders LITERAL bins with exact edges. An empty histogram is an explicit empty state, never a zero line." },
+    { "id": "figure.response_curve",        "revision": 1, "status": "stable", "marks": ["point", "line", "area", "rule", "text"],           "notes": "Points are primary. A connecting line appears only for ORDERED conditions and is labelled a guide unless a fitted model is present." },
+    { "id": "figure.phase_plane",           "revision": 1, "status": "stable", "marks": ["line", "point", "path", "text"],                   "notes": "Trajectories with direction markers plus a bounded vector field. Arrow length may be normalized for display, but the magnitude is retained and the normalization is recorded." },
+    { "id": "figure.connection_graph",      "revision": 1, "status": "stable", "marks": ["line", "path", "point", "text"],                   "notes": "Preserves isolates, autapses (as visible loops), and every multapse on its own deterministic lane. Direction survives without colour or motion. Schematic layout is labelled as such." },
+    { "id": "figure.matrix",                "revision": 1, "status": "stable", "marks": ["rect", "rule", "text"],                            "notes": "Shared by adjacency, weight, and delay matrices. Target rows, source columns. A cell that was never observed is drawn as ABSENT and is visually distinct from a measured zero." },
+    { "id": "figure.spatial_map_2d",        "revision": 1, "status": "stable", "marks": ["point", "line", "rule", "text"],                   "notes": "One equal x/y scale. Measured positions are never jittered. Marker radius is fixed screen-space decoration and is disclosed as such." },
+    { "id": "figure.synaptic_weight_trace", "revision": 1, "status": "stable", "marks": ["path", "line", "point", "area", "text"],           "notes": "STEPS for event-updated piecewise-constant weights; a line for sampled continuous values. Never connects across a missing observation without a declared hold or interpolation policy." },
+    { "id": "figure.bundle",                "revision": 1, "status": "stable", "marks": ["group"],                                           "notes": "Composes validated child artifacts. Performs NO analysis of its own." },
+
+    { "id": "experimental.spatial_3d",       "revision": 1, "status": "experimental", "marks": [], "notes": "WebGL. No deterministic output and no byte-stable export." },
+    { "id": "experimental.knowledge_graph",  "revision": 1, "status": "experimental", "marks": [], "notes": "Iterative force layout. Geometry is schematic." },
+    { "id": "experimental.animation_replay", "revision": 1, "status": "experimental", "marks": [], "notes": "Animated. Never autoplays; always offers a static key-frame alternative." }
+  ],
+
+  "svgProfile": {
+    "allowedElements": ["svg", "title", "desc", "metadata", "defs", "clipPath", "g", "path", "line", "rect", "circle", "polyline", "text", "tspan"],
+    "forbidden": [
+      "script", "foreignObject", "image", "use with an external href", "a", "animate", "set", "filter referencing an external resource", "style with @import", "any on* event-handler attribute", "any external URL", "any data: URL", "any unknown namespace"
+    ],
+    "normalization": [
+      "A fixed XML declaration policy.",
+      "A fixed attribute order.",
+      "Fixed namespace declarations.",
+      "A fixed whitespace and newline policy.",
+      "Locale-independent decimal formatting; -0 normalized to 0.",
+      "A stable element order.",
+      "NO generator timestamp — a timestamp would make the bytes unreproducible.",
+      "Element ids derive from the artifact digest, never from a counter, a UUID, a clock, or React's useId."
+    ],
+    "normativeBytes": "The NORMALIZED byte sequence produced by Cortexel's own serializer is normative. A browser's DOM reserialization is not, because it may reorder attributes and rewrite numbers."
+  }
+}

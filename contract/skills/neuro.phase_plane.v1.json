@@ -1,0 +1,2633 @@
+{
+  "id": "neuro.phase_plane",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
+  "purpose": {
+    "canonicalQuestion": "In a state space spanned by two declared state variables, where did the system's trajectory go, and what does a caller-computed vector field say about the flow at the points where it was actually evaluated?",
+    "cannotEstablish": [
+      "How fast the system moved. The drawn curve is a path, not a speed: a long arc traversed in 1 ms and a short arc traversed in 100 ms look identical. Only the time column distinguishes them.",
+      "The stability or type of a fixed point (saddle, node, focus, center). That requires the Jacobian's eigenvalues, which Cortexel neither computes nor accepts in 1.0. A marker is a declared location with a residual, not a proof of stability.",
+      "That a nullcline is correct. Cortexel does not solve dx/dt = 0 or dy/dt = 0; it renders the curve the caller computed, labelled with the caller's method and residual tolerance.",
+      "Anything about the field between its samples. The field is never interpolated and streamlines are never drawn. A coarse lattice can step straight over a fixed point and show no sign of it.",
+      "That the arrows' lengths or angles are physical. Both depend on the axis scaling and on the declared display normalization. Rescale the x axis from mV to V and every drawn arrow rotates.",
+      "That the caller's declared derivative unit is the unit its numbers were computed in. `/s` and `/ms` share a dimension, so mislabelling one as the other scales every derivative by 1000 and is undetectable from the values alone.",
+      "That the system is two-dimensional. A 2D projection of a higher-dimensional model (4D Hodgkin-Huxley, for example) can show trajectories that appear to cross; trajectories of a genuine autonomous 2D system cannot.",
+      "That two curves which appear to touch actually intersect. In a projection they need not, and a drawn break at an integrate-and-fire reset is a discontinuity, not a crossing.",
+      "That the vector field and the trajectories came from the same model, the same parameters, or the same run. Cortexel checks that they share axes and units; it cannot check that the caller evaluated the equations that produced the trajectory.",
+      "That a rate change, an excursion, or a return to rest was caused by any particular current, input, or mechanism.",
+      "Anything outside the declared field domain and the supplied trajectory extent. The absence of drawn structure there is an absence of evaluation, not an absence of dynamics."
+    ]
+  },
+  "science": {
+    "normalization": [
+      "Trajectory points are NEVER sorted. The supplied array order IS the trajectory order. A trajectory is a parametric curve, not a function of x: sorting by a coordinate would reconnect the points into a shape the system never traced, and a limit cycle would collapse into a fold.",
+      "Points are grouped by `pointTrajectoryIds` with a stable grouping that preserves relative index order. Points of one trajectory need not be contiguous in the arrays; their relative order is their trajectory order.",
+      "`timeDirection` declares whether time increases or decreases along the supplied order. Times must be monotone in that direction. A violation is REFUSED, never re-sorted: re-sorting a backward-integrated orbit reverses its arrowheads and converts an unstable manifold into a stable-looking one.",
+      "Duplicate timestamps within one trajectory require an explicit policy (`reject` or `keep_replicates`). No aggregate is offered: averaging two state coordinates would place the system at a point it never occupied, and last-write-wins would make the drawn curve depend on array order.",
+      "A point is MISSING when EITHER coordinate is null. It is never half-plotted at a partial coordinate, never interpolated across, and always counted in the missing-value disclosure. The path breaks there.",
+      "A genuine discontinuity - an integrate-and-fire reset from threshold to reset potential - MUST be expressed as a missing pair or as two separate trajectories. Otherwise the renderer draws a straight segment from threshold to reset, through states the model never visited.",
+      "Duplicate identical rows are PRESERVED. Two samples with the same time and the same state are a source-data question, not something the renderer may quietly resolve.",
+      "Unit conversion is same-dimension only, is applied as a single multiplication, and is recorded and disclosed. A derivative's SI value is value x toCanonical(axis unit) x toCanonical(derivative unit); the two factors are multiplied once and never chained through an intermediate unit.",
+      "Category ordering is declared, never derived from a value. Trajectories are listed in the order of the declared universe; nullclines and fixed points in their declared order. Nothing is ever sorted by residual, by magnitude, or by proximity to a fixed point.",
+      "The two axes generally carry DIFFERENT dimensions, so no equal-aspect constraint is applied and no cross-axis distance is ever computed in physical units. An aspect ratio between mV and a dimensionless gating variable has no meaning.",
+      "A declared trajectory id with no points is retained in the legend, the table, and the summary count. It is never silently dropped: a trajectory that left the domain immediately is a result, not an absence."
+    ],
+    "derivation": [
+      "Derivative unit composition. A derivative declares only the RECIPROCAL-TIME factor (`/s` or `/ms`, kind `derivative`) and INHERITS its state dimension from its axis: `dxdt` in `/ms` on an x axis in `mV` means mV per ms. Its SI value is value x toCanonical(mV) x toCanonical(/ms) = value x 1e-3 x 1e3, so 1 mV/ms is exactly 1 V/s.",
+      "Axis-normalized speed (the default, and the only basis legal across incommensurable axes). Each component is divided by the drawn extent of its own axis: u = (dx/dt) / (xMax - xMin), v = (dy/dt) / (yMax - yMin). Both are dimensionless per unit time, and speed = sqrt(u^2 + v^2). It is a DISPLAY quantity that depends on the drawn extent, and it is labelled as one.",
+      "Physical magnitude is legal ONLY when both axes share a dimension and both derivative units are convertible. Then magnitude = sqrt((dx/dt)^2 + (dy/dt)^2) in SI, with its unit. Across incommensurable axes it is refused: adding mV/ms to a dimensionless 1/ms yields a number that changes by three orders of magnitude when the voltage axis is written in V rather than mV, with the dynamics unchanged.",
+      "Arrow display normalization. Arrow LENGTH is set by `arrowScaling` (`unit_length`, `magnitude_proportional`, or `sqrt_magnitude`) and is bounded by `maxArrowLengthFraction` of the shorter drawn axis. The normalization is recorded in the artifact and stated in the summary and the table; the raw dx/dt and dy/dt are always retained. A normalized arrow never implies equal dynamics.",
+      "Magnitude legend. When arrow length encodes magnitude (`magnitude_proportional` or `sqrt_magnitude`) the figure MUST carry a separate magnitude legend: a reference arrow, its magnitude, its unit, and its basis. `sqrt_magnitude` is labelled compressed, so a doubled arrow is never read as a doubled speed. `unit_length` carries a key stating it encodes direction only.",
+      "Direction markers point along INCREASING model time. With `timeDirection: backward` the samples run backward in time, so the arrowhead points from index i+1 to index i. This is the whole reason the direction is declared: a backward-integrated separatrix drawn with forward arrows inverts the stability it exists to show.",
+      "Fixed points: convergence is RE-DERIVED, not trusted. `converged` must equal (|residualDxDt| <= toleranceDxDt) AND (|residualDyDt| <= toleranceDyDt) after unit conversion, compared with a relative binary64 tolerance of 1e-9. A contradiction is refused rather than drawn as an equilibrium.",
+      "Nullclines: each curve declares which derivative it claims to zero (`zeroDerivativeOf`), a named method, and the residual tolerance that bounds |d?/dt| along the curve. Cortexel renders the declared vertices and never solves, refines, closes, or extends the curve.",
+      "Lattice verification. A `regular_grid` claim is checked: nx x ny must equal the sample count, and the coordinates must actually form that lattice. A false lattice claim is refused, because a scattered field drawn as a lattice implies uniform coverage of the domain that was never evaluated.",
+      "Cortexel performs NO integration, NO interpolation, NO streamlines, NO equation evaluation, and NO numerical differentiation of a trajectory. A finite-difference derivative would depend on the sampling interval and would be meaningless across a reset discontinuity, so a trajectory's derivatives are accepted only when the caller supplies them.",
+      "Executable expressions are never accepted - not as a string, not as a formula, not as source code. A figure whose content depends on evaluated caller code cannot be reproduced from its artifact, and evaluating caller code inside a validator is a remote-code-execution surface.",
+      "Numeric comparisons use a RELATIVE binary64 tolerance of 1e-9, never an absolute epsilon: a phase plane routinely carries a voltage near -65 and a gating variable near 0.05 on the same figure, and one absolute epsilon cannot serve both.",
+      "Complexity: O(n) in supplied points for grouping, unit composition, and budget preflight. There is no pairwise work and no sort."
+    ],
+    "scopeRules": [
+      "There is no view-cropping parameter. A caller cannot crop a phase plane: cropping would remove an excursion from the drawing while leaving the figure looking complete. The drawn domain is the union of the declared field domain and the extent of every supplied point.",
+      "The drawn vector field is capped at 2500 arrows (a 50 x 50 lattice) as a legibility budget. Above that the request is refused with RESOURCE_MARKS_EXCEEDED rather than thinned: thinning a lattice changes the apparent density of the flow and can empty the neighbourhood of a fixed point.",
+      "A figure exceeding the visible-mark budget is REFUSED with RESOURCE_COMPACTION_UNAVAILABLE, never decimated. No registered compaction policy is valid here (see knownLimitations), so `compactionPolicies` is `[\"none\"]`.",
+      "When `data.vectorField` is present, `parameters.arrowScaling` and `parameters.magnitudeBasis` are REQUIRED; a missing one is reported as SCHEMA_REQUIRED_PROPERTY_MISSING. When `data.trajectories` is present, `parameters.directionMarkers` and `parameters.duplicateTimePolicy` are REQUIRED on the same terms.",
+      "Every `pointTrajectoryIds` entry must be a member of the declared trajectory universe. A point belonging to a trajectory that was not declared is a contradiction in the source, reported as SEMANTIC_UNKNOWN_REFERENCE.",
+      "Trajectories beyond the distinguishable-colour cap of the active palette are drawn in one shared neutral style and distinguished only in the table. Cortexel does not mint indistinguishable colours (RENDER_SERIES_LIMIT_EXCEEDED where no shared style is acceptable).",
+      "The state space is exactly two-dimensional. A projection of a higher-dimensional model is a caller fact that Cortexel cannot detect; declare it in `source.declaredNote`, where it renders as an attributed, unverified caller note."
+    ],
+    "uncertaintySupport": [
+      "none"
+    ]
+  },
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "A state space, plus at least one of: trajectories through it, or a vector field evaluated on it. Nullclines and fixed points are optional annotations and are accepted only with a declared method.",
+      "properties": {
+        "axes": {
+          "type": "object",
+          "description": "The two state variables that define the space. This is the single source of truth for each axis's identity, kind, and unit; every series is checked against it.",
+          "properties": {
+            "x": {
+              "type": "object",
+              "properties": {
+                "stateId": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                },
+                "label": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                },
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                }
+              },
+              "required": [
+                "stateId",
+                "kind",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "stateId": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                },
+                "label": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                },
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                }
+              },
+              "required": [
+                "stateId",
+                "kind",
+                "unit"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "trajectories": {
+          "type": "object",
+          "description": "One flat set of parallel per-point arrays, exactly as a multimeter emits them: one row per sample, tagged with the trajectory it belongs to. The array order IS the trajectory order and is never re-sorted.",
+          "properties": {
+            "universe": {
+              "type": "object",
+              "description": "The COMPLETE set of trajectories under consideration, including any that contributed no drawn point. A trajectory that left the domain immediately is a result, not an absence.",
+              "properties": {
+                "ids": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                  },
+                  "minItems": 1,
+                  "maxItems": 256
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                  },
+                  "maxItems": 256
+                }
+              },
+              "required": [
+                "ids"
+              ],
+              "additionalProperties": false
+            },
+            "timeDirection": {
+              "type": "string",
+              "enum": [
+                "forward",
+                "backward"
+              ],
+              "description": "Whether model time increases or decreases along the supplied order. Arrowheads always point along INCREASING model time, so `backward` reverses them. Backward integration is how a stable manifold is computed; drawing it with forward arrows would invert the stability claim."
+            },
+            "pointTrajectoryIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 250000,
+              "description": "The trajectory each point belongs to. Every entry must be a member of `universe.ids`."
+            },
+            "times": {
+              "type": "object",
+              "description": "The time of every point. REQUIRED: without its parameter, a parametric curve has no direction, no speed, and no way to tell a 0.1 ms step from a 10 ms step. Cortexel never substitutes the sample index for a clock.",
+              "properties": {
+                "kind": {
+                  "const": "time"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "x": {
+              "type": "object",
+              "description": "The x state coordinate of every point. `null` means MISSING and breaks the path; it is never drawn as zero and never interpolated across.",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dxdt": {
+              "type": "object",
+              "description": "Optional. Supplied by the caller only: Cortexel never differentiates a trajectory numerically, because a finite difference depends on the sampling interval and is meaningless across a reset. The unit is a reciprocal-time code; the state dimension is inherited from axes.x.",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dydt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "universe",
+            "timeDirection",
+            "pointTrajectoryIds",
+            "times",
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "vectorField": {
+          "type": "object",
+          "description": "Samples the CALLER evaluated. Cortexel 1.0 evaluates no model equations: there is no registered model registry, and an executable expression is never accepted. Every sample carries its own explicit coordinates, so no ordering convention (row-major, column-major) is ever assumed.",
+          "properties": {
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dx": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dy": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "domain": {
+              "type": "object",
+              "description": "The region of state space over which the field was actually evaluated. It bounds what the figure may claim: outside it, the absence of arrows is an absence of evaluation. There is no interval convention here because nothing is binned by it; both endpoints are drawn.",
+              "properties": {
+                "x": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "stop": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "stop",
+                    "unit"
+                  ],
+                  "additionalProperties": false
+                },
+                "y": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "stop": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "stop",
+                    "unit"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "lattice": {
+              "description": "Whether the samples form a regular grid or are scattered. The claim is VERIFIED: nx x ny must equal the sample count and the coordinates must actually form that lattice. A scattered field drawn as a lattice would imply a uniform coverage of the domain that was never evaluated. The lattice is capped at 50 x 50 because a denser arrow field is a legibility failure long before it is a resource one.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "regular_grid"
+                    },
+                    "nx": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 50
+                    },
+                    "ny": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 50
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "nx",
+                    "ny"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "scattered"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "dx",
+            "dy",
+            "domain",
+            "lattice"
+          ],
+          "additionalProperties": false
+        },
+        "nullclines": {
+          "type": "object",
+          "description": "Curves on which one derivative is claimed to vanish. Per-curve declarations and per-point vertices are parallel arrays, so every constraint is checkable without an ordering convention. Cortexel never computes a nullcline.",
+          "properties": {
+            "curveIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 8
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "maxItems": 8
+            },
+            "zeroDerivativeOf": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "x",
+                  "y"
+                ]
+              },
+              "maxItems": 8,
+              "description": "WHICH derivative the curve zeroes. This is never inferred from colour, order, or naming: the x-nullcline (dx/dt = 0) and the y-nullcline (dy/dt = 0) are different curves, and swapping them moves every apparent equilibrium."
+            },
+            "methods": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "analytic",
+                      "contour_marching_squares",
+                      "sampled_root_find"
+                    ]
+                  },
+                  "residualTolerance": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+                    "description": "The bound on |d?/dt| along the curve, as a `derivative` quantity in a reciprocal-time unit. A curve that claims a derivative is zero must say how close to zero it actually got."
+                  },
+                  "gridResolution": {
+                    "type": "object",
+                    "properties": {
+                      "nx": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 100000
+                      },
+                      "ny": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 100000
+                      }
+                    },
+                    "required": [
+                      "nx",
+                      "ny"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "residualTolerance"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "pointCurveIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 250000
+            },
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "description": "A `null` pair separates disconnected branches of one nullcline. It is never bridged: joining two branches would draw a curve through states where the derivative is not zero.",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "curveIds",
+            "zeroDerivativeOf",
+            "methods",
+            "pointCurveIds",
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "fixedPoints": {
+          "type": "object",
+          "description": "Declared equilibria. Each carries a NAMED numerical method, an absolute residual, the tolerance it was accepted against, and a convergence status that Cortexel re-derives. An annotation with no method has no place here: put it in `source.declaredNote`, where it renders as an attributed, unverified caller note.",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 64
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "maxItems": 64
+            },
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "methods": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "analytic",
+                  "newton_raphson",
+                  "grid_bisection",
+                  "levenberg_marquardt"
+                ]
+              },
+              "maxItems": 64,
+              "description": "A closed set of NAMED methods. There is deliberately no `declared_without_method` member: an unbacked equilibrium claim is refused, not demoted."
+            },
+            "converged": {
+              "type": "array",
+              "items": {
+                "type": "boolean"
+              },
+              "maxItems": 64,
+              "description": "RE-DERIVED and checked against the residual and the tolerance. `false` is legal and is rendered as an unconverged candidate with a distinct mark; it is never drawn as an established equilibrium."
+            },
+            "residualDxDt": {
+              "type": "object",
+              "description": "|dx/dt| at the declared point. Non-negative: a signed residual would make the convergence comparison ambiguous.",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "residualDyDt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "toleranceDxDt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "toleranceDyDt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "ids",
+            "x",
+            "y",
+            "methods",
+            "converged",
+            "residualDxDt",
+            "residualDyDt",
+            "toleranceDxDt",
+            "toleranceDyDt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "axes"
+      ],
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "trajectories"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "vectorField"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "arrowScaling": {
+          "type": "object",
+          "description": "Required whenever a vector field is present. Arrow length is a DISPLAY normalization; the magnitudes themselves are always retained in the table.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "unit_length",
+                "magnitude_proportional",
+                "sqrt_magnitude"
+              ],
+              "description": "unit_length draws direction only and makes no magnitude claim. magnitude_proportional is faithful but is dominated by the fastest region. sqrt_magnitude compresses the dynamic range and must never be read as a linear speed."
+            },
+            "maxArrowLengthFraction": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.25,
+              "default": 0.05,
+              "description": "The longest arrow, as a fraction of the shorter drawn axis. Bounded so that arrows cannot overlap into an apparent flow that no sample supports."
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "magnitudeBasis": {
+          "type": "string",
+          "enum": [
+            "axis_normalized",
+            "physical"
+          ],
+          "description": "axis_normalized divides each component by its own drawn axis extent and is the only basis legal across incommensurable axes. physical takes the Euclidean norm in SI and is legal ONLY when both axes share a dimension; requested otherwise it is refused with SCIENCE_UNIT_DIMENSION_MISMATCH."
+        },
+        "directionMarkers": {
+          "type": "object",
+          "description": "Required whenever trajectories are present. Placement is deterministic and never depends on animation: the arrowheads are present in a still export and under reduced motion.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "none",
+                "arrowhead_at_end",
+                "arrowheads_every_n_points"
+              ]
+            },
+            "everyNPoints": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 250000
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "duplicateTimePolicy": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "keep_replicates"
+          ],
+          "description": "Required whenever trajectories are present. There is deliberately no aggregate: averaging two state coordinates that share a timestamp would place the system at a point it never occupied. keep_replicates retains both samples, which is how an instantaneous reset is represented."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Only `none` is supported. UncertaintyV1 is one-dimensional, and two marginal intervals are not a joint region for a point in state space: a box built from two 95% marginals does not have 95% joint coverage, and it is wrong in any direction the errors are correlated. Any other variant is refused with SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL."
+        }
+      },
+      "required": [
+        "uncertainty"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "semanticValidators": [
+    {
+      "id": "provenance.no_caller_assurance"
+    },
+    {
+      "id": "provenance.note_safe_display"
+    },
+    {
+      "id": "unit.canonical_code"
+    },
+    {
+      "id": "unit.dimension_match"
+    },
+    {
+      "id": "phase_plane.derivative_dimension"
+    },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/trajectories/pointTrajectoryIds",
+            "/data/trajectories/times/values",
+            "/data/trajectories/x/values",
+            "/data/trajectories/y/values",
+            "/data/trajectories/dxdt/values",
+            "/data/trajectories/dydt/values"
+          ],
+          [
+            "/data/trajectories/universe/ids",
+            "/data/trajectories/universe/labels"
+          ],
+          [
+            "/data/vectorField/x/values",
+            "/data/vectorField/y/values",
+            "/data/vectorField/dx/values",
+            "/data/vectorField/dy/values"
+          ],
+          [
+            "/data/nullclines/curveIds",
+            "/data/nullclines/labels",
+            "/data/nullclines/zeroDerivativeOf",
+            "/data/nullclines/methods"
+          ],
+          [
+            "/data/nullclines/pointCurveIds",
+            "/data/nullclines/x/values",
+            "/data/nullclines/y/values"
+          ],
+          [
+            "/data/fixedPoints/ids",
+            "/data/fixedPoints/labels",
+            "/data/fixedPoints/x/values",
+            "/data/fixedPoints/y/values",
+            "/data/fixedPoints/methods",
+            "/data/fixedPoints/converged",
+            "/data/fixedPoints/residualDxDt/values",
+            "/data/fixedPoints/residualDyDt/values",
+            "/data/fixedPoints/toleranceDxDt/values",
+            "/data/fixedPoints/toleranceDyDt/values"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/trajectories/universe/ids",
+          "/data/nullclines/curveIds",
+          "/data/fixedPoints/ids"
+        ]
+      }
+    },
+    {
+      "id": "window.valid",
+      "parameters": {
+        "pointer": "/data/vectorField/domain/x"
+      }
+    },
+    {
+      "id": "window.valid",
+      "parameters": {
+        "pointer": "/data/vectorField/domain/y"
+      }
+    },
+    {
+      "id": "uncertainty.valid"
+    },
+    {
+      "id": "uncertainty.supported_variant"
+    }
+  ],
+  "renderer": {
+    "id": "figure.phase_plane",
+    "revision": 1
+  },
+  "budgets": {
+    "maxObservations": 250000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": [
+      "none"
+    ],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+  "provenance": {
+    "requiredSourceFields": [
+      "kind"
+    ]
+  },
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "MISSING_VALUES_PRESENT",
+    "UNIT_CONVERTED",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+  "accessibility": {
+    "summaryTemplate": "Phase plane: {yLabel} ({yUnit}) against {xLabel} ({xUnit}). {trajectoryCount} trajectories, {trajectoryPointCount} points, times {timeStart} to {timeStop} {timeUnit}, running {timeDirection} along the supplied order; arrowheads mark increasing model time. Vector field: {fieldSampleCount} samples, {latticeKind}, over x {xDomainStart} to {xDomainStop} {xUnit} and y {yDomainStart} to {yDomainStop} {yUnit}; arrow length is a {arrowScalingMode} display normalization, not a physical length; magnitude basis {magnitudeBasis}. {nullclineCount} nullclines and {fixedPointCount} fixed-point annotations, each with a declared method, residual, and convergence status. {missingStatement} {uncertaintyStatement} The path shows where the state went, not how fast; exact values and times are in the table.",
+    "tableColumns": [
+      {
+        "key": "rowKind",
+        "header": "Row",
+        "description": "trajectory_point, field_sample, nullcline_point, or fixed_point. The four are never merged into one anonymous list of coordinates."
+      },
+      {
+        "key": "elementId",
+        "header": "Element",
+        "description": "Trajectory id, nullcline curve id, or fixed-point id."
+      },
+      {
+        "key": "time",
+        "header": "Time",
+        "description": "Trajectory points only, in the declared time unit. This is the only column that distinguishes a fast excursion from a slow one."
+      },
+      {
+        "key": "x",
+        "header": "x",
+        "description": "The x state coordinate, in the x axis unit. Empty means MISSING, which breaks the path; it never means zero."
+      },
+      {
+        "key": "y",
+        "header": "y",
+        "description": "The y state coordinate, in the y axis unit."
+      },
+      {
+        "key": "dxdt",
+        "header": "dx/dt",
+        "description": "Caller-supplied. Cortexel never differentiates a trajectory numerically."
+      },
+      {
+        "key": "dydt",
+        "header": "dy/dt"
+      },
+      {
+        "key": "derivativeUnit",
+        "header": "Derivative unit",
+        "description": "A reciprocal-time code. The FULL unit is the axis unit per this code: `/ms` on an axis in mV means mV per ms, not ms to the minus one."
+      },
+      {
+        "key": "speed",
+        "header": "Speed",
+        "description": "The magnitude on the declared basis. Axis-normalized speed is a display quantity that depends on the drawn extent; a physical magnitude is present only when both axes share a dimension."
+      },
+      {
+        "key": "method",
+        "header": "Method",
+        "description": "The named method for a nullcline or fixed point. Blank for measured points."
+      },
+      {
+        "key": "residual",
+        "header": "Residual",
+        "description": "|dx/dt| and |dy/dt| at a fixed point, or the residual tolerance bounding the derivative along a nullcline."
+      },
+      {
+        "key": "converged",
+        "header": "Converged",
+        "description": "Re-derived by Cortexel from the residual and the tolerance, not copied from the caller's flag. `no` marks an unconverged candidate, not an equilibrium."
+      }
+    ]
+  },
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "numpy/scipy FitzHugh-Nagumo reference field and nullcline",
+      "version": "numpy 2.1.3 / scipy 1.14.1",
+      "status": "not_run",
+      "notes": "The intended differential check recomputes the FitzHugh-Nagumo field samples, the analytic V-nullcline, and the Newton fixed point from the published equations, and compares them with the figure's table. It checks the FIXTURE, not Cortexel's derivation: Cortexel integrates nothing and solves nothing, so the hand vectors remain the primary evidence for the parts that are actually Cortexel's - the derivative unit composition (1 mV/ms = 1 V/s exactly, via 1e-3 x 1e3), the axis-normalized speed, the convergence re-derivation from residual and tolerance, and the arrowhead orientation under backward time. The pinned reference environment has not been executed here, so the status is not_run rather than assumed."
+    }
+  },
+  "adapters": [
+    {
+      "system": "nest.multimeter",
+      "status": "supported",
+      "notes": "Two recorded state variables plus times and senders. The adapter maps each recorded variable to an axis with its declared unit and uses the sender as the trajectory id. Recorder order is never assumed: rows are grouped per sender and each sender's own time order is preserved, never sorted globally."
+    },
+    {
+      "system": "neo.AnalogSignal",
+      "status": "supported",
+      "notes": "Two channels sharing one time base map to x and y. If two signals were sampled on different clocks the adapter REFUSES rather than resampling: interpolating one signal onto the other's timestamps would fabricate state coordinates the model never produced."
+    },
+    {
+      "system": "nwb.TimeSeries",
+      "status": "partial",
+      "notes": "The caller must select the two channels explicitly and supply canonical unit codes; NWB unit strings are free text and frequently aliases."
+    },
+    {
+      "system": "matplotlib.streamplot",
+      "status": "rejected",
+      "notes": "streamplot integrates an interpolated field to draw streamlines. Cortexel refuses that output: a streamline is a computed trajectory, and presenting one as data would show an integration Cortexel never performed and the caller never checked."
+    }
+  ],
+  "migration": {
+    "legacyIds": [
+      "nest.phase_plane"
+    ],
+    "notes": "The legacy payload carried two coordinate arrays and a scene name. It did not say which state variable each axis was, in which unit, at which times, or in which time direction the samples ran, and its nullcline annotations carried no method. Migration therefore REQUIRES x and y state quantities with units and a per-sample time, and it BLOCKS without them: it never substitutes the sample index for a clock and never infers the flow direction from the array order, because either guess would silently reverse the arrowheads and invert the stability the figure appears to show. A legacy nullcline or fixed-point annotation with no declared method and residual is not migrated as an annotation; it becomes a caller note or is dropped, with a warning."
+  },
+  "owner": "Sepehr Mahmoudian",
+  "changePolicy": [
+    "Changing the derivative unit convention - a reciprocal-time code whose state dimension is inherited from its axis - is MAJOR. Every dx/dt in every stored artifact would change meaning.",
+    "Changing the arrowhead orientation rule, or the meaning of `timeDirection`, is MAJOR: it inverts the apparent stability of every manifold ever drawn.",
+    "Changing the default `magnitudeBasis`, or permitting a physical magnitude across incommensurable axes, is MAJOR.",
+    "Changing the fixed-point convergence re-derivation (converged == residual <= tolerance) or its relative 1e-9 tolerance is MAJOR.",
+    "Accepting a trajectory without times, or deriving a time from the sample index, is MAJOR: it changes what the direction markers and the time column mean.",
+    "Adding a trajectory decimation policy is MINOR only while `none` remains the default and the policy is opt-in and disclosed. Making any decimation the default is MAJOR.",
+    "Adding a registered model registry so Cortexel may evaluate a declared field is MINOR, provided executable expressions remain forbidden.",
+    "Adding an optional fixed-point stability classification is MINOR, provided it requires eigenvalues and a declared Jacobian source.",
+    "Adding a nullcline or fixed-point method to the closed enums is MINOR."
+  ],
+  "knownLimitations": [
+    "The 1.0 unit registry has no composite state-per-time code (there is no `mV/ms`). A derivative therefore carries only the reciprocal-time factor and inherits its state dimension from its axis. A composite unit dimension is a post-1.0 registry addition.",
+    "Because `/s` and `/ms` share the `per_time` dimension, a derivative labelled `/s` whose numbers were computed in `/ms` passes every dimensional check while being wrong by 1000x. No contract can catch this from the values alone.",
+    "The semantic-validator registry has no `trajectory.time_monotone` id. Monotonicity against the declared `timeDirection` is enforced at derivation and reported with the closest registered code, SCIENCE_NEGATIVE_INTERVAL, whose name reflects its ISI origin.",
+    "There is no registered validator for trajectory-universe membership (`events.sender_universe_declared` is sender-specific and is deliberately not reused). The rule is enforced at the semantic stage and reported as SEMANTIC_UNKNOWN_REFERENCE.",
+    "There is no registered validator for the fixed-point convergence re-derivation. It is enforced at derivation and reported as SCIENCE_NORMALIZATION_UNVERIFIABLE, which is the registered code for a derived claim that does not follow from the numbers supplied with it.",
+    "`phase_plane.derivative_dimension` only checks that `data.vectorField.dx` and `dy` carry kind `derivative` (SCIENCE_UNIT_DIMENSION_MISMATCH). It does not verify lattice shape (a derivation check); trajectory and fixed-point derivative units are covered by `unit.dimension_match`.",
+    "No registered disclosure rule announces the arrow display normalization or an unconverged fixed-point annotation. Both facts reach the artifact, the accessible summary, and the table - but not the footer disclosure list - until such rules are registered.",
+    "No registered compaction policy is valid here: `line_envelope_minmax` takes a min/max envelope per pixel column, which would collapse a limit cycle into a filled band. An over-budget figure is refused with RESOURCE_COMPACTION_UNAVAILABLE; arc-length-preserving decimation is post-1.0.",
+    "UncertaintyV1 is one-dimensional, so no joint uncertainty region for a point in state space can be expressed. `uncertaintySupport` is therefore `[\"none\"]`, and an ensemble of trajectories must be drawn as trajectories, not as a band.",
+    "Cortexel 1.0 does not integrate ODEs, evaluate model equations, compute nullclines, locate fixed points, differentiate trajectories, or draw streamlines. Every such quantity is a caller-supplied sample with a declared method.",
+    "A trajectory without recorded times cannot be rendered by this figure. The sample index is not a clock, and substituting it would silently imply uniform sampling.",
+    "`trace.axis_dimension_compatible` and `trace.duplicate_time_policy` read a `data.series[]` trace structure this phase plane does not use, so they are not declared. Per-component dimension is covered by `unit.dimension_match`; duplicate-time handling is a derivation concern."
+  ],
+  "examples": {
+    "valid": [
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.phase_plane"
+        },
+        "data": {
+          "axes": {
+            "x": {
+              "stateId": "Vm",
+              "label": "Membrane potential",
+              "kind": "membrane_voltage",
+              "unit": "mV"
+            },
+            "y": {
+              "stateId": "w",
+              "label": "Recovery variable",
+              "kind": "state_variable",
+              "unit": "1"
+            }
+          },
+          "trajectories": {
+            "universe": {
+              "ids": [
+                "n1"
+              ],
+              "labels": [
+                "Neuron 1"
+              ]
+            },
+            "timeDirection": "forward",
+            "pointTrajectoryIds": [
+              "n1",
+              "n1",
+              "n1",
+              "n1"
+            ],
+            "times": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                0.5,
+                1.0,
+                1.5
+              ]
+            },
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -65,
+                -60,
+                -50,
+                -40
+              ]
+            },
+            "y": {
+              "kind": "state_variable",
+              "unit": "1",
+              "values": [
+                0.05,
+                0.06,
+                0.09,
+                0.14
+              ]
+            },
+            "dxdt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                10,
+                18,
+                22,
+                15
+              ]
+            },
+            "dydt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                0.02,
+                0.05,
+                0.08,
+                0.1
+              ]
+            }
+          },
+          "vectorField": {
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -70,
+                -40,
+                -70,
+                -40
+              ]
+            },
+            "y": {
+              "kind": "state_variable",
+              "unit": "1",
+              "values": [
+                0,
+                0,
+                0.2,
+                0.2
+              ]
+            },
+            "dx": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                5,
+                20,
+                2,
+                12
+              ]
+            },
+            "dy": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                0.01,
+                0.06,
+                -0.02,
+                0.03
+              ]
+            },
+            "domain": {
+              "x": {
+                "start": -70,
+                "stop": -40,
+                "unit": "mV"
+              },
+              "y": {
+                "start": 0,
+                "stop": 0.2,
+                "unit": "1"
+              }
+            },
+            "lattice": {
+              "kind": "regular_grid",
+              "nx": 2,
+              "ny": 2
+            }
+          },
+          "nullclines": {
+            "curveIds": [
+              "v-nullcline"
+            ],
+            "labels": [
+              "dV/dt = 0"
+            ],
+            "zeroDerivativeOf": [
+              "x"
+            ],
+            "methods": [
+              {
+                "kind": "analytic",
+                "residualTolerance": {
+                  "kind": "derivative",
+                  "unit": "/ms",
+                  "value": 1e-12
+                }
+              }
+            ],
+            "pointCurveIds": [
+              "v-nullcline",
+              "v-nullcline",
+              "v-nullcline"
+            ],
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -70,
+                -55,
+                -40
+              ]
+            },
+            "y": {
+              "kind": "state_variable",
+              "unit": "1",
+              "values": [
+                0.02,
+                0.1,
+                0.18
+              ]
+            }
+          },
+          "fixedPoints": {
+            "ids": [
+              "fp1"
+            ],
+            "labels": [
+              "Resting state"
+            ],
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -64.5
+              ]
+            },
+            "y": {
+              "kind": "state_variable",
+              "unit": "1",
+              "values": [
+                0.0511
+              ]
+            },
+            "methods": [
+              "newton_raphson"
+            ],
+            "converged": [
+              true
+            ],
+            "residualDxDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                2e-10
+              ]
+            },
+            "residualDyDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                4e-12
+              ]
+            },
+            "toleranceDxDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                1e-08
+              ]
+            },
+            "toleranceDyDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                1e-08
+              ]
+            }
+          }
+        },
+        "parameters": {
+          "arrowScaling": {
+            "mode": "sqrt_magnitude",
+            "maxArrowLengthFraction": 0.05
+          },
+          "magnitudeBasis": "axis_normalized",
+          "directionMarkers": {
+            "mode": "arrowheads_every_n_points",
+            "everyNPoints": 2
+          },
+          "duplicateTimePolicy": "reject",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.phase_plane"
+        },
+        "data": {
+          "axes": {
+            "x": {
+              "stateId": "Vsoma",
+              "label": "Somatic potential",
+              "kind": "membrane_voltage",
+              "unit": "mV"
+            },
+            "y": {
+              "stateId": "Vdend",
+              "label": "Dendritic potential",
+              "kind": "membrane_voltage",
+              "unit": "mV"
+            }
+          },
+          "vectorField": {
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -70,
+                -50,
+                -70,
+                -50
+              ]
+            },
+            "y": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -70,
+                -70,
+                -50,
+                -50
+              ]
+            },
+            "dx": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                1.5,
+                4,
+                0.5,
+                3
+              ]
+            },
+            "dy": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                0.5,
+                2,
+                1,
+                2.5
+              ]
+            },
+            "domain": {
+              "x": {
+                "start": -70,
+                "stop": -50,
+                "unit": "mV"
+              },
+              "y": {
+                "start": -70,
+                "stop": -50,
+                "unit": "mV"
+              }
+            },
+            "lattice": {
+              "kind": "regular_grid",
+              "nx": 2,
+              "ny": 2
+            }
+          }
+        },
+        "parameters": {
+          "arrowScaling": {
+            "mode": "magnitude_proportional"
+          },
+          "magnitudeBasis": "physical",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          }
+        },
+        "source": {
+          "kind": "literature_extraction",
+          "declaredNote": "Field values transcribed from figure 3 of the source publication."
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.phase_plane"
+        },
+        "data": {
+          "axes": {
+            "x": {
+              "stateId": "Vm",
+              "label": "Membrane potential",
+              "kind": "membrane_voltage",
+              "unit": "mV"
+            },
+            "y": {
+              "stateId": "w",
+              "label": "Recovery variable",
+              "kind": "state_variable",
+              "unit": "1"
+            }
+          },
+          "trajectories": {
+            "universe": {
+              "ids": [
+                "m1"
+              ],
+              "labels": [
+                "Stable manifold, integrated backward"
+              ]
+            },
+            "timeDirection": "backward",
+            "pointTrajectoryIds": [
+              "m1",
+              "m1",
+              "m1",
+              "m1",
+              "m1"
+            ],
+            "times": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                10,
+                9.5,
+                9,
+                8.5,
+                8
+              ]
+            },
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -45,
+                -52,
+                null,
+                -61,
+                -64
+              ]
+            },
+            "y": {
+              "kind": "state_variable",
+              "unit": "1",
+              "values": [
+                0.3,
+                0.22,
+                null,
+                0.11,
+                0.08
+              ]
+            },
+            "dxdt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                -14,
+                -18,
+                null,
+                -6,
+                -3
+              ]
+            },
+            "dydt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                -0.16,
+                -0.14,
+                null,
+                -0.06,
+                -0.03
+              ]
+            }
+          }
+        },
+        "parameters": {
+          "directionMarkers": {
+            "mode": "arrowheads_every_n_points",
+            "everyNPoints": 2
+          },
+          "duplicateTimePolicy": "reject",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.phase_plane"
+        },
+        "data": {
+          "axes": {
+            "x": {
+              "stateId": "Vm",
+              "label": "Membrane potential",
+              "kind": "membrane_voltage",
+              "unit": "mV"
+            },
+            "y": {
+              "stateId": "w",
+              "label": "Recovery variable",
+              "kind": "state_variable",
+              "unit": "1"
+            }
+          },
+          "vectorField": {
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -70,
+                -55,
+                -40
+              ]
+            },
+            "y": {
+              "kind": "state_variable",
+              "unit": "1",
+              "values": [
+                0.05,
+                0.12,
+                0.2
+              ]
+            },
+            "dx": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                4,
+                -2,
+                9
+              ]
+            },
+            "dy": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                0.02,
+                -0.01,
+                0.05
+              ]
+            },
+            "domain": {
+              "x": {
+                "start": -70,
+                "stop": -40,
+                "unit": "mV"
+              },
+              "y": {
+                "start": 0,
+                "stop": 0.2,
+                "unit": "1"
+              }
+            },
+            "lattice": {
+              "kind": "scattered"
+            }
+          },
+          "fixedPoints": {
+            "ids": [
+              "fp-candidate"
+            ],
+            "labels": [
+              "Unconverged candidate"
+            ],
+            "x": {
+              "kind": "membrane_voltage",
+              "unit": "mV",
+              "values": [
+                -52.4
+              ]
+            },
+            "y": {
+              "kind": "state_variable",
+              "unit": "1",
+              "values": [
+                0.14
+              ]
+            },
+            "methods": [
+              "grid_bisection"
+            ],
+            "converged": [
+              false
+            ],
+            "residualDxDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                0.031
+              ]
+            },
+            "residualDyDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                4e-09
+              ]
+            },
+            "toleranceDxDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                1e-06
+              ]
+            },
+            "toleranceDyDt": {
+              "kind": "derivative",
+              "unit": "/ms",
+              "values": [
+                1e-06
+              ]
+            }
+          }
+        },
+        "parameters": {
+          "arrowScaling": {
+            "mode": "unit_length"
+          },
+          "magnitudeBasis": "axis_normalized",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "why": "The request asserts that Cortexel validated it. Validation results are library-generated facts: a caller declares what its data IS, never what Cortexel concluded about it. The authority boundary runs first, on the raw request, so the forbidden field is rejected rather than surviving into a stored request that reads as though it had been honoured.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "vectorField": {
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -70,
+                  -40
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.1,
+                  0.1
+                ]
+              },
+              "dx": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  5,
+                  20
+                ]
+              },
+              "dy": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  0.01,
+                  0.06
+                ]
+              },
+              "domain": {
+                "x": {
+                  "start": -70,
+                  "stop": -40,
+                  "unit": "mV"
+                },
+                "y": {
+                  "start": 0,
+                  "stop": 0.2,
+                  "unit": "1"
+                }
+              },
+              "lattice": {
+                "kind": "scattered"
+              }
+            }
+          },
+          "parameters": {
+            "arrowScaling": {
+              "mode": "unit_length"
+            },
+            "magnitudeBasis": "axis_normalized",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          },
+          "validation": {
+            "science": {
+              "result": "passed"
+            }
+          }
+        }
+      },
+      {
+        "why": "A vector-field component is declared with kind `derivative` but the unit `mV`. A derivative has the per_time dimension and `mV` has the voltage dimension: `/ms` on an mV axis means mV per ms, whereas `mV` alone is a state value, not a rate of change. `unit.dimension_match` refuses it rather than drawing arrows from numbers a whole dimension (and a factor of 1000) off.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "vectorField": {
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -70,
+                  -40
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.1,
+                  0.1
+                ]
+              },
+              "dx": {
+                "kind": "derivative",
+                "unit": "mV",
+                "values": [
+                  5,
+                  20
+                ]
+              },
+              "dy": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  0.01,
+                  0.06
+                ]
+              },
+              "domain": {
+                "x": {
+                  "start": -70,
+                  "stop": -40,
+                  "unit": "mV"
+                },
+                "y": {
+                  "start": 0,
+                  "stop": 0.2,
+                  "unit": "1"
+                }
+              },
+              "lattice": {
+                "kind": "scattered"
+              }
+            }
+          },
+          "parameters": {
+            "arrowScaling": {
+              "mode": "unit_length"
+            },
+            "magnitudeBasis": "axis_normalized",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`milliseconds` is an accepted alias, not the canonical code `ms`. A stable request must use the canonical code: a silently converted alias changes a number the caller never sees, and here it would rescale every trajectory time and therefore every derived traversal speed. The alias is rejected with a repair pointing at `ms`.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "trajectories": {
+              "universe": {
+                "ids": [
+                  "n1"
+                ]
+              },
+              "timeDirection": "forward",
+              "pointTrajectoryIds": [
+                "n1",
+                "n1"
+              ],
+              "times": {
+                "kind": "time",
+                "unit": "milliseconds",
+                "values": [
+                  0,
+                  0.5
+                ]
+              },
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -65,
+                  -50
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.05,
+                  0.09
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "directionMarkers": {
+              "mode": "arrowhead_at_end"
+            },
+            "duplicateTimePolicy": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The field-domain x endpoint carries the unit alias `millivolts` rather than the canonical code `mV`. A domain endpoint is a bare unit with no `kind`, so `unit.canonical_code` catches it: an alias converted silently would move the drawn domain the figure is allowed to claim, so it is rejected with a repair rather than absorbed.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "vectorField": {
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -70,
+                  -40
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.1,
+                  0.1
+                ]
+              },
+              "dx": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  5,
+                  20
+                ]
+              },
+              "dy": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  0.01,
+                  0.06
+                ]
+              },
+              "domain": {
+                "x": {
+                  "start": -70,
+                  "stop": -40,
+                  "unit": "millivolts"
+                },
+                "y": {
+                  "start": 0,
+                  "stop": 0.2,
+                  "unit": "1"
+                }
+              },
+              "lattice": {
+                "kind": "scattered"
+              }
+            }
+          },
+          "parameters": {
+            "arrowScaling": {
+              "mode": "unit_length"
+            },
+            "magnitudeBasis": "axis_normalized",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The x series carries 3 values and the y series carries 2. Pairing them by best effort would invent a state coordinate: the third x would be plotted against a y belonging to a different instant, or none at all. A point in state space is two numbers observed together, or it is not a point, so `series.equal_length` refuses.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "trajectories": {
+              "universe": {
+                "ids": [
+                  "n1"
+                ]
+              },
+              "timeDirection": "forward",
+              "pointTrajectoryIds": [
+                "n1",
+                "n1",
+                "n1"
+              ],
+              "times": {
+                "kind": "time",
+                "unit": "ms",
+                "values": [
+                  0,
+                  0.5,
+                  1.0
+                ]
+              },
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -65,
+                  -50,
+                  -45
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.05,
+                  0.09
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "directionMarkers": {
+              "mode": "arrowhead_at_end"
+            },
+            "duplicateTimePolicy": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The trajectory universe declares the id `n1` twice. An ambiguous identity must fail before selection, legend binding, or table lookup can resolve it two different ways — otherwise the figure quietly stops being about the set of trajectories the caller declared. `ids.unique` rejects the duplicate.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "trajectories": {
+              "universe": {
+                "ids": [
+                  "n1",
+                  "n1"
+                ]
+              },
+              "timeDirection": "forward",
+              "pointTrajectoryIds": [
+                "n1",
+                "n1"
+              ],
+              "times": {
+                "kind": "time",
+                "unit": "ms",
+                "values": [
+                  0,
+                  0.5
+                ]
+              },
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -65,
+                  -50
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.05,
+                  0.09
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "directionMarkers": {
+              "mode": "arrowhead_at_end"
+            },
+            "duplicateTimePolicy": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The field-domain x interval is inverted: start -40, stop -70. A domain must satisfy start < stop, because an empty or inverted domain cannot bound what the figure is allowed to claim outside the evaluated samples. `window.valid` refuses it rather than silently swapping the endpoints.",
+        "expectedCode": "SCIENCE_WINDOW_INVALID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "vectorField": {
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -70,
+                  -40
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.1,
+                  0.1
+                ]
+              },
+              "dx": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  5,
+                  20
+                ]
+              },
+              "dy": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  0.01,
+                  0.06
+                ]
+              },
+              "domain": {
+                "x": {
+                  "start": -40,
+                  "stop": -70,
+                  "unit": "mV"
+                },
+                "y": {
+                  "start": 0,
+                  "stop": 0.2,
+                  "unit": "1"
+                }
+              },
+              "lattice": {
+                "kind": "scattered"
+              }
+            }
+          },
+          "parameters": {
+            "arrowScaling": {
+              "mode": "unit_length"
+            },
+            "magnitudeBasis": "axis_normalized",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "A confidence interval is requested, but this figure supports only `none`. UncertaintyV1 is one-dimensional, and two marginal intervals are not a joint region for a point in state space: a box built from two 95% marginals does not have 95% joint coverage. `uncertainty.supported_variant` refuses the variant rather than drawing a band that overstates the coverage it has.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "vectorField": {
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -70,
+                  -40
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.1,
+                  0.1
+                ]
+              },
+              "dx": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  5,
+                  20
+                ]
+              },
+              "dy": {
+                "kind": "derivative",
+                "unit": "/ms",
+                "values": [
+                  0.01,
+                  0.06
+                ]
+              },
+              "domain": {
+                "x": {
+                  "start": -70,
+                  "stop": -40,
+                  "unit": "mV"
+                },
+                "y": {
+                  "start": 0,
+                  "stop": 0.2,
+                  "unit": "1"
+                }
+              },
+              "lattice": {
+                "kind": "scattered"
+              }
+            }
+          },
+          "parameters": {
+            "arrowScaling": {
+              "mode": "unit_length"
+            },
+            "magnitudeBasis": "axis_normalized",
+            "uncertainty": {
+              "kind": "confidence_interval",
+              "unit": "mV",
+              "lower": [
+                -66,
+                -61
+              ],
+              "upper": [
+                -64,
+                -59
+              ],
+              "level": 0.95,
+              "method": "bootstrap",
+              "coverage": "pointwise",
+              "basis": "trials"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "A trajectory is supplied with no times. Without its time parameter a parametric curve has no direction, no speed, and no way to tell samples 0.1 ms apart from samples 10 ms apart. `times` is structurally required, so the request fails at the structural stage rather than having the sample index silently substituted for a clock.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.phase_plane"
+          },
+          "data": {
+            "axes": {
+              "x": {
+                "stateId": "Vm",
+                "kind": "membrane_voltage",
+                "unit": "mV"
+              },
+              "y": {
+                "stateId": "w",
+                "kind": "state_variable",
+                "unit": "1"
+              }
+            },
+            "trajectories": {
+              "universe": {
+                "ids": [
+                  "n1"
+                ]
+              },
+              "timeDirection": "forward",
+              "pointTrajectoryIds": [
+                "n1",
+                "n1"
+              ],
+              "x": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -65,
+                  -50
+                ]
+              },
+              "y": {
+                "kind": "state_variable",
+                "unit": "1",
+                "values": [
+                  0.05,
+                  0.09
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "directionMarkers": {
+              "mode": "arrowhead_at_end"
+            },
+            "duplicateTimePolicy": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      }
+    ]
+  }
+}

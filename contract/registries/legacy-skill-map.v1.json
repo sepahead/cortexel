@@ -1,0 +1,148 @@
+{
+  "registry": "cortexel-legacy-skill-map",
+  "version": "1.0",
+  "description": "The deterministic outcome for every one of the 26 pre-1.0 skill ids. All 26 are covered; there is no fall-through.\n\nThese ids are accepted ONLY by `cortexel migrate` and `migrateLegacyVizSpec`. Normal 1.0 validation rejects them with MIGRATION_LEGACY_ID_NOT_ACCEPTED and a repair. That is deliberate: a silent alias would make a stored artifact ambiguous about which contract actually validated it, which is exactly the ambiguity this release exists to remove.\n\nMigration produces a REQUEST plus a REPORT. It never produces a validation receipt, a render receipt, or an artifact. The consumer must revalidate and re-render.",
+
+  "refusals": [
+    "Migration never invents a population count, a trial count, a unit, a node universe, MPI completeness, an uncertainty method, a zero-lag policy, or a calibration status.",
+    "When required information is absent, migration returns a partial request plus blocking errors — or no request at all. It never guesses.",
+    "An ambiguous legacy value maps to the WEAKER accurate target, never the stronger one, and always with a warning."
+  ],
+
+  "entries": [
+    { "legacyId": "nest.voltage_trace", "outcome": "migrate", "targetId": "neuro.analog_trace",
+      "transform": "voltageTraceToAnalogTrace",
+      "notes": "The signal is mapped with kind `membrane_voltage` ONLY because the legacy id asserted it was a voltage trace. The general contract does not assume every analog signal is a membrane potential.",
+      "requires": ["an explicit time unit", "an explicit value unit"] },
+
+    { "legacyId": "nest.spike_raster", "outcome": "migrate", "targetId": "neuro.spike_raster",
+      "transform": "spikeRasterToSpikeRaster",
+      "notes": "Event identity and order are preserved. The RECORDED sender universe must be supplied: the legacy payload did not distinguish senders that were recorded from senders that happened to fire.",
+      "requires": ["recordedSenderIds", "an observation window"] },
+
+    { "legacyId": "nest.population_rate", "outcome": "migrate", "targetId": "neuro.population_rate",
+      "transform": "populationRateToPopulationRate",
+      "notes": "Raw bin counts and the recorded-sender denominator are preserved, and the rate is re-derived and checked.",
+      "requires": ["recordedSenderCount"] },
+
+    { "legacyId": "nest.rate_response", "outcome": "migrate", "targetId": "neuro.response_curve",
+      "transform": "rateResponseToResponseCurve",
+      "notes": "The current-only F-I assumption is NOT hard-coded into the neutral contract: the input quantity and the response method must both be declared.",
+      "requires": ["an input quantity with a unit", "a response method"] },
+
+    { "legacyId": "nest.isi_distribution", "outcome": "migrate", "targetId": "neuro.isi_distribution",
+      "transform": "isiToIsiDistribution",
+      "notes": "Per-sender interval derivation, edge policy, bins, normalization, and exclusions are preserved.",
+      "requires": ["a zero-interval policy"] },
+
+    { "legacyId": "nest.psth", "outcome": "migrate", "targetId": "neuro.psth",
+      "transform": "psthToPsth",
+      "notes": "Trial alignment, selected senders, and the trial denominator are preserved.",
+      "requires": ["a trial universe or count", "an alignment reference"] },
+
+    { "legacyId": "nest.correlogram", "outcome": "migrate", "targetId": "neuro.correlogram",
+      "transform": "correlogramToCorrelogram",
+      "notes": "The legacy caller-selected `zeroLagPolicy` is DROPPED. Self-pair treatment is now DERIVED by the registered algorithm from event identity and reported as a fact; it is no longer something a caller can assert.",
+      "requires": ["an explicit kind (auto|cross)", "an ordered (reference, target) pair", "a statistic"] },
+
+    { "legacyId": "nest.phase_plane", "outcome": "migrate", "targetId": "neuro.phase_plane",
+      "transform": "phasePlaneToPhasePlane",
+      "notes": "State-variable quantities and trajectory ordering are preserved. An unverified nullcline annotation becomes a caller note or is dropped.",
+      "requires": ["x and y state quantities with units"] },
+
+    { "legacyId": "nest.astrocyte_dynamics", "outcome": "migrate", "targetId": "neuro.multisignal_trace",
+      "transform": "astrocyteToMultisignalTrace",
+      "notes": "Each signal keeps its REAL quantity kind and unit. Calcium and IP3 are never relabelled as membrane voltage, and dimensionally incompatible signals become small multiples rather than one forced axis. Astrocytes get a recipe, not a renderer branch.",
+      "requires": ["a quantity kind and unit per signal"] },
+
+    { "legacyId": "nest.compartmental_dynamics", "outcome": "migrate", "targetId": "neuro.compartment_trace",
+      "transform": "compartmentalToCompartmentTrace",
+      "notes": "This was a host-only (`scene: null`) route. It now has a native renderer: small multiples below a bounded compartment count, a time-by-compartment heatmap above it.",
+      "requires": ["cellId", "compartment ids", "a signal quantity with a unit"] },
+
+    { "legacyId": "nest.connection_graph", "outcome": "migrate", "targetId": "network.connection_graph",
+      "transform": "connectionGraphToConnectionGraph",
+      "notes": "Isolates, autapses, multapses, and directedness are preserved.",
+      "requires": ["a complete node universe", "a network scope"] },
+
+    { "legacyId": "nest.adjacency_matrix", "outcome": "migrate", "targetId": "network.adjacency_matrix",
+      "transform": "adjacencyToAdjacencyMatrix",
+      "notes": "NEST's target-row / source-column convention is frozen and stated on the axes, in the table, and in the caption.",
+      "requires": ["complete row (target) and column (source) universes", "a cell mode", "a network scope"] },
+
+    { "legacyId": "nest.weight_matrix", "outcome": "migrate", "targetId": "network.weight_matrix",
+      "transform": "weightMatrixToWeightMatrix",
+      "notes": "A multapse aggregation is now MANDATORY. The legacy behavior had no declared policy for repeated connections mapping to one cell.",
+      "requires": ["a multapse aggregation", "a weight quantity with a declared dimension"] },
+
+    { "legacyId": "nest.delay_matrix", "outcome": "migrate", "targetId": "network.delay_matrix",
+      "transform": "delayMatrixToDelayMatrix",
+      "notes": "Delays must be finite and positive. A multapse aggregation is mandatory.",
+      "requires": ["a multapse aggregation"] },
+
+    { "legacyId": "nest.in_degree_distribution", "outcome": "migrate", "targetId": "network.degree_distribution",
+      "transform": "inDegreeToDegreeDistribution",
+      "notes": "Merged into one contract with a closed `direction` discriminator, set here to `in`. The complete node universe is required so that zero-degree nodes survive.",
+      "requires": ["a complete node universe", "a counting policy"],
+      "materializedParameters": { "direction": "in" } },
+
+    { "legacyId": "nest.out_degree_distribution", "outcome": "migrate", "targetId": "network.degree_distribution",
+      "transform": "outDegreeToDegreeDistribution",
+      "notes": "Direction is set to `out`. If the source scope is target-rank-local, migration BLOCKS with SCOPE_OUT_DEGREE_FROM_RANK_LOCAL: rank-local target evidence cannot be promoted to a global out-degree, because the connections from a local source to a remote target live on another rank.",
+      "requires": ["a complete node universe", "a counting policy", "a scope that can support an out-degree claim"],
+      "materializedParameters": { "direction": "out" } },
+
+    { "legacyId": "nest.delay_distribution", "outcome": "migrate", "targetId": "network.delay_distribution",
+      "transform": "delayDistributionToDelayDistribution",
+      "notes": "The exact edge population, sampling status, unit, bins, and normalization are preserved.",
+      "requires": ["an edge scope", "a normalization"] },
+
+    { "legacyId": "nest.weight_histogram", "outcome": "migrate", "targetId": "network.weight_distribution",
+      "transform": "weightHistogramToWeightDistribution",
+      "notes": "Signs are preserved. Weights are never absolute-valued or sign-split unless requested, and never pooled across incompatible dimensions or synapse models.",
+      "requires": ["an edge scope", "a weight quantity with a declared dimension"] },
+
+    { "legacyId": "nest.spatial_map_2d", "outcome": "migrate", "targetId": "network.spatial_map_2d",
+      "transform": "spatialMap2dToSpatialMap2d",
+      "notes": "Coordinate frame, center/extent, and periodic-wrap metadata are preserved.",
+      "requires": ["a coordinate frame", "positions covering the node universe"] },
+
+    { "legacyId": "nest.plasticity_dynamics", "outcome": "migrate", "targetId": "network.synaptic_weight_trace",
+      "transform": "plasticityToSynapticWeightTrace",
+      "notes": "The observation kind must be declared: event-updated weights are piecewise-constant and are drawn as STEPS, while sampled continuous values are drawn as a line. Drawing an STDP update as a smooth line would invent values that never existed.",
+      "requires": ["a stable synapse identity", "an observation kind"] },
+
+    { "legacyId": "nest.spatial_3d", "outcome": "experimental", "targetId": "experimental.network.spatial_3d",
+      "transform": null,
+      "notes": "Moved out of the stable catalog. Import the explicit experimental subpath. There is NO stable alias, because a stable alias would let an agent select a nondeterministic WebGL scene while believing it selected a conformant figure.",
+      "errorCode": "CAPABILITY_EXPERIMENTAL" },
+
+    { "legacyId": "corpus.knowledge_graph", "outcome": "experimental", "targetId": "experimental.evidence.knowledge_graph",
+      "transform": null,
+      "notes": "Moved out of the stable catalog. The evidence table/JSON export remains available and is the authoritative view; the force-directed 3D geometry is explicitly schematic.",
+      "errorCode": "CAPABILITY_EXPERIMENTAL" },
+
+    { "legacyId": "nest.animation_replay", "outcome": "experimental", "targetId": "experimental.neuro.animation_replay",
+      "transform": null,
+      "notes": "No stable renderer and no safe deterministic export exist for it. Its former unbounded payload is replaced by a strict event union.",
+      "errorCode": "MIGRATION_NO_STABLE_REPLACEMENT" },
+
+    { "legacyId": "nest.connectivity_matrix", "outcome": "blocked", "targetId": null,
+      "transform": null,
+      "errorCode": "MIGRATION_AMBIGUOUS_CONNECTIVITY_MATRIX",
+      "notes": "The caller must choose network.adjacency_matrix, network.weight_matrix, or network.delay_matrix. Cortexel will NOT guess from which fields happen to be present: the three differ in how they treat an absent cell, a zero value, and a repeated connection, so guessing wrong would silently change what the figure claims.",
+      "alternatives": ["network.adjacency_matrix", "network.weight_matrix", "network.delay_matrix"] },
+
+    { "legacyId": "nest.spatial_2d", "outcome": "migrate_conditional", "targetId": "network.spatial_map_2d",
+      "transform": "spatial2dToSpatialMap2d",
+      "errorCode": "MIGRATION_INFORMATION_MISSING",
+      "notes": "A host-only route with no Cortexel-owned output. It migrates ONLY when the legacy payload already carries the complete measured-position contract — node ids bound to positions, a coordinate frame, and units. Otherwise migration returns a field-by-field error rather than fabricating a coordinate frame.",
+      "requires": ["node ids bound to positions", "a coordinate frame", "position units"] },
+
+    { "legacyId": "nest.stimulus_response", "outcome": "recipe", "targetId": "figure.bundle",
+      "transform": "stimulusResponseToBundleDraft",
+      "errorCode": "MIGRATION_NO_STABLE_REPLACEMENT",
+      "notes": "There is no one-to-one replacement, because this was never one figure. `cortexel migrate` emits a DRAFT bundle — a stimulus trace panel, a response trace panel, and a response-curve panel — and lists every input it could not resolve. The caller completes it.",
+      "alternatives": ["figure.bundle containing neuro.analog_trace + neuro.population_rate + neuro.response_curve"] }
+  ]
+}

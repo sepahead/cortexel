@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.spike_raster.request.v1.schema.json",
+  "title": "neuro.spike_raster request",
+  "description": "GENERATED from contract/skills/neuro.spike_raster.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.spike_raster"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "eventTimes": {
+          "type": "object",
+          "description": "One time per recorded event, in the caller's declared time unit.",
+          "properties": {
+            "kind": {
+              "const": "time"
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2000000,
+              "description": "Finite binary64 times. Never null: a missing observation is not an event, so there is nothing to place and nothing to count."
+            }
+          },
+          "required": [
+            "kind",
+            "unit",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "eventSenderIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "maxItems": 2000000,
+          "description": "The sender of each event, parallel to eventTimes.values. Every value must be a member of recordedSenderIds."
+        },
+        "eventTrialIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "maxItems": 2000000,
+          "description": "Optional. The trial of each event, parallel to eventTimes.values. When present, the complete trial universe `trialIds` is required and rows become (sender, trial) pairs."
+        },
+        "eventIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "maxItems": 2000000,
+          "description": "Optional stable per-event identity, parallel to eventTimes.values. When absent, a deterministic ordinal identity is assigned from the original row index and the assignment method is recorded, so an event can always be pointed at even though it was not named."
+        },
+        "recordedSenderIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 100000,
+          "description": "The COMPLETE set of senders that were recorded, INCLUDING every sender that never fired. These are the rows. It cannot be inferred from the events: a sender that stayed silent produces no event, and a raster whose rows come from the event list simply loses it — along with the negative evidence that is the raster's whole point."
+        },
+        "senderPopulationIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "maxItems": 100000,
+          "description": "Optional, parallel to recordedSenderIds: the population each recorded sender belongs to. The populations are exactly the distinct values here and their block order is first appearance in recordedSenderIds, so there is no second list to drift and no population id can dangle. Repetition is expected and is never treated as a duplicate-id error."
+        },
+        "trialIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 1000,
+          "description": "The COMPLETE trial universe in display order, INCLUDING trials in which nothing happened. Required whenever eventTrialIds are supplied. Cortexel never infers the trial count from the observed trial ids: a trial with no spikes is still a trial, and it is precisely the trial you must be able to see."
+        },
+        "window": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+          "description": "The declared observation window. Half-open [start, stop) by default; an event exactly at `stop` is outside it."
+        },
+        "timeBase": {
+          "type": "string",
+          "enum": [
+            "absolute_clock",
+            "trial_relative"
+          ],
+          "description": "What t = 0 means. `absolute_clock` is the source's own clock. `trial_relative` means times were re-expressed relative to a per-trial alignment event, which Cortexel cannot verify — so it must be named, and the axis is labelled with that name rather than with a bare time."
+        },
+        "alignmentLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "Required when timeBase is trial_relative: what the times are relative to (for example \"Stimulus onset\"). An unlabelled relative axis is indistinguishable from an absolute one and invites the reader to date a spike to a moment that never existed."
+        },
+        "senderUniverseComplete": {
+          "type": "boolean",
+          "description": "Whether recordedSenderIds is the complete recorded universe (true) or a declared selection from a larger recording (false). This is the completeness label; it is carried into the artifact, the deterministic summary, and the table metadata."
+        },
+        "eventCompleteness": {
+          "type": "string",
+          "enum": [
+            "complete_for_recorded_senders"
+          ],
+          "description": "An explicit assertion that every event of every declared sender inside the window is present. There is deliberately no `sampled` value: no disclosure rule exists that could mark a sampled raster honestly, and a raster whose ticks are a sample cannot be read — every gap becomes ambiguous between `did not fire` and `was not sampled`. Large rasters are handled by the count-preserving density grid instead, so caller-side event sampling is never necessary."
+        }
+      },
+      "required": [
+        "eventTimes",
+        "eventSenderIds",
+        "recordedSenderIds",
+        "window",
+        "timeBase",
+        "senderUniverseComplete",
+        "eventCompleteness"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "timeBase": {
+                "const": "trial_relative"
+              }
+            },
+            "required": [
+              "timeBase"
+            ]
+          },
+          "then": {
+            "required": [
+              "alignmentLabel",
+              "eventTrialIds",
+              "trialIds"
+            ]
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "rowOrder": {
+          "type": "string",
+          "enum": [
+            "as_declared",
+            "canonical_sender_id",
+            "grouped_by_population"
+          ],
+          "description": "The Y order, and it is always explicit. There is no option to sort by an observed statistic: sorting rows by rate or first-spike latency draws a diagonal band that reads as population structure and is an artifact of the sort. To use such an order, place it in recordedSenderIds with `as_declared`, where it is recorded as your choice. `grouped_by_population` with no declared populations degenerates to a single block and is recorded as such."
+        },
+        "markStyle": {
+          "type": "string",
+          "enum": [
+            "tick",
+            "point"
+          ],
+          "default": "tick",
+          "description": "How each event is drawn below the mark budget. This changes only the glyph; it never changes a time, a count, or which events are drawn."
+        },
+        "outOfWindowPolicy": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "exclude_and_disclose"
+          ],
+          "description": "What to do with an event outside the declared window. `reject` fails the request. `exclude_and_disclose` excludes it from the drawing, counts it, discloses the count, and keeps it in the table with inWindow = false. There is no third option in which it disappears."
+        },
+        "aboveMarkBudget": {
+          "type": "string",
+          "enum": [
+            "density_grid",
+            "refuse"
+          ],
+          "description": "What to do when the event count exceeds the visible-mark budget. `density_grid` switches to the count-preserving raster_density_bins policy and discloses it. `refuse` fails with RESOURCE_MARKS_EXCEEDED, for the case where an aggregated image would be worse than no image."
+        },
+        "densityGrid": {
+          "type": "object",
+          "description": "Optional explicit grid, consulted only when the mark budget is exceeded and aboveMarkBudget is density_grid. When absent the grid is derived deterministically from the declared plot geometry and the renderer revision. Either way the dimensions used are recorded in the artifact and named in the disclosure.",
+          "properties": {
+            "timeBins": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096
+            },
+            "rowBins": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096,
+              "description": "Rows are merged only in contiguous blocks of the final row order. A tile spanning several senders is labelled as such: its count belongs to the block, not to a neuron."
+            }
+          },
+          "required": [
+            "timeBins",
+            "rowBins"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "rowOrder",
+        "outOfWindowPolicy",
+        "aboveMarkBudget"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

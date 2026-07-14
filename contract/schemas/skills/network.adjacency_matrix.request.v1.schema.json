@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.adjacency_matrix.request.v1.schema.json",
+  "title": "network.adjacency_matrix request",
+  "description": "GENERATED from contract/skills/network.adjacency_matrix.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.adjacency_matrix"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "A connection snapshot plus the single complete, ordered node universe that becomes both axes. There is no `matrix` field: Cortexel derives the cells from the connections and the universe, so a caller can never hand it a matrix whose cells disagree with its own edge list.",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE, ordered set of nodes. Its order is the row order AND the column order, so the visual diagonal is the self-connection diagonal by construction. `complete` must be true, or no empty cell can be read as a measured absence."
+        },
+        "connections": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+          "description": "Every connection, one row per connection. Multapses are distinct rows and are never deduplicated. Carried `weights` and `delays` are validated and tabulated but never enter a cell value."
+        },
+        "scope": {
+          "description": "What this snapshot actually saw. It decides which rows can support an absence claim and which cell modes are legal. `snapshotTime` is REQUIRED here even though the shared type leaves it optional: under structural plasticity an undated adjacency matrix is not merely unlabelled, it is undefined.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+            },
+            {
+              "type": "object",
+              "required": [
+                "snapshotTime"
+              ]
+            }
+          ]
+        },
+        "observedTargetIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 100000,
+          "description": "The row targets whose incoming connections were COMPLETELY observed — the rank's own targets. Only inside these rows is an empty cell a measured absence. REQUIRED under `mpi_target_rank_local` and REJECTED under every other scope, where the observed set is derived: the whole universe under `single_process` and a fully merged `global_merged`, and the EMPTY set under `sampled`."
+        }
+      },
+      "required": [
+        "nodeUniverse",
+        "connections",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "Rank-local evidence cannot be read off the connections: a rank holds every connection whose TARGET it owns, but nothing in the edge list says WHICH targets those are. Without `observedTargetIds` every remote target's row would be drawn empty, and an empty row reads as a measured in-degree of zero. It is therefore REQUIRED under `mpi_target_rank_local` and REJECTED under every other scope, where the observed set is derived — accepting it there would let a caller hand Cortexel an observability claim that the derivation then silently ignores.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "mpi_target_rank_local"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "observedTargetIds"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "observedTargetIds"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+        },
+        "selectionLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "universeLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "A name for the node population, e.g. \"L2/3 excitatory\". It is APPENDED to the library-generated role words \"Target\" (rows) and \"Source\" (columns); it can never replace them, because a caller who relabelled the axes could transpose the meaning of the figure without transposing the data."
+        },
+        "cellMode": {
+          "type": "string",
+          "enum": [
+            "binary_presence",
+            "multiplicity"
+          ],
+          "description": "binary_presence: a cell is 1 when at least one connection lands in it. multiplicity: a cell is the exact count of connection rows in it, multapses and autapses included. They are different quantities: binary presence answers 'is there a connection', multiplicity answers 'how many connection entries are there'."
+        },
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How more than one connection in one cell is combined into the drawn value. There is no default and no 'last edge wins'. `no_aggregation` ASSERTS at most one connection per cell and FAILS (SCIENCE_AGGREGATION_REQUIRED) if that is untrue, so the information loss of collapsing multapses is always a choice the caller made on the record."
+        },
+        "multiplicityScale": {
+          "type": "string",
+          "enum": [
+            "linear",
+            "log"
+          ],
+          "description": "The value scale for multiplicity. `log` is safe here because a present cell has multiplicity >= 1, so the domain never contains zero. Refused with binary_presence: a two-valued presence domain has no scale to choose."
+        },
+        "tableCellEnumeration": {
+          "type": "string",
+          "enum": [
+            "present_cells_only",
+            "dense"
+          ],
+          "default": "present_cells_only",
+          "description": "present_cells_only (the default): the table lists every present cell, and the complete ordered universe plus the per-row observability let a reader derive the status of every cell that is not listed. dense: every cell is enumerated with an explicit status, which is exact but costs rows x columns entries and is refused above the matrix-cell and sidecar budgets."
+        }
+      },
+      "required": [
+        "selectionId",
+        "cellMode",
+        "multapseAggregation"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "A scale for a two-valued domain is meaningless, so the field is rejected rather than ignored.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "cellMode": {
+                "const": "binary_presence"
+              }
+            },
+            "required": [
+              "cellMode"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "multiplicityScale"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,1365 @@
+{
+  "id": "neuro.correlogram",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Oriented lag correlogram between two event trains",
+  "purpose": {
+    "canonicalQuestion": "How many ordered (reference, target) event pairs fall at each lag, or what normalized lag statistic follows from those pairs, under a fixed lag orientation, an explicit zero-lag bin, a declared self-pair treatment, and a denominator that is stated rather than assumed?",
+    "cannotEstablish": [
+      "That either train drives the other. A peak at +2 ms is equally consistent with a monosynaptic connection, a common input arriving with different conduction delays, and a shared oscillation. A correlogram cannot separate them.",
+      "That a peak is larger than chance. This figure draws no significance band and computes no surrogate, jitter, or shift predictor. The expected count under independence depends on both firing rates and on any nonstationarity, none of which it estimates.",
+      "Anything from the symmetry of an autocorrelogram. Forming both ordered pairs of every distinct event pair makes value(-lag) = value(+lag) by construction, up to the bin-edge rule below. The symmetry is a property of the algorithm, not evidence about the neuron.",
+      "Fine-timescale synchrony when the two firing rates co-vary slowly across the window. Slow co-modulation produces a broad central peak that is not spike synchrony, and pooling every pair in the window cannot tell the two apart.",
+      "Single-neuron refractoriness or bursting from a pooled multi-unit train. A pooled autocorrelogram counts cross-neuron coincidences as pairs, so its central region is not a refractory trough.",
+      "That no coupling exists because no peak is visible. The bin width sets the temporal resolution: coupling jittered on a finer scale than the bin is smeared away, and weak coupling can sit inside the sampling noise of the counts.",
+      "How self-pairs were treated, from the height of the centre bin. The treatment is recorded from what the algorithm actually did; it is never inferred from a zero-valued or a tall centre bin.",
+      "That the two trains were really observed over the declared window. Cortexel sees events, never recording extent. A window that overstates the recording inflates every eligible-reference denominator and depresses the rate."
+    ]
+  },
+  "science": {
+    "normalization": [
+      "Recorder output is NOT assumed chronological. Events are stably sorted by (time, senderId, original ordinal) WITHIN each train only. Order is never established across the reference and target trains: they are separate scientific groups. The original order and its digest are retained in the artifact.",
+      "The observation window is half-open [start, stop) by default and is shared by both trains. An event exactly at `stop` is EXCLUDED by that convention and the count of such events is reported (EVENTS_EXCLUDED_OUT_OF_WINDOW), never silently absorbed.",
+      "An event strictly outside [start, stop] is not a boundary convention but a contradiction: the declared window does not describe the data. It fails with SCIENCE_EVENT_OUT_OF_WINDOW rather than being dropped, because such an event still forms pairs with in-window events while every denominator excludes it.",
+      "The lag axis carries 2m+1 bins with centres at k*binWidth for k = -m..m, where m = tauMax/binWidth must be an exact positive integer within a bounded, index-independent binary64 tolerance. Edges lie at (k -/+ 1/2)*binWidth, so the zero-lag bin is CENTRED on zero and spans [-binWidth/2, +binWidth/2).",
+      "Lag bins are half-open [lo, hi), except that a lag exactly at the final edge (+tauMax + binWidth/2) falls in the final bin. A lag of exactly +binWidth/2 therefore falls in the NEXT bin and exactly -binWidth/2 falls in the zero bin. On a 0.1 ms simulation grid with 1 ms bins this is not a corner case: a 0.5 ms lag occurs constantly.",
+      "Duplicate identical event rows are PRESERVED and counted as distinct events. Two records of one physical spike would manufacture a spurious zero-lag pair. That is detectable only through event ids, which must be unique within a train and fail with SEMANTIC_DUPLICATE_ID when they are not. Without event ids Cortexel cannot detect a duplicated record, and the artifact says so.",
+      "A duplicate timestamp is not a duplicate sample. Two events with equal times are two events (two senders, or a genuinely simultaneous pair) and are both retained. No duplicate-time aggregation policy applies to an event train.",
+      "Negative zero is ACCEPTED, never rejected: RFC 8785 canonicalizes -0 to 0 and -0 === 0, so no value moves and digests stay reproducible. A signed-zero lag could not select a different bin in any case, because the zero-lag bin is CENTRED on zero rather than edge-aligned on it, so both -0 and +0 fall strictly inside it.",
+      "Event times, bin width, tauMax and the window are all time-dimensioned and may use different canonical codes. Each is converted ONCE through the typed unit layer with the registry factor, and the conversion is recorded (UNIT_CONVERTED). A bin width in ms is never turned into seconds by a hard-coded 1000.",
+      "Missing values are not representable in an event train: an event with no time is not an event, so event-time arrays admit no nulls. Nulls may appear only in caller-supplied uncertainty bounds, where they mean the bound is missing, the band is broken there, and nothing is drawn as zero."
+    ],
+    "derivation": [
+      "Lag convention: lag = t_target - t_reference. A POSITIVE lag means the target event follows the reference event by that lag. This orientation is fixed by the contract, is not caller-selectable, and is used identically in the adapters, the table, the accessible summary, and the LAG_ORIENTATION disclosure.",
+      "Pairing: exactly the ordered pairs (i in reference, j in target). The pair (j, i) is not also counted. For an autocorrelation the single train supplies both roles, so both (i, j) and (j, i) are formed for i != j - which is why an autocorrelogram is symmetric by construction, up to the bin-edge rule below, and why its symmetry carries no information.",
+      "Autocorrelogram symmetry is exact only away from the bin edges. A distinct pair whose lag is exactly +binWidth/2 falls in bin +1 while its reverse at -binWidth/2 falls in the zero bin, so the two flanks can differ by such pairs. That residual asymmetry is the half-open rule showing through and is never read as directional coupling.",
+      "Self-pairs, auto mode: the registered algorithm excludes exactly the pairs i == j (an event with itself) and retains every pair of DISTINCT events, including two distinct events with identical times. The zero-lag bin is therefore not necessarily empty, its content is never used to infer the treatment, and the excluded count is recorded (ZERO_LAG_SELF_PAIRS_EXCLUDED).",
+      "Self-pairs, cross mode: no generic exclusion applies. One applies only when both trains supply event ids and those ids intersect; pairs sharing an event id are then literal self-pairs, are excluded, and the count is recorded. When event ids are absent the artifact records that no identity information existed, rather than implying that none was needed.",
+      "raw_pair_count: N(k) is the number of ordered pairs whose lag falls in bin k. It is an exact non-negative integer of kind `count` in unit `1`. It has no denominator and is not comparable across bin widths, observation durations, or firing rates.",
+      "weighted_pair_sum: the sum over the pairs in bin k of w_i * w_j, the weights of the connections that delivered the two events into the correlation channels (NEST's `histogram` channel). It is a sum of PRODUCTS of two simulator-defined weights, is carried as a simulator-defined quantity, is never converted, and is never pooled or compared across synapse models. It is not a weight.",
+      "target_rate_per_reference_event: value(k) = N(k) / (eligibleReference(k) * binWidth_in_seconds), of kind `firing_rate` in `Hz`. It is the target train's mean firing rate at lag k given a reference event at lag zero. The bin width reaches seconds through the typed unit layer, never through a hard-coded factor of 1000.",
+      "Edge correction `none` sets eligibleReference(k) to the reference event count for every k. The finite window then makes large-|lag| bins collect fewer pairs simply because the partner would have to lie outside the window. That taper is an artifact of the window and is disclosed as uncorrected, not silently removed.",
+      "Edge correction `eligible_reference_events` sets eligibleReference(k) to the exact number of reference events whose lag-shifted bin [t_i + lo_k, t_i + hi_k) lies entirely inside the window. It is exact and assumes no stationarity, unlike the classical (T - |lag|)/T triangular correction, which is not offered. If eligibleReference(k) is 0 the bin has no denominator and is undefined, never zero.",
+      "pearson_coefficient: both trains are binned on the window with the SAME bin width as the lag axis, giving L bins; the width must tile the window exactly, so no partial final bin carries a different exposure. r(k) is the Pearson correlation of x_b against y_(b+k) over the b for which both indices lie in [0, L) - the valid overlap - with means and standard deviations recomputed OVER THAT OVERLAP.",
+      "Zero-padded correlation is not offered. Padding shrinks |r| toward zero as |lag| grows for purely arithmetic reasons, and that shrinkage is routinely misread as decorrelation with lag.",
+      "pearson_coefficient requires an explicit binValues choice: `counts` uses the integer count in each bin; `binarized` clips each bin to 0 or 1. The two differ whenever any bin holds two or more spikes, which begins as soon as the bin width exceeds the refractory period, so the choice is declared and never defaulted.",
+      "The Pearson denominator is overlapCount(k) * s_x(k) * s_y(k) computed on the overlap. If either overlap standard deviation is zero (an empty train, or a train with the same count in every bin) or the overlap holds fewer than two bins, r is UNDEFINED: Cortexel emits SCIENCE_CORRELATION_DENOMINATOR_INVALID rather than the 0 or NaN a naive implementation would draw as 'no correlation'.",
+      "Every re-derived r(k) is bounds-checked: it must lie in [-1, +1] within a bounded binary64 tolerance. A value outside that range is not roundoff but a broken denominator or a mis-declared overlap, and it fails with SCIENCE_CORRELATION_DENOMINATOR_INVALID rather than being clamped to +/-1, which would hide the defect behind a plausible number.",
+      "Pairs whose lag falls outside [-tauMax - binWidth/2, +tauMax + binWidth/2] are NOT counted and are NEVER clamped into the end bins; the upper edge itself falls in the final bin under the final-edge rule. Clamping would build a fake peak at +/-tauMax out of every distant pair. The excluded-pair count is recorded and shown in the table.",
+      "No smoothing is offered: no kernel, no rolling mean, no interpolated curve. Bins are drawn as independent stems from their literal counts. Smoothing a correlogram is indistinguishable from widening the bin width, which IS its scientific parameter, so the only way to change the temporal resolution is to declare a different binWidth.",
+      "Pre-binned input is never re-binned. Cortexel re-derives the normalized value from the supplied integer pair counts and the declared denominators and checks it within a tight binary64 tolerance. For a weighted sum only the one-sided invariant is checkable - a bin with zero pairs must carry exactly zero - and PRE_BINNED_INPUT discloses that the raw events were never observed.",
+      "The effective observation duration is DERIVED as stop - start from the single declared window rather than supplied. A second caller-supplied duration could disagree with the window, and Cortexel would then have to choose which one to believe.",
+      "Complexity: O(n log n) for the within-train stable sorts, then O(n log n + P) for a two-pointer sweep that forms only the P pairs inside the lag range. Pearson is O(L + m*L) over binned sequences.",
+      "Cost is preflighted with saturating arithmetic on the product referenceEventCount * targetEventCount. If that upper bound exceeds the pairwise budget, an EXACT eligible-pair count is computed by an O(n log n) counting sweep that forms no pair, and the request is refused only if the exact count still exceeds the budget (RESOURCE_PAIRWISE_EXCEEDED). Quadratic work is never attempted speculatively.",
+      "If either train has no events in the window, no pair can exist: the figure is an explicit empty state with a reason (RENDER_NO_DATA), never a flat zero correlogram that would read as a measured absence of correlation."
+    ],
+    "scopeRules": [
+      "pairScope is `single_pair`: one reference train against one target train. `matched_pairs` and `all_pairs` are refused, because each produces either many correlograms or a pooled statistic with a different denominator - a different figure, not a display option.",
+      "In cross mode the reference and target sender universes must be DISJOINT. A neuron present in both trains contributes its own autocorrelation to a figure labelled cross-correlation, and its literal self-pairs land in the zero-lag bin.",
+      "Each train declares the complete set of senders pooled into it. A train pooling more than one sender must also supply per-event sender ids, so membership is checkable rather than asserted. `events.sender_universe_declared` refuses a pooled train without them (SCIENCE_POPULATION_UNIVERSE_REQUIRED) and refuses an event whose sender is outside the universe (SEMANTIC_UNKNOWN_REFERENCE).",
+      "Both trains are observed over the SAME declared window. Trains recorded over different windows must be intersected by the caller before the request: Cortexel sees events, never recording extent.",
+      "`ids.unique` is applied per registry entry: the ids at ALL pointers of one entry form a single set that must be unique. Separate entries therefore assert within-array uniqueness, and a shared entry asserts joint disjointness. Event ids are deliberately NOT joined across the two trains, because a shared event id is the very fact that makes a cross-mode self-pair exclusion meaningful.",
+      "Legal statistic and mode combinations: raw_pair_count and target_rate_per_reference_event in every mode; weighted_pair_sum only where a weight exists for every event (per-event weights in an events mode, or a pre-binned weighted channel); pearson_coefficient ONLY in an events mode, because the per-bin variances a coefficient divides by cannot be recovered from pair counts.",
+      "A pre-binned autocorrelogram whose source counted each event paired with itself is refused. Cortexel cannot un-count pairs it did not form, so the caller must supply the raw trains instead.",
+      "The auto/cross distinction is a DATA-SHAPE discriminator, not a parameter. A request can therefore never claim 'auto' while supplying two independent trains, nor claim 'cross' while supplying one train twice - contradictions that would silently manufacture a zero-lag peak equal to the event count."
+    ],
+    "uncertaintySupport": [
+      "none",
+      "standard_deviation",
+      "standard_error",
+      "confidence_interval",
+      "quantile_interval",
+      "ensemble_range"
+    ]
+  },
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Raw events for the correlogram. Both trains are observed over the SAME window and pooled into one time-ordered stream; the per-event sender ids identify which sender produced each event, and the recorded-sender universe is the complete set of senders (including silent ones) that were recorded.",
+          "properties": {
+            "mode": {
+              "const": "events"
+            },
+            "eventTimes": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "time"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 500000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 500000,
+              "description": "Parallel to eventTimes: the sender that produced each event."
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE set of senders that were recorded across both trains, including any that never fired. Every event sender must be a member of it."
+            },
+            "referenceEventCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of reference events inside the window. It is the per-reference-event denominator basis and is required for a correlation coefficient."
+            },
+            "targetEventCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of target events inside the window."
+            },
+            "effectiveDuration": {
+              "type": "object",
+              "description": "The effective observation duration, DERIVED as stop - start from the window when raw events are supplied, or declared explicitly here for a pre-binned figure. It is the exposure the per-reference-event rate divides by.",
+              "properties": {
+                "kind": {
+                  "const": "duration"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "value": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "eventTimes",
+            "eventSenderIds",
+            "recordedSenderIds",
+            "window"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "A pre-binned correlogram, for example a NEST correlation-detector status. Cortexel did not observe the events and cannot re-bin them; it re-derives and checks the normalized value from the integer pair counts and the declared denominators.",
+          "properties": {
+            "mode": {
+              "const": "prebinned"
+            },
+            "binEdges": {
+              "type": "object",
+              "description": "The LAG bin edges, ordered from -tauMax to +tauMax. n edges define n-1 half-open lag bins; the zero-lag bin is centred on zero.",
+              "properties": {
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 20002
+                }
+              },
+              "required": [
+                "unit",
+                "edges"
+              ],
+              "additionalProperties": false
+            },
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxItems": 20001,
+              "description": "Exact integer pair counts per lag bin. This is the auditable numerator; a normalized value that cannot be re-derived from it is refused. Length must be edges.length - 1."
+            },
+            "rates": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "firing_rate"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 20001
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false,
+              "description": "Optional. The target rate per reference event as the source computed it. If supplied it is RE-DERIVED from the pair counts and the declared denominator and checked; it is never taken on trust."
+            },
+            "recordedSenderCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The per-reference-event denominator basis (the reference event count under edge correction none). It cannot be recovered from the pair counts."
+            },
+            "referenceEventCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of reference events, required for a correlation coefficient."
+            },
+            "targetEventCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "effectiveDuration": {
+              "type": "object",
+              "description": "The effective observation duration, DERIVED as stop - start from the window when raw events are supplied, or declared explicitly here for a pre-binned figure. It is the exposure the per-reference-event rate divides by.",
+              "properties": {
+                "kind": {
+                  "const": "duration"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "value": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "selfPairTreatment": {
+              "type": "string",
+              "enum": [
+                "excluded_by_source",
+                "no_shared_event_identity"
+              ],
+              "description": "`excluded_by_source`: shared events existed and the source removed their self-pairs. `no_shared_event_identity`: no event can appear in both trains, so no self-pair exists to exclude. A source that shared events and KEPT their self-pairs cannot be labelled honestly and is refused."
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "binEdges",
+            "counts",
+            "recordedSenderCount",
+            "selfPairTreatment",
+            "window"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pairScope": {
+          "type": "string",
+          "enum": [
+            "single_pair"
+          ],
+          "description": "One reference train against one target train. `matched_pairs` and `all_pairs` are refused: they yield many correlograms or a pooled statistic with a different denominator."
+        },
+        "lagRange": {
+          "type": "object",
+          "description": "The lag axis extent. lag = t_target - t_reference; a positive lag means the target follows the reference. min is -tauMax and max is +tauMax; max must exceed min.",
+          "properties": {
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "unit",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        "bins": {
+          "type": "object",
+          "description": "The lag bin width. It must be positive and must tile the lag range; smoothing is never offered, so the only way to change the temporal resolution is to declare a different width.",
+          "properties": {
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "width": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "unit",
+            "width"
+          ],
+          "additionalProperties": false
+        },
+        "statistic": {
+          "type": "string",
+          "enum": [
+            "raw_pair_count",
+            "weighted_pair_sum",
+            "target_rate_per_reference_event",
+            "correlation_coefficient"
+          ],
+          "description": "The per-bin quantity. `raw_pair_count` has no denominator. `target_rate_per_reference_event` divides by the reference events and the bin width. `correlation_coefficient` is the Pearson correlation of the two binned trains and requires the per-train event counts and an effective duration; it is refused when those are absent."
+        },
+        "edgeCorrection": {
+          "type": "string",
+          "enum": [
+            "none",
+            "eligible_reference_events",
+            "valid_overlap_only"
+          ],
+          "description": "`none` leaves the finite-window taper in the figure, disclosed. `eligible_reference_events` divides by the reference events whose lag-shifted bin lies inside the window. `valid_overlap_only` is the Pearson variant over the overlapping bins."
+        },
+        "normalization": {
+          "type": "string",
+          "enum": [
+            "mean_rate_per_recorded_sender",
+            "total_event_rate"
+          ],
+          "description": "How a pre-binned rate was formed, so it can be re-derived and checked. `mean_rate_per_recorded_sender` divides the pair count by the reference-event denominator and the bin width; `total_event_rate` divides by the bin width alone."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty"
+        }
+      },
+      "required": [
+        "pairScope",
+        "lagRange",
+        "bins",
+        "statistic"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "semanticValidators": [
+    {
+      "id": "provenance.no_caller_assurance"
+    },
+    {
+      "id": "provenance.note_safe_display"
+    },
+    {
+      "id": "unit.canonical_code"
+    },
+    {
+      "id": "unit.dimension_match"
+    },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/eventTimes/values",
+            "/data/eventSenderIds"
+          ],
+          [
+            "/data/counts",
+            "/data/rates/values"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/recordedSenderIds"
+        ]
+      }
+    },
+    {
+      "id": "window.valid",
+      "parameters": {
+        "pointer": "/data/window"
+      }
+    },
+    {
+      "id": "bins.strictly_increasing"
+    },
+    {
+      "id": "events.within_window"
+    },
+    {
+      "id": "events.sender_universe_declared"
+    },
+    {
+      "id": "correlogram.lag_range_valid"
+    },
+    {
+      "id": "correlogram.statistic_denominator"
+    },
+    {
+      "id": "rate.denominator_positive"
+    },
+    {
+      "id": "rate.verify_normalization"
+    },
+    {
+      "id": "uncertainty.valid"
+    },
+    {
+      "id": "uncertainty.supported_variant"
+    }
+  ],
+  "renderer": {
+    "id": "figure.correlogram",
+    "revision": 1
+  },
+  "budgets": {
+    "maxObservations": 500000,
+    "maxVisibleMarks": 20001,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": [
+      "none"
+    ],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+  "provenance": {
+    "requiredSourceFields": [
+      "kind"
+    ]
+  },
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "LAG_ORIENTATION",
+    "ZERO_LAG_SELF_PAIRS_EXCLUDED",
+    "PRE_BINNED_INPUT",
+    "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+    "MISSING_VALUES_PRESENT",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "UNIT_CONVERTED",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+  "accessibility": {
+    "summaryTemplate": "Correlogram ({correlationKind}) of target {targetLabel} relative to reference {referenceLabel}. Positive lag means the target follows the reference. Lag axis {lagMin} to {lagMax} {lagUnit} in {binCount} bins of {binWidth} {lagUnit}; the zero-lag bin is centred on zero and spans {zeroBinStart} to {zeroBinEnd} {lagUnit}. Statistic: {statistic} in {valueUnit}. Denominator: {denominatorStatement}. {referenceEventCount} reference events and {targetEventCount} target events over {observationDuration} {timeUnit}. {pairsCounted} pairs counted; {pairsOutsideLagRange} pairs fell outside the lag range and are not counted. Self-pair treatment: {selfPairStatement}. Edge correction: {edgeCorrection}. Values range from {valueMin} to {valueMax}. {uncertaintyStatement}",
+    "tableColumns": [
+      {
+        "key": "lagBinStart",
+        "header": "Lag bin start",
+        "description": "Inclusive lower edge: centre minus half a bin width."
+      },
+      {
+        "key": "lagBinCenter",
+        "header": "Lag centre",
+        "description": "The lag this bin is centred on. Positive means the target follows the reference."
+      },
+      {
+        "key": "lagBinEnd",
+        "header": "Lag bin end",
+        "description": "Exclusive upper edge, except for the final bin."
+      },
+      {
+        "key": "pairCount",
+        "header": "Pairs",
+        "description": "Exact integer count of ordered (reference, target) pairs whose lag falls in this bin. This is the raw observation everything else is derived from."
+      },
+      {
+        "key": "eligibleReferenceEvents",
+        "header": "Eligible reference events",
+        "description": "Reference events whose lag-shifted bin lies inside the observation window. Equal to the reference event count when the edge correction is none."
+      },
+      {
+        "key": "denominator",
+        "header": "Denominator",
+        "description": "The exact denominator used for this bin under the declared statistic. Empty for raw_pair_count and weighted_pair_sum, which have none."
+      },
+      {
+        "key": "value",
+        "header": "Value",
+        "description": "Re-derived and verified from the pair count and the denominator. Empty where the denominator is zero and the statistic is undefined."
+      },
+      {
+        "key": "valueUnit",
+        "header": "Unit"
+      },
+      {
+        "key": "sampleCount",
+        "header": "Overlap bins (n)",
+        "description": "The number of overlapping bin pairs used for a Pearson coefficient at this lag. Empty for the other statistics."
+      },
+      {
+        "key": "uncertaintyLower",
+        "header": "Uncertainty lower"
+      },
+      {
+        "key": "uncertaintyUpper",
+        "header": "Uncertainty upper"
+      }
+    ]
+  },
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "elephant.spike_train_correlation.cross_correlation_histogram",
+      "version": "1.2.1",
+      "status": "not_run",
+      "notes": "Elephant's CCH is the intended differential oracle, but it is only an oracle once the conventions are reconciled parameter for parameter: it correlates BinnedSpikeTrains rather than enumerating event pairs, its `window` is expressed in bins, its `border_correction` is the classical triangular correction that this contract deliberately does not offer, and `cross_correlation_coefficient=True` normalizes over the whole train rather than over the valid overlap. Until every one of those is matched bin for bin, agreement would be luck and disagreement would be uninformative. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+  "adapters": [
+    {
+      "system": "nest.spike_recorder",
+      "status": "supported",
+      "notes": "Two selected trains plus their declared sender universes. The adapter must state which senders were pooled into each train; it may never infer a train's universe from the senders that happened to spike."
+    },
+    {
+      "system": "nest.correlation_detector",
+      "status": "partial",
+      "notes": "delta_tau, tau_max, Tstart and Tstop map to binWidth, tauMax and the window. Both channels are required: `count_histogram` becomes pairCounts so the numerator stays auditable, and `histogram` (the sum of products of the two channel weights) may become the weighted values. The detector's treatment of a source connected to BOTH channels is not inferred: the caller must declare selfPairTreatment, and a source that kept its self-pairs is refused. The detector's channel-0/channel-1 orientation must be mapped to reference/target explicitly, because a swap silently mirrors the lag axis."
+    },
+    {
+      "system": "neo.SpikeTrain",
+      "status": "supported",
+      "notes": "t_start/t_stop map to the shared window and the unit is taken from the quantity, never guessed. Two SpikeTrains recorded over different intervals must be intersected by the caller first."
+    },
+    {
+      "system": "nwb.Units.spike_times",
+      "status": "partial",
+      "notes": "The caller must select the unit rows for each train explicitly and declare the recording interval; NWB does not state which units were pooled into an analysis."
+    },
+    {
+      "system": "elephant.cross_correlation_histogram",
+      "status": "rejected",
+      "notes": "There is no adapter that imports an Elephant CCH as authoritative. Elephant output may enter only through the generic pre-binned modes, with the lag axis, orientation, self-pair treatment and normalization declared explicitly - otherwise Elephant's defaults would become Cortexel's semantics without anyone deciding that they should."
+    }
+  ],
+  "migration": {
+    "legacyIds": [
+      "nest.correlogram"
+    ],
+    "notes": "The legacy payload carried a caller-selected `zero_lag_policy` of 'included' or 'excluded_self_pairs' - an honesty flag chosen by the caller rather than a fact computed by the algorithm. Migration therefore cannot upgrade a legacy autocorrelogram that declared 'included': Cortexel cannot un-count self-pairs it did not form, and blocks with MIGRATION_INFORMATION_MISSING rather than relabelling a centre bin that is inflated by exactly the event count. Legacy also lacked the reference-event denominator, the declared sender universes, and the per-event weights, and carried a free unit string for the weighted statistic; each is requested rather than guessed."
+  },
+  "owner": "Sepehr Mahmoudian",
+  "changePolicy": [
+    "Changing the lag sign convention (lag = t_target - t_reference) is MAJOR. Every stored figure would silently mirror.",
+    "Changing the zero-lag bin geometry from centred-on-zero to edge-aligned is MAJOR: it moves every coincidence into a different bin.",
+    "Changing the half-open bin rule or the final-edge inclusion is MAJOR.",
+    "Changing the self-pair rule, in either auto or cross mode, is MAJOR.",
+    "Changing any statistic's denominator, dimensionality, or unit is MAJOR.",
+    "Changing which statistic/mode combinations are legal is MAJOR.",
+    "Adding a statistic, an edge correction, or a pair scope is MINOR.",
+    "Adding an uncertainty variant is MINOR."
+  ],
+  "knownLimitations": [
+    "The pairwise budget is the binding limit, not the observation limit: two trains of about 7,000 events each already reach the standard profile's 50,000,000-pair preflight bound, and larger trains are refused rather than attempted.",
+    "The unit registry has no code for the product of two simulator-defined weights. A weighted_pair_sum is carried under `nest:weight`, whose simulator_defined dimension forbids conversion and pooling, but that code understates it: the quantity is a weight SQUARED in the simulator's terms.",
+    "No disclosure id exists for a pooled multi-unit train. The pooled sender universe is stated in the summary and the table, but no mandatory footer line announces that an autocorrelogram is multi-unit; the registry gap is recorded rather than papered over with a caller note.",
+    "No disclosure id exists for a pre-binned histogram whose source kept its self-pairs, so such input is refused outright instead of being drawn with a caveat that the registry cannot express.",
+    "The figure refuses to compact. Merging adjacent lag bins would widen the bin width, which IS the scientific parameter of a correlogram: a 1 ms coincidence peak merged into 5 ms bins becomes a broad hump indistinguishable from slow rate co-modulation. Oversized lag axes are refused, not summarized.",
+    "Pre-binned input cannot be re-binned or re-oriented. Cortexel checks the arithmetic that connects the counts to the values; it cannot check that the source binned or oriented them the way the request declares.",
+    "A correlogram is a co-occurrence statistic. Connectivity, causality, and significance are outside it, and Cortexel adds no significance band that would suggest otherwise.",
+    "The pre-binned rate check reuses the shared rate vocabulary: recordedSenderCount carries the per-reference-event denominator and normalization its form, so rate.verify_normalization re-derives target_rate_per_reference_event from the integer pair counts.",
+    "Raw events are supplied as one pooled, window-shared stream (eventTimes, eventSenderIds, recordedSenderIds) with the reference and target event counts declared separately; the auto/cross distinction is a data-shape fact, not a caller-selected mode."
+  ],
+  "examples": {
+    "valid": [
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.correlogram"
+        },
+        "data": {
+          "mode": "events",
+          "eventTimes": {
+            "kind": "time",
+            "unit": "ms",
+            "values": [
+              1,
+              2,
+              5
+            ]
+          },
+          "eventSenderIds": [
+            "1",
+            "1",
+            "2"
+          ],
+          "recordedSenderIds": [
+            "1",
+            "2"
+          ],
+          "window": {
+            "start": 0,
+            "stop": 10,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          }
+        },
+        "parameters": {
+          "pairScope": "single_pair",
+          "lagRange": {
+            "unit": "ms",
+            "min": -3,
+            "max": 3
+          },
+          "bins": {
+            "unit": "ms",
+            "width": 1
+          },
+          "statistic": "raw_pair_count",
+          "edgeCorrection": "none",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "single_trial"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.correlogram"
+        },
+        "data": {
+          "mode": "prebinned",
+          "binEdges": {
+            "unit": "ms",
+            "edges": [
+              -2.5,
+              -1.5,
+              -0.5,
+              0.5,
+              1.5,
+              2.5
+            ]
+          },
+          "counts": [
+            4,
+            10,
+            0,
+            10,
+            4
+          ],
+          "rates": {
+            "kind": "firing_rate",
+            "unit": "Hz",
+            "values": [
+              1000,
+              2500,
+              0,
+              2500,
+              1000
+            ]
+          },
+          "recordedSenderCount": 4,
+          "selfPairTreatment": "excluded_by_source",
+          "window": {
+            "start": 0,
+            "stop": 1000,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          }
+        },
+        "parameters": {
+          "pairScope": "single_pair",
+          "lagRange": {
+            "unit": "ms",
+            "min": -2,
+            "max": 2
+          },
+          "bins": {
+            "unit": "ms",
+            "width": 1
+          },
+          "statistic": "target_rate_per_reference_event",
+          "edgeCorrection": "none",
+          "normalization": "mean_rate_per_recorded_sender",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_computed"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "recorderId": "correlation_detector_1"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.correlogram"
+        },
+        "data": {
+          "mode": "events",
+          "eventTimes": {
+            "kind": "time",
+            "unit": "ms",
+            "values": [
+              1,
+              2,
+              5
+            ]
+          },
+          "eventSenderIds": [
+            "1",
+            "1",
+            "2"
+          ],
+          "recordedSenderIds": [
+            "1",
+            "2"
+          ],
+          "referenceEventCount": 20,
+          "targetEventCount": 18,
+          "effectiveDuration": {
+            "kind": "duration",
+            "unit": "ms",
+            "value": 10
+          },
+          "window": {
+            "start": 0,
+            "stop": 10,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          }
+        },
+        "parameters": {
+          "pairScope": "single_pair",
+          "lagRange": {
+            "unit": "ms",
+            "min": -3,
+            "max": 3
+          },
+          "bins": {
+            "unit": "ms",
+            "width": 1
+          },
+          "statistic": "correlation_coefficient",
+          "edgeCorrection": "valid_overlap_only",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "single_trial"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "why": "The recorded-sender universe repeats an id. An ambiguous sender identity must fail before selection or binding can resolve it two different ways, so ids.unique refuses the duplicated recorded id.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "events",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                1,
+                2
+              ]
+            },
+            "eventSenderIds": [
+              "1",
+              "1"
+            ],
+            "recordedSenderIds": [
+              "1",
+              "1"
+            ],
+            "window": {
+              "start": 0,
+              "stop": 10,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -3,
+              "max": 3
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 1
+            },
+            "statistic": "raw_pair_count",
+            "edgeCorrection": "none"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The source counted each event paired with itself and declared it. `included_by_source` is not an accepted self-pair treatment: Cortexel cannot subtract pairs it never formed, and the disclosure registry has no line that could honestly label the inflated centre bin, so the closed enum rejects the value structurally.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "prebinned",
+            "binEdges": {
+              "unit": "ms",
+              "edges": [
+                -2.5,
+                -1.5,
+                -0.5,
+                0.5,
+                1.5,
+                2.5
+              ]
+            },
+            "counts": [
+              4,
+              10,
+              20,
+              10,
+              4
+            ],
+            "rates": {
+              "kind": "firing_rate",
+              "unit": "Hz",
+              "values": [
+                200,
+                500,
+                1000,
+                500,
+                200
+              ]
+            },
+            "recordedSenderCount": 20,
+            "selfPairTreatment": "included_by_source",
+            "window": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -2,
+              "max": 2
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 1
+            },
+            "statistic": "target_rate_per_reference_event",
+            "edgeCorrection": "none",
+            "normalization": "mean_rate_per_recorded_sender"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "A correlation coefficient is requested from pre-binned pair counts with no effective duration and no per-train event counts. The variances it divides by are gone: the same pair counts are consistent with r = 0.05 and with r = 0.5, so correlogram.statistic_denominator refuses rather than draw a coefficient it cannot form.",
+        "expectedCode": "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "prebinned",
+            "binEdges": {
+              "unit": "ms",
+              "edges": [
+                -2.5,
+                -1.5,
+                -0.5,
+                0.5,
+                1.5,
+                2.5
+              ]
+            },
+            "counts": [
+              4,
+              10,
+              0,
+              10,
+              4
+            ],
+            "recordedSenderCount": 20,
+            "selfPairTreatment": "no_shared_event_identity",
+            "window": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -2,
+              "max": 2
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 1
+            },
+            "statistic": "correlation_coefficient",
+            "edgeCorrection": "valid_overlap_only"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "The lag bin width is zero, so the lag axis has no temporal resolution and cannot tile the range. correlogram.lag_range_valid requires a positive bin width; a zero-width bin is not a lag axis.",
+        "expectedCode": "SCIENCE_LAG_RANGE_INVALID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "events",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                1,
+                2,
+                5
+              ]
+            },
+            "eventSenderIds": [
+              "1",
+              "1",
+              "2"
+            ],
+            "recordedSenderIds": [
+              "1",
+              "2"
+            ],
+            "window": {
+              "start": 0,
+              "stop": 10,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -3,
+              "max": 3
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 0
+            },
+            "statistic": "raw_pair_count",
+            "edgeCorrection": "none"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The supplied rate does not follow from the pair count and the denominator. 4 pairs / (4 reference events * 0.001 s) is 1000 Hz, not 999 Hz. Cortexel re-derives every pre-binned value from the integer counts rather than drawing the number it was handed.",
+        "expectedCode": "SCIENCE_NORMALIZATION_UNVERIFIABLE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "prebinned",
+            "binEdges": {
+              "unit": "ms",
+              "edges": [
+                -2.5,
+                -1.5,
+                -0.5,
+                0.5,
+                1.5,
+                2.5
+              ]
+            },
+            "counts": [
+              4,
+              10,
+              0,
+              10,
+              4
+            ],
+            "rates": {
+              "kind": "firing_rate",
+              "unit": "Hz",
+              "values": [
+                999,
+                2500,
+                0,
+                2500,
+                1000
+              ]
+            },
+            "recordedSenderCount": 4,
+            "selfPairTreatment": "excluded_by_source",
+            "window": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -2,
+              "max": 2
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 1
+            },
+            "statistic": "target_rate_per_reference_event",
+            "edgeCorrection": "none",
+            "normalization": "mean_rate_per_recorded_sender"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "An event at 10.5 ms lies outside the declared [0, 10) ms window. It would still form pairs with in-window events while every denominator excludes it, so numerator and denominator would describe different windows. events.within_window refuses rather than silently dropping it.",
+        "expectedCode": "SCIENCE_EVENT_OUT_OF_WINDOW",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "events",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                1,
+                2,
+                10.5
+              ]
+            },
+            "eventSenderIds": [
+              "1",
+              "1",
+              "2"
+            ],
+            "recordedSenderIds": [
+              "1",
+              "2"
+            ],
+            "window": {
+              "start": 0,
+              "stop": 10,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -3,
+              "max": 3
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 1
+            },
+            "statistic": "raw_pair_count",
+            "edgeCorrection": "none"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`ms` is canonical but `milliseconds` is only an alias. A stable request must use the canonical code: a silent alias conversion would change the bin width - and with it the temporal resolution of the whole figure - without the caller ever seeing the number that was used.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "events",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                1,
+                2,
+                5
+              ]
+            },
+            "eventSenderIds": [
+              "1",
+              "1",
+              "2"
+            ],
+            "recordedSenderIds": [
+              "1",
+              "2"
+            ],
+            "window": {
+              "start": 0,
+              "stop": 10,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -3,
+              "max": 3
+            },
+            "bins": {
+              "unit": "milliseconds",
+              "width": 1
+            },
+            "statistic": "raw_pair_count",
+            "edgeCorrection": "none"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The legacy caller flag `zeroLagPolicy` is not a parameter of this contract. Self-pair treatment is a fact computed by the algorithm, never a caller-settable flag; the closed parameters schema makes the typo fail rather than be silently ignored.",
+        "expectedCode": "SCHEMA_UNKNOWN_PROPERTY",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "events",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                1,
+                2,
+                5
+              ]
+            },
+            "eventSenderIds": [
+              "1",
+              "1",
+              "2"
+            ],
+            "recordedSenderIds": [
+              "1",
+              "2"
+            ],
+            "window": {
+              "start": 0,
+              "stop": 10,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -3,
+              "max": 3
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 1
+            },
+            "statistic": "raw_pair_count",
+            "edgeCorrection": "none",
+            "zeroLagPolicy": "excluded_self_pairs"
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The request asserts that an independent reference comparison passed. Reference-comparison status is a library-generated fact; a caller that could set it could claim an Elephant cross-correlation oracle agreed with a figure that was never compared to anything.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.correlogram"
+          },
+          "data": {
+            "mode": "events",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                1,
+                2,
+                5
+              ]
+            },
+            "eventSenderIds": [
+              "1",
+              "1",
+              "2"
+            ],
+            "recordedSenderIds": [
+              "1",
+              "2"
+            ],
+            "window": {
+              "start": 0,
+              "stop": 10,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "pairScope": "single_pair",
+            "lagRange": {
+              "unit": "ms",
+              "min": -3,
+              "max": 3
+            },
+            "bins": {
+              "unit": "ms",
+              "width": 1
+            },
+            "statistic": "raw_pair_count",
+            "edgeCorrection": "none"
+          },
+          "source": {
+            "kind": "simulation"
+          },
+          "validation": {
+            "referenceComparison": {
+              "status": "passed"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

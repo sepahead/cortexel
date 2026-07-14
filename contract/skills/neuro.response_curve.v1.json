@@ -1,0 +1,1952 @@
+{
+  "id": "neuro.response_curve",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Input-response curve across declared conditions",
+
+  "purpose": {
+    "canonicalQuestion": "How does a declared response statistic vary with a declared controlled input across an explicitly declared set of conditions, with every repeat, its sample count, and every exclusion accounted for?",
+    "cannotEstablish": [
+      "That the input CAUSED the response. Conditions are compared, not randomized; a monotone curve is equally consistent with an uncontrolled covariate that co-varied with condition order (a seed schedule, a warm-up, a parameter changed alongside the input).",
+      "The response at any input level that was not run. There is no interpolation between conditions and no extrapolation beyond them; the guide line has no value between two points and is not a prediction.",
+      "A threshold, a slope, a gain, a rheobase, or an EC50. Revision 1 renders no fitted model, and a threshold read off a guide line is an artifact of the condition spacing, not a measurement.",
+      "That the curve is smooth or monotone between conditions. A response that is strongly non-monotone at an unsampled input would produce exactly this figure.",
+      "That the repeats are independent. Repeats sharing a seed, a network realization, or a cell are not n independent samples, and a standard error computed as if they were is too small by an unknown factor. Cortexel records the declared design; it cannot check it.",
+      "That a peak response is a property of the system rather than of the bin width or bandwidth used to estimate it. Halving the bin width can roughly double a reported peak rate.",
+      "That the response values are raw. Cortexel cannot detect a baseline subtraction, a normalization, or any other transform the caller applied before sending.",
+      "That the conditions are comparable. They are usually separate simulation runs, and nothing in this contract can verify that they shared a model, a network realization, or a seed policy."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "The condition universe is DECLARED and is the x-axis domain. A condition with no usable repeat keeps its place on the axis and is drawn as an explicit gap; it is never deleted, which would silently shorten the curve and, on a categorical axis, move every remaining point.",
+      "Conditions are ordered by their declared axis: `numeric` orders by input value ascending, stable on ties by declared order; `ordinal` uses the declared order exactly; `nominal` has no order, is laid out as declared, and is never connected by a line.",
+      "Rows are NOT assumed grouped or sorted. Observations are stably sorted by (condition order, repeatId, original ordinal) before any derivation; the original ordinal and its digest are retained in the artifact.",
+      "A repeat in which no event occurred is a MEASURED ZERO for `mean_firing_rate`, `peak_firing_rate`, and `event_count`: its response is 0, never null and never absent.",
+      "For `first_spike_latency` a repeat with no event is UNDEFINED: its response is null, never 0. A latency of zero would claim the system responded instantaneously.",
+      "Omitting a silent repeat is forbidden in both cases. Dropping the zero-response repeats at low input is what turns a graded threshold into a false jump discontinuity, and dropping the no-spike repeats biases a latency curve toward the fast repeats that happened to fire.",
+      "Missing responses (null) are EXCLUDED from the estimator and COUNTED. The excluded count per condition reaches the table, the summary, and the disclosure. There is no caller-settable exclusion policy because there is only one honest one.",
+      "A (conditionId, repeatId) pair is unique. Two rows claiming to be the same repeat are an ambiguity in the source, not two replicates; averaging them would double-weight one measurement and, under a paired design, would break the pairing.",
+      "Units are canonical codes only. The input unit's dimension must match the input kind, and the response unit's dimension must match the kind the declared response method requires. Conversions performed during canonicalization are recorded and disclosed; there is no hard-coded factor of 1000.",
+      "The measurement window is half-open [start, stop) by default, matching neuro.population_rate, so a rate re-derived here from raw counts and a rate computed there over the same window agree rather than differing by one boundary event.",
+      "A numeric input axis carries an explicit scale. `log10` with a zero or negative input is REFUSED (RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN), never clipped: clipping the zero-input control condition deletes the baseline the rest of the curve is read against."
+    ],
+    "derivation": [
+      "estimator `mean`: the arithmetic mean of the RETAINED repeats, summed with Neumaier compensated summation over the stably sorted repeats so that TypeScript and Python agree and the result does not depend on the order the caller happened to send. The denominator is the retained count n, never the attempted count.",
+      "estimator `median`: for odd n the central order statistic; for even n the arithmetic mean of the two central order statistics. Stated because the alternative (lower median) shifts every even-n point downward and would silently flatten a curve.",
+      "estimator `trimmed_mean`: k = floor(n * trimFraction) values are removed from EACH tail after sorting, so `trimFraction: 0.1` removes 20% of the repeats in total. n - 2k must be >= 1 or the condition has no estimate. This matches scipy.stats.trim_mean(proportiontocut); a per-total reading would halve the trimming.",
+      "mean_firing_rate MAY carry `response.audit.eventCounts` (the exact integer count per repeat) alongside the request-level `recordedSenderCount` denominator, so rate = eventCount / (recordedSenderCount * windowDuration_seconds) stays reconstructable and auditable. Revision 1 checks that the denominator is a positive integer; it does not yet re-derive each repeat's rate from the counts (see knownLimitations).",
+      "peak_firing_rate: the caller declares the basis (bin width, or kernel shape, bandwidth, and causality) that produced the peak. A peak instantaneous rate has no value independent of that basis. Cortexel does not compute the peak and refuses to render one whose basis is undeclared.",
+      "first_spike_latency: a duration from the declared reference (stimulus onset, or the measurement-window start) to the first event inside the window. A repeat with no event has no latency and is null.",
+      "No fit, no interpolation, no smoothing across conditions. On an ordered axis a straight guide line joins consecutive condition estimates and is labelled a guide; on a nominal axis no line is drawn at all, because connecting unordered categories asserts an order the data does not have.",
+      "The guide line is not a caller choice. It follows deterministically from the declared axis, so there is no request that draws a line through unordered categories and no request that suppresses a line the ordering justifies.",
+      "Uncertainty is never fabricated. Cortexel renders the supplied UncertaintyV1 after checking it, and where none is supplied it says so rather than drawing bare points that imply precision.",
+      "Complexity: O(n log n) in repeats for the stable sort and the order statistics, O(c) in conditions for the estimates."
+    ],
+    "scopeRules": [
+      "The condition universe must be declared, non-empty, and complete: it IS the x-axis domain, and a condition absent from it cannot appear in the figure.",
+      "Every observation's conditionId must be a member of that universe. Cortexel never silently extends a universe the caller declared.",
+      "Repeat identity is unique within a condition. Under `paired`, the same repeatId across conditions denotes the same replicate; Cortexel never imputes a missing pair and never reorders repeats to manufacture one.",
+      "Aggregates mode is a summary. The raw repeats cannot be recovered from it, so spread, outliers, and pairing claims are refused rather than approximated, and the aggregation is disclosed on the figure.",
+      "In aggregates mode `repeatDesign` is a caller declaration Cortexel cannot check, because the repeat identities are not present. It is recorded and rendered as a declared fact, never as a verified one.",
+      "Conditions are typically separate simulation runs. The contract cannot verify that they share a model, a network realization, or a seed policy; a curve assembled from incomparable runs is structurally valid and scientifically worthless."
+    ],
+    "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "Either raw repeats (every attempted repeat is a row, including the ones whose response was zero or undefined) or per-condition aggregates (a summary that carries its own sample and exclusion counts). The response METHOD lives on the response object itself, not in parameters, because it states what the numbers ARE — and because it is then bound STRUCTURALLY to the quantity kind and to the basis fields it requires, rather than by a conditional a reader has to reconstruct.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "repeats" },
+            "measurementWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "The interval over which every response was measured. A mean rate without its window is not auditable, and whether a pre-stimulus period is included changes the number."
+            },
+            "conditions": {
+              "type": "object",
+              "description": "The declared condition universe. It is the x-axis domain: a condition with no usable repeat stays on the axis and is drawn as a gap, never removed.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": { "const": "numeric" },
+                    "ids": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+                      "maxItems": 1000
+                    },
+                    "input": {
+                      "type": "object",
+                      "description": "The controlled input level of each condition, parallel to `ids`. Any quantity kind is allowed — an injected current, a drive rate, a conductance, an orientation angle — and the unit's dimension must match the kind.",
+                      "properties": {
+                        "kind": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind" },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": { "type": "array", "items": { "type": "number" }, "minItems": 1, "maxItems": 1000 },
+                        "label": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+                        "scale": {
+                          "type": "string",
+                          "enum": ["linear", "log10"],
+                          "description": "The scale on which the input was meaningfully spaced. `log10` with a zero or negative input is refused (RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN) rather than clipped, because clipping a zero-input control condition deletes the baseline."
+                        }
+                      },
+                      "required": ["kind", "unit", "values", "scale"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["axis", "ids", "input"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": {
+                      "type": "string",
+                      "enum": ["ordinal", "nominal"],
+                      "description": "`ordinal` conditions have a meaningful declared order and may carry a guide line. `nominal` conditions have none and are NEVER connected: a line across unordered categories asserts an order that does not exist."
+                    },
+                    "ids": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+                      "maxItems": 1000
+                    },
+                    "inputLabel": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                      "description": "What distinguishes the conditions. A categorical axis has no numeric input and therefore no unit; it must not be given one."
+                    }
+                  },
+                  "required": ["axis", "ids"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "observations": {
+              "type": "object",
+              "description": "One row per ATTEMPTED repeat. A repeat that produced no event is still a row: for count-like methods its response is a measured 0, for a latency it is null.",
+              "properties": {
+                "conditionIds": {
+                  "type": "array",
+                  "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                  "minItems": 1,
+                  "maxItems": 20000
+                },
+                "repeatIds": {
+                  "type": "array",
+                  "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                  "minItems": 1,
+                  "maxItems": 20000,
+                  "description": "Replicate identity: a trial, a seed, or a cell. Under a paired design the SAME id recurs across conditions and is how the pairing is expressed, so ids are unique within a condition rather than globally."
+                },
+                "response": {
+                  "type": "object",
+                  "description": "What the response numbers ARE. Each branch binds `method` to the quantity kind it must carry and to the fields that method cannot be interpreted without: a latency is never typed as a rate, and a peak never arrives without the estimator that produced it. There is no branch in which a basis, a latency reference, or a count audit attaches to a method it cannot describe.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "description": "A mean firing rate over the measurement window. Optionally carries the exact integer counts and the recorded-sender denominator so Cortexel can RE-DERIVE each repeat's rate instead of trusting the supplied number.",
+                      "properties": {
+                        "method": { "const": "mean_firing_rate" },
+                        "kind": { "enum": ["firing_rate"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 20000,
+                          "description": "null means the repeat was attempted and its response is UNDEFINED. It is never a zero, never interpolated, and never dropped from the attempted count. A repeat that fired no spike has response 0, not null."
+                        },
+                        "audit": {
+                          "type": "object",
+                          "description": "Optional per-repeat count audit. It is legal ONLY here, because a count and the request-level `recordedSenderCount` denominator can reconstruct a MEAN rate and cannot reconstruct a peak, a latency, or a voltage.",
+                          "properties": {
+                            "eventCounts": {
+                              "type": "array",
+                              "items": { "type": ["integer", "null"], "minimum": 0 },
+                              "minItems": 1,
+                              "maxItems": 20000,
+                              "description": "Exact integer counts, parallel to the observation rows. An entry is null exactly where the response is null."
+                            }
+                          },
+                          "required": ["eventCounts"],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "A peak instantaneous rate. The basis is REQUIRED: a peak is a property of the estimator as much as of the system, and halving the bin width can roughly double it.",
+                      "properties": {
+                        "method": { "const": "peak_firing_rate" },
+                        "kind": { "enum": ["firing_rate"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        },
+                        "basis": {
+                          "type": "object",
+                          "description": "The estimator that produced the peak. Cortexel does not compute the peak and refuses to render one whose basis is undeclared.",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": { "const": "binned_count" },
+                                "binWidth": {
+                                  "type": "object",
+                                  "description": "The bin width whose maximum count produced the peak.",
+                                  "properties": {
+                                    "kind": { "enum": ["duration"] },
+                                    "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                                    "value": { "type": "number", "exclusiveMinimum": 0 }
+                                  },
+                                  "required": ["kind", "unit", "value"],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["estimator", "binWidth"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": { "const": "kernel" },
+                                "shape": { "type": "string", "enum": ["gaussian", "boxcar", "exponential"] },
+                                "bandwidth": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": { "enum": ["duration"] },
+                                    "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                                    "value": { "type": "number", "exclusiveMinimum": 0 }
+                                  },
+                                  "required": ["kind", "unit", "value"],
+                                  "additionalProperties": false
+                                },
+                                "causal": {
+                                  "type": "boolean",
+                                  "description": "A causal kernel uses only the past. A symmetric kernel lets an event raise the estimate before it happened, which moves a peak earlier."
+                                }
+                              },
+                              "required": ["estimator", "shape", "bandwidth", "causal"],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values", "basis"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "The latency of the first event inside the window. The reference is REQUIRED: a latency is a duration from a reference, and without it the number is not a latency.",
+                      "properties": {
+                        "method": { "const": "first_spike_latency" },
+                        "kind": { "enum": ["duration"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 20000,
+                          "description": "A repeat with no event is null. It is NEVER 0, which would claim the system responded instantaneously, and it is never dropped from the attempted count."
+                        },
+                        "latencyReference": {
+                          "type": "string",
+                          "enum": ["stimulus_onset", "measurement_window_start"]
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values", "latencyReference"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "An exact integer event count, not a rate.",
+                      "properties": {
+                        "method": { "const": "event_count" },
+                        "kind": { "enum": ["count"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "A membrane-voltage response must be declared as a MEMBRANE voltage, not as a generic voltage: only the source can say that the signal IS a membrane potential.",
+                      "properties": {
+                        "method": { "enum": ["mean_membrane_voltage", "peak_membrane_voltage"] },
+                        "kind": { "enum": ["membrane_voltage"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "description": "A declared model state variable, which carries its own dimension.",
+                      "properties": {
+                        "method": { "const": "mean_state_variable" },
+                        "kind": { "enum": ["state_variable"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 20000
+                        },
+                        "variableLabel": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                          "description": "Which state variable it is. A state variable with no name is an unlabelled axis."
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values", "variableLabel"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": ["conditionIds", "repeatIds", "response"],
+              "additionalProperties": false
+            },
+            "recordedSenderCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Optional. The RECORDED sender universe the audited rates were averaged over, including senders that never fired — the denominator for `observations.response.audit`. Counting only the senders that spiked inflates every per-neuron rate, always in the flattering direction. Checked positive by rate.denominator_positive."
+            }
+          },
+          "required": ["mode", "measurementWindow", "conditions", "observations"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "aggregates" },
+            "measurementWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            },
+            "conditions": {
+              "type": "object",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": { "const": "numeric" },
+                    "ids": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+                      "maxItems": 1000
+                    },
+                    "input": {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind" },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": { "type": "array", "items": { "type": "number" }, "minItems": 1, "maxItems": 1000 },
+                        "label": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+                        "scale": { "type": "string", "enum": ["linear", "log10"] }
+                      },
+                      "required": ["kind", "unit", "values", "scale"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["axis", "ids", "input"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "axis": { "type": "string", "enum": ["ordinal", "nominal"] },
+                    "ids": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                      "minItems": 1,
+                      "maxItems": 1000
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+                      "maxItems": 1000
+                    },
+                    "inputLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" }
+                  },
+                  "required": ["axis", "ids"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "aggregates": {
+              "type": "object",
+              "description": "Exactly one row per declared condition, POSITIONALLY bound to conditions.ids in the declared order. Positional binding is deliberate: it makes it impossible to omit a condition, which is the way an inconvenient low-input point usually disappears.",
+              "properties": {
+                "response": {
+                  "type": "object",
+                  "description": "The per-condition estimate. The method is bound to its quantity kind exactly as it is for raw repeats; a summary does not earn a weaker binding. There is no count audit here: an aggregate cannot be re-derived from per-repeat counts that were not supplied.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": { "const": "mean_firing_rate" },
+                        "kind": { "enum": ["firing_rate"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "description": "The estimate for each condition. null means no repeat yielded a usable response — the condition keeps its place on the axis with no point drawn."
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": { "const": "peak_firing_rate" },
+                        "kind": { "enum": ["firing_rate"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "basis": {
+                          "type": "object",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": { "const": "binned_count" },
+                                "binWidth": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": { "enum": ["duration"] },
+                                    "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                                    "value": { "type": "number", "exclusiveMinimum": 0 }
+                                  },
+                                  "required": ["kind", "unit", "value"],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": ["estimator", "binWidth"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "estimator": { "const": "kernel" },
+                                "shape": { "type": "string", "enum": ["gaussian", "boxcar", "exponential"] },
+                                "bandwidth": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": { "enum": ["duration"] },
+                                    "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                                    "value": { "type": "number", "exclusiveMinimum": 0 }
+                                  },
+                                  "required": ["kind", "unit", "value"],
+                                  "additionalProperties": false
+                                },
+                                "causal": { "type": "boolean" }
+                              },
+                              "required": ["estimator", "shape", "bandwidth", "causal"],
+                              "additionalProperties": false
+                            }
+                          ]
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values", "basis"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": { "const": "first_spike_latency" },
+                        "kind": { "enum": ["duration"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "latencyReference": {
+                          "type": "string",
+                          "enum": ["stimulus_onset", "measurement_window_start"]
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values", "latencyReference"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": { "const": "event_count" },
+                        "kind": { "enum": ["count"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 1000,
+                          "description": "An estimator over exact counts need not itself be an integer: the mean of 3 and 4 counted events is 3.5, and rounding it would be a fabricated measurement."
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": { "enum": ["mean_membrane_voltage", "peak_membrane_voltage"] },
+                        "kind": { "enum": ["membrane_voltage"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        }
+                      },
+                      "required": ["method", "kind", "unit", "values"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "method": { "const": "mean_state_variable" },
+                        "kind": { "enum": ["state_variable"] },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "values": {
+                          "type": "array",
+                          "items": { "type": ["number", "null"] },
+                          "minItems": 1,
+                          "maxItems": 1000
+                        },
+                        "variableLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" }
+                      },
+                      "required": ["method", "kind", "unit", "values", "variableLabel"],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "sampleCounts": {
+                  "type": "array",
+                  "items": { "type": ["integer", "null"], "minimum": 1 },
+                  "minItems": 1,
+                  "maxItems": 1000,
+                  "description": "n RETAINED by the estimator for each condition; null exactly where the response is null. An aggregate without n is uninterpretable: the mean of 1 repeat draws identically to the mean of 50."
+                },
+                "excludedCounts": {
+                  "type": "array",
+                  "items": { "type": "integer", "minimum": 0 },
+                  "minItems": 1,
+                  "maxItems": 1000,
+                  "description": "Repeats ATTEMPTED but excluded because the response was undefined. attempted = sampleCount + excludedCount, so the denominator the caller actually used is auditable instead of assumed."
+                }
+              },
+              "required": ["response", "sampleCounts", "excludedCounts"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["mode", "measurementWindow", "conditions", "aggregates"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "parameters": {
+      "type": "object",
+      "description": "The estimator is a closed union: a trim fraction exists exactly where a trimmed mean does. A trim fraction with no trimmed mean would be an instruction silently ignored, and a trimmed mean with no fraction has no definition.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "curveId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+            "curveLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+            "responseMethod": {
+              "type": "string",
+              "enum": ["mean_firing_rate", "peak_firing_rate", "first_spike_latency", "event_count", "mean_membrane_voltage", "peak_membrane_voltage", "mean_state_variable"],
+              "description": "What the response VALUE is, declared in parameters so the semantic layer can read it (validator response_curve.estimator_declared). It must name the same method carried by the response object; a curve whose y axis has no defined meaning is not a result."
+            },
+            "estimator": {
+              "type": "string",
+              "enum": ["mean", "median"],
+              "description": "In repeats mode Cortexel computes this from the retained repeats. In aggregates mode it names the estimator that produced the supplied values. Either way the figure states which one it is, because a mean and a median of a skewed rate distribution are different numbers."
+            },
+            "repeatDesign": {
+              "type": "string",
+              "enum": ["independent", "paired"],
+              "description": "`paired` means the same replicate (seed, cell, network realization) appears at every condition, so the repeats are not independent samples and an interval computed as if they were is too narrow. Declared, recorded, and rendered; never inferred."
+            },
+            "uncertainty": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+              "description": "Required. Per condition, parallel to conditions.ids. `{kind: none, reason}` is a valid and honest answer; leaving it out is not, because bare points imply a precision nobody stated."
+            }
+          },
+          "required": ["curveId", "estimator", "responseMethod", "repeatDesign", "uncertainty"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "curveId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+            "curveLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+            "responseMethod": {
+              "type": "string",
+              "enum": ["mean_firing_rate", "peak_firing_rate", "first_spike_latency", "event_count", "mean_membrane_voltage", "peak_membrane_voltage", "mean_state_variable"],
+              "description": "What the response VALUE is, declared in parameters so the semantic layer can read it (validator response_curve.estimator_declared). It must name the same method carried by the response object; a curve whose y axis has no defined meaning is not a result."
+            },
+            "estimator": { "const": "trimmed_mean" },
+            "trimFraction": {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 0.5,
+              "description": "floor(n * trimFraction) values are removed from EACH tail, so 0.1 removes 20% of the repeats in total. The per-tail reading is the scipy convention; the per-total reading would trim half as much."
+            },
+            "repeatDesign": {
+              "type": "string",
+              "enum": ["independent", "paired"]
+            },
+            "uncertainty": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty"
+            }
+          },
+          "required": ["curveId", "estimator", "responseMethod", "trimFraction", "repeatDesign", "uncertainty"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/conditions/ids",
+            "/data/conditions/labels",
+            "/data/conditions/input/values",
+            "/data/aggregates/response/values",
+            "/data/aggregates/sampleCounts",
+            "/data/aggregates/excludedCounts",
+            "/parameters/uncertainty/values",
+            "/parameters/uncertainty/lower",
+            "/parameters/uncertainty/upper",
+            "/parameters/uncertainty/sampleCount"
+          ],
+          [
+            "/data/observations/conditionIds",
+            "/data/observations/repeatIds",
+            "/data/observations/response/values",
+            "/data/observations/response/audit/eventCounts"
+          ]
+        ]
+      }
+    },
+    { "id": "ids.unique", "parameters": { "pointers": ["/data/conditions/ids"] } },
+    { "id": "window.valid", "parameters": { "pointer": "/data/measurementWindow" } },
+    { "id": "response_curve.estimator_declared" },
+    { "id": "rate.denominator_positive" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.response_curve", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 20000,
+    "maxVisibleMarks": 50000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "AGGREGATE_WITHOUT_RAW_REPEATS",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "MISSING_VALUES_PRESENT",
+    "UNIT_CONVERTED",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Response curve {curveLabel}: {responseMethod} in {responseUnit} against {inputLabel} in {inputUnit} on a {inputScale} scale, across {conditionCount} {axisKind} conditions. Estimator {estimator} over {retainedCount} of {attemptedCount} repeats; {excludedCount} repeats had an undefined response and were excluded. Repeat design: {repeatDesign}. Response basis: {responseBasis}. Measurement window {windowStart} to {windowStop} {timeUnit}. Response ranges from {responseMin} to {responseMax} {responseUnit}. {uncertaintyStatement} {aggregationStatement} {lineStatement}",
+    "tableColumns": [
+      { "key": "conditionId", "header": "Condition" },
+      { "key": "conditionLabel", "header": "Condition label" },
+      { "key": "input", "header": "Input", "description": "The controlled input level. Empty on an ordinal or nominal axis, which has no numeric input and must not be given one." },
+      { "key": "inputUnit", "header": "Input unit" },
+      { "key": "repeatId", "header": "Repeat", "description": "Present on a raw repeat row. Empty on an aggregate row." },
+      { "key": "response", "header": "Response", "description": "The measured response of this repeat, or the estimate on an aggregate row." },
+      { "key": "responseUnit", "header": "Response unit" },
+      { "key": "responseMethod", "header": "Method", "description": "What the number is: a mean rate, a peak rate, a first-spike latency, a count, a voltage, or a declared state variable." },
+      { "key": "missing", "header": "Undefined", "description": "True when the repeat was attempted and its response is undefined. It is never rendered as zero and never removed from the attempted count." },
+      { "key": "estimator", "header": "Estimator" },
+      { "key": "sampleCount", "header": "n retained", "description": "Repeats entering the estimator. Never the attempted count." },
+      { "key": "excludedCount", "header": "n excluded", "description": "Repeats attempted whose response was undefined." },
+      { "key": "responseBasis", "header": "Basis", "description": "The bin width or kernel that produced a peak response, and the measurement window otherwise. A peak rate has no value independent of it." },
+      { "key": "uncertaintyKind", "header": "Uncertainty" },
+      { "key": "uncertaintyValue", "header": "Uncertainty value", "description": "The DISPERSION (standard deviation or standard error) for this condition. A dispersion is not an interval: it is reported here and never in the bound columns, because +/- one SD is not a coverage statement." },
+      { "key": "uncertaintyLower", "header": "Uncertainty lower", "description": "The lower BOUND of an interval variant. Empty for a dispersion." },
+      { "key": "uncertaintyUpper", "header": "Uncertainty upper", "description": "The upper BOUND of an interval variant. Empty for a dispersion." },
+      { "key": "uncertaintyBasis", "header": "Uncertainty basis", "description": "What the uncertainty was computed over (trials, neurons, ensemble members, bootstrap draws, replicates), plus the level or quantiles and the method where the variant carries them." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "elephant.statistics.mean_firing_rate",
+      "version": "1.2.1",
+      "status": "not_run",
+      "notes": "Elephant divides the event count of ONE SpikeTrain by (t_stop - t_start); Cortexel additionally divides by the recorded-sender count, so the comparison is only parameter-for-parameter meaningful with recordedSenderCount = 1 and an identical half-open window. scipy.stats.trim_mean is the intended oracle for the trimming convention, where the fraction is removed from EACH tail. The pinned reference environment has NOT been executed here, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    {
+      "system": "nest.spike_recorder",
+      "status": "partial",
+      "notes": "The recorder yields the events of one repeat, so it can produce the response. It cannot produce the INPUT: the injected current or drive rate lives in the protocol that set up the sweep, not in the recorder output. The caller must declare the condition input; the adapter never reads it back out of a device name."
+    },
+    {
+      "system": "nest.multimeter",
+      "status": "partial",
+      "notes": "Supplies mean or peak membrane voltage per repeat. The adapter must select the recorded variable explicitly and may not assume V_m."
+    },
+    {
+      "system": "neo.Block",
+      "status": "partial",
+      "notes": "Condition and repeat identity must be selected explicitly from annotations. The adapter will not guess which annotation is the stimulus level, and it never coerces an annotation label into a numeric input."
+    },
+    {
+      "system": "nwb.icephys",
+      "status": "planned",
+      "notes": "The icephys stimulus/response tables map naturally onto conditions and repeats, but the mapping is not implemented and is therefore not claimed."
+    }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.rate_response"],
+    "notes": "The legacy payload assumed the response was a firing rate, carried the input as a bare number with no unit or kind, had no repeat identity, no sample count, and no way to distinguish a repeat that fired zero spikes from a repeat that was dropped. Migration therefore REQUIRES an input kind and unit, a response method, and either the raw repeats or an explicit sample and exclusion count, and it BLOCKS with MIGRATION_INFORMATION_MISSING rather than inventing them — inferring the denominator from the repeats that happened to respond is exactly the error that manufactures a false threshold."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the rule that a zero-event repeat is a measured zero for rate and count methods, and undefined for a latency, is MAJOR.",
+    "Changing the trimmed-mean convention from per-tail to per-total is MAJOR: it halves the trimming and moves every point.",
+    "Changing the even-n median convention is MAJOR.",
+    "Changing the mean-rate denominator, or the half-open measurement-window convention it depends on, is MAJOR.",
+    "Changing when a guide line is drawn, or making it a caller choice, is MAJOR: the line's meaning is bound to the declared axis ordering.",
+    "Changing the positional binding of aggregate rows to the declared condition order is MAJOR.",
+    "Moving `method` off the response object, or loosening the structural binding between a method, its quantity kind, and its required basis, is MAJOR.",
+    "Adding a response method, or a supported uncertainty variant, is MINOR.",
+    "Accepting a caller-supplied fit is MINOR only if it ships with a registered disclosure marking the fit as unverified by Cortexel. Without one it stays forbidden."
+  ],
+
+  "knownLimitations": [
+    "Revision 1 renders no fitted model. Cortexel has no optimizer with which to re-derive a fit, and the disclosure registry has no rule that would mark a caller-supplied fit as unverified — an unmarked fitted line is indistinguishable from measured data, so the figure refuses it.",
+    "Revision 1 accepts no baseline subtraction or response normalization. A baseline-corrected response is a different quantity and there is no registered disclosure to mark it; a caller who pre-transforms must say so in source.declaredLimitations, where it is rendered as an unverified caller statement.",
+    "The 1.0 registry has no reference-in-universe rule aimable at an arbitrary field; `events.sender_universe_declared` is hard-wired to recordedSenderIds/eventSenderIds, not a condition axis, so it is NOT declared here. A conditionId absent from conditions.ids is therefore not machine-checked in 1.0; `reference.in_universe` is proposed for 1.1.",
+    "The registry has no composite-key uniqueness rule, and `ids.unique` enforces only flat whole-array uniqueness. A repeatId legitimately recurs across conditions under a paired design, so `ids.unique` is applied to conditions.ids only; within-condition repeat uniqueness is NOT machine-checked in 1.0 (ids.unique_composite proposed for 1.1).",
+    "Per-repeat rate re-derivation is not machine-checked in 1.0: the registry's `rate.verify_normalization` re-derives from bin edges (the population_rate shape) and does not fit a per-repeat window audit, so it is not declared here. `rate.denominator_positive` still checks the recorded-sender denominator is a positive integer; a window-based audit rule is proposed for 1.1.",
+    "Unit-bearing uncertainty variants (SD, SE, confidence/quantile interval, ensemble range) are declared supported, but in the 1.0 build `unit.dimension_match` walks the uncertainty object and rejects its variant `kind` as a quantity kind. The living valid examples therefore use `{kind: none}`; excluding that subtree is proposed for 1.1.",
+    "The registry has no cross-array value-equality rule. Where the supplied uncertainty carries its own sampleCount it must be elementwise identical to aggregates.sampleCounts — they describe the same repeats — but only the lengths are machine-checked in 1.0.",
+    "Cortexel does not re-derive a supplied dispersion from the raw repeats: `uncertainty.valid` checks bounds, ordering, units, lengths, and positive sample counts, not that a supplied standard error equals that of the repeats in the same request. `uncertainty.verify_from_repeats` is proposed for 1.1.",
+    "No disclosure rule surfaces a peak response's dependence on the smoothing that produced it. KERNEL_SMOOTHED_RATE cannot be reused: its text asserts a continuous line rather than steps, which is false of a curve. `PEAK_DEPENDS_ON_SMOOTHING` is proposed for 1.1.",
+    "Because no such disclosure exists, the peak basis is instead required structurally and surfaced in the deterministic summary and the `responseBasis` table column rather than in the footer.",
+    "This figure declares no compaction policy. Above the visible-mark budget it fails rather than thinning repeats: extrema sampling would fabricate an inflated spread, and merging repeats would fabricate measurements that were never run. Supply aggregates instead, and accept the aggregation disclosure."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.response_curve"
+        },
+        "data": {
+          "mode": "repeats",
+          "measurementWindow": {
+            "start": 0,
+            "stop": 1000,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          },
+          "recordedSenderCount": 1,
+          "conditions": {
+            "axis": "numeric",
+            "ids": [
+              "I000",
+              "I100",
+              "I200"
+            ],
+            "labels": [
+              "0 pA",
+              "100 pA",
+              "200 pA"
+            ],
+            "input": {
+              "kind": "current",
+              "unit": "pA",
+              "values": [
+                0,
+                100,
+                200
+              ],
+              "label": "Injected current",
+              "scale": "linear"
+            }
+          },
+          "observations": {
+            "conditionIds": [
+              "I000",
+              "I000",
+              "I100",
+              "I100",
+              "I200",
+              "I200"
+            ],
+            "repeatIds": [
+              "r1",
+              "r2",
+              "r1",
+              "r2",
+              "r1",
+              "r2"
+            ],
+            "response": {
+              "method": "mean_firing_rate",
+              "kind": "firing_rate",
+              "unit": "Hz",
+              "values": [
+                0,
+                0,
+                12,
+                14,
+                31,
+                29
+              ],
+              "audit": {
+                "eventCounts": [
+                  0,
+                  0,
+                  12,
+                  14,
+                  31,
+                  29
+                ]
+              }
+            }
+          }
+        },
+        "parameters": {
+          "curveId": "fi_curve",
+          "curveLabel": "iaf_psc_alpha F-I",
+          "estimator": "mean",
+          "responseMethod": "mean_firing_rate",
+          "repeatDesign": "independent",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "single_trial"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.response_curve"
+        },
+        "data": {
+          "mode": "aggregates",
+          "measurementWindow": {
+            "start": 0,
+            "stop": 200,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          },
+          "conditions": {
+            "axis": "ordinal",
+            "ids": [
+              "low",
+              "mid",
+              "high"
+            ],
+            "labels": [
+              "Low",
+              "Medium",
+              "High"
+            ],
+            "inputLabel": "Stimulus intensity"
+          },
+          "aggregates": {
+            "response": {
+              "method": "first_spike_latency",
+              "kind": "duration",
+              "unit": "ms",
+              "values": [
+                null,
+                42.5,
+                18.25
+              ],
+              "latencyReference": "stimulus_onset"
+            },
+            "sampleCounts": [
+              null,
+              8,
+              10
+            ],
+            "excludedCounts": [
+              10,
+              2,
+              0
+            ]
+          }
+        },
+        "parameters": {
+          "curveId": "latency_curve",
+          "estimator": "median",
+          "responseMethod": "first_spike_latency",
+          "repeatDesign": "paired",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_computed"
+          }
+        },
+        "source": {
+          "kind": "literature_extraction",
+          "datasetId": "fig3b",
+          "declaredNote": "Digitized from Figure 3B; values read to three significant figures."
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.response_curve"
+        },
+        "data": {
+          "mode": "repeats",
+          "measurementWindow": {
+            "start": 0,
+            "stop": 1000,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          },
+          "conditions": {
+            "axis": "nominal",
+            "ids": [
+              "control",
+              "gaba_block",
+              "ampa_block"
+            ],
+            "labels": [
+              "Control",
+              "GABA-A blocked",
+              "AMPA blocked"
+            ],
+            "inputLabel": "Pharmacological condition"
+          },
+          "observations": {
+            "conditionIds": [
+              "control",
+              "control",
+              "control",
+              "gaba_block",
+              "gaba_block",
+              "gaba_block",
+              "ampa_block",
+              "ampa_block",
+              "ampa_block"
+            ],
+            "repeatIds": [
+              "seed1",
+              "seed2",
+              "seed3",
+              "seed1",
+              "seed2",
+              "seed3",
+              "seed1",
+              "seed2",
+              "seed3"
+            ],
+            "response": {
+              "method": "mean_firing_rate",
+              "kind": "firing_rate",
+              "unit": "Hz",
+              "values": [
+                8.2,
+                7.6,
+                8.9,
+                41.3,
+                44.8,
+                39.7,
+                1.1,
+                0.8,
+                1.4
+              ]
+            }
+          }
+        },
+        "parameters": {
+          "curveId": "pharma_response",
+          "curveLabel": "Rate by pharmacological condition",
+          "estimator": "mean",
+          "responseMethod": "mean_firing_rate",
+          "repeatDesign": "paired",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_computed"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.response_curve"
+        },
+        "data": {
+          "mode": "repeats",
+          "measurementWindow": {
+            "start": 0,
+            "stop": 500,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          },
+          "conditions": {
+            "axis": "numeric",
+            "ids": [
+              "g010",
+              "g100",
+              "g1000"
+            ],
+            "labels": [
+              "10 nS",
+              "100 nS",
+              "1000 nS"
+            ],
+            "input": {
+              "kind": "conductance",
+              "unit": "nS",
+              "values": [
+                10,
+                100,
+                1000
+              ],
+              "label": "Peak synaptic conductance",
+              "scale": "log10"
+            }
+          },
+          "observations": {
+            "conditionIds": [
+              "g010",
+              "g010",
+              "g100",
+              "g100",
+              "g1000",
+              "g1000"
+            ],
+            "repeatIds": [
+              "t1",
+              "t2",
+              "t1",
+              "t2",
+              "t1",
+              "t2"
+            ],
+            "response": {
+              "method": "first_spike_latency",
+              "kind": "duration",
+              "unit": "ms",
+              "values": [
+                null,
+                null,
+                61.5,
+                58.25,
+                12.75,
+                13.5
+              ],
+              "latencyReference": "stimulus_onset"
+            }
+          }
+        },
+        "parameters": {
+          "curveId": "latency_vs_conductance",
+          "estimator": "trimmed_mean",
+          "responseMethod": "first_spike_latency",
+          "trimFraction": 0.1,
+          "repeatDesign": "paired",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_computed"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.response_curve"
+        },
+        "data": {
+          "mode": "aggregates",
+          "measurementWindow": {
+            "start": 200,
+            "stop": 1200,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          },
+          "conditions": {
+            "axis": "numeric",
+            "ids": [
+              "d100",
+              "d200",
+              "d400",
+              "d800"
+            ],
+            "labels": [
+              "100 Hz",
+              "200 Hz",
+              "400 Hz",
+              "800 Hz"
+            ],
+            "input": {
+              "kind": "firing_rate",
+              "unit": "Hz",
+              "values": [
+                100,
+                200,
+                400,
+                800
+              ],
+              "label": "Poisson drive rate",
+              "scale": "linear"
+            }
+          },
+          "aggregates": {
+            "response": {
+              "method": "peak_firing_rate",
+              "kind": "firing_rate",
+              "unit": "Hz",
+              "values": [
+                45,
+                120,
+                180,
+                60
+              ],
+              "basis": {
+                "estimator": "kernel",
+                "shape": "gaussian",
+                "bandwidth": {
+                  "kind": "duration",
+                  "unit": "ms",
+                  "value": 5
+                },
+                "causal": false
+              }
+            },
+            "sampleCounts": [
+              10,
+              10,
+              10,
+              10
+            ],
+            "excludedCounts": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "parameters": {
+          "curveId": "peak_vs_drive",
+          "curveLabel": "Peak rate vs drive (non-monotone: depolarization block at 800 Hz)",
+          "estimator": "mean",
+          "responseMethod": "peak_firing_rate",
+          "repeatDesign": "independent",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_computed"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "why": "The response array is one shorter than the observation rows, so values would pair with rows by position and every repeat after the gap would slide to the previous condition — the 31 Hz response measured at 200 pA would be drawn at 100 pA, moving the apparent threshold a full step. Cortexel never pairs parallel arrays by best effort.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000",
+                "I200",
+                "I200"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2",
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "mean_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  0,
+                  31
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "fi_curve",
+            "estimator": "mean",
+            "responseMethod": "mean_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "An aggregate row with no sample count is uninterpretable: the mean of one repeat draws exactly like the mean of fifty, and at n = 1 there is no standard error at all. Cortexel refuses the aggregate rather than drawing an anonymous point; sampleCounts is a required member of the aggregates object.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "aggregates",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "aggregates": {
+              "response": {
+                "method": "mean_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  30
+                ]
+              },
+              "excludedCounts": [
+                0,
+                0
+              ]
+            }
+          },
+          "parameters": {
+            "curveId": "fi_curve",
+            "estimator": "mean",
+            "responseMethod": "mean_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The method says first-spike latency but the response is typed as a firing rate. Latency and rate move in OPPOSITE directions, so this figure would rise where the true response falls: an 18.5 ms latency would be drawn and labelled 18.5 Hz. The method branch fixes the quantity kind, so this cannot degrade into a label-level mistake.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000",
+                "I200",
+                "I200"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2",
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "first_spike_latency",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  null,
+                  null,
+                  18.5,
+                  17.25
+                ],
+                "latencyReference": "stimulus_onset"
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "latency_curve",
+            "estimator": "median",
+            "responseMethod": "first_spike_latency",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "A peak instantaneous rate is supplied with no basis. A peak is a property of the estimator as much as of the system — halving the bin width can roughly double it — so a peak whose bin width or kernel is undeclared has no value that could be compared with anything. The basis is a required member of the peak branch, not an optional annotation.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000",
+                "I200",
+                "I200"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2",
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "peak_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  0,
+                  180,
+                  172
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "peak_curve",
+            "estimator": "mean",
+            "responseMethod": "peak_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The input is declared as a current but carries a voltage unit. The x axis would claim an injected current while holding a membrane potential, so every current read off the curve — a rheobase, a threshold, a working point — would not be a current at all. Two arrays are not comparable merely because both are numbers.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "mV",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000",
+                "I200",
+                "I200"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2",
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "mean_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  0,
+                  31,
+                  29
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "fi_curve",
+            "estimator": "mean",
+            "responseMethod": "mean_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`pA` is canonical; `picoamp` is only an accepted alias. A stable request must use the canonical code. The alias is rejected with a repair rather than silently converted, because a silent conversion rescales an axis by a factor the caller never sees and never checks.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "picoamp",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000",
+                "I200",
+                "I200"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2",
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "mean_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  0,
+                  31,
+                  29
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "fi_curve",
+            "estimator": "mean",
+            "responseMethod": "mean_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "Two conditions are declared with the same id `I000`. A duplicated condition identity is an ambiguity in the design, not two conditions: axis placement, selection, and the aggregate-to-condition binding could each resolve it differently, so it must fail before any point binds to it.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I000"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  100
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "mean_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  12
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "fi_curve",
+            "estimator": "mean",
+            "responseMethod": "mean_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "A credible interval asserts a calibrated posterior. Nothing in a response curve establishes calibration, and structural validity never can: this figure renders no posterior, so the variant is refused rather than drawn as a band that would be read as one. The supported variants are none, SD, SE, confidence interval, quantile interval, and ensemble range.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000",
+                "I200",
+                "I200"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2",
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "mean_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  0,
+                  31,
+                  29
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "fi_curve",
+            "estimator": "mean",
+            "responseMethod": "mean_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "credible_interval",
+              "unit": "Hz",
+              "lower": [
+                0,
+                28
+              ],
+              "upper": [
+                0,
+                32
+              ],
+              "level": 0.95,
+              "method": "highest density interval",
+              "coverage": "pointwise",
+              "basis": "trials"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The request tries to assert that an independent reference comparison passed. Validation results are library-generated facts and are never caller-settable — and for this skill the external oracle has NOT been run, so a stored artifact carrying that claim would be a false statement about the evidence behind the figure. The field is rejected, not ignored.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.response_curve"
+          },
+          "data": {
+            "mode": "repeats",
+            "measurementWindow": {
+              "start": 0,
+              "stop": 1000,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            },
+            "conditions": {
+              "axis": "numeric",
+              "ids": [
+                "I000",
+                "I200"
+              ],
+              "input": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  200
+                ],
+                "scale": "linear"
+              }
+            },
+            "observations": {
+              "conditionIds": [
+                "I000",
+                "I000",
+                "I200",
+                "I200"
+              ],
+              "repeatIds": [
+                "r1",
+                "r2",
+                "r1",
+                "r2"
+              ],
+              "response": {
+                "method": "mean_firing_rate",
+                "kind": "firing_rate",
+                "unit": "Hz",
+                "values": [
+                  0,
+                  0,
+                  31,
+                  29
+                ]
+              }
+            }
+          },
+          "parameters": {
+            "curveId": "fi_curve",
+            "estimator": "mean",
+            "responseMethod": "mean_firing_rate",
+            "repeatDesign": "independent",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_computed"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          },
+          "validation": {
+            "referenceComparison": {
+              "status": "passed"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

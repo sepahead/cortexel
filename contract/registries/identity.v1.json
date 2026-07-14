@@ -1,0 +1,70 @@
+{
+  "registry": "cortexel-identity",
+  "version": "1.0",
+  "description": "The coordinated identity model.\n\nThe pre-1.0 tree carried package 0.5.0, VizSpec 1.3.0, skill-axis 1.6.0, manifest 8, and constraint-language 8 as five uncoordinated numbers. Multiple identities are legitimate — but only when each one's MEANING, compatibility rule, and source set are explicit. A bare version tuple with no axis label is not an identity, it is a number.\n\nSo: no public 1.0 object contains `specVersion`, `skillAxisVersion`, or `manifestVersion: \"8\"`. Every axis below is named, and `getBuildIdentity()` returns all of them together.",
+
+  "axes": [
+    {
+      "id": "packageVersion",
+      "meaning": "The npm/PyPI SemVer of the installed artifact.",
+      "compatibility": "Standard SemVer for the API surface. It says NOTHING about the contract: two package versions may share one contract, and a patch release may never change contract acceptance."
+    },
+    {
+      "id": "requestContract",
+      "value": "cortexel-figure-request/1.0",
+      "meaning": "The shape and acceptance rules of what a caller authors.",
+      "compatibility": "An incompatible request shape or an incompatible semantic change requires 2.0. Additive optional fields with unchanged defaults remain 1.x."
+    },
+    {
+      "id": "artifactContract",
+      "value": "cortexel-figure-artifact/1.0",
+      "meaning": "The shape of what Cortexel emits and archives.",
+      "compatibility": "A 1.x writer emits the current 1.x revision. A 1.x reader supports every 1.x revision. A stored artifact is never rewritten in place."
+    },
+    {
+      "id": "contractDigest",
+      "meaning": "SHA-256 over the canonicalized normative source set in contract/. This is the identity that actually matters for reproducibility: it changes whenever anything normative changes.",
+      "format": "sha256:<64 lowercase hex>",
+      "compatibility": "ANY normative change changes it. An additive, compatible skill revision may keep the contract at 1.0 while still changing the digest — that is correct and intended."
+    },
+    {
+      "id": "catalogDigest",
+      "meaning": "SHA-256 over the STABLE catalog only. Kept separate from the contract digest so that editing an experimental capability's description cannot change the stable identity.",
+      "format": "sha256:<64 lowercase hex>"
+    },
+    {
+      "id": "skillRevision",
+      "meaning": "A per-skill positive integer, bumped when that skill's accepted meaning or output changes.",
+      "compatibility": "A request may pin a revision. A build that does not provide it REFUSES rather than approximating."
+    },
+    {
+      "id": "rendererRevision",
+      "meaning": "A per-renderer positive integer, bumped when its output changes."
+    },
+    {
+      "id": "sourceRevision",
+      "meaning": "The git commit a release was built from, or the literal `unreleased-worktree`.",
+      "rule": "A dirty or non-tag build reports `unreleased-worktree` and `release: false`. It never pretends to know a release commit — a build that lies about its provenance is worse than one with no provenance."
+    }
+  ],
+
+  "digestSourceSet": {
+    "include": ["contract/meta/**", "contract/registries/**", "contract/schemas/**", "contract/skills/**"],
+    "exclude": [
+      "contract/manifest.v1.json — it cannot contain its own hash",
+      "contract/conformance/** — vectors TEST the contract, they are not the contract",
+      "contract/README.md — prose, not normative structure"
+    ],
+    "algorithm": [
+      "Canonicalize each JSON file with RFC 8785 (JSON Canonicalization Scheme).",
+      "SHA-256 each canonical UTF-8 byte sequence.",
+      "Sort entries by repository-relative path (UTF-8 code-unit order).",
+      "SHA-256 the RFC 8785 canonical JSON of that sorted inventory.",
+      "A short prefix may be DISPLAYED to a human. It is never an API value."
+    ],
+    "prohibited": [
+      "Any volatile field — a timestamp, a build host, an absolute path — in a normative input. It would make the digest unreproducible, which would make it useless.",
+      "A non-cryptographic or truncated hash as the normative identity."
+    ]
+  }
+}

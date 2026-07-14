@@ -1,0 +1,1892 @@
+{
+  "id": "network.delay_distribution",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Synaptic delay distribution over a declared edge population",
+  "purpose": {
+    "canonicalQuestion": "What is the distribution of synaptic transmission delays over an explicitly declared population of connections, counted either once per synapse row or once per ordered node pair, within a network scope that states exactly which connections were observed?",
+    "cannotEstablish": [
+      "That any signal is actually transmitted with these latencies. A delay is a declared model parameter of a connection; the latency of influence also depends on weight, membrane time constant, and network state, none of which is in this figure.",
+      "The functional latency between two populations. A synaptic delay is structural; the peak lag of a cross-correlogram is a network property and can differ from the modal delay by more than the delay's own spread.",
+      "Anything about connections that were not supplied. The histogram describes exactly the rows in the declared selection. A row filtered upstream is invisible, and Cortexel cannot see that it ever existed.",
+      "The global delay distribution from a rank-local or sampled snapshot. It is complete for the retained edges only; extrapolating requires that retention be independent of delay, which Cortexel cannot check and which a prefix of NEST's rank/thread-ordered rows does not satisfy.",
+      "The per-pair distribution from a per-synapse histogram, or the reverse. Where multiplicity covaries with delay -- as under a distance-dependent rule, where near pairs get both more contacts and shorter delays -- the two differ systematically and neither can be recovered from the other.",
+      "That an alternating comb in the bars is a property of the network. When the bin width is not an integer multiple of the simulator's resolution, consecutive bins straddle different numbers of grid delays, and a uniform delay population is drawn as structure.",
+      "That these were the delays in effect at any time other than the declared snapshot. A delay-modifying operation or structural plasticity between two snapshots of one run changes every value here.",
+      "Anything about synaptic strength, sign, or receptor. Weights may ride along on the rows; they never affect, filter, or group a delay, and two synapses with identical delay can differ by orders of magnitude in drive.",
+      "That the distribution has any functional form. Cortexel draws the empirical histogram: it fits nothing and tests nothing, and a mean delay is a summary of the rows supplied, not a claim about the rule that generated them.",
+      "In prebinned mode, that the counts are the counts of the declared selection. Cortexel re-derives the normalization and checks the conservation identity, but it never saw a row: it cannot verify the counting policy, the endpoints, or the positivity of a single delay."
+    ]
+  },
+  "science": {
+    "normalization": [
+      "Connection rows are NOT assumed to arrive in any order: NEST's GetConnections returns them in a rank- and thread-dependent order. A histogram is order-invariant, but edge identity, pair aggregation and the per-edge sidecar are not, so rows are stably sorted by (sourceId, targetId, delay, original ordinal) before ordinal identity is assigned. The original order and its digest are retained.",
+      "Duplicate identical rows are PRESERVED. Two connections between the same ordered pair are two synapses -- a multapse, not a duplicate-entry error. Under per_connection each contributes its own observation; deduplicating them would silently convert the figure into a per-pair distribution and shift its mass wherever multiplicity covaries with delay.",
+      "A delay is a finite, strictly positive time. Zero, negative and -0 are refused with SCIENCE_DELAY_NONPOSITIVE. NEST's minimum delay is one resolution tick, and a zero-delay synapse is not representable in an event-driven scheduler that relies on min-delay lookahead; a 0 in a delay column is a default, not a measurement.",
+      "A null delay is REFUSED, never skipped. A row whose delay was not read cannot enter the histogram, and dropping it silently shrinks the edge population by an amount nobody sees. Supply the delay or remove the row from the declared selection.",
+      "Delay values carry kind `delay` and a time-dimension unit. `nest:delay` is accepted and maps to milliseconds exactly -- unlike `nest:weight`, whose dimension is simulator-defined and never convertible. The bin unit must share the time dimension; conversion is a single typed step, never a hard-coded factor of 1000, and it is disclosed.",
+      "Bins are half-open [lo, hi), except that a value exactly at the FINAL edge falls in the final bin -- otherwise the largest observed delay would always be silently dropped. Bins are ordered by ascending lower edge, always; never by frequency.",
+      "Boundary membership carries a bounded binary64 allowance: a value within a few ulp of an edge is treated as lying ON that edge and is assigned to the upper bin under the half-open rule. The allowance is relative to the two magnitudes compared and NEVER grows with the bin index -- a tolerance that scaled with the index would move real sub-boundary delays into the wrong bin.",
+      "Simulator delays are quantized to the resolution grid: NEST rounds every delay to a multiple of h (default 0.1 ms). The population is therefore supported on a lattice, and `sourceResolution` is a declared fact that reaches the artifact, the table and the summary so a reader can see the lattice the bins are cutting.",
+      "Weights, synapse models and edge ids may ride along on the rows. A weight NEVER affects, filters, or groups a delay. A selection is expressed by supplying exactly the rows it contains, because a filter Cortexel applied silently would change the population the histogram claims to describe.",
+      "Self-connections are ordinary connections: an autapse's delay is a real delay and is counted like any other. There is deliberately no autapse filter; excluding autapses means not supplying those rows."
+    ],
+    "derivation": [
+      "The contributing row set R is exactly the supplied connection rows. Both endpoints must lie in their declared universes, so R is the selected rectangle and never an implicit superset. Complexity O(e) for endpoint binding, O(e log e) for the canonical sort, O(e) for binning, O(b) for normalization; memory O(e).",
+      "per_connection: every row contributes exactly one delay observation. Three parallel connections from u to v with delays 1.0, 1.5 and 2.0 ms contribute three observations. This is the weighted-by-synapse reading -- the one the raw rows literally support -- but it is never DEFAULTED: countingPolicy is a required parameter, because silently assuming it is the failure this figure exists to refuse.",
+      "per_ordered_pair: each ordered (source, target) pair with at least one row contributes exactly ONE observation, obtained by `multapseAggregation` over that pair's rows. This is the weighted-by-pair reading. It answers a different question from per_connection and the two histograms differ whenever multiplicity covaries with delay.",
+      "multapseAggregation is min, mean, max, or no_aggregation. `sum` is refused: the sum of three 1.5 ms delays is 4.5 ms, a number with the units of time and no physical referent -- no synapse carries it and no spike experiences it. `mean` is an explicit summary of the pair, not a delay any synapse has, and the table says so.",
+      "no_aggregation ASSERTS at most one row per ordered pair and FAILS with SCIENCE_AGGREGATION_REQUIRED when that is untrue. There is no `last row wins`: which row won would depend on the rank/thread order NEST happened to return, so the same run would produce two different figures.",
+      "A `mean` aggregate sums a pair's delays in the canonical sorted order and divides by the row count. Binary64 addition is not associative, so the order is fixed to keep the TypeScript and Python results bit-identical rather than merely close.",
+      "Grouping partitions R by the declared synapse model BEFORE the counting policy is applied. Collapsing pairs first and then attributing the survivor to a model would make each group's contents depend on the aggregation instead of on the model. At most 8 groups; beyond that the request is refused with RENDER_SERIES_LIMIT_EXCEEDED rather than minting indistinguishable colours.",
+      "Delays of different synapse models MAY be pooled: a NEST delay is always a time and maps safely to SI, whereas a NEST weight's physical dimension depends on the model. Grouping is therefore optional here, where for network.weight_distribution the equivalent split is a correctness requirement.",
+      "Binning: membership is decided on the delay expressed in the DECLARED bin unit after a single conversion, on half-open bins with a final-edge-inclusive last bin.",
+      "count: the exact non-negative integer number of contributing OBSERVATIONS per bin -- connection rows under per_connection, ordered pairs under per_ordered_pair. The table names which, because a count of synapses and a count of pairs are different numbers and both are called `count` in the wild.",
+      "probability: p(bin) = count / N_binned, where N_binned is the number of observations of that GROUP that fell inside the bin range. The sum is re-derived and checked to 1 within 1e-9 absolute.",
+      "density: d(bin) = count / (N_binned * w), where w is the LINEAR bin width in the declared bin unit; the unit is the reciprocal of the bin unit (/ms for millisecond bins). Sum of d_i * w_i = 1 within tolerance. Density is admissible here -- unlike for a degree -- because a delay is a genuinely continuous physical quantity.",
+      "The LINEAR width is used even when xScale is `log`. A logarithmic axis is a presentation choice and must never change a derived value. Dividing by a log-width yields a density with respect to log-delay; drawn as if it were p(delay) it moves the apparent mode by an amount that depends only on the chosen bin spacing.",
+      "probability and density are normalized WITHIN each group, so every group's mass is 1 and the relative SIZE of the groups cannot be read from the drawn curves. The per-group observation and connection counts are therefore required columns of the table and required facts of the accessible summary.",
+      "An empty histogram (N_binned = 0) is NEVER normalized. probability and density are undefined with a zero denominator, so the figure reports an explicit empty state (RENDER_NO_DATA) rather than a flat, NaN, or fabricated distribution.",
+      "outOfRangeDelays = reject: every contributing delay must fall inside [firstEdge, lastEdge]; otherwise the request is refused. The refusal reuses SCIENCE_BIN_EDGES_INVALID -- the edges are invalid for this data -- because the registry has no dedicated bin-range code (see knownLimitations).",
+      "outOfRangeDelays = exclude_and_report: out-of-range delays are excluded from the bins, counted as separate under-range and over-range totals, and carried into the artifact, the table and the summary. N_binned is then strictly less than the contributing observation count, so the drawn values describe only the binned subset. This is why the caller must choose explicitly.",
+      "Conservation, per group: sum(binCounts) + underRangeCount + overRangeCount == observationCount, and under per_connection observationCount equals the number of counted rows in that group. Cortexel asserts this and refuses rather than draw a histogram it cannot reconcile with the rows it counted.",
+      "prebinned: Cortexel did not observe the rows, so it verifies instead of counting. Counts must be exact integers, their length must equal the bin count derived from `parameters.bins`, the conservation identity must hold against consideredConnectionCount, and any supplied probability or density values are RE-DERIVED from the counts and checked. Cortexel re-computes rather than trusts.",
+      "The artifact carries the complete per-connection delay table as a content-addressed sidecar in connections mode, so any bar can be traced back to the exact synapses inside it. In prebinned mode there is no such sidecar and the figure discloses that Cortexel never saw an edge."
+    ],
+    "scopeRules": [
+      "Every request declares a NetworkScopeV1. A connection snapshot has no meaning without one, and a delay distribution is a claim about which connections were observed.",
+      "single_process: supported for both counting policies. The process observed every connection, so the scope is complete by construction.",
+      "global_merged: supported only when mergedRanks covers 0..worldSize-1 exactly once. A partial rank set stays partial, fails with SCOPE_MERGE_INCOMPLETE, and is never upgraded to a global claim.",
+      "mpi_target_rank_local: SUPPORTED, and the difference from network.degree_distribution is scientific, not an oversight. A rank holds every connection whose TARGET it owns, so the local target rectangle is complete: a delay is a per-edge value, not a per-node aggregate that shrinks when rows are missing. localTargetUniverseComplete must be true and every declared target must be one this rank owns.",
+      "A rank-local delay distribution is a LOCAL claim and is disclosed as one. Whether the local targets are representative of the network depends on the virtual-process mapping and on whether delay covaries with target id -- which Cortexel cannot know and does not assume.",
+      "sampled: SUPPORTED as a statement about the RETAINED edges only, and disclosed with SAMPLED_EDGES and PARTIAL_NETWORK_SCOPE. A delay survives subsetting in a way a degree does not: a degree read from a subset is a lower bound of unknown tightness, while a retained edge's delay is exactly its delay.",
+      "`deterministic_first_n` over a GetConnections result is a prefix of a rank/thread-ordered list, so it is a biased sample of delay whenever delay covaries with source, thread, or position -- which it does under any distance-dependent rule. Cortexel records and discloses the method; it cannot correct the bias and no downstream number repairs it.",
+      "The one declared node universe bounds both endpoints of the rows and need NOT be complete. A delay distribution makes no isolate or zero-degree claim, so a node that contributes no connection contributes nothing at all: this is the one figure where an incomplete node universe is harmless, and NODE_UNIVERSE_INCOMPLETE is disclosed rather than refused."
+    ],
+    "uncertaintySupport": [
+      "none",
+      "standard_deviation",
+      "standard_error",
+      "confidence_interval",
+      "quantile_interval",
+      "ensemble_range"
+    ]
+  },
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "Either the connection rows themselves, or a histogram the caller already binned. `mode` is the discriminator, and the fields of the other mode are REFUSED rather than ignored -- a field Cortexel cannot check must not be accepted as though it had been checked.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "connections",
+            "prebinned"
+          ],
+          "description": "connections: Cortexel counts and bins the delays itself from the rows. prebinned: the caller supplies bin counts and Cortexel verifies the normalization and the conservation identity instead of observing the rows. There is deliberately no raw delay-values mode: a bag of numbers with no edge linkage cannot be checked against a counting policy or an edge selection, and it offers nothing that connection rows do not."
+        },
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The nodes permitted at EITHER endpoint of a counted connection: the source and the target ends are both bound to this one declared universe, and a row whose source or target is not a member is refused with SEMANTIC_UNKNOWN_REFERENCE. It need not be complete -- this figure makes no isolate or zero-degree claim, so a node that contributes no connection contributes nothing at all. Its job is to catch a row that does not belong to the selection, such as an external generator left in a recurrent figure; under an mpi_target_rank_local scope it holds the local targets the rank owns."
+        },
+        "connections": {
+          "description": "Exactly the connections in the selection. Every multapse is its own row and is never deduplicated. A delay is REQUIRED on every row: a connection whose delay was not read cannot enter a delay histogram, and skipping it would shrink the population by an amount nobody sees.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows"
+            },
+            {
+              "type": "object",
+              "required": [
+                "delays"
+              ],
+              "properties": {
+                "delays": {
+                  "type": "object",
+                  "description": "The delay of each connection, parallel to sourceIds. No lower bound is imposed structurally: a zero or negative delay is refused by the semantic layer with SCIENCE_DELAY_NONPOSITIVE, which names the science, rather than by a bare type constraint. null is not accepted -- a missing delay is not a delay.",
+                  "properties": {
+                    "kind": {
+                      "const": "delay"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "maxItems": 500000
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "unit",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ]
+        },
+        "groupBy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "synapse_model"
+          ],
+          "description": "How the supplied rows are partitioned into histograms. It lives in `data` because it is a claim about the rows themselves: a partition Cortexel cannot see in the rows is not a partition it can verify. `synapse_model` therefore REQUIRES `connections.synapseModels`. Delays of different models may legitimately be pooled -- a NEST delay is always a time -- so grouping is optional here, unlike for weights."
+        },
+        "histogram": {
+          "type": "object",
+          "description": "A histogram the caller already computed, on the bin edges declared in `parameters.bins`. The edges are NOT restated here: two copies of one fact are two facts that can drift. `values` are the per-bin quantity named by `parameters.normalization` -- the exact integer counts under `count`, the per-group probabilities under `probability`, or the densities under `density` -- and the semantic validator `histogram.normalization_consistent` re-derives that normalization from them and refuses a set that does not sum or integrate to one; it never takes the numbers on trust.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "count",
+                "probability",
+                "probability_density"
+              ]
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 100000,
+              "description": "One value per bin; its length must equal the bin count derived from parameters.bins."
+            }
+          },
+          "required": [
+            "kind",
+            "unit",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "consideredConnectionCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The number of connection rows the caller considered before binning. It reaches the summary and the table as declared context: Cortexel never saw the rows in prebinned mode, so it cannot reconcile sum(counts) + underRangeCount + overRangeCount against it -- that conservation identity is stated by the caller, not machine-checked here."
+        },
+        "underRangeCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Observations below the first bin edge. Under `outOfRangeDelays: reject` this must be 0; a nonzero value means the bins do not cover the data the histogram claims to describe. Declared context only."
+        },
+        "overRangeCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Observations above the last bin edge. Under `outOfRangeDelays: reject` this must be 0. Declared context only."
+        },
+        "sourceResolution": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+          "description": "The simulator's time resolution, kind `duration`. Simulator delays are quantized to multiples of it, so it is what tells a reader whether the bin width cuts the lattice evenly. It is a DECLARED fact: registry v1 has no validator that can check a delay against it (see knownLimitations)."
+        },
+        "scope": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+          "description": "What this snapshot actually saw. Every scope is answerable for a delay distribution -- including rank-local and sampled, which a degree distribution cannot support -- but each carries a different claim, and the claim is disclosed rather than assumed."
+        }
+      },
+      "required": [
+        "mode",
+        "scope"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "connections"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "connections",
+              "nodeUniverse",
+              "groupBy"
+            ],
+            "not": {
+              "required": [
+                "histogram"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "prebinned"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "histogram"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "connections"
+                  ]
+                },
+                {
+                  "required": [
+                    "groupBy"
+                  ]
+                },
+                {
+                  "required": [
+                    "nodeUniverse"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "groupBy": {
+                "const": "synapse_model"
+              }
+            },
+            "required": [
+              "groupBy"
+            ]
+          },
+          "then": {
+            "required": [
+              "connections"
+            ],
+            "properties": {
+              "connections": {
+                "type": "object",
+                "required": [
+                  "synapseModels"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+          "description": "Names the edge population so two figures of the same run cannot be confused for one another."
+        },
+        "selectionLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "countingPolicy": {
+          "type": "string",
+          "enum": [
+            "per_connection",
+            "per_ordered_pair"
+          ],
+          "description": "Required; there is deliberately no schema default. per_connection: every connection row contributes one delay observation, so a multapse of three contributes three. This is the weighted-by-synapse reading and the conventional one, but it is stated explicitly rather than assumed -- an unstated counting policy is exactly what lets a per-pair figure be read as a per-synapse one. per_ordered_pair: every ordered (source, target) pair contributes one observation, obtained by multapseAggregation. The two answer different questions and diverge wherever multiplicity covaries with delay."
+        },
+        "multapseAggregation": {
+          "description": "How the parallel connections of one ordered pair are reduced to a single delay under per_ordered_pair. Required for per_ordered_pair, forbidden for per_connection. `sum` is excluded: the sum of three 1.5 ms delays is 4.5 ms, which is not a delay any synapse carries. `no_aggregation` asserts at most one row per ordered pair and fails with SCIENCE_AGGREGATION_REQUIRED if that is untrue. This is the field the semantic validator `topology.multapse_aggregation_declared` reads.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation"
+            },
+            {
+              "enum": [
+                "min",
+                "mean",
+                "max",
+                "no_aggregation"
+              ]
+            }
+          ]
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "Required, in both modes, and the single source of truth for the bin edges. Cortexel does not choose them: for a grid-quantized delay the choice is unusually consequential, because a width that is not an integer multiple of the simulator resolution draws a uniform population as an alternating comb."
+        },
+        "normalization": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",
+          "description": "count: exact integers. probability: sums to 1 over the binned observations of each group. density: integrates to 1 over the LINEAR bin widths, with a unit reciprocal to the bin unit. All three are admissible because a delay is a continuous physical quantity."
+        },
+        "outOfRangeDelays": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "exclude_and_report"
+          ],
+          "description": "What happens to a contributing delay outside [firstEdge, lastEdge]. `reject` requires the bins to cover the data. `exclude_and_report` excludes it, counts it, and discloses the under-range and over-range totals -- after which the drawn values describe only the binned subset, not the population."
+        },
+        "xScale": {
+          "type": "string",
+          "enum": [
+            "linear",
+            "log"
+          ],
+          "default": "linear",
+          "description": "Presentation only; it never changes a derived value. A delay is strictly positive, so a log axis is always defined -- but the density denominator remains the LINEAR bin width."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Dispersion across REALIZATIONS of the network. Within one realization a bin count is an exact enumeration of connections and has no sampling uncertainty, so a basis of `trials` or `neurons` is refused: delays do not vary across trials of one network."
+        }
+      },
+      "required": [
+        "selectionId",
+        "countingPolicy",
+        "bins",
+        "normalization",
+        "outOfRangeDelays"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "countingPolicy": {
+                "const": "per_ordered_pair"
+              }
+            },
+            "required": [
+              "countingPolicy"
+            ]
+          },
+          "then": {
+            "required": [
+              "multapseAggregation"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "countingPolicy": {
+                "const": "per_connection"
+              }
+            },
+            "required": [
+              "countingPolicy"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "multapseAggregation"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "semanticValidators": [
+    {
+      "id": "provenance.no_caller_assurance"
+    },
+    {
+      "id": "provenance.note_safe_display"
+    },
+    {
+      "id": "unit.canonical_code"
+    },
+    {
+      "id": "unit.dimension_match"
+    },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/delays/values",
+            "/data/connections/weights/values",
+            "/data/connections/synapseModels"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/nodeUniverse/ids",
+          "/data/connections/edgeIds"
+        ]
+      }
+    },
+    {
+      "id": "bins.strictly_increasing"
+    },
+    {
+      "id": "topology.scope_declared"
+    },
+    {
+      "id": "topology.scope_supports_claim"
+    },
+    {
+      "id": "topology.edge_endpoints_in_universe"
+    },
+    {
+      "id": "topology.delay_positive"
+    },
+    {
+      "id": "topology.multapse_aggregation_declared"
+    },
+    {
+      "id": "histogram.normalization_consistent"
+    },
+    {
+      "id": "uncertainty.valid"
+    },
+    {
+      "id": "uncertainty.supported_variant"
+    }
+  ],
+  "renderer": {
+    "id": "figure.distribution",
+    "revision": 1
+  },
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 20000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": [
+      "none",
+      "histogram_merge_adjacent"
+    ],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+  "provenance": {
+    "requiredSourceFields": [
+      "kind"
+    ]
+  },
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE",
+    "RANK_LOCAL_SCOPE",
+    "SAMPLED_EDGES",
+    "NODE_UNIVERSE_INCOMPLETE",
+    "MULTAPSE_AGGREGATED",
+    "MISSING_VALUES_PRESENT",
+    "UNIT_CONVERTED",
+    "PRE_BINNED_INPUT",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "COMPACTION_MAY_HIDE_TRANSIENTS",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+  "accessibility": {
+    "summaryTemplate": "Synaptic delay distribution for {selectionLabel}. {consideredConnectionCount} connection rows considered; counting policy {countingPolicy}{pairAggregationStatement}, giving {observationCount} {observationKind} observations in {groupCount} group(s) ({groupByStatement}). Scope: {scopeStatement}. Delays run from {delayMin} to {delayMax} {delayUnit}; declared source resolution {sourceResolution}. {binCount} bins span {binMin} to {binMax} {binUnit} on a {xScale} axis; {underRangeCount} observations fell below and {overRangeCount} above that range. Values are the {normalization} per bin, in {valueUnit}, normalized within each group. {uncertaintyStatement} {compactionStatement}",
+    "tableColumns": [
+      {
+        "key": "groupId",
+        "header": "Group",
+        "description": "The series: the synapse model when grouping is on, otherwise the selection itself. Each group is normalized within itself."
+      },
+      {
+        "key": "binStart",
+        "header": "Bin start",
+        "description": "Inclusive lower edge, in the declared bin unit."
+      },
+      {
+        "key": "binEnd",
+        "header": "Bin end",
+        "description": "Exclusive upper edge, except for the final bin, whose upper edge is inclusive."
+      },
+      {
+        "key": "binWidth",
+        "header": "Bin width",
+        "description": "The LINEAR width. It is the width used by the density denominator even when the axis is logarithmic."
+      },
+      {
+        "key": "binUnit",
+        "header": "Bin unit"
+      },
+      {
+        "key": "count",
+        "header": "Observations",
+        "description": "Exact integer count in this bin. This is the raw observation everything else is derived from; an empty bin is a measured zero, not missing data."
+      },
+      {
+        "key": "observationKind",
+        "header": "Observation kind",
+        "description": "connection under per_connection, ordered_pair under per_ordered_pair. A count of synapses and a count of pairs are different numbers and both get called `count`."
+      },
+      {
+        "key": "normalization",
+        "header": "Normalization",
+        "description": "Which quantity the value carries: count, probability, or density. Stated per row so a reader of the table alone never has to infer it from the magnitudes."
+      },
+      {
+        "key": "samplingScope",
+        "header": "Scope (sampling)",
+        "description": "The declared scope of the rows behind this group: complete, local targets only, or the retained edges of a sample with its sampling method. A partial population is stated in the table, not only in the footer."
+      },
+      {
+        "key": "probability",
+        "header": "Probability",
+        "description": "count / binned observations of this group. Present only when normalization is probability."
+      },
+      {
+        "key": "density",
+        "header": "Density",
+        "description": "count / (binned observations of this group x linear bin width). Present only when normalization is density."
+      },
+      {
+        "key": "densityUnit",
+        "header": "Density unit",
+        "description": "The reciprocal of the bin unit, e.g. /ms for millisecond bins."
+      },
+      {
+        "key": "groupObservationCount",
+        "header": "Group observations",
+        "description": "The normalization denominator for this group: the observations that fell inside the bin range."
+      },
+      {
+        "key": "consideredConnectionCount",
+        "header": "Connections considered",
+        "description": "Connection rows considered for this group before the counting policy was applied. Under per_ordered_pair it exceeds the observation count whenever the group contains a multapse."
+      },
+      {
+        "key": "excludedUnderRangeCount",
+        "header": "Excluded (below range)",
+        "description": "Observations below the first bin edge. Always reported; never silently absorbed."
+      },
+      {
+        "key": "excludedOverRangeCount",
+        "header": "Excluded (above range)",
+        "description": "Observations above the last bin edge."
+      },
+      {
+        "key": "uncertaintyLower",
+        "header": "Uncertainty lower"
+      },
+      {
+        "key": "uncertaintyUpper",
+        "header": "Uncertainty upper"
+      },
+      {
+        "key": "uncertaintyBasis",
+        "header": "Uncertainty basis",
+        "description": "Realizations only: ensemble_members, bootstrap_draws or replicates. Within one realization a bin count is exact and carries no sampling uncertainty."
+      }
+    ]
+  },
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "numpy.histogram",
+      "version": "2.1.0",
+      "status": "not_run",
+      "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle, for the delay resolution grid and for the MPI target-rank-local row semantics specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+  "adapters": [
+    {
+      "system": "nest.GetConnections",
+      "status": "supported",
+      "notes": "Supplies source, target and the per-connection `delay`, preserving every multapse as its own row. Delays come back in milliseconds and are multiples of the simulation resolution; the adapter must carry that resolution as sourceResolution and must never round, snap, or re-quantize a delay itself. Under MPI the rows are those whose TARGET the rank owns, so the adapter emits an mpi_target_rank_local scope -- and unlike an out-degree, a delay distribution over the local target rectangle remains answerable."
+    },
+    {
+      "system": "nest.synapse_model_status",
+      "status": "supported",
+      "notes": "Supplies the synapse model per row for grouping. Where a model decomposes the total delay into components, the adapter must export exactly one declared delay quantity and must never sum or substitute components silently -- two different delays reported under one name is precisely the failure this contract exists to prevent."
+    },
+    {
+      "system": "networkx.MultiDiGraph",
+      "status": "partial",
+      "notes": "A `delay` edge attribute on a MultiDiGraph retains parallel edges and therefore supports per_connection. A DiGraph has already collapsed them and cannot say with which aggregation, so per_connection is REFUSED from a DiGraph rather than approximated from a collapsed graph."
+    },
+    {
+      "system": "neo.Block",
+      "status": "rejected",
+      "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it maps to a synaptic delay."
+    },
+    {
+      "system": "nwb.core",
+      "status": "planned",
+      "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today."
+    },
+    {
+      "system": "ncp",
+      "status": "planned",
+      "notes": "Not yet certified. Adapter output is never exempt from the core gate: it is validated by this contract like any other request."
+    }
+  ],
+  "migration": {
+    "legacyIds": [
+      "nest.delay_distribution"
+    ],
+    "notes": "The legacy payload took a flat array of numbers labelled `delays` with no edge linkage, no scope, and no counting policy. Nothing in it could establish whether a multapse contributed once or three times, whether an external-generator connection was still in the set, or whether the snapshot was rank-local -- and the natural default, per_connection over an assumed-complete single-process snapshot, is exactly the assumption that makes a partial subset look like a whole network. Migration therefore REQUIRES connection rows or a verifiable prebinned histogram, a NetworkScopeV1, and an explicit counting policy, and blocks with MIGRATION_INFORMATION_MISSING rather than guessing any of them."
+  },
+  "owner": "Sepehr Mahmoudian",
+  "changePolicy": [
+    "Changing what per_connection or per_ordered_pair counts is MAJOR.",
+    "Changing the permitted pair aggregations -- above all admitting `sum`, which produces a number no synapse carries -- is MAJOR.",
+    "Changing the bin boundary convention or the final-edge inclusion rule is MAJOR.",
+    "Changing the probability denominator away from the per-group binned-observation count is MAJOR.",
+    "Changing the density denominator, or using anything other than the LINEAR bin width under a logarithmic axis, is MAJOR.",
+    "Changing the order of operations between grouping and the counting policy is MAJOR: it changes the contents of every group.",
+    "Changing which scopes are legal, or ever letting a rank-local or sampled figure be presented as a complete claim, is MAJOR.",
+    "Changing the boundary tolerance so that it scales with the bin index rather than with the compared magnitudes is MAJOR.",
+    "Admitting a raw delay-values mode with no edge linkage is MAJOR: it removes the counting-policy and endpoint verification this figure exists to provide.",
+    "Relaxing the refusal of a null or non-positive delay is MAJOR.",
+    "Adding a grouping key, an uncertainty variant, a table column, or a summary fact is MINOR."
+  ],
+  "knownLimitations": [
+    "Registry gap: there is no `bins.grid_aligned` validator id. `sourceResolution` is a DECLARED fact that reaches the artifact, the table and the summary, but registry v1 cannot check that a delay is a multiple of it or that a bin width is. The comb artifact is disclosed in prose, not refused.",
+    "Registry gap: there is no disclosure id for out-of-range exclusions. Under `exclude_and_report` the under- and over-range counts reach the summary and the table, but no footer disclosure states them. EVENTS_EXCLUDED_OUT_OF_WINDOW is about a time window and is deliberately not reused.",
+    "Registry gap: there is no dedicated error code for a delay falling outside the declared bin range under `reject`. SCIENCE_BIN_EDGES_INVALID is used, matching neuro.isi_distribution; a future SCIENCE_BIN_RANGE_INCOMPLETE would be more precise.",
+    "Registry gap: there is no conservation validator. `histogram.normalization_consistent` re-derives the probability sum or density integral of the supplied per-bin values (surfacing SCIENCE_NORMALIZATION_UNVERIFIABLE or SCIENCE_DENSITY_DOES_NOT_INTEGRATE), but it does NOT reconcile sum(counts) + under + over against consideredConnectionCount; that identity stays declared context in registry v1.",
+    "Registry gap: `series.equal_length` compares only parallel-array lengths, and `histogram.normalization_consistent` silently skips a histogram whose value count does not match the derived bin count, so a miscounted prebinned length is not refused today. A length mismatch among connection rows IS caught and surfaces as SEMANTIC_LENGTH_MISMATCH.",
+    "Registry gap: `topology.multapse_aggregation_declared` ignores the counting policy and demands an aggregation for any repeated ordered pair, so a per_connection selection that literally contains a multapse is currently refused with SCIENCE_AGGREGATION_REQUIRED. The connections examples keep one row per pair; multapse handling is exercised under per_ordered_pair.",
+    "MULTAPSE_AGGREGATED's registry text is worded for matrix cells. On this figure {contributingCount} must be read as connections per ordered endpoint pair.",
+    "MISSING_VALUES_PRESENT can fire only from a ride-along weight series. A null DELAY is refused outright, so it can never be the cause here.",
+    "Cortexel does not choose bin edges, and for a grid-quantized delay the choice is unusually consequential: with a 0.1 ms resolution, a 0.15 ms bin width makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth.",
+    "Cortexel cannot verify that the supplied rows are the selection the caller says they are. It verifies scope, endpoints, positivity and conservation; it cannot know which GetConnections call produced the rows.",
+    "There is no autapse filter. A self-connection's delay is a delay and is counted like any other; excluding self-connections means not supplying those rows.",
+    "Prebinned mode verifies the normalization and the conservation identity but cannot verify positivity, endpoint membership, or the counting policy, because Cortexel never saw an edge. PRE_BINNED_INPUT says so on the figure.",
+    "Cortexel fits and tests nothing. A mean, a mode, or an apparent bimodality read off this figure is a property of the rows supplied and of the bins chosen for them."
+  ],
+  "examples": {
+    "valid": [
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.delay_distribution"
+        },
+        "data": {
+          "mode": "connections",
+          "nodeUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "targetIds": [
+              "2",
+              "3",
+              "4",
+              "1"
+            ],
+            "edgeIds": [
+              "c1",
+              "c2",
+              "c3",
+              "c4"
+            ],
+            "delays": {
+              "kind": "delay",
+              "unit": "ms",
+              "values": [
+                1.0,
+                1.5,
+                1.5,
+                2.0
+              ]
+            }
+          },
+          "groupBy": "none",
+          "sourceResolution": {
+            "kind": "duration",
+            "unit": "ms",
+            "value": 0.1
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 1000
+            }
+          }
+        },
+        "parameters": {
+          "selectionId": "recurrent_ee",
+          "selectionLabel": "Recurrent E to E",
+          "countingPolicy": "per_connection",
+          "bins": {
+            "mode": "width",
+            "unit": "ms",
+            "width": 0.5,
+            "start": 0.5,
+            "stop": 3.0
+          },
+          "normalization": "count",
+          "outOfRangeDelays": "reject",
+          "xScale": "linear",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.delay_distribution"
+        },
+        "data": {
+          "mode": "connections",
+          "nodeUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "1",
+              "1",
+              "2",
+              "3"
+            ],
+            "targetIds": [
+              "2",
+              "2",
+              "3",
+              "2"
+            ],
+            "edgeIds": [
+              "c1",
+              "c2",
+              "c3",
+              "c4"
+            ],
+            "delays": {
+              "kind": "delay",
+              "unit": "ms",
+              "values": [
+                1.0,
+                1.5,
+                1.5,
+                2.0
+              ]
+            },
+            "synapseModels": [
+              "static_synapse",
+              "static_synapse",
+              "stdp_synapse",
+              "static_synapse"
+            ]
+          },
+          "groupBy": "synapse_model",
+          "sourceResolution": {
+            "kind": "duration",
+            "unit": "ms",
+            "value": 0.1
+          },
+          "scope": {
+            "kind": "mpi_target_rank_local",
+            "rank": 0,
+            "worldSize": 4,
+            "localTargetUniverseComplete": true,
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 1000
+            }
+          }
+        },
+        "parameters": {
+          "selectionId": "rank0_local_targets",
+          "selectionLabel": "Connections into rank-0 targets",
+          "countingPolicy": "per_ordered_pair",
+          "multapseAggregation": "min",
+          "bins": {
+            "mode": "edges",
+            "unit": "ms",
+            "edges": [
+              0.5,
+              1.0,
+              1.5,
+              2.0,
+              2.5
+            ],
+            "finalEdgeInclusive": true
+          },
+          "normalization": "probability",
+          "outOfRangeDelays": "reject",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.delay_distribution"
+        },
+        "data": {
+          "mode": "prebinned",
+          "histogram": {
+            "kind": "probability_density",
+            "unit": "/ms",
+            "values": [
+              0,
+              0.4,
+              1.2,
+              0.4,
+              0
+            ]
+          },
+          "consideredConnectionCount": 50,
+          "underRangeCount": 0,
+          "overRangeCount": 0,
+          "sourceResolution": {
+            "kind": "duration",
+            "unit": "ms",
+            "value": 0.1
+          },
+          "scope": {
+            "kind": "sampled",
+            "parentScope": "single_process",
+            "method": "declared_subset",
+            "sourceConnectionCount": 1000,
+            "retainedConnectionCount": 50
+          }
+        },
+        "parameters": {
+          "selectionId": "declared_subset",
+          "selectionLabel": "Declared 50-connection subset",
+          "countingPolicy": "per_connection",
+          "bins": {
+            "mode": "edges",
+            "unit": "ms",
+            "edges": [
+              0.5,
+              1.0,
+              1.5,
+              2.0,
+              2.5,
+              3.0
+            ],
+            "finalEdgeInclusive": true
+          },
+          "normalization": "density",
+          "outOfRangeDelays": "reject",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_computed"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.delay_distribution"
+        },
+        "data": {
+          "mode": "connections",
+          "nodeUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "targetIds": [
+              "2",
+              "3",
+              "4",
+              "1"
+            ],
+            "edgeIds": [
+              "c1",
+              "c2",
+              "c3",
+              "c4"
+            ],
+            "delays": {
+              "kind": "delay",
+              "unit": "s",
+              "values": [
+                0.001,
+                0.0015,
+                0.0015,
+                0.0025
+              ]
+            }
+          },
+          "groupBy": "none",
+          "sourceResolution": {
+            "kind": "duration",
+            "unit": "ms",
+            "value": 0.1
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 1000
+            }
+          }
+        },
+        "parameters": {
+          "selectionId": "recurrent_ee_seconds",
+          "selectionLabel": "Recurrent E to E, delays reported in seconds",
+          "countingPolicy": "per_connection",
+          "bins": {
+            "mode": "edges",
+            "unit": "ms",
+            "edges": [
+              0.5,
+              1.0,
+              1.5,
+              2.0,
+              2.5
+            ],
+            "finalEdgeInclusive": true
+          },
+          "normalization": "count",
+          "outOfRangeDelays": "reject",
+          "xScale": "linear",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "why": "A connection is supplied with a delay of 0. NEST's minimum delay is one resolution tick (0.1 ms by default) and a zero-delay synapse is not representable in an event-driven scheduler that relies on min-delay lookahead, so a 0 in a delay column is a default value or an unread field -- never a measurement. Drawn, it would put mass in the lowest bin and, in a network whose real delays cluster at 1.5 ms, invent a population of instantaneous contacts at a latency no synapse in the model has. Cortexel refuses rather than bin a number that cannot be a delay.",
+        "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "4"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.5,
+                  0,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "width",
+              "unit": "ms",
+              "width": 0.5,
+              "start": 0,
+              "stop": 3.0
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "`no_aggregation` ASSERTS that at most one connection joins each ordered pair, and the rows say otherwise: 1 -> 2 appears twice, with delays 1.0 and 1.5 ms. Both silent resolutions are wrong. Keeping the last row makes the pair's delay 1.5 ms, and which row is last depends on the rank/thread order NEST happened to return -- so the same run would produce two different figures on two different machines. Keeping both quietly turns a per-pair figure back into a per-synapse one. Cortexel refuses and makes the caller declare min, mean, or max.",
+        "expectedCode": "SCIENCE_AGGREGATION_REQUIRED",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "1",
+                "2",
+                "3"
+              ],
+              "targetIds": [
+                "2",
+                "2",
+                "3",
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  1.5,
+                  1.5,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_ordered_pair",
+            "multapseAggregation": "no_aggregation",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "A row arrives from source `9001`, which is not in the declared node universe -- a Poisson generator left in the row set of a recurrent-delay figure. In a Brunel-style network the external drive is delivered with a single fixed delay of 1.5 ms while recurrent delays are drawn from a distribution around it, and there are typically 200 external connections per neuron against 1000 recurrent ones. Those rows would deposit roughly 17% of all observations into one bin, drawing a delta spike at exactly 1.5 ms that reads as a strong preferred latency of the recurrent circuit. Cortexel refuses and makes the caller say which population it meant.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3",
+                "9001"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "1",
+                "2"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  1.5,
+                  1.5,
+                  1.5
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "The delay column carries the unit `nest:weight`, whose dimension is simulator-defined and can never be a time. This is the column swap: NEST returns weight and delay from the same status call as bare floats, and a weight array in the range 0.1 to 2.0 looks exactly like a plausible delay distribution in milliseconds -- nothing downstream would ever flag it, and the figure would be a histogram of synaptic strengths captioned as latencies. The kind/unit check runs before any conversion is attempted, so the failure names the swap rather than a downstream conversion that could never have succeeded either.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "4",
+                "1"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "nest:weight",
+                "values": [
+                  1.0,
+                  1.5,
+                  1.5,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "`ms` is canonical but `milliseconds` is only an accepted alias. A stable request must carry the canonical code: the alias is rejected with a repair rather than silently converted, because a silent conversion moves every bin edge by a factor the caller never sees. On this figure that factor is not hypothetical -- the same numeric edges read as seconds instead of milliseconds place the entire delay population, whose whole range is 0.5 to 3 ms, below the first bin. Adapters and `cortexel migrate` may resolve aliases; normal validation may not.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "4",
+                "1"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  1.5,
+                  1.5,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "milliseconds",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "The parallel connection arrays have fallen out of step: three delays are supplied for four sources and four targets. Each of these arrays describes the same connection rows, so they must have identical length. A best-effort pairing would attach three delays to four connections and silently drop or invent one -- moving mass by a whole bin while the figure still claims four connections. Cortexel never pairs values with rows by best effort, so a length mismatch among the parallel connection arrays fails here as SEMANTIC_LENGTH_MISMATCH.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "4",
+                "1"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  1.5,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "The per-bin probabilities are supplied but they sum to 0.8, not 1: a fifth of the mass is missing. A probability histogram whose bars do not sum to one is either drawn on the wrong denominator or missing a bin, and either way the height of every bar is wrong by the same hidden factor. Cortexel re-derives the sum from the supplied values through `histogram.normalization_consistent` and refuses rather than draw a distribution that does not close, surfacing SCIENCE_NORMALIZATION_UNVERIFIABLE.",
+        "expectedCode": "SCIENCE_NORMALIZATION_UNVERIFIABLE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "prebinned",
+            "histogram": {
+              "kind": "probability",
+              "unit": "1",
+              "values": [
+                0.1,
+                0.3,
+                0.3,
+                0.1,
+                0.0
+              ]
+            },
+            "consideredConnectionCount": 50,
+            "underRangeCount": 0,
+            "overRangeCount": 0,
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5,
+                3.0
+              ]
+            },
+            "normalization": "probability",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "Probability mass is supplied under the label `probability_density`. With 50 observations in 0.5 ms bins the density is count / (50 x 0.5) = count / 25, so the correct values are 0, 0.4, 1.2, 0.4, 0 per ms and they integrate to 1. The supplied values are the probabilities, 0, 0.2, 0.6, 0.2, 0, and they integrate to 0.5 -- understated by exactly 1/w. The number's meaning also changes with the bin width: the same mistake with 0.1 ms bins understates the density tenfold. Cortexel re-derives the density and refuses to draw a y axis whose value does not integrate to one.",
+        "expectedCode": "SCIENCE_DENSITY_DOES_NOT_INTEGRATE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "prebinned",
+            "histogram": {
+              "kind": "probability_density",
+              "unit": "/ms",
+              "values": [
+                0,
+                0.2,
+                0.6,
+                0.2,
+                0
+              ]
+            },
+            "consideredConnectionCount": 50,
+            "underRangeCount": 0,
+            "overRangeCount": 0,
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5,
+                3.0
+              ]
+            },
+            "normalization": "density",
+            "outOfRangeDelays": "reject",
+            "xScale": "linear"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "A merged snapshot claims global coverage while only 2 of 4 ranks were merged. A partial rank set stays partial and is never upgraded: half the target space was never looked at, and whether the observed half is representative depends on the virtual-process mapping and on whether delay covaries with target id -- neither of which Cortexel can know. The figure would be captioned as the network's delay distribution while 50% of its synapses were never opened. Merge every rank, or keep the evidence labelled rank-local, which this contract fully supports.",
+        "expectedCode": "SCOPE_MERGE_INCOMPLETE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "4",
+                "1"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  1.5,
+                  1.5,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "global_merged",
+              "worldSize": 4,
+              "mergedRanks": [
+                0,
+                1
+              ]
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "The request adds an undeclared `delayFilterMin`, asking Cortexel to drop every connection below 1.2 ms. A filter Cortexel applied silently would change the population the histogram claims to describe: it would remove observations and lift the reported mean delay, while the figure, the table and the summary would all still say every row was considered. A selection is expressed by supplying exactly the rows it contains. The schema is closed, so a typoed or invented scientific field fails rather than being quietly ignored.",
+        "expectedCode": "SCHEMA_UNKNOWN_PROPERTY",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "4",
+                "1"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  1.5,
+                  1.5,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject",
+            "delayFilterMin": 1.2
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "A prebinned request asks to be grouped by synapse model. Cortexel never saw a row, so it cannot partition one: it would have to take the caller's word that these counts are the static-synapse counts, and a partition nobody checked is a legend that cannot be wrong. `synapse_model` grouping is refused in prebinned mode rather than ignored, because the failure mode is silent -- a mislabelled group would attribute one model's 1.5 ms delays to another, and every downstream reading of the figure would be about the wrong synapse. Supply the rows to group them.",
+        "expectedCode": "SCHEMA_VALIDATION_FAILED",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "prebinned",
+            "groupBy": "synapse_model",
+            "histogram": {
+              "kind": "count",
+              "unit": "1",
+              "values": [
+                0,
+                10,
+                30,
+                10,
+                0
+              ]
+            },
+            "consideredConnectionCount": 50,
+            "underRangeCount": 0,
+            "overRangeCount": 0,
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5,
+                3.0
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          }
+        }
+      },
+      {
+        "why": "The request asserts that Cortexel validated it. Validation results are library-generated facts: a caller declares what its data IS, never what Cortexel concluded about it. On this figure the assertion is particularly dangerous, because a caller-authored `passed` sitting beside a sampled or rank-local scope would launder a subset of the synapses into a figure that reads as the network's delay distribution. The field is rejected, not ignored.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.delay_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": {
+              "ids": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2",
+                "3",
+                "4"
+              ],
+              "targetIds": [
+                "2",
+                "3",
+                "4",
+                "1"
+              ],
+              "delays": {
+                "kind": "delay",
+                "unit": "ms",
+                "values": [
+                  1.0,
+                  1.5,
+                  1.5,
+                  2.0
+                ]
+              }
+            },
+            "groupBy": "none",
+            "scope": {
+              "kind": "single_process",
+              "complete": true
+            }
+          },
+          "parameters": {
+            "selectionId": "recurrent_ee",
+            "countingPolicy": "per_connection",
+            "bins": {
+              "mode": "edges",
+              "unit": "ms",
+              "edges": [
+                0.5,
+                1.0,
+                1.5,
+                2.0,
+                2.5
+              ]
+            },
+            "normalization": "count",
+            "outOfRangeDelays": "reject"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST"
+          },
+          "validation": {
+            "structural": {
+              "result": "passed"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

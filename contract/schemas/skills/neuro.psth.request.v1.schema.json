@@ -1,0 +1,369 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.psth.request.v1.schema.json",
+  "title": "neuro.psth request",
+  "description": "GENERATED from contract/skills/neuro.psth.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.psth"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "events"
+            },
+            "eventTimes": {
+              "type": "object",
+              "description": "ABSOLUTE event times on the recording clock. Pre-aligned relative times are not accepted: alignment is the operation this figure exists to perform, and a caller-computed relative time cannot be checked against the trial's alignment time.",
+              "properties": {
+                "kind": {
+                  "const": "time"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2000000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 2000000
+            },
+            "eventTrialIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 2000000,
+              "description": "The trial each event belongs to. It selects the alignment time; an event with no trial has no relative time. Read against `trialIds` by events.trial_universe_declared, so every value must be a member of the declared trial universe."
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE set of senders that were recorded AND selected — including any that never fired in any trial. This is the per-neuron denominator basis and it cannot be inferred from the events. events.sender_universe_declared requires every event sender to be a member."
+            },
+            "trialIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE trial universe as a flat array, including trials in which nothing happened. Declared, never inferred from the observed event trial ids: a trial with no events is still a trial. Kept unique by ids.unique and used as the universe by events.trial_universe_declared."
+            },
+            "alignmentUnit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+              "description": "The unit of every entry in `alignmentTimes`. Alignment times are on the same absolute clock as `eventTimes` and must share its dimension; a differing code is converted through the typed unit layer and the conversion is disclosed."
+            },
+            "alignmentTimes": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The absolute alignment time of each trial, positionally parallel to `trialIds`. Relative time is t_event minus the alignment time of the event's own trial. Required by psth.alignment_declared: without it there is nothing for time zero to mean."
+            },
+            "relativeWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "The analysis window in RELATIVE time, measured from each trial's own alignment time. It decides membership; the bins decide placement. window.valid reads it at /data/relativeWindow."
+            }
+          },
+          "required": [
+            "mode",
+            "eventTimes",
+            "eventSenderIds",
+            "eventTrialIds",
+            "recordedSenderIds",
+            "trialIds",
+            "alignmentUnit",
+            "alignmentTimes",
+            "relativeWindow"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "prebinned"
+            },
+            "trialIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE trial universe the pre-binned counts were computed over, as a flat array. It is includedTrialCount + excludedTrialCount long. Kept unique by ids.unique; its length is the trial count read by psth.alignment_declared."
+            },
+            "alignmentUnit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+              "description": "The unit of every entry in `alignmentTimes`."
+            },
+            "alignmentTimes": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The absolute alignment time of each trial in `trialIds`, positionally parallel to it. A pre-binned request still declares the reference it was aligned to; psth.alignment_declared requires it in both modes."
+            },
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "maxItems": 100000,
+              "description": "Exact integer event counts per bin, summed over the included trials and the selected senders. `null` means the bin was covered by NO included trial: it is a hole, not a measured zero. Length must be one less than the number of edges resolved from `parameters.bins`."
+            },
+            "trialDenominators": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "maxItems": 100000,
+              "description": "The number of included trials that FULLY cover each bin. Under a uniform denominator this is the same positive integer in every bin. It is null exactly where `counts` is null: a count without a denominator, or a denominator without a count, is a contradiction and is refused."
+            },
+            "recordedSenderCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The number of senders that were recorded and selected, including any that never fired. The per-neuron denominator. rate.denominator_positive requires it to be a positive integer."
+            },
+            "includedTrialCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The total number of trials included in the analysis. No per-bin denominator may exceed it."
+            },
+            "excludedTrialCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of trials that were recorded and deliberately excluded. Declared, never inferred: the trial universe is includedTrialCount + excludedTrialCount."
+            },
+            "rates": {
+              "type": "object",
+              "description": "Optional. The pre-normalized values per bin. Its `kind` must match the requested normalization: `count` -> count, `count_per_trial` -> ratio, either rate -> firing_rate. `null` exactly where `counts` is null.",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "relativeWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "trialIds",
+            "alignmentUnit",
+            "alignmentTimes",
+            "counts",
+            "trialDenominators",
+            "recordedSenderCount",
+            "includedTrialCount",
+            "excludedTrialCount",
+            "relativeWindow"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "seriesId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+        },
+        "seriesLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "alignmentLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "What the alignment times are DECLARED to be, for example \"Stimulus onset\". It labels the zero line. Cortexel cannot verify it: the scientific fact is the per-trial alignment time, and the label is a caller declaration like the source system."
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "The single authoritative bin-edge vector, in RELATIVE time, in BOTH modes. The bins must tile the relative window exactly. Cortexel never chooses a bin width for you: the width determines the height of every peak in the figure."
+        },
+        "normalization": {
+          "type": "string",
+          "enum": [
+            "count",
+            "count_per_trial",
+            "total_event_rate_per_trial",
+            "mean_rate_per_selected_sender_per_trial"
+          ],
+          "description": "`count` is the exact integer. `count_per_trial` divides by the bin's trial denominator. `total_event_rate_per_trial` is the rate of the whole selected group per trial and carries NO per-neuron claim. `mean_rate_per_selected_sender_per_trial` additionally divides by the selected-sender count and IS a per-neuron claim. The two rates are separate ids precisely so they cannot be conflated."
+        },
+        "denominatorPolicy": {
+          "type": "string",
+          "enum": [
+            "uniform_trial_count",
+            "per_bin_covering_trials"
+          ],
+          "description": "`uniform_trial_count` asserts that every included trial observed the entire relative window. `per_bin_covering_trials` requires every included trial to declare coverage and gives each bin the number of trials that fully cover it — the only honest option when recordings started late or ended early."
+        },
+        "baseline": {
+          "type": "object",
+          "description": "Optional baseline subtraction, in RELATIVE time and in the unit of `relativeWindow`. Permitted ONLY with a rate normalization: a count is extensive — it grows with the bin width and with the number of covering trials — so subtracting a mean count from bins of different width or different coverage produces a number with no consistent meaning. Both bounds must coincide with bin edges.",
+          "properties": {
+            "mode": {
+              "const": "subtract_mean_rate"
+            },
+            "start": {
+              "type": "number"
+            },
+            "stop": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "mode",
+            "start",
+            "stop"
+          ],
+          "additionalProperties": false
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty"
+        }
+      },
+      "required": [
+        "seriesId",
+        "bins",
+        "normalization",
+        "denominatorPolicy"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "normalization": {
+                "enum": [
+                  "count",
+                  "count_per_trial"
+                ]
+              }
+            },
+            "required": [
+              "normalization"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "baseline"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

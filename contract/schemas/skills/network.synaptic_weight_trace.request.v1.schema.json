@@ -1,0 +1,992 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.synaptic_weight_trace.request.v1.schema.json",
+  "title": "network.synaptic_weight_trace request",
+  "description": "GENERATED from contract/skills/network.synaptic_weight_trace.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.synaptic_weight_trace"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Edges mode: the raw per-synapse observations. This is the honest input whenever the observations exist, because everything else in the figure — the aggregate, its denominators, the dispersion — is then DERIVED and checkable rather than asserted.",
+          "properties": {
+            "mode": {
+              "const": "edges"
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "The analysis window and the single time frame of the figure. Every edge's times are converted into its unit. Half-open by default: an update exactly at `stop` is excluded and counted."
+            },
+            "scope": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+              "description": "Where these synapses were observed. Mandatory: a weight trace from a rank-local recorder and one from a merged global snapshot are different evidence, and only the scope can say which this is. `snapshotTime`, when supplied, names the moment the connection set was enumerated — the moment the declared membership is true of."
+            },
+            "observation": {
+              "description": "What a sample IS, declared ONCE for the whole request because it is a property of the source recording. Mixing kinds in one figure is not offered: an aggregate that held a point sample, or averaged a step-held value with a continuously sampled one, would combine two incompatible assumptions about unobserved time.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "description": "The source wrote a value at each synaptic update (a NEST weight recorder). The weight is piecewise-constant between updates and is drawn as steps.",
+                  "properties": {
+                    "kind": {
+                      "const": "event_updated"
+                    },
+                    "updateSemantics": {
+                      "type": "string",
+                      "enum": [
+                        "value_after_update",
+                        "value_before_update"
+                      ],
+                      "description": "Whether the value written at an event is the weight AFTER the update that event triggered (right-continuous: it holds forward from t) or the weight that was in force BEFORE it (left-continuous: it describes the interval ending at t). Required, with no default. The two conventions differ by exactly one inter-update interval on every step edge, and Cortexel cannot tell them apart from the numbers: the wrong declaration produces an entirely plausible figure in which a potentiation appears to precede the spike that caused it. It is a property of the synapse model's send() in the exact simulator version and must be established there, not guessed."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "updateSemantics"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "description": "The source sampled the weight at times of its own choosing (a polled GetConnections, a clock-driven state monitor). Consecutive samples are joined by a straight segment, which is a drawing convention and not a measurement.",
+                  "properties": {
+                    "kind": {
+                      "const": "point_sample"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "description": "A reconstruction between observations, produced by the source system or by the caller. Its points are NOT observations: they never enter the observation count, and such a series may not be a member of a derived aggregate under a hold evaluation. Cortexel records and displays the reconstruction; it never performs one.",
+                  "properties": {
+                    "kind": {
+                      "const": "interpolated_trajectory"
+                    },
+                    "method": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                      "description": "The name of the algorithm that produced the trajectory. Required: a reconstructed line that will not name its method is an unattributable curve."
+                    },
+                    "interpolant": {
+                      "type": "string",
+                      "enum": [
+                        "linear",
+                        "previous",
+                        "next",
+                        "cubic_spline",
+                        "other"
+                      ],
+                      "description": "The shape assumed between observations. `previous` is a hold and is honest for an event-updated source; `cubic_spline` can overshoot past a declared bound and produce a weight the model could not reach."
+                    },
+                    "reconstructedBy": {
+                      "type": "string",
+                      "enum": [
+                        "source_system",
+                        "caller"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "method",
+                    "interpolant",
+                    "reconstructedBy"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "series": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1024,
+              "description": "The synapses, in canonical order — one drawn time series per synapse. The array is named `series` and each synapse's weight quantity is named `values` so the registered trace validators, which read `data.series[].time.values` and `data.series[].values.unit`, actually see this figure's observations. That canonical order fixes the legend, the palette, the median's order statistics, the min/max tie-break, and the summation order of the mean; it is never reordered by anything the data did.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "edgeId": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                    "description": "Stable per-SYNAPSE identity. Two parallel synapses between one pair are two edge ids and are never merged. A source that cannot attribute a weight event to a single synapse cannot supply this."
+                  },
+                  "label": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                  },
+                  "endpoints": {
+                    "type": "object",
+                    "description": "The presynaptic source and postsynaptic target. Descriptive: this figure declares no node universe and makes no degree or connectivity claim. Both ids are required together — a half-identified synapse names nothing.",
+                    "properties": {
+                      "sourceId": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                      },
+                      "targetId": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                      }
+                    },
+                    "required": [
+                      "sourceId",
+                      "targetId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "synapseModel": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                    "description": "The source system's synapse model — which IS the plasticity rule (`stdp_synapse`, `tsodyks2_synapse`, `static_synapse`). Required, recorded verbatim, and never used to infer a unit, a bound, or a comparability claim. Two numbers are not comparable merely because both are called `weight`."
+                  },
+                  "recordedInterval": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+                    "description": "The span over which the source was actually observing THIS synapse. Required. A held step is drawn only inside it, and the last observed value is never extended past it: without this declaration, holding to the window edge would silently assert that no update occurred after the recorder stopped."
+                  },
+                  "time": {
+                    "type": "object",
+                    "description": "This synapse's observation times. Every value is finite: an observation with an unknown time is not an observation, so `null` is not accepted here — unlike a weight, where null is a legitimate missing value.",
+                    "properties": {
+                      "kind": {
+                        "const": "time"
+                      },
+                      "unit": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                      },
+                      "values": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "maxItems": 250000
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "unit",
+                      "values"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "values": {
+                    "type": "object",
+                    "description": "The observed weights for this synapse. Named `values` (not `weights`) so `trace.axis_dimension_compatible` reads `data.series[].values.unit` and refuses to pool weights of different dimensions on one axis. Written out rather than $ref'd to `quantitySeries` because the accepted `kind` is exactly one: a membrane potential or a firing rate on this axis would be a routing error, not a weight trace.",
+                    "properties": {
+                      "kind": {
+                        "const": "synaptic_weight"
+                      },
+                      "unit": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+                        "description": "A code whose dimension is legal for `synaptic_weight`: `nest:weight` (simulator-defined, never converted), a conductance, a current, a voltage, or `1`. A simulator-defined weight has no SI mapping and is never pooled with any other code."
+                      },
+                      "values": {
+                        "type": "array",
+                        "items": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "maxItems": 250000,
+                        "description": "`null` is a MISSING observation and it BREAKS THE HOLD: the interval to the next observed update is undefined and drawn as a gap. Holding the previous value across it would assert that the update did nothing."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "unit",
+                      "values"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "eventKinds": {
+                    "type": "array",
+                    "maxItems": 250000,
+                    "description": "Optional, parallel to `time`: what caused each observation. It reaches the table as the source-event column. `poll` marks a value that was read rather than written, which is the difference between seeing every update and seeing the stored state at chosen moments.",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "presynaptic_spike",
+                        "postsynaptic_spike",
+                        "structural_update",
+                        "poll",
+                        "parameter_write",
+                        "unknown"
+                      ]
+                    }
+                  },
+                  "initialWeight": {
+                    "type": "object",
+                    "description": "Optional. The weight at the start of the recorded interval, before the first observed update. It closes the leading gap under `value_after_update` and lets the member contribute to an aggregate before its first update. It is a DECLARATION and must say where it came from.",
+                    "properties": {
+                      "quantity": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity"
+                      },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "model_parameter",
+                          "measured_at_window_start",
+                          "declared_by_caller"
+                        ],
+                        "description": "Required source metadata. A model parameter is a fact about the run; a caller assertion is a fact about the caller, and the table says which."
+                      }
+                    },
+                    "required": [
+                      "quantity",
+                      "origin"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "bounds": {
+                    "type": "object",
+                    "description": "Optional reference bounds (an STDP `Wmax`, a floor at zero). Drawn as reference lines annotated with their origin. Cortexel NEVER clamps, rounds, or corrects an observed weight against them: a value observed above a hard bound stays where it was observed, because clamping it would turn the figure into evidence that the bound was respected.",
+                    "properties": {
+                      "lower": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity"
+                      },
+                      "upper": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity"
+                      },
+                      "boundKind": {
+                        "type": "string",
+                        "enum": [
+                          "hard",
+                          "soft"
+                        ],
+                        "description": "hard: the rule clips at the bound. soft: the rule approaches it asymptotically. The distinction changes how a flat trace at the bound should be read, and it is the caller's declaration."
+                      },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "model_parameter",
+                          "declared_by_caller"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "boundKind",
+                      "origin"
+                    ],
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "lower"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "upper"
+                        ]
+                      }
+                    ],
+                    "additionalProperties": false
+                  },
+                  "uncertainty": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+                    "description": "Required on every edge. A dispersion here is across trials or seeds for THIS synapse. `{\"kind\":\"none\",\"reason\":...}` is the honest answer for a single run, and it is the ONLY variant accepted in derived-aggregate mode: Cortexel will not propagate an across-trial dispersion into an across-synapse aggregate, because doing so needs an error model it does not have."
+                  },
+                  "sourceRef": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/dataRef",
+                    "description": "Optional content-addressed reference to the bytes this trace was extracted from. Cortexel RECORDS it and never resolves it — stable core has no filesystem or network authority — and it never substitutes for the inline observations."
+                  }
+                },
+                "required": [
+                  "edgeId",
+                  "synapseModel",
+                  "recordedInterval",
+                  "time",
+                  "values",
+                  "uncertainty"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "membership": {
+              "type": "object",
+              "description": "The group whose aggregate is drawn, and WHEN each synapse belonged to it. Required for any derived aggregate. Membership over time is not a refinement: a synapse created by structural plasticity at 500 ms did not exist before, and counting it from 0 ms drags the mean toward its initial weight at times when it was not there.",
+              "properties": {
+                "groupId": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                },
+                "groupLabel": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                  "description": "Display text. The accessible summary always prints the member count beside it, so a label cannot do the work of a completeness claim that no scope in this contract supports."
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+                  "description": "The time unit of the intervals below. Declared explicitly rather than inherited, so a membership expressed in seconds against a window expressed in milliseconds fails instead of silently shrinking the group by a factor of 1000."
+                },
+                "members": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 1024,
+                  "description": "In canonical order. This order is the median's order-statistic order and the mean's summation order.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "edgeId": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                        "description": "Must be a declared edge of this request. A member with no observations behind it is a denominator entry with nothing in it."
+                      },
+                      "intervals": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 64,
+                        "description": "The half-open [enter, exit) spans during which this synapse belonged to the group. A synapse that was created, pruned, and re-created has several.",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "start": {
+                              "type": "number"
+                            },
+                            "stop": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "start",
+                            "stop"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "edgeId",
+                      "intervals"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "groupId",
+                "unit",
+                "members"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "mode",
+            "window",
+            "scope",
+            "observation",
+            "series"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "Pre-aggregated mode: the caller supplies an aggregate it computed elsewhere. Cortexel never saw the members, so it cannot re-derive the value — it checks what it can (lengths, counts, bounds, the denominator rules) and discloses that the individual synapses were not supplied and cannot be shown.",
+          "properties": {
+            "mode": {
+              "const": "preaggregated"
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            },
+            "scope": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+            },
+            "aggregate": {
+              "type": "object",
+              "properties": {
+                "groupId": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                },
+                "groupLabel": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                },
+                "synapseModel": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                  "description": "The model whose weights were aggregated. An aggregate over more than one model is refused unless the request declares a comparability claim, exactly as it is for the raw edges."
+                },
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "mean",
+                    "median",
+                    "min",
+                    "max"
+                  ],
+                  "description": "The statistic that was computed. `sum` is absent by design: over a membership that changes size it conflates a change in the number of synapses with a change in their weights, and no registered disclosure can carry that conflation."
+                },
+                "intervalMethod": {
+                  "type": "string",
+                  "enum": [
+                    "hold_last_observed",
+                    "shared_sample_grid",
+                    "declared_by_source"
+                  ],
+                  "description": "How the caller obtained each member's value at each evaluation time. Required: an aggregate of event-updated weights is meaningless until it says what it assumed about the times between the updates. `declared_by_source` is an honest admission that the upstream system's rule is not known in this detail, and it is disclosed as such."
+                },
+                "observation": {
+                  "description": "How the AGGREGATE SERIES itself is to be read and drawn. The mean of right-continuous step functions is itself a right-continuous step function, so a hold-evaluated mean of event-updated weights is `event_updated` and is drawn as steps — not as a smooth line through its evaluation points.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "event_updated"
+                        },
+                        "updateSemantics": {
+                          "type": "string",
+                          "enum": [
+                            "value_after_update",
+                            "value_before_update"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "updateSemantics"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "point_sample"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "interpolated_trajectory"
+                        },
+                        "method": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                        },
+                        "interpolant": {
+                          "type": "string",
+                          "enum": [
+                            "linear",
+                            "previous",
+                            "next",
+                            "cubic_spline",
+                            "other"
+                          ]
+                        },
+                        "reconstructedBy": {
+                          "type": "string",
+                          "enum": [
+                            "source_system",
+                            "caller"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "method",
+                        "interpolant",
+                        "reconstructedBy"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "time": {
+                  "type": "object",
+                  "description": "The evaluation times of the aggregate. Finite; no nulls.",
+                  "properties": {
+                    "kind": {
+                      "const": "time"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "number"
+                      },
+                      "maxItems": 250000
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "unit",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                },
+                "values": {
+                  "type": "object",
+                  "description": "The aggregate at each evaluation time. `null` where no member contributed — never 0.",
+                  "properties": {
+                    "kind": {
+                      "const": "synaptic_weight"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "maxItems": 250000
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "unit",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                },
+                "memberCounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxItems": 250000,
+                  "description": "How many synapses belonged to the group at each evaluation time. This is what makes a CHANGING membership visible: a mean that rises while this count falls is a different fact from a mean that rises while it holds."
+                },
+                "contributingCounts": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "maxItems": 250000,
+                  "description": "How many of those members actually had a value at that time. THIS is the denominator of a mean — never the member count, never the number of synapses in the network. It must be <= the member count, it must be positive wherever a value is present, and where it is 0 the value must be null."
+                },
+                "uncertainty": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+                  "description": "Required. The dispersion across the member synapses at each evaluation time, or an explicit `none` with a reason. `credible_interval` is refused: it is a claim about a posterior and structural validity establishes nothing about calibration."
+                }
+              },
+              "required": [
+                "groupId",
+                "synapseModel",
+                "method",
+                "intervalMethod",
+                "observation",
+                "time",
+                "values",
+                "memberCounts",
+                "contributingCounts",
+                "uncertainty"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "mode",
+            "window",
+            "scope",
+            "aggregate"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "display": {
+          "type": "string",
+          "enum": [
+            "individual",
+            "aggregate_derived",
+            "aggregate_derived_with_members",
+            "aggregate_declared"
+          ],
+          "description": "individual: one drawn series per synapse, with a legend entry each; refused above 8 edges — the palette's `categoricalSeries.maxStableSeries` — rather than minting a style outside the colour-vision-deficiency-safe set. aggregate_derived: Cortexel computes the aggregate from the member observations. aggregate_derived_with_members: the same, with the members drawn behind it WITHOUT individual colour or legend identity, so the spread is visible while no per-synapse colour claim is made. aggregate_declared: the caller's pre-aggregated series, which Cortexel cannot re-derive. The first three require `data.mode: edges`; the last requires `data.mode: preaggregated`."
+        },
+        "weightComparability": {
+          "description": "Why these weights may share one value axis at all. Required, because `nest:weight` is one code covering values whose physical meaning differs by synapse and neuron model: the same number 10.0 may be a 10 pA postsynaptic current under one model and a 10 nS conductance under another.",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "Every drawn weight comes from the same synapse model. If two or more distinct `synapseModel` values are present, this fails with SCIENCE_WEIGHT_GROUP_INCOMPATIBLE.",
+              "properties": {
+                "mode": {
+                  "const": "single_synapse_model"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "The caller declares that the listed models produce weights that mean the same physical thing. The set of distinct models present must equal this list exactly. Cortexel verifies that the claim was made and that it matches the data; it cannot verify that it is TRUE, and the declared set is surfaced in the summary and the table, attributed to the caller.",
+              "properties": {
+                "mode": {
+                  "const": "declared_comparable_models"
+                },
+                "comparableModels": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                  },
+                  "minItems": 2,
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "mode",
+                "comparableModels"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "aggregate": {
+          "type": "object",
+          "description": "How Cortexel is to DERIVE the aggregate from the declared members. Required for `aggregate_derived` and `aggregate_derived_with_members`; forbidden for `individual` and for `aggregate_declared`, where there is nothing to derive.",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "mean",
+                "median",
+                "min",
+                "max"
+              ],
+              "description": "mean divides by the CONTRIBUTING count, never the member count. median takes the middle order statistic, or the arithmetic mean of the two central ones for an even count. min/max break ties on the first member in canonical order."
+            },
+            "evaluation": {
+              "description": "The interval method: how a member's value at an evaluation time is obtained. There is no interpolating mode and there never will be — an interpolated weight between two updates is a value that never existed.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "description": "Evaluate at the union of the members' observation times, holding each member's last observed value. Legal only when `data.observation.kind` is `event_updated` — a hold is what an event-updated weight actually does between updates, and it is a fabrication for anything else.",
+                  "properties": {
+                    "mode": {
+                      "const": "hold_last_observed_at_union_times"
+                    }
+                  },
+                  "required": [
+                    "mode"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "description": "Evaluate at an explicit grid, holding each member's last observed value. Legal only when `data.observation.kind` is `event_updated`. The grid changes nothing about the underlying step function; it only chooses where it is read.",
+                  "properties": {
+                    "mode": {
+                      "const": "hold_last_observed_at_declared_times"
+                    },
+                    "times": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "time"
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "values": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "minItems": 1,
+                          "maxItems": 250000
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "unit",
+                        "values"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "times"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "description": "Aggregate per sample index over an identical time vector. Legal only when `data.observation.kind` is `point_sample` and every member's time vector is elementwise identical as exact binary64 values. Nothing is held and nothing is interpolated.",
+                  "properties": {
+                    "mode": {
+                      "const": "shared_sample_grid"
+                    }
+                  },
+                  "required": [
+                    "mode"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "dispersion": {
+              "description": "The spread across the CONTRIBUTING member synapses at each evaluation time, computed by Cortexel from the members it was given. It is a library-generated fact, which is why it is requested by name here rather than supplied as values.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "none"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "single_trial",
+                        "not_computed",
+                        "not_available",
+                        "not_applicable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "description": "A per-point dispersion across the contributing members. It is NOT an interval and is never relabelled as one.",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "standard_deviation",
+                        "standard_error"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "description": "Empirical quantiles of the contributing members. It carries no coverage probability and is never drawn or labelled as a confidence interval.",
+                  "properties": {
+                    "kind": {
+                      "const": "quantile_interval"
+                    },
+                    "lowerQuantile": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "upperQuantile": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "lowerQuantile",
+                    "upperQuantile"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "description": "The observed minimum and maximum across the contributing members. No coverage probability, and never drawn as a confidence interval.",
+                  "properties": {
+                    "kind": {
+                      "const": "ensemble_range"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "method",
+            "evaluation",
+            "dispersion"
+          ],
+          "additionalProperties": false
+        },
+        "duplicateTimePolicy": {
+          "description": "What to do when one synapse has two observations at one timestamp. Enforced semantically only when duplicates actually exist, so a clean recording is never made to answer a question it does not have. For an `event_updated` series only `reject` and `keep_replicates` are legal: the two values at one instant are the same synapse before and after ONE update, and their mean is a weight it never held.",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "policy": {
+                  "const": "reject"
+                }
+              },
+              "required": [
+                "policy"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "policy": {
+                  "const": "keep_replicates"
+                }
+              },
+              "required": [
+                "policy"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "Legal only for `point_sample` and `interpolated_trajectory` sources, where replicates at one time are repeated readings rather than the two sides of an update. Applied within one edge at one timestamp over non-null replicates; an even-count median is the arithmetic mean of the two central order statistics. The replicate count reaches the table.",
+              "properties": {
+                "policy": {
+                  "const": "aggregate"
+                },
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "mean",
+                    "median",
+                    "min",
+                    "max"
+                  ]
+                }
+              },
+              "required": [
+                "policy",
+                "method"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "showObservationMarkers": {
+          "type": "boolean",
+          "default": false,
+          "description": "Draw a marker at every retained observation. Presentation only: it changes no value. On a point-sampled trace it is the honest way to reveal where the sampler actually looked, which a bare line conceals."
+        },
+        "showReferenceLines": {
+          "type": "boolean",
+          "default": false,
+          "description": "Draw the declared initial weights and bounds as reference lines, annotated with their declared origin. They are never used to clamp or correct an observed value."
+        }
+      },
+      "required": [
+        "display",
+        "weightComparability"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "display": {
+                "enum": [
+                  "aggregate_derived",
+                  "aggregate_derived_with_members"
+                ]
+              }
+            },
+            "required": [
+              "display"
+            ]
+          },
+          "then": {
+            "required": [
+              "aggregate"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "display": {
+                "enum": [
+                  "individual",
+                  "aggregate_declared"
+                ]
+              }
+            },
+            "required": [
+              "display"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "aggregate"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

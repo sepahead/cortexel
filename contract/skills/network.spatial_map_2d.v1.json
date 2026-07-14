@@ -1,0 +1,1074 @@
+{
+  "id": "network.spatial_map_2d",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Two-dimensional spatial map of declared node positions",
+
+  "purpose": {
+    "canonicalQuestion": "Where, in a declared two-dimensional coordinate frame, were the nodes of a declared universe positioned at one snapshot — drawn at one equal scale on both axes, with every coordinate preserved exactly, every missing position reported rather than placed at the origin, and periodic-boundary metadata used to choose an edge chord rather than to invent duplicate nodes?",
+    "cannotEstablish": [
+      "That the drawn nodes are all the nodes in the region. Emptiness on this map is emptiness in the DECLARED universe under the declared scope; a sampled or rank-local scope shows a fraction of the layer, and its empty regions may be full.",
+      "Areal density. This contract derives none: units.v1 has no area code and no per-area quantity kind, and a reader who divides marker count by drawn area is measuring the selection, not the tissue.",
+      "That two overlapping markers are one node. Coincident coordinates overlap exactly and are never jittered, so a grid layer holding an excitatory and an inhibitory population at the same points draws N markers for 2N neurons.",
+      "Anything about a third dimension. There is no projection mode: projecting a 3-D layer would collapse a real axis and make distant neurons coincident.",
+      "Soma size, arbor extent, or any physical size. Marker radius is fixed screen-space decoration; it does not scale with the data and it is not a length.",
+      "Connectivity, when no connections are supplied — and, when they are, only the connections inside the declared scope. A drawn chord is a declared synapse, never a measured axonal path.",
+      "Separation across a periodic boundary read straight off the page. Under a wrapped chord the drawn segments end at the domain edge; the modelled separation is the minimum image, not the on-page length.",
+      "That a per-node value was measured over any particular window. The value is whatever the caller bound to the node; this figure carries no analysis window for it and re-derives nothing about it.",
+      "Localization uncertainty. There is no positional error channel: a 1-D uncertainty array cannot express a 2-D error, and drawing it as a disc would assert an isotropy the source never declared.",
+      "What the layout is at any other time. This is one snapshot; under structural plasticity the node set at another time is a different node set.",
+      "That the coordinate frame corresponds to anatomical space. Cortexel records the declared frame id. It performs no registration and no frame transform."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Position rows are NOT assumed to arrive in any order. They are stably sorted by (index of nodeId in the declared node universe, original ordinal). The node universe — not string collation — is the ordering authority, so drawing and table order never depend on how an id happens to be spelled (numerically 9 < 10; by code point \"10\" < \"9\").",
+      "A coordinate is never null. Half a position is not a position: a node with an x and no y cannot be placed anywhere. A node WITHOUT a position is therefore absent from `positions.nodeIds` entirely, and what follows is governed by the declared missing-position policy — never by an origin fallback.",
+      "A missing VALUE is a different fact from a missing position and is an explicit null in the parallel value series. The node is still drawn — its coordinate is a fact — with the reserved no-value symbol, never at the colour-scale midpoint and never as zero.",
+      "Two DIFFERENT nodes at the same coordinate are preserved and overlap exactly. Coincidence is tested on the canonicalized coordinates by exact equality, never with an epsilon, because an epsilon would merge two genuinely distinct nearby neurons. The coincident count reaches the summary and the table.",
+      "Duplicate node ids are rejected before anything can diverge on them: one id bound to two neurons binds one coordinate, one colour and one table row to both.",
+      "Negative zero is accepted. RFC 8785 canonicalizes it to 0 and -0 === 0, so nothing is lost. A coordinate of exactly 0 is a place — usually the layer centre — and never an absence.",
+      "Unit conversion happens only within the length dimension, through the typed unit layer, with an exact factor recorded in the derivation and disclosed (UNIT_CONVERTED). When the axes and the domain declare different length codes, all are canonicalized to the FINEST declared code, so no coordinate is coarsened. `nest:weight` is simulator-defined and is never converted.",
+      "The domain rectangle is CLOSED: [centre - extent/2, centre + extent/2] per axis. Unlike a time window, a boundary coordinate is a real place, and excluding it would report a real neuron as out of domain.",
+      "Domain membership uses an extent-relative tolerance per axis plus a bounded binary64 allowance for the centre +/- extent/2 arithmetic. The tolerance never grows with the absolute coordinate origin: a 0.4 mm layer centred 40 mm away must not acquire a tolerance 100x its own size.",
+      "On a periodic axis the two boundary coordinates are the SAME place. A node exactly on the boundary is drawn once, at the coordinate it was given, and never duplicated at the opposite edge — a ghost marker would be counted as a neuron that does not exist.",
+      "Groups are ordered as declared, a node belongs to at most one group, and nodes in no group form a final implicit `ungrouped` category that is never dropped. Legend order follows that order.",
+      "The y axis increases UPWARD: the scientific convention, not the SVG one."
+    ],
+    "derivation": [
+      "equal_scale_mapping: one scale s = min(plotWidth / domainWidth, plotHeight / domainHeight) is applied to BOTH axes, so a circle stays a circle and an on-page distance means the same thing horizontally and vertically. There is no anisotropic mode. O(1).",
+      "domain_selection: when a domain is declared it IS the mapped rectangle. Otherwise the rectangle is the axis-aligned bounding box of the drawn positions expanded by a 2 percent margin per axis, and no domain rectangle is drawn.",
+      "degenerate_domain: zero extent on BOTH axes with no declared domain is refused (RENDER_DEGENERATE_DOMAIN) — every scale would be arbitrary, and an arbitrary scale on a map that asserts distance is a false statement. If exactly one axis is degenerate (collinear nodes) it takes the other's extent, keeping one equal scale, and the collinearity stays visible.",
+      "coincidence: nodes whose canonicalized (x, y) are bit-identical are counted and reported. Exact-key hashing, O(n).",
+      "in_domain: closed-interval membership per axis under the extent-relative tolerance above. A node outside the declared domain is drawn where it was declared — visibly outside the domain rectangle — and counted. It is never clamped, wrapped, or dropped.",
+      "minimum_image: for a periodic axis of period P and an endpoint displacement d = x_target - x_source, the drawn displacement is d' = d - P * round(d / P). At |d| = P/2 exactly the two images tie; the tie is resolved toward the POSITIVE axis direction and the tie count is reported. Node coordinates are never modified — only the chord is chosen.",
+      "wrapped_chord: a wrapped chord is split at the domain boundary into two segments that terminate AT the domain edge and carry a matched marker binding them to one edge id. No ghost node is drawn at the wrapped position.",
+      "straight_chord: the literal chord between the two declared coordinates. It is legal, labelled, and accompanied by the count of edges whose straight chord exceeds their minimum image: in a 400 um periodic layer, two nodes 300 um apart on the page were connected across 100 um, and the drawn length is 3x the modelled separation.",
+      "multapse chords: connections sharing an unordered endpoint pair lie on the SAME chord, because the endpoints are measured places. They are never lane-offset — an offset chord passes through coordinates where nothing was measured. They are drawn as one chord with a count label; when a value is encoded, a declared aggregation is required (SCIENCE_AGGREGATION_REQUIRED).",
+      "reciprocal pairs: A->B and B->A share the chord and BOTH arrowheads are drawn, one at each end, with per-direction counts. A reciprocal pair is never collapsed into one double-headed line, which would hide the case where only one direction exists.",
+      "autapse: drawn as a fixed screen-space loop anchored at the node, with an arrowhead. The loop is decoration; its radius is not a spatial extent.",
+      "direction: an arrowhead at the target end of every chord, always. Direction is never carried by colour, curvature, or motion, so a grayscale print, a still export, and a reduced-motion reader all read the same direction.",
+      "edge_value_scale: width encodes |value| over a bounded pixel range stated in the legend. A diverging colour scale requires an explicit centre (RENDER_DIVERGING_SCALE_NO_CENTER). When the encoded values carry BOTH signs, negative chords are additionally dashed — a colour-free sign encoding that survives a grayscale print.",
+      "node_colour: group colour is always paired with a distinct marker shape, so group identity never depends on colour perception; more than 8 groups is refused (RENDER_SERIES_LIMIT_EXCEEDED). A value scale carries numeric legend ticks, and a symlog transform carries its declared linear threshold.",
+      "encoding_channel_bound: an encoding may never name a channel the data does not carry. `nodeEncoding.mode = value` with no `positions.value` series, or `connectionDisplay.valueEncoding = weight | delay` with no matching connection series, is refused by the renderer (RENDER_NO_DATA) — never drawn as a uniform figure under a legend that claims a value nobody supplied. This bind is enforced at render time, not by a semantic validator.",
+      "empty_result: a map with no connections is a VALID figure. A map in which no node is drawable is an explicit empty state with a reason (RENDER_NO_DATA), never an empty coordinate system that resembles a measured emptiness.",
+      "Complexity: O(n log n) for the position sort, O(n) for coincidence and domain membership, O(e) for chords. No iterative, seeded, or force-directed step exists anywhere in this figure."
+    ],
+    "scopeRules": [
+      "One NetworkScopeV1 is mandatory in `data.scope`. It describes how the whole snapshot query was PARTITIONED — for the coordinates and for any connections drawn over them. It is not a coverage claim: a single_process query can still return no position for a node, and that gap is reported separately by the missing-position count.",
+      "single_process: the query observed every node it was asked for. global_merged: `mergedRanks` must cover 0..worldSize-1 exactly once, or the merge stays partial (SCOPE_MERGE_INCOMPLETE) and is never upgraded; a rank listed twice is a conflict (SCOPE_MERGE_CONFLICT) because merging one rank twice would double-count.",
+      "mpi_target_rank_local: a rank-local query. The declared node universe is then the rank-local selection, and the map is disclosed RANK_LOCAL_SCOPE and PARTIAL_NETWORK_SCOPE. It is DISCLOSED, not refused: this figure exposes no coverage-claim parameter, so there is no global claim to contradict.",
+      "sampled: a subset. The drawn density is a fraction of the true density and the empty regions of the map may be full; no coverage or completeness claim survives this scope.",
+      "Connections may be drawn only when every endpoint has a position. A node omitted for a missing position takes its connections with it, so this figure requires COMPLETE position coverage (SCOPE_POSITION_COVERAGE_INCOMPLETE) whenever connections are present or the policy is `reject`: a map may have holes OR chords, never both.",
+      "`nodeUniverse.complete = false` is refused (SCOPE_NODE_UNIVERSE_REQUIRED): an incomplete universe cannot ground any empty-region or isolate reading, so this revision requires a complete declared universe rather than silently disclosing the gap.",
+      "Weights are pooled onto one encoding only when they share a declared dimension and, where synapse models are declared, a single model (SCIENCE_WEIGHT_GROUP_INCOMPATIBLE otherwise)."
+    ],
+    "uncertaintySupport": ["none"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE selected node universe in a declared order. It is required and is never inferred from the position rows: a node the source failed to position must still be counted, or its absence from the map would be invisible. Read by topology.node_universe_declared, topology.edge_endpoints_in_universe, and spatial.position_coverage_complete."
+        },
+        "positions": {
+          "type": "object",
+          "description": "One row per POSITIONED node: an id, an x, a y, and optionally a value. Binding them in one row is what makes coverage structural — a value can never be supplied for a node that has no coordinate, and a coordinate can never lose its value.",
+          "properties": {
+            "nodeIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Binds each coordinate to a node explicitly. Coordinates are never matched to nodes by array position, because a reordered node universe would then silently relocate every neuron."
+            },
+            "x": {
+              "type": "object",
+              "description": "The x coordinate per row. `kind` is `position`, whose only dimension is length: a spatial map at one equal scale asserts a distance, and a distance needs a unit. Bare model numbers are not plotted here.",
+              "properties": {
+                "kind": { "const": "position" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 100000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "description": "The y coordinate per row. No null is admitted on either axis: a node with an x and no y cannot be placed, and half a position is not a position.",
+              "properties": {
+                "kind": { "const": "position" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 100000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "status": {
+              "type": "string",
+              "enum": ["measured", "model_generated", "supplied"],
+              "description": "`measured` was observed from a physical system. `model_generated` was produced by the model itself — a NEST grid or free layer is model_generated, not measured. `supplied` was authored by the caller. The status is stated in the summary and on every table row; it is never inferred from `source.kind`."
+            },
+            "frame": {
+              "type": "object",
+              "description": "The declared coordinate frame. Cortexel records it and never transforms between frames: a frame transform that nobody declared is a silent relocation of every node.",
+              "properties": {
+                "id": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                "xAxisLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+                "yAxisLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" }
+              },
+              "required": ["id"],
+              "additionalProperties": false
+            },
+            "domain": {
+              "type": "object",
+              "description": "The declared spatial domain — a NEST layer's centre, extent and edge_wrap. Optional; when present it IS the mapped rectangle and it supplies the period that a wrapped chord needs. Because the boundary rule lives here, a periodic chord rule can never be declared without the period it requires.",
+              "properties": {
+                "center": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "position" },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "value": { "type": "number" }
+                      },
+                      "required": ["kind", "unit", "value"],
+                      "additionalProperties": false
+                    },
+                    "y": {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "position" },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "value": { "type": "number" }
+                      },
+                      "required": ["kind", "unit", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["x", "y"],
+                  "additionalProperties": false
+                },
+                "extent": {
+                  "type": "object",
+                  "description": "The full width and height of the domain, not a half-extent. Both are strictly positive: a zero-extent domain has no scale and no period.",
+                  "properties": {
+                    "width": {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "length" },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "value": { "type": "number", "exclusiveMinimum": 0 }
+                      },
+                      "required": ["kind", "unit", "value"],
+                      "additionalProperties": false
+                    },
+                    "height": {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "length" },
+                        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                        "value": { "type": "number", "exclusiveMinimum": 0 }
+                      },
+                      "required": ["kind", "unit", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["width", "height"],
+                  "additionalProperties": false
+                },
+                "boundary": {
+                  "description": "Open or periodic. Under `periodic` the chord rule is REQUIRED and has no default: a connection across a wrapped boundary is drawn either as the minimum image or as the literal straight chord, the two differ by the period, and no reader can tell which one they are looking at unless the figure says so.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": { "kind": { "const": "open" } },
+                      "required": ["kind"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "periodic" },
+                        "x": { "type": "boolean", "description": "Whether the x axis wraps. Periodicity is declared per axis: NEST's edge_wrap is a property of the layer, and a layer may wrap in one axis only." },
+                        "y": { "type": "boolean" },
+                        "edgeChordRule": {
+                          "type": "string",
+                          "enum": ["minimum_image", "straight_chord"],
+                          "description": "`minimum_image` draws the shortest wrapped chord, split at the boundary, with no ghost node at the wrapped position. `straight_chord` draws the literal chord between the two declared coordinates and is labelled as such, together with the count of edges whose drawn length exceeds their modelled separation."
+                        }
+                      },
+                      "required": ["kind", "x", "y", "edgeChordRule"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": ["center", "extent", "boundary"],
+              "additionalProperties": false
+            },
+            "value": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantitySeries",
+              "description": "Optional per-node scalar, parallel to `nodeIds`. A node with no value carries an explicit null and is still drawn with the reserved no-value symbol. Cortexel does not re-derive this value and makes no claim about how it was computed."
+            },
+            "valueLabel": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+              "description": "What the value IS, including the window it came from if it has one. The figure carries no analysis window of its own for it."
+            }
+          },
+          "required": ["nodeIds", "x", "y", "status", "frame"],
+          "additionalProperties": false
+        },
+        "scope": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+          "description": "How the snapshot query was partitioned, for the coordinates and for any connections. This is the single scope read by topology.scope_declared and topology.scope_supports_claim. It is not a coverage claim: a single-process query can still return no position for a node, and that gap is reported separately."
+        },
+        "connections": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+          "description": "Optional edge layer in parallel-array form (`sourceIds`, `targetIds`, optional `edgeIds`, `weights`, `delays`, `synapseModels`). Multapses are distinct rows and are never deduplicated; on this map they share one chord and are counted, never lane-offset onto coordinates where nothing was measured. Every endpoint must resolve into `nodeUniverse` (topology.edge_endpoints_in_universe) and have a position (spatial.position_coverage_complete)."
+        }
+      },
+      "required": ["nodeUniverse", "positions", "scope"],
+      "additionalProperties": false
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "mapId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "mapLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "missingPositionPolicy": {
+          "type": "string",
+          "enum": ["reject", "omit_and_disclose"],
+          "description": "Required, with no default. `reject` fails closed when any selected node has no position. `omit_and_disclose` is intended to draw the positioned nodes and disclose the omitted count (POSITIONS_MISSING). NOTE: under the current semantic-validator registry, spatial.position_coverage_complete always requires full coverage, so both policies presently require a position for every selected node; the enum is retained for the forward-compatible policy axis. An unpositioned node is NEVER placed at the origin, which under a centred layer is the single most plausible place for a real soma to be."
+        },
+        "nodeEncoding": {
+          "description": "What a marker's colour means. Required: a figure in which colour acquired a meaning by default is a figure whose legend nobody wrote.",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": { "mode": { "const": "uniform" } },
+              "required": ["mode"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "Categorical colour by declared group, always paired with a distinct marker shape so group identity never depends on colour perception.",
+              "properties": { "mode": { "const": "group" } },
+              "required": ["mode"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "Continuous colour by the per-node value. A diverging scale carries an explicit centre; a symlog transform carries its linear threshold. Neither is ever inferred.",
+              "properties": {
+                "mode": { "const": "value" },
+                "colorScale": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "sequential" },
+                        "transform": { "const": "linear" }
+                      },
+                      "required": ["kind", "transform"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "sequential" },
+                        "transform": { "const": "symlog" },
+                        "linearThreshold": { "type": "number", "exclusiveMinimum": 0 }
+                      },
+                      "required": ["kind", "transform", "linearThreshold"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "diverging" },
+                        "center": { "type": "number" },
+                        "transform": { "const": "linear" }
+                      },
+                      "required": ["kind", "center", "transform"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "diverging" },
+                        "center": { "type": "number" },
+                        "transform": { "const": "symlog" },
+                        "linearThreshold": { "type": "number", "exclusiveMinimum": 0 }
+                      },
+                      "required": ["kind", "center", "transform", "linearThreshold"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": ["mode", "colorScale"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "markerRadiusPx": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 3,
+          "description": "Fixed screen-space decoration. It encodes NOTHING: it never scales with a value, a degree, or a soma size, and two markers that touch are not two neurons that touch."
+        },
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "The statistic that a shared chord's encoded value represents. Required (topology.multapse_aggregation_declared) whenever two or more connection rows share an unordered endpoint pair, because the chord between two measured places cannot be split into lanes without inventing geometry. `no_aggregation` ASSERTS at most one connection per pair and fails if that is untrue. Read at the parameters top level."
+        },
+        "synapseModelGroup": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "An explicit declaration that weights from several synapse models are genuinely comparable and may be pooled onto one encoding. Read by topology.weight_group_compatible; without it, weights spanning more than one declared synapse model are refused (SCIENCE_WEIGHT_GROUP_INCOMPATIBLE)."
+        },
+        "connectionDisplay": {
+          "description": "How the optional edge layer is drawn. Absent means chords are drawn uniformly with a count label on any multi-connection pair; the rows themselves are never merged and always reach the table. Encoding a value requires the channel that carries it — and, where that channel is colour, the scale — because a stroke that acquired its meaning from a default is a stroke whose legend nobody wrote.",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "Uniform chords. No value claim: stroke width and colour mean nothing, and direction is carried by the arrowhead alone.",
+              "properties": { "valueEncoding": { "const": "none" } },
+              "required": ["valueEncoding"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "A declared edge attribute encoded as stroke WIDTH over the bounded pixel range stated in the legend. No colour scale is admitted, because no colour meaning is claimed. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
+              "properties": {
+                "valueEncoding": { "type": "string", "enum": ["weight", "delay"] },
+                "channel": { "const": "width" }
+              },
+              "required": ["valueEncoding", "channel"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "A declared edge attribute encoded with COLOUR (alone or with width). The scale is required and never inferred: a diverging scale carries an explicit centre, and signed values are additionally dashed so the sign survives a grayscale print. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
+              "properties": {
+                "valueEncoding": { "type": "string", "enum": ["weight", "delay"] },
+                "channel": { "type": "string", "enum": ["color", "width_and_color"] },
+                "colorScale": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "sequential" },
+                        "transform": { "const": "linear" }
+                      },
+                      "required": ["kind", "transform"],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": { "const": "diverging" },
+                        "center": { "type": "number" },
+                        "transform": { "const": "linear" }
+                      },
+                      "required": ["kind", "center", "transform"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": ["valueEncoding", "channel", "colorScale"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Only the `none` variant is renderable. UncertaintyV1 is a 1-D per-point channel; a position's error is 2-D, and drawing a single array as a disc around each marker would assert an isotropic localization error that the source never declared."
+        }
+      },
+      "required": ["mapId", "missingPositionPolicy", "nodeEncoding"],
+      "additionalProperties": false
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/positions/nodeIds",
+            "/data/positions/x/values",
+            "/data/positions/y/values",
+            "/data/positions/value/values"
+          ],
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/weights/values",
+            "/data/connections/delays/values",
+            "/data/connections/synapseModels"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": ["/data/nodeUniverse/ids", "/data/positions/nodeIds", "/data/connections/edgeIds"]
+      }
+    },
+    { "id": "topology.scope_declared" },
+    { "id": "topology.scope_supports_claim" },
+    { "id": "topology.node_universe_declared" },
+    { "id": "topology.edge_endpoints_in_universe" },
+    { "id": "topology.delay_positive" },
+    { "id": "topology.weight_group_compatible" },
+    { "id": "topology.multapse_aggregation_declared" },
+    { "id": "spatial.position_coverage_complete" },
+    { "id": "spatial.equal_axis_units" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant", "parameters": { "supported": ["none"] } }
+  ],
+
+  "renderer": { "id": "figure.spatial_map_2d", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 50000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "graph_declared_subset"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION", "SOURCE_SYNTHETIC_FIXTURE", "SOURCE_KIND_UNKNOWN", "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY", "SOURCE_AUTHENTICITY_UNVERIFIED", "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE", "RANK_LOCAL_SCOPE", "SAMPLED_EDGES", "NODE_UNIVERSE_INCOMPLETE",
+    "POSITIONS_MISSING", "MULTAPSE_AGGREGATED", "MISSING_VALUES_PRESENT", "UNIT_CONVERTED",
+    "UNCERTAINTY_NOT_PROVIDED", "DOWNSAMPLED_FOR_RENDERING", "COMPACTION_MAY_HIDE_TRANSIENTS",
+    "TABLE_EXCERPT_ONLY", "CALLER_NOTE_UNVERIFIED", "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Spatial map {mapLabel}. {drawnNodeCount} of {declaredNodeCount} nodes drawn at {positionStatus} positions in frame {frameId}; {missingPositionCount} have no declared position and are omitted, never placed at the origin. Axes {xAxisLabel} and {yAxisLabel}, both {positionUnit}, one equal scale. Domain: {domainStatement}. Boundary: {boundaryStatement}. {coincidentNodeCount} nodes exactly overlap another node; positions are never jittered. {outsideDomainCount} lie outside the declared domain. Marker radius is fixed screen-space decoration and encodes nothing. Color: {nodeEncodingStatement}. Connections: {connectionStatement}. Node universe: {nodeUniverseStatement}. Scope: {scopeStatement} {uncertaintyStatement} {compactionStatement} {tableStatement}",
+    "tableColumns": [
+      { "key": "rowKind", "header": "Row", "description": "`node` or `connection`. A cell that does not apply to the row kind is empty; an empty cell is never a zero." },
+      { "key": "id", "header": "Id", "description": "The node id, or the connection's edge id (assigned by ordinal after the canonical sort when the source supplied none)." },
+      { "key": "group", "header": "Group", "description": "The declared group, or `ungrouped`. A node belongs to at most one group." },
+      { "key": "x", "header": "x", "description": "The declared coordinate, exactly as given. Never jittered, clamped, or wrapped." },
+      { "key": "y", "header": "y" },
+      { "key": "positionUnit", "header": "Position unit", "description": "The same unit on both axes after canonicalization. A conversion, if any, is recorded in the derivation and disclosed." },
+      { "key": "positionStatus", "header": "Position status", "description": "`measured`, `model_generated`, or `supplied`. A NEST layer's coordinates are model_generated, not measured." },
+      { "key": "positionMissing", "header": "Position missing", "description": "True for a selected node with no declared position. Such a node is omitted from the map and is never drawn at the origin." },
+      { "key": "insideDomain", "header": "Inside domain", "description": "Closed-interval membership of the declared domain. Empty when no domain was declared." },
+      { "key": "coincidentWith", "header": "Coincident with", "description": "Other node ids sharing this exact coordinate. Two coincident nodes are one marker on the page and two rows here." },
+      { "key": "value", "header": "Value", "description": "The declared per-node value, or empty when the source supplied a null. Empty is missing, not zero." },
+      { "key": "valueUnit", "header": "Value unit" },
+      { "key": "sourceId", "header": "Source", "description": "Connection rows only." },
+      { "key": "targetId", "header": "Target", "description": "Connection rows only. The arrowhead is drawn at this end." },
+      { "key": "chordRule", "header": "Chord", "description": "`straight`, or `wrapped (minimum image)` when the chord crosses a periodic boundary. A wrapped chord's drawn length is not the modelled separation." },
+      { "key": "parallelCount", "header": "Parallel count", "description": "How many connections share this unordered endpoint pair. Greater than 1 means one drawn chord and this many rows." },
+      { "key": "weight", "header": "Weight", "description": "Exact declared value, or empty when none was supplied." },
+      { "key": "weightUnit", "header": "Weight unit", "description": "`nest:weight` is simulator-defined: never converted, never compared across synapse models." },
+      { "key": "delay", "header": "Delay" },
+      { "key": "delayUnit", "header": "Delay unit" },
+      { "key": "synapseModel", "header": "Synapse model" },
+      { "key": "scope", "header": "Scope", "description": "The declared scope, repeated on every row so an extracted subset cannot lose it." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "ase.geometry.find_mic",
+      "version": "3.23.0",
+      "status": "not_run",
+      "notes": "ASE's minimum-image-convention helper is the intended differential oracle for the periodic chord rule ONLY — never for the layout, the equal-scale mapping, or the table, which are Cortexel's own normative constructions. The comparison is meaningful only after the conventions are pinned parameter for parameter: ASE takes an orthorhombic cell matrix while Cortexel takes centre plus extent, and the tie at exactly half the period (|d| = P/2, where two images are equally short) is resolved by rounding, which the two libraries need not resolve the same way. A hand vector covers it directly: in a 400 um periodic layer, d = 300 um must map to d' = -100 um, and d = 200 um must map to the positive image. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.GetPosition", "status": "supported", "notes": "Binds node ids to the matching position order — never by array index alone — and retains the single-process / rank-local / merged scope of the position query. The layer's centre, extent and edge_wrap are carried only when the source actually declares them; they are never reconstructed from the coordinates, and a connection mask or kernel is never reconstructed from them at all. NEST layer coordinates are bare numbers: the adapter requires the caller to declare the length unit and never guesses one." },
+    { "system": "nest.GetConnections", "status": "supported", "notes": "The optional edge layer. SynapseCollection.get() in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. The connection scope must come from the actual run, and its snapshot time must match the position query's." },
+    { "system": "nwb", "status": "partial", "notes": "NWB carries positions in the electrode table and as ophys ROI centroids. The declared unit and what real files actually store do not always agree, so the adapter requires the caller to declare the unit and select the table explicitly; it never infers either. NWB carries no node-universe completeness flag and no MPI scope, so the caller declares both." },
+    { "system": "neo", "status": "rejected", "notes": "Neo models recordings, not spatial layouts. There is no faithful mapping, and an invented one would be worse than none." },
+    { "system": "ncp", "status": "planned", "notes": "Pending the narrow NCP adapter and its downstream consumer certification." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.spatial_map_2d", "nest.spatial_2d"],
+    "notes": "`nest.spatial_2d` was a scene:null host-only route with no contract; `nest.spatial_map_2d` carried `coordinate_units` as free text and centre/extent/edge_wrap as bare numbers, with no node universe, no missing-position policy and no periodic chord rule. Migration REQUIRES the complete position contract and blocks with MIGRATION_INFORMATION_MISSING rather than inventing any of it: guessing the length unit invites a silent 1000x, inferring the universe from the position rows deletes every node the source failed to position, and defaulting the chord rule picks between two drawings that differ by a whole period. Legacy ids are never accepted in normal validation (MIGRATION_LEGACY_ID_NOT_ACCEPTED): a silent alias makes a stored artifact ambiguous about what was validated."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Introducing an anisotropic display mode is MAJOR: every stored figure's on-page distances would stop meaning one thing.",
+    "Changing the equal-scale rule, the domain-selection rule, or the upward y axis is MAJOR.",
+    "Changing the minimum-image formula, its half-period tie-break, or the wrapped-chord split is MAJOR: a stored figure would no longer reproduce byte-for-byte, and the drawn connection lengths would change.",
+    "Adding an origin fallback for a missing position is MAJOR and will not be accepted: it invents a measurement at the most plausible place on the map.",
+    "Introducing node jitter, node deduplication, or any node compaction is MAJOR and will not be accepted.",
+    "Lane-offsetting parallel chords is MAJOR and will not be accepted: it draws an axonal path that was never measured.",
+    "Changing the arrowhead convention from the target end is MAJOR: it reverses the meaning of every stored figure.",
+    "Adding a node encoding mode, a colour transform, or an adapter is MINOR.",
+    "Raising a budget ceiling is MINOR; lowering one is MAJOR, because a request that validated yesterday must not fail today."
+  ],
+
+  "knownLimitations": [
+    "Blueprint 30.18 permits an anisotropic display when the frame authorizes it. No disclosure rule can state 'the axes carry different scales', so honesty cannot fail closed for it and this revision refuses anisotropic display. Closing the gap needs a new disclosure id, not a skill change.",
+    "The closed semantic-validator registry has no `spatial.positions_within_extent` rule and no matching error code, so a position outside the declared domain cannot be REFUSED. It is drawn exactly where it was declared — visibly outside the domain rectangle — and counted in the summary and the table.",
+    "UncertaintyV1 is a 1-D per-point channel, so a 2-D localization error cannot be expressed. Rendering a single array as an isotropic disc would assert an isotropy nobody declared, so only `none` is supported.",
+    "units.v1 has no area code and no per-area quantity kind, so an areal density cannot be emitted as a typed quantity. The summary reports the node count and the declared extent; the figure makes no density claim of its own.",
+    "One scope governs the whole snapshot: `data.scope` is read by both topology.scope_declared and topology.scope_supports_claim. There is no separate connection scope field, so the position and connection layers cannot declare conflicting snapshot times; a single declared scope binds them together.",
+    "`topology.edge_endpoints_in_universe` checks that every CONNECTION endpoint (`connections.sourceIds`, `connections.targetIds`) resolves into the declared `nodeUniverse`. A `positions.nodeIds` entry outside the universe is not caught by this rule — coverage is checked in the other direction — so an extra positioned id that is not a universe member is a known gap in this revision.",
+    "`spatial.position_coverage_complete` runs on every request, independent of `missingPositionPolicy`, so this revision requires a position for every selected node even under `omit_and_disclose`. A map with a hole is refused (SCOPE_POSITION_COVERAGE_INCOMPLETE), never drawn as a partial map.",
+    "`topology.node_universe_declared` refuses a `nodeUniverse.complete = false`, so a declared-incomplete universe is rejected (SCOPE_NODE_UNIVERSE_REQUIRED) rather than disclosed in this revision. NODE_UNIVERSE_INCOMPLETE remains reserved for a future revision that can ground a partial-universe reading.",
+    "Marker radius is fixed screen-space decoration. Two neurons 1 um apart in a 400 um map are drawn as overlapping dots, and a dot's area is not a soma.",
+    "No node compaction policy exists: extrema sampling and averaging both destroy the spatial distribution the figure exists to show, and none in the registry fits a point cloud. Above the visible-mark budget a request is refused (RESOURCE_COMPACTION_UNAVAILABLE), never thinned.",
+    "`graph_declared_subset` is the only compaction this figure permits, and it thins the optional edge layer alone. It never removes a node, and its retained/source counts are disclosed (SAMPLED_EDGES).",
+    "The shared nodeUniverse type admits 100000 nodes, but this contract draws at most 50000 markers and cannot compact them, so a larger layer is refused rather than shown as a thinned map that would understate its own density.",
+    "Coincident nodes overlap exactly and are never separated: a grid layer with an excitatory and an inhibitory population on the same points draws N markers for 2N neurons. The coincident count is reported, but the drawing cannot pull them apart.",
+    "Chords between measured positions are straight or wrapped lines, not axonal paths. common.v1 carries no measured axon geometry, and none is invented here.",
+    "There is no projection of a 3-D layer. A projected z silently collapses a real axis and can make two distant neurons coincident; a 3-D layer belongs to the experimental 3-D scene, whose table and summary remain the complete route to the data."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.spatial_map_2d" },
+        "data": {
+          "nodeUniverse": {
+            "ids": ["1", "2", "3", "4"],
+            "order": "as_declared",
+            "groups": [
+              { "id": "exc", "label": "Excitatory", "memberIds": ["1", "2", "3"] },
+              { "id": "inh", "label": "Inhibitory", "memberIds": ["4"] }
+            ],
+            "complete": true
+          },
+          "positions": {
+            "nodeIds": ["1", "2", "3", "4"],
+            "x": { "kind": "position", "unit": "um", "values": [-150, 150, -150, 150] },
+            "y": { "kind": "position", "unit": "um", "values": [-150, -150, 150, 150] },
+            "status": "model_generated",
+            "frame": { "id": "l4_sheet", "xAxisLabel": "x (medial-lateral)", "yAxisLabel": "y (rostral-caudal)" },
+            "domain": {
+              "center": {
+                "x": { "kind": "position", "unit": "um", "value": 0 },
+                "y": { "kind": "position", "unit": "um", "value": 0 }
+              },
+              "extent": {
+                "width": { "kind": "length", "unit": "um", "value": 400 },
+                "height": { "kind": "length", "unit": "um", "value": 400 }
+              },
+              "boundary": { "kind": "periodic", "x": true, "y": true, "edgeChordRule": "minimum_image" }
+            }
+          },
+          "scope": {
+            "kind": "single_process",
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 },
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": ["1", "1", "2", "4"],
+            "targetIds": ["2", "2", "1", "4"],
+            "edgeIds": ["e1", "e2", "e3", "e4"],
+            "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10.5, 10.5, -3.2, -1] },
+            "delays": { "kind": "delay", "unit": "ms", "values": [1.5, 1.5, 2, 1] },
+            "synapseModels": ["static_synapse", "static_synapse", "static_synapse", "static_synapse"]
+          }
+        },
+        "parameters": {
+          "mapId": "l4_layer_map",
+          "mapLabel": "L4 layer at t = 1000 ms",
+          "missingPositionPolicy": "reject",
+          "nodeEncoding": { "mode": "group" },
+          "markerRadiusPx": 3,
+          "multapseAggregation": "sum",
+          "connectionDisplay": {
+            "valueEncoding": "weight",
+            "channel": "width_and_color",
+            "colorScale": { "kind": "diverging", "center": 0, "transform": "linear" }
+          },
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-7" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.spatial_map_2d" },
+        "data": {
+          "nodeUniverse": { "ids": ["101", "102", "103"], "order": "as_declared", "complete": true },
+          "positions": {
+            "nodeIds": ["101", "102", "103"],
+            "x": { "kind": "position", "unit": "mm", "values": [0.1, 0.4, 0.4] },
+            "y": { "kind": "position", "unit": "mm", "values": [0.2, 0.2, 0.5] },
+            "status": "model_generated",
+            "frame": { "id": "free_layer", "xAxisLabel": "x", "yAxisLabel": "y" },
+            "value": { "kind": "firing_rate", "unit": "Hz", "values": [12.5, null, 3] },
+            "valueLabel": "Mean rate over 0-1000 ms"
+          },
+          "scope": {
+            "kind": "mpi_target_rank_local",
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 },
+            "rank": 2,
+            "worldSize": 4,
+            "localTargetUniverseComplete": true
+          }
+        },
+        "parameters": {
+          "mapId": "rank2_positions",
+          "mapLabel": "Nodes owned by rank 2 of 4",
+          "missingPositionPolicy": "reject",
+          "nodeEncoding": { "mode": "value", "colorScale": { "kind": "sequential", "transform": "linear" } },
+          "uncertainty": { "kind": "none", "reason": "not_available" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.spatial_map_2d" },
+        "data": {
+          "nodeUniverse": { "ids": ["roi-1", "roi-2", "roi-3"], "order": "as_declared", "complete": true },
+          "positions": {
+            "nodeIds": ["roi-1", "roi-2", "roi-3"],
+            "x": { "kind": "position", "unit": "um", "values": [12.5, 130, 240] },
+            "y": { "kind": "position", "unit": "um", "values": [8, 95, 190.25] },
+            "status": "measured",
+            "frame": { "id": "fov_2p", "xAxisLabel": "x (field of view)", "yAxisLabel": "y (field of view)" }
+          },
+          "scope": { "kind": "single_process", "complete": true }
+        },
+        "parameters": {
+          "mapId": "fov_rois",
+          "mapLabel": "Segmented ROIs, session 3",
+          "missingPositionPolicy": "omit_and_disclose",
+          "nodeEncoding": { "mode": "uniform" },
+          "markerRadiusPx": 4,
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": {
+          "kind": "experimental_recording",
+          "system": "two-photon",
+          "datasetId": "session-3",
+          "declaredNote": "Session 3 field of view; ROI centroids from the segmentation step."
+        }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.spatial_map_2d" },
+        "data": {
+          "nodeUniverse": { "ids": ["1", "2", "3", "4", "5"], "order": "as_declared", "complete": true },
+          "positions": {
+            "nodeIds": ["1", "2", "3", "4", "5"],
+            "x": { "kind": "position", "unit": "um", "values": [-350, -100, 0, 150, 350] },
+            "y": { "kind": "position", "unit": "um", "values": [-90, 40, 0, -40, 90] },
+            "status": "model_generated",
+            "frame": { "id": "wide_sheet", "xAxisLabel": "x", "yAxisLabel": "y" },
+            "domain": {
+              "center": {
+                "x": { "kind": "position", "unit": "um", "value": 0 },
+                "y": { "kind": "position", "unit": "um", "value": 0 }
+              },
+              "extent": {
+                "width": { "kind": "length", "unit": "um", "value": 800 },
+                "height": { "kind": "length", "unit": "um", "value": 200 }
+              },
+              "boundary": { "kind": "open" }
+            }
+          },
+          "scope": {
+            "kind": "global_merged",
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 250 },
+            "worldSize": 4,
+            "mergedRanks": [0, 1, 2, 3]
+          },
+          "connections": {
+            "sourceIds": ["1", "3"],
+            "targetIds": ["3", "5"],
+            "edgeIds": ["e1", "e2"],
+            "delays": { "kind": "delay", "unit": "ms", "values": [1.2, 2.4] }
+          }
+        },
+        "parameters": {
+          "mapId": "merged_layer_map",
+          "mapLabel": "Layer merged over 4 ranks at t = 250 ms",
+          "missingPositionPolicy": "reject",
+          "nodeEncoding": { "mode": "uniform" },
+          "markerRadiusPx": 3,
+          "connectionDisplay": { "valueEncoding": "delay", "channel": "width" },
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-12" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "Three nodes are selected and two have coordinates, under `reject`. Node 3 has no position. Placing it at the origin invents a measurement — and in a layer centred on (0, 0) the origin is the exact middle of the sheet, the single most plausible place for a real soma to be, so the fabricated point would survive every visual sanity check. Dropping it silently would instead make a 3-node population look like a 2-node one.",
+        "expectedCode": "SCOPE_POSITION_COVERAGE_INCOMPLETE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "x is a length and y is a dimensionless layer index. The map draws both axes at ONE scale, so 6 cortical layers spanning y = 0..5 would be drawn 5 um tall inside a 400 um wide map: the laminar structure — the entire point of the figure — collapses into a horizontal line, and sqrt(um^2 + index^2) is not a distance at all. Two quantities are not comparable merely because both arrays are numbers.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2", "3"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100, 400] },
+              "y": { "kind": "position", "unit": "1", "values": [0, 2, 5] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Node 2 is declared twice. One id would bind two coordinates: the marker is drawn at whichever row the index kept, the table shows two rows for one neuron, and a selection or a search jumps to a different one of them than the drawing shows. An ambiguous identity must fail before anything can diverge on it.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "2"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100, 200] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50, 0] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A connection targets node 99, which is not in the declared complete node universe. Drawing the chord would add an edge to a neuron that is not in the population — and silently convert a declared-complete claim into a false one. Either the universe is wrong or the connection row is; Cortexel will not extend a universe you declared complete.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2", "3"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100, 200] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50, 25] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["99"]
+            }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" },
+            "connectionDisplay": { "valueEncoding": "none" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "`um` is canonical; `micrometer` is only an alias. A stable request is rejected with a repair rather than silently converted, because a spatial map is exactly where an unseen factor of 1000 is invisible: a 400 um layer and a 400 mm layer draw the identical picture, and only the axis tick text — which the caller never checked — differs.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "micrometer", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Three parallel connections from node 1 to node 2 are drawn while weight is encoded, and no aggregation is declared. On a measured map the three synapses lie on ONE chord — the endpoints are real places, and offsetting the stroke would draw an axon through coordinates where nothing was measured. So one chord must carry one number: the weights are 10, 10 and -25, whose sum is -5, whose mean is -1.67 and whose maximum is 10. Painting the last row would turn a net-inhibitory pair into a strongly excitatory one. There is no 'last edge wins'.",
+        "expectedCode": "SCIENCE_AGGREGATION_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true },
+            "connections": {
+              "sourceIds": ["1", "1", "1"],
+              "targetIds": ["2", "2", "2"],
+              "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10, 10, -25] },
+              "synapseModels": ["static_synapse", "static_synapse", "static_synapse"]
+            }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" },
+            "connectionDisplay": {
+              "valueEncoding": "weight",
+              "channel": "width_and_color",
+              "colorScale": { "kind": "diverging", "center": 0, "transform": "linear" }
+            }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Connections are drawn over a map with a hole: node 3 has no position and the policy omits it. Omitting node 3 also omits both connections into it, so a 2-in convergence is drawn as two unconnected neurons — the omission deletes synapses, not just a marker, and the deletion is invisible on the page. A map may have holes OR chords, never both.",
+        "expectedCode": "SCOPE_POSITION_COVERAGE_INCOMPLETE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true },
+            "connections": { "sourceIds": ["1", "2"], "targetIds": ["3", "3"] }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "omit_and_disclose",
+            "nodeEncoding": { "mode": "uniform" },
+            "connectionDisplay": { "valueEncoding": "none" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The scope claims a global merge of a 3-rank run but lists rank 2 twice in `mergedRanks`. Merging one rank's snapshot twice would double-count every node and connection it owns, so the claimed global coverage is not merely partial — it is inconsistent. A partial or duplicated rank set is never upgraded to a global claim by declaring one.",
+        "expectedCode": "SCOPE_MERGE_CONFLICT",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": {
+              "kind": "global_merged",
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 250 },
+              "worldSize": 3,
+              "mergedRanks": [0, 1, 2, 2]
+            }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A delay of 0 ms. NEST cannot represent an instantaneous chemical synapse: a delay is at least one resolution step, 0.1 ms by default. A zero therefore does not describe a fast synapse — it describes an empty column, or a delay recorded in seconds (0.0015 s) that was scaled to zero. On a spatial map this is doubly misleading, because a reader will try to relate the drawn chord length to the transmission delay.",
+        "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"],
+              "delays": { "kind": "delay", "unit": "ms", "values": [0] }
+            }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" },
+            "connectionDisplay": { "valueEncoding": "delay", "channel": "width" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A confidence interval on node positions. UncertaintyV1 is a single 1-D array, so it cannot express a 2-D localization error; rendering it would put an isotropic disc around each marker and assert that the x and y errors are equal and uncorrelated — a claim the source never made. A two-photon ROI centroid is typically far more uncertain along the optical axis and in the direction of drift than across it. The variant is refused, not approximated.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "measured",
+              "frame": { "id": "fov_2p" }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "mapId": "fov_rois",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" },
+            "uncertainty": {
+              "kind": "confidence_interval",
+              "unit": "um",
+              "lower": [-2, 98],
+              "upper": [2, 102],
+              "level": 0.95,
+              "method": "bootstrap",
+              "coverage": "pointwise",
+              "basis": "bootstrap_draws"
+            }
+          },
+          "source": { "kind": "experimental_recording", "system": "two-photon" }
+        }
+      },
+      {
+        "why": "The request asserts that Cortexel validated it and that the position coverage is complete. Validation results and completeness are library-generated facts: a caller declares what its data IS, never what Cortexel concluded about it. Accepting a caller-set coverage flag would let a map with holes claim to be whole with one boolean — exactly the failure the coverage rule exists to prevent. The field is rejected, not ignored.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" },
+          "validation": { "scope": { "result": "passed", "positionCoverage": "complete" } }
+        }
+      },
+      {
+        "why": "Two connections pool weights from two different synapse models — `static_synapse` and `stdp_synapse` — onto one width encoding, with no `synapseModelGroup` declaring them comparable. A NEST weight's physical meaning depends on its model: in one it behaves like a current, in another like a conductance. Encoding both on one stroke scale is a comparison of numbers that are not comparable. Group by model, or declare that they are genuinely comparable.",
+        "expectedCode": "SCIENCE_WEIGHT_GROUP_INCOMPATIBLE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.spatial_map_2d" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3"], "complete": true },
+            "positions": {
+              "nodeIds": ["1", "2", "3"],
+              "x": { "kind": "position", "unit": "um", "values": [0, 100, 200] },
+              "y": { "kind": "position", "unit": "um", "values": [0, 50, 0] },
+              "status": "model_generated",
+              "frame": { "id": "layer" }
+            },
+            "scope": { "kind": "single_process", "complete": true },
+            "connections": {
+              "sourceIds": ["1", "2"],
+              "targetIds": ["2", "3"],
+              "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10, 20] },
+              "synapseModels": ["static_synapse", "stdp_synapse"]
+            }
+          },
+          "parameters": {
+            "mapId": "layer_map",
+            "missingPositionPolicy": "reject",
+            "nodeEncoding": { "mode": "uniform" },
+            "connectionDisplay": { "valueEncoding": "weight", "channel": "width" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      }
+    ]
+  }
+}

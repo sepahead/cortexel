@@ -1,0 +1,344 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.connection_graph.request.v1.schema.json",
+  "title": "network.connection_graph request",
+  "description": "GENERATED from contract/skills/network.connection_graph.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.connection_graph"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE selected node universe, in a declared order. This is required and cannot be inferred: an edge list can only show that no edge was observed, never that a node has degree zero. Without it, every isolate silently disappears from the figure. The semantic validators read this at `data.nodeUniverse`."
+        },
+        "connections": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+          "description": "One row per connection. Parallel connections between the same pair are distinct rows and are never deduplicated; a row whose source equals its target is an autapse and is never dropped."
+        },
+        "scope": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+          "description": "How much of the connectivity was actually observed. This is a fact about the CONNECTIONS and is independent of whether the node universe is complete."
+        },
+        "positions": {
+          "type": "object",
+          "description": "Measured node coordinates. Required when the layout mode is `measured_positions`, and then required to cover the node universe COMPLETELY: a node with no coordinate can neither be placed at the origin (which invents a measurement) nor dropped (which deletes a node and every edge touching it).",
+          "properties": {
+            "nodeIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Binds each coordinate to a node explicitly. Coordinates are never matched to nodes by position in the array, because a reordered node universe would then silently relocate every neuron."
+            },
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "position"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "position"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "frame": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+              "description": "The coordinate frame the positions were measured in. Cortexel does not transform between frames; it records which one was declared."
+            }
+          },
+          "required": [
+            "nodeIds",
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "nodeUniverse",
+        "connections",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "graphId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+        },
+        "graphLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "layout": {
+          "type": "object",
+          "description": "Either measured coordinates or a closed-form deterministic schematic construction. There is no force-directed option: a spring layout depends on iteration order and floating-point accumulation, so it cannot produce the byte-identical output a stable figure requires — and its distances mean nothing anyway.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "measured_positions",
+                "schematic_circular",
+                "schematic_grouped_circular",
+                "schematic_layered"
+              ],
+              "description": "`measured_positions` is spatial and honours one equal scale on both axes. Every `schematic_*` mode is explicitly NON-SPATIAL: it is labelled as such on the figure and in the summary, because a reader who measures distance in it is measuring the algorithm."
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "parallelEdges": {
+          "type": "object",
+          "description": "How multiple connections between the same pair are DRAWN. They are never merged in the data: every row survives into the table and the sidecar regardless of this setting.",
+          "properties": {
+            "display": {
+              "type": "string",
+              "enum": [
+                "separate_lanes",
+                "bundled"
+              ],
+              "description": "`separate_lanes` draws each connection on its own deterministic routed lane. `bundled` draws one stroke carrying an explicit count label; when an edge value is encoded it additionally requires a declared aggregation."
+            },
+            "maxLanes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "description": "The number of distinct lanes drawn between one pair before lanes would have to be shared — a rendering hint. What fails closed is the multapse-aggregation rule (a declared `parameters.multapseAggregation` for any pair carrying parallel connections); the lane cap itself is not re-checked at the validation boundary."
+            }
+          },
+          "required": [
+            "display",
+            "maxLanes"
+          ],
+          "additionalProperties": false
+        },
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How parallel connections between one unordered pair are summarized into a per-pair derived value (a bundled stroke's encoded value, a degree area). REQUIRED whenever any pair carries more than one connection; `no_aggregation` asserts at most one connection per pair and fails if that is untrue. The rows are never merged in the data regardless of this setting. Read by the semantic validator at `parameters.multapseAggregation`."
+        },
+        "edgeValueEncoding": {
+          "type": "object",
+          "description": "Optional. Absent means edges carry no value encoding and are drawn uniformly. Present means an attribute is mapped to stroke geometry, and the legend states the exact mapping.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "weight",
+                "delay"
+              ]
+            },
+            "channel": {
+              "type": "string",
+              "enum": [
+                "width",
+                "color",
+                "width_and_color"
+              ]
+            },
+            "colorScale": {
+              "type": "string",
+              "enum": [
+                "sequential",
+                "diverging"
+              ],
+              "description": "A diverging scale requires an explicit `center` — enforced structurally by the conditional below. Without one the map implies a symmetry the data may not have, and the request is refused."
+            },
+            "center": {
+              "type": "number"
+            },
+            "scale": {
+              "type": "string",
+              "enum": [
+                "linear",
+                "symlog"
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "channel"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "colorScale": {
+                    "const": "diverging"
+                  }
+                },
+                "required": [
+                  "colorScale"
+                ]
+              },
+              "then": {
+                "required": [
+                  "center"
+                ]
+              }
+            }
+          ]
+        },
+        "degreeAnnotation": {
+          "type": "object",
+          "description": "Optional. Absent means the figure makes NO degree claim at all — the safe default. Present means a degree is computed, labelled, and (optionally) encoded as node area, which requires both a complete node universe and a scope that can support the claim.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "in_degree",
+                "out_degree",
+                "total_degree"
+              ],
+              "description": "Under a target-rank-local scope only `in_degree` is computable; `out_degree` and `total_degree` are refused, because the connections leaving a local source toward a remote target are stored on the other rank."
+            },
+            "countingPolicy": {
+              "type": "string",
+              "enum": [
+                "per_connection_entry",
+                "per_unique_neighbour"
+              ],
+              "description": "`per_connection_entry` counts every synapse, so a multapse contributes more than one. `per_unique_neighbour` counts partners. The two give different numbers and neither is a default."
+            },
+            "autapseContribution": {
+              "type": "string",
+              "enum": [
+                "counts_in_and_out",
+                "counts_once",
+                "excluded"
+              ]
+            },
+            "encodeAsNodeArea": {
+              "type": "boolean",
+              "default": false,
+              "description": "When true, node AREA (never radius) is proportional to the degree, and the legend states the reference area. When false, the degree appears only as a label and in the table."
+            }
+          },
+          "required": [
+            "mode",
+            "countingPolicy",
+            "autapseContribution"
+          ],
+          "additionalProperties": false
+        },
+        "nodeColorBy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "group"
+          ],
+          "default": "none",
+          "description": "Group color is always paired with a distinct marker shape, so group identity never depends on color perception."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Only the `none` variant is renderable here. A drawn edge is a connection that exists in the snapshot; there is no band to draw around it, and any other variant is refused rather than approximated into a shading that would state a probabilistic claim the snapshot cannot support."
+        }
+      },
+      "required": [
+        "graphId",
+        "layout",
+        "parallelEdges"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

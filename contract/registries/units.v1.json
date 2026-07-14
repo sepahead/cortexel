@@ -1,0 +1,110 @@
+{
+  "registry": "cortexel-units",
+  "version": "1.0",
+  "description": "Closed unit and quantity-kind registry. A non-blank string is not a unit: every stable numeric axis carries a code from `units`, and every quantity carries a `kind` from `quantityKinds` whose dimension must match that code's dimension. Dimensional compatibility is enforced by the semantic validator `unit.dimension_match`, not by JSON Schema.",
+
+  "dimensions": {
+    "time": { "canonical": "s", "description": "Duration or an instant on a declared clock." },
+    "frequency": { "canonical": "Hz", "description": "Events or cycles per unit time." },
+    "voltage": { "canonical": "V", "description": "Electric potential." },
+    "current": { "canonical": "A", "description": "Electric current." },
+    "conductance": { "canonical": "S", "description": "Electric conductance." },
+    "concentration": { "canonical": "mol/L", "description": "Amount-of-substance concentration." },
+    "length": { "canonical": "m", "description": "Spatial extent or coordinate." },
+    "angle": { "canonical": "rad", "description": "Plane angle." },
+    "dimensionless": { "canonical": "1", "description": "Pure number: counts, probabilities, ratios, coefficients." },
+    "per_time": { "canonical": "/s", "description": "Reciprocal time. Produced by density normalization over a time-binned axis." },
+    "per_voltage": { "canonical": "/V", "description": "Reciprocal voltage. Produced by density normalization over a voltage-binned axis." },
+    "per_current": { "canonical": "/A", "description": "Reciprocal current." },
+    "per_conductance": { "canonical": "/S", "description": "Reciprocal conductance." },
+    "per_length": { "canonical": "/m", "description": "Reciprocal length." },
+    "per_dimensionless": { "canonical": "/1", "description": "Reciprocal of a pure number. Produced by density normalization over a dimensionless axis such as degree." },
+    "simulator_defined": { "canonical": null, "description": "A quantity whose unit is defined by a source simulator and has no safe SI mapping. Never silently converted, never compared across systems." }
+  },
+
+  "units": [
+    { "code": "s",       "dimension": "time",          "toCanonical": 1,        "ucum": "s",       "label": "s",     "aliases": ["sec", "seconds", "second"] },
+    { "code": "ms",      "dimension": "time",          "toCanonical": 1e-3,     "ucum": "ms",      "label": "ms",    "aliases": ["msec", "milliseconds", "millisecond"] },
+    { "code": "us",      "dimension": "time",          "toCanonical": 1e-6,     "ucum": "us",      "label": "µs",    "aliases": ["µs", "usec", "microseconds", "microsecond"] },
+
+    { "code": "Hz",      "dimension": "frequency",     "toCanonical": 1,        "ucum": "Hz",      "label": "Hz",    "aliases": ["hz", "hertz", "spikes/s", "sp/s"] },
+    { "code": "kHz",     "dimension": "frequency",     "toCanonical": 1e3,      "ucum": "kHz",     "label": "kHz",   "aliases": ["khz"] },
+
+    { "code": "V",       "dimension": "voltage",       "toCanonical": 1,        "ucum": "V",       "label": "V",     "aliases": ["volt", "volts"] },
+    { "code": "mV",      "dimension": "voltage",       "toCanonical": 1e-3,     "ucum": "mV",      "label": "mV",    "aliases": ["millivolt", "millivolts"] },
+    { "code": "uV",      "dimension": "voltage",       "toCanonical": 1e-6,     "ucum": "uV",      "label": "µV",    "aliases": ["µV", "microvolt", "microvolts"] },
+
+    { "code": "A",       "dimension": "current",       "toCanonical": 1,        "ucum": "A",       "label": "A",     "aliases": ["amp", "amps", "ampere"] },
+    { "code": "nA",      "dimension": "current",       "toCanonical": 1e-9,     "ucum": "nA",      "label": "nA",    "aliases": ["nanoamp", "nanoampere"] },
+    { "code": "pA",      "dimension": "current",       "toCanonical": 1e-12,    "ucum": "pA",      "label": "pA",    "aliases": ["picoamp", "picoampere"] },
+
+    { "code": "S",       "dimension": "conductance",   "toCanonical": 1,        "ucum": "S",       "label": "S",     "aliases": ["siemens"] },
+    { "code": "nS",      "dimension": "conductance",   "toCanonical": 1e-9,     "ucum": "nS",      "label": "nS",    "aliases": ["nanosiemens"] },
+    { "code": "pS",      "dimension": "conductance",   "toCanonical": 1e-12,    "ucum": "pS",      "label": "pS",    "aliases": ["picosiemens"] },
+
+    { "code": "mol/L",   "dimension": "concentration", "toCanonical": 1,        "ucum": "mol/L",   "label": "M",     "aliases": ["M", "molar"] },
+    { "code": "mmol/L",  "dimension": "concentration", "toCanonical": 1e-3,     "ucum": "mmol/L",  "label": "mM",    "aliases": ["mM", "millimolar"] },
+    { "code": "umol/L",  "dimension": "concentration", "toCanonical": 1e-6,     "ucum": "umol/L",  "label": "µM",    "aliases": ["µM", "uM", "micromolar"] },
+    { "code": "nmol/L",  "dimension": "concentration", "toCanonical": 1e-9,     "ucum": "nmol/L",  "label": "nM",    "aliases": ["nM", "nanomolar"] },
+
+    { "code": "m",       "dimension": "length",        "toCanonical": 1,        "ucum": "m",       "label": "m",     "aliases": ["metre", "meter", "metres", "meters"] },
+    { "code": "mm",      "dimension": "length",        "toCanonical": 1e-3,     "ucum": "mm",      "label": "mm",    "aliases": ["millimetre", "millimeter"] },
+    { "code": "um",      "dimension": "length",        "toCanonical": 1e-6,     "ucum": "um",      "label": "µm",    "aliases": ["µm", "micrometre", "micrometer", "micron"] },
+
+    { "code": "rad",     "dimension": "angle",         "toCanonical": 1,        "ucum": "rad",     "label": "rad",   "aliases": ["radian", "radians"] },
+    { "code": "deg",     "dimension": "angle",         "toCanonical": 0.017453292519943295, "ucum": "deg", "label": "°", "aliases": ["degree", "degrees", "°"] },
+
+    { "code": "1",       "dimension": "dimensionless", "toCanonical": 1,        "ucum": "1",       "label": "",      "aliases": ["", "unitless", "dimensionless", "count", "none"] },
+
+    { "code": "/s",      "dimension": "per_time",          "toCanonical": 1,     "ucum": "/s",      "label": "s⁻¹",   "aliases": ["1/s", "s^-1"] },
+    { "code": "/ms",     "dimension": "per_time",          "toCanonical": 1e3,   "ucum": "/ms",     "label": "ms⁻¹",  "aliases": ["1/ms", "ms^-1"] },
+    { "code": "/V",      "dimension": "per_voltage",       "toCanonical": 1,     "ucum": "/V",      "label": "V⁻¹",   "aliases": ["1/V"] },
+    { "code": "/mV",     "dimension": "per_voltage",       "toCanonical": 1e3,   "ucum": "/mV",     "label": "mV⁻¹",  "aliases": ["1/mV"] },
+    { "code": "/A",      "dimension": "per_current",       "toCanonical": 1,     "ucum": "/A",      "label": "A⁻¹",   "aliases": ["1/A"] },
+    { "code": "/nA",     "dimension": "per_current",       "toCanonical": 1e9,   "ucum": "/nA",     "label": "nA⁻¹",  "aliases": ["1/nA"] },
+    { "code": "/pA",     "dimension": "per_current",       "toCanonical": 1e12,  "ucum": "/pA",     "label": "pA⁻¹",  "aliases": ["1/pA"] },
+    { "code": "/S",      "dimension": "per_conductance",   "toCanonical": 1,     "ucum": "/S",      "label": "S⁻¹",   "aliases": ["1/S"] },
+    { "code": "/nS",     "dimension": "per_conductance",   "toCanonical": 1e9,   "ucum": "/nS",     "label": "nS⁻¹",  "aliases": ["1/nS"] },
+    { "code": "/m",      "dimension": "per_length",        "toCanonical": 1,     "ucum": "/m",      "label": "m⁻¹",   "aliases": ["1/m"] },
+    { "code": "/mm",     "dimension": "per_length",        "toCanonical": 1e3,   "ucum": "/mm",     "label": "mm⁻¹",  "aliases": ["1/mm"] },
+    { "code": "/um",     "dimension": "per_length",        "toCanonical": 1e6,   "ucum": "/um",     "label": "µm⁻¹",  "aliases": ["1/um"] },
+    { "code": "/1",      "dimension": "per_dimensionless", "toCanonical": 1,     "ucum": "/1",      "label": "",      "aliases": ["1/1"] },
+
+    { "code": "nest:weight", "dimension": "simulator_defined", "toCanonical": null, "ucum": null, "label": "weight (NEST)", "aliases": [], "sourceSystem": "nest", "note": "NEST synaptic weight. Its physical meaning depends on the synapse and neuron model (it may act as a current, a conductance, or a dimensionless factor). Cortexel never converts it, and never pools it across models." },
+    { "code": "nest:delay",  "dimension": "time",              "toCanonical": 1e-3, "ucum": "ms",  "label": "ms",             "aliases": [], "sourceSystem": "nest", "note": "NEST delays are expressed in milliseconds and are a genuine time; unlike weight they map safely to SI." }
+  ],
+
+  "quantityKinds": [
+    { "kind": "time",                "dimensions": ["time"],                                                    "description": "An instant on a declared clock, or a lag." },
+    { "kind": "duration",            "dimensions": ["time"],                                                    "description": "A length of time: a bin width, a window, an interval." },
+    { "kind": "interspike_interval", "dimensions": ["time"],                                                    "description": "The interval between two successive events of the SAME train. Never formed across senders or trials." },
+    { "kind": "delay",               "dimensions": ["time"],                                                    "description": "Synaptic transmission delay. Must be finite and positive." },
+    { "kind": "frequency",           "dimensions": ["frequency"],                                               "description": "Cycles or events per unit time." },
+    { "kind": "firing_rate",         "dimensions": ["frequency"],                                               "description": "Event rate. The denominator (per neuron, per trial, total) is a separate recorded fact, not part of the unit." },
+    { "kind": "membrane_voltage",    "dimensions": ["voltage"],                                                 "description": "Membrane potential. Only use this kind when the source declares the signal IS a membrane potential." },
+    { "kind": "voltage",             "dimensions": ["voltage"],                                                 "description": "Any other electric potential." },
+    { "kind": "current",             "dimensions": ["current"],                                                 "description": "Electric current." },
+    { "kind": "conductance",         "dimensions": ["conductance"],                                             "description": "Electric conductance." },
+    { "kind": "concentration",       "dimensions": ["concentration"],                                           "description": "Concentration of a declared chemical species (for example calcium or IP3)." },
+    { "kind": "position",            "dimensions": ["length"],                                                  "description": "A spatial coordinate in a declared coordinate frame." },
+    { "kind": "length",              "dimensions": ["length"],                                                  "description": "A spatial extent or distance." },
+    { "kind": "angle",               "dimensions": ["angle"],                                                   "description": "A plane angle or phase." },
+    { "kind": "count",               "dimensions": ["dimensionless"],                                           "description": "An exact non-negative integer count of observed things." },
+    { "kind": "degree",              "dimensions": ["dimensionless"],                                           "description": "A node degree: an exact non-negative integer." },
+    { "kind": "probability",         "dimensions": ["dimensionless"],                                           "description": "A value in [0,1] whose group sums to 1." },
+    { "kind": "probability_density", "dimensions": ["per_time", "per_voltage", "per_current", "per_conductance", "per_length", "per_dimensionless"], "description": "A density over a binned axis: integrating value x binWidth over the bins yields 1. Its unit is the reciprocal of the binned axis unit." },
+    { "kind": "correlation",         "dimensions": ["dimensionless"],                                           "description": "A correlation coefficient. Only use this kind when a recognized formula and its required statistics are present; a scaled pair count is NOT a correlation coefficient." },
+    { "kind": "ratio",               "dimensions": ["dimensionless"],                                           "description": "A dimensionless ratio or normalized value." },
+    { "kind": "synaptic_weight",     "dimensions": ["simulator_defined", "conductance", "current", "voltage", "dimensionless"], "description": "A synaptic weight. Its dimension depends on the synapse model; declare it. Weights of different declared dimensions are never pooled." },
+    { "kind": "state_variable",      "dimensions": ["voltage", "current", "conductance", "concentration", "dimensionless"], "description": "A model state variable in a phase plane or multi-signal trace, whose physical dimension is declared." },
+    { "kind": "derivative",          "dimensions": ["per_time"],                                                "description": "A time derivative of a state variable, used by the phase-plane vector field." }
+  ],
+
+  "conversionPolicy": {
+    "sameDimensionOnly": "A conversion is legal only between two codes of the same dimension. Cross-dimension conversion is never attempted.",
+    "simulatorDefinedNeverConverted": "A code whose dimension is `simulator_defined` has `toCanonical: null` and can never be converted, compared, or pooled with any other code — including another simulator-defined code.",
+    "aliasesAreNotCanonical": "Aliases are accepted ONLY by adapters and by `cortexel migrate`. A stable 1.0 request that uses an alias is rejected with a repair suggesting the canonical code. Silent alias conversion in the normal validation path is prohibited.",
+    "conversionsAreRecorded": "Every conversion performed during canonicalization appends a derivation operation recording `from`, `to`, the exact factor, and the algorithm id.",
+    "exactFactors": "Factors here are exact binary64 values where the decimal scale is representable. Conversion multiplies once; it never chains through an intermediate unit."
+  }
+}

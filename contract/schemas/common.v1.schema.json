@@ -1,0 +1,427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json",
+  "title": "Cortexel shared types v1",
+  "description": "Shared structural types. Enumerations that have a registry (units, quantity kinds, error codes, skill ids) are $ref'd from contract/schemas/generated/ so there is exactly one authority for each.",
+
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "description": "A full SHA-256 digest. A shortened prefix may be displayed to a human; it is never an API value.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+
+    "identifier": {
+      "type": "string",
+      "description": "A stable opaque identifier supplied by the caller (a sender id, a node id, an edge id). Numeric source ids are normalized to canonical decimal strings; they are never coerced from arbitrary labels.",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]*$"
+    },
+
+    "displayString": {
+      "type": "string",
+      "description": "Human-readable text that will be rendered. Control characters, C1 codes, bidi overrides/isolates, and zero-width characters are excluded because they can visually spoof an axis label, a legend entry, or a mandatory disclosure.",
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+    },
+
+    "label": {
+      "$ref": "#/$defs/displayString",
+      "type": "string",
+      "maxLength": 120,
+      "description": "A short rendered label. `type` is restated alongside the $ref because a length constraint with no declared type is ambiguous — and Ajv's strict mode is right to reject it."
+    },
+
+    "unitCode": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/unitCode"
+    },
+
+    "quantityKind": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/quantityKind"
+    },
+
+    "quantity": {
+      "type": "object",
+      "description": "A scalar physical quantity. There is no bare number at a semantic boundary: a value without a kind and a unit has no scientific meaning.",
+      "properties": {
+        "kind": { "$ref": "#/$defs/quantityKind" },
+        "unit": { "$ref": "#/$defs/unitCode" },
+        "value": { "type": "number" }
+      },
+      "required": ["kind", "unit", "value"],
+      "additionalProperties": false
+    },
+
+    "quantitySeries": {
+      "type": "object",
+      "description": "A vector of observations of one quantity. `null` means the observation is MISSING — it is never mapped to zero, never interpolated across, and never omitted from the count.",
+      "properties": {
+        "kind": { "$ref": "#/$defs/quantityKind" },
+        "unit": { "$ref": "#/$defs/unitCode" },
+        "values": {
+          "type": "array",
+          "items": { "type": ["number", "null"] },
+          "maxItems": 2000000
+        }
+      },
+      "required": ["kind", "unit", "values"],
+      "additionalProperties": false
+    },
+
+    "timeWindow": {
+      "type": "object",
+      "description": "An observation or analysis window. The boundary convention is explicit: an event exactly at `stop` is EXCLUDED under the default half-open convention. A source format that records a closed endpoint must say so.",
+      "properties": {
+        "start": { "type": "number" },
+        "stop": { "type": "number" },
+        "unit": { "$ref": "#/$defs/unitCode" },
+        "boundary": {
+          "type": "string",
+          "enum": ["[start,stop)", "[start,stop]"],
+          "default": "[start,stop)"
+        }
+      },
+      "required": ["start", "stop", "unit"],
+      "additionalProperties": false
+    },
+
+    "binSpec": {
+      "type": "object",
+      "description": "How a continuous axis is binned. Either explicit edges, or a width that tiles the window. `n` edges define `n-1` half-open bins. There is never a bare `bin_ms` alongside a separate free-text time unit.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "edges" },
+            "unit": { "$ref": "#/$defs/unitCode" },
+            "edges": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 100001,
+              "description": "Strictly increasing finite edges. Verified by the semantic validator `bins.strictly_increasing`."
+            },
+            "boundary": { "type": "string", "enum": ["[lo,hi)", "[lo,hi]"], "default": "[lo,hi)" },
+            "finalEdgeInclusive": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether a value exactly at the LAST edge falls in the final bin. Bins are otherwise half-open; without this, the maximum observation would always be silently dropped."
+            }
+          },
+          "required": ["mode", "unit", "edges"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "width" },
+            "unit": { "$ref": "#/$defs/unitCode" },
+            "width": { "type": "number", "exclusiveMinimum": 0 },
+            "start": { "type": "number" },
+            "stop": { "type": "number" },
+            "boundary": { "type": "string", "enum": ["[lo,hi)", "[lo,hi]"], "default": "[lo,hi)" },
+            "finalEdgeInclusive": { "type": "boolean", "default": true }
+          },
+          "required": ["mode", "unit", "width", "start", "stop"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "histogramNormalization": {
+      "type": "string",
+      "description": "count: exact integer counts. probability: values sum to 1 across bins. density: value x binWidth integrates to 1, so the unit is the reciprocal of the binned axis unit.",
+      "enum": ["count", "probability", "density"]
+    },
+
+    "uncertainty": {
+      "description": "A closed union. A shaded band is meaningless without its method, level, basis, and units — so there is no generic {lower, upper, label}. Absence is stated explicitly rather than left blank.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "none" },
+            "reason": {
+              "type": "string",
+              "enum": ["single_trial", "not_computed", "not_available", "not_applicable"]
+            }
+          },
+          "required": ["kind", "reason"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "enum": ["standard_deviation", "standard_error"] },
+            "unit": { "$ref": "#/$defs/unitCode" },
+            "values": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2000000 },
+            "sampleCount": { "type": "array", "items": { "type": ["integer", "null"], "minimum": 1 } },
+            "basis": { "type": "string", "enum": ["trials", "neurons", "ensemble_members", "bootstrap_draws", "replicates"] }
+          },
+          "required": ["kind", "unit", "values", "sampleCount", "basis"],
+          "additionalProperties": false,
+          "description": "A non-negative dispersion per point. It is NOT an interval and must never be relabelled as one."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "enum": ["confidence_interval", "credible_interval"] },
+            "unit": { "$ref": "#/$defs/unitCode" },
+            "lower": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2000000 },
+            "upper": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2000000 },
+            "level": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+            "method": { "$ref": "#/$defs/label" },
+            "coverage": { "type": "string", "enum": ["pointwise", "simultaneous"] },
+            "sampleCount": { "type": "array", "items": { "type": ["integer", "null"], "minimum": 1 } },
+            "basis": { "type": "string", "enum": ["trials", "neurons", "ensemble_members", "bootstrap_draws", "replicates"] }
+          },
+          "required": ["kind", "unit", "lower", "upper", "level", "method", "coverage", "basis"],
+          "additionalProperties": false,
+          "description": "`credible_interval` additionally requires an external attestation establishing a posterior analysis; structural validity alone never establishes calibration."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "quantile_interval" },
+            "unit": { "$ref": "#/$defs/unitCode" },
+            "lower": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2000000 },
+            "upper": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2000000 },
+            "lowerQuantile": { "type": "number", "minimum": 0, "maximum": 1 },
+            "upperQuantile": { "type": "number", "minimum": 0, "maximum": 1 },
+            "method": { "$ref": "#/$defs/label" },
+            "sampleCount": { "type": "array", "items": { "type": ["integer", "null"], "minimum": 1 } },
+            "basis": { "type": "string", "enum": ["trials", "neurons", "ensemble_members", "bootstrap_draws", "replicates"] }
+          },
+          "required": ["kind", "unit", "lower", "upper", "lowerQuantile", "upperQuantile", "method", "basis"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "ensemble_range" },
+            "unit": { "$ref": "#/$defs/unitCode" },
+            "lower": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2000000 },
+            "upper": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2000000 },
+            "sampleCount": { "type": "array", "items": { "type": ["integer", "null"], "minimum": 1 } },
+            "basis": { "type": "string", "enum": ["trials", "neurons", "ensemble_members", "bootstrap_draws", "replicates"] }
+          },
+          "required": ["kind", "unit", "lower", "upper", "sampleCount", "basis"],
+          "additionalProperties": false,
+          "description": "The observed minimum and maximum across the ensemble. It carries NO coverage probability and is never drawn or labelled as a confidence interval."
+        }
+      ]
+    },
+
+    "dataRef": {
+      "type": "object",
+      "description": "A content-addressed reference to bulk data. Stable core has NO filesystem or network authority: it holds an opaque resolver key and never a URL, a path, or a command. The host resolves the key to bytes and MUST verify byteLength and sha256 before parsing.",
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "mediaType": {
+          "type": "string",
+          "enum": [
+            "application/vnd.cortexel.f64le+octet-stream",
+            "application/vnd.cortexel.i32le+octet-stream",
+            "application/json",
+            "text/csv"
+          ]
+        },
+        "byteLength": { "type": "integer", "minimum": 0, "maximum": 1073741824 },
+        "shape": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 1, "maxItems": 4 },
+        "dtype": { "type": "string", "enum": ["f64", "i32", "utf8"] },
+        "resolverKey": {
+          "$ref": "#/$defs/identifier",
+          "description": "An opaque key the HOST understands. Cortexel never interprets, dereferences, or joins it to a path."
+        }
+      },
+      "required": ["id", "sha256", "mediaType", "byteLength"],
+      "additionalProperties": false
+    },
+
+    "networkScope": {
+      "description": "A closed scope union. A connection snapshot has no meaning without it, and a partial snapshot can never be upgraded to a global claim.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "single_process" },
+            "snapshotTime": { "$ref": "#/$defs/quantity" },
+            "complete": {
+              "type": "boolean",
+              "const": true,
+              "description": "A single-process run observes every connection, so this scope is complete by construction."
+            }
+          },
+          "required": ["kind", "complete"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "global_merged" },
+            "snapshotTime": { "$ref": "#/$defs/quantity" },
+            "worldSize": { "type": "integer", "minimum": 1 },
+            "mergedRanks": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 0 },
+              "minItems": 1,
+              "description": "Every rank actually merged. The semantic validator requires that these cover 0..worldSize-1 exactly once; a partial rank set remains partial."
+            }
+          },
+          "required": ["kind", "worldSize", "mergedRanks"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "mpi_target_rank_local" },
+            "snapshotTime": { "$ref": "#/$defs/quantity" },
+            "rank": { "type": "integer", "minimum": 0 },
+            "worldSize": { "type": "integer", "minimum": 1 },
+            "localTargetUniverseComplete": {
+              "type": "boolean",
+              "description": "Whether every connection whose target this rank owns is present. Under NEST's MPI semantics this is what makes a LOCAL in-degree computable — and what still makes a global out-degree impossible."
+            }
+          },
+          "required": ["kind", "rank", "worldSize", "localTargetUniverseComplete"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "sampled" },
+            "snapshotTime": { "$ref": "#/$defs/quantity" },
+            "parentScope": { "type": "string", "enum": ["single_process", "global_merged", "mpi_target_rank_local"] },
+            "method": { "type": "string", "enum": ["deterministic_first_n", "deterministic_stride", "declared_subset"] },
+            "sourceConnectionCount": { "type": "integer", "minimum": 0 },
+            "retainedConnectionCount": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["kind", "parentScope", "method", "sourceConnectionCount", "retainedConnectionCount"],
+          "additionalProperties": false,
+          "description": "A subset. Degree and matrix completeness claims are refused under this scope."
+        }
+      ]
+    },
+
+    "nodeUniverse": {
+      "type": "object",
+      "description": "The COMPLETE set of nodes under consideration, in a declared order. This is required wherever isolates or zero-degree nodes carry meaning: an edge list can only show that no edge was observed, never that a node has degree zero.",
+      "properties": {
+        "ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" },
+          "minItems": 1,
+          "maxItems": 100000
+        },
+        "order": {
+          "type": "string",
+          "enum": ["as_declared", "canonical_id", "grouped"],
+          "default": "as_declared"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "$ref": "#/$defs/identifier" },
+              "label": { "$ref": "#/$defs/label" },
+              "memberIds": { "type": "array", "items": { "$ref": "#/$defs/identifier" }, "maxItems": 100000 }
+            },
+            "required": ["id", "memberIds"],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "complete": {
+          "type": "boolean",
+          "description": "Whether these ids are the complete selected universe. `false` forbids any isolate or zero-degree claim."
+        }
+      },
+      "required": ["ids", "complete"],
+      "additionalProperties": false
+    },
+
+    "connectionRows": {
+      "type": "object",
+      "description": "A connection snapshot in parallel-array form. Every multapse is a distinct row and is NEVER deduplicated: two connections between the same pair are two connections, not a duplicate-entry error.",
+      "properties": {
+        "sourceIds": { "type": "array", "items": { "$ref": "#/$defs/identifier" }, "maxItems": 500000 },
+        "targetIds": { "type": "array", "items": { "$ref": "#/$defs/identifier" }, "maxItems": 500000 },
+        "edgeIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/identifier" },
+          "maxItems": 500000,
+          "description": "Stable per-connection identity. When absent, a deterministic ordinal identity is assigned after canonical sorting and the method is recorded."
+        },
+        "weights": { "$ref": "#/$defs/quantitySeries" },
+        "delays": { "$ref": "#/$defs/quantitySeries" },
+        "synapseModels": { "type": "array", "items": { "$ref": "#/$defs/label" }, "maxItems": 500000 }
+      },
+      "required": ["sourceIds", "targetIds"],
+      "additionalProperties": false
+    },
+
+    "multapseAggregation": {
+      "type": "string",
+      "description": "How multiple connections mapping to one cell are combined. There is no default and there is no 'last edge wins'. `no_aggregation` asserts at most one connection per cell and FAILS if that is untrue.",
+      "enum": ["sum", "mean", "min", "max", "no_aggregation"]
+    },
+
+    "sourceDeclaration": {
+      "type": "object",
+      "description": "What the CALLER declares about where the data came from. A caller declares what its data IS; it never declares what Cortexel concluded about it. `unknown` is valid and honest — it triggers a disclosure and is better than invented specificity.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "simulation",
+            "experimental_recording",
+            "derived_dataset",
+            "synthetic_fixture",
+            "literature_extraction",
+            "manual_entry",
+            "unknown"
+          ]
+        },
+        "system": { "$ref": "#/$defs/label", "description": "The producing system, e.g. \"NEST\"." },
+        "systemVersion": { "$ref": "#/$defs/label" },
+        "runId": { "$ref": "#/$defs/identifier" },
+        "sessionId": { "$ref": "#/$defs/identifier" },
+        "datasetId": { "$ref": "#/$defs/identifier" },
+        "recorderId": { "$ref": "#/$defs/identifier" },
+        "sourceDigest": { "$ref": "#/$defs/sha256" },
+        "declaredLimitations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/displayString" },
+          "maxItems": 16,
+          "description": "Limitations the caller knows about. These are ADDED to Cortexel's mandatory disclosures; they never replace or suppress one."
+        },
+        "declaredNote": {
+          "$ref": "#/$defs/displayString",
+          "type": "string",
+          "maxLength": 200,
+          "description": "A free-text caller note. It is rendered under the label \"Source note (declared by caller; not verified)\", bidi-isolated, and can never precede, replace, suppress, or visually dominate a mandatory disclosure."
+        }
+      },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+
+    "presentation": {
+      "type": "object",
+      "description": "Presentation preferences. These may never alter a scientific value, a required disclosure, or a normative output. There is no raw CSS, no style object, no URL, and no markup.",
+      "properties": {
+        "title": { "$ref": "#/$defs/label" },
+        "subtitle": { "$ref": "#/$defs/label" },
+        "themeId": { "type": "string", "enum": ["light", "dark", "print", "grayscale"], "default": "light" },
+        "paletteId": { "$ref": "#/$defs/label" },
+        "width": { "type": "integer", "minimum": 160, "maximum": 4096, "default": 720 },
+        "height": { "type": "integer", "minimum": 120, "maximum": 4096, "default": 440 },
+        "budgetProfile": { "type": "string", "enum": ["standard", "agent"], "default": "standard" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

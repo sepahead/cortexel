@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.analog_trace.request.v1.schema.json",
+  "title": "neuro.analog_trace request",
+  "description": "GENERATED from contract/skills/neuro.analog_trace.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.analog_trace"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "A declared analysis window, a flat id universe, and a parallel list of series. Each series carries its OWN time vector and its own quantity samples, so channels sampled at different intervals or over different extents are never forced onto a common grid — padding a short channel would fabricate samples. `seriesIds[i]` names `series[i]`; the id vector is kept separate so a single declared identity governs the legend, the table, the palette, and any selection.",
+      "properties": {
+        "window": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+        },
+        "seriesIds": {
+          "type": "array",
+          "items": {
+            "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "description": "The COMPLETE, ordered id universe, one id per series in declared order. Uniqueness is enforced by the semantic validator ids.unique: an ambiguous identity must fail before the legend, the table, the palette, or any selection can bind two series under the same name."
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "recordedVariable": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                "description": "The source system's own name for the recorded channel, e.g. NEST's `V_m` or `g_ex`. It is recorded verbatim and shown in the table. It is NEVER used to infer a quantity kind or a unit: `V_m` does not license `membrane_voltage`, the caller must declare it."
+              },
+              "populationId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "cellId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "conditionId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "observationKind": {
+                "type": "string",
+                "enum": [
+                  "point_sample",
+                  "piecewise_constant"
+                ],
+                "description": "point_sample: an instantaneous sample of a continuous value; successive samples are joined by a straight segment. piecewise_constant: the value is HELD until the next sample and is drawn as a step. Drawing a held signal as a sloped line invents a ramp that never existed, so this is a required declaration and never a default."
+              },
+              "origin": {
+                "description": "Whether these values were recorded or computed. A derived series is never re-labelled as recorded, and its method is always visible in the table.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "recorded"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "derived"
+                      },
+                      "method": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                        "description": "The name of the algorithm that produced these values, e.g. `mean_across_trials` or `lowpass_butterworth_4th_order_200Hz`. Required: a derived series that will not name its method is an unattributable number. Cortexel records and displays it and never re-derives or verifies it."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "method"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "time": {
+                "type": "object",
+                "description": "This series' own time vector. Every value is a finite number: a sample with an unknown time is not an observation, so `null` is not accepted here (unlike a value, where null is a legitimate missing observation). Its length is checked against the series' value vector by series.equal_length before any sort.",
+                "properties": {
+                  "kind": {
+                    "const": "time"
+                  },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "maxItems": 2000000
+                  }
+                },
+                "required": [
+                  "kind",
+                  "unit",
+                  "values"
+                ],
+                "additionalProperties": false
+              },
+              "values": {
+                "type": "object",
+                "description": "The observations for this series. Written out rather than $ref'd to `quantitySeries` because the accepted `kind` set is deliberately narrower here: a synaptic weight or a firing rate on this axis would be a routing error, not a trace. The field is named `values` and read as the series' quantity by trace.axis_dimension_compatible.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "membrane_voltage",
+                      "voltage",
+                      "current",
+                      "conductance",
+                      "concentration",
+                      "state_variable",
+                      "derivative"
+                    ],
+                    "description": "`membrane_voltage` only when the source declares the signal IS a membrane potential. `state_variable` carries a declared dimension (voltage, current, conductance, concentration, or dimensionless). `derivative` is bound by the unit registry to the per_time dimension, so it can only express the derivative of a DIMENSIONLESS state variable (a gating variable's dn/dt in /ms). A dimensioned derivative such as dV/dt (mV/ms) has no representable kind in registry 1.0 and is refused rather than mislabelled."
+                  },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "maxItems": 2000000,
+                    "description": "`null` is a MISSING observation. It is never zero, never interpolated across, and never dropped from the count."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "unit",
+                  "values"
+                ],
+                "additionalProperties": false
+              },
+              "sourceRef": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/dataRef",
+                "description": "Optional content-addressed reference to the bytes this series was extracted from. Cortexel RECORDS it and never resolves it — stable core has no filesystem or network authority — and it never substitutes for the inline samples."
+              }
+            },
+            "required": [
+              "observationKind",
+              "origin",
+              "time",
+              "values"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "window",
+        "seriesIds",
+        "series"
+      ],
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": [
+            "shared_axis",
+            "small_multiples"
+          ],
+          "description": "How the series are placed. There is no `auto`: whether two signals may share a numeric axis is a scientific judgement, and Cortexel will not make it silently. shared_axis overlays every series on one converted value axis (legal only within one dimension, checked by trace.axis_dimension_compatible); small_multiples gives each group its own panel and exempts that cross-series dimension check."
+        },
+        "valueUnit": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+          "description": "shared_axis only: the unit of the common value axis. Every series is converted into it, which is legal only within one dimension. When omitted, the unit of the FIRST series in declared order is used — a deterministic rule, never a heuristic about which unit 'looks nicer'."
+        },
+        "groupBy": {
+          "type": "string",
+          "enum": [
+            "series",
+            "quantity_kind"
+          ],
+          "description": "small_multiples only: one panel per series, or one panel per quantity kind. Only keys guaranteed present on every series are offered: registry 1.0 has no validator that can assert an OPTIONAL key (population, condition, cell) is populated for every series, and a panel silently missing a series would be a lie of omission."
+        },
+        "sharedTimeAxis": {
+          "type": "boolean",
+          "default": true,
+          "description": "small_multiples only: true means every panel spans one identical time domain, so panels may be compared horizontally; false means each panel spans its own covered extent, and no horizontal comparison across panels is licensed."
+        },
+        "duplicateTimePolicy": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "keep_replicates",
+            "aggregate"
+          ],
+          "description": "What to do when a series has two samples at one timestamp. Optional in the schema and enforced semantically only when duplicates actually exist: with duplicates present and no policy declared, trace.duplicate_time_policy refuses with SCIENCE_DUPLICATE_TIME_POLICY. Last-write-wins is not on the list and never will be: it makes the drawn value a function of the recorder's write order."
+        },
+        "aggregateMethod": {
+          "type": "string",
+          "enum": [
+            "mean",
+            "median",
+            "min",
+            "max"
+          ],
+          "description": "Used only with duplicateTimePolicy=aggregate. Applied within one series at one timestamp, over non-null replicates only. An even-count median is the arithmetic mean of the two central order statistics. The replicate count reaches the table, so an aggregate can never be read as a single observation."
+        },
+        "showSamplePoints": {
+          "type": "boolean",
+          "default": false,
+          "description": "Draw a marker at every retained sample. Presentation only: it changes no value. It is the honest way to reveal where the sampler actually looked, which a bare line conceals."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "The figure-level uncertainty declaration, read by uncertainty.valid and uncertainty.supported_variant. `{\"kind\":\"none\",\"reason\":...}` is the honest answer for a single trial; absence is STATED, never left blank, because a trace with no band and no statement reads as a trace whose uncertainty is small."
+        }
+      },
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

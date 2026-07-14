@@ -1,0 +1,734 @@
+{
+  "id": "neuro.psth",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Peri-event time histogram (trial-aligned event counts)",
+
+  "purpose": {
+    "canonicalQuestion": "How does the event count of a declared set of selected senders vary with time relative to a declared per-trial alignment event, using exact integer counts and an explicitly declared trial and sender denominator?",
+    "cannotEstablish": [
+      "That the declared alignment times mark the event they are labelled with. Cortexel aligns to the times it is given; it cannot verify that they are stimulus onsets rather than trial starts, or that they were corrected for display latency.",
+      "That a modulation around the alignment instant was CAUSED by the aligning event. A PSTH shows temporal coincidence with a declared reference; a stimulus-locked artifact, a periodic background, or a slow drift across the session produce the same shape.",
+      "That a response is time-locked rather than latency-jittered. Averaging over trials attenuates a response whose latency varies from trial to trial, so a flat PSTH is not evidence that no response occurred.",
+      "That any bin differs significantly from baseline. This contract renders counts, derived values, and declared uncertainty. It performs no test, applies no multiple-comparison correction across bins, and reports no p-value.",
+      "The instantaneous rate. A PSTH is an exact count in a finite bin: the height of a peak depends on the bin width that was chosen, and this contract offers no kernel estimate of an underlying intensity function.",
+      "The response of senders that were not selected, or of trials that were excluded. Every value is computed over the DECLARED included trials and selected senders and says nothing about anything outside them.",
+      "That a bin no included trial covered has a rate of zero. That bin was not observed. It is reported as null, drawn as a gap, and never painted as a measured zero."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Recorder output is NOT assumed chronological, grouped by trial, or grouped by sender. Events are stably sorted by (relative time, trial id, sender id, original ordinal) and the original order and its digest are retained. Binning is order-independent, so the sort exists only to make the table, the artifact, and the digest deterministic. No scientific value depends on it.",
+      "Relative time is t_event minus the alignment time of the event's own trial. ABSOLUTE event times are required; pre-aligned relative times are not accepted, because a caller-computed relative time cannot be checked against the trial's alignment time. Event and alignment units may differ; both must be of the time dimension, are converted through the typed unit layer, and the conversion is disclosed.",
+      "The relative window decides MEMBERSHIP; the bins decide PLACEMENT, and membership is decided first. Under the default half-open window [start, stop) an event at exactly relStop is out of window: it is excluded, counted, and disclosed. `finalEdgeInclusive` cannot resurrect it, and has an effect only when the window is declared closed as [start, stop].",
+      "Without that precedence a spike at exactly relStop would be counted in the final bin of this epoch and again in the first bin of an adjacent epoch that begins there. One spike, two counts.",
+      "An event at exactly relative time 0 — the alignment instant — belongs to the bin that BEGINS at 0, not to the bin that ends at 0. Half-open bins make this unambiguous, but it is stated because comparing before and after zero is the entire purpose of this figure: an off-by-one here moves the response into the baseline.",
+      "Bins must tile the relative window exactly: the first and last edge must equal the window bounds to within 8 units in the last place of the window EXTENT. The tolerance is extent-relative and never grows with the absolute value of the clock origin. An untiled window would let an in-window event land in no bin and vanish without a count.",
+      "There is exactly ONE authoritative bin-edge vector, at `/parameters/bins`, in BOTH modes. A pre-binned request declares the bins it used there; it does not carry a second edge vector that could disagree with the analysis binning.",
+      "Duplicate identical event rows are PRESERVED and counted. Two records of the same spike are a source-data question, not something the renderer may quietly resolve.",
+      "Trial ids are unique. A duplicate trial id is refused before it can diverge alignment (which alignment time wins?) and the denominator (is the trial counted once or twice?).",
+      "A bin that no included trial covers has NO observation. Its count and its value are null — never 0, never interpolated across, never bridged by a step. MISSING_VALUES_PRESENT reports how many such bins exist.",
+      "There is no default normalization and no default denominator policy. Both are required: choosing them is a scientific claim, and a default would make that claim on the caller's behalf.",
+      "Negative zero is refused at snapshot. Unit aliases are refused with a repair; a stable request carries only canonical codes."
+    ],
+    "derivation": [
+      "count: for each half-open bin, the exact number of in-window, in-coverage events that come from an included trial and a selected sender and whose relative time falls in that bin. Counts are exact non-negative integers. A null count means the bin was covered by no included trial.",
+      "Denominator, `uniform_trial_count`: every bin's denominator is includedTrialCount. Every included trial is thereby ASSERTED to have observed the entire relative window; a declared coverage narrower than the window is refused under this policy rather than quietly ignored.",
+      "Denominator, `per_bin_covering_trials`: every included trial must declare its coverage, each coverage bound must coincide with a bin edge, and a bin's denominator is the number of included trials whose coverage contains that whole bin. No bin is ever partially covered, so a numerator and its denominator are consistent by construction.",
+      "Cortexel will NOT snap a coverage bound to a bin edge on the caller's behalf. Snapping outward claims observation time that was not observed; snapping inward discards observation time that was. Which is right depends on how the recording actually ended, and only the caller knows that.",
+      "An event that lies inside the relative window but outside its own trial's declared coverage is a contradiction — the trial says that interval was not observed — and is refused with SCIENCE_EVENT_OUT_OF_WINDOW. Accepting it would place a spike in a numerator whose denominator excludes the very trial that produced it.",
+      "count_per_trial = count / trialDenominator(bin). Dimensionless (kind `ratio`, unit `1`). It carries no per-neuron claim.",
+      "total_event_rate_per_trial = count / (trialDenominator(bin) * binWidth_in_seconds), in Hz. This is the event rate of the whole selected group per trial. It carries NO per-neuron claim and is the honest choice when the selected senders are not the population you want to speak about.",
+      "mean_rate_per_selected_sender_per_trial = count / (trialDenominator(bin) * recordedSenderCount * binWidth_in_seconds), in Hz. This IS a per-neuron claim. The bin width is converted to seconds through the typed unit layer, never through a hard-coded factor of 1000.",
+      "Baseline (rate normalizations only): baselineRate = (sum of counts over the baseline bins) / (sum over the baseline bins of trialDenominator * binWidth_in_seconds, times recordedSenderCount for the per-sender normalization). The baseline is re-derived from raw counts and exposures as ONE aggregate interval.",
+      "The baseline is NOT the arithmetic mean of the per-bin rates. That mean would weight a narrow or thinly covered bin as heavily as a wide, fully covered one, and would change value if the same data were binned differently.",
+      "The corrected value is rate(bin) minus baselineRate. It is a signed difference and may be negative. The raw count and the uncorrected rate are ALWAYS retained in the artifact and the table: the correction adds a column, it never replaces the count.",
+      "A baseline of exactly 0 Hz is legitimate — subtracting zero is well defined. A baseline whose total exposure is zero is not: no included trial covered the baseline window, so no baseline exists, and the request is refused with SCIENCE_DENOMINATOR_INVALID rather than fabricating one.",
+      "The baseline window's bounds must coincide with bin edges. A baseline that cuts a bin in half has no defined exposure for that bin, and a mean over a partial bin is not a mean over anything the recorder observed.",
+      "Supplied `normalizedValues` are RE-DERIVED from the counts, the per-bin denominators, and the bin widths, and compared with a relative tolerance of 1e-12 against a scale set by the largest derived value across bins. Cortexel re-computes rather than trusts.",
+      "Cortexel never recovers a count from a rate; `counts` is required in prebinned mode. A rate is a lossy encoding of a count: at 4 trials x 5 senders x a 10 ms bin, one event is 5 Hz, so a supplied 12 Hz implies 2.4 events — a number no recorder ever produced. Refusing to invert is cheaper than deciding which rounding is honest.",
+      "Events belonging to a trial declared `included: false` are dropped from every numerator AND every denominator; they are never partially counted. Their number is recorded in the derivation receipt and the excluded-trial count appears in the summary.",
+      "Bins are drawn as literal steps or bars on their exact interval boundaries, with a reference line at relative time 0 and, when a baseline is applied, a zero line the axis may not hide. This contract has NO kernel mode: a smoothed peri-event intensity is a different quantity and needs its own contract and its own legend.",
+      "Cortexel does not compute uncertainty. A supplied UncertaintyV1 is validated and drawn as declared. Cortexel never draws a sqrt(N) Poisson band: that band is a model assumption about the spike-generating process, not an observation, and on the figure it is indistinguishable from a measured across-trial dispersion.",
+      "Complexity: O(T) to index the trials, O(n log n) for the deterministic sort, O(n) binning for a uniform width or O(n log B) for explicit edges, and O(T*B) worst case for the per-bin coverage denominators, which is preflighted against the budget before any bin is formed."
+    ],
+    "scopeRules": [
+      "The trial universe must be declared and non-empty, and at least one trial must be included. Trial count is never inferred from the maximum trial id or from the trials that happen to appear in the event list: a trial in which nothing happened is still a trial.",
+      "The selected sender universe (`recordedSenderIds`) must be declared and non-empty and must include senders that never fired. It is the per-neuron denominator basis and cannot be inferred from the events.",
+      "Every event's sender must be a member of `recordedSenderIds`, and every event's trial must be a member of the declared trial universe `trialIds`. An event from a sender or a trial that was supposedly not recorded is a contradiction, not a rounding error.",
+      "`ids.unique` is applied to the flat arrays `/data/recordedSenderIds` and `/data/trialIds`; the trial universe and its per-trial `alignmentTimes` are positionally parallel columnar arrays rather than a row table, so a duplicate sender or trial id fails before it can diverge selection, alignment, or the denominator.",
+      "In prebinned mode Cortexel cannot see the trial coverage. It checks that no per-bin denominator exceeds includedTrialCount, that a count and its denominator are null together, and it re-derives every value — but it cannot verify that a denominator of 3 really corresponds to three trials that covered that bin. PRE_BINNED_INPUT discloses exactly this.",
+      "Under `uniform_trial_count` every non-null per-bin denominator must EQUAL includedTrialCount, in both modes. A prebinned request declaring that policy with varying denominators is a contradiction — the policy asserts every included trial observed the whole window, the rows deny it — and is refused with SCIENCE_DENOMINATOR_INVALID rather than one of the two being silently believed.",
+      "The figure makes no claim beyond the declared included trials and selected senders. It is not a claim about the population, the session, or any trial that was excluded."
+    ],
+    "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "events" },
+            "eventTimes": {
+              "type": "object",
+              "description": "ABSOLUTE event times on the recording clock. Pre-aligned relative times are not accepted: alignment is the operation this figure exists to perform, and a caller-computed relative time cannot be checked against the trial's alignment time.",
+              "properties": {
+                "kind": { "const": "time" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 2000000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "maxItems": 2000000
+            },
+            "eventTrialIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "maxItems": 2000000,
+              "description": "The trial each event belongs to. It selects the alignment time; an event with no trial has no relative time. Read against `trialIds` by events.trial_universe_declared, so every value must be a member of the declared trial universe."
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE set of senders that were recorded AND selected — including any that never fired in any trial. This is the per-neuron denominator basis and it cannot be inferred from the events. events.sender_universe_declared requires every event sender to be a member."
+            },
+            "trialIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE trial universe as a flat array, including trials in which nothing happened. Declared, never inferred from the observed event trial ids: a trial with no events is still a trial. Kept unique by ids.unique and used as the universe by events.trial_universe_declared."
+            },
+            "alignmentUnit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+              "description": "The unit of every entry in `alignmentTimes`. Alignment times are on the same absolute clock as `eventTimes` and must share its dimension; a differing code is converted through the typed unit layer and the conversion is disclosed."
+            },
+            "alignmentTimes": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The absolute alignment time of each trial, positionally parallel to `trialIds`. Relative time is t_event minus the alignment time of the event's own trial. Required by psth.alignment_declared: without it there is nothing for time zero to mean."
+            },
+            "relativeWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "The analysis window in RELATIVE time, measured from each trial's own alignment time. It decides membership; the bins decide placement. window.valid reads it at /data/relativeWindow."
+            }
+          },
+          "required": ["mode", "eventTimes", "eventSenderIds", "eventTrialIds", "recordedSenderIds", "trialIds", "alignmentUnit", "alignmentTimes", "relativeWindow"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "prebinned" },
+            "trialIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE trial universe the pre-binned counts were computed over, as a flat array. It is includedTrialCount + excludedTrialCount long. Kept unique by ids.unique; its length is the trial count read by psth.alignment_declared."
+            },
+            "alignmentUnit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+              "description": "The unit of every entry in `alignmentTimes`."
+            },
+            "alignmentTimes": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The absolute alignment time of each trial in `trialIds`, positionally parallel to it. A pre-binned request still declares the reference it was aligned to; psth.alignment_declared requires it in both modes."
+            },
+            "counts": {
+              "type": "array",
+              "items": { "type": ["integer", "null"], "minimum": 0 },
+              "maxItems": 100000,
+              "description": "Exact integer event counts per bin, summed over the included trials and the selected senders. `null` means the bin was covered by NO included trial: it is a hole, not a measured zero. Length must be one less than the number of edges resolved from `parameters.bins`."
+            },
+            "trialDenominators": {
+              "type": "array",
+              "items": { "type": ["integer", "null"], "minimum": 1 },
+              "maxItems": 100000,
+              "description": "The number of included trials that FULLY cover each bin. Under a uniform denominator this is the same positive integer in every bin. It is null exactly where `counts` is null: a count without a denominator, or a denominator without a count, is a contradiction and is refused."
+            },
+            "recordedSenderCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The number of senders that were recorded and selected, including any that never fired. The per-neuron denominator. rate.denominator_positive requires it to be a positive integer."
+            },
+            "includedTrialCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The total number of trials included in the analysis. No per-bin denominator may exceed it."
+            },
+            "excludedTrialCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of trials that were recorded and deliberately excluded. Declared, never inferred: the trial universe is includedTrialCount + excludedTrialCount."
+            },
+            "rates": {
+              "type": "object",
+              "description": "Optional. The pre-normalized values per bin. Its `kind` must match the requested normalization: `count` -> count, `count_per_trial` -> ratio, either rate -> firing_rate. `null` exactly where `counts` is null.",
+              "properties": {
+                "kind": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 100000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "relativeWindow": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow" }
+          },
+          "required": ["mode", "trialIds", "alignmentUnit", "alignmentTimes", "counts", "trialDenominators", "recordedSenderCount", "includedTrialCount", "excludedTrialCount", "relativeWindow"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "seriesId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "seriesLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "alignmentLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "What the alignment times are DECLARED to be, for example \"Stimulus onset\". It labels the zero line. Cortexel cannot verify it: the scientific fact is the per-trial alignment time, and the label is a caller declaration like the source system."
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "The single authoritative bin-edge vector, in RELATIVE time, in BOTH modes. The bins must tile the relative window exactly. Cortexel never chooses a bin width for you: the width determines the height of every peak in the figure."
+        },
+        "normalization": {
+          "type": "string",
+          "enum": ["count", "count_per_trial", "total_event_rate_per_trial", "mean_rate_per_selected_sender_per_trial"],
+          "description": "`count` is the exact integer. `count_per_trial` divides by the bin's trial denominator. `total_event_rate_per_trial` is the rate of the whole selected group per trial and carries NO per-neuron claim. `mean_rate_per_selected_sender_per_trial` additionally divides by the selected-sender count and IS a per-neuron claim. The two rates are separate ids precisely so they cannot be conflated."
+        },
+        "denominatorPolicy": {
+          "type": "string",
+          "enum": ["uniform_trial_count", "per_bin_covering_trials"],
+          "description": "`uniform_trial_count` asserts that every included trial observed the entire relative window. `per_bin_covering_trials` requires every included trial to declare coverage and gives each bin the number of trials that fully cover it — the only honest option when recordings started late or ended early."
+        },
+        "baseline": {
+          "type": "object",
+          "description": "Optional baseline subtraction, in RELATIVE time and in the unit of `relativeWindow`. Permitted ONLY with a rate normalization: a count is extensive — it grows with the bin width and with the number of covering trials — so subtracting a mean count from bins of different width or different coverage produces a number with no consistent meaning. Both bounds must coincide with bin edges.",
+          "properties": {
+            "mode": { "const": "subtract_mean_rate" },
+            "start": { "type": "number" },
+            "stop": { "type": "number" }
+          },
+          "required": ["mode", "start", "stop"],
+          "additionalProperties": false
+        },
+        "uncertainty": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty" }
+      },
+      "required": ["seriesId", "bins", "normalization", "denominatorPolicy"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": { "normalization": { "enum": ["count", "count_per_trial"] } },
+            "required": ["normalization"]
+          },
+          "then": { "not": { "required": ["baseline"] } }
+        }
+      ]
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          ["/data/eventTimes/values", "/data/eventSenderIds", "/data/eventTrialIds"],
+          ["/data/trialIds", "/data/alignmentTimes"],
+          ["/data/counts", "/data/trialDenominators", "/data/rates/values"]
+        ]
+      }
+    },
+    { "id": "ids.unique", "parameters": { "pointers": ["/data/recordedSenderIds", "/data/trialIds"] } },
+    { "id": "window.valid", "parameters": { "pointer": "/data/relativeWindow" } },
+    { "id": "bins.strictly_increasing" },
+    { "id": "events.sender_universe_declared" },
+    { "id": "events.trial_universe_declared" },
+    { "id": "psth.alignment_declared" },
+    { "id": "rate.denominator_positive" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.psth", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 2000000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "histogram_merge_adjacent"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+    "MISSING_VALUES_PRESENT",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "PRE_BINNED_INPUT",
+    "UNIT_CONVERTED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "COMPACTION_MAY_HIDE_TRANSIENTS",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Peri-event time histogram for {seriesLabel}, aligned to {alignmentLabel} at relative time 0. Relative window {windowStart} to {windowStop} {timeUnit}, {binCount} bins of {binWidth} {timeUnit}. {eventCount} events from {selectedSenderCount} selected senders over {includedTrialCount} included trials, {excludedTrialCount} excluded. Denominator policy: {denominatorPolicy}. Normalization: {normalization}. Values range from {valueMin} to {valueMax} {valueUnit}. {baselineStatement} {missingBinStatement} {excludedEventStatement} {uncertaintyStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "binStart", "header": "Bin start (relative)", "description": "Inclusive lower edge, measured from the alignment instant." },
+      { "key": "binEnd", "header": "Bin end (relative)", "description": "Exclusive upper edge; inclusive only for the final bin of a closed window." },
+      { "key": "binWidth", "header": "Bin width" },
+      { "key": "count", "header": "Events", "description": "Exact integer count. Null means no included trial covered this bin — it is not a measured zero. This is the raw observation everything else is derived from." },
+      { "key": "trialDenominator", "header": "Covering trials", "description": "Included trials that fully cover this bin. The denominator for this bin." },
+      { "key": "includedTrialCount", "header": "Included trials", "description": "Every trial in the analysis. Constant across bins. Under `per_bin_covering_trials` it is the ceiling the covering-trial count is read against, so a bin estimated from fewer trials is visible in the table alone." },
+      { "key": "excludedTrialCount", "header": "Excluded trials", "description": "Trials recorded, declared, and deliberately excluded. Constant across bins. They enter no numerator and no denominator; the table states them so the denominator basis is readable without the summary." },
+      { "key": "excludedOutOfWindowCount", "header": "Events excluded (out of window)", "description": "Events whose relative time fell outside the relative window — including one at exactly relStop under the half-open convention — and so entered no bin. Constant across bins. Counted and reported, never silently dropped." },
+      { "key": "selectedSenderCount", "header": "Selected senders", "description": "Includes senders that never fired. Used only by the per-sender normalization." },
+      { "key": "value", "header": "Value", "description": "The normalized value, re-derived and verified from the count, the denominator, and the bin width." },
+      { "key": "valueUnit", "header": "Unit" },
+      { "key": "baselineCorrectedValue", "header": "Value minus baseline", "description": "Signed difference from the baseline rate; may be negative. Absent when no baseline was requested. It never replaces the count." },
+      { "key": "uncertaintyLower", "header": "Uncertainty lower" },
+      { "key": "uncertaintyUpper", "header": "Uncertainty upper" }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "elephant.statistics.time_histogram",
+      "version": "1.2.1",
+      "status": "not_run",
+      "notes": "Elephant's time_histogram is the intended differential oracle for the uniform-denominator policy, with one SpikeTrain per trial. Its conventions must be reconciled parameter for parameter first: its `mean` output divides by the number of SPIKETRAINS, which equals the trial count only when each train pools every selected sender — the exact per-trial versus per-neuron conflation this contract splits into two normalization ids. It also requires the input trains to share t_start and t_stop, so it cannot oracle `per_bin_covering_trials` at all; that policy is covered by hand vectors only. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.spike_recorder", "status": "partial", "notes": "Events and senders map directly. NEST has no concept of a trial: the alignment times, the trial universe, the exclusions, and any coverage are NOT in the recorder and must be supplied by the caller. The adapter blocks with ADAPTER_MAPPING_REQUIRED rather than treating each simulation as one implicit trial." },
+    { "system": "neo.Segment", "status": "supported", "notes": "One Segment per trial. t_start/t_stop map to coverage. The alignment time must be an explicitly selected Event: a Segment's t_start is a recording boundary, not a stimulus onset, and is never used as an alignment reference by default." },
+    { "system": "nwb.TimeIntervals", "status": "partial", "notes": "The trials table supplies start_time/stop_time as coverage and the excluded trials as declared rows. The alignment column must be named explicitly; start_time is not assumed to be the aligning event." },
+    { "system": "nwb.Units.spike_times", "status": "partial", "notes": "The caller must select the unit rows explicitly; the selected-sender universe is the selection, not every unit in the file." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.psth"],
+    "notes": "The legacy payload carried a spike list and a bin width. It had no trial universe (a trial with no spikes simply vanished and shrank the denominator), no coverage (a truncated trial was indistinguishable from a silent one), and a single ambiguous `rate_hz` that could mean per-trial or per-neuron. Migration therefore REQUIRES an included-trial count and blocks with MIGRATION_INFORMATION_MISSING without one, rather than inferring the trial count from the trial ids that happen to appear. An ambiguous legacy `rate_hz` maps to the WEAKER but accurate `total_event_rate_per_trial` and emits MIGRATION_AMBIGUOUS; it is never promoted into a per-neuron claim."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the precedence between the window boundary and the bin final-edge rule — that is, the fate of an event at exactly relStop — is MAJOR.",
+    "Changing which bin contains relative time 0 is MAJOR.",
+    "Changing any normalization formula or its denominator is MAJOR.",
+    "Changing the meaning of a normalization id, or merging the per-trial and per-neuron rate ids into one, is MAJOR.",
+    "Changing the baseline from a raw-count-and-exposure re-derivation to a mean of per-bin rates is MAJOR.",
+    "Changing the default denominator policy, or introducing any default normalization, is MAJOR.",
+    "Requiring bins to tile the window, or relaxing that requirement, is MAJOR.",
+    "Adding a normalization id, a baseline mode, an exclusion reason, or an uncertainty variant is MINOR."
+  ],
+
+  "knownLimitations": [
+    "No BASELINE_CORRECTED disclosure id exists in disclosures.v1.json 1.0, so the baseline window, method, and derived baseline value are surfaced through the deterministic summary and the table rather than through a disclosure rule. A future registry revision should register one.",
+    "The unit registry has no `rate_change` quantity kind. A baseline-subtracted value is a signed difference of rates, carried as `firing_rate` in Hz: dimensionally correct, but the kind does not encode that it may be negative. The column is headed \"Value minus baseline\" so it is not read as a rate.",
+    "Baseline ratio and z-score modes are not offered. A ratio to baseline is undefined whenever the baseline count is zero — the common case for a sparse neuron — and a z-score needs a dispersion denominator the 1.0 validator registry has no entry for. Cortexel refuses rather than emit an infinity.",
+    "`histogram_merge_adjacent` is registered with `appliesTo: [\"distribution\"]`. A PSTH is a binned count over time, but the policy's semantics — merge adjacent bins only, sum raw counts — are what it needs; the tag should be widened. Extrema sampling would drop whole bins and is refused.",
+    "Merging is refused when the merged bins do not share a trial denominator: a summed count over a changing exposure has no single rate, and re-deriving one would silently average two different experiments.",
+    "Relative times are a binary64 difference of absolute times. At an absolute clock of 1e9 ms the resolution of that difference is about 2.4e-7 ms — far below any realistic bin width — but microsecond bins on a multi-day clock approach that limit, and Cortexel does not currently refuse it.",
+    "A per-bin trial denominator means the bins of one figure are not all estimated from the same trials. Each bin's denominator is in the table, but two bins with different denominators are not directly comparable as samples of one thing.",
+    "Cortexel validates that a per-bin denominator does not exceed the included-trial count; in prebinned mode it cannot verify that the denominator corresponds to trials that actually covered the bin.",
+    "The trial universe is declared columnar: a flat `trialIds` array with a positionally parallel `alignmentTimes`. That is what lets ids.unique read a real array, events.trial_universe_declared read a real universe, and psth.alignment_declared read a real alignment, rather than a `/data/trials/rows/*/id` pointer the pipeline cannot resolve.",
+    "Per-trial `included`, `exclusionReason`, and `coverage` metadata are derivation-stage inputs, not fields of this request schema; the semantic layer validates the declared universe, its ids, the alignment, and the denominator, while coverage consistency under `per_bin_covering_trials` is checked when the bins are formed.",
+    "`events.within_window` is not declared for this figure: it compares absolute event times against a single absolute `/data/window`, but a PSTH's membership window is RELATIVE and resolved per trial against each alignment time. Relative-window membership and the excluded-event count are enforced at the derivation stage, which owns the alignment.",
+    "`rate.verify_normalization` is not declared for this figure: it re-derives count / (recordedSenderCount x binWidth) from a `/data/binEdges` vector — the population-rate denominator — whereas a PSTH divides by a per-bin trial denominator and keeps one authoritative bin vector at `/parameters/bins`. Supplied `rates` are re-derived at the derivation stage instead."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.psth" },
+        "data": {
+          "mode": "events",
+          "eventTimes": { "kind": "time", "unit": "ms", "values": [1002.0, 1005.5, 1010.0, 2004.0, 2004.0, 2011.5, 3009.0] },
+          "eventSenderIds": ["1", "2", "1", "1", "3", "2", "3"],
+          "eventTrialIds": ["t1", "t1", "t1", "t2", "t2", "t2", "t3"],
+          "recordedSenderIds": ["1", "2", "3", "4"],
+          "trialIds": ["t1", "t2", "t3", "t4"],
+          "alignmentUnit": "ms",
+          "alignmentTimes": [1000, 2000, 3000, 4000],
+          "relativeWindow": { "start": -10, "stop": 20, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "seriesId": "exc",
+          "seriesLabel": "Excitatory",
+          "alignmentLabel": "Stimulus onset",
+          "bins": { "mode": "width", "unit": "ms", "width": 10, "start": -10, "stop": 20, "boundary": "[lo,hi)", "finalEdgeInclusive": false },
+          "normalization": "mean_rate_per_selected_sender_per_trial",
+          "denominatorPolicy": "uniform_trial_count",
+          "uncertainty": { "kind": "none", "reason": "not_computed" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.psth" },
+        "data": {
+          "mode": "prebinned",
+          "trialIds": ["t1", "t2", "t3", "t4", "t5", "t6"],
+          "alignmentUnit": "ms",
+          "alignmentTimes": [1000, 2000, 3000, 4000, 5000, 6000],
+          "counts": [null, 3, 12, 6],
+          "trialDenominators": [null, 3, 5, 5],
+          "recordedSenderCount": 4,
+          "includedTrialCount": 5,
+          "excludedTrialCount": 1,
+          "rates": { "kind": "firing_rate", "unit": "Hz", "values": [null, 100, 240, 120] },
+          "relativeWindow": { "start": -20, "stop": 20, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "seriesId": "unit-07",
+          "seriesLabel": "Unit 07",
+          "alignmentLabel": "Cue onset",
+          "bins": { "mode": "edges", "unit": "ms", "edges": [-20, -10, 0, 10, 20], "boundary": "[lo,hi)", "finalEdgeInclusive": false },
+          "normalization": "total_event_rate_per_trial",
+          "denominatorPolicy": "per_bin_covering_trials",
+          "baseline": { "mode": "subtract_mean_rate", "start": -10, "stop": 0 },
+          "uncertainty": { "kind": "none", "reason": "not_computed" }
+        },
+        "source": { "kind": "experimental_recording", "system": "Open Ephys", "datasetId": "ds-014" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "The request tries to assert that Cortexel validated it. Validation results are library-generated facts and are not caller-settable; the field is rejected, not ignored — and the authority boundary runs first, on the raw request, so this is the sole reported failure. A caller declares what its data IS, never what Cortexel concluded about it.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "prebinned",
+            "trialIds": ["t1", "t2", "t3", "t4"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000, 2000, 3000, 4000],
+            "counts": [5],
+            "trialDenominators": [4],
+            "recordedSenderCount": 4,
+            "includedTrialCount": 4,
+            "excludedTrialCount": 0,
+            "relativeWindow": { "start": 0, "stop": 10, "unit": "ms" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" },
+          "validation": { "structural": { "result": "passed" } }
+        }
+      },
+      {
+        "why": "The trial universe is absent: `trialIds`, `alignmentUnit`, and `alignmentTimes` are all omitted, so nothing declares which trials were run or what time zero means. Cortexel does not infer the trial count from the ids that happen to appear in the event list — a trial in which nothing happened is still a trial, and dropping it inflates every per-trial value. The events-mode branch fails structurally with the required properties missing before any denominator can be formed.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0, 2005.0] },
+            "eventSenderIds": ["1", "1"],
+            "eventTrialIds": ["t1", "t2"],
+            "recordedSenderIds": ["1"],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count_per_trial",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "There is one event time but two event senders. The parallel arrays describe the same observations, so they must have the same length; a shorter time array does not mean \"reuse the last time\", it means the export is broken. series.equal_length refuses to pair a value with a time by best effort.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1", "2"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1", "2"],
+            "trialIds": ["t1"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "An event's sender is \"9\", which is not in the declared recorded-sender universe. A sender that was supposedly not recorded cannot have produced a recorded event, and Cortexel will not silently extend a universe the caller declared complete: doing so would either drop a real spike or enlarge the per-neuron denominator. events.sender_universe_declared rejects it.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["9"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "An event declares trial t9, which is not in the declared trial universe. There is no alignment time for it, so its relative time is undefined. Dropping it silently would remove a real spike from a numerator while leaving the denominator untouched; adding t9 silently would invent a trial and enlarge the denominator. events.trial_universe_declared will not extend a universe the caller declared complete.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1"],
+            "eventTrialIds": ["t9"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1", "t2"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000, 2000],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The trial universe declares trial t2 twice, with different alignment times. Every event of t2 would align to whichever entry the implementation read last — a 500 ms difference here, which moves every one of its spikes into a different bin — and t2 would be counted twice in the denominator. An ambiguous identity must fail before it can diverge alignment and the denominator, so ids.unique rejects it on /data/trialIds.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1", "t2", "t2"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000, 2000, 2500],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The relative window is inverted: start 10 is not less than stop -10, so it selects no time at all. An empty or inverted window has no membership to decide, and window.valid refuses it rather than letting a downstream bin loop silently produce nothing.",
+        "expectedCode": "SCIENCE_WINDOW_INVALID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000],
+            "relativeWindow": { "start": 10, "stop": -10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The bin edges [-10, 0, 0, 10] are not strictly increasing: the third edge repeats the second, which defines a zero-width bin that has no meaning and would silently absorb or double-count events on the boundary. bins.strictly_increasing rejects it. n edges must define n-1 half-open bins with positive width.",
+        "expectedCode": "SCIENCE_BIN_EDGES_INVALID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "`ms` is canonical but `milliseconds` is only an alias, and here it is on the bin unit. A stable request must use the canonical code; the alias is rejected with a repair rather than silently converted, because a silent conversion changes the bin width — and the bin width changes the height of every peak in the figure. unit.canonical_code rejects it.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "milliseconds", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "A baseline was requested with a `count` normalization. A count is extensive — it grows with the bin width and with the number of covering trials — so subtracting a mean baseline count from bins of different width or coverage produces a number with no consistent meaning. Baseline subtraction is defined only for a rate, so the parameters schema forbids `baseline` under `count` and `count_per_trial` and this fails structurally.",
+        "expectedCode": "SCHEMA_VALIDATION_FAILED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count",
+            "baseline": { "mode": "subtract_mean_rate", "start": -10, "stop": 0 }
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The uncertainty variant is `credible_interval`, which this figure does not support: a credible interval is a statement about a posterior, and structural validity alone never establishes that one was computed or calibrated. uncertainty.supported_variant refuses it and points at the variants this figure can render truthfully.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.psth" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1005.0] },
+            "eventSenderIds": ["1"],
+            "eventTrialIds": ["t1"],
+            "recordedSenderIds": ["1"],
+            "trialIds": ["t1"],
+            "alignmentUnit": "ms",
+            "alignmentTimes": [1000],
+            "relativeWindow": { "start": -10, "stop": 10, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": {
+            "seriesId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [-10, 0, 10] },
+            "normalization": "count",
+            "denominatorPolicy": "uniform_trial_count",
+            "uncertainty": {
+              "kind": "credible_interval",
+              "unit": "Hz",
+              "lower": [0],
+              "upper": [1],
+              "level": 0.95,
+              "method": "HPD 95%",
+              "coverage": "pointwise",
+              "basis": "trials"
+            }
+          },
+          "source": { "kind": "simulation" }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "registry": "cortexel-budget-profiles",
+  "version": "1.0",
+  "description": "One resource model, from raw bytes through parser, validator, derivation, render plan, SVG, table, and sidecar.\n\nThe governing distinction: a HARD LIMIT protects the process, and a DISPLAY BUDGET controls representation. They are not the same thing and must never be confused. Input above a hard limit FAILS. Input within hard limits but above a display budget may be compacted — but only by a named, deterministic, scientifically appropriate policy that is recorded in the artifact and disclosed on the figure. The complete accepted data always remains available through the table or a content-addressed sidecar.\n\nA caller may LOWER a limit. A caller can never RAISE one from untrusted input.",
+
+  "provenanceOfNumbers": "These ceilings are the blueprint's proposed release values. They have NOT yet been benchmarked on the minimum supported CI machine for peak memory and latency. Until that benchmark exists (gate R117), they are documented as provisional and the evidence ledger records the benchmark as NOT_RUN. They are deliberately conservative rather than tuned.",
+
+  "profiles": [
+    {
+      "id": "standard",
+      "description": "The default. Sized for a workstation or a CI runner.",
+      "limits": {
+        "rawInputBytes": { "value": 33554432, "unit": "bytes", "rationale": "32 MiB. A giant string must not be able to allocate an unbounded parse tree.", "errorCode": "JSON_BYTES_EXCEEDED" },
+        "jsonDepth": { "value": 64, "unit": "levels", "rationale": "Deep nesting is a denial-of-service vector, not a scientific need.", "errorCode": "JSON_DEPTH_EXCEEDED" },
+        "jsonTotalNodes": { "value": 1000000, "unit": "nodes", "rationale": "Total scalar and container nodes in the materialized value.", "errorCode": "SNAPSHOT_NODES_EXCEEDED" },
+        "jsonStringLength": { "value": 65536, "unit": "code units", "rationale": "No stable field needs a 64 KiB string.", "errorCode": "JSON_STRING_TOO_LONG" },
+        "jsonNumberTokenLength": { "value": 64, "unit": "characters", "rationale": "A longer digit string cannot add binary64 precision; it can only waste time.", "errorCode": "JSON_NUMBER_TOKEN_TOO_LONG" },
+        "jsonObjectKeys": { "value": 4096, "unit": "members", "rationale": "Per object.", "errorCode": "JSON_TOO_MANY_KEYS" },
+        "jsonArrayItems": { "value": 2000000, "unit": "members", "rationale": "Per array.", "errorCode": "JSON_ARRAY_TOO_LONG" },
+
+        "observationsPerSeries": { "value": 250000, "unit": "observations", "rationale": "A single trace or train.", "errorCode": "RESOURCE_OBSERVATIONS_EXCEEDED" },
+        "observationsPerRequest": { "value": 2000000, "unit": "observations", "rationale": "Across every series in one request.", "errorCode": "RESOURCE_OBSERVATIONS_EXCEEDED" },
+        "graphNodes": { "value": 100000, "unit": "nodes", "rationale": "Declared node universe.", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
+        "graphEdges": { "value": 200000, "unit": "edges", "rationale": "Connection rows.", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
+        "matrixCells": { "value": 16000000, "unit": "cells", "rationale": "4000 x 4000, and only when the data is referenced rather than materialized densely.", "errorCode": "RESOURCE_MATRIX_CELLS_EXCEEDED" },
+        "pairwiseOperations": { "value": 50000000, "unit": "pairs", "rationale": "Preflighted with saturating arithmetic BEFORE a single pair is formed. Correlograms are the quadratic risk.", "errorCode": "RESOURCE_PAIRWISE_EXCEEDED" },
+
+        "visibleMarks": { "value": 100000, "unit": "marks", "rationale": "Display budget. Exceeding it triggers compaction or refusal, never silent truncation.", "errorCode": "RESOURCE_MARKS_EXCEEDED" },
+        "svgTextNodes": { "value": 20000, "unit": "elements", "rationale": "Display budget.", "errorCode": "RESOURCE_MARKS_EXCEEDED" },
+        "svgBytes": { "value": 20971520, "unit": "bytes", "rationale": "20 MiB of normalized SVG.", "errorCode": "RESOURCE_OUTPUT_BYTES_EXCEEDED" },
+        "sidecarBytes": { "value": 104857600, "unit": "bytes", "rationale": "100 MiB.", "errorCode": "RESOURCE_SIDECAR_BYTES_EXCEEDED" },
+        "inlineTableRows": { "value": 500, "unit": "rows", "rationale": "Beyond this the inline table becomes an excerpt bound by digest to a complete sidecar. An excerpt is ALWAYS labelled as one.", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
+
+        "errorRecords": { "value": 32, "unit": "records", "rationale": "Diagnostics are themselves an untrusted-input amplification surface.", "errorCode": "ERROR_LIMIT_REACHED" },
+        "bundlePanels": { "value": 8, "unit": "panels", "rationale": "One level of composition; a bundle may not contain a bundle.", "errorCode": "RESOURCE_BUDGET_EXCEEDED" }
+      }
+    },
+    {
+      "id": "agent",
+      "description": "A tighter profile for autonomous agents, where an accidental multi-megabyte payload is more likely than an intentional one. Every limit is <= the standard profile.",
+      "limits": {
+        "rawInputBytes": { "value": 4194304, "unit": "bytes", "rationale": "4 MiB.", "errorCode": "JSON_BYTES_EXCEEDED" },
+        "jsonDepth": { "value": 32, "unit": "levels", "rationale": "", "errorCode": "JSON_DEPTH_EXCEEDED" },
+        "jsonTotalNodes": { "value": 200000, "unit": "nodes", "rationale": "", "errorCode": "SNAPSHOT_NODES_EXCEEDED" },
+        "jsonStringLength": { "value": 8192, "unit": "code units", "rationale": "", "errorCode": "JSON_STRING_TOO_LONG" },
+        "jsonNumberTokenLength": { "value": 64, "unit": "characters", "rationale": "", "errorCode": "JSON_NUMBER_TOKEN_TOO_LONG" },
+        "jsonObjectKeys": { "value": 1024, "unit": "members", "rationale": "", "errorCode": "JSON_TOO_MANY_KEYS" },
+        "jsonArrayItems": { "value": 200000, "unit": "members", "rationale": "", "errorCode": "JSON_ARRAY_TOO_LONG" },
+
+        "observationsPerSeries": { "value": 50000, "unit": "observations", "rationale": "", "errorCode": "RESOURCE_OBSERVATIONS_EXCEEDED" },
+        "observationsPerRequest": { "value": 200000, "unit": "observations", "rationale": "", "errorCode": "RESOURCE_OBSERVATIONS_EXCEEDED" },
+        "graphNodes": { "value": 20000, "unit": "nodes", "rationale": "", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
+        "graphEdges": { "value": 50000, "unit": "edges", "rationale": "", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
+        "matrixCells": { "value": 1000000, "unit": "cells", "rationale": "", "errorCode": "RESOURCE_MATRIX_CELLS_EXCEEDED" },
+        "pairwiseOperations": { "value": 5000000, "unit": "pairs", "rationale": "", "errorCode": "RESOURCE_PAIRWISE_EXCEEDED" },
+
+        "visibleMarks": { "value": 25000, "unit": "marks", "rationale": "", "errorCode": "RESOURCE_MARKS_EXCEEDED" },
+        "svgTextNodes": { "value": 5000, "unit": "elements", "rationale": "", "errorCode": "RESOURCE_MARKS_EXCEEDED" },
+        "svgBytes": { "value": 5242880, "unit": "bytes", "rationale": "", "errorCode": "RESOURCE_OUTPUT_BYTES_EXCEEDED" },
+        "sidecarBytes": { "value": 20971520, "unit": "bytes", "rationale": "", "errorCode": "RESOURCE_SIDECAR_BYTES_EXCEEDED" },
+        "inlineTableRows": { "value": 200, "unit": "rows", "rationale": "", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
+
+        "errorRecords": { "value": 32, "unit": "records", "rationale": "", "errorCode": "ERROR_LIMIT_REACHED" },
+        "bundlePanels": { "value": 8, "unit": "panels", "rationale": "", "errorCode": "RESOURCE_BUDGET_EXCEEDED" }
+      }
+    }
+  ],
+
+  "compactionPolicies": [
+    {
+      "id": "none", "revision": 1, "appliesTo": ["*"],
+      "description": "No compaction. The figure is drawn in full or the request is refused.",
+      "preservesExtrema": true, "preservesMass": true, "deterministic": true
+    },
+    {
+      "id": "line_envelope_minmax", "revision": 1, "appliesTo": ["trace", "weight_trace"],
+      "description": "Per horizontal pixel bucket, retain the minimum and the maximum sample, plus the first and last sample of the series and every boundary of a missing span. A one-sample transient therefore SURVIVES, which naive averaging would erase.",
+      "preservesExtrema": true, "preservesMass": false, "deterministic": true
+    },
+    {
+      "id": "raster_density_bins", "revision": 1, "appliesTo": ["spike_raster"],
+      "description": "Aggregate events into an explicit time x sender bin grid and draw density. Every event is COUNTED — none is dropped. The bin dimensions and the before/after counts are recorded.",
+      "preservesExtrema": false, "preservesMass": true, "deterministic": true
+    },
+    {
+      "id": "histogram_merge_adjacent", "revision": 1, "appliesTo": ["distribution"],
+      "description": "Merge ONLY adjacent bins, summing raw counts and probability mass (or integrating density before re-normalizing by the wider bin). Extrema sampling is INVALID for a distribution — it would destroy the mass — so it is not offered.",
+      "preservesExtrema": false, "preservesMass": true, "deterministic": true
+    },
+    {
+      "id": "matrix_value_quantize", "revision": 1, "appliesTo": ["matrix"],
+      "description": "Group cells that share a quantized value into one paint path. This is a PAINT optimization only: every cell is retained and remains individually addressable in the table.",
+      "preservesExtrema": true, "preservesMass": true, "deterministic": true
+    },
+    {
+      "id": "graph_declared_subset", "revision": 1, "appliesTo": ["graph"],
+      "description": "Draw only the caller's explicitly declared edge subset. The retained and source counts are disclosed and no degree claim is permitted.",
+      "preservesExtrema": false, "preservesMass": false, "deterministic": true
+    }
+  ],
+
+  "prohibited": [
+    "Math.random or any unseeded sampling in a stable path.",
+    "A prefix `slice` that silently drops later observations.",
+    "Averaging a time series without a policy that preserves transients or discloses that it cannot.",
+    "Extrema sampling of a distribution: it destroys the mass the distribution exists to show.",
+    "Block-aggregating a matrix without an explicit statistic and ordering.",
+    "Presenting any excerpt as if it were complete."
+  ]
+}

@@ -1,0 +1,637 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.spatial_map_2d.request.v1.schema.json",
+  "title": "network.spatial_map_2d request",
+  "description": "GENERATED from contract/skills/network.spatial_map_2d.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.spatial_map_2d"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE selected node universe in a declared order. It is required and is never inferred from the position rows: a node the source failed to position must still be counted, or its absence from the map would be invisible. Read by topology.node_universe_declared, topology.edge_endpoints_in_universe, and spatial.position_coverage_complete."
+        },
+        "positions": {
+          "type": "object",
+          "description": "One row per POSITIONED node: an id, an x, a y, and optionally a value. Binding them in one row is what makes coverage structural — a value can never be supplied for a node that has no coordinate, and a coordinate can never lose its value.",
+          "properties": {
+            "nodeIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Binds each coordinate to a node explicitly. Coordinates are never matched to nodes by array position, because a reordered node universe would then silently relocate every neuron."
+            },
+            "x": {
+              "type": "object",
+              "description": "The x coordinate per row. `kind` is `position`, whose only dimension is length: a spatial map at one equal scale asserts a distance, and a distance needs a unit. Bare model numbers are not plotted here.",
+              "properties": {
+                "kind": {
+                  "const": "position"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "description": "The y coordinate per row. No null is admitted on either axis: a node with an x and no y cannot be placed, and half a position is not a position.",
+              "properties": {
+                "kind": {
+                  "const": "position"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "measured",
+                "model_generated",
+                "supplied"
+              ],
+              "description": "`measured` was observed from a physical system. `model_generated` was produced by the model itself — a NEST grid or free layer is model_generated, not measured. `supplied` was authored by the caller. The status is stated in the summary and on every table row; it is never inferred from `source.kind`."
+            },
+            "frame": {
+              "type": "object",
+              "description": "The declared coordinate frame. Cortexel records it and never transforms between frames: a frame transform that nobody declared is a silent relocation of every node.",
+              "properties": {
+                "id": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                },
+                "xAxisLabel": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                },
+                "yAxisLabel": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            },
+            "domain": {
+              "type": "object",
+              "description": "The declared spatial domain — a NEST layer's centre, extent and edge_wrap. Optional; when present it IS the mapped rectangle and it supplies the period that a wrapped chord needs. Because the boundary rule lives here, a periodic chord rule can never be declared without the period it requires.",
+              "properties": {
+                "center": {
+                  "type": "object",
+                  "properties": {
+                    "x": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "position"
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "unit",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "y": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "position"
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "unit",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "x",
+                    "y"
+                  ],
+                  "additionalProperties": false
+                },
+                "extent": {
+                  "type": "object",
+                  "description": "The full width and height of the domain, not a half-extent. Both are strictly positive: a zero-extent domain has no scale and no period.",
+                  "properties": {
+                    "width": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "length"
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "value": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "unit",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "height": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "length"
+                        },
+                        "unit": {
+                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                        },
+                        "value": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "unit",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "width",
+                    "height"
+                  ],
+                  "additionalProperties": false
+                },
+                "boundary": {
+                  "description": "Open or periodic. Under `periodic` the chord rule is REQUIRED and has no default: a connection across a wrapped boundary is drawn either as the minimum image or as the literal straight chord, the two differ by the period, and no reader can tell which one they are looking at unless the figure says so.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "open"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "periodic"
+                        },
+                        "x": {
+                          "type": "boolean",
+                          "description": "Whether the x axis wraps. Periodicity is declared per axis: NEST's edge_wrap is a property of the layer, and a layer may wrap in one axis only."
+                        },
+                        "y": {
+                          "type": "boolean"
+                        },
+                        "edgeChordRule": {
+                          "type": "string",
+                          "enum": [
+                            "minimum_image",
+                            "straight_chord"
+                          ],
+                          "description": "`minimum_image` draws the shortest wrapped chord, split at the boundary, with no ghost node at the wrapped position. `straight_chord` draws the literal chord between the two declared coordinates and is labelled as such, together with the count of edges whose drawn length exceeds their modelled separation."
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "x",
+                        "y",
+                        "edgeChordRule"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "center",
+                "extent",
+                "boundary"
+              ],
+              "additionalProperties": false
+            },
+            "value": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantitySeries",
+              "description": "Optional per-node scalar, parallel to `nodeIds`. A node with no value carries an explicit null and is still drawn with the reserved no-value symbol. Cortexel does not re-derive this value and makes no claim about how it was computed."
+            },
+            "valueLabel": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+              "description": "What the value IS, including the window it came from if it has one. The figure carries no analysis window of its own for it."
+            }
+          },
+          "required": [
+            "nodeIds",
+            "x",
+            "y",
+            "status",
+            "frame"
+          ],
+          "additionalProperties": false
+        },
+        "scope": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+          "description": "How the snapshot query was partitioned, for the coordinates and for any connections. This is the single scope read by topology.scope_declared and topology.scope_supports_claim. It is not a coverage claim: a single-process query can still return no position for a node, and that gap is reported separately."
+        },
+        "connections": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+          "description": "Optional edge layer in parallel-array form (`sourceIds`, `targetIds`, optional `edgeIds`, `weights`, `delays`, `synapseModels`). Multapses are distinct rows and are never deduplicated; on this map they share one chord and are counted, never lane-offset onto coordinates where nothing was measured. Every endpoint must resolve into `nodeUniverse` (topology.edge_endpoints_in_universe) and have a position (spatial.position_coverage_complete)."
+        }
+      },
+      "required": [
+        "nodeUniverse",
+        "positions",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "mapId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+        },
+        "mapLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "missingPositionPolicy": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "omit_and_disclose"
+          ],
+          "description": "Required, with no default. `reject` fails closed when any selected node has no position. `omit_and_disclose` is intended to draw the positioned nodes and disclose the omitted count (POSITIONS_MISSING). NOTE: under the current semantic-validator registry, spatial.position_coverage_complete always requires full coverage, so both policies presently require a position for every selected node; the enum is retained for the forward-compatible policy axis. An unpositioned node is NEVER placed at the origin, which under a centred layer is the single most plausible place for a real soma to be."
+        },
+        "nodeEncoding": {
+          "description": "What a marker's colour means. Required: a figure in which colour acquired a meaning by default is a figure whose legend nobody wrote.",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "const": "uniform"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "Categorical colour by declared group, always paired with a distinct marker shape so group identity never depends on colour perception.",
+              "properties": {
+                "mode": {
+                  "const": "group"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "Continuous colour by the per-node value. A diverging scale carries an explicit centre; a symlog transform carries its linear threshold. Neither is ever inferred.",
+              "properties": {
+                "mode": {
+                  "const": "value"
+                },
+                "colorScale": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "sequential"
+                        },
+                        "transform": {
+                          "const": "linear"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "transform"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "sequential"
+                        },
+                        "transform": {
+                          "const": "symlog"
+                        },
+                        "linearThreshold": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "transform",
+                        "linearThreshold"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "diverging"
+                        },
+                        "center": {
+                          "type": "number"
+                        },
+                        "transform": {
+                          "const": "linear"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "center",
+                        "transform"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "diverging"
+                        },
+                        "center": {
+                          "type": "number"
+                        },
+                        "transform": {
+                          "const": "symlog"
+                        },
+                        "linearThreshold": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "center",
+                        "transform",
+                        "linearThreshold"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "mode",
+                "colorScale"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "markerRadiusPx": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 3,
+          "description": "Fixed screen-space decoration. It encodes NOTHING: it never scales with a value, a degree, or a soma size, and two markers that touch are not two neurons that touch."
+        },
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "The statistic that a shared chord's encoded value represents. Required (topology.multapse_aggregation_declared) whenever two or more connection rows share an unordered endpoint pair, because the chord between two measured places cannot be split into lanes without inventing geometry. `no_aggregation` ASSERTS at most one connection per pair and fails if that is untrue. Read at the parameters top level."
+        },
+        "synapseModelGroup": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "An explicit declaration that weights from several synapse models are genuinely comparable and may be pooled onto one encoding. Read by topology.weight_group_compatible; without it, weights spanning more than one declared synapse model are refused (SCIENCE_WEIGHT_GROUP_INCOMPATIBLE)."
+        },
+        "connectionDisplay": {
+          "description": "How the optional edge layer is drawn. Absent means chords are drawn uniformly with a count label on any multi-connection pair; the rows themselves are never merged and always reach the table. Encoding a value requires the channel that carries it — and, where that channel is colour, the scale — because a stroke that acquired its meaning from a default is a stroke whose legend nobody wrote.",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "Uniform chords. No value claim: stroke width and colour mean nothing, and direction is carried by the arrowhead alone.",
+              "properties": {
+                "valueEncoding": {
+                  "const": "none"
+                }
+              },
+              "required": [
+                "valueEncoding"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "A declared edge attribute encoded as stroke WIDTH over the bounded pixel range stated in the legend. No colour scale is admitted, because no colour meaning is claimed. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
+              "properties": {
+                "valueEncoding": {
+                  "type": "string",
+                  "enum": [
+                    "weight",
+                    "delay"
+                  ]
+                },
+                "channel": {
+                  "const": "width"
+                }
+              },
+              "required": [
+                "valueEncoding",
+                "channel"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "A declared edge attribute encoded with COLOUR (alone or with width). The scale is required and never inferred: a diverging scale carries an explicit centre, and signed values are additionally dashed so the sign survives a grayscale print. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
+              "properties": {
+                "valueEncoding": {
+                  "type": "string",
+                  "enum": [
+                    "weight",
+                    "delay"
+                  ]
+                },
+                "channel": {
+                  "type": "string",
+                  "enum": [
+                    "color",
+                    "width_and_color"
+                  ]
+                },
+                "colorScale": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "sequential"
+                        },
+                        "transform": {
+                          "const": "linear"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "transform"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "diverging"
+                        },
+                        "center": {
+                          "type": "number"
+                        },
+                        "transform": {
+                          "const": "linear"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "center",
+                        "transform"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "valueEncoding",
+                "channel",
+                "colorScale"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Only the `none` variant is renderable. UncertaintyV1 is a 1-D per-point channel; a position's error is 2-D, and drawing a single array as a disc around each marker would assert an isotropic localization error that the source never declared."
+        }
+      },
+      "required": [
+        "mapId",
+        "missingPositionPolicy",
+        "nodeEncoding"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

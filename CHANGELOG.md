@@ -6,6 +6,64 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — contract kernel (M1)
+
+- **One normative contract authority under `contract/`.** Registries (units, error
+  codes, capabilities, semantic validators, disclosures, budget profiles, renderers,
+  palettes, identity, the legacy-skill map), Draft 2020-12 shared schemas, the
+  request/artifact envelopes, and one self-describing contract file per stable skill.
+  A meta-schema (`contract/meta/contract-source.schema.json`) constrains every skill
+  contract.
+- **The 19 stable single-figure contracts plus the `figure.bundle` artifact kind**,
+  each with its scientific purpose, closed request schema, named semantic validators,
+  budgets, disclosures, accessibility summary/table, hand-vector evidence flag,
+  migration mapping, ownership, and living valid/invalid examples.
+- **`scripts/generate-contract.ts`** derives the TypeScript catalog, identity, enum
+  schemas, composed per-skill request schemas, the Python mirror, and the contract
+  digest from `contract/` — deterministically. `scripts/check-generated.ts` fails if
+  any generated file drifts or if generation is nondeterministic. The generator also
+  refuses to emit an incoherent contract (a dangling validator id, an open object
+  schema, a stable skill on an experimental renderer, or an oracle claimed as passed
+  with no receipt).
+- **Coordinated contract identity.** A SHA-256 `contractDigest` over the canonicalized
+  normative source set, a separate `catalogDigest` over the stable catalog, and
+  `getBuildIdentity()` naming every version axis. A local build reports
+  `sourceRevision: "unreleased-worktree"` and `release: false` rather than guessing a
+  release commit.
+- **Dependency-free SHA-256** (checked against the FIPS 180-4 vectors and
+  differentially against `node:crypto`) and **RFC 8785 JSON canonicalization** (the
+  root of every cross-language digest).
+- **A strict raw-JSON parser** that rejects duplicate object members before
+  materialization — the check `JSON.parse` cannot perform — enforces resource limits
+  during scanning, and builds null-prototype objects. And a **safe snapshot** for
+  already-materialized values that inspects property descriptors without ever invoking
+  a getter, `toJSON`, or `Symbol.toPrimitive`, survives a throwing Proxy, and returns
+  a detached copy.
+- **The request/artifact split.** `FigureRequestV1` (what a caller authors) and
+  `FigureArtifactV1` (what Cortexel emits) are separate schemas. A caller cannot
+  author a library conclusion — validation status, disclosures, digests, calibration —
+  and the attempt is rejected with `PROVENANCE_CALLER_ASSURANCE_FORBIDDEN`, checked
+  first, on the raw request, so it cannot hide behind a schema error.
+- **The validation pipeline** (`parseAndValidateRequest`, `validateRequestValue`):
+  boundary → authority → identity → structural (Ajv 2020, strict, no coercion) →
+  semantic → canonicalize, returning a branded validated request that rendering will
+  later require. The materialized-value boundary honestly reports the weaker
+  `duplicateKeys: "not_observable_after_materialization"` assurance.
+- **35 named semantic validators** — the rules JSON Schema cannot express: intervals
+  formed only within a train, a rate denominator that counts recorded (not spiking)
+  neurons, a rank-local snapshot that cannot claim a global out-degree, a multapse
+  aggregation that is never "last edge wins", a unit dimension that must match its
+  quantity kind, and a unit alias rejected with a repair rather than silently
+  converted.
+- **The disclosure engine**, deriving mandatory disclosures only from machine-checkable
+  artifact facts through the closed rule registry — never from caller text or a flag.
+- **Deterministic pre-1.0 migration** (`migrateLegacyRequest`) covering all 26 legacy
+  ids: it produces a request plus a report, never an artifact, and refuses to invent a
+  fact the legacy payload did not carry.
+- **Living-fixture, hostile-input, and identity tests**: 297 contract-example checks,
+  a SHA-256 vector + differential suite, an RFC 8785 suite, and hostile parser and
+  snapshot corpora.
+
 ### Added
 
 - **Pre-1.0 baseline and evidence ledger.** `docs/release/BASELINE-2026-07-14.md`

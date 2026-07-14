@@ -1,0 +1,976 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.phase_plane.request.v1.schema.json",
+  "title": "neuro.phase_plane request",
+  "description": "GENERATED from contract/skills/neuro.phase_plane.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.phase_plane"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "description": "A state space, plus at least one of: trajectories through it, or a vector field evaluated on it. Nullclines and fixed points are optional annotations and are accepted only with a declared method.",
+      "properties": {
+        "axes": {
+          "type": "object",
+          "description": "The two state variables that define the space. This is the single source of truth for each axis's identity, kind, and unit; every series is checked against it.",
+          "properties": {
+            "x": {
+              "type": "object",
+              "properties": {
+                "stateId": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                },
+                "label": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                },
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                }
+              },
+              "required": [
+                "stateId",
+                "kind",
+                "unit"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "stateId": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                },
+                "label": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                },
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                }
+              },
+              "required": [
+                "stateId",
+                "kind",
+                "unit"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "trajectories": {
+          "type": "object",
+          "description": "One flat set of parallel per-point arrays, exactly as a multimeter emits them: one row per sample, tagged with the trajectory it belongs to. The array order IS the trajectory order and is never re-sorted.",
+          "properties": {
+            "universe": {
+              "type": "object",
+              "description": "The COMPLETE set of trajectories under consideration, including any that contributed no drawn point. A trajectory that left the domain immediately is a result, not an absence.",
+              "properties": {
+                "ids": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+                  },
+                  "minItems": 1,
+                  "maxItems": 256
+                },
+                "labels": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                  },
+                  "maxItems": 256
+                }
+              },
+              "required": [
+                "ids"
+              ],
+              "additionalProperties": false
+            },
+            "timeDirection": {
+              "type": "string",
+              "enum": [
+                "forward",
+                "backward"
+              ],
+              "description": "Whether model time increases or decreases along the supplied order. Arrowheads always point along INCREASING model time, so `backward` reverses them. Backward integration is how a stable manifold is computed; drawing it with forward arrows would invert the stability claim."
+            },
+            "pointTrajectoryIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 250000,
+              "description": "The trajectory each point belongs to. Every entry must be a member of `universe.ids`."
+            },
+            "times": {
+              "type": "object",
+              "description": "The time of every point. REQUIRED: without its parameter, a parametric curve has no direction, no speed, and no way to tell a 0.1 ms step from a 10 ms step. Cortexel never substitutes the sample index for a clock.",
+              "properties": {
+                "kind": {
+                  "const": "time"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "x": {
+              "type": "object",
+              "description": "The x state coordinate of every point. `null` means MISSING and breaks the path; it is never drawn as zero and never interpolated across.",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dxdt": {
+              "type": "object",
+              "description": "Optional. Supplied by the caller only: Cortexel never differentiates a trajectory numerically, because a finite difference depends on the sampling interval and is meaningless across a reset. The unit is a reciprocal-time code; the state dimension is inherited from axes.x.",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dydt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "universe",
+            "timeDirection",
+            "pointTrajectoryIds",
+            "times",
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "vectorField": {
+          "type": "object",
+          "description": "Samples the CALLER evaluated. Cortexel 1.0 evaluates no model equations: there is no registered model registry, and an executable expression is never accepted. Every sample carries its own explicit coordinates, so no ordering convention (row-major, column-major) is ever assumed.",
+          "properties": {
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dx": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "dy": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "domain": {
+              "type": "object",
+              "description": "The region of state space over which the field was actually evaluated. It bounds what the figure may claim: outside it, the absence of arrows is an absence of evaluation. There is no interval convention here because nothing is binned by it; both endpoints are drawn.",
+              "properties": {
+                "x": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "stop": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "stop",
+                    "unit"
+                  ],
+                  "additionalProperties": false
+                },
+                "y": {
+                  "type": "object",
+                  "properties": {
+                    "start": {
+                      "type": "number"
+                    },
+                    "stop": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                    }
+                  },
+                  "required": [
+                    "start",
+                    "stop",
+                    "unit"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "lattice": {
+              "description": "Whether the samples form a regular grid or are scattered. The claim is VERIFIED: nx x ny must equal the sample count and the coordinates must actually form that lattice. A scattered field drawn as a lattice would imply a uniform coverage of the domain that was never evaluated. The lattice is capped at 50 x 50 because a denser arrow field is a legibility failure long before it is a resource one.",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "regular_grid"
+                    },
+                    "nx": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 50
+                    },
+                    "ny": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 50
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "nx",
+                    "ny"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "scattered"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "dx",
+            "dy",
+            "domain",
+            "lattice"
+          ],
+          "additionalProperties": false
+        },
+        "nullclines": {
+          "type": "object",
+          "description": "Curves on which one derivative is claimed to vanish. Per-curve declarations and per-point vertices are parallel arrays, so every constraint is checkable without an ordering convention. Cortexel never computes a nullcline.",
+          "properties": {
+            "curveIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 8
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "maxItems": 8
+            },
+            "zeroDerivativeOf": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "x",
+                  "y"
+                ]
+              },
+              "maxItems": 8,
+              "description": "WHICH derivative the curve zeroes. This is never inferred from colour, order, or naming: the x-nullcline (dx/dt = 0) and the y-nullcline (dy/dt = 0) are different curves, and swapping them moves every apparent equilibrium."
+            },
+            "methods": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "analytic",
+                      "contour_marching_squares",
+                      "sampled_root_find"
+                    ]
+                  },
+                  "residualTolerance": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+                    "description": "The bound on |d?/dt| along the curve, as a `derivative` quantity in a reciprocal-time unit. A curve that claims a derivative is zero must say how close to zero it actually got."
+                  },
+                  "gridResolution": {
+                    "type": "object",
+                    "properties": {
+                      "nx": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 100000
+                      },
+                      "ny": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "maximum": 100000
+                      }
+                    },
+                    "required": [
+                      "nx",
+                      "ny"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "residualTolerance"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "pointCurveIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 250000
+            },
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "description": "A `null` pair separates disconnected branches of one nullcline. It is never bridged: joining two branches would draw a curve through states where the derivative is not zero.",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxItems": 250000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "curveIds",
+            "zeroDerivativeOf",
+            "methods",
+            "pointCurveIds",
+            "x",
+            "y"
+          ],
+          "additionalProperties": false
+        },
+        "fixedPoints": {
+          "type": "object",
+          "description": "Declared equilibria. Each carries a NAMED numerical method, an absolute residual, the tolerance it was accepted against, and a convergence status that Cortexel re-derives. An annotation with no method has no place here: put it in `source.declaredNote`, where it renders as an attributed, unverified caller note.",
+          "properties": {
+            "ids": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 64
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "maxItems": 64
+            },
+            "x": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "y": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "methods": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "analytic",
+                  "newton_raphson",
+                  "grid_bisection",
+                  "levenberg_marquardt"
+                ]
+              },
+              "maxItems": 64,
+              "description": "A closed set of NAMED methods. There is deliberately no `declared_without_method` member: an unbacked equilibrium claim is refused, not demoted."
+            },
+            "converged": {
+              "type": "array",
+              "items": {
+                "type": "boolean"
+              },
+              "maxItems": 64,
+              "description": "RE-DERIVED and checked against the residual and the tolerance. `false` is legal and is rendered as an unconverged candidate with a distinct mark; it is never drawn as an established equilibrium."
+            },
+            "residualDxDt": {
+              "type": "object",
+              "description": "|dx/dt| at the declared point. Non-negative: a signed residual would make the convergence comparison ambiguous.",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "residualDyDt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "toleranceDxDt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "toleranceDyDt": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "derivative"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "ids",
+            "x",
+            "y",
+            "methods",
+            "converged",
+            "residualDxDt",
+            "residualDyDt",
+            "toleranceDxDt",
+            "toleranceDyDt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "axes"
+      ],
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "trajectories"
+          ]
+        },
+        {
+          "type": "object",
+          "required": [
+            "vectorField"
+          ]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "arrowScaling": {
+          "type": "object",
+          "description": "Required whenever a vector field is present. Arrow length is a DISPLAY normalization; the magnitudes themselves are always retained in the table.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "unit_length",
+                "magnitude_proportional",
+                "sqrt_magnitude"
+              ],
+              "description": "unit_length draws direction only and makes no magnitude claim. magnitude_proportional is faithful but is dominated by the fastest region. sqrt_magnitude compresses the dynamic range and must never be read as a linear speed."
+            },
+            "maxArrowLengthFraction": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.25,
+              "default": 0.05,
+              "description": "The longest arrow, as a fraction of the shorter drawn axis. Bounded so that arrows cannot overlap into an apparent flow that no sample supports."
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "magnitudeBasis": {
+          "type": "string",
+          "enum": [
+            "axis_normalized",
+            "physical"
+          ],
+          "description": "axis_normalized divides each component by its own drawn axis extent and is the only basis legal across incommensurable axes. physical takes the Euclidean norm in SI and is legal ONLY when both axes share a dimension; requested otherwise it is refused with SCIENCE_UNIT_DIMENSION_MISMATCH."
+        },
+        "directionMarkers": {
+          "type": "object",
+          "description": "Required whenever trajectories are present. Placement is deterministic and never depends on animation: the arrowheads are present in a still export and under reduced motion.",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "none",
+                "arrowhead_at_end",
+                "arrowheads_every_n_points"
+              ]
+            },
+            "everyNPoints": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 250000
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "duplicateTimePolicy": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "keep_replicates"
+          ],
+          "description": "Required whenever trajectories are present. There is deliberately no aggregate: averaging two state coordinates that share a timestamp would place the system at a point it never occupied. keep_replicates retains both samples, which is how an instantaneous reset is represented."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Only `none` is supported. UncertaintyV1 is one-dimensional, and two marginal intervals are not a joint region for a point in state space: a box built from two 95% marginals does not have 95% joint coverage, and it is wrong in any direction the errors are correlated. Any other variant is refused with SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL."
+        }
+      },
+      "required": [
+        "uncertainty"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

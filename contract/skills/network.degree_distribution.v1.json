@@ -1,0 +1,826 @@
+{
+  "id": "network.degree_distribution",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "In- and out-degree distribution over a declared node universe",
+
+  "purpose": {
+    "canonicalQuestion": "What is the exact in- or out-degree distribution of a complete, declared node universe, under an explicitly stated connection-counting policy and autapse policy, within a network scope that can actually support the claim?",
+    "cannotEstablish": [
+      "That the degree distribution follows any functional form. Cortexel draws the empirical histogram; it fits nothing and tests nothing, and a heavy right tail on a log axis is not evidence of scale-freeness.",
+      "A global out-degree from an MPI target-rank-local snapshot. A rank holds the connections whose TARGET it owns; the ones leaving a local source for a remote target sit on another rank and are simply absent from the evidence.",
+      "The degree of any node outside the declared universe. A node that was not declared is not a node of degree zero — it is a node that was not looked at.",
+      "The in-degree of a node an MPI rank does not own. A rank-local figure is complete only for the targets the rank observed, which is why those ids must be declared rather than assumed.",
+      "Functional or effective connectivity. A structural degree counts connections; it says nothing about whether they carry signal, in which direction of influence, or with what sign.",
+      "Anything about synaptic strength or latency. Two nodes with identical degree can differ by orders of magnitude in total drive; supplied weights and delays do not affect a degree and are never used to filter one.",
+      "The distribution of the whole network from a sampled edge subset. Every degree read from a subset is a lower bound of unknown tightness, and a histogram of lower bounds looks exactly like a histogram of degrees.",
+      "That a difference between two degree distributions is meaningful. No statistical test is performed and no null model is assumed.",
+      "That the network had this structure at any time other than the declared snapshot time. Structural plasticity can change every degree between two snapshots of one run."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Connection rows are NOT assumed to arrive in any order: NEST's GetConnections returns them in a rank- and thread-dependent order. A degree is order-invariant, but edge identity and the per-node sidecar are not, so rows are stably sorted by (degree-side id, counterpart id, original ordinal) before ordinal identity is assigned, and the original order and its digest are retained.",
+      "Duplicate identical rows are PRESERVED. Two connections between the same ordered pair are two connections — a multapse, not a duplicate-entry error. Deduplicating them would silently convert `count_edges` into `count_unique_neighbors` and understate every degree in a network built with multapses permitted.",
+      "Node ids are stable opaque identifiers; numeric source ids are normalized to canonical decimal strings and are never coerced from labels. A duplicate id inside the universe, or inside the declared observed targets, fails with SEMANTIC_DUPLICATE_ID before any degree can be attributed to an ambiguous node.",
+      "A node with no counted connection has degree 0. That is a MEASURED zero: it occupies the zero bin, it is never treated as a missing value, and it is categorically different from a node that was never declared.",
+      "Degree bins are INCLUSIVE INTEGER RANGES [lo, hi], not half-open real intervals. Degree is discrete, and a half-open real convention leaves a degree sitting exactly on an edge ambiguous — which is how a bin ends up double-counted or silently empty.",
+      "Bins are ordered by ascending degree, always. They are never reordered by frequency, and the domain always begins at degree 0 even when the zero bin is empty: `no node has degree zero` is a finding, not a reason to crop the axis.",
+      "No unit conversion is possible or performed. The degree axis is dimensionless (`1`) and a probability is dimensionless (`1`). An alias such as `count` or `unitless` is rejected with a repair rather than silently converted.",
+      "Negative zero is rejected at snapshot. Degrees and node counts are exact non-negative integers; there is no floating-point path into them.",
+      "Weights, delays and synapse models may ride along on the rows. They do not affect any degree and are NEVER used to filter or group one. A selection is expressed by supplying exactly the rows it contains, because a filter Cortexel applied silently would change every degree in the figure."
+    ],
+    "derivation": [
+      "The counted row set R is the supplied connection rows after the autapse policy is applied. `direction: in` reads the degree-side endpoint from targetIds and the counterpart from sourceIds; `direction: out` reverses them. Both endpoints must lie in the declared node universe, so R is exactly the connections within that universe and never an implicit superset. Complexity O(e).",
+      "count_edges: d(v) = |{ r in R : degreeEndpoint(r) = v }|. Every connection ENTRY counts, so three parallel connections from u to v add three to v's in-degree. Complexity O(e).",
+      "count_unique_neighbors: d(v) = |{ u : some r in R has degreeEndpoint(r) = v and counterpart(r) = u }|. Parallel connections between one pair collapse to one neighbour. Reciprocity does not double count: for in-degree, u to v and v to u contribute one neighbour to v and one to u. Complexity O(e log e).",
+      "autapsePolicy `include`: a self-connection u to u contributes 1 to u's in-degree and 1 to u's out-degree. These are separate figures, so that is not double counting. Under count_unique_neighbors, u counts as one of its own neighbours.",
+      "autapsePolicy `exclude`: self-connections are removed from R before any counting and the removed count is recorded and reported. They are never silently dropped: in a network built with autapses permitted this shifts the degree of every node that has one by exactly 1.",
+      "Conservation under count_edges: the sum of d(v) over the declared universe equals |R| exactly, because each counted connection contributes exactly one to exactly one degree-side endpoint. Cortexel asserts this and refuses with INTERNAL_INVARIANT_VIOLATED rather than emit a histogram it cannot reconcile with the rows it counted.",
+      "Bounds under count_unique_neighbors: the sum of d(v) is <= |R|, and 0 <= d(v) <= |nodeUniverse| — except that when autapses are excluded the per-node maximum is |nodeUniverse| - 1, since v can no longer be its own neighbour.",
+      "node_degrees mode: Cortexel did not observe the rows, so it verifies instead of counting. The supplied node ids must be exactly the declared universe, each appearing once, zero-degree nodes included; and the degrees are the caller's assertion of the conservation identity (count_edges) or the bounds above (count_unique_neighbors) against the declared countedConnectionCount.",
+      "Histogram, `count`: the bin value is the exact integer number of NODES whose degree falls in the bin. It is a count of nodes, never of connections. The two are confused often enough that the table names both.",
+      "Histogram, `probability`: p(bin) = nodeCount(bin) / |nodeUniverse|. The denominator is the COMPLETE declared universe, including every zero-degree node. Dividing by the nodes that happened to have a connection inflates every probability and destroys the meaning of the zero bin. The sum of p is re-derived and checked to 1 within 1e-9 absolute.",
+      "`density` is refused. Over unit-width integer bins a density is numerically equal to the probability mass, so it invites reading a discrete distribution as a continuous pdf; and once adjacent bins are merged for display it is divided by the bin width while a probability is not — the same figure would mean two different things before and after compaction.",
+      "Binning `per_integer_degree` produces one bin per integer degree in [0, maxObservedDegree] and is the exact, decision-free form. `integer_width` merges consecutive integers into inclusive integer ranges anchored at `start`. A width of 1 is refused: it is per_integer_degree under another name, and two encodings of one figure make the derivation record ambiguous.",
+      "Uncertainty is over REALIZATIONS of the network, never over nodes. Within a single realization a bin's node count is an exact enumeration, not an estimate, so a standard error `over neurons` would be a fabricated sampling distribution. Permitted bases: ensemble_members, bootstrap_draws, replicates.",
+      "The artifact carries the complete per-node degree table as a content-addressed sidecar. The inline table is the histogram; the sidecar is the evidence it was derived from, so any bar can be traced back to the exact nodes inside it."
+    ],
+    "scopeRules": [
+      "Every request declares a NetworkScopeV1. A connection snapshot has no meaning without one, and a degree distribution is a completeness claim about the scope it was drawn from.",
+      "`nodeUniverse.complete` must be true. An edge list can establish only that no connection was OBSERVED for a node; it can never establish that the node has degree zero.",
+      "single_process: both directions are supported. The process observed every connection, so the scope is complete by construction.",
+      "global_merged: both directions are supported, but only when mergedRanks covers 0..worldSize-1 exactly once. A partial rank set stays partial and fails with SCOPE_MERGE_INCOMPLETE; it is never upgraded.",
+      "mpi_target_rank_local: `direction: in` is supported only when localTargetUniverseComplete is true; when it is false even a local in-degree cannot be established and the request fails with SCOPE_LOCAL_CANNOT_CLAIM_GLOBAL. The result is a LOCAL in-degree and is disclosed as one.",
+      "`observedTargetIds` declares the targets an MPI rank owns. It is an ownership declaration, never a filter: it removes no row. Cortexel v1 does not machine-verify that the node universe stays inside it (see knownLimitations); a caller that overstates its ownership has misdeclared its evidence.",
+      "mpi_target_rank_local with `direction: out` fails with SCOPE_OUT_DEGREE_FROM_RANK_LOCAL, always and without exception. A rank holds the connections whose target it owns, so a local source's connections to remote targets live elsewhere and the out-degree computed here is arbitrarily low.",
+      "sampled: refused for either direction with SCOPE_INCOMPATIBLE_WITH_SKILL. A degree read from a subset is a lower bound of unknown tightness, and there is no honest way to draw a histogram of lower bounds as a degree distribution."
+    ],
+    "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "A connection snapshot plus the node universe it is drawn over, or one degree per node for that same universe. `mode` is the discriminator, and each mode is a CLOSED object: the fields of the other mode are refused rather than ignored, because a countedConnectionCount supplied beside the rows it is supposed to summarise is an assertion Cortexel would then have to choose between trusting and re-deriving.",
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "connections",
+          "description": "Cortexel counts the degrees itself from the rows.",
+          "properties": {
+            "mode": { "const": "connections" },
+            "nodeUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of nodes under consideration, including every node that has no connection at all. Both endpoints of every counted connection must lie in it. `complete` must be true: this is what makes the zero bin an observation rather than an artifact of which nodes happened to appear in an edge list."
+            },
+            "connections": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+              "description": "Exactly the connections in the selection, every endpoint a member of the node universe. Every multapse is its own row and is never deduplicated. Weights, delays and synapse models may be present; they do not affect a degree and are never used to filter or group one."
+            },
+            "observedTargetIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The targets an MPI rank actually owns, declared under `mpi_target_rank_local` with `direction: in`. It is an ownership declaration, not a filter: it removes no row, and it is meaningful only under a rank-local scope."
+            },
+            "scope": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+              "description": "What this snapshot actually saw. A degree distribution is a completeness claim, so the scope decides which directions are even askable."
+            }
+          },
+          "required": ["mode", "nodeUniverse", "connections", "scope"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "title": "node_degrees",
+          "description": "The caller supplies one degree per node and Cortexel verifies coverage instead of observing the rows.",
+          "properties": {
+            "mode": { "const": "node_degrees" },
+            "nodeUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of nodes whose degree is histogrammed. `complete` must be true, and the supplied degrees must cover it exactly once."
+            },
+            "nodeDegrees": {
+              "type": "object",
+              "description": "One degree per node, for EVERY node of the declared universe — a node omitted here is not a node of degree zero, it is an unverifiable histogram.",
+              "properties": {
+                "nodeIds": {
+                  "type": "array",
+                  "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                  "minItems": 1,
+                  "maxItems": 100000
+                },
+                "degrees": {
+                  "type": "array",
+                  "items": { "type": "integer", "minimum": 0 },
+                  "minItems": 1,
+                  "maxItems": 100000,
+                  "description": "Exact non-negative integer degrees, parallel to nodeIds."
+                }
+              },
+              "required": ["nodeIds", "degrees"],
+              "additionalProperties": false
+            },
+            "countedConnectionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of connections COUNTED after the autapse policy was applied. It is the conservation target: under count_edges the supplied degrees are asserted to sum to exactly this number, and under count_unique_neighbors not to exceed it."
+            },
+            "excludedAutapseCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many self-connections were removed under `autapsePolicy: exclude` before the degrees were computed. Accepted only in this mode, where Cortexel cannot see the rows; in connections mode it is derived, and a caller-supplied value is refused rather than trusted."
+            },
+            "observedTargetIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The targets an MPI rank actually owns, declared under `mpi_target_rank_local` with `direction: in`. It is an ownership declaration, not a filter."
+            },
+            "scope": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
+              "description": "What the snapshot these degrees were counted from actually saw. A degree distribution is a completeness claim, so the scope decides which directions are even askable."
+            }
+          },
+          "required": ["mode", "nodeUniverse", "nodeDegrees", "countedConnectionCount", "scope"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+          "description": "Names the degree-bearing selection so two figures of the same run cannot be confused for one another."
+        },
+        "selectionLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "direction": {
+          "type": "string",
+          "enum": ["in", "out"],
+          "description": "The closed discriminator that replaced the two legacy skills. `in` counts connections arriving at a node; `out` counts connections leaving one. Under a target-rank-local scope only `in` is answerable."
+        },
+        "countingPolicy": {
+          "type": "string",
+          "enum": ["count_edges", "count_unique_neighbors"],
+          "description": "count_edges: every connection ENTRY counts, so a multapse of three contributes three. count_unique_neighbors: every distinct counterpart node counts once, however many parallel connections join the pair. The two give different answers and the difference is scientific, not cosmetic."
+        },
+        "autapsePolicy": {
+          "type": "string",
+          "enum": ["include", "exclude"],
+          "description": "include: a self-connection contributes 1 to the node's in-degree and 1 to its out-degree, and under unique-neighbour counting the node is one of its own neighbours. exclude: self-connections are removed before counting and the removed count is reported."
+        },
+        "binning": {
+          "description": "How integer degrees are grouped. Bins are inclusive integer ranges, and each mode is a CLOSED object: `per_integer_degree` is the exact form and makes no decision at all, so it carries no width and no start.",
+          "oneOf": [
+            {
+              "type": "object",
+              "title": "per_integer_degree",
+              "description": "One bin per integer degree in [0, maxObservedDegree]. The exact, decision-free form.",
+              "properties": {
+                "mode": { "const": "per_integer_degree" }
+              },
+              "required": ["mode"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "title": "integer_width",
+              "description": "Consecutive integer degrees merged into inclusive integer ranges anchored at `start`.",
+              "properties": {
+                "mode": { "const": "integer_width" },
+                "width": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "description": "Consecutive integer degrees per bin. A width of 1 is refused because it is `per_integer_degree` under another name, and two encodings of one figure make the derivation record ambiguous."
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "The inclusive lower degree of the first bin. Bin j covers the inclusive integer range [start + j*width, start + (j+1)*width - 1]."
+                }
+              },
+              "required": ["mode", "width", "start"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "normalization": {
+          "description": "count: the exact integer number of NODES per bin. probability: that count divided by the COMPLETE declared node universe, zero-degree nodes included. `density` is deliberately not accepted — see science.derivation.",
+          "allOf": [
+            { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization" },
+            { "enum": ["count", "probability"] }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Dispersion across REALIZATIONS of the network. Within one realization a bin count is an exact enumeration and has no sampling uncertainty, so a basis of `neurons` or `trials` is not meaningful here; the supported variants are listed in science.uncertaintySupport."
+        }
+      },
+      "required": ["selectionId", "direction", "countingPolicy", "autapsePolicy", "binning", "normalization"],
+      "additionalProperties": false
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/weights/values",
+            "/data/connections/delays/values",
+            "/data/connections/synapseModels"
+          ],
+          ["/data/nodeDegrees/nodeIds", "/data/nodeDegrees/degrees"]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/nodeUniverse/ids",
+          "/data/connections/edgeIds",
+          "/data/nodeDegrees/nodeIds",
+          "/data/observedTargetIds"
+        ]
+      }
+    },
+    { "id": "topology.scope_declared" },
+    { "id": "topology.scope_supports_claim" },
+    { "id": "topology.node_universe_declared" },
+    { "id": "topology.edge_endpoints_in_universe" },
+    { "id": "degree.counting_policy_declared" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.distribution", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 20000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "histogram_merge_adjacent"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION", "SOURCE_SYNTHETIC_FIXTURE", "SOURCE_KIND_UNKNOWN", "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY", "SOURCE_AUTHENTICITY_UNVERIFIED", "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE", "RANK_LOCAL_SCOPE", "NODE_UNIVERSE_INCOMPLETE", "MULTAPSE_AGGREGATED",
+    "MISSING_VALUES_PRESENT", "PRE_BINNED_INPUT", "UNCERTAINTY_NOT_PROVIDED",
+    "DOWNSAMPLED_FOR_RENDERING", "COMPACTION_MAY_HIDE_TRANSIENTS", "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED", "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "{direction}-degree distribution for {selectionLabel}. Counting policy {countingPolicy}; autapses {autapsePolicy}{excludedAutapseStatement}. Node universe: {universeNodeCount} nodes, declared complete. Scope: {scopeStatement}. {countedConnectionCount} connections counted. Degrees run from {minDegree} to {maxDegree}; {zeroDegreeNodeCount} nodes have degree 0. {binCount} bins, {binningStatement}. Values are the {normalization} of nodes per degree bin. {uncertaintyStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "degreeLow", "header": "Degree (lower)", "description": "Inclusive lower degree of the bin. Under per_integer_degree binning it equals the upper." },
+      { "key": "degreeHigh", "header": "Degree (upper)", "description": "Inclusive upper degree. Degree bins are inclusive integer ranges, never half-open real intervals." },
+      { "key": "nodeCount", "header": "Nodes", "description": "Exact integer number of NODES whose degree falls in this bin. This is the raw observation, and it is a count of nodes — not of connections." },
+      { "key": "probability", "header": "Probability", "description": "nodeCount divided by the complete declared node universe, zero-degree nodes included. Present only when normalization is probability." },
+      { "key": "universeNodeCount", "header": "Universe nodes", "description": "The denominator. Includes every node of degree zero." },
+      { "key": "valueUnit", "header": "Unit", "description": "Dimensionless (1). A degree has no unit and is never converted." },
+      { "key": "uncertaintyLower", "header": "Uncertainty lower" },
+      { "key": "uncertaintyUpper", "header": "Uncertainty upper" },
+      { "key": "uncertaintyBasis", "header": "Uncertainty basis", "description": "Realizations only: ensemble_members, bootstrap_draws or replicates. Within one realization a bin count is exact and carries no sampling uncertainty." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "networkx.MultiDiGraph.in_degree / out_degree",
+      "version": "3.3",
+      "status": "not_run",
+      "notes": "networkx is the intended differential oracle, and it is only meaningful parameter for parameter. MultiDiGraph retains parallel edges, which corresponds to `count_edges`; DiGraph has already collapsed them, which corresponds to `count_unique_neighbors` and from which `count_edges` can never be recovered. A self-loop adds one to in_degree and one to out_degree on a directed graph, while the undirected Graph.degree counts it twice — matching the autapse convention is therefore part of the comparison, not an afterthought. NEST 3.10 is the second intended oracle, for the MPI rank-local scope rules specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.GetConnections", "status": "supported", "notes": "Supplies the connection rows, preserving every multapse as its own row. Under MPI the returned rows are the ones whose TARGET the rank owns, so the adapter must emit an mpi_target_rank_local scope, declare the rank's targets as observedTargetIds, and the out-degree route is then closed." },
+    { "system": "nest.NodeCollection", "status": "supported", "notes": "Supplies the complete node universe including isolated and silent nodes. This is the fact GetConnections structurally cannot provide, and without it the zero bin is empty by construction rather than by observation." },
+    { "system": "networkx.MultiDiGraph", "status": "partial", "notes": "G.nodes gives the universe and retains isolates. The counting policy must match the graph class: a DiGraph has already collapsed parallel edges, so `count_edges` is refused for it rather than approximated from a collapsed graph." },
+    { "system": "neo.Block", "status": "rejected", "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it can be mapped to a degree." },
+    { "system": "nwb.core", "status": "planned", "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.in_degree_distribution", "nest.out_degree_distribution"],
+    "notes": "The two legacy skills collapse into one contract with a closed `direction` discriminator. The legacy payloads carried an edge list and no node universe, so every zero-degree node was invisible: a node with no connections simply did not appear, and the zero bin was empty by construction rather than by observation. Migration therefore REQUIRES a complete node universe, a counting policy and an autapse policy, and blocks with MIGRATION_INFORMATION_MISSING without them rather than inferring the universe from the edges — which would have hidden exactly the nodes a degree distribution exists to show. `nest.out_degree_distribution` migrated from a target-rank-local snapshot blocks with SCOPE_OUT_DEGREE_FROM_RANK_LOCAL: that evidence cannot be promoted, only re-collected."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing what `count_edges` or `count_unique_neighbors` counts is MAJOR.",
+    "Changing how an autapse contributes under either counting policy is MAJOR.",
+    "Changing the probability denominator away from the complete declared node universe is MAJOR.",
+    "Changing degree bins from inclusive integer ranges to half-open real intervals is MAJOR.",
+    "Dropping the guarantee that the domain begins at degree 0 and that the zero bin is always present is MAJOR.",
+    "Changing which scope/direction combinations are legal — above all, ever permitting an out-degree from a target-rank-local snapshot — is MAJOR.",
+    "Admitting `density` normalization is MAJOR: it changes what the y axis means and makes the drawn value depend on the display budget.",
+    "Adding a binning mode is MINOR.",
+    "Adding a supported uncertainty variant is MINOR."
+  ],
+
+  "knownLimitations": [
+    "This figure computes the degree over a SINGLE declared node universe: every counted connection has both endpoints in it, and the counterpart set is the universe itself. A rectangular selection whose counterpart set differs from the degree universe is not expressible in v1, because the v1 topology validators bind both endpoints to one `nodeUniverse`.",
+    "Registry v1 has no `degree.conservation` validator, and this figure's request carries no precomputed histogram values or continuous bin edges, so `bins.strictly_increasing` and `histogram.normalization_consistent` have nothing to check at request time and are not declared. The count_edges conservation identity and the count_unique_neighbors bounds are asserted during derivation (INTERNAL_INVARIANT_VIOLATED), not verified against the request.",
+    "Registry v1 has no disclosure id for excluded autapses. Under `autapsePolicy: exclude` the excluded count reaches the accessible summary and the table metadata, but no footer disclosure states it.",
+    "MULTAPSE_AGGREGATED is emitted when `count_unique_neighbors` collapses parallel connections. Its registry text is worded for matrix cells, so on this figure {contributingCount} must be read as connections per unordered endpoint pair.",
+    "Cortexel v1 does not machine-verify that `observedTargetIds` really is the rank's target set, nor that the node universe stays inside it. It is recorded as a caller ownership declaration; a caller that declares a rank owns targets it does not own has misdeclared its evidence.",
+    "Because the schema makes `countingPolicy` and `autapsePolicy` required, a missing policy fails structurally. `degree.counting_policy_declared` therefore acts as defence in depth on the normalized request, and its SCIENCE_AGGREGATION_REQUIRED code is reached mainly through migration.",
+    "A sampled snapshot is refused with SCOPE_INCOMPATIBLE_WITH_SKILL rather than a sampling-specific code; registry v1 has no code that names the sampling itself.",
+    "Cortexel does not filter rows by synapse model, weight sign, or receptor. A selection is expressed by supplying exactly its rows; a filter applied silently would change every degree in the figure.",
+    "Cortexel fits and tests nothing. It draws the empirical histogram; a scale-free, binomial or lognormal claim belongs to the reader, and no log-log axis is offered as a stand-in for a fit.",
+    "Cortexel cannot verify that the supplied snapshot is the whole snapshot. It verifies the scope and the universe; it cannot know that GetConnections was called with the selection the caller says it was."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.degree_distribution" },
+        "data": {
+          "mode": "connections",
+          "nodeUniverse": { "ids": ["1", "2", "3", "4"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["1", "1", "2", "3", "2"],
+            "targetIds": ["2", "2", "3", "2", "2"],
+            "edgeIds": ["c1", "c2", "c3", "c4", "c5"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+          }
+        },
+        "parameters": {
+          "selectionId": "exc",
+          "selectionLabel": "Excitatory",
+          "direction": "in",
+          "countingPolicy": "count_edges",
+          "autapsePolicy": "include",
+          "binning": { "mode": "per_integer_degree" },
+          "normalization": "count",
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.degree_distribution" },
+        "data": {
+          "mode": "node_degrees",
+          "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+          "nodeDegrees": { "nodeIds": ["1", "2", "3", "4"], "degrees": [0, 4, 1, 0] },
+          "countedConnectionCount": 5,
+          "scope": { "kind": "global_merged", "worldSize": 2, "mergedRanks": [0, 1] }
+        },
+        "parameters": {
+          "selectionId": "exc",
+          "direction": "in",
+          "countingPolicy": "count_edges",
+          "autapsePolicy": "include",
+          "binning": { "mode": "per_integer_degree" },
+          "normalization": "probability",
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.degree_distribution" },
+        "data": {
+          "mode": "connections",
+          "nodeUniverse": { "ids": ["1", "2", "3", "4"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["1", "1", "2", "3", "4", "2"],
+            "targetIds": ["2", "2", "3", "1", "1", "1"],
+            "edgeIds": ["c1", "c2", "c3", "c4", "c5", "c6"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 500 }
+          }
+        },
+        "parameters": {
+          "selectionId": "exc_out",
+          "selectionLabel": "Excitatory out-degree, unique neighbours",
+          "direction": "out",
+          "countingPolicy": "count_unique_neighbors",
+          "autapsePolicy": "include",
+          "binning": { "mode": "integer_width", "width": 2, "start": 0 },
+          "normalization": "count",
+          "uncertainty": { "kind": "none", "reason": "single_trial" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.degree_distribution" },
+        "data": {
+          "mode": "connections",
+          "nodeUniverse": { "ids": ["5", "6"], "complete": true },
+          "connections": {
+            "sourceIds": ["5", "6"],
+            "targetIds": ["6", "5"],
+            "edgeIds": ["c1", "c2"]
+          },
+          "observedTargetIds": ["5", "6"],
+          "scope": {
+            "kind": "mpi_target_rank_local",
+            "rank": 1,
+            "worldSize": 4,
+            "localTargetUniverseComplete": true
+          }
+        },
+        "parameters": {
+          "selectionId": "exc_rank1",
+          "selectionLabel": "Excitatory targets owned by rank 1",
+          "direction": "in",
+          "countingPolicy": "count_edges",
+          "autapsePolicy": "include",
+          "binning": { "mode": "per_integer_degree" },
+          "normalization": "count",
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.degree_distribution" },
+        "data": {
+          "mode": "node_degrees",
+          "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+          "nodeDegrees": { "nodeIds": ["1", "2", "3", "4"], "degrees": [0, 3, 1, 0] },
+          "countedConnectionCount": 4,
+          "excludedAutapseCount": 1,
+          "scope": { "kind": "single_process", "complete": true }
+        },
+        "parameters": {
+          "selectionId": "exc_no_autapse",
+          "direction": "in",
+          "countingPolicy": "count_edges",
+          "autapsePolicy": "exclude",
+          "binning": { "mode": "per_integer_degree" },
+          "normalization": "probability",
+          "uncertainty": { "kind": "none", "reason": "not_computed" }
+        },
+        "source": { "kind": "simulation", "system": "NEST" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "An out-degree is requested from a target-rank-local snapshot. Under NEST's MPI semantics a rank holds only the connections whose TARGET it owns, so the connections leaving a local source for a target on another rank are not in this evidence at all. In-degree from this same snapshot is answerable; out-degree is not, and no amount of care in the counting can recover it. Declaring observedTargetIds does not rescue it — ownership of the targets is exactly what makes the OUT direction unanswerable.",
+        "expectedCode": "SCOPE_OUT_DEGREE_FROM_RANK_LOCAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["5", "6"], "complete": true },
+            "connections": { "sourceIds": ["5", "6"], "targetIds": ["6", "5"] },
+            "observedTargetIds": ["5", "6"],
+            "scope": { "kind": "mpi_target_rank_local", "rank": 0, "worldSize": 4, "localTargetUniverseComplete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "out",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A rank-local in-degree is requested from a snapshot that declares its local target universe INCOMPLETE. If the rank cannot vouch that it holds every connection into the targets it owns, then a target with no observed incoming connection may simply not have been captured — so even a local in-degree cannot be established, and the request is refused rather than drawn with a fabricated zero bin.",
+        "expectedCode": "SCOPE_LOCAL_CANNOT_CLAIM_GLOBAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["5", "6"], "complete": true },
+            "connections": { "sourceIds": ["5", "6"], "targetIds": ["6", "5"] },
+            "observedTargetIds": ["5", "6"],
+            "scope": { "kind": "mpi_target_rank_local", "rank": 1, "worldSize": 4, "localTargetUniverseComplete": false }
+          },
+          "parameters": {
+            "selectionId": "exc_rank1",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The node universe is declared incomplete. An edge list can only show that no connection was OBSERVED for a node; it can never show that the node has degree zero. Dropping the nodes that have no incoming connection would take the histogram from the real population to whichever nodes happened to appear in an edge list, doubling the apparent mean in-degree and deleting the zero bin. Cortexel refuses rather than draw a distribution whose shape is decided by which nodes happened to appear.",
+        "expectedCode": "SCOPE_NODE_UNIVERSE_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["2", "3"], "complete": false },
+            "connections": { "sourceIds": ["2", "3"], "targetIds": ["3", "2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "`density` normalization is requested for a discrete variable. Over the unit-width integer bins of a degree axis a density is numerically identical to the probability mass, so it reads as a continuous pdf that can be compared across networks with different degree ranges — which it cannot. Worse, it is not stable under display: merging adjacent bins divides the density by the bin width while it does not divide the probability. The schema closes normalization to count or probability, so density fails the enum before the semantic stage.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "2"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "density"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A bin width of 1 is requested. It is `per_integer_degree` under another name, and admitting both would make the derivation record ambiguous: two encodings of one figure that a reader cannot tell apart, and a compaction decision that reads differently depending on which encoding was stored. The schema closes the integer_width width at a minimum of 2, so the value fails structural validation and the caller is told to name the exact form instead.",
+        "expectedCode": "SCHEMA_VALIDATION_FAILED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "2"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "integer_width", "width": 1, "start": 0 },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A connection arrives from source `9001`, which is not in the declared node universe — a Poisson generator, say, left in the row set of a recurrent in-degree figure. The rows and the universe contradict each other, and both silent resolutions are wrong: keeping the row counts external drive as recurrent input, while dropping it understates a total in-degree by the same amount. Cortexel refuses and makes the caller say which figure it meant.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "9001"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "One degree is missing from the parallel arrays: 4 node ids, 3 degrees. There is no best-effort pairing here — index 3 would silently bind node `4`'s identity to no degree at all, or, on a looser reader, shift every degree by one position. A degree distribution is an exact enumeration over a declared universe; a length mismatch means the enumeration is not the universe.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "node_degrees",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "nodeDegrees": { "nodeIds": ["1", "2", "3", "4"], "degrees": [0, 4, 1] },
+            "countedConnectionCount": 5,
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A degree distribution is requested from a sampled edge subset. Every degree read from a subset is a lower bound of unknown tightness, and a histogram of lower bounds is visually indistinguishable from a histogram of degrees: with 5 of 20 connections retained the distribution looks exactly like a genuinely sparser network. No sampling method makes this honest, so the scope is refused for either direction rather than disclosed and drawn.",
+        "expectedCode": "SCOPE_INCOMPATIBLE_WITH_SKILL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "2"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": {
+              "kind": "sampled",
+              "parentScope": "single_process",
+              "method": "deterministic_stride",
+              "sourceConnectionCount": 20,
+              "retainedConnectionCount": 5
+            }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Node `2` appears twice in the declared universe. Identity must be unambiguous before any degree can be attributed, because a node listed twice is counted twice: node 2's in-degree would land in the histogram twice against a denominator that is also wrong. A duplicate id has to fail before selection, binding, or the histogram can diverge on it — there is no correct way to resolve it later.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "2"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "probability"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The snapshot time is declared as a `time` but carries a voltage unit. Nothing on this figure is drawn in millivolts, so the mistake would never show up on an axis — it would sit in the provenance record and silently misdate the structural snapshot this histogram is bound to. A kind and its unit must agree in dimension, and a value whose dimension contradicts its kind is refused rather than read past.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "2"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "mV", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "`ms` is canonical but `milliseconds` is only an accepted alias. A stable request must carry the canonical code: the alias is rejected with a repair rather than silently converted, because a silent conversion changes a recorded number — here the snapshot time that binds this structural figure to a moment in the run — without the caller ever seeing it. Adapters and `cortexel migrate` may convert aliases; normal validation may not.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "2"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "milliseconds", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A credible interval is requested. It is a statement about a posterior, and this figure cannot render one truthfully: structural validity shows the number is SHAPED like a credible interval, but nothing establishes that a calibrated posterior was ever computed. The supported variants are dispersion across realizations of the network — none, standard_deviation, standard_error, confidence_interval, quantile_interval, ensemble_range — and any other is refused rather than relabelled.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "node_degrees",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "nodeDegrees": { "nodeIds": ["1", "2", "3", "4"], "degrees": [0, 4, 1, 0] },
+            "countedConnectionCount": 5,
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count",
+            "uncertainty": {
+              "kind": "credible_interval",
+              "unit": "1",
+              "lower": [0],
+              "upper": [1],
+              "level": 0.95,
+              "method": "hpd",
+              "coverage": "pointwise",
+              "basis": "ensemble_members"
+            }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The request asserts that Cortexel validated it. Validation results are library-generated facts: a caller declares what its data IS, never what Cortexel concluded about it. A degree distribution is exactly the figure where such an assertion is most dangerous — it is a completeness claim about a network, and a caller-authored `passed` beside a rank-local snapshot would launder partial evidence into a global claim. The field is rejected, not ignored.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.degree_distribution" },
+          "data": {
+            "mode": "connections",
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "complete": true },
+            "connections": { "sourceIds": ["1", "1", "2", "3", "2"], "targetIds": ["2", "2", "3", "2", "2"] },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "direction": "in",
+            "countingPolicy": "count_edges",
+            "autapsePolicy": "include",
+            "binning": { "mode": "per_integer_degree" },
+            "normalization": "count"
+          },
+          "source": { "kind": "simulation", "system": "NEST" },
+          "validation": { "structural": { "result": "passed" } }
+        }
+      }
+    ]
+  }
+}

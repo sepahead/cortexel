@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.population_rate.request.v1.schema.json",
+  "title": "neuro.population_rate request",
+  "description": "GENERATED from contract/skills/neuro.population_rate.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.population_rate"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "events"
+            },
+            "eventTimes": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "time"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2000000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 2000000
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE set of senders that were recorded — including any that never fired. This is the denominator basis and it cannot be inferred from the events."
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "eventTimes",
+            "eventSenderIds",
+            "recordedSenderIds",
+            "window"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "prebinned"
+            },
+            "binEdges": {
+              "type": "object",
+              "properties": {
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 100001
+                }
+              },
+              "required": [
+                "unit",
+                "edges"
+              ],
+              "additionalProperties": false
+            },
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxItems": 100000,
+              "description": "Exact integer event counts per bin. Length must be edges.length - 1."
+            },
+            "recordedSenderCount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rates": {
+              "type": "object",
+              "description": "Optional. If supplied it is RE-DERIVED from the counts and denominator and checked; it is never taken on trust.",
+              "properties": {
+                "kind": {
+                  "const": "firing_rate"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "binEdges",
+            "counts",
+            "recordedSenderCount",
+            "window"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "populationId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+        },
+        "populationLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "rateMode": {
+          "type": "string",
+          "enum": [
+            "binned_count",
+            "kernel"
+          ],
+          "description": "binned_count produces literal bins drawn as steps. kernel produces a smoothed estimate drawn as a line. They are different quantities and are never drawn the same way."
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec"
+        },
+        "kernel": {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "type": "string",
+              "enum": [
+                "gaussian",
+                "boxcar",
+                "exponential"
+              ]
+            },
+            "bandwidth": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity"
+            },
+            "edgeCorrection": {
+              "type": "string",
+              "enum": [
+                "none",
+                "truncate_and_renormalize"
+              ]
+            },
+            "causal": {
+              "type": "boolean",
+              "description": "A causal kernel uses only the past. A symmetric kernel lets a spike influence the estimate BEFORE it happened, which matters if the figure is used to argue about timing."
+            }
+          },
+          "required": [
+            "shape",
+            "bandwidth",
+            "edgeCorrection",
+            "causal"
+          ],
+          "additionalProperties": false
+        },
+        "normalization": {
+          "type": "string",
+          "enum": [
+            "mean_rate_per_recorded_sender",
+            "total_event_rate"
+          ],
+          "description": "mean_rate_per_recorded_sender divides by the recorded-sender count and IS a per-neuron claim. total_event_rate does not and is NOT. When the recorded universe is unknown, the honest choice is total_event_rate."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty"
+        }
+      },
+      "required": [
+        "populationId",
+        "rateMode",
+        "normalization"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

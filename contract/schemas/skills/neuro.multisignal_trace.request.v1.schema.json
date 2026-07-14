@@ -1,0 +1,641 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.multisignal_trace.request.v1.schema.json",
+  "title": "neuro.multisignal_trace request",
+  "description": "GENERATED from contract/skills/neuro.multisignal_trace.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.multisignal_trace"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeBase",
+        "timeAlignment",
+        "series",
+        "window"
+      ],
+      "properties": {
+        "timeBase": {
+          "type": "string",
+          "enum": [
+            "shared",
+            "per_series"
+          ],
+          "description": "shared: one `sharedTime` vector every series is sampled on, and no series may carry its own `times`. per_series: every series carries its own `times` and there is no `sharedTime`. The two are exclusive because a mixture makes 'the same length as the time vector' ambiguous."
+        },
+        "eventTimes": {
+          "type": "object",
+          "description": "The one time vector every series is sampled on, on the display clock. Required when timeBase is `shared`, forbidden otherwise. `events.within_window` checks these sample times against `window`; a sample outside the window is refused, never cropped.",
+          "properties": {
+            "kind": {
+              "const": "time"
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1,
+              "maxItems": 2000000,
+              "description": "Times are never null. A missing OBSERVATION is a null in the signal; a missing TIME is not an observation at all."
+            }
+          },
+          "required": [
+            "kind",
+            "unit",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "timeAlignment": {
+          "type": "object",
+          "description": "How the series' clocks relate. Required: a multi-signal figure exists to compare timing, and timing read across two unrelated clocks is not a result.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "same_clock",
+                "declared_offsets"
+              ],
+              "description": "same_clock: every series is already on one clock (the single-run multimeter case). declared_offsets: every series carries an explicit `timeOffset`. There is no `not_aligned` member — signals whose clocks have an unknown relation cannot be drawn on one time axis."
+            },
+            "runId": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+              "description": "The run whose clock this is. Optional, and strongly recommended: it is the only thing that lets a reader check later whether two figures share a clock."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "properties": {
+              "seriesId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "label": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "entityId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The biological entity this signal was recorded FROM. Two identical variables recorded from two neurons are two series and are never merged."
+              },
+              "entityKind": {
+                "type": "string",
+                "enum": [
+                  "neuron",
+                  "astrocyte",
+                  "glia",
+                  "synapse",
+                  "population",
+                  "device",
+                  "other"
+                ],
+                "description": "A compartment is expressed as `compartmentId` on a neuron entity; a figure ABOUT compartments belongs to neuro.compartment_trace."
+              },
+              "compartmentId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "pathwayId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The declared signalling pathway or projection this signal belongs to. Optional, and never inferred from a variable name."
+              },
+              "variableId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The source model's OWN name for the recorded variable (`Ca_astro`, `IP3`, `V_m`, `I_SIC`). Required, because a quantity kind cannot distinguish two signals that share a dimension: calcium and IP3 are both concentrations, and a legend that reads 'concentration' twice is not a legend."
+              },
+              "panelId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The declared panel this series is drawn in. Membership is structural: every series belongs to exactly one panel, so no series can be silently dropped from the layout and no panel partition can be left incomplete."
+              },
+              "timeOffset": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+                "description": "A `duration` added to this series' recorded times to place it on the display clock. Required when timeAlignment.kind is `declared_offsets`, forbidden when it is `same_clock` — an implicit zero offset would be an undeclared claim about synchronization."
+              },
+              "time": {
+                "type": "object",
+                "description": "This series' own time vector on the display clock. Required when timeBase is `per_series`, forbidden when it is `shared`. Duplicate timestamps here are decided by `parameters.duplicateTimePolicy` and never resolved by array order.",
+                "properties": {
+                  "kind": {
+                    "const": "time"
+                  },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 1,
+                    "maxItems": 2000000
+                  }
+                },
+                "required": [
+                  "kind",
+                  "unit",
+                  "values"
+                ],
+                "additionalProperties": false
+              },
+              "observationKind": {
+                "type": "string",
+                "enum": [
+                  "point_sample",
+                  "piecewise_constant"
+                ],
+                "description": "point_sample: an instantaneous sample of a continuous value; successive samples are joined by a straight segment. piecewise_constant: the value is HELD until the next sample and is drawn as a step. A held signal drawn as a sloped line invents a ramp that never existed, so this is a required declaration and never a default — and on a figure read for lead and lag, an invented ramp is an invented onset."
+              },
+              "origin": {
+                "description": "Whether these values were recorded or computed. A derived series is never relabelled as recorded, and its method is always visible in the table.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "recorded"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "derived"
+                      },
+                      "method": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                        "description": "The name of the algorithm that produced these values, e.g. `mean_across_trials`. Required: a derived series that will not name its method is an unattributable number. Cortexel records and displays it and never re-derives or verifies it."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "method"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "values": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantitySeries",
+                "description": "The observations, with their REAL quantity kind and unit. A null is a missing sample: it is never zero, never interpolated across, and never removed from the count. `trace.axis_dimension_compatible` reads `values.unit`, so an overlay of two dimensions is refused."
+              },
+              "uncertainty": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+                "description": "Required on every series. `{ \"kind\": \"none\", \"reason\": ... }` is the honest answer for a single deterministic run — a curve with no band must SAY why it has no band, not merely lack one."
+              },
+              "sourceRef": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/dataRef",
+                "description": "Optional content-addressed reference to the bytes this series was extracted from. Cortexel RECORDS it and never resolves it — stable core has no filesystem or network authority — and it never substitutes for the inline samples."
+              }
+            },
+            "required": [
+              "seriesId",
+              "entityId",
+              "entityKind",
+              "variableId",
+              "panelId",
+              "observationKind",
+              "origin",
+              "values",
+              "uncertainty"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "window": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "timeBase": {
+                "const": "shared"
+              }
+            },
+            "required": [
+              "timeBase"
+            ]
+          },
+          "then": {
+            "required": [
+              "eventTimes"
+            ],
+            "properties": {
+              "series": {
+                "type": "array",
+                "items": {
+                  "not": {
+                    "required": [
+                      "time"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "timeBase": {
+                "const": "per_series"
+              }
+            },
+            "required": [
+              "timeBase"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "eventTimes"
+              ]
+            },
+            "properties": {
+              "series": {
+                "type": "array",
+                "items": {
+                  "required": [
+                    "time"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "timeAlignment": {
+                "properties": {
+                  "kind": {
+                    "const": "declared_offsets"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "timeAlignment"
+            ]
+          },
+          "then": {
+            "properties": {
+              "series": {
+                "items": {
+                  "required": [
+                    "timeOffset"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "timeAlignment": {
+                "properties": {
+                  "kind": {
+                    "const": "same_clock"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "timeAlignment"
+            ]
+          },
+          "then": {
+            "properties": {
+              "series": {
+                "items": {
+                  "not": {
+                    "required": [
+                      "timeOffset"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layout",
+        "panels",
+        "duplicateTimePolicy"
+      ],
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": [
+            "small_multiples",
+            "shared_axis_overlay",
+            "normalized_overlay"
+          ],
+          "description": "There is no default. The layout decides whether a magnitude comparison between two signals is meaningful at all, so it is never chosen for the caller. small_multiples: one panel per declared panel, independent y domains. shared_axis_overlay: one panel, one unit, dimensionally compatible series only. normalized_overlay: one dimensionless panel; each series is separately mapped to a ratio and NO magnitude claim survives."
+        },
+        "panels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "description": "The declared panel universe. Every series names one of these; a panel that no series names is refused with RENDER_NO_DATA rather than drawn as an empty axis.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "panelId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "label": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                "description": "The axis label. When a panel holds more than one `variableId`, the axis is labelled with THIS label, or with the shared unit alone — never with one member's variable name, which would silently attribute the whole panel to one species."
+              },
+              "unit": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+                "description": "The panel's DISPLAY unit. Every member series is converted into it, so every member must share its dimension. Under `normalized_overlay` it must be `1`: the drawn quantity there is a dimensionless ratio, not the source quantity."
+              },
+              "scale": {
+                "type": "string",
+                "enum": [
+                  "linear",
+                  "log",
+                  "symlog"
+                ],
+                "default": "linear"
+              },
+              "symlogLinearThreshold": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "The half-width of the linear region around zero. Required for `symlog`, because a symlog axis with an undeclared threshold changes shape when the data changes."
+              }
+            },
+            "required": [
+              "panelId",
+              "unit"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "scale": {
+                      "const": "symlog"
+                    }
+                  },
+                  "required": [
+                    "scale"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "symlogLinearThreshold"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "duplicateTimePolicy": {
+          "type": "object",
+          "description": "Required. Duplicate timestamps within a series are a source fact that has to be decided, not resolved by array order.",
+          "properties": {
+            "policy": {
+              "type": "string",
+              "enum": [
+                "reject",
+                "keep_replicates",
+                "aggregate"
+              ],
+              "description": "reject: duplicates fail the request. keep_replicates: every replicate is retained and drawn. aggregate: replicates are combined by the named method, and the aggregation is disclosed."
+            },
+            "aggregate": {
+              "type": "string",
+              "enum": [
+                "mean",
+                "median",
+                "min",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "policy"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "policy": {
+                    "const": "aggregate"
+                  }
+                },
+                "required": [
+                  "policy"
+                ]
+              },
+              "then": {
+                "required": [
+                  "aggregate"
+                ]
+              }
+            }
+          ]
+        },
+        "normalization": {
+          "type": "object",
+          "description": "Required for `normalized_overlay`, forbidden otherwise. The method, its window, and its per-series constants are recorded in the derivation and shown in the table: a normalized figure whose constants are not published cannot be checked by anyone.",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "z_score",
+                "min_max",
+                "divide_by_baseline_mean"
+              ],
+              "description": "z_score: (x − mean) / sd with the sample standard deviation (ddof = 1) and N ≥ 2. min_max: (x − min) / (max − min), requiring max > min. divide_by_baseline_mean: x / mean, requiring the baseline mean to be finite and strictly positive."
+            },
+            "statisticsWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "The window the normalization statistics are computed over. Required and never defaulted to the whole trace: a baseline taken over a window that already contains the response shrinks the response it is supposed to measure."
+            }
+          },
+          "required": [
+            "method",
+            "statisticsWindow"
+          ],
+          "additionalProperties": false
+        },
+        "panelOrder": {
+          "type": "string",
+          "enum": [
+            "as_declared",
+            "by_panel_id"
+          ],
+          "default": "as_declared",
+          "description": "Panels are never ordered by amplitude, variance, or peak time. An order that depends on the data would make the layout itself a claim about the data."
+        },
+        "showSamplePoints": {
+          "type": "boolean",
+          "default": false,
+          "description": "Draw the individual samples in addition to the line. Useful precisely because the line between two samples is a rendering of adjacency, not a measurement."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "normalized_overlay"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "required": [
+              "normalization"
+            ],
+            "properties": {
+              "panels": {
+                "maxItems": 1,
+                "items": {
+                  "properties": {
+                    "unit": {
+                      "const": "1"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "shared_axis_overlay"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "normalization"
+              ]
+            },
+            "properties": {
+              "panels": {
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "small_multiples"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "normalization"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

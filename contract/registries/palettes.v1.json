@@ -1,0 +1,85 @@
+{
+  "registry": "cortexel-palettes",
+  "version": "1.0",
+  "description": "The visual system. Not 'a nice-looking chart' — a set of measurable rules for encoding data without lying about it.\n\nColour-map CLASS is selected from declared data semantics, never from a skill name and never from fashion: sequential for ordered magnitude, diverging only when a meaningful reference centre exists, cyclic for phase, categorical for unordered groups. A diverging request with no centre is REFUSED, because a diverging map implies a symmetry the data may not have.\n\nCategorical identity is never carried by hue alone. Every series style is a TUPLE of colour, dash pattern, and marker shape, so the figure survives greyscale printing and colour-vision deficiency.",
+
+  "colormaps": [
+    {
+      "id": "batlow", "class": "sequential",
+      "source": "Fabio Crameri, Scientific colour maps",
+      "license": "MIT (colour map definitions); see THIRD_PARTY_NOTICES.md",
+      "citation": "Crameri, F. (2018). Geodynamic diagnostics, scientific visualisation and StagLab 3.0. Geoscientific Model Development.",
+      "properties": ["perceptually uniform", "monotonic lightness", "readable in greyscale", "colour-vision-deficiency friendly"],
+      "usedFor": ["ordered magnitude: delays, rates, densities, weights with no meaningful zero"],
+      "default": true
+    },
+    {
+      "id": "vik", "class": "diverging",
+      "source": "Fabio Crameri, Scientific colour maps",
+      "license": "MIT (colour map definitions); see THIRD_PARTY_NOTICES.md",
+      "properties": ["perceptually uniform", "symmetric lightness about the centre", "colour-vision-deficiency friendly"],
+      "usedFor": ["signed values with a MEANINGFUL zero: excitatory/inhibitory weights, potentiation/depression"],
+      "requiresCenter": true,
+      "note": "Refused without an explicit centre: RENDER_DIVERGING_SCALE_NO_CENTER."
+    },
+    {
+      "id": "romaO", "class": "cyclic",
+      "source": "Fabio Crameri, Scientific colour maps",
+      "license": "MIT (colour map definitions); see THIRD_PARTY_NOTICES.md",
+      "properties": ["perceptually uniform", "endpoint-continuous"],
+      "usedFor": ["phase and angle, where 0 and 2*pi are the same value"],
+      "requiresPeriod": true
+    }
+  ],
+
+  "prohibited": [
+    "Rainbow / jet as a default. Its lightness is non-monotonic, so it manufactures visual boundaries the data does not contain and hides real ones.",
+    "Colour as the SOLE categorical cue.",
+    "A diverging map with no meaningful centre.",
+    "A sequential map for unordered categories.",
+    "Mapping MISSING to zero, or to the minimum colour. Missing is a distinct state and gets a distinct legend key.",
+    "Arbitrary caller CSS or style objects anywhere in the normative scientific output path."
+  ],
+
+  "categoricalSeries": {
+    "source": "Okabe and Ito (2008), colour-vision-deficiency safe qualitative palette",
+    "maxStableSeries": 8,
+    "beyondCapacity": "Small multiples, explicit grouping, or a typed refusal (RENDER_SERIES_LIMIT_EXCEEDED). Cortexel does not mint dozens of indistinguishable colours and call it a legend.",
+    "styles": [
+      { "index": 0, "color": "#0072b2", "dash": "none",    "marker": "circle",   "label": "series 1" },
+      { "index": 1, "color": "#d55e00", "dash": "6 3",     "marker": "square",   "label": "series 2" },
+      { "index": 2, "color": "#009e73", "dash": "2 2",     "marker": "triangle", "label": "series 3" },
+      { "index": 3, "color": "#cc79a7", "dash": "8 2 2 2", "marker": "diamond",  "label": "series 4" },
+      { "index": 4, "color": "#e69f00", "dash": "1 3",     "marker": "cross",    "label": "series 5" },
+      { "index": 5, "color": "#56b4e9", "dash": "10 4",    "marker": "star",     "label": "series 6" },
+      { "index": 6, "color": "#8a6d00", "dash": "4 2 1 2", "marker": "plus",     "label": "series 7" },
+      { "index": 7, "color": "#000000", "dash": "3 3",     "marker": "hexagon",  "label": "series 8" }
+    ],
+    "note": "Each style is a TUPLE. Two series remain distinguishable by dash pattern and marker shape with colour removed entirely — a test asserts exactly that, which is what makes the figure survive a greyscale printout."
+  },
+
+  "themes": [
+    { "id": "light",     "background": "#ffffff", "text": "#111418", "mutedText": "#4a5158", "axis": "#3a4046", "grid": "#e2e6ea", "focus": "#0072b2", "missing": "#767e87", "warning": "#8a4600", "error": "#a4123f" },
+    { "id": "dark",      "background": "#0f1419", "text": "#f2f5f7", "mutedText": "#aeb6be", "axis": "#c2c9cf", "grid": "#252c33", "focus": "#56b4e9", "missing": "#98a1aa", "warning": "#e69f00", "error": "#ff8ba5" },
+    { "id": "print",     "background": "#ffffff", "text": "#000000", "mutedText": "#333333", "axis": "#000000", "grid": "#d9d9d9", "focus": "#000000", "missing": "#6b6b6b", "warning": "#000000", "error": "#000000" },
+    { "id": "grayscale", "background": "#ffffff", "text": "#000000", "mutedText": "#3d3d3d", "axis": "#000000", "grid": "#dcdcdc", "focus": "#000000", "missing": "#6b6b6b", "warning": "#000000", "error": "#000000" }
+  ],
+
+  "contrastTargets": {
+    "standard": "WCAG 2.2",
+    "text": { "ratio": 4.5, "appliesTo": ["axis labels", "tick labels", "titles", "disclosures", "table text"] },
+    "nonText": { "ratio": 3.0, "appliesTo": ["axis lines", "focus indicators", "selected states", "essential boundaries", "legend swatches"] },
+    "testedAgainst": "The FINAL token pairs actually used, not isolated palette swatches. A colour that passes in isolation can still fail on the background it is drawn on.",
+    "scope": "These targets apply to the surfaces CORTEXEL OWNS. Cortexel makes no conformance claim about the host page it is embedded in — that would be a claim it has no way to support."
+  },
+
+  "uncertaintyStyles": [
+    { "kind": "confidence_interval", "mark": "band",    "label": "{level}% {coverage} {method} confidence interval", "note": "The legend states exactly what is drawn. It never says merely 'error'." },
+    { "kind": "credible_interval",   "mark": "band",    "label": "{level}% {coverage} {method} credible interval",   "note": "Requires an attestation establishing a posterior analysis." },
+    { "kind": "quantile_interval",   "mark": "band",    "label": "{lowerQuantile}-{upperQuantile} quantile interval" },
+    { "kind": "standard_deviation",  "mark": "whisker", "label": "+/-1 SD (n = {sampleCount}, over {basis})",        "note": "A dispersion, drawn as a whisker. It is NOT an interval and is never relabelled as one." },
+    { "kind": "standard_error",      "mark": "whisker", "label": "+/-1 SEM (n = {sampleCount}, over {basis})" },
+    { "kind": "ensemble_range",      "mark": "band",    "label": "observed min-max across {basis} (n = {sampleCount})", "note": "Carries NO coverage probability. Never drawn or captioned as a confidence interval." },
+    { "kind": "none",                "mark": "none",    "label": "no uncertainty shown ({reason})",                  "note": "Rendered as an explicit statement. The renderer never invents a ribbon to fill the space." }
+  ]
+}

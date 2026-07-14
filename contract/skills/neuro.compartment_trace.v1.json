@@ -1,0 +1,717 @@
+{
+  "id": "neuro.compartment_trace",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Signal traces across the identified compartments of one cell",
+
+  "purpose": {
+    "canonicalQuestion": "How does a declared signal evolve over time in each identified compartment of ONE declared cell, with a compartment axis whose ordering basis is declared, disclosed, and never invented by Cortexel?",
+    "cannotEstablish": [
+      "A morphology. Compartment ids, parent links, and path distances are metadata; this figure never reconstructs or draws a neurite, and never implies a morphology image was supplied.",
+      "That a signal travelled between compartments, in which direction, or how fast. A visual sweep down a row-ordered heatmap is a property of the DECLARED row order, not a measured conduction velocity.",
+      "That two adjacent rows are anatomically adjacent. Any linear order is a one-dimensional projection of a branched tree: two compartments at the same path distance can sit on different branches.",
+      "What the unrecorded compartments did. A declared-but-unrecorded compartment is drawn as unrecorded; its absence is not evidence that it was quiescent.",
+      "That a compartment value is a point measurement. It is the model's state for a lumped segment whose size is a discretization choice; refining the discretization changes the value.",
+      "That a mean across compartments is 'the cell's' membrane potential. Compartments differ by orders of magnitude in surface area, so an unweighted mean weights a spine head equally with the soma.",
+      "Causation. That a dendritic depolarization caused a somatic spike, or was caused by it, cannot be read from co-occurrence in this figure.",
+      "That the sampling resolves the model's fastest events. A 0.1 ms sampling interval cannot resolve a 0.5 ms spike upstroke, and Cortexel draws the samples it was given without interpolating between them."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Recorder output is NOT assumed chronological. Within each compartment series, samples are stably sorted by (time, original ordinal). Series are never sorted against one another, and Cortexel never re-orders the compartment axis: the declared order of `compartmentIds` IS the row order.",
+      "`compartmentOrderBasis` is a REQUIRED declaration of what that order means. It is disclosed verbatim and attributed to the caller. Cortexel does not derive an anatomical order, because it has no morphology to derive one from. `recorder_input_order` and `arbitrary_id_order` carry no anatomical meaning at all.",
+      "The observation window is half-open [start, stop) by default; the boundary convention is explicit and never guessed.",
+      "A missing observation is an explicit null in a series' `values`. A line BREAKS at a null; a null is never interpolated across, drawn as zero, or removed from the sample count. Sample times are never null.",
+      "A compartment declared in `compartmentIds` with no series was declared but NOT RECORDED. That is structurally distinct from a recorded null, and neither is ever dropped: dropping an unrecorded compartment would imply it is not part of the model.",
+      "Duplicate timestamps within one series require an explicit `duplicateTimePolicy`. When duplicates are present and no policy is declared, the request is refused. Last-write-wins is never applied, because which sample survived would depend on array order rather than on anything scientific.",
+      "Equal-length obligation, compartment axis: `compartmentIds`, `compartmentParentIds`, `compartmentLabels`, and `compartmentPathDistances.values` are parallel and must share one length; the aggregate's `weights` match its OWN `compartmentIds` selection. Series are never compared against one another: two compartments may legitimately carry different sample counts.",
+      "`compartmentPathDistances`, when supplied, is a caller declaration; it is disclosed, never defaulted, and 0 is the soma. Unit codes must be canonical: an alias is refused with a repair rather than silently converted, because a conversion the caller never sees is a number the caller never checked.",
+      "Compartment ids are opaque identifiers. They are never parsed for structure (a source label such as `dend[3][7]` is an id, not a coordinate) and never rendered as markup."
+    ],
+    "derivation": [
+      "The derivation is deliberately close to identity: Cortexel does not bin, smooth, resample, or interpolate a compartment series. The only arithmetic is duplicate-time resolution, the optional compartment aggregate, and unit conversion.",
+      "duplicate_time_policy: `reject` fails when any series contains a repeated timestamp; `keep_replicates` retains every sample and records the replicate count; `aggregate` combines ONLY the tied samples of ONE series with the declared method (mean, median, min, max) and records how many were combined. Ties are never combined across compartments or across signals.",
+      "small_multiples: one panel per compartment, drawn in declared order, as lines that break at every missing sample. `yScale: independent` gives each panel its own domain and is stated in the summary, because independent panels make a 2 mV dendritic EPSP and an 80 mV somatic spike look identical.",
+      "heatmap: exactly one signal, one rect per accepted sample. The colour domain is [min, max] over ALL accepted values of the single signal across ALL series; a per-row domain is forbidden. A `diverging` family requires an explicit `center`; a diverging map with no reference point asserts a symmetry the data may not have.",
+      "overlay: the explicitly selected compartments (`overlayCompartmentIds`, at most 12) are drawn on one axis. Minting dozens of indistinguishable colours is refused rather than attempted.",
+      "compartment aggregate: value(t) = sum_i(w_i * x_i(t)) / sum_i(w_i) over the EXPLICITLY selected `compartmentAggregate.compartmentIds`, with `uniform` weights all equal to 1. If ANY selected compartment lacks an accepted sample at t, the aggregate at t is MISSING; it is never computed over the survivors, because a silently shrinking denominator turns a recording dropout into an apparent signal change.",
+      "Every compartment series in one request must share a quantity dimension. A membrane potential and a calcium concentration do not belong on one axis merely because both arrays are the same length; that comparison is `neuro.multisignal_trace`'s figure. Complexity: O(N log N) for the within-series stable sort and O(N) for compaction and rendering."
+    ],
+    "scopeRules": [
+      "This is a SINGLE-CELL figure. `NetworkScopeV1` does not apply and is not accepted: a compartment tree is not a connection snapshot, and no MPI, merge, or sampling scope may be declared here.",
+      "`compartmentUniverseComplete` must be declared. `false` means the listed compartments are a subset of the model's compartments: no whole-cell claim may be read from the figure, and the compartment aggregate is labelled with the number of compartments it actually covers.",
+      "Exactly one signal may be coloured by a heatmap. Supplying more than one signal to a heatmap is refused at the render stage (RENDER_SERIES_LIMIT_EXCEEDED): a single sequential scale encodes exactly one quantity."
+    ],
+    "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "One cell, a declared compartment universe, and one series per RECORDED compartment. Each series carries its own time vector and a quantity with a kind and a unit; a compartment listed in the universe with no series was declared but not recorded.",
+      "required": ["cellId", "compartmentIds", "compartmentOrderBasis", "compartmentUniverseComplete", "series", "window"],
+      "additionalProperties": false,
+      "properties": {
+        "cellId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "cellLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "compartmentIds": {
+          "type": "array",
+          "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+          "minItems": 1,
+          "maxItems": 2048,
+          "description": "The DECLARED compartment universe, in the order the rows are drawn. Cortexel never re-orders it. A compartment listed here with no series was declared but not recorded."
+        },
+        "compartmentParentIds": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              { "type": "null" }
+            ]
+          },
+          "maxItems": 2048,
+          "description": "Parallel to compartmentIds. `null` marks a root. Parent membership in the universe is a declared, disclosed claim (there is no single-cell tree validator), never a rendered edge."
+        },
+        "compartmentLabels": {
+          "type": "array",
+          "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+          "maxItems": 2048,
+          "description": "Parallel to compartmentIds."
+        },
+        "compartmentPathDistances": {
+          "type": "object",
+          "description": "Optional path distance from the declared root, parallel to compartmentIds. When supplied it is a caller declaration; a null distance is never defaulted to 0, because 0 is the soma.",
+          "properties": {
+            "kind": { "const": "length" },
+            "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+            "values": { "type": "array", "items": { "type": ["number", "null"] }, "maxItems": 2048 }
+          },
+          "required": ["kind", "unit", "values"],
+          "additionalProperties": false
+        },
+        "compartmentOrderBasis": {
+          "type": "string",
+          "enum": ["anatomical_declared", "path_distance_ascending", "tree_depth_first", "recorder_input_order", "arbitrary_id_order"],
+          "description": "What the declared row order MEANS. It is disclosed as a caller declaration and never inferred. `recorder_input_order` and `arbitrary_id_order` carry no anatomical meaning at all."
+        },
+        "compartmentUniverseComplete": {
+          "type": "boolean",
+          "description": "Whether these are ALL the compartments of the model. `false` forbids any claim about the cell as a whole and is disclosed."
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8192,
+          "description": "One series per RECORDED (compartment, signal). Every series shares a quantity dimension. A declared compartment with no series here was not recorded.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "compartmentId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "signalId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "signalLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+              "time": {
+                "type": "object",
+                "description": "This series' OWN time vector. Two series may carry identical times or differ; Cortexel never resamples them onto a common grid.",
+                "properties": {
+                  "kind": { "const": "time" },
+                  "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                  "values": { "type": "array", "items": { "type": "number" }, "minItems": 1, "maxItems": 250000 }
+                },
+                "required": ["kind", "unit", "values"],
+                "additionalProperties": false
+              },
+              "values": {
+                "type": "object",
+                "description": "The observations, with their REAL quantity kind and unit. A firing rate or a degree is not a compartment state variable. A null is a missing observation and is never zero.",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["membrane_voltage", "voltage", "current", "conductance", "concentration", "state_variable"]
+                  },
+                  "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                  "values": { "type": "array", "items": { "type": ["number", "null"] }, "minItems": 1, "maxItems": 250000 }
+                },
+                "required": ["kind", "unit", "values"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["compartmentId", "signalId", "time", "values"],
+            "additionalProperties": false
+          }
+        },
+        "window": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "compartmentOrderBasis": { "const": "path_distance_ascending" } }, "required": ["compartmentOrderBasis"] },
+          "then": { "required": ["compartmentPathDistances"] }
+        },
+        {
+          "if": { "properties": { "compartmentOrderBasis": { "const": "tree_depth_first" } }, "required": ["compartmentOrderBasis"] },
+          "then": { "required": ["compartmentParentIds"] }
+        }
+      ]
+    },
+
+    "parameters": {
+      "type": "object",
+      "required": ["layout"],
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": ["small_multiples", "heatmap", "overlay"],
+          "description": "How the compartment axis is shown. There is no automatic switch: a silent change of representation is a silent change of what the reader is looking at. `small_multiples` requires a `yScale`; `heatmap` a `colorScale`; `overlay` an explicit `overlayCompartmentIds`."
+        },
+        "yScale": {
+          "type": "string",
+          "enum": ["shared", "independent"],
+          "description": "For small_multiples. `independent` gives every panel its own domain, which makes a 2 mV dendritic EPSP and an 80 mV somatic spike look identical. It is legal, never the default, and the summary always states which was used."
+        },
+        "colorScale": {
+          "type": "object",
+          "description": "For heatmap. The colour domain is global across rows; a diverging family needs a declared reference point.",
+          "properties": {
+            "family": { "type": "string", "enum": ["sequential", "diverging"] },
+            "center": { "type": "number", "description": "Required for `diverging`. A diverging map with no declared reference point asserts a symmetry the data may not have." }
+          },
+          "required": ["family"],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": { "properties": { "family": { "const": "diverging" } }, "required": ["family"] },
+              "then": { "required": ["center"] }
+            }
+          ]
+        },
+        "overlayCompartmentIds": {
+          "type": "array",
+          "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+          "minItems": 1,
+          "maxItems": 12,
+          "description": "For overlay. An EXPLICIT bounded selection, because dozens of indistinguishable colours are refused, not minted. Each id is a declared compartment (a claim, not verified against the universe by a network validator this single-cell figure does not run)."
+        },
+        "duplicateTimePolicy": {
+          "type": "string",
+          "enum": ["reject", "keep_replicates", "aggregate"],
+          "description": "Required whenever any series carries duplicate timestamps; a request with duplicates and no policy is refused with SCIENCE_DUPLICATE_TIME_POLICY. `first`/`last` are deliberately absent: the winner would depend on array order, which is not a scientific fact. It is structurally optional only because a trace with no duplicate timestamps needs no policy."
+        },
+        "duplicateTimeAggregate": {
+          "type": "string",
+          "enum": ["mean", "median", "min", "max"],
+          "description": "The method used when duplicateTimePolicy is `aggregate`, applied only to the tied samples of one series."
+        },
+        "compartmentAggregate": {
+          "type": "object",
+          "description": "Optional. An aggregate across compartments is drawn as an ADDITIONAL labelled series carrying its compartment count. It never replaces the rows and is never labelled as the cell's value.",
+          "properties": {
+            "compartmentIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 2048,
+              "description": "The EXPLICIT selection the aggregate covers. Required: an aggregate over an implied 'all compartments' would change meaning whenever a compartment is added, removed, or left unrecorded. Each id must be a member of `data.compartmentIds`."
+            },
+            "method": { "type": "string", "enum": ["mean", "sum", "median", "min", "max"] },
+            "weighting": {
+              "type": "string",
+              "enum": ["uniform", "declared"],
+              "description": "`uniform` is a CHOICE, not a physical fact: it weights a spine head equally with the soma. It is stated in the summary."
+            },
+            "weights": {
+              "type": "array",
+              "items": { "type": "number", "exclusiveMinimum": 0 },
+              "maxItems": 2048,
+              "description": "Relative weights parallel to this aggregate's `compartmentIds` selection, normalized by their sum. A zero weight is refused: to exclude a compartment, do not select it."
+            },
+            "weightBasis": {
+              "type": "string",
+              "enum": ["surface_area", "volume", "membrane_capacitance", "other_declared"],
+              "description": "What the weights were derived from. Required whenever weights are declared, because an unexplained weight vector is an unauditable one."
+            },
+            "label": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" }
+          },
+          "required": ["compartmentIds", "method", "weighting"],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": { "properties": { "weighting": { "const": "declared" } }, "required": ["weighting"] },
+              "then": { "required": ["weights", "weightBasis"] }
+            },
+            {
+              "if": { "properties": { "method": { "enum": ["median", "min", "max"] } }, "required": ["method"] },
+              "then": { "properties": { "weighting": { "const": "uniform" } } }
+            }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Optional, declared once for the figure. `{ \"kind\": \"none\", \"reason\": ... }` is the honest answer for a single deterministic run — a curve with no band must SAY why it has no band, not merely lack one."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "layout": { "const": "small_multiples" } }, "required": ["layout"] },
+          "then": { "required": ["yScale"] }
+        },
+        {
+          "if": { "properties": { "layout": { "const": "heatmap" } }, "required": ["layout"] },
+          "then": { "required": ["colorScale"] }
+        },
+        {
+          "if": { "properties": { "layout": { "const": "overlay" } }, "required": ["layout"] },
+          "then": { "required": ["overlayCompartmentIds"] }
+        },
+        {
+          "if": { "properties": { "duplicateTimePolicy": { "const": "aggregate" } }, "required": ["duplicateTimePolicy"] },
+          "then": { "required": ["duplicateTimeAggregate"] }
+        }
+      ]
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          ["/data/compartmentIds", "/data/compartmentParentIds", "/data/compartmentLabels", "/data/compartmentPathDistances/values"],
+          ["/parameters/compartmentAggregate/compartmentIds", "/parameters/compartmentAggregate/weights"]
+        ],
+        "note": "Only literal (non-wildcard) pointers are compared, because the registered validator resolves RFC 6901 pointers without an index wildcard. The parallel compartment-axis arrays and the aggregate's weights-to-selection pairing are checked; a series' own time-to-values length is enforced structurally per series and never across series."
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/compartmentIds",
+          "/parameters/overlayCompartmentIds",
+          "/parameters/compartmentAggregate/compartmentIds"
+        ],
+        "note": "The compartment universe, the overlay selection, and the aggregate selection are each id-keyed and must be unambiguous before rows are bound or a table row is addressed. A compartment legitimately carries one series per signal, so series compartment ids are not required unique across signals."
+      }
+    },
+    { "id": "window.valid", "parameters": { "pointer": "/data/window" } },
+    { "id": "trace.duplicate_time_policy" },
+    { "id": "trace.axis_dimension_compatible" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.compartment_trace", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 2000000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "line_envelope_minmax", "matrix_value_quantize"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION", "SOURCE_SYNTHETIC_FIXTURE", "SOURCE_KIND_UNKNOWN", "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY", "SOURCE_AUTHENTICITY_UNVERIFIED", "REFERENCE_COMPARISON_NOT_RUN",
+    "NODE_UNIVERSE_INCOMPLETE", "SCHEMATIC_LAYOUT", "EVENTS_EXCLUDED_OUT_OF_WINDOW", "MISSING_VALUES_PRESENT",
+    "DUPLICATE_TIMES_AGGREGATED", "UNIT_CONVERTED", "UNCERTAINTY_NOT_PROVIDED", "DOWNSAMPLED_FOR_RENDERING",
+    "TABLE_EXCERPT_ONLY", "CALLER_NOTE_UNVERIFIED", "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Compartment trace for cell {cellLabel}: {signalLabel} ({quantityKind}) in {unit}, {compartmentCount} compartments over {windowStart} to {windowStop} {timeUnit}. Layout: {layoutMode} ({scaleStatement}). Row order: {compartmentOrderBasis}, declared by the caller and not verified. {recordedCompartmentCount} compartments recorded, {notRecordedCount} declared but not recorded. {sampleCount} samples, {missingSampleCount} missing. Values range from {valueMin} to {valueMax} {unit}. {duplicateTimeStatement} {aggregateStatement} {uncertaintyStatement} {universeStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "cellId", "header": "Cell" },
+      { "key": "rowIndex", "header": "Row", "description": "Position on the compartment axis, in the declared order. It is not an anatomical coordinate." },
+      { "key": "compartmentId", "header": "Compartment" },
+      { "key": "compartmentLabel", "header": "Compartment label" },
+      { "key": "parentCompartmentId", "header": "Parent", "description": "Empty for a root. Declared by the caller; Cortexel does not reconstruct the tree." },
+      { "key": "pathDistance", "header": "Path distance", "description": "As declared. Empty is empty — it is never 0, because 0 is the soma." },
+      { "key": "pathDistanceUnit", "header": "Distance unit" },
+      { "key": "recorded", "header": "Recorded", "description": "`no` means the compartment was declared but never recorded. That is not the same fact as a missing sample." },
+      { "key": "signalId", "header": "Signal" },
+      { "key": "time", "header": "Time" },
+      { "key": "timeUnit", "header": "Time unit" },
+      { "key": "value", "header": "Value", "description": "The sample as supplied. Empty means missing; it is never drawn or tabulated as zero." },
+      { "key": "unit", "header": "Unit" },
+      { "key": "missing", "header": "Missing", "description": "true when this observation was null in the source. Distinct from `recorded: no`, which means the compartment has no series at all." },
+      { "key": "sourceOrdinal", "header": "Source row", "description": "The sample's index in the caller's original array, before the within-series stable sort." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "nest cm_default multicompartment recorder",
+      "version": "3.10.0",
+      "status": "not_run",
+      "notes": "The derivation is near-identity, so the oracle's job is not to check arithmetic: it is to pin the RECORDER-to-CONTRACT mapping. NEST records compartment state under positional keys (v_comp0, v_comp1, ...) whose index is the compartment's position in the model's compartment list; the oracle fixture exists to prove that the adapter binds each key to a declared compartment id rather than to a row position. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.multimeter.cm_default", "status": "partial", "notes": "NEST exposes compartment state under positional keys (v_comp0, v_comp1, ...). The adapter REQUIRES an explicit key-to-compartmentId mapping and fails with ADAPTER_MAPPING_REQUIRED rather than assuming index order: a model assembled in a different order would otherwise attach the tuft's trace to the soma's row and no validator could see it. Accessor-bearing input is rejected before any getter runs." },
+    { "system": "neuron.Vector", "status": "planned", "notes": "NEURON records at (section, seg.x), where seg.x is a normalized position within a section rather than a global compartment identity. The caller must supply the (section, position) to compartment-id mapping; it is not derivable from the recorded arrays." },
+    { "system": "neo.AnalogSignal", "status": "partial", "notes": "Neo has no compartment concept. The caller must map each channel to a compartment id explicitly; a channel index is not a compartment id." },
+    { "system": "nwb.icephys", "status": "rejected", "notes": "An NWB intracellular series describes an ELECTRODE, not a compartment of a model tree. A single-electrode recording is `neuro.analog_trace`. Presenting it here would imply a compartmental model that does not exist." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.compartmental_dynamics"],
+    "notes": "The legacy route was host-only (`scene: null`), so nothing forced a host renderer to preserve compartment identity or show a disclosure. It now has a native renderer. Migration REQUIRES a cellId, compartment ids, and a signal quantity with a unit, and BLOCKS with MIGRATION_INFORMATION_MISSING when the legacy payload identified compartments only by array index (position is not identity), carries no unit, or does not state whether the listed compartments are the model's complete set. The duplicate-time policy and the order basis have no legacy equivalent and are never guessed."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the meaning of any `compartmentOrderBasis` value is MAJOR.",
+    "Changing the rule that Cortexel never re-orders the compartment axis is MAJOR.",
+    "Changing the distinction between a declared-but-unrecorded compartment and a recorded null is MAJOR.",
+    "Changing the heatmap colour domain from global-across-rows to per-row is MAJOR.",
+    "Changing the aggregate's missing-data rule (every selected compartment must have a sample at t) is MAJOR.",
+    "Making `duplicateTimePolicy` acquire a default, or accepting duplicate timestamps without a declared policy, is MAJOR; today there is none, and that is the point.",
+    "Adding a layout mode, an order basis, or an aggregate method is MINOR; adding an uncertainty variant is MINOR; raising a maxItems bound is MINOR while lowering one is MAJOR."
+  ],
+
+  "knownLimitations": [
+    "Registry gap: `topology.node_universe_declared` requires a COMPLETE node universe, so it is NOT declared here — this figure is designed to disclose an incomplete compartment universe (a recorded subset), which that validator would reject. The universe is still structurally required.",
+    "Registry gap: `topology.edge_endpoints_in_universe` and `spatial.position_coverage_complete` read a `connections`/`positions` snapshot that a single cell does not carry, so parent-link membership and path-distance completeness are declared-and-disclosed claims rather than machine-checked ones. A single-cell tree/coverage validator is a MINOR addition.",
+    "Registry gap: `events.within_window` reads one `eventTimes` array; a multi-series trace has per-series sample times, so an out-of-window trace sample has no dedicated validator. Sample times are still checked for duplicates by `trace.duplicate_time_policy`.",
+    "Registry gap: `series.equal_length` and `ids.unique` define no index-wildcard pointer, so a series' own time-to-values length equality and per-series compartment-id uniqueness are enforced structurally rather than cross-checked; the parallel compartment-axis arrays and the aggregate selection are cross-checked.",
+    "A unit-bearing uncertainty band is read by `unit.dimension_match` as a quantity whose 'kind' is a dispersion name, so per-series bands are not modelled in v1: uncertainty is declared once via `parameters.uncertainty`. Per-compartment bands are a MINOR addition once the dimension walker excludes uncertainty variants.",
+    "A compartment value is a model state over a lumped segment. Cortexel cannot detect an under-discretized model, and refining the discretization changes the values it draws.",
+    "The heatmap colour domain is derived from the accepted data, so two heatmaps are not comparable by colour. Compare exact values through the table. A heatmap over the mark budget is REFUSED (RESOURCE_COMPACTION_UNAVAILABLE), not time-averaged."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.compartment_trace" },
+        "data": {
+          "cellId": "cell_0",
+          "cellLabel": "L5 pyramidal (cm_default)",
+          "compartmentIds": ["soma", "dend_1", "dend_1_1"],
+          "compartmentParentIds": [null, "soma", "dend_1"],
+          "compartmentLabels": ["Soma", "Apical trunk", "Apical tuft"],
+          "compartmentPathDistances": { "kind": "length", "unit": "um", "values": [0, 120, 340] },
+          "compartmentOrderBasis": "path_distance_ascending",
+          "compartmentUniverseComplete": true,
+          "series": [
+            {
+              "compartmentId": "soma",
+              "signalId": "v_m",
+              "signalLabel": "Membrane potential",
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2, 0.3] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69.2, -40.5, 12.4] }
+            },
+            {
+              "compartmentId": "dend_1",
+              "signalId": "v_m",
+              "signalLabel": "Membrane potential",
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2, 0.3] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69.8, -55.1, -30.2] }
+            },
+            {
+              "compartmentId": "dend_1_1",
+              "signalId": "v_m",
+              "signalLabel": "Membrane potential",
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2, 0.3] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -70, -68.9, null] }
+            }
+          ],
+          "window": { "start": 0, "stop": 0.4, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "layout": "small_multiples",
+          "yScale": "shared",
+          "duplicateTimePolicy": "reject",
+          "uncertainty": { "kind": "none", "reason": "single_trial" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "recorderId": "mm_1" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.compartment_trace" },
+        "data": {
+          "cellId": "cell_1",
+          "compartmentIds": ["soma", "dend_1"],
+          "compartmentOrderBasis": "recorder_input_order",
+          "compartmentUniverseComplete": false,
+          "series": [
+            {
+              "compartmentId": "soma",
+              "signalId": "g_ex",
+              "signalLabel": "Excitatory conductance",
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.5, 0.5, 1.0] },
+              "values": { "kind": "conductance", "unit": "nS", "values": [0, 0.2, 0.4, 0.1] }
+            },
+            {
+              "compartmentId": "dend_1",
+              "signalId": "g_ex",
+              "signalLabel": "Excitatory conductance",
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.5, 1.0] },
+              "values": { "kind": "conductance", "unit": "nS", "values": [0, 1.8, 0.9] }
+            }
+          ],
+          "window": { "start": 0, "stop": 1.5, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "layout": "overlay",
+          "overlayCompartmentIds": ["soma", "dend_1"],
+          "duplicateTimePolicy": "keep_replicates",
+          "compartmentAggregate": {
+            "compartmentIds": ["soma", "dend_1"],
+            "method": "mean",
+            "weighting": "declared",
+            "weights": [1, 0.15],
+            "weightBasis": "surface_area",
+            "label": "Area-weighted mean over 2 recorded compartments"
+          }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "declaredNote": "Two recorded compartments of a 200-compartment model."
+        }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.compartment_trace" },
+        "data": {
+          "cellId": "cell_2",
+          "cellLabel": "L2/3 pyramidal (3 declared compartments, 2 recorded)",
+          "compartmentIds": ["soma", "dend_1", "dend_1_1"],
+          "compartmentParentIds": [null, "soma", "dend_1"],
+          "compartmentLabels": ["Soma", "Apical trunk", "Apical tuft"],
+          "compartmentOrderBasis": "anatomical_declared",
+          "compartmentUniverseComplete": true,
+          "series": [
+            {
+              "compartmentId": "soma",
+              "signalId": "v_m",
+              "signalLabel": "Membrane potential",
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69, -55] }
+            },
+            {
+              "compartmentId": "dend_1",
+              "signalId": "v_m",
+              "signalLabel": "Membrane potential",
+              "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.2] },
+              "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69.8, -60] }
+            }
+          ],
+          "window": { "start": 0, "stop": 0.3, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "layout": "heatmap",
+          "colorScale": { "family": "sequential" },
+          "duplicateTimePolicy": "reject"
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "recorderId": "mm_2",
+          "declaredNote": "The tuft is part of the model but was not recorded."
+        }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "The request asserts that Cortexel validated it. Validation results are library-generated facts and are not caller-settable; the field is rejected on the raw request, before normalization, rather than ignored - an ignored assurance field is one that a downstream reader could still find in the payload and believe.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.compartment_trace" },
+          "data": {
+            "cellId": "cell_0",
+            "compartmentIds": ["soma"],
+            "compartmentOrderBasis": "recorder_input_order",
+            "compartmentUniverseComplete": true,
+            "series": [
+              {
+                "compartmentId": "soma",
+                "signalId": "v_m",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69] }
+              }
+            ],
+            "window": { "start": 0, "stop": 0.2, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": { "layout": "small_multiples", "yScale": "shared", "duplicateTimePolicy": "reject" },
+          "source": { "kind": "simulation", "system": "NEST" },
+          "validation": { "structural": { "result": "passed" } }
+        }
+      },
+      {
+        "why": "The compartment axis declares 3 compartments but only 2 parent links. The parallel compartment-axis arrays must share one length: pairing them by best effort would attach the tuft's parent to the trunk and mislabel the tree Cortexel discloses. Cortexel never aligns parallel arrays by best effort.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.compartment_trace" },
+          "data": {
+            "cellId": "cell_0",
+            "compartmentIds": ["soma", "dend_1", "dend_1_1"],
+            "compartmentParentIds": [null, "soma"],
+            "compartmentOrderBasis": "recorder_input_order",
+            "compartmentUniverseComplete": true,
+            "series": [
+              {
+                "compartmentId": "soma",
+                "signalId": "v_m",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69] }
+              }
+            ],
+            "window": { "start": 0, "stop": 0.2, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": { "layout": "small_multiples", "yScale": "shared", "duplicateTimePolicy": "reject" },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The same compartment id appears twice, so `soma` names two different rows. Identity must be unambiguous BEFORE rows are bound, an overlay selection is resolved, or a table row is addressed: otherwise one soma trace silently overwrites the other in any id-keyed map and the figure shows one of two recordings with no way to tell which.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.compartment_trace" },
+          "data": {
+            "cellId": "cell_0",
+            "compartmentIds": ["soma", "soma"],
+            "compartmentOrderBasis": "recorder_input_order",
+            "compartmentUniverseComplete": true,
+            "series": [
+              {
+                "compartmentId": "soma",
+                "signalId": "v_m",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69] }
+              }
+            ],
+            "window": { "start": 0, "stop": 0.2, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": { "layout": "small_multiples", "yScale": "shared", "duplicateTimePolicy": "reject" },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The observation window is inverted (start 0.4, stop 0.2). A window with stop not greater than start is empty and cannot bound anything; Cortexel refuses it rather than silently swapping the endpoints.",
+        "expectedCode": "SCIENCE_WINDOW_INVALID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.compartment_trace" },
+          "data": {
+            "cellId": "cell_0",
+            "compartmentIds": ["soma"],
+            "compartmentOrderBasis": "recorder_input_order",
+            "compartmentUniverseComplete": true,
+            "series": [
+              {
+                "compartmentId": "soma",
+                "signalId": "v_m",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69] }
+              }
+            ],
+            "window": { "start": 0.4, "stop": 0.2, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": { "layout": "small_multiples", "yScale": "shared", "duplicateTimePolicy": "reject" },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Two samples share t = 0.1 ms in one series and no duplicate-time policy is declared. Last-write-wins would pick one of -69 mV and 12 mV - an 82 mV difference - purely from array position, so the spike would appear or vanish depending on the order the recorder happened to emit its rows. Cortexel refuses rather than resolve a tie it has no scientific basis to resolve.",
+        "expectedCode": "SCIENCE_DUPLICATE_TIME_POLICY",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.compartment_trace" },
+          "data": {
+            "cellId": "cell_0",
+            "compartmentIds": ["soma"],
+            "compartmentOrderBasis": "recorder_input_order",
+            "compartmentUniverseComplete": true,
+            "series": [
+              {
+                "compartmentId": "soma",
+                "signalId": "v_m",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1, 0.1, 0.2] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69, 12, -55] }
+              }
+            ],
+            "window": { "start": 0, "stop": 0.3, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": { "layout": "small_multiples", "yScale": "shared" },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A membrane potential in mV and a calcium concentration in umol/L are overlaid on one compartment axis. They share no dimension, so they cannot share an axis: a 0.4 umol/L transient would be drawn roughly 70 units above a -70 mV baseline and read as a depolarization. Dimensionally distinct signals belong in `neuro.multisignal_trace`.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.compartment_trace" },
+          "data": {
+            "cellId": "cell_0",
+            "compartmentIds": ["soma"],
+            "compartmentOrderBasis": "recorder_input_order",
+            "compartmentUniverseComplete": true,
+            "series": [
+              {
+                "compartmentId": "soma",
+                "signalId": "v_m",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1] },
+                "values": { "kind": "membrane_voltage", "unit": "mV", "values": [-70, -69] }
+              },
+              {
+                "compartmentId": "soma",
+                "signalId": "ca",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1] },
+                "values": { "kind": "concentration", "unit": "umol/L", "values": [0.05, 0.4] }
+              }
+            ],
+            "window": { "start": 0, "stop": 0.2, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": { "layout": "overlay", "overlayCompartmentIds": ["soma"], "duplicateTimePolicy": "reject" },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "`mV` is canonical; `millivolts` is only an alias. A stable request must use the canonical code. The alias is rejected with a repair rather than silently converted, because a silent conversion changes a number the caller never sees - and here the same digits under `V` instead of `mV` would be a factor of 1000.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.compartment_trace" },
+          "data": {
+            "cellId": "cell_0",
+            "compartmentIds": ["soma"],
+            "compartmentOrderBasis": "recorder_input_order",
+            "compartmentUniverseComplete": true,
+            "series": [
+              {
+                "compartmentId": "soma",
+                "signalId": "v_m",
+                "time": { "kind": "time", "unit": "ms", "values": [0, 0.1] },
+                "values": { "kind": "membrane_voltage", "unit": "millivolts", "values": [-70, -69] }
+              }
+            ],
+            "window": { "start": 0, "stop": 0.2, "unit": "ms", "boundary": "[start,stop)" }
+          },
+          "parameters": { "layout": "small_multiples", "yScale": "shared", "duplicateTimePolicy": "reject" },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      }
+    ]
+  }
+}

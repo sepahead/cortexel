@@ -1,0 +1,2003 @@
+{
+  "id": "network.weight_distribution",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Synaptic weight distribution over a declared edge population",
+  "purpose": {
+    "canonicalQuestion": "What is the distribution of synaptic weights over an explicitly declared edge population — a declared source universe, a declared target universe, and a network scope that says how completely those connections were observed — without hiding the sign, the synapse model, the multapse structure, or any sampling?",
+    "cannotEstablish": [
+      "That a negative weight is inhibitory or a positive weight excitatory. In a conductance-based model an inhibitory synapse carries a POSITIVE conductance weight and its sign of effect comes from the reversal potential, which is a property of the neuron model and is not in this figure at all.",
+      "That the postsynaptic effect is proportional to the weight. The effect depends on the synapse model, the receptor port, the reversal potential, the membrane state at arrival, and short-term plasticity — none of which a weight histogram contains.",
+      "That two synapse models' weights are comparable. Cortexel checks that a comparability claim was MADE and that it matches the models present; it cannot check that the claim is true, and the claim stays attributed to the caller.",
+      "The total drive onto any neuron. That is a sum over a neuron's in-edges and needs the degree and the weights jointly; a marginal weight histogram cannot recover it, because it has thrown away which synapse landed on which target.",
+      "That the distribution is stationary. This is one snapshot at one declared time. Under STDP the weight distribution at t = 1 s and at t = 100 s can be unrecognizably different, and neither is 'the' distribution of the network.",
+      "That the weights follow any functional form. Cortexel draws the empirical histogram; it fits nothing and tests nothing. A long right tail is not evidence of lognormality, and a log axis is not a fit.",
+      "The distribution of the whole network from a sampled edge subset or a rank-local snapshot. Both describe exactly the connections they retained, and a biased retention looks identical to an unbiased one once it is drawn.",
+      "That a synapse of weight zero is absent. A zero weight is a PRESENT connection whose strength was measured as zero; a connection that does not exist contributes nothing to this figure at all. The two are different facts and are never merged.",
+      "Anything about connections outside the declared source x target rectangle. External Poisson drive, devices, and unselected populations are not in the population unless the caller put them in it.",
+      "That the weights are what the caller believes they are, when the unit is `nest:weight`. A simulator-defined unit has no SI meaning; Cortexel never converts it, never pools it across simulators, and cannot check what it stands for."
+    ]
+  },
+  "science": {
+    "normalization": [
+      "Connection rows are NOT assumed to arrive in any order: NEST's GetConnections returns them in a rank- and thread-dependent order. A histogram is order-invariant, but edge identity and the per-connection sidecar are not, so rows are stably sorted by (sourceId, targetId, original ordinal) before ordinal edge identity is assigned, and the original order and its digest are retained in the artifact.",
+      "Duplicate identical rows are PRESERVED. Two connections between the same ordered pair are two synapses — a multapse, not a duplicate-entry error. Under `observationUnit: synapse` each row is one observation; deduplicating them would silently turn this figure into a per-pair figure and understate every bar that the multapses fall in.",
+      "A null weight is MISSING, never zero. It is excluded from the bins, counted, disclosed, and removed from every denominator. Zero is a MEASURED value — a synapse configured, depressed, or pruned to zero strength — and mapping unknown to zero inflates exactly the bin where a pruning claim is read.",
+      "Bins are half-open [lo, hi), except that a value exactly at the FINAL edge falls in the final bin — otherwise the single strongest synapse would always be silently dropped, and the strongest synapse is the one a heavy-tail claim rests on.",
+      "When the bin range spans zero, an EXACT binary64 edge at 0 is required and no bin may straddle zero. A bin from -20 to +20 pA merges inhibitory and excitatory synapses into one bar whose height means nothing, and that bar is then read as a count of excitatory synapses. Negative zero satisfies the requirement: -0 === 0 and canonicalization emits 0.",
+      "In `width` mode an edge is computed as start + j * width with a SINGLE multiplication, never by repeated addition, because accumulated rounding moves the very edge the zero rule depends on. If no j lands on exact binary64 zero, the request is refused and explicit edges must be supplied. Cortexel never snaps an edge to zero: snapping an edge moves real observations between bins.",
+      "A weight exactly on a bin edge belongs to the bin above it under the half-open convention. A measured zero therefore falls in the first non-negative bin, alongside the weakest excitatory synapses. Because that is easy to misread, the exact count of zero-valued weights is reported separately in the summary and the table metadata, and is never inferred from the first bar's height.",
+      "Bins are ordered by ascending lower edge, always. They are never reordered by frequency, and the axis is never cropped to the observed range: a range the caller declared is a decision that stays visible.",
+      "Unit conversion runs through the typed unit layer in exactly one step (pA to nA, nS to S), never through a hard-coded factor, and every conversion is recorded and disclosed. A `nest:weight` axis is simulator-defined and can never be converted: the bin unit must be exactly `nest:weight`, and a request that bins a `nest:weight` value in `pA` is refused rather than reinterpreted.",
+      "Accepted aliases (`picoamp`, `nanosiemens`) are REJECTED with a repair rather than silently converted. A silent conversion changes a number the caller never sees.",
+      "The weight quantity's kind must be `synaptic_weight`. Delays and synapse models may ride along on the rows; they are never used to filter or reweight an observation, because a filter Cortexel applied silently would change every bar in the figure. A selection is expressed by supplying exactly the rows it contains.",
+      "Sign is preserved by default. `signTreatment: magnitude` is an explicit, recorded transform to |w|; it is never applied on Cortexel's initiative, and it destroys the excitatory/inhibitory distinction that the sign of a current-based weight carries."
+    ],
+    "derivation": [
+      "The observation set is formed from the connection rows of the declared rectangle after the missing-weight rule. Under `observationUnit: synapse` each row with an observed weight is exactly one observation, so a multapse of three contributes three observations. Complexity O(e).",
+      "Under `observationUnit: node_pair` the rows are grouped by ORDERED pair and combined by the declared aggregation into one observation per pair. `sum` yields the total drive from u to v — a different quantity from a synaptic weight, and the axis is labelled as one. Complexity O(e).",
+      "`no_aggregation` ASSERTS at most one connection per ordered pair and FAILS if that is untrue. There is no implicit 'last edge wins': it would discard a real synapse, and which row survived would depend on the rank- and thread-dependent order the snapshot happened to arrive in.",
+      "A pair containing ANY missing weight yields a MISSING observation: the pair is excluded and counted, never summed over its observed subset. A sum over the observed subset would report a smaller total drive as if it were complete, and it would be indistinguishable from a genuinely weaker pair.",
+      "signTreatment `preserve`: the observation is the weight w. `magnitude`: the observation is |w|, the axis is labelled |weight|, and the transform is recorded in the derivation receipt, the summary, and the table metadata. -0 and +0 both map to 0.",
+      "Binning: membership is decided on the observation expressed in the DECLARED bin unit after a single conversion. Bins are half-open with a final-edge-inclusive last bin. Bin edges come from `parameters.bins` in `connections` mode and from `data.binEdges` in `prebinned` mode; supplying both, or neither, is refused.",
+      "count: the exact non-negative integer number of observations in each bin. This is the raw observation from which probability and density are derived, and it is what the table reports.",
+      "probability: count / N_binned, where N_binned is the number of formed observations that fell INSIDE the bin range. Values sum to 1 across the bins within a relative tolerance of 1e-9.",
+      "density: count / (N_binned * w), where w is the LINEAR bin width in the declared unit. The value's kind is `probability_density` and its unit is the reciprocal of the bin unit (/pA for picoampere bins). Sum of density_i * w_i = 1 within 1e-9.",
+      "density is REFUSED when the bin unit has no registered reciprocal code. A `nest:weight` axis is simulator-defined, and `simulator_defined` is not among the dimensions of `probability_density`: a per-NEST-weight density is not a quantity that can be typed, so the figure refuses rather than emit an untyped y axis. count or probability must be used instead.",
+      "The LINEAR width is used even when xScale is `log`. A logarithmic axis is a presentation choice and must never change a derived value; dividing by a log-width yields a density with respect to log-weight, which plotted as p(w) shifts the apparent mode by an amount that depends only on the chosen bin spacing.",
+      "An empty histogram (N_binned = 0) is NEVER normalized. probability and density are undefined with a zero denominator, so the figure reports an explicit empty state (RENDER_NO_DATA) rather than a flat, NaN, or fabricated distribution.",
+      "outOfRangeWeights `reject`: every formed observation must lie inside [firstEdge, lastEdge]. Otherwise the request is refused. The refusal reuses SCIENCE_BIN_EDGES_INVALID — the edges are invalid for this data — because the code registry has no dedicated bin-range code (see knownLimitations).",
+      "outOfRangeWeights `exclude_and_report`: out-of-range observations are excluded from the bins, counted as separate under-range and over-range totals, and carried into the artifact, the table, and the summary. N_binned is then strictly less than the formed-observation count, so the probabilities describe only the binned subset. This is why the caller must choose explicitly.",
+      "xScale `log` requires every bin edge to be strictly positive AND every formed observation to be strictly positive, after signTreatment. A negative or zero weight has no position on a logarithmic axis, and excluding it would delete exactly the inhibitory synapses and the silenced ones. The refusal is RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN.",
+      "prebinned mode: Cortexel did not observe the individual weights, so it verifies the arithmetic it can. sum(counts) must equal totalObservationCount - excludedUnderRangeCount - excludedOverRangeCount: an observation that vanished between the snapshot and the bins is otherwise invisible, and the values that fail to land in a bin are the extremes.",
+      "prebinned mode: under `observationUnit: synapse`, totalObservationCount + missingWeightCount must equal sourceConnectionCount EXACTLY — every connection is either an observation or a hole, and there is no third category. Under `node_pair` that total may only be at most sourceConnectionCount - missingWeightCount, since aggregation can reduce a count and never raise it.",
+      "prebinned mode: supplied probability or density values are RE-DERIVED from the counts and the denominator and checked within a relative tolerance of 1e-9. Cortexel re-computes rather than trusts.",
+      "Compaction by `histogram_merge_adjacent` merges ONLY adjacent bins, summing raw counts (or integrating density before re-normalizing by the wider bin), and may NEVER merge across the zero edge: that would recreate exactly the straddling bin the binning rules refuse, and a display step may not manufacture a figure the contract rejects. Extrema sampling destroys the mass and is not offered.",
+      "Complexity: O(e log e) for the stable row sort, O(e) for grouping and binning, O(b) in bins for normalization. Memory O(e)."
+    ],
+    "scopeRules": [
+      "Both node universes are declared, complete, and free of duplicate ids, and every row endpoint lies inside them. The universes are the SELECTION RECTANGLE — which connections were asked for. The scope is the COMPLETENESS of the edge set inside it. Two different facts, each with its own encoding: an incomplete node universe leaves the population unidentified and is refused, not disclosed.",
+      "`snapshotTime` is REQUIRED. A weight is a state variable, not a constant: under any plasticity rule an undated weight histogram cannot be bound to a moment in the run, and two undated histograms of one simulation cannot be ordered.",
+      "single_process: the snapshot observes every connection, so the edge population is complete within the declared rectangle.",
+      "global_merged: legal only when mergedRanks covers 0..worldSize-1 exactly once. A partial rank set remains partial and can never be upgraded to a global claim.",
+      "mpi_target_rank_local: legal ONLY with localTargetUniverseComplete = true. Under NEST's MPI semantics a rank holds the connections whose TARGET it owns, so the retained rows are the COMPLETE in-edge set of the rank's local targets — exact for that population and for no other. The target universe must be exactly those local targets.",
+      "mpi_target_rank_local with localTargetUniverseComplete = false is REFUSED: the rows are then an unidentified subset of an unidentified population. The figure is always disclosed as rank-local, because a rank's local targets are an interleaved subset of the network and nothing here shows that weights are independent of target identity.",
+      "mpi_target_rank_local supports `observationUnit: node_pair`, and this is not a coincidence: because the rank owns every connection arriving at a local target, every synapse of a pair (u, v) with v local is present, so a per-pair aggregate is complete rather than partial.",
+      "sampled: legal, and the figure then describes exactly the RETAINED edges. Every denominator is the retained observation count, the retained and source counts are disclosed, and no claim about the population is permitted — a retention rule correlated with weight produces a figure indistinguishable from an honest one.",
+      "sampled FORBIDS `observationUnit: node_pair`. Aggregating multapses over a sampled subset gives a per-pair sum that is a lower bound of unknown tightness, a mean over an unknown subset, and a max that is a lower bound — three numbers that look exactly like the complete ones and are not.",
+      "Cortexel verifies the scope, the universes, the endpoint membership, and the conservation identities. It cannot verify that the caller queried the connections it says it queried; that limit is stated on the figure rather than papered over."
+    ],
+    "uncertaintySupport": [
+      "none",
+      "standard_deviation",
+      "standard_error",
+      "confidence_interval",
+      "quantile_interval",
+      "ensemble_range"
+    ]
+  },
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "A connection snapshot with weights, or a pre-binned histogram of those weights, in both cases over an explicitly declared source x target rectangle and an explicit network scope. `mode` is the discriminator; the fields of the other mode are refused rather than ignored.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "connections"
+            },
+            "sourceUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of presynaptic nodes the population was selected from. `complete` must be true: it is half of the statement 'these are the connections from A to B', and without it the histogram describes an unnamed population."
+            },
+            "targetUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of postsynaptic nodes the population was selected from. Under an MPI target-rank-local scope this is exactly the rank's local targets."
+            },
+            "connections": {
+              "description": "Exactly the connections of the declared rectangle. `weights` is REQUIRED and its kind must be `synaptic_weight`: a connection snapshot without weights is a topology figure, not this one. Every multapse is its own row and is never deduplicated.",
+              "allOf": [
+                {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "weights"
+                  ],
+                  "properties": {
+                    "weights": {
+                      "type": "object",
+                      "required": [
+                        "kind"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "synaptic_weight"
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "scope": {
+              "description": "What this snapshot actually saw. `snapshotTime` is REQUIRED even though the shared type leaves it optional: a weight is a state variable, and an undated weight distribution cannot be bound to a moment in the run.",
+              "allOf": [
+                {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "snapshotTime"
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "sourceUniverse",
+            "targetUniverse",
+            "connections",
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "const": "prebinned"
+            },
+            "sourceUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of presynaptic nodes the population was selected from. `complete` must be true: it is half of the statement 'these are the connections from A to B', and without it the histogram describes an unnamed population."
+            },
+            "targetUniverse": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+              "description": "The COMPLETE set of postsynaptic nodes the population was selected from. Under an MPI target-rank-local scope this is exactly the rank's local targets."
+            },
+            "binEdges": {
+              "type": "object",
+              "description": "Strictly increasing finite edges, read by `bins.strictly_increasing`. n edges define n-1 bins, half-open with a final-edge-inclusive last bin. When the range spans zero an exact edge at 0 is required.",
+              "properties": {
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 100001
+                }
+              },
+              "required": [
+                "unit",
+                "edges"
+              ],
+              "additionalProperties": false
+            },
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Exact integer observation counts per bin. Length must be edges.length - 1. These are the raw numbers everything else is re-derived from."
+            },
+            "histogram": {
+              "type": "object",
+              "description": "Optional normalized values, read by `histogram.normalization_consistent`. If supplied they are RE-DERIVED from the counts and the denominator and checked within a tight tolerance; they are never taken on trust.",
+              "properties": {
+                "kind": {
+                  "allOf": [
+                    {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantityKind"
+                    },
+                    {
+                      "enum": [
+                        "probability",
+                        "probability_density"
+                      ]
+                    }
+                  ]
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 1,
+                  "maxItems": 100000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "sourceConnectionCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of connection ROWS in the declared rectangle, before any aggregation and before any exclusion. It is the top of the conservation chain: every row is either an observation or a missing weight."
+            },
+            "missingWeightCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows whose weight was absent or null. They are excluded from every bin and every denominator and are NEVER counted as zero."
+            },
+            "totalObservationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "All observations formed, in range and out of range. Under `observationUnit: synapse` this plus missingWeightCount must equal sourceConnectionCount exactly."
+            },
+            "excludedUnderRangeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Observations below the first edge. Under outOfRangeWeights `reject` this must be 0."
+            },
+            "excludedOverRangeCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Observations above the last edge. Under outOfRangeWeights `reject` this must be 0."
+            },
+            "zeroWeightCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Observations whose value is exactly 0. Reported separately because the half-open convention places them in the first non-negative bin, where they would otherwise be read as weak excitatory synapses."
+            },
+            "contributingSynapseModels": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "minItems": 1,
+              "maxItems": 64,
+              "description": "Every distinct synapse model that contributed a weight. Required, because a pre-binned histogram destroys the per-row model and the comparability claim would otherwise be unverifiable against anything at all."
+            },
+            "scope": {
+              "description": "What this snapshot actually saw. `snapshotTime` is REQUIRED even though the shared type leaves it optional: a weight is a state variable, and an undated weight distribution cannot be bound to a moment in the run.",
+              "allOf": [
+                {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "snapshotTime"
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "sourceUniverse",
+            "targetUniverse",
+            "binEdges",
+            "counts",
+            "sourceConnectionCount",
+            "missingWeightCount",
+            "totalObservationCount",
+            "excludedUnderRangeCount",
+            "excludedOverRangeCount",
+            "zeroWeightCount",
+            "contributingSynapseModels",
+            "scope"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+          "description": "Names the edge population so two weight figures of the same run cannot be confused for one another."
+        },
+        "selectionLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+        },
+        "observationUnit": {
+          "type": "string",
+          "enum": [
+            "synapse",
+            "node_pair"
+          ],
+          "description": "What ONE observation is. synapse: every connection row counts once, so a multapse of three contributes three weights — this is the distribution of synaptic weights. node_pair: the rows of an ordered pair are combined by the declared aggregation into one observation — this is the distribution of per-pair drive, which is a different quantity and is labelled as one. There is no default; the two answers differ, and the difference is scientific."
+        },
+        "aggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How the connections of one ordered pair are combined. Required under `node_pair` and REFUSED under `synapse`, where nothing is combined. `no_aggregation` asserts at most one connection per ordered pair and fails if that is untrue; there is no implicit 'last edge wins'."
+        },
+        "weightComparability": {
+          "description": "Why these weights may share one axis at all. Required, because `nest:weight` is one code covering values whose physical meaning depends on the synapse AND the postsynaptic neuron model: the same number 10.0 may be 10 pA of injected current under one model and 10 nS of conductance under another, and a histogram of the two is a histogram of nothing.",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "Every contributing weight comes from one synapse model. If two or more distinct models are present this fails with SCIENCE_WEIGHT_GROUP_INCOMPATIBLE. If the weight unit is `nest:weight` and no model is declared at all, this also fails: under a simulator-defined unit an undeclared model set is an unproven pooling claim, not a homogeneous one.",
+              "properties": {
+                "mode": {
+                  "const": "single_synapse_model"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "The caller declares that the listed synapse models produce weights that mean the same physical thing and may share one axis. The set of distinct models present must equal this list exactly. Cortexel verifies that the claim was made and that it matches the data; it cannot verify that the claim is true, and the declared set is surfaced in the summary and the table.",
+              "properties": {
+                "mode": {
+                  "const": "declared_comparable_models"
+                },
+                "comparableModels": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+                  },
+                  "minItems": 2,
+                  "maxItems": 64
+                }
+              },
+              "required": [
+                "mode",
+                "comparableModels"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "signTreatment": {
+          "type": "string",
+          "enum": [
+            "preserve",
+            "magnitude"
+          ],
+          "description": "preserve: the observation is the weight, sign and all. It is the only choice that destroys nothing. magnitude: the observation is |w|; a -60 pA inhibitory synapse and a +60 pA excitatory one become the same observation. It is applied only when it is asked for, it is recorded in the derivation receipt, and the axis is labelled |weight|."
+        },
+        "grouping": {
+          "type": "string",
+          "enum": [
+            "none",
+            "by_synapse_model"
+          ],
+          "description": "none: one histogram over the pooled observations. by_synapse_model: one series per distinct synapse model over the SAME bins, which does not pool the counts but still shares an x axis — so it still requires `declared_comparable_models`, and requiring only one model with it is refused as a redundant encoding of one figure. Available only in `connections` mode, where the rows carry a model; series are capped at 8 (RENDER_SERIES_LIMIT_EXCEEDED)."
+        },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "The bin edges, in `connections` mode. Required there and REFUSED in `prebinned` mode, where the edges are data. Cortexel does not choose bin edges: with the same weights, edges that begin at 0 delete every inhibitory synapse, and a bin that straddles 0 merges the two populations into one bar. Both are refused rather than drawn."
+        },
+        "normalization": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",
+          "description": "count: exact integers. probability: sums to 1 over the BINNED observations. density: integrates to 1 over the linear bin widths, with a unit reciprocal to the bin unit — and therefore refused on a `nest:weight` axis, which has no reciprocal code and no dimension a density could carry."
+        },
+        "outOfRangeWeights": {
+          "type": "string",
+          "enum": [
+            "reject",
+            "exclude_and_report"
+          ],
+          "description": "What happens to an observation outside [firstEdge, lastEdge]. reject: the bins must cover the data. exclude_and_report: it is excluded, counted, and the under-range and over-range totals are disclosed — after which the plotted probabilities describe only the binned subset, not the population."
+        },
+        "xScale": {
+          "type": "string",
+          "enum": [
+            "linear",
+            "log"
+          ],
+          "default": "linear",
+          "description": "Presentation only; it never changes a derived value, and density always uses the LINEAR bin width. `log` requires every bin edge and every observation to be strictly positive, because a negative or zero weight has no position on a logarithmic axis and dropping it would delete exactly the inhibitory synapses and the silenced ones."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Required, so that absence cannot masquerade as smallness. Within ONE network realization a bin count is an exact enumeration and carries no sampling uncertainty, so the only meaningful basis is dispersion across realizations: ensemble_members, bootstrap_draws, or replicates. A basis of `neurons` or `trials` is refused."
+        }
+      },
+      "required": [
+        "selectionId",
+        "observationUnit",
+        "weightComparability",
+        "signTreatment",
+        "grouping",
+        "normalization",
+        "outOfRangeWeights",
+        "uncertainty"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "observationUnit": {
+                "const": "node_pair"
+              }
+            },
+            "required": [
+              "observationUnit"
+            ]
+          },
+          "then": {
+            "required": [
+              "aggregation"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "observationUnit": {
+                "const": "synapse"
+              }
+            },
+            "required": [
+              "observationUnit"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "aggregation"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "grouping": {
+                "const": "by_synapse_model"
+              }
+            },
+            "required": [
+              "grouping"
+            ]
+          },
+          "then": {
+            "properties": {
+              "weightComparability": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "const": "declared_comparable_models"
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "semanticValidators": [
+    {
+      "id": "provenance.no_caller_assurance"
+    },
+    {
+      "id": "provenance.note_safe_display"
+    },
+    {
+      "id": "unit.canonical_code"
+    },
+    {
+      "id": "unit.dimension_match"
+    },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/weights/values",
+            "/data/connections/delays/values",
+            "/data/connections/synapseModels"
+          ],
+          [
+            "/data/counts",
+            "/data/histogram/values"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/sourceUniverse/ids",
+          "/data/targetUniverse/ids",
+          "/data/connections/edgeIds"
+        ]
+      }
+    },
+    {
+      "id": "topology.scope_declared"
+    },
+    {
+      "id": "topology.scope_supports_claim"
+    },
+    {
+      "id": "topology.weight_group_compatible"
+    },
+    {
+      "id": "bins.strictly_increasing"
+    },
+    {
+      "id": "histogram.normalization_consistent"
+    },
+    {
+      "id": "uncertainty.valid"
+    },
+    {
+      "id": "uncertainty.supported_variant"
+    }
+  ],
+  "renderer": {
+    "id": "figure.distribution",
+    "revision": 1
+  },
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 20000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": [
+      "none",
+      "histogram_merge_adjacent"
+    ],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+  "provenance": {
+    "requiredSourceFields": [
+      "kind"
+    ]
+  },
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE",
+    "RANK_LOCAL_SCOPE",
+    "SAMPLED_EDGES",
+    "MULTAPSE_AGGREGATED",
+    "MISSING_VALUES_PRESENT",
+    "PRE_BINNED_INPUT",
+    "UNIT_CONVERTED",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "COMPACTION_MAY_HIDE_TRANSIENTS",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+  "accessibility": {
+    "summaryTemplate": "Synaptic weight distribution for {selectionLabel}. {inRangeObservationCount} observations ({observationUnit}) from {sourceConnectionCount} connections over {sourceNodeCount} declared sources x {targetNodeCount} declared targets. Scope: {scopeStatement}. Models: {synapseModels}; comparability: {weightComparability}. Weights {signTreatment}, unit {weightUnit}. {missingWeightCount} connections have no weight and are excluded, never counted as zero; {zeroWeightCount} have a measured weight of exactly 0. {binCount} bins span {binMin} to {binMax} {binUnit} on a {xScale} axis. {zeroEdgeStatement} {underRangeCount} observations fell below and {overRangeCount} above that range. Normalization: {normalization}, values in {valueUnit}. {uncertaintyStatement} {compactionStatement}",
+    "tableColumns": [
+      {
+        "key": "binLow",
+        "header": "Weight (lower)",
+        "description": "Inclusive lower edge of the bin."
+      },
+      {
+        "key": "binHigh",
+        "header": "Weight (upper)",
+        "description": "Exclusive upper edge, except for the final bin, whose upper edge is inclusive so the strongest synapse is never dropped."
+      },
+      {
+        "key": "binWidth",
+        "header": "Bin width",
+        "description": "The LINEAR width, in the bin unit. It is the density denominator even when the axis is logarithmic."
+      },
+      {
+        "key": "signRegion",
+        "header": "Sign",
+        "description": "negative, or non_negative. Every bin lies wholly on one side: whenever the range spans zero an exact edge at 0 is required, and no bin may straddle it. This is the non-colour encoding of sign; the non_negative bin that starts at 0 also contains the measured zeros."
+      },
+      {
+        "key": "count",
+        "header": "Observations",
+        "description": "Exact integer count of observations in the bin. This is the raw number from which probability and density are derived."
+      },
+      {
+        "key": "value",
+        "header": "Value",
+        "description": "The normalized value under the declared normalization. Equal to count when normalization is count."
+      },
+      {
+        "key": "valueUnit",
+        "header": "Unit",
+        "description": "Dimensionless (1) for count and probability; the reciprocal of the bin unit for density."
+      },
+      {
+        "key": "inRangeObservationCount",
+        "header": "Binned observations",
+        "description": "The probability and density denominator. It excludes missing weights and out-of-range observations, so it can be smaller than the connection count."
+      },
+      {
+        "key": "uncertaintyLower",
+        "header": "Uncertainty lower"
+      },
+      {
+        "key": "uncertaintyUpper",
+        "header": "Uncertainty upper"
+      },
+      {
+        "key": "uncertaintyBasis",
+        "header": "Uncertainty basis",
+        "description": "Realizations only: ensemble_members, bootstrap_draws, or replicates. Within one realization a bin count is exact and carries no sampling uncertainty."
+      }
+    ]
+  },
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "numpy.histogram",
+      "version": "2.1.0",
+      "status": "not_run",
+      "notes": "numpy.histogram is the intended differential oracle for the binning and normalization, and it is only meaningful parameter-for-parameter: its bins are half-open except for the last, which is closed on the right — the same convention this contract fixes — and its `density=True` divides by the LINEAR bin width, which is exactly the rule that must hold under a logarithmic axis. It has no notion of a missing value, of an out-of-range policy, or of a zero-straddling bin, so those rules are covered by hand vectors instead. NEST 3.10 GetConnections is the second intended oracle, for the multapse and MPI target-rank-local fixtures specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+  "adapters": [
+    {
+      "system": "nest.GetConnections",
+      "status": "supported",
+      "notes": "Supplies source, target, weight, delay and synapse_model per connection, preserving every multapse as its own row. Under MPI the returned rows are the ones whose TARGET the rank owns, so the adapter must emit an mpi_target_rank_local scope with the rank's local target universe; it may never emit a global claim from one rank."
+    },
+    {
+      "system": "nest.NodeCollection",
+      "status": "supported",
+      "notes": "Supplies the two node universes — the selection rectangle. GetConnections alone cannot state which rectangle was queried, and a rectangle inferred from the rows that happen to exist is not the rectangle that was asked for."
+    },
+    {
+      "system": "nest.synapse_defaults",
+      "status": "partial",
+      "notes": "The synapse model's declared weight dimension can be read from the model defaults, but the physical meaning also depends on the POSTSYNAPTIC neuron model (current-based versus conductance-based), which no connection row carries. The adapter therefore records the model set and leaves the comparability claim to the caller."
+    },
+    {
+      "system": "networkx.MultiDiGraph",
+      "status": "partial",
+      "notes": "The `weight` edge attribute maps directly and parallel edges are retained, which is what `observationUnit: synapse` requires. A DiGraph has already collapsed parallel edges, so the per-synapse unit is refused for it rather than approximated from a collapsed graph."
+    },
+    {
+      "system": "neo.Block",
+      "status": "rejected",
+      "notes": "Neo models signals and spike trains. It carries no connection snapshot and nothing in it maps to a synaptic weight."
+    },
+    {
+      "system": "nwb.core",
+      "status": "planned",
+      "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today."
+    }
+  ],
+  "migration": {
+    "legacyIds": [
+      "nest.weight_histogram"
+    ],
+    "notes": "The legacy payload was a bare array of weights with a free-text unit: no synapse model, no node universes, no scope, no snapshot time, no bins, and no way to say whether a multapse had been counted once or collapsed. It could not distinguish a simulator-defined `nest:weight` from a physical pA. Migration therefore blocks with MIGRATION_INFORMATION_MISSING until the caller supplies the synapse-model set and the comparability claim, both universes, the scope with a snapshot time, the observation unit, and explicit bins. It never guesses. A legacy figure whose bins began at 0 over a signed population cannot be reproduced: those bins silently deleted every inhibitory synapse, and migration refuses rather than re-emit a figure whose binning destroyed the data."
+  },
+  "owner": "Sepehr Mahmoudian",
+  "changePolicy": [
+    "Changing what one observation IS — the meaning of `synapse` or `node_pair` — is MAJOR.",
+    "Giving `observationUnit`, `weightComparability`, `signTreatment`, or `outOfRangeWeights` a default is MAJOR: each default would silently decide a scientific question the caller must answer.",
+    "Changing the half-open bin convention or the final-edge inclusion rule is MAJOR.",
+    "Dropping the exact-zero-edge requirement, or ever permitting a bin to straddle zero, is MAJOR.",
+    "Permitting compaction to merge across the zero edge is MAJOR: it would manufacture a bin the binning rules refuse.",
+    "Changing how a missing weight is handled — above all, ever binning it as zero — is MAJOR.",
+    "Changing the probability or density denominator away from the in-range observation count is MAJOR.",
+    "Using anything other than the LINEAR bin width for density under a logarithmic axis is MAJOR.",
+    "Permitting `density` over a simulator-defined weight axis is MAJOR.",
+    "Changing which scope/observation-unit combinations are legal — above all, ever permitting `node_pair` under a sampled scope, or relaxing localTargetUniverseComplete — is MAJOR.",
+    "Relaxing any prebinned conservation identity is MAJOR.",
+    "Adding a grouping mode (by receptor, by sign), a binning mode, an uncertainty variant, a table column, or a summary fact is MINOR."
+  ],
+  "knownLimitations": [
+    "Registry gap: the error registry has no dedicated code for observations outside the declared bin range, nor for a bin that straddles zero. SCIENCE_BIN_EDGES_INVALID is the closest registered code for both.",
+    "The shared `bins.strictly_increasing` validator checks only that edges are finite and strictly increasing. The exact-zero-edge requirement, the no-straddle rule, and out-of-range coverage under `reject` are normative here and are not mechanically enforced.",
+    "The shared node-universe validators read one `data.nodeUniverse`; this figure has a two-sided `sourceUniverse` x `targetUniverse` rectangle, so they are not applied. Universes are required complete and their ids checked by `ids.unique`, but per-side endpoint membership is not mechanically enforced.",
+    "`topology.multapse_aggregation_declared` has no `observationUnit` awareness and would reject a legitimate per-synapse multapse, so it is not applied. The `node_pair` aggregation requirement and the `no_aggregation` assertion are normative here and not mechanically enforced.",
+    "`topology.scope_supports_claim` enforces global-merge rank coverage and the sampling bound only. The scope/observation-unit legality table — `sampled` forbidding `node_pair`, `mpi_target_rank_local` requiring `localTargetUniverseComplete` — is normative here and not mechanically enforced.",
+    "`topology.weight_group_compatible` enforces the single-model pooling guard: two or more distinct synapse models may not share one axis undeclared. It does not verify a `declared_comparable_models` set; that comparability claim stays the caller's and is surfaced rather than checked.",
+    "Prebinned conservation: `histogram.normalization_consistent` re-derives supplied probability/density values from the counts, but it does not check the conservation identities (sum of counts against the observation totals, or synapse closure). Those are normative here and not mechanically enforced.",
+    "`xScale: log` over a non-positive domain is refused at render time; no semantic-stage validator enforces it, so validation accepts such a request and the refusal happens later in the pipeline.",
+    "Registry gap: no disclosure id covers `signTreatment: magnitude`, and none covers observations excluded by `outOfRangeWeights`. Both facts reach the derivation receipt, the accessible summary, and the table metadata, but no footer disclosure states them.",
+    "PRE_BINNED_INPUT's registry text says the raw EVENTS were not observed. Here it means the raw connection rows. The fact it discloses is correct; only the noun is borrowed.",
+    "MULTAPSE_AGGREGATED's registry text is worded for matrix cells. Under `observationUnit: node_pair` its {contributingCount} must be read as connections per ordered endpoint pair.",
+    "Registry gap: `connectionRows` has no receptor or port field, so receptor grouping is not offered. Two weights on different receptor ports of one neuron are pooled today, and only the synapse-model set can distinguish them.",
+    "Registry gap: the unit registry has no reciprocal code for `pS` or `uV`, so `density` is unavailable for weights expressed in those units even though the dimension exists. `count` or `probability` must be used, or the weights converted to `nS` or `mV` first.",
+    "A `nest:weight` value's physical meaning depends on the postsynaptic NEURON model as well as the synapse model, and no connection row carries the neuron model. Cortexel checks the synapse-model set and nothing more; the comparability claim stays the caller's.",
+    "Cortexel fits and tests nothing. It draws the empirical histogram; a lognormal, heavy-tailed, or bimodal claim belongs to the reader, and no log axis is offered as a stand-in for a fit.",
+    "Cortexel cannot verify that the supplied snapshot is the whole snapshot. It verifies id uniqueness, scope merge coverage, the sampling bound, and normalization; it cannot know that GetConnections was called with the selection the caller says it was."
+  ],
+  "examples": {
+    "valid": [
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.weight_distribution"
+        },
+        "data": {
+          "mode": "connections",
+          "sourceUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "targetUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "1",
+              "1",
+              "2",
+              "3",
+              "4",
+              "4"
+            ],
+            "targetIds": [
+              "2",
+              "2",
+              "3",
+              "1",
+              "3",
+              "2"
+            ],
+            "edgeIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6"
+            ],
+            "weights": {
+              "kind": "synaptic_weight",
+              "unit": "pA",
+              "values": [
+                45.0,
+                45.0,
+                30.5,
+                -60.0,
+                -75.25,
+                0
+              ]
+            },
+            "synapseModels": [
+              "static_synapse",
+              "static_synapse",
+              "static_synapse",
+              "static_synapse",
+              "static_synapse",
+              "static_synapse"
+            ]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 1000
+            }
+          }
+        },
+        "parameters": {
+          "selectionId": "recurrent-all",
+          "observationUnit": "synapse",
+          "weightComparability": {
+            "mode": "single_synapse_model"
+          },
+          "signTreatment": "preserve",
+          "grouping": "none",
+          "normalization": "count",
+          "outOfRangeWeights": "reject",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          },
+          "selectionLabel": "All recurrent connections",
+          "bins": {
+            "mode": "edges",
+            "unit": "pA",
+            "edges": [
+              -100,
+              -50,
+              0,
+              50,
+              100
+            ],
+            "boundary": "[lo,hi)",
+            "finalEdgeInclusive": true
+          },
+          "xScale": "linear"
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "runId": "run-2026-07-14-a"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.weight_distribution"
+        },
+        "data": {
+          "mode": "prebinned",
+          "sourceUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3",
+              "4"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "targetUniverse": {
+            "ids": [
+              "5",
+              "6",
+              "7",
+              "8"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "binEdges": {
+            "unit": "nest:weight",
+            "edges": [
+              -2,
+              -1,
+              0,
+              1,
+              2
+            ]
+          },
+          "counts": [
+            10,
+            15,
+            40,
+            35
+          ],
+          "sourceConnectionCount": 102,
+          "missingWeightCount": 2,
+          "totalObservationCount": 100,
+          "excludedUnderRangeCount": 0,
+          "excludedOverRangeCount": 0,
+          "zeroWeightCount": 3,
+          "contributingSynapseModels": [
+            "static_synapse"
+          ],
+          "scope": {
+            "kind": "global_merged",
+            "worldSize": 2,
+            "mergedRanks": [
+              0,
+              1
+            ],
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 5000
+            }
+          }
+        },
+        "parameters": {
+          "selectionId": "exc-to-exc",
+          "observationUnit": "synapse",
+          "weightComparability": {
+            "mode": "single_synapse_model"
+          },
+          "signTreatment": "preserve",
+          "grouping": "none",
+          "normalization": "count",
+          "outOfRangeWeights": "reject",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_computed"
+          },
+          "selectionLabel": "E to E projection"
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "runId": "run-2026-07-14-b"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "network.weight_distribution"
+        },
+        "data": {
+          "mode": "connections",
+          "sourceUniverse": {
+            "ids": [
+              "1",
+              "2",
+              "3"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "targetUniverse": {
+            "ids": [
+              "4",
+              "5"
+            ],
+            "order": "as_declared",
+            "complete": true
+          },
+          "connections": {
+            "sourceIds": [
+              "1",
+              "1",
+              "2",
+              "3",
+              "3"
+            ],
+            "targetIds": [
+              "4",
+              "5",
+              "4",
+              "4",
+              "5"
+            ],
+            "edgeIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5"
+            ],
+            "weights": {
+              "kind": "synaptic_weight",
+              "unit": "pA",
+              "values": [
+                -100,
+                -25,
+                0,
+                60,
+                100
+              ]
+            },
+            "synapseModels": [
+              "static_synapse",
+              "static_synapse",
+              "static_synapse",
+              "static_synapse",
+              "static_synapse"
+            ]
+          },
+          "scope": {
+            "kind": "sampled",
+            "parentScope": "global_merged",
+            "method": "deterministic_stride",
+            "sourceConnectionCount": 50,
+            "retainedConnectionCount": 5,
+            "snapshotTime": {
+              "kind": "time",
+              "unit": "ms",
+              "value": 2000
+            }
+          }
+        },
+        "parameters": {
+          "selectionId": "sampled-stride-10",
+          "observationUnit": "synapse",
+          "weightComparability": {
+            "mode": "single_synapse_model"
+          },
+          "signTreatment": "preserve",
+          "grouping": "none",
+          "normalization": "probability",
+          "outOfRangeWeights": "reject",
+          "uncertainty": {
+            "kind": "none",
+            "reason": "not_applicable"
+          },
+          "selectionLabel": "Every tenth recurrent connection",
+          "bins": {
+            "mode": "edges",
+            "unit": "pA",
+            "edges": [
+              -100,
+              -50,
+              0,
+              50,
+              100
+            ],
+            "boundary": "[lo,hi)",
+            "finalEdgeInclusive": true
+          },
+          "xScale": "linear"
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "runId": "run-2026-07-14-c"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "why": "The request tries to assert that Cortexel validated it and that its reference comparison passed. Validation results are library-generated facts: a caller declares what its data IS, never what Cortexel concluded about it. The field is rejected before anything else runs.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2"
+              ],
+              "targetIds": [
+                "3",
+                "4"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "pA",
+                "values": [
+                  30,
+                  40
+                ]
+              },
+              "synapseModels": [
+                "static_synapse",
+                "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "pA",
+              "edges": [
+                0,
+                25,
+                50
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          },
+          "validation": {
+            "structural": {
+              "result": "passed"
+            }
+          },
+          "referenceComparison": {
+            "status": "passed"
+          }
+        }
+      },
+      {
+        "why": "`picoamp` is an accepted alias, not the canonical code `pA`. A stable request must use the canonical code: the alias is rejected with a repair rather than silently converted, because on a weight axis a factor of 1000 between pA and nA still produces a plausible-looking histogram.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2"
+              ],
+              "targetIds": [
+                "3",
+                "4"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "picoamp",
+                "values": [
+                  30,
+                  40
+                ]
+              },
+              "synapseModels": [
+                "static_synapse",
+                "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "pA",
+              "edges": [
+                0,
+                25,
+                50
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "A density is requested over a `nest:weight` axis. A density's value is a `probability_density`, whose dimension must be the reciprocal of the binned axis — but `simulator_defined` is not among that kind's dimensions and the registry has no reciprocal code for it. The y value literally cannot be typed, so the figure refuses; count or probability must be used.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "prebinned",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "binEdges": {
+              "unit": "nest:weight",
+              "edges": [
+                0,
+                15,
+                30
+              ]
+            },
+            "counts": [
+              30,
+              30
+            ],
+            "histogram": {
+              "kind": "probability_density",
+              "unit": "nest:weight",
+              "values": [
+                0.03333333333333333,
+                0.03333333333333333
+              ]
+            },
+            "sourceConnectionCount": 60,
+            "missingWeightCount": 0,
+            "totalObservationCount": 60,
+            "excludedUnderRangeCount": 0,
+            "excludedOverRangeCount": 0,
+            "zeroWeightCount": 0,
+            "contributingSynapseModels": [
+              "static_synapse"
+            ],
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "density",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "The weight vector has one entry while the six connection rows have two sources and two targets. Cortexel never pairs a weight with a connection by best effort: a shorter weight array means the export is broken, not that the last weight repeats.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2"
+              ],
+              "targetIds": [
+                "3",
+                "4"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "pA",
+                "values": [
+                  30
+                ]
+              },
+              "synapseModels": [
+                "static_synapse",
+                "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "pA",
+              "edges": [
+                -100,
+                -50,
+                0,
+                50,
+                100
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "The source universe declares the id `1` twice. An ambiguous identity must fail before selection or edge binding can resolve it two different ways; a universe with a repeated node is not a universe.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "1"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1"
+              ],
+              "targetIds": [
+                "3"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "pA",
+                "values": [
+                  30
+                ]
+              },
+              "synapseModels": [
+                "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "pA",
+              "edges": [
+                0,
+                25,
+                50
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "The bin edges -100, 0, -50, 100 are not strictly increasing: the third edge is below the second, so one bin is inverted and has no meaning. n edges must be strictly increasing finite numbers.",
+        "expectedCode": "SCIENCE_BIN_EDGES_INVALID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2"
+              ],
+              "targetIds": [
+                "3",
+                "4"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "pA",
+                "values": [
+                  45,
+                  30
+                ]
+              },
+              "synapseModels": [
+                "static_synapse",
+                "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "pA",
+              "edges": [
+                -100,
+                0,
+                -50,
+                100
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "Two synapse models are pooled onto one `nest:weight` axis with no grouping declared. A NEST weight has no SI meaning: 45.0 on a static_synapse and 9.7 on an stdp_synapse are different quantities, and the pooled bar is a mixture of two. The caller must group by model or declare them comparable.",
+        "expectedCode": "SCIENCE_WEIGHT_GROUP_INCOMPATIBLE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2"
+              ],
+              "targetIds": [
+                "3",
+                "4"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "nest:weight",
+                "values": [
+                  45.0,
+                  9.7
+                ]
+              },
+              "synapseModels": [
+                "static_synapse",
+                "stdp_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "nest:weight",
+              "edges": [
+                0,
+                25,
+                50
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "This claims a global merge of a three-rank run but supplies only ranks 0 and 1. A partial rank set stays partial: it cannot be upgraded to a global claim by declaring one, because the connections owned by the missing rank are simply absent.",
+        "expectedCode": "SCOPE_MERGE_INCOMPLETE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2"
+              ],
+              "targetIds": [
+                "3",
+                "4"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "pA",
+                "values": [
+                  30,
+                  40
+                ]
+              },
+              "synapseModels": [
+                "static_synapse",
+                "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "global_merged",
+              "worldSize": 3,
+              "mergedRanks": [
+                0,
+                1
+              ],
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "pA",
+              "edges": [
+                0,
+                25,
+                50
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "The sample declares that it retained five connections out of a source of three. A sample cannot retain more connections than existed to sample from; the counts are inconsistent and the scope cannot be trusted.",
+        "expectedCode": "SCOPE_MERGE_CONFLICT",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "connections",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "connections": {
+              "sourceIds": [
+                "1",
+                "2"
+              ],
+              "targetIds": [
+                "3",
+                "4"
+              ],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "pA",
+                "values": [
+                  30,
+                  40
+                ]
+              },
+              "synapseModels": [
+                "static_synapse",
+                "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "sampled",
+              "parentScope": "single_process",
+              "method": "deterministic_stride",
+              "sourceConnectionCount": 3,
+              "retainedConnectionCount": 5,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "count",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            },
+            "bins": {
+              "mode": "edges",
+              "unit": "pA",
+              "edges": [
+                0,
+                25,
+                50
+              ],
+              "boundary": "[lo,hi)",
+              "finalEdgeInclusive": true
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      },
+      {
+        "why": "The supplied probability values are each 0.1 and sum to 0.4, not 1, over the four bins. Cortexel re-derives a normalized histogram from the raw counts rather than trusting the numbers it was handed; a probability that does not sum to 1 cannot be verified.",
+        "expectedCode": "SCIENCE_NORMALIZATION_UNVERIFIABLE",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "network.weight_distribution"
+          },
+          "data": {
+            "mode": "prebinned",
+            "sourceUniverse": {
+              "ids": [
+                "1",
+                "2"
+              ],
+              "complete": true
+            },
+            "targetUniverse": {
+              "ids": [
+                "3",
+                "4"
+              ],
+              "complete": true
+            },
+            "binEdges": {
+              "unit": "pA",
+              "edges": [
+                -100,
+                -50,
+                0,
+                50,
+                100
+              ]
+            },
+            "counts": [
+              10,
+              15,
+              40,
+              35
+            ],
+            "histogram": {
+              "kind": "probability",
+              "unit": "1",
+              "values": [
+                0.1,
+                0.1,
+                0.1,
+                0.1
+              ]
+            },
+            "sourceConnectionCount": 100,
+            "missingWeightCount": 0,
+            "totalObservationCount": 100,
+            "excludedUnderRangeCount": 0,
+            "excludedOverRangeCount": 0,
+            "zeroWeightCount": 0,
+            "contributingSynapseModels": [
+              "static_synapse"
+            ],
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": {
+                "kind": "time",
+                "unit": "ms",
+                "value": 1000
+              }
+            }
+          },
+          "parameters": {
+            "selectionId": "sel-1",
+            "observationUnit": "synapse",
+            "weightComparability": {
+              "mode": "single_synapse_model"
+            },
+            "signTreatment": "preserve",
+            "grouping": "none",
+            "normalization": "probability",
+            "outOfRangeWeights": "reject",
+            "uncertainty": {
+              "kind": "none",
+              "reason": "not_applicable"
+            }
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0"
+          }
+        }
+      }
+    ]
+  }
+}

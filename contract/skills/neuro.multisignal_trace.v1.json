@@ -1,0 +1,2156 @@
+{
+  "id": "neuro.multisignal_trace",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Multiple biologically distinct signals on one declared clock",
+  "purpose": {
+    "canonicalQuestion": "How do several biologically distinct time-varying signals — each carrying its own entity, variable identity, quantity kind, and unit — evolve together on one declared clock, without any signal being relabelled, unit-coerced, or forced onto an axis whose dimension it does not share?",
+    "cannotEstablish": [
+      "That one signal caused another. Co-variation on a shared clock is co-variation: an IP3 rise preceding a calcium transient is consistent with IP3-gated release and does not demonstrate it.",
+      "The relative magnitude of two signals in different panels. Panels carry independent units and independent y domains, so a taller curve is not a larger effect — the panel height is a layout choice.",
+      "Any magnitude comparison under `normalized_overlay`. Each series is mapped separately to a dimensionless ratio, so two curves at the same height mean only that each sits equally far from ITS OWN reference statistic.",
+      "A lead or lag finer than the sampling interval. Signals sampled every 1 ms cannot establish a 0.2 ms lead, and Cortexel does not resample or interpolate to pretend otherwise.",
+      "That the signals really do share a clock. `same_clock` is a caller declaration; Cortexel checks that the times are internally consistent, never that two recorders were physically synchronized.",
+      "That the drawn signals are the complete state of the system. A model has state variables that were not recorded, and their absence from this figure is not evidence that they were constant.",
+      "That the trace between two samples followed the drawn path. A line segment renders adjacency between two measurements; it is not itself a measurement of the interval."
+    ]
+  },
+  "science": {
+    "normalization": [
+      "Sample order is NOT assumed chronological. Within each series, samples are stably sorted by (time, original ordinal); sorting never crosses a series boundary, and the original ordinal is retained in the artifact and the table.",
+      "The analysis window is half-open [start, stop) by default and applies to the DISPLAY clock, after any declared offset. A sample outside it is a contradiction between the declared window and the supplied samples: it is REFUSED, never silently cropped.",
+      "A recorder that emits a sample exactly at `stop` must declare `boundary: \"[start,stop]\"`. Cortexel does not guess an endpoint convention, because guessing it changes the sample count — and the sample it decides about is the last one.",
+      "Duplicate timestamps within one series require an explicit policy: `reject`, `keep_replicates`, or `aggregate` with a named method. Last-write-wins is never applied; which duplicate 'won' would depend on array order. Duplicates are detected on the SUPPLIED times in the supplied unit by exact binary64 equality, before any conversion, so a conversion can never merge two times the source kept apart.",
+      "`null` is a MISSING sample. It is never drawn as zero, never interpolated across, and never dropped from the count: the path breaks at every gap and the missing count reaches the disclosure, the summary, and the table. Non-finite numbers and negative zero are rejected at the parse and snapshot stages.",
+      "Unit conversion happens only WITHIN a panel, only between codes of the same dimension, and only into the panel's declared display unit. Each conversion multiplies once by the exact registry factor, is recorded as a derivation operation, and is disclosed. Raw supplied values remain in the table.",
+      "A simulator-defined unit (dimension `simulator_defined`, for example `nest:weight`) is never converted and is never dimension-compatible with any other code — including another simulator-defined code. Such a series therefore always occupies a panel of its own and can never be overlaid or normalized against a physical quantity.",
+      "Panel order is the declared order of `parameters.panels`; series order within a panel is the declared order of `data.series`. Series are NEVER reordered by amplitude, variance, or peak time — a sort that depends on the data would make the legend a claim about the data.",
+      "`series.equal_length` compares each declared series' sample count against its time vector (the shared `eventTimes` or the series' own `time`) and against every uncertainty array it carries. The registry validator resolves concrete JSON Pointers, so the groups are enumerated per series index rather than wildcarded."
+    ],
+    "derivation": [
+      "Time base: either one `eventTimes` vector that every series is sampled on, or a per-series `time` vector. The two are mutually exclusive at the request level, because a mixture would make 'the same length as the time vector' ambiguous. Sampling intervals may differ between series and are NEVER resampled onto a common grid.",
+      "Time alignment: `same_clock` asserts every series is already on one clock. `declared_offsets` requires a per-series `timeOffset` duration and maps t_display = t_recorded + offset, recorded as a derivation operation. Because the offset lives ON the series, coverage is structural: no series can silently receive an offset of zero.",
+      "small_multiples: one panel per declared panel, vertically stacked, all sharing one x domain (the analysis window). Each panel keeps its own y domain and its own unit. Panel y domains are never forced to a common scale, and no cross-panel height comparison is drawable.",
+      "shared_axis_overlay: exactly one panel. Every series is converted into that panel's display unit, so every member must share the panel unit's dimension. Two arrays are not comparable merely because they are the same length and both are called 'signals'.",
+      "normalized_overlay: exactly one panel whose display unit is `1`. Each series is mapped SEPARATELY by an affine transform to a dimensionless ratio, so between-series dimension compatibility is not required — and that is exactly why this layout supports no magnitude claim at all.",
+      "The three normalizations, computed over the declared statistics window and over the non-missing samples only. z_score: (x − mean_S) / sd_S, with the SAMPLE standard deviation (ddof = 1) and N ≥ 2. min_max: (x − min_S) / (max_S − min_S), requiring max_S > min_S. divide_by_baseline_mean: x / mean_S, requiring mean_S finite and strictly positive.",
+      "A non-positive `divide_by_baseline_mean` denominator is refused with SCIENCE_DENOMINATOR_INVALID. A membrane potential with a −70 mV baseline would otherwise map a depolarization to −65/−70 = 0.93 — BELOW the 1.0 baseline — drawing every excitatory event as a decrease, in a figure that looks entirely plausible.",
+      "Under a normalization, uncertainty bounds are carried through the SAME affine map (all three methods have a strictly positive scale), and a dispersion is scaled by the map's scale factor and not re-centred. A variant that cannot be mapped by that affine transform is not drawn rather than approximated. Missing samples stay missing.",
+      "Duplicate-time aggregation (`mean`, `median`, `min`, `max`) is computed over the replicate group, and the group's uncertainty is not synthesized from the replicates — an aggregate of replicates is not an uncertainty estimate unless the caller supplies one.",
+      "A model state with no standard quantity (a gating variable, an adaptation variable) uses the `state_variable` kind with a unit that declares its dimension. Two `state_variable` series share a panel only when their units share a dimension.",
+      "Rendering: a `point_sample` series is drawn as straight segments between successive samples; a `piecewise_constant` series is drawn as horizontal steps held until the next sample. Sample points are drawn only when `showSamplePoints` is set. Series in one panel may carry different observation kinds; each keeps its own mark.",
+      "`observationKind` is declared per series and never defaulted: drawing a held, event-updated signal as a sloped line invents a ramp that never existed, and in a figure read for lead and lag an invented ramp is an invented onset.",
+      "`origin` declares whether a series was recorded or computed. A derived series names the method that produced it and is never relabelled as recorded; Cortexel records and displays that method and never re-derives or verifies it.",
+      "There is no smoothing, at any layout, by default or by request — a smoothed trace is a different derived artifact with a declared method, window, and edge policy, and it does not belong to this contract.",
+      "Complexity: O(n log n) per series for the stable sort, O(n) for conversion and normalization, O(s) in series for the dimension checks. Tolerances: time equality is exact binary64; window containment is an exact comparison with no epsilon."
+    ],
+    "scopeRules": [
+      "Every series declares the entity it was recorded from and the variable it IS. Two series with the same `variableId` on different entities are distinct series and are never merged or averaged.",
+      "One shared x axis means one clock. `same_clock` and `declared_offsets` are the only alignments; there is deliberately no `not_aligned`, because every layout of this figure — including small multiples — places every series on ONE shared time axis, where an unknown clock offset would be read as a real lead or lag.",
+      "A panel's y domain covers only its own series. Panel domains are never harmonized and panel heights are never comparable; the summary and the accessible description both say so.",
+      "At most 8 series may share one panel under `shared_axis_overlay` or `normalized_overlay`. Beyond that the figure is refused with RENDER_SERIES_LIMIT_EXCEEDED rather than minting indistinguishable colours; use small multiples.",
+      "A declared panel that holds no series is refused with RENDER_NO_DATA. Cortexel never draws an empty coordinate system, which a reader would mistake for a measured flat line.",
+      "The figure claims nothing about state variables that were not recorded, and nothing about entities outside the declared series."
+    ],
+    "uncertaintySupport": [
+      "none",
+      "standard_deviation",
+      "standard_error",
+      "confidence_interval",
+      "quantile_interval",
+      "ensemble_range"
+    ]
+  },
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeBase",
+        "timeAlignment",
+        "series",
+        "window"
+      ],
+      "properties": {
+        "timeBase": {
+          "type": "string",
+          "enum": [
+            "shared",
+            "per_series"
+          ],
+          "description": "shared: one `sharedTime` vector every series is sampled on, and no series may carry its own `times`. per_series: every series carries its own `times` and there is no `sharedTime`. The two are exclusive because a mixture makes 'the same length as the time vector' ambiguous."
+        },
+        "eventTimes": {
+          "type": "object",
+          "description": "The one time vector every series is sampled on, on the display clock. Required when timeBase is `shared`, forbidden otherwise. `events.within_window` checks these sample times against `window`; a sample outside the window is refused, never cropped.",
+          "properties": {
+            "kind": {
+              "const": "time"
+            },
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 1,
+              "maxItems": 2000000,
+              "description": "Times are never null. A missing OBSERVATION is a null in the signal; a missing TIME is not an observation at all."
+            }
+          },
+          "required": [
+            "kind",
+            "unit",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "timeAlignment": {
+          "type": "object",
+          "description": "How the series' clocks relate. Required: a multi-signal figure exists to compare timing, and timing read across two unrelated clocks is not a result.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "same_clock",
+                "declared_offsets"
+              ],
+              "description": "same_clock: every series is already on one clock (the single-run multimeter case). declared_offsets: every series carries an explicit `timeOffset`. There is no `not_aligned` member — signals whose clocks have an unknown relation cannot be drawn on one time axis."
+            },
+            "runId": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+              "description": "The run whose clock this is. Optional, and strongly recommended: it is the only thing that lets a reader check later whether two figures share a clock."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": {
+            "type": "object",
+            "properties": {
+              "seriesId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "label": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label"
+              },
+              "entityId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The biological entity this signal was recorded FROM. Two identical variables recorded from two neurons are two series and are never merged."
+              },
+              "entityKind": {
+                "type": "string",
+                "enum": [
+                  "neuron",
+                  "astrocyte",
+                  "glia",
+                  "synapse",
+                  "population",
+                  "device",
+                  "other"
+                ],
+                "description": "A compartment is expressed as `compartmentId` on a neuron entity; a figure ABOUT compartments belongs to neuro.compartment_trace."
+              },
+              "compartmentId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "pathwayId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The declared signalling pathway or projection this signal belongs to. Optional, and never inferred from a variable name."
+              },
+              "variableId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The source model's OWN name for the recorded variable (`Ca_astro`, `IP3`, `V_m`, `I_SIC`). Required, because a quantity kind cannot distinguish two signals that share a dimension: calcium and IP3 are both concentrations, and a legend that reads 'concentration' twice is not a legend."
+              },
+              "panelId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier",
+                "description": "The declared panel this series is drawn in. Membership is structural: every series belongs to exactly one panel, so no series can be silently dropped from the layout and no panel partition can be left incomplete."
+              },
+              "timeOffset": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
+                "description": "A `duration` added to this series' recorded times to place it on the display clock. Required when timeAlignment.kind is `declared_offsets`, forbidden when it is `same_clock` — an implicit zero offset would be an undeclared claim about synchronization."
+              },
+              "time": {
+                "type": "object",
+                "description": "This series' own time vector on the display clock. Required when timeBase is `per_series`, forbidden when it is `shared`. Duplicate timestamps here are decided by `parameters.duplicateTimePolicy` and never resolved by array order.",
+                "properties": {
+                  "kind": {
+                    "const": "time"
+                  },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    },
+                    "minItems": 1,
+                    "maxItems": 2000000
+                  }
+                },
+                "required": [
+                  "kind",
+                  "unit",
+                  "values"
+                ],
+                "additionalProperties": false
+              },
+              "observationKind": {
+                "type": "string",
+                "enum": [
+                  "point_sample",
+                  "piecewise_constant"
+                ],
+                "description": "point_sample: an instantaneous sample of a continuous value; successive samples are joined by a straight segment. piecewise_constant: the value is HELD until the next sample and is drawn as a step. A held signal drawn as a sloped line invents a ramp that never existed, so this is a required declaration and never a default — and on a figure read for lead and lag, an invented ramp is an invented onset."
+              },
+              "origin": {
+                "description": "Whether these values were recorded or computed. A derived series is never relabelled as recorded, and its method is always visible in the table.",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "recorded"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "derived"
+                      },
+                      "method": {
+                        "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                        "description": "The name of the algorithm that produced these values, e.g. `mean_across_trials`. Required: a derived series that will not name its method is an unattributable number. Cortexel records and displays it and never re-derives or verifies it."
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "method"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "values": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantitySeries",
+                "description": "The observations, with their REAL quantity kind and unit. A null is a missing sample: it is never zero, never interpolated across, and never removed from the count. `trace.axis_dimension_compatible` reads `values.unit`, so an overlay of two dimensions is refused."
+              },
+              "uncertainty": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+                "description": "Required on every series. `{ \"kind\": \"none\", \"reason\": ... }` is the honest answer for a single deterministic run — a curve with no band must SAY why it has no band, not merely lack one."
+              },
+              "sourceRef": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/dataRef",
+                "description": "Optional content-addressed reference to the bytes this series was extracted from. Cortexel RECORDS it and never resolves it — stable core has no filesystem or network authority — and it never substitutes for the inline samples."
+              }
+            },
+            "required": [
+              "seriesId",
+              "entityId",
+              "entityKind",
+              "variableId",
+              "panelId",
+              "observationKind",
+              "origin",
+              "values",
+              "uncertainty"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "window": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "timeBase": {
+                "const": "shared"
+              }
+            },
+            "required": [
+              "timeBase"
+            ]
+          },
+          "then": {
+            "required": [
+              "eventTimes"
+            ],
+            "properties": {
+              "series": {
+                "type": "array",
+                "items": {
+                  "not": {
+                    "required": [
+                      "time"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "timeBase": {
+                "const": "per_series"
+              }
+            },
+            "required": [
+              "timeBase"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "eventTimes"
+              ]
+            },
+            "properties": {
+              "series": {
+                "type": "array",
+                "items": {
+                  "required": [
+                    "time"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "timeAlignment": {
+                "properties": {
+                  "kind": {
+                    "const": "declared_offsets"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "timeAlignment"
+            ]
+          },
+          "then": {
+            "properties": {
+              "series": {
+                "items": {
+                  "required": [
+                    "timeOffset"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "timeAlignment": {
+                "properties": {
+                  "kind": {
+                    "const": "same_clock"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "timeAlignment"
+            ]
+          },
+          "then": {
+            "properties": {
+              "series": {
+                "items": {
+                  "not": {
+                    "required": [
+                      "timeOffset"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layout",
+        "panels",
+        "duplicateTimePolicy"
+      ],
+      "properties": {
+        "layout": {
+          "type": "string",
+          "enum": [
+            "small_multiples",
+            "shared_axis_overlay",
+            "normalized_overlay"
+          ],
+          "description": "There is no default. The layout decides whether a magnitude comparison between two signals is meaningful at all, so it is never chosen for the caller. small_multiples: one panel per declared panel, independent y domains. shared_axis_overlay: one panel, one unit, dimensionally compatible series only. normalized_overlay: one dimensionless panel; each series is separately mapped to a ratio and NO magnitude claim survives."
+        },
+        "panels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "description": "The declared panel universe. Every series names one of these; a panel that no series names is refused with RENDER_NO_DATA rather than drawn as an empty axis.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "panelId": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "label": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+                "description": "The axis label. When a panel holds more than one `variableId`, the axis is labelled with THIS label, or with the shared unit alone — never with one member's variable name, which would silently attribute the whole panel to one species."
+              },
+              "unit": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode",
+                "description": "The panel's DISPLAY unit. Every member series is converted into it, so every member must share its dimension. Under `normalized_overlay` it must be `1`: the drawn quantity there is a dimensionless ratio, not the source quantity."
+              },
+              "scale": {
+                "type": "string",
+                "enum": [
+                  "linear",
+                  "log",
+                  "symlog"
+                ],
+                "default": "linear"
+              },
+              "symlogLinearThreshold": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "The half-width of the linear region around zero. Required for `symlog`, because a symlog axis with an undeclared threshold changes shape when the data changes."
+              }
+            },
+            "required": [
+              "panelId",
+              "unit"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "scale": {
+                      "const": "symlog"
+                    }
+                  },
+                  "required": [
+                    "scale"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "symlogLinearThreshold"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "duplicateTimePolicy": {
+          "type": "object",
+          "description": "Required. Duplicate timestamps within a series are a source fact that has to be decided, not resolved by array order.",
+          "properties": {
+            "policy": {
+              "type": "string",
+              "enum": [
+                "reject",
+                "keep_replicates",
+                "aggregate"
+              ],
+              "description": "reject: duplicates fail the request. keep_replicates: every replicate is retained and drawn. aggregate: replicates are combined by the named method, and the aggregation is disclosed."
+            },
+            "aggregate": {
+              "type": "string",
+              "enum": [
+                "mean",
+                "median",
+                "min",
+                "max"
+              ]
+            }
+          },
+          "required": [
+            "policy"
+          ],
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "policy": {
+                    "const": "aggregate"
+                  }
+                },
+                "required": [
+                  "policy"
+                ]
+              },
+              "then": {
+                "required": [
+                  "aggregate"
+                ]
+              }
+            }
+          ]
+        },
+        "normalization": {
+          "type": "object",
+          "description": "Required for `normalized_overlay`, forbidden otherwise. The method, its window, and its per-series constants are recorded in the derivation and shown in the table: a normalized figure whose constants are not published cannot be checked by anyone.",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "z_score",
+                "min_max",
+                "divide_by_baseline_mean"
+              ],
+              "description": "z_score: (x − mean) / sd with the sample standard deviation (ddof = 1) and N ≥ 2. min_max: (x − min) / (max − min), requiring max > min. divide_by_baseline_mean: x / mean, requiring the baseline mean to be finite and strictly positive."
+            },
+            "statisticsWindow": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "The window the normalization statistics are computed over. Required and never defaulted to the whole trace: a baseline taken over a window that already contains the response shrinks the response it is supposed to measure."
+            }
+          },
+          "required": [
+            "method",
+            "statisticsWindow"
+          ],
+          "additionalProperties": false
+        },
+        "panelOrder": {
+          "type": "string",
+          "enum": [
+            "as_declared",
+            "by_panel_id"
+          ],
+          "default": "as_declared",
+          "description": "Panels are never ordered by amplitude, variance, or peak time. An order that depends on the data would make the layout itself a claim about the data."
+        },
+        "showSamplePoints": {
+          "type": "boolean",
+          "default": false,
+          "description": "Draw the individual samples in addition to the line. Useful precisely because the line between two samples is a rendering of adjacency, not a measurement."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "normalized_overlay"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "required": [
+              "normalization"
+            ],
+            "properties": {
+              "panels": {
+                "maxItems": 1,
+                "items": {
+                  "properties": {
+                    "unit": {
+                      "const": "1"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "shared_axis_overlay"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "normalization"
+              ]
+            },
+            "properties": {
+              "panels": {
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "layout": {
+                "const": "small_multiples"
+              }
+            },
+            "required": [
+              "layout"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "normalization"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "semanticValidators": [
+    {
+      "id": "provenance.no_caller_assurance"
+    },
+    {
+      "id": "provenance.note_safe_display"
+    },
+    {
+      "id": "unit.canonical_code"
+    },
+    {
+      "id": "unit.dimension_match"
+    },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/eventTimes/values",
+            "/data/series/0/values/values"
+          ],
+          [
+            "/data/series/0/time/values",
+            "/data/series/0/values/values"
+          ],
+          [
+            "/data/series/0/values/values",
+            "/data/series/0/uncertainty/values"
+          ],
+          [
+            "/data/series/0/values/values",
+            "/data/series/0/uncertainty/lower"
+          ],
+          [
+            "/data/series/0/values/values",
+            "/data/series/0/uncertainty/upper"
+          ],
+          [
+            "/data/series/0/values/values",
+            "/data/series/0/uncertainty/sampleCount"
+          ],
+          [
+            "/data/eventTimes/values",
+            "/data/series/1/values/values"
+          ],
+          [
+            "/data/series/1/time/values",
+            "/data/series/1/values/values"
+          ],
+          [
+            "/data/series/1/values/values",
+            "/data/series/1/uncertainty/values"
+          ],
+          [
+            "/data/series/1/values/values",
+            "/data/series/1/uncertainty/lower"
+          ],
+          [
+            "/data/series/1/values/values",
+            "/data/series/1/uncertainty/upper"
+          ],
+          [
+            "/data/series/1/values/values",
+            "/data/series/1/uncertainty/sampleCount"
+          ],
+          [
+            "/data/eventTimes/values",
+            "/data/series/2/values/values"
+          ],
+          [
+            "/data/series/2/time/values",
+            "/data/series/2/values/values"
+          ],
+          [
+            "/data/series/2/values/values",
+            "/data/series/2/uncertainty/values"
+          ],
+          [
+            "/data/series/2/values/values",
+            "/data/series/2/uncertainty/lower"
+          ],
+          [
+            "/data/series/2/values/values",
+            "/data/series/2/uncertainty/upper"
+          ],
+          [
+            "/data/series/2/values/values",
+            "/data/series/2/uncertainty/sampleCount"
+          ],
+          [
+            "/data/eventTimes/values",
+            "/data/series/3/values/values"
+          ],
+          [
+            "/data/series/3/time/values",
+            "/data/series/3/values/values"
+          ],
+          [
+            "/data/series/3/values/values",
+            "/data/series/3/uncertainty/values"
+          ],
+          [
+            "/data/series/3/values/values",
+            "/data/series/3/uncertainty/lower"
+          ],
+          [
+            "/data/series/3/values/values",
+            "/data/series/3/uncertainty/upper"
+          ],
+          [
+            "/data/series/3/values/values",
+            "/data/series/3/uncertainty/sampleCount"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "window.valid",
+      "parameters": {
+        "pointer": "/data/window"
+      }
+    },
+    {
+      "id": "window.valid",
+      "parameters": {
+        "pointer": "/parameters/normalization/statisticsWindow"
+      }
+    },
+    {
+      "id": "events.within_window"
+    },
+    {
+      "id": "trace.duplicate_time_policy"
+    },
+    {
+      "id": "trace.axis_dimension_compatible"
+    }
+  ],
+  "renderer": {
+    "id": "figure.multisignal_trace",
+    "revision": 1
+  },
+  "budgets": {
+    "maxObservations": 2000000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": [
+      "none",
+      "line_envelope_minmax"
+    ],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+  "provenance": {
+    "requiredSourceFields": [
+      "kind"
+    ]
+  },
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "MISSING_VALUES_PRESENT",
+    "DUPLICATE_TIMES_AGGREGATED",
+    "UNIT_CONVERTED",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+  "accessibility": {
+    "summaryTemplate": "Multi-signal trace: {seriesCount} signals in {panelCount} panels over {windowStart} to {windowStop} {timeUnit}, window {windowBoundary}. Layout: {layout}. Time alignment: {timeAlignment}. Panels: {panelSummary}. Panels carry independent units and y domains, so heights are not comparable across panels. Signals: {seriesSummary}. {observationKindStatement} {originStatement} {sampleCount} samples, {missingCount} missing; a missing sample breaks the line and is never interpolated across or drawn as zero. Duplicate-time policy: {duplicateTimePolicy}. {normalizationStatement} {uncertaintyStatement} {unitConversionStatement} {compactionStatement}",
+    "tableColumns": [
+      {
+        "key": "seriesId",
+        "header": "Series"
+      },
+      {
+        "key": "seriesLabel",
+        "header": "Label"
+      },
+      {
+        "key": "entityId",
+        "header": "Entity",
+        "description": "The entity the signal was recorded from."
+      },
+      {
+        "key": "entityKind",
+        "header": "Entity kind"
+      },
+      {
+        "key": "compartmentId",
+        "header": "Compartment"
+      },
+      {
+        "key": "pathwayId",
+        "header": "Pathway",
+        "description": "The declared signalling pathway or projection. Recorded verbatim; never inferred from a variable name."
+      },
+      {
+        "key": "variableId",
+        "header": "Variable",
+        "description": "The source model's own name for the variable. A quantity kind alone cannot distinguish calcium from IP3: both are concentrations."
+      },
+      {
+        "key": "panelId",
+        "header": "Panel"
+      },
+      {
+        "key": "observationKind",
+        "header": "Observation kind",
+        "description": "point_sample (joined by a straight segment) or piecewise_constant (held to the next sample and drawn as a step)."
+      },
+      {
+        "key": "origin",
+        "header": "Origin",
+        "description": "recorded or derived. A derived series is never presented as a recorded one."
+      },
+      {
+        "key": "originMethod",
+        "header": "Derivation method",
+        "description": "The caller-declared algorithm behind a derived series. Cortexel records and displays it; it never re-derives or verifies it."
+      },
+      {
+        "key": "recordedTime",
+        "header": "Recorded time",
+        "description": "AS SUPPLIED, before any declared offset. The raw time the source reported."
+      },
+      {
+        "key": "timeOffset",
+        "header": "Declared offset",
+        "description": "The offset added to the recorded time to place this series on the display clock. Zero under `same_clock`, where no offset may be declared at all."
+      },
+      {
+        "key": "time",
+        "header": "Time",
+        "description": "On the display clock, after any declared offset. recordedTime + timeOffset."
+      },
+      {
+        "key": "timeUnit",
+        "header": "Time unit"
+      },
+      {
+        "key": "value",
+        "header": "Value",
+        "description": "AS SUPPLIED, before any panel unit conversion or overlay normalization. This is the raw observation everything drawn is derived from."
+      },
+      {
+        "key": "unit",
+        "header": "Unit",
+        "description": "The unit as supplied."
+      },
+      {
+        "key": "displayValue",
+        "header": "Drawn value",
+        "description": "The value as drawn: converted into the panel unit, or mapped to a dimensionless ratio under normalized_overlay."
+      },
+      {
+        "key": "displayUnit",
+        "header": "Drawn unit"
+      },
+      {
+        "key": "missing",
+        "header": "Missing",
+        "description": "true when the observation is absent. It is never drawn as zero and never interpolated across."
+      },
+      {
+        "key": "replicateCount",
+        "header": "Replicates",
+        "description": "How many supplied samples share this timestamp. 1 unless duplicates were kept or aggregated; an aggregate row states how many replicates it combines."
+      },
+      {
+        "key": "uncertaintyKind",
+        "header": "Uncertainty kind"
+      },
+      {
+        "key": "uncertaintyLower",
+        "header": "Uncertainty lower"
+      },
+      {
+        "key": "uncertaintyUpper",
+        "header": "Uncertainty upper"
+      },
+      {
+        "key": "uncertaintyMethod",
+        "header": "Uncertainty method",
+        "description": "The declared method and level of an interval variant. An interval with no method is never drawn as one."
+      },
+      {
+        "key": "sourceRowIndex",
+        "header": "Source row",
+        "description": "The original ordinal in the caller's array, retained through stable sorting so any drawn point can be traced back to the row it came from."
+      }
+    ]
+  },
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "neo.AnalogSignal.rescale + scipy.stats.zscore",
+      "version": "neo 0.13.1 / scipy 1.14.1",
+      "status": "not_run",
+      "notes": "Neo is the intended differential oracle for unit rescaling and SciPy for the z-score. The conventions must be matched parameter for parameter before the comparison means anything: scipy.stats.zscore defaults to ddof = 0 while this contract specifies the sample standard deviation (ddof = 1), and the two disagree by a factor sqrt(N/(N-1)) — 5.4% at N = 10. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+  "adapters": [
+    {
+      "system": "nest.multimeter",
+      "status": "supported",
+      "notes": "One node, several recorded variables, one clock. Each recorded variable becomes a series carrying its REAL quantity kind and unit; the adapter must supply them and never defaults an unlabelled channel to membrane voltage."
+    },
+    {
+      "system": "nest.astrocyte_lr_1994",
+      "status": "supported",
+      "notes": "A recipe, not a renderer branch. Ca_astro and IP3 map to `concentration` in umol/L, the target neuron's V_m to `membrane_voltage` in mV, and the slow inward current to `current` in pA. They land in three panels because they are three dimensions — not because astrocytes are special."
+    },
+    {
+      "system": "neo.AnalogSignal",
+      "status": "supported",
+      "notes": "One AnalogSignal per series. t_start and sampling_period give the shared time base; the unit is taken from the quantity and never guessed."
+    },
+    {
+      "system": "neo.IrregularlySampledSignal",
+      "status": "supported",
+      "notes": "Maps to the per-series time base. The times are used exactly as supplied; Cortexel does not resample onto a common grid."
+    },
+    {
+      "system": "nwb.TimeSeries",
+      "status": "partial",
+      "notes": "The caller must select the series and declare each one's quantity kind. An NWB unit string is not a Cortexel unit code and is not accepted as one."
+    }
+  ],
+  "migration": {
+    "legacyIds": [
+      "nest.astrocyte_dynamics"
+    ],
+    "notes": "The legacy payload carried astrocyte signals as bare value arrays under a voltage-flavoured scene. Migration requires a quantity kind and a unit PER SIGNAL and blocks with MIGRATION_INFORMATION_MISSING without them: it never guesses mV, and it never relabels calcium or IP3 as a membrane potential. Signals that turn out to be dimensionally incompatible become small multiples rather than one forced axis, so a migrated figure may legitimately have more panels than the original had curves."
+  },
+  "owner": "Sepehr Mahmoudian",
+  "changePolicy": [
+    "Changing the default window boundary convention, or accepting a sample outside the declared window instead of refusing it, is MAJOR.",
+    "Changing the z_score denominator (currently the sample standard deviation, ddof = 1, over the non-missing samples of the statistics window) is MAJOR: every drawn value moves.",
+    "Changing any normalization formula, or the rule that a normalized value is dimensionless, is MAJOR. Adding a new normalization method is MINOR.",
+    "Making `layout` optional or giving it a default is MAJOR. The layout decides whether a magnitude comparison is meaningful, so it may never be chosen for the caller.",
+    "Changing duplicate-time semantics is MAJOR. Last-write-wins is prohibited outright and will not be added.",
+    "Permitting a simulator-defined unit to share a panel with any other series is MAJOR.",
+    "Adding a time-alignment kind whose clock relation is unknown is MAJOR, and would need a mechanized disclosure first.",
+    "Changing panel or series draw order, or sorting series by amplitude, variance, or peak time, is MAJOR.",
+    "Giving `observationKind` a default, or drawing a `piecewise_constant` series as a sloped line, is MAJOR: it would invent intermediate values that were never recorded.",
+    "Permitting a derived series to omit its method, or presenting a derived series as a recorded one, is MAJOR.",
+    "Adding an uncertainty variant is MINOR; removing one is MAJOR."
+  ],
+  "knownLimitations": [
+    "Panel membership (a series' panelId names a declared panel; a declared panel holds at least one series) has no semantic validator in this build, so an undeclared panelId or an empty declared panel is not refused during request validation. A `trace.panel_membership_declared` validator should own it.",
+    "`ids.unique` reads one flat identifier array, but this figure's series ids and panel ids live inside arrays of objects (data.series[].seriesId, parameters.panels[].panelId). No resolvable pointer exists, so the validator was removed; series-id and panel-id uniqueness are unenforced until the registry gains object-array pointer support.",
+    "`series.equal_length` resolves concrete JSON Pointers, not index wildcards, so its groups are enumerated per series index (0..3). A length mismatch in a later series index would not be caught until the registry adopts index-wildcard pointers.",
+    "`uncertainty.valid` and `uncertainty.supported_variant` read a single top-level parameters/data uncertainty; this figure carries uncertainty PER SERIES, which those validators do not traverse. Both were removed and per-series uncertainty is validated only structurally, pending a per-series uncertainty validator.",
+    "Because `unit.dimension_match` treats any {kind,unit} object as a physical quantity, a series uncertainty that carries a unit and a non-quantity kind (standard_deviation, confidence_interval, ...) is rejected as a dimension mismatch. Only kind:none series uncertainties validate until the walker excludes uncertainty nodes.",
+    "A non-positive `divide_by_baseline_mean` denominator is described by the science but has no semantic validator in this build, so a sign-flipping baseline is not refused at validation time. A normalization validator should own SCIENCE_DENOMINATOR_INVALID for this figure.",
+    "Log/symlog domain checks and the empty-panel RENDER_NO_DATA check belong to the render stage, which request validation does not reach; a non-positive log domain is not refused during validation.",
+    "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that a channel was what the caller says it was, or that a `derived` series was produced by the method it names.",
+    "Cortexel cannot verify that two recorders shared a clock. `same_clock` is a caller declaration; all Cortexel can do is refuse to draw signals on one time axis unless the caller states which clock they are on.",
+    "Series may be sampled at different intervals. Cortexel never resamples onto a common grid, so a vertical alignment must not be read finer than the coarser series' sampling interval.",
+    "`line_envelope_minmax` compacts each series independently. Each series' drawn shape survives, but the drawn samples of two series are no longer paired; read paired values from the table.",
+    "Two signals of the same dimension but different species (calcium and IP3 are both concentrations) may legally share an axis. Cortexel cannot know they are different molecules, which is why every series must declare a variableId, so the legend and the table can."
+  ],
+  "examples": {
+    "valid": [
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.multisignal_trace"
+        },
+        "data": {
+          "timeBase": "shared",
+          "eventTimes": {
+            "kind": "time",
+            "unit": "ms",
+            "values": [
+              0,
+              10,
+              20,
+              30,
+              40
+            ]
+          },
+          "timeAlignment": {
+            "kind": "same_clock",
+            "runId": "run-2026-07-14-a"
+          },
+          "series": [
+            {
+              "seriesId": "ca",
+              "label": "Astrocyte Ca",
+              "entityId": "astro-1",
+              "entityKind": "astrocyte",
+              "variableId": "Ca_astro",
+              "panelId": "chemistry",
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "recorded"
+              },
+              "values": {
+                "kind": "concentration",
+                "unit": "umol/L",
+                "values": [
+                  0.073,
+                  0.081,
+                  0.19,
+                  0.42,
+                  0.11
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "single_trial"
+              }
+            },
+            {
+              "seriesId": "ip3",
+              "label": "Astrocyte IP3",
+              "entityId": "astro-1",
+              "entityKind": "astrocyte",
+              "variableId": "IP3",
+              "panelId": "chemistry",
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "recorded"
+              },
+              "values": {
+                "kind": "concentration",
+                "unit": "umol/L",
+                "values": [
+                  0.16,
+                  0.25,
+                  0.61,
+                  0.44,
+                  0.21
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "single_trial"
+              }
+            },
+            {
+              "seriesId": "vm",
+              "label": "Target neuron V_m",
+              "entityId": "nrn-7",
+              "entityKind": "neuron",
+              "compartmentId": "soma",
+              "variableId": "V_m",
+              "panelId": "membrane",
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "recorded"
+              },
+              "values": {
+                "kind": "membrane_voltage",
+                "unit": "mV",
+                "values": [
+                  -70.0,
+                  -69.8,
+                  -68.4,
+                  -64.1,
+                  -67.2
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "single_trial"
+              }
+            },
+            {
+              "seriesId": "sic",
+              "label": "Slow inward current",
+              "entityId": "nrn-7",
+              "entityKind": "neuron",
+              "compartmentId": "soma",
+              "pathwayId": "astro-1-to-nrn-7",
+              "variableId": "I_SIC",
+              "panelId": "current",
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "recorded"
+              },
+              "values": {
+                "kind": "current",
+                "unit": "pA",
+                "values": [
+                  0,
+                  0,
+                  12.4,
+                  38.9,
+                  null
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "single_trial"
+              }
+            }
+          ],
+          "window": {
+            "start": 0,
+            "stop": 50,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          }
+        },
+        "parameters": {
+          "layout": "small_multiples",
+          "panels": [
+            {
+              "panelId": "chemistry",
+              "label": "Astrocyte chemistry",
+              "unit": "umol/L",
+              "scale": "linear"
+            },
+            {
+              "panelId": "membrane",
+              "label": "Membrane potential",
+              "unit": "mV",
+              "scale": "linear"
+            },
+            {
+              "panelId": "current",
+              "label": "Astrocytic current",
+              "unit": "pA",
+              "scale": "linear"
+            }
+          ],
+          "duplicateTimePolicy": {
+            "policy": "reject"
+          },
+          "panelOrder": "as_declared",
+          "showSamplePoints": false
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "runId": "run-2026-07-14-a"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.multisignal_trace"
+        },
+        "data": {
+          "timeBase": "per_series",
+          "timeAlignment": {
+            "kind": "declared_offsets",
+            "runId": "run-2026-07-14-b"
+          },
+          "series": [
+            {
+              "seriesId": "ca",
+              "label": "Astrocyte Ca",
+              "entityId": "astro-1",
+              "entityKind": "astrocyte",
+              "variableId": "Ca_astro",
+              "panelId": "z",
+              "timeOffset": {
+                "kind": "duration",
+                "unit": "ms",
+                "value": 0
+              },
+              "time": {
+                "kind": "time",
+                "unit": "ms",
+                "values": [
+                  0,
+                  10,
+                  20,
+                  30
+                ]
+              },
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "recorded"
+              },
+              "values": {
+                "kind": "concentration",
+                "unit": "umol/L",
+                "values": [
+                  0.07,
+                  0.09,
+                  0.3,
+                  0.12
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "single_trial"
+              }
+            },
+            {
+              "seriesId": "ip3",
+              "label": "Astrocyte IP3",
+              "entityId": "astro-1",
+              "entityKind": "astrocyte",
+              "variableId": "IP3",
+              "panelId": "z",
+              "timeOffset": {
+                "kind": "duration",
+                "unit": "ms",
+                "value": 5
+              },
+              "time": {
+                "kind": "time",
+                "unit": "ms",
+                "values": [
+                  0,
+                  10,
+                  20,
+                  30
+                ]
+              },
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "recorded"
+              },
+              "values": {
+                "kind": "concentration",
+                "unit": "nmol/L",
+                "values": [
+                  160,
+                  610,
+                  440,
+                  210
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "single_trial"
+              }
+            }
+          ],
+          "window": {
+            "start": 0,
+            "stop": 40,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          }
+        },
+        "parameters": {
+          "layout": "normalized_overlay",
+          "panels": [
+            {
+              "panelId": "z",
+              "label": "z-score (dimensionless)",
+              "unit": "1",
+              "scale": "linear"
+            }
+          ],
+          "normalization": {
+            "method": "z_score",
+            "statisticsWindow": {
+              "start": 0,
+              "stop": 40,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "duplicateTimePolicy": {
+            "policy": "reject"
+          },
+          "panelOrder": "as_declared",
+          "showSamplePoints": true
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "runId": "run-2026-07-14-b"
+        }
+      },
+      {
+        "contract": {
+          "name": "cortexel-figure-request",
+          "version": "1.0"
+        },
+        "skill": {
+          "id": "neuro.multisignal_trace"
+        },
+        "data": {
+          "timeBase": "shared",
+          "eventTimes": {
+            "kind": "time",
+            "unit": "ms",
+            "values": [
+              0,
+              10,
+              20,
+              30
+            ]
+          },
+          "timeAlignment": {
+            "kind": "same_clock",
+            "runId": "run-2026-07-14-c"
+          },
+          "series": [
+            {
+              "seriesId": "ca",
+              "label": "Astrocyte Ca",
+              "entityId": "astro-1",
+              "entityKind": "astrocyte",
+              "variableId": "Ca_astro",
+              "panelId": "chemistry",
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "derived",
+                "method": "mean_across_trials"
+              },
+              "values": {
+                "kind": "concentration",
+                "unit": "umol/L",
+                "values": [
+                  0.073,
+                  0.19,
+                  0.42,
+                  0.11
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "not_computed"
+              }
+            },
+            {
+              "seriesId": "ip3",
+              "label": "Astrocyte IP3",
+              "entityId": "astro-1",
+              "entityKind": "astrocyte",
+              "variableId": "IP3",
+              "panelId": "chemistry",
+              "observationKind": "point_sample",
+              "origin": {
+                "kind": "derived",
+                "method": "mean_across_trials"
+              },
+              "values": {
+                "kind": "concentration",
+                "unit": "nmol/L",
+                "values": [
+                  160,
+                  610,
+                  440,
+                  210
+                ]
+              },
+              "uncertainty": {
+                "kind": "none",
+                "reason": "not_computed"
+              }
+            }
+          ],
+          "window": {
+            "start": 0,
+            "stop": 40,
+            "unit": "ms",
+            "boundary": "[start,stop)"
+          }
+        },
+        "parameters": {
+          "layout": "shared_axis_overlay",
+          "panels": [
+            {
+              "panelId": "chemistry",
+              "label": "Astrocyte chemistry",
+              "unit": "umol/L",
+              "scale": "linear"
+            }
+          ],
+          "duplicateTimePolicy": {
+            "policy": "reject"
+          },
+          "panelOrder": "as_declared",
+          "showSamplePoints": true
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "systemVersion": "3.10.0",
+          "runId": "run-2026-07-14-c"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "why": "A calcium concentration and a membrane potential are forced onto one numeric axis. They are the same length and both are 'signals', which is exactly why this must fail: on a mV axis a resting potential of -70 mV would be drawn far below a calcium baseline of 0.073 umol/L, and a reader would see a vast negative calcium excursion that does not exist. Use small multiples, or a normalized_overlay of same-dimension series.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "ca",
+                "entityId": "astro-1",
+                "entityKind": "astrocyte",
+                "variableId": "Ca_astro",
+                "panelId": "forced",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "concentration",
+                  "unit": "umol/L",
+                  "values": [
+                    0.073,
+                    0.19,
+                    0.42
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              },
+              {
+                "seriesId": "vm",
+                "entityId": "nrn-7",
+                "entityKind": "neuron",
+                "variableId": "V_m",
+                "panelId": "forced",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "membrane_voltage",
+                  "unit": "mV",
+                  "values": [
+                    -70.0,
+                    -68.4,
+                    -64.1
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 30,
+              "unit": "ms"
+            }
+          },
+          "parameters": {
+            "layout": "shared_axis_overlay",
+            "panels": [
+              {
+                "panelId": "forced",
+                "label": "Signals",
+                "unit": "mV"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The final sample sits exactly at `stop` while the window declares [start,stop). Cortexel refuses instead of quietly cropping it: a recording sampled every 0.1 ms has one more sample under a closed window than a half-open one, and the sample that disappears is the last one, frequently the peak of the final response. Declare boundary [start,stop] or widen the window; Cortexel does not guess an endpoint convention.",
+        "expectedCode": "SCIENCE_EVENT_OUT_OF_WINDOW",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "vm",
+                "entityId": "nrn-7",
+                "entityKind": "neuron",
+                "variableId": "V_m",
+                "panelId": "membrane",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "membrane_voltage",
+                  "unit": "mV",
+                  "values": [
+                    -70.0,
+                    -68.4,
+                    -64.1
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 20,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "layout": "small_multiples",
+            "panels": [
+              {
+                "panelId": "membrane",
+                "unit": "mV"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "Two samples share t = 10 ms and the declared policy is `reject`. Cortexel never applies last-write-wins: which of 0.19 and 0.42 umol/L 'won' would depend on array order, and a recorder that emitted two rows for one step is reporting a source problem, not offering a value to pick from. Declare keep_replicates, or an aggregate whose method is then disclosed on the figure.",
+        "expectedCode": "SCIENCE_DUPLICATE_TIME_POLICY",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "per_series",
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "ca",
+                "entityId": "astro-1",
+                "entityKind": "astrocyte",
+                "variableId": "Ca_astro",
+                "panelId": "chemistry",
+                "time": {
+                  "kind": "time",
+                  "unit": "ms",
+                  "values": [
+                    0,
+                    10,
+                    10,
+                    20
+                  ]
+                },
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "concentration",
+                  "unit": "umol/L",
+                  "values": [
+                    0.073,
+                    0.19,
+                    0.42,
+                    0.11
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 30,
+              "unit": "ms"
+            }
+          },
+          "parameters": {
+            "layout": "small_multiples",
+            "panels": [
+              {
+                "panelId": "chemistry",
+                "unit": "umol/L"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The normalization statistics window runs from 40 ms back to 0 ms: it is empty/inverted. Cortexel refuses rather than compute a baseline over a window with no interior — an inverted statistics window would silently define the normalization constants over nothing. Supply start < stop for the statistics window.",
+        "expectedCode": "SCIENCE_WINDOW_INVALID",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "vm",
+                "entityId": "nrn-7",
+                "entityKind": "neuron",
+                "variableId": "V_m",
+                "panelId": "z",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "membrane_voltage",
+                  "unit": "mV",
+                  "values": [
+                    -70.0,
+                    -68.4,
+                    -65.0
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 40,
+              "unit": "ms",
+              "boundary": "[start,stop)"
+            }
+          },
+          "parameters": {
+            "layout": "normalized_overlay",
+            "panels": [
+              {
+                "panelId": "z",
+                "label": "z-score (dimensionless)",
+                "unit": "1"
+              }
+            ],
+            "normalization": {
+              "method": "z_score",
+              "statisticsWindow": {
+                "start": 40,
+                "stop": 0,
+                "unit": "ms",
+                "boundary": "[start,stop)"
+              }
+            },
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The shared clock has three samples but this series carries only two values. Cortexel never pairs values with times by best effort — a shorter value array does not mean 'reuse the last sample', it means the export is broken. Supply one value per shared-clock sample.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "vm",
+                "entityId": "nrn-7",
+                "entityKind": "neuron",
+                "variableId": "V_m",
+                "panelId": "membrane",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "membrane_voltage",
+                  "unit": "mV",
+                  "values": [
+                    -70.0,
+                    -68.4
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 30,
+              "unit": "ms"
+            }
+          },
+          "parameters": {
+            "layout": "small_multiples",
+            "panels": [
+              {
+                "panelId": "membrane",
+                "unit": "mV"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The request declares that the two signals' clocks are not aligned. The enum has no `not_aligned` member on purpose: every layout of this figure places every series on ONE shared time axis, so an unknown clock offset would be read straight off the figure as a real lead or lag. Declare same_clock, or supply a per-series timeOffset.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "not_aligned"
+            },
+            "series": [
+              {
+                "seriesId": "ip3",
+                "entityId": "astro-1",
+                "entityKind": "astrocyte",
+                "variableId": "IP3",
+                "panelId": "chemistry",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "concentration",
+                  "unit": "umol/L",
+                  "values": [
+                    0.16,
+                    0.61,
+                    0.21
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 30,
+              "unit": "ms"
+            }
+          },
+          "parameters": {
+            "layout": "small_multiples",
+            "panels": [
+              {
+                "panelId": "chemistry",
+                "unit": "umol/L"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`mV` is canonical; `millivolts` is only an accepted alias. A stable request must use the canonical code. The alias is rejected with a repair rather than silently converted, because a silent conversion changes a number the caller never sees — here it would silently decide whether the trace is in millivolts or volts, a factor of 1000.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "vm",
+                "entityId": "nrn-7",
+                "entityKind": "neuron",
+                "variableId": "V_m",
+                "panelId": "membrane",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "membrane_voltage",
+                  "unit": "millivolts",
+                  "values": [
+                    -70.0,
+                    -68.4,
+                    -64.1
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 30,
+              "unit": "ms"
+            }
+          },
+          "parameters": {
+            "layout": "small_multiples",
+            "panels": [
+              {
+                "panelId": "membrane",
+                "unit": "mV"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "`smooth` is not a parameter of this contract, and a closed schema rejects it rather than ignoring it. Smoothing is not a presentation flag: a smoothed trace is a different derived quantity with a method, a window, and an edge policy, and a caller who believed the flag took effect would publish an unsmoothed figure captioned as a smoothed one, or the reverse.",
+        "expectedCode": "SCHEMA_UNKNOWN_PROPERTY",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "vm",
+                "entityId": "nrn-7",
+                "entityKind": "neuron",
+                "variableId": "V_m",
+                "panelId": "membrane",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "membrane_voltage",
+                  "unit": "mV",
+                  "values": [
+                    -70.0,
+                    -68.4,
+                    -64.1
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 30,
+              "unit": "ms"
+            }
+          },
+          "parameters": {
+            "layout": "small_multiples",
+            "panels": [
+              {
+                "panelId": "membrane",
+                "unit": "mV"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            },
+            "smooth": true
+          },
+          "source": {
+            "kind": "simulation"
+          }
+        }
+      },
+      {
+        "why": "The request tries to assert that Cortexel validated it. Validation results are library-generated facts and are not caller-settable; the field is rejected, not ignored. A caller declares what its data IS, never what Cortexel concluded about it.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": {
+            "name": "cortexel-figure-request",
+            "version": "1.0"
+          },
+          "skill": {
+            "id": "neuro.multisignal_trace"
+          },
+          "data": {
+            "timeBase": "shared",
+            "eventTimes": {
+              "kind": "time",
+              "unit": "ms",
+              "values": [
+                0,
+                10,
+                20
+              ]
+            },
+            "timeAlignment": {
+              "kind": "same_clock"
+            },
+            "series": [
+              {
+                "seriesId": "vm",
+                "entityId": "nrn-7",
+                "entityKind": "neuron",
+                "variableId": "V_m",
+                "panelId": "membrane",
+                "observationKind": "point_sample",
+                "origin": {
+                  "kind": "recorded"
+                },
+                "values": {
+                  "kind": "membrane_voltage",
+                  "unit": "mV",
+                  "values": [
+                    -70.0,
+                    -68.4,
+                    -64.1
+                  ]
+                },
+                "uncertainty": {
+                  "kind": "none",
+                  "reason": "single_trial"
+                }
+              }
+            ],
+            "window": {
+              "start": 0,
+              "stop": 30,
+              "unit": "ms"
+            }
+          },
+          "parameters": {
+            "layout": "small_multiples",
+            "panels": [
+              {
+                "panelId": "membrane",
+                "unit": "mV"
+              }
+            ],
+            "duplicateTimePolicy": {
+              "policy": "reject"
+            }
+          },
+          "source": {
+            "kind": "simulation"
+          },
+          "validation": {
+            "structural": {
+              "result": "passed"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

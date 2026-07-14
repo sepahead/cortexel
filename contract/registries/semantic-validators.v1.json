@@ -1,0 +1,224 @@
+{
+  "registry": "cortexel-semantic-validators",
+  "version": "1.0",
+  "description": "Closed registry of NAMED cross-field rules. JSON Schema checks the shape of a request; these check its meaning. Adding a validator requires an entry here, an independent TypeScript implementation, an independent Python implementation, a complexity bound, and a valid + nearest-invalid + adversarial-boundary vector.\n\nNo validator is expressed as an evaluable expression. The registry wires an id to a hand-written function; it never generates algorithm code from a string.",
+
+  "validators": [
+    {
+      "id": "unit.dimension_match", "revision": 1,
+      "description": "Every quantity's unit dimension matches its declared kind, and quantities combined on one axis share a dimension. Two arrays are not comparable merely because they are the same length: a calcium concentration and a membrane potential do not belong on one numeric axis.",
+      "errorCodes": ["SCIENCE_UNIT_DIMENSION_MISMATCH"],
+      "complexity": "O(n) in quantities", "tsSymbol": "unitDimensionMatch", "pySymbol": "unit_dimension_match", "oracle": "hand"
+    },
+    {
+      "id": "unit.canonical_code", "revision": 1,
+      "description": "A stable request uses canonical unit codes. An accepted alias is REJECTED with a repair rather than silently converted, because a silent conversion changes a number without the caller ever seeing it. Adapters and `cortexel migrate` may convert aliases; normal validation may not.",
+      "errorCodes": ["SCIENCE_UNIT_ALIAS_NOT_CANONICAL"],
+      "complexity": "O(n) in quantities", "tsSymbol": "unitCanonicalCode", "pySymbol": "unit_canonical_code", "oracle": "hand"
+    },
+    {
+      "id": "series.equal_length", "revision": 1,
+      "description": "Parallel arrays that describe the same observations have identical lengths. Values are never paired with times by best effort.",
+      "errorCodes": ["SEMANTIC_LENGTH_MISMATCH"],
+      "complexity": "O(1) per array", "tsSymbol": "seriesEqualLength", "pySymbol": "series_equal_length", "oracle": "hand"
+    },
+    {
+      "id": "ids.unique", "revision": 1,
+      "description": "Declared identifiers are unique where identity must be unambiguous. A duplicate id must fail BEFORE selection, edge binding, or search can diverge on it.",
+      "errorCodes": ["SEMANTIC_DUPLICATE_ID"],
+      "complexity": "O(n)", "tsSymbol": "idsUnique", "pySymbol": "ids_unique", "oracle": "hand"
+    },
+    {
+      "id": "bins.strictly_increasing", "revision": 1,
+      "description": "Bin edges are finite and strictly increasing. n edges define n-1 bins, half-open except for the documented final-edge inclusion.",
+      "errorCodes": ["SCIENCE_BIN_EDGES_INVALID"],
+      "complexity": "O(n) in edges", "tsSymbol": "binsStrictlyIncreasing", "pySymbol": "bins_strictly_increasing", "oracle": "hand"
+    },
+    {
+      "id": "window.valid", "revision": 1,
+      "description": "An analysis window has start < stop and finite bounds, and its boundary convention is explicit.",
+      "errorCodes": ["SCIENCE_WINDOW_INVALID"],
+      "complexity": "O(1)", "tsSymbol": "windowValid", "pySymbol": "window_valid", "oracle": "hand"
+    },
+    {
+      "id": "events.within_window", "revision": 1,
+      "description": "Events outside the declared observation window are counted and reported. They are never silently dropped, and the excluded count always reaches the artifact and the disclosure.",
+      "errorCodes": ["SCIENCE_EVENT_OUT_OF_WINDOW"],
+      "complexity": "O(n) in events", "tsSymbol": "eventsWithinWindow", "pySymbol": "events_within_window", "oracle": "hand"
+    },
+    {
+      "id": "events.sender_universe_declared", "revision": 1,
+      "description": "The RECORDED sender universe is declared. Cortexel never infers population size from the senders that happened to spike — a neuron that stayed silent was still recorded, and treating it as absent inflates every per-neuron rate.",
+      "errorCodes": ["SCIENCE_POPULATION_UNIVERSE_REQUIRED", "SEMANTIC_UNKNOWN_REFERENCE"],
+      "complexity": "O(n) in events", "tsSymbol": "eventsSenderUniverseDeclared", "pySymbol": "events_sender_universe_declared", "oracle": "hand"
+    },
+    {
+      "id": "events.trial_universe_declared", "revision": 1,
+      "description": "The trial universe or count is declared. Trial count is never inferred from the maximum trial id: a trial in which nothing happened is still a trial, and omitting it inflates the per-trial normalization.",
+      "errorCodes": ["SCIENCE_TRIAL_UNIVERSE_REQUIRED", "SEMANTIC_UNKNOWN_REFERENCE"],
+      "complexity": "O(n) in events", "tsSymbol": "eventsTrialUniverseDeclared", "pySymbol": "events_trial_universe_declared", "oracle": "hand"
+    },
+    {
+      "id": "rate.denominator_positive", "revision": 1,
+      "description": "A rate's recorded-sender denominator is a positive integer.",
+      "errorCodes": ["SCIENCE_DENOMINATOR_INVALID"],
+      "complexity": "O(1)", "tsSymbol": "rateDenominatorPositive", "pySymbol": "rate_denominator_positive", "oracle": "hand"
+    },
+    {
+      "id": "rate.verify_normalization", "revision": 1,
+      "description": "When pre-binned rows supply BOTH a raw count and a normalized rate, the rate is re-derived and checked within a tight binary64 tolerance. Cortexel re-computes rather than trusts.",
+      "errorCodes": ["SCIENCE_NORMALIZATION_UNVERIFIABLE", "SCIENCE_COUNT_NOT_INTEGER"],
+      "complexity": "O(n) in bins", "tsSymbol": "rateVerifyNormalization", "pySymbol": "rate_verify_normalization", "oracle": "hand"
+    },
+    {
+      "id": "histogram.normalization_consistent", "revision": 1,
+      "description": "count => exact non-negative integers. probability => values sum to 1 within tolerance. density => value x binWidth integrates to 1 within tolerance, and the unit is the reciprocal of the binned axis. An EMPTY histogram is never normalized into NaN or a fabricated distribution.",
+      "errorCodes": ["SCIENCE_COUNT_NOT_INTEGER", "SCIENCE_DENSITY_DOES_NOT_INTEGRATE", "SCIENCE_NORMALIZATION_UNVERIFIABLE"],
+      "complexity": "O(n) in bins", "tsSymbol": "histogramNormalizationConsistent", "pySymbol": "histogram_normalization_consistent", "oracle": "hand+elephant"
+    },
+    {
+      "id": "isi.within_train_only", "revision": 1,
+      "description": "Intervals are formed ONLY between successive events of the same sender (and the same trial when trials are present). An interval is never formed between two neurons or across a trial boundary — such a number is not an interspike interval at all.",
+      "errorCodes": ["SCIENCE_NEGATIVE_INTERVAL"],
+      "complexity": "O(n log n) in events", "tsSymbol": "isiWithinTrainOnly", "pySymbol": "isi_within_train_only", "oracle": "hand+elephant"
+    },
+    {
+      "id": "isi.zero_interval_policy", "revision": 1,
+      "description": "A zero-length interval requires an explicit policy: it is valid only when the source profile permits duplicate same-sender events. Zero intervals are never silently discarded.",
+      "errorCodes": ["SCIENCE_ZERO_INTERVAL_POLICY"],
+      "complexity": "O(n)", "tsSymbol": "isiZeroIntervalPolicy", "pySymbol": "isi_zero_interval_policy", "oracle": "hand"
+    },
+    {
+      "id": "psth.alignment_declared", "revision": 1,
+      "description": "A PSTH declares its alignment reference per trial, its relative window, its selected sender universe, and its trial count. Its normalization denominator is therefore verifiable rather than assumed.",
+      "errorCodes": ["SCIENCE_TRIAL_UNIVERSE_REQUIRED", "SCIENCE_DENOMINATOR_INVALID"],
+      "complexity": "O(n) in events", "tsSymbol": "psthAlignmentDeclared", "pySymbol": "psth_alignment_declared", "oracle": "hand+elephant"
+    },
+    {
+      "id": "correlogram.lag_range_valid", "revision": 1,
+      "description": "The lag range is finite, the bin width is positive and tiles it, and the pairwise cost is within budget before any pair is formed.",
+      "errorCodes": ["SCIENCE_LAG_RANGE_INVALID", "RESOURCE_PAIRWISE_EXCEEDED"],
+      "complexity": "O(1) preflight", "tsSymbol": "correlogramLagRangeValid", "pySymbol": "correlogram_lag_range_valid", "oracle": "hand"
+    },
+    {
+      "id": "correlogram.statistic_denominator", "revision": 1,
+      "description": "A correlation COEFFICIENT requires a recognized formula and a valid variance denominator. A scaled pair count is a scaled pair count; calling it a correlation coefficient would be a false statement about what the number is.",
+      "errorCodes": ["SCIENCE_CORRELATION_DENOMINATOR_INVALID"],
+      "complexity": "O(1)", "tsSymbol": "correlogramStatisticDenominator", "pySymbol": "correlogram_statistic_denominator", "oracle": "hand+elephant"
+    },
+    {
+      "id": "topology.scope_declared", "revision": 1,
+      "description": "Every network figure declares a NetworkScopeV1.",
+      "errorCodes": ["SCOPE_REQUIRED"],
+      "complexity": "O(1)", "tsSymbol": "topologyScopeDeclared", "pySymbol": "topology_scope_declared", "oracle": "hand"
+    },
+    {
+      "id": "topology.scope_supports_claim", "revision": 1,
+      "description": "The declared scope can actually support the figure's claim. Under NEST's MPI semantics a rank holds the connections whose TARGET it owns; a target-rank-local snapshot therefore supports a LOCAL in-degree but can never support a global out-degree, because the connections leaving a local source to a remote target live on the other rank. A sampled scope supports no completeness claim at all. When a figure joins two independently declared scopes in ONE request, the declared facts they share must AGREE: two scopes that disagree on snapshot time or world size describe two different networks, and drawing them together asserts a coexistence neither observed (SCOPE_MERGE_CONFLICT). Agreement is checked only between scopes present in the same request; it can never establish that separately merged ranks came from one run.",
+      "errorCodes": ["SCOPE_LOCAL_CANNOT_CLAIM_GLOBAL", "SCOPE_OUT_DEGREE_FROM_RANK_LOCAL", "SCOPE_INCOMPATIBLE_WITH_SKILL", "SCOPE_MERGE_INCOMPLETE", "SCOPE_MERGE_CONFLICT"],
+      "complexity": "O(1)", "tsSymbol": "topologyScopeSupportsClaim", "pySymbol": "topology_scope_supports_claim", "oracle": "hand+nest"
+    },
+    {
+      "id": "topology.node_universe_declared", "revision": 1,
+      "description": "A figure whose meaning depends on isolates or zero-degree nodes declares a complete node universe. An edge list can only prove that no edge was OBSERVED; it can never prove that a node has degree zero.",
+      "errorCodes": ["SCOPE_NODE_UNIVERSE_REQUIRED"],
+      "complexity": "O(1)", "tsSymbol": "topologyNodeUniverseDeclared", "pySymbol": "topology_node_universe_declared", "oracle": "hand"
+    },
+    {
+      "id": "topology.edge_endpoints_in_universe", "revision": 1,
+      "description": "Every edge endpoint is a member of the declared universe. Cortexel never silently extends a universe the caller declared complete.",
+      "errorCodes": ["SEMANTIC_UNKNOWN_REFERENCE"],
+      "complexity": "O(e)", "tsSymbol": "topologyEdgeEndpointsInUniverse", "pySymbol": "topology_edge_endpoints_in_universe", "oracle": "hand"
+    },
+    {
+      "id": "topology.multapse_aggregation_declared", "revision": 1,
+      "description": "When more than one connection maps to a matrix cell, an aggregation is declared. `no_aggregation` ASSERTS at most one connection per cell and fails if that is untrue. There is no implicit 'last edge wins' — that would silently discard a real synapse.",
+      "errorCodes": ["SCIENCE_AGGREGATION_REQUIRED"],
+      "complexity": "O(e)", "tsSymbol": "topologyMultapseAggregationDeclared", "pySymbol": "topology_multapse_aggregation_declared", "oracle": "hand"
+    },
+    {
+      "id": "topology.delay_positive", "revision": 1,
+      "description": "Every delay is finite and strictly positive.",
+      "errorCodes": ["SCIENCE_DELAY_NONPOSITIVE"],
+      "complexity": "O(e)", "tsSymbol": "topologyDelayPositive", "pySymbol": "topology_delay_positive", "oracle": "hand"
+    },
+    {
+      "id": "topology.weight_group_compatible", "revision": 1,
+      "description": "Weights pooled into one figure share a declared dimension and, when models are declared, a synapse model. A NEST weight's physical meaning depends on the model: pooling a conductance-like weight with a current-like weight produces a histogram of nothing.",
+      "errorCodes": ["SCIENCE_WEIGHT_GROUP_INCOMPATIBLE"],
+      "complexity": "O(e)", "tsSymbol": "topologyWeightGroupCompatible", "pySymbol": "topology_weight_group_compatible", "oracle": "hand"
+    },
+    {
+      "id": "degree.counting_policy_declared", "revision": 1,
+      "description": "Degree counting declares whether each connection ENTRY counts (so a multapse contributes more than one) or each unique NEIGHBOUR counts, and how an autapse contributes. The two give different answers and the difference is scientific, not cosmetic.",
+      "errorCodes": ["SCIENCE_AGGREGATION_REQUIRED"],
+      "complexity": "O(e)", "tsSymbol": "degreeCountingPolicyDeclared", "pySymbol": "degree_counting_policy_declared", "oracle": "hand+nest"
+    },
+    {
+      "id": "spatial.position_coverage_complete", "revision": 1,
+      "description": "Declared positions cover the selected node universe. A node with a missing position is REPORTED — never placed at the origin, which would invent a measurement.",
+      "errorCodes": ["SCOPE_POSITION_COVERAGE_INCOMPLETE"],
+      "complexity": "O(n)", "tsSymbol": "spatialPositionCoverageComplete", "pySymbol": "spatial_position_coverage_complete", "oracle": "hand"
+    },
+    {
+      "id": "spatial.equal_axis_units", "revision": 1,
+      "description": "Both spatial axes carry the same unit dimension so an equal aspect ratio is meaningful.",
+      "errorCodes": ["SCIENCE_UNIT_DIMENSION_MISMATCH"],
+      "complexity": "O(1)", "tsSymbol": "spatialEqualAxisUnits", "pySymbol": "spatial_equal_axis_units", "oracle": "hand"
+    },
+    {
+      "id": "uncertainty.valid", "revision": 1,
+      "description": "Bounds are ordered and finite, lengths match the estimate, a level lies in (0,1), a sample count is positive, dispersion is non-negative, and units are compatible. An arbitrary range is never converted into a confidence or credible interval.",
+      "errorCodes": ["SCIENCE_UNCERTAINTY_BOUNDS_INVALID", "SCIENCE_UNCERTAINTY_LEVEL_INVALID", "SEMANTIC_LENGTH_MISMATCH"],
+      "complexity": "O(n)", "tsSymbol": "uncertaintyValid", "pySymbol": "uncertainty_valid", "oracle": "hand"
+    },
+    {
+      "id": "uncertainty.supported_variant", "revision": 1,
+      "description": "The supplied uncertainty variant is one this figure declares it can render truthfully. `credible_interval` additionally requires an attestation establishing a posterior analysis: structural validity alone never establishes calibration.",
+      "errorCodes": ["SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL", "PROVENANCE_ATTESTATION_UNVERIFIED"],
+      "complexity": "O(1)", "tsSymbol": "uncertaintySupportedVariant", "pySymbol": "uncertainty_supported_variant", "oracle": "hand"
+    },
+    {
+      "id": "trace.duplicate_time_policy", "revision": 1,
+      "description": "Duplicate timestamps in one series require an explicit policy: reject, keep_replicates, or a named aggregate. Last-write-wins is never applied, because which sample won would depend on array order.",
+      "errorCodes": ["SCIENCE_DUPLICATE_TIME_POLICY"],
+      "complexity": "O(n log n)", "tsSymbol": "traceDuplicateTimePolicy", "pySymbol": "trace_duplicate_time_policy", "oracle": "hand"
+    },
+    {
+      "id": "trace.axis_dimension_compatible", "revision": 1,
+      "description": "Series overlaid on a shared axis have compatible quantity dimensions. Incompatible signals are laid out as small multiples instead of being forced onto one axis.",
+      "errorCodes": ["SCIENCE_UNIT_DIMENSION_MISMATCH"],
+      "complexity": "O(s) in series", "tsSymbol": "traceAxisDimensionCompatible", "pySymbol": "trace_axis_dimension_compatible", "oracle": "hand"
+    },
+    {
+      "id": "phase_plane.derivative_dimension", "revision": 1,
+      "description": "A vector-field sample's derivative has the dimension of its state variable per unit time, and the grid is finite and well-shaped.",
+      "errorCodes": ["SCIENCE_UNIT_DIMENSION_MISMATCH"],
+      "complexity": "O(n)", "tsSymbol": "phasePlaneDerivativeDimension", "pySymbol": "phase_plane_derivative_dimension", "oracle": "hand"
+    },
+    {
+      "id": "weight_trace.observation_kind_declared", "revision": 1,
+      "description": "A synaptic-weight trace declares whether its samples are event-updated (piecewise-constant, drawn as steps) or point samples of a continuous value (drawn as a line). Drawing an event-updated weight as a smooth line would invent intermediate values that never existed.",
+      "errorCodes": ["SCIENCE_DUPLICATE_TIME_POLICY", "SEMANTIC_LENGTH_MISMATCH"],
+      "complexity": "O(n)", "tsSymbol": "weightTraceObservationKindDeclared", "pySymbol": "weight_trace_observation_kind_declared", "oracle": "hand"
+    },
+    {
+      "id": "response_curve.estimator_declared", "revision": 1,
+      "description": "A response curve declares its response method and, when it supplies aggregates rather than raw repeats, its sample counts and uncertainty. Unordered categorical conditions are never connected as if they were continuous.",
+      "errorCodes": ["SCIENCE_UNCERTAINTY_LEVEL_INVALID", "SEMANTIC_LENGTH_MISMATCH"],
+      "complexity": "O(n)", "tsSymbol": "responseCurveEstimatorDeclared", "pySymbol": "response_curve_estimator_declared", "oracle": "hand"
+    },
+    {
+      "id": "provenance.no_caller_assurance", "revision": 1,
+      "description": "The request contains no field that only Cortexel may author. This is checked on the RAW request, before any normalization, so a forbidden field cannot be smuggled in through a default.",
+      "errorCodes": ["PROVENANCE_CALLER_ASSURANCE_FORBIDDEN"],
+      "complexity": "O(n) in request nodes", "tsSymbol": "provenanceNoCallerAssurance", "pySymbol": "provenance_no_caller_assurance", "oracle": "hand"
+    },
+    {
+      "id": "provenance.note_safe_display", "revision": 1,
+      "description": "A caller's declared note is within its length limit and free of control, bidi-override, and zero-width characters — which could otherwise visually reorder or conceal a mandatory disclosure rendered beside it.",
+      "errorCodes": ["PROVENANCE_NOTE_TOO_LONG", "PROVENANCE_NOTE_UNSAFE_DISPLAY"],
+      "complexity": "O(n)", "tsSymbol": "provenanceNoteSafeDisplay", "pySymbol": "provenance_note_safe_display", "oracle": "hand"
+    }
+  ]
+}

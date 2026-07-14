@@ -1,0 +1,684 @@
+{
+  "id": "network.adjacency_matrix",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Connection adjacency matrix (target rows, source columns)",
+
+  "purpose": {
+    "canonicalQuestion": "Over one declared complete, ordered node universe, which cells of the target-row by source-column matrix contain at least one connection — or exactly how many connection entries — and which cells were actually observed, under a declared network scope and snapshot time?",
+    "cannotEstablish": [
+      "That an empty row means the target has in-degree zero in the wider network. The matrix is complete only over the DECLARED node universe: a target receiving 40 connections from unselected nodes still shows an empty row here.",
+      "That an unobserved cell contains no connection. Under a rank-local or sampled scope most cells are unobserved, and unobserved is not absence — it is the snapshot declining to speak.",
+      "Connection strength. A cell is present because a connection EXISTS, not because it is strong: a zero-weight synapse is present here and appears as the value 0 in network.weight_matrix. The two figures can disagree and both be right.",
+      "Functional or effective connectivity. This is a structural snapshot: a present cell does not mean one neuron influenced another, and an absent cell does not mean the two were independent.",
+      "That a visible block or cluster is a property of the network rather than of the declared node ORDER. Reordering can create or destroy every apparent block; Cortexel draws only the declared order and never sorts by connectivity.",
+      "That the network still looks like this. The matrix is a snapshot at a declared time; under structural plasticity it says nothing about connectivity before or after that instant.",
+      "That multiplicity is strength. Three parallel connections are not three times the influence of one — their weights may differ, may have opposite signs, and adjacency never looks at them.",
+      "That a present cell is a monosynaptic pathway of a particular kind. Adjacency pools every declared synapse model in the supplied rows; the models are listed in the table, but the cell does not distinguish them."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Row and column order is the DECLARED order of the single node universe and is never derived from the connection data. Stable Cortexel offers no seriation, clustering, spectral ordering, or degree sort: those manufacture visible block structure, and no reader can tell a discovered block from a sorted one.",
+      "Orientation is FIXED: rows are connection TARGETS and columns are connection SOURCES, both indexed into the SAME declared node universe, so cell (rowIndex(t), columnIndex(s)) holds the connection from source s to target t. This follows NEST's convention and is not caller-configurable; a caller-supplied universe label is appended to the library-generated role words, never substituted for them.",
+      "Because rows and columns share one ordered universe, the visual diagonal is the self-connection diagonal BY CONSTRUCTION: cell (i, i) is node i connecting to itself. There is no separate row and column order that could fall out of alignment.",
+      "Connection rows are NOT assumed to arrive in any order. They are stably sorted by (targetId, sourceId, edgeId, original ordinal) before cell binding; the original order and its digest are retained in the artifact. No cell value can depend on the caller's array order.",
+      "Multapses are PRESERVED as distinct rows and are never deduplicated. Two rows with the same (source, target) are two connections — that is a fact about the network, not a duplicate-entry error to be resolved.",
+      "Autapses (a row whose target id equals its source id) are counted like any other connection. The diagonal cell is never blanked, masked, or excluded, because a blank diagonal reads as 'this neuron does not connect to itself' — a claim the data would be contradicting.",
+      "Ids are matched by exact string equality. There is no case folding, no whitespace trimming, and no numeric coercion: a source id of '07' is not the node '7'. Numeric ids are normalized to canonical decimal strings by the adapter, before Cortexel sees them.",
+      "`weights` and `delays`, when the snapshot carries them, are CARRIED but never used. They are canonicalized, validated, and written to the table as per-connection attributes; they never enter a cell value. A weight of zero is still a connection and its cell is still present. A null attribute is a missing ATTRIBUTE, never a missing connection.",
+      "Negative zero is normalized to zero upstream, so no cell index, count, or carried attribute can carry a value that is invisible in canonical JSON but distinguishable in JavaScript."
+    ],
+    "derivation": [
+      "Cell binding: each connection row (source s, target t) maps to the single cell (rowIndex(t), columnIndex(s)) through one id->index map over the declared node universe, built once. A row whose endpoint is outside the universe is a contradiction and fails; it is never appended to the axis and never discarded.",
+      "binary_presence: cell = 1 if at least one connection row maps to it, otherwise the cell is not present. The multiplicity is STILL computed and written to the table and sidecar — binary mode withholds multiplicity from the paint, it never destroys it.",
+      "multiplicity: cell = the exact count of connection ROWS mapping to it, an integer >= 1, including multapses and autapses. It is a count of entries, not of unique neighbours; a cell can never be a present 0, because a present cell has at least one connection.",
+      "multapseAggregation declares how multiple connection rows in one cell combine into the drawn value. `no_aggregation` ASSERTS that at most one connection maps to any cell and FAILS (SCIENCE_AGGREGATION_REQUIRED) with the offending cell and its count if that is untrue. There is no implicit collapse and no 'last edge wins'.",
+      "An EMPTY connection set is a legal snapshot, not an empty figure. Under a complete scope every cell of the declared universe is then an observed absence, and the zero matrix is exactly the claim 'none of these neurons are connected'. It is drawn, never refused as RENDER_NO_DATA: what this figure enumerates is the universe, not the connections.",
+      "Observability is a THIRD state, independent of the value. A cell is observed if and only if its row target is in the observed-target set; only inside an observed row is an empty cell a measured absence. Cells in unobserved rows are drawn and tabulated as `unobserved` and are never reported as absent.",
+      "The observed-target set: the complete universe under `single_process` and a fully merged `global_merged`; exactly the declared `observedTargetIds` under `mpi_target_rank_local` (the targets this rank owns); and the EMPTY set under `sampled`, where no absence can be established at all.",
+      "Edge identity: when `edgeIds` are absent, a deterministic ordinal identity is assigned AFTER the canonical sort and the assignment method is recorded, so a cell's contributing-connection list is reproducible without depending on the caller's array order.",
+      "Complexity: O(e log e) for the stable sort and O(e) for binding, over one id->index map built in O(n). The dense matrix is NEVER materialized: working memory is O(e + n), which is why a sparse 4000-node snapshot is drawable while its dense export is not.",
+      "Numeric tolerance: NONE, anywhere in a cell value. Every value this figure draws is an exact non-negative integer — a presence bit or an exact count of connection rows. Carried weights and delays are binary64 and are validated, but they never enter a cell value, so no floating-point comparison can change what is drawn."
+    ],
+    "scopeRules": [
+      "The node universe must be declared with `complete: true`. A matrix axis IS a universe claim — a reader counts the rows and believes that is the node set — so an axis the caller cannot vouch for is refused rather than disclosed.",
+      "A NetworkScopeV1 is required and must carry `snapshotTime`. Under structural plasticity an adjacency matrix without a time is not merely unlabelled, it is undefined: the same network yields different matrices at different instants.",
+      "Legal scope x cellMode: `single_process` and a fully merged `global_merged` accept both cell modes and observe every row. `mpi_target_rank_local` accepts both cell modes but observes only the declared local targets. `sampled` accepts ONLY `binary_presence` and observes no row.",
+      "Rows-as-targets is precisely what makes rank-local evidence expressible. Under MPI a rank holds every connection whose TARGET it owns, so a locally-owned target's ROW is complete. `mpi_target_rank_local` therefore requires `localTargetUniverseComplete: true` and an explicit `observedTargetIds`.",
+      "`global_merged` requires `mergedRanks` to cover 0..worldSize-1 exactly once (SCOPE_MERGE_INCOMPLETE). A partial rank set stays partial and cannot be upgraded into a complete matrix by relabelling.",
+      "Cortexel SELECTS and FILTERS nothing. The connection rows the caller supplies are the network the figure claims to show. A model-restricted or otherwise reduced edge set must be declared as a `sampled` scope with method `declared_subset`, under which no absence claim is permitted."
+    ],
+    "uncertaintySupport": ["none"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "A connection snapshot plus the single complete, ordered node universe that becomes both axes. There is no `matrix` field: Cortexel derives the cells from the connections and the universe, so a caller can never hand it a matrix whose cells disagree with its own edge list.",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE, ordered set of nodes. Its order is the row order AND the column order, so the visual diagonal is the self-connection diagonal by construction. `complete` must be true, or no empty cell can be read as a measured absence."
+        },
+        "connections": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows",
+          "description": "Every connection, one row per connection. Multapses are distinct rows and are never deduplicated. Carried `weights` and `delays` are validated and tabulated but never enter a cell value."
+        },
+        "scope": {
+          "description": "What this snapshot actually saw. It decides which rows can support an absence claim and which cell modes are legal. `snapshotTime` is REQUIRED here even though the shared type leaves it optional: under structural plasticity an undated adjacency matrix is not merely unlabelled, it is undefined.",
+          "allOf": [
+            { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope" },
+            { "type": "object", "required": ["snapshotTime"] }
+          ]
+        },
+        "observedTargetIds": {
+          "type": "array",
+          "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+          "minItems": 1,
+          "maxItems": 100000,
+          "description": "The row targets whose incoming connections were COMPLETELY observed — the rank's own targets. Only inside these rows is an empty cell a measured absence. REQUIRED under `mpi_target_rank_local` and REJECTED under every other scope, where the observed set is derived: the whole universe under `single_process` and a fully merged `global_merged`, and the EMPTY set under `sampled`."
+        }
+      },
+      "required": ["nodeUniverse", "connections", "scope"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "Rank-local evidence cannot be read off the connections: a rank holds every connection whose TARGET it owns, but nothing in the edge list says WHICH targets those are. Without `observedTargetIds` every remote target's row would be drawn empty, and an empty row reads as a measured in-degree of zero. It is therefore REQUIRED under `mpi_target_rank_local` and REJECTED under every other scope, where the observed set is derived — accepting it there would let a caller hand Cortexel an observability claim that the derivation then silently ignores.",
+          "if": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": { "kind": { "const": "mpi_target_rank_local" } },
+                "required": ["kind"]
+              }
+            },
+            "required": ["scope"]
+          },
+          "then": { "required": ["observedTargetIds"] },
+          "else": { "not": { "required": ["observedTargetIds"] } }
+        }
+      ]
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "selectionLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "universeLabel": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "A name for the node population, e.g. \"L2/3 excitatory\". It is APPENDED to the library-generated role words \"Target\" (rows) and \"Source\" (columns); it can never replace them, because a caller who relabelled the axes could transpose the meaning of the figure without transposing the data."
+        },
+        "cellMode": {
+          "type": "string",
+          "enum": ["binary_presence", "multiplicity"],
+          "description": "binary_presence: a cell is 1 when at least one connection lands in it. multiplicity: a cell is the exact count of connection rows in it, multapses and autapses included. They are different quantities: binary presence answers 'is there a connection', multiplicity answers 'how many connection entries are there'."
+        },
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How more than one connection in one cell is combined into the drawn value. There is no default and no 'last edge wins'. `no_aggregation` ASSERTS at most one connection per cell and FAILS (SCIENCE_AGGREGATION_REQUIRED) if that is untrue, so the information loss of collapsing multapses is always a choice the caller made on the record."
+        },
+        "multiplicityScale": {
+          "type": "string",
+          "enum": ["linear", "log"],
+          "description": "The value scale for multiplicity. `log` is safe here because a present cell has multiplicity >= 1, so the domain never contains zero. Refused with binary_presence: a two-valued presence domain has no scale to choose."
+        },
+        "tableCellEnumeration": {
+          "type": "string",
+          "enum": ["present_cells_only", "dense"],
+          "default": "present_cells_only",
+          "description": "present_cells_only (the default): the table lists every present cell, and the complete ordered universe plus the per-row observability let a reader derive the status of every cell that is not listed. dense: every cell is enumerated with an explicit status, which is exact but costs rows x columns entries and is refused above the matrix-cell and sidecar budgets."
+        }
+      },
+      "required": ["selectionId", "cellMode", "multapseAggregation"],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "description": "A scale for a two-valued domain is meaningless, so the field is rejected rather than ignored.",
+          "if": {
+            "type": "object",
+            "properties": { "cellMode": { "const": "binary_presence" } },
+            "required": ["cellMode"]
+          },
+          "then": { "not": { "required": ["multiplicityScale"] } }
+        }
+      ]
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/synapseModels",
+            "/data/connections/weights/values",
+            "/data/connections/delays/values"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": [
+          "/data/nodeUniverse/ids",
+          "/data/connections/edgeIds",
+          "/data/observedTargetIds"
+        ]
+      }
+    },
+    { "id": "topology.scope_declared" },
+    { "id": "topology.node_universe_declared" },
+    { "id": "topology.edge_endpoints_in_universe" },
+    { "id": "topology.scope_supports_claim" },
+    { "id": "topology.multapse_aggregation_declared" },
+    { "id": "topology.delay_positive" }
+  ],
+
+  "renderer": { "id": "figure.matrix", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "matrix_value_quantize"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE",
+    "RANK_LOCAL_SCOPE",
+    "SAMPLED_EDGES",
+    "ABSENT_IS_NOT_ZERO",
+    "MULTAPSE_AGGREGATED",
+    "MISSING_VALUES_PRESENT",
+    "UNIT_CONVERTED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Adjacency matrix for {selectionLabel}: {nodeCount} nodes as target rows by source columns, in target-row by source-column orientation over one declared node universe. Cell mode {cellMode}. {presentCellCount} cells contain at least one connection, derived from {connectionCount} connection rows; multiplicity ranges from {multiplicityMin} to {multiplicityMax}. {observedRowCount} of {nodeCount} rows are fully observed; {unobservedCellCount} cells are unobserved and are not claimed absent. {autapseCellCount} cells are self-connections. Scope: {scopeStatement}. Snapshot time {snapshotTime} {snapshotTimeUnit}. {multapseStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "rowIndex", "header": "Row (target index)", "description": "Zero-based position in the declared node universe. The order is the declared order and is never derived from the connections." },
+      { "key": "targetId", "header": "Target (row)", "description": "The connection's TARGET. The orientation is fixed by the contract and is not caller-configurable." },
+      { "key": "columnIndex", "header": "Column (source index)", "description": "Zero-based position in the declared node universe." },
+      { "key": "sourceId", "header": "Source (column)", "description": "The connection's SOURCE." },
+      { "key": "cellStatus", "header": "Status", "description": "present, absent_observed, or unobserved. absent_observed is a measured absence. unobserved means this snapshot cannot speak to the cell, and it is never reported as absent." },
+      { "key": "cellValue", "header": "Cell value", "description": "1 or 0 in binary_presence mode; the exact multiplicity in multiplicity mode. Empty when the cell is unobserved, because there is no value to report." },
+      { "key": "multiplicity", "header": "Connections", "description": "The exact count of connection rows in the cell, multapses and autapses included. Present in BOTH cell modes: binary presence stops drawing multiplicity, it never destroys it." },
+      { "key": "isAutapse", "header": "Self-connection", "description": "True when the row target id equals the column source id. Autapses are always counted and the diagonal cell is never blanked." },
+      { "key": "edgeIds", "header": "Contributing connections", "description": "The stable ids of every connection row in the cell, or the deterministic ordinal identities assigned after the canonical sort when the caller supplied none." },
+      { "key": "synapseModels", "header": "Synapse models", "description": "The declared models of the contributing connections. Adjacency pools models by design; they are listed so a reader can see exactly what was pooled." },
+      { "key": "carriedAttributes", "header": "Carried weight / delay", "description": "Per-connection weight and delay when the snapshot supplied them, with their units. Shown, never used: a cell is present because a connection exists. A zero-weight connection is present." },
+      { "key": "scope", "header": "Scope", "description": "The scope under which this cell was, or was not, observed." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "nest.GetConnections",
+      "version": "3.10.0",
+      "status": "not_run",
+      "notes": "The intended differential oracle is a deterministic NEST script (Create + Connect with allow_multapses and allow_autapses) whose GetConnections output is compared cell by cell against this contract's derivation, including the target-row convention, multapse counts, autapse diagonal, and rank-local target ownership. A second, adversarial oracle is networkx: its adjacency convention is A[source][target], the TRANSPOSE of Cortexel's, so the comparison must transpose explicitly and a forgotten transpose fails loudly instead of producing a plausible mirrored matrix. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    {
+      "system": "nest.GetConnections",
+      "status": "supported",
+      "notes": "The adapter must take the node universe from the NodeCollection, never infer it from the returned connections — an edge list can only show that no connection was observed, never that a node has degree zero. It accepts the official singular/scalar form or canonical plural arrays, never both, never broadcasts an optional scalar across rows, and never deduplicates multapses. Accessor-bearing input is rejected before any getter can run (ADAPTER_ACCESSOR_INPUT_REJECTED)."
+    },
+    {
+      "system": "nest.SynapseCollection (MPI, target-rank-local)",
+      "status": "partial",
+      "notes": "The rank-local snapshot maps cleanly onto this figure because rows are targets: the rank holds every connection whose target it owns, so each locally-owned target's ROW is complete. The adapter cannot discover which targets those are from the connections alone; the caller must declare observedTargetIds. The output stays mpi_target_rank_local and is never merged implicitly."
+    },
+    {
+      "system": "networkx.DiGraph",
+      "status": "partial",
+      "notes": "networkx's adjacency is A[source][target] — the transpose of Cortexel's convention — so the adapter transposes explicitly and records that it did. The node universe comes from G.nodes so that isolates survive; taking it from G.edges would silently delete every isolate row and column. A MultiDiGraph's parallel edges become distinct connection rows and are never collapsed."
+    },
+    {
+      "system": "dense numeric matrix (numpy / scipy.sparse)",
+      "status": "rejected",
+      "notes": "A bare array carries no node ids, no orientation, and no way to distinguish an unobserved cell from an observed absence. Those are exactly the three facts this contract exists to pin down, so an array that has lost them cannot be promoted back into a matrix figure. Supply the connection rows and the node universe instead."
+    }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.adjacency_matrix"],
+    "notes": "The legacy payload left the orientation implicit, had no cell mode, no network scope, and no declared node universe — so an empty cell meant nothing in particular and a multapse meant whatever the drawing code happened to do. Migration REQUIRES the node universe, a cell mode, a multapse aggregation, and a scope with a snapshot time, and it blocks with MIGRATION_INFORMATION_MISSING rather than guessing any of them. The removed `nest.connectivity_matrix` is NOT aliased here: it never said whether it meant adjacency, weight, or delay, and those differ precisely in how they treat an absent cell, a zero value, and a repeated connection, so `cortexel migrate` fails it with MIGRATION_AMBIGUOUS_CONNECTIVITY_MATRIX and makes the caller choose."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the target-row / source-column orientation is MAJOR. It transposes the meaning of every artifact ever produced, and a transposed matrix is not obviously wrong to look at.",
+    "Changing what an empty cell means — absent, unobserved, or zero — is MAJOR.",
+    "Changing multapse handling in either cell mode, or the meaning of `no_aggregation`, is MAJOR.",
+    "Changing autapse or diagonal handling, including any option to exclude autapses, is MAJOR.",
+    "Widening the legal scope x cellMode table is MAJOR, even though it only ADDS accepted requests: it weakens the figure's standing guarantee that every drawn multiplicity is an exact network multiplicity.",
+    "Changing the default of `tableCellEnumeration`, or any other default that changes the content of the artifact, is MAJOR.",
+    "Adding a new cell mode, a new carried attribute in the table, or a new adapter is MINOR."
+  ],
+
+  "knownLimitations": [
+    "Rows and columns share one ordered node universe, so 1.0 draws SQUARE self-connectivity matrices only. A bipartite source-set by target-set matrix (e.g. thalamic sources by cortical targets) is a genuinely different figure and is not expressible here.",
+    "There is no way to make a model-restricted absence claim. A caller who supplies only one synapse model's rows must declare a `sampled` / `declared_subset` scope, under which no cell may be called absent — so 'no AMPA connection here' is not expressible in 1.0.",
+    "The scope x cellMode restrictions in scopeRules — `sampled` admitting only `binary_presence`, and `mpi_target_rank_local` requiring `localTargetUniverseComplete: true` — are normative but are not machine-checked by a semantic validator for this skill in 1.0; the caller owns them.",
+    "The disclosure registry has no rule for 'paint paths merged, every cell retained'. Under `matrix_value_quantize` DOWNSAMPLED_FOR_RENDERING is emitted even though no cell is dropped; the budget receipt records countAfter == countBefore, which is how a reader can tell.",
+    "No uncertainty variant is supported. A connection-PROBABILITY matrix over an ensemble of network instantiations is a genuinely different figure, and 1.0 does not have it: this contract draws one exact snapshot, not an estimate.",
+    "Cortexel verifies internal consistency, not truth. It can check that the scope, the universe, and the connections agree with each other; it cannot check that the snapshot enumerated the network correctly in the first place.",
+    "No data-dependent reordering is offered. A caller who wants a seriated or clustered matrix must compute the order themselves, declare it as the universe order, and own the claim that the block structure is real."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.adjacency_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["1", "2", "3", "4"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["1", "1", "2", "3", "3"],
+            "targetIds": ["2", "2", "3", "3", "4"],
+            "edgeIds": ["e1", "e2", "e3", "e4", "e5"],
+            "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [1.2, 0.9, 0, -0.5, 2.0] },
+            "delays": { "kind": "delay", "unit": "ms", "values": [1.5, 1.5, 2.0, 1.0, 1.0] },
+            "synapseModels": ["static_synapse", "static_synapse", "static_synapse", "static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+          }
+        },
+        "parameters": {
+          "selectionId": "l23_microcircuit",
+          "selectionLabel": "L2/3 microcircuit",
+          "universeLabel": "L2/3 neurons",
+          "cellMode": "multiplicity",
+          "multapseAggregation": "sum",
+          "multiplicityScale": "linear",
+          "tableCellEnumeration": "dense"
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-2026-07-14-a" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.adjacency_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["1", "2", "3", "4"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["2", "4"],
+            "targetIds": ["1", "3"]
+          },
+          "scope": {
+            "kind": "mpi_target_rank_local",
+            "rank": 0,
+            "worldSize": 2,
+            "localTargetUniverseComplete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 500 }
+          },
+          "observedTargetIds": ["1", "3"]
+        },
+        "parameters": {
+          "selectionId": "rank0_targets",
+          "selectionLabel": "Locally owned targets (rank 0)",
+          "universeLabel": "L4 neurons",
+          "cellMode": "binary_presence",
+          "multapseAggregation": "no_aggregation",
+          "tableCellEnumeration": "dense"
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.adjacency_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["1", "2", "3"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["2", "1", "2"],
+            "targetIds": ["2", "2", "3"],
+            "edgeIds": ["e1", "e2", "e3"],
+            "synapseModels": ["static_synapse", "static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "global_merged",
+            "worldSize": 2,
+            "mergedRanks": [0, 1],
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 2000 }
+          }
+        },
+        "parameters": {
+          "selectionId": "recurrent_triplet",
+          "selectionLabel": "Recurrent triplet",
+          "cellMode": "multiplicity",
+          "multapseAggregation": "no_aggregation",
+          "multiplicityScale": "linear"
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.adjacency_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": [],
+            "targetIds": []
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 0 }
+          }
+        },
+        "parameters": {
+          "selectionId": "unconnected_pair",
+          "selectionLabel": "Unconnected pair, before Connect",
+          "cellMode": "binary_presence",
+          "multapseAggregation": "no_aggregation"
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "`no_aggregation` asserts that at most one connection lands in any cell, but two rows land in (target 2, source 1). Cortexel does not choose which one to keep. This assertion exists precisely because NEST's fixed_indegree with allow_multapses routinely produces parallel synapses per pair: silently collapsing them would understate that cell's connection count while the figure kept saying 'connections'.",
+        "expectedCode": "SCIENCE_AGGREGATION_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1", "1"],
+              "targetIds": ["2", "2"],
+              "edgeIds": ["e1", "e2"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "pair",
+            "cellMode": "multiplicity",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A connection targets node 99, which is not in the declared complete node universe. Cortexel never extends a universe the caller declared complete. Drawing the figure anyway would mean silently DISCARDING that connection: source 1's out-degree would be understated by one, and target 99 would not appear at all — a neuron with a real input rendered as if it did not exist.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3", "4"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1", "1"],
+              "targetIds": ["2", "99"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "l23_microcircuit",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Node '3' is declared twice, so one neuron has two rows. Cell binding would then depend on which index the id->index map happened to keep: the connection into neuron 3 would land in one row, and the OTHER row for the same neuron would be drawn as a fully observed empty row — a neuron shown with in-degree 0 that in fact has an input. An ambiguous identity has to fail before binding, not be resolved by an implementation convention.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2", "3", "3"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["3"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "dup",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The node universe is declared incomplete. A matrix axis IS a universe claim — a reader counts 2 rows and believes those are the nodes — so `complete: false` means neither the axis count nor any empty cell can be relied on: a cell that looks like an observed absence may simply be a node the caller left off the axis. This figure REFUSES an incomplete axis rather than disclosing one.",
+        "expectedCode": "SCOPE_NODE_UNIVERSE_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": false },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "partial_axis",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The merge claims global coverage of a 4-rank run while carrying only ranks 0 and 1. Every target owned by ranks 2 and 3 would appear as a fully observed empty row — an absent-cell claim across the entire width of the matrix — when those connections were simply never collected. A partial rank set stays partial and cannot be upgraded into a complete matrix by relabelling it `global_merged`.",
+        "expectedCode": "SCOPE_MERGE_INCOMPLETE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"]
+            },
+            "scope": {
+              "kind": "global_merged",
+              "worldSize": 4,
+              "mergedRanks": [0, 1],
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "partial_merge",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The two parallel arrays that describe the same connections disagree in length: two sources but one target. Cortexel never pairs a source with a target by best effort — a shorter target array does not mean 'reuse the last target', it means the export is broken — so the mismatch fails rather than binding source 2 to a target it was never given.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1", "2"],
+              "targetIds": ["2"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "ragged",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A carried synaptic delay is zero. Delays are carried, not drawn — but they are still validated, because a nonpositive delay means the snapshot is corrupt, and a corrupt snapshot's adjacency is no more trustworthy than its delays. A zero delay is not physical for the supported source simulators.",
+        "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"],
+              "delays": { "kind": "delay", "unit": "ms", "values": [0] }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "zero_delay",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "`ms` is canonical but `milliseconds` is only an alias. The delays here are carried, not drawn — but a silent alias conversion changes a number the caller never sees, and the table prints these values next to the connections they belong to. The alias is rejected with a repair rather than converted.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"],
+              "delays": { "kind": "delay", "unit": "milliseconds", "values": [1.5] }
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "alias",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A rank-local snapshot declares no `observedTargetIds`. A rank holds only the connections whose TARGET it owns, and nothing in the edge list says which targets those are — so a target that lives on another rank would be drawn as a fully observed empty row: a neuron with real afferents rendered as receiving nothing. The rank cannot infer its own target set, so the figure refuses to guess it and the field is structurally required here.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["1"]
+            },
+            "scope": {
+              "kind": "mpi_target_rank_local",
+              "rank": 0,
+              "worldSize": 2,
+              "localTargetUniverseComplete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "rank_local_no_observed",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The request tries to assert that Cortexel checked the snapshot against a reference. Reference-comparison status is a library-generated fact: if a caller could set it, the one disclosure that says 'nobody has checked this' could be switched off from the outside. The field is rejected, not ignored.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.adjacency_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["1", "2"], "order": "as_declared", "complete": true },
+            "connections": {
+              "sourceIds": ["1"],
+              "targetIds": ["2"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "selectionId": "assured",
+            "cellMode": "binary_presence",
+            "multapseAggregation": "no_aggregation"
+          },
+          "source": { "kind": "simulation", "system": "NEST" },
+          "validation": { "referenceComparison": { "status": "passed" } }
+        }
+      }
+    ]
+  }
+}

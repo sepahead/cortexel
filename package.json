@@ -94,6 +94,8 @@
   "scripts": {
     "build": "tsup && tsx scripts/emit-manifest.ts",
     "manifest": "tsx scripts/emit-manifest.ts",
+    "generate": "tsx scripts/generate-contract.ts",
+    "check:generated": "tsx scripts/check-generated.ts",
     "typecheck": "tsc --noEmit",
     "check:ledger": "tsx scripts/check-evidence-ledger.ts",
     "test": "vitest run",
@@ -105,6 +107,7 @@
     "prepublishOnly": "bun run build && bun run check && bun run audit && bun run lint:package && bun run test:package"
   },
   "dependencies": {
+    "ajv": "^8.17.1",
     "zod": "^4"
   },
   "overrides": {
@@ -150,8 +153,8 @@
     "@types/react-dom": "^19.0.0",
     "@types/react-test-renderer": "^19.0.0",
     "@types/three": "^0.185.1",
-    "ajv": "^8.17.1",
     "d3-force-3d": "^3.0.5",
+    "fast-check": "^4.9.0",
     "publint": "^0.3.15",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

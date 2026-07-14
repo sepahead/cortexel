@@ -1,0 +1,1736 @@
+{
+  "manifest": "cortexel-contract-manifest",
+  "manifestVersion": 1,
+  "requestContract": "cortexel-figure-request/1.0",
+  "artifactContract": "cortexel-figure-artifact/1.0",
+  "contractDigest": "sha256:ff53616e3a79a3281102d9714a3b0d768731bd645bd0e79d271db88386231358",
+  "catalogDigest": "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691",
+  "stableSkillCount": 19,
+  "stableSkills": [
+    {
+      "id": "network.adjacency_matrix",
+      "revision": 1,
+      "title": "Connection adjacency matrix (target rows, source columns)",
+      "renderer": {
+        "id": "figure.matrix",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "Over one declared complete, ordered node universe, which cells of the target-row by source-column matrix contain at least one connection — or exactly how many connection entries — and which cells were actually observed, under a declared network scope and snapshot time?",
+      "requestSchema": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "matrix_value_quantize"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "SAMPLED_EDGES",
+        "ABSENT_IS_NOT_ZERO",
+        "MULTAPSE_AGGREGATED",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "topology.scope_declared",
+        "topology.node_universe_declared",
+        "topology.edge_endpoints_in_universe",
+        "topology.scope_supports_claim",
+        "topology.multapse_aggregation_declared",
+        "topology.delay_positive"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "nest.GetConnections",
+          "version": "3.10.0",
+          "status": "not_run",
+          "notes": "The intended differential oracle is a deterministic NEST script (Create + Connect with allow_multapses and allow_autapses) whose GetConnections output is compared cell by cell against this contract's derivation, including the target-row convention, multapse counts, autapse diagonal, and rank-local target ownership. A second, adversarial oracle is networkx: its adjacency convention is A[source][target], the TRANSPOSE of Cortexel's, so the comparison must transpose explicitly and a forgotten transpose fails loudly instead of producing a plausible mirrored matrix. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.adjacency_matrix"
+      ]
+    },
+    {
+      "id": "network.connection_graph",
+      "revision": 1,
+      "title": "Directed connection graph of a declared network snapshot",
+      "renderer": {
+        "id": "figure.connection_graph",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "Which connections existed between a COMPLETE declared set of nodes at one snapshot, under one declared scope, with every isolate, autapse, multapse, direction, and edge attribute preserved?",
+      "requestSchema": "contract/schemas/skills/network.connection_graph.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 20000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "graph_declared_subset"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "SAMPLED_EDGES",
+        "NODE_UNIVERSE_INCOMPLETE",
+        "MULTAPSE_AGGREGATED",
+        "SCHEMATIC_LAYOUT",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "topology.scope_declared",
+        "topology.scope_supports_claim",
+        "topology.node_universe_declared",
+        "topology.edge_endpoints_in_universe",
+        "topology.delay_positive",
+        "topology.weight_group_compatible",
+        "topology.multapse_aggregation_declared",
+        "spatial.position_coverage_complete",
+        "spatial.equal_axis_units",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "networkx.MultiDiGraph",
+          "version": "3.3",
+          "status": "not_run",
+          "notes": "NetworkX is the intended differential oracle for degree counting, multiedge retention, and self-loop handling ONLY — never for layout, because Cortexel's stable layouts are closed-form and NetworkX's are not normative. The comparison MUST use MultiDiGraph: networkx.DiGraph silently collapses parallel edges, so comparing against it would 'confirm' precisely the deduplication bug this contract exists to prevent. NetworkX also counts a self-loop as 2 in Graph.degree but as 1 each in in_degree/out_degree, so the autapse policy must be matched explicitly before any number agrees for the right reason. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.connection_graph"
+      ]
+    },
+    {
+      "id": "network.degree_distribution",
+      "revision": 1,
+      "title": "In- and out-degree distribution over a declared node universe",
+      "renderer": {
+        "id": "figure.distribution",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "What is the exact in- or out-degree distribution of a complete, declared node universe, under an explicitly stated connection-counting policy and autapse policy, within a network scope that can actually support the claim?",
+      "requestSchema": "contract/schemas/skills/network.degree_distribution.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 20000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "histogram_merge_adjacent"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "NODE_UNIVERSE_INCOMPLETE",
+        "MULTAPSE_AGGREGATED",
+        "MISSING_VALUES_PRESENT",
+        "PRE_BINNED_INPUT",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "topology.scope_declared",
+        "topology.scope_supports_claim",
+        "topology.node_universe_declared",
+        "topology.edge_endpoints_in_universe",
+        "degree.counting_policy_declared",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "networkx.MultiDiGraph.in_degree / out_degree",
+          "version": "3.3",
+          "status": "not_run",
+          "notes": "networkx is the intended differential oracle, and it is only meaningful parameter for parameter. MultiDiGraph retains parallel edges, which corresponds to `count_edges`; DiGraph has already collapsed them, which corresponds to `count_unique_neighbors` and from which `count_edges` can never be recovered. A self-loop adds one to in_degree and one to out_degree on a directed graph, while the undirected Graph.degree counts it twice — matching the autapse convention is therefore part of the comparison, not an afterthought. NEST 3.10 is the second intended oracle, for the MPI rank-local scope rules specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.in_degree_distribution",
+        "nest.out_degree_distribution"
+      ]
+    },
+    {
+      "id": "network.delay_distribution",
+      "revision": 1,
+      "title": "Synaptic delay distribution over a declared edge population",
+      "renderer": {
+        "id": "figure.distribution",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "What is the distribution of synaptic transmission delays over an explicitly declared population of connections, counted either once per synapse row or once per ordered node pair, within a network scope that states exactly which connections were observed?",
+      "requestSchema": "contract/schemas/skills/network.delay_distribution.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 20000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "histogram_merge_adjacent"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "SAMPLED_EDGES",
+        "NODE_UNIVERSE_INCOMPLETE",
+        "MULTAPSE_AGGREGATED",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "PRE_BINNED_INPUT",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "bins.strictly_increasing",
+        "topology.scope_declared",
+        "topology.scope_supports_claim",
+        "topology.edge_endpoints_in_universe",
+        "topology.delay_positive",
+        "topology.multapse_aggregation_declared",
+        "histogram.normalization_consistent",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "numpy.histogram",
+          "version": "2.1.0",
+          "status": "not_run",
+          "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle, for the delay resolution grid and for the MPI target-rank-local row semantics specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.delay_distribution"
+      ]
+    },
+    {
+      "id": "network.delay_matrix",
+      "revision": 1,
+      "title": "Transmission-delay matrix over a declared target-row / source-column node universe",
+      "renderer": {
+        "id": "figure.matrix",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "For each ordered (source, target) pair in a declared node universe, what is the explicitly named aggregate of the positive transmission delays of the connections observed between them, under a declared network scope?",
+      "requestSchema": "contract/schemas/skills/network.delay_matrix.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "matrix_value_quantize"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "SAMPLED_EDGES",
+        "NODE_UNIVERSE_INCOMPLETE",
+        "MULTAPSE_AGGREGATED",
+        "ABSENT_IS_NOT_ZERO",
+        "UNIT_CONVERTED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "topology.scope_declared",
+        "topology.scope_supports_claim",
+        "topology.node_universe_declared",
+        "topology.edge_endpoints_in_universe",
+        "topology.multapse_aggregation_declared",
+        "topology.delay_positive"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "nest.GetConnections + SynapseCollection.get(['source','target','delay'])",
+          "version": "3.10.0",
+          "status": "not_run",
+          "notes": "The intended differential oracle is NEST itself: build a fixture network with known multapses, an autapse, an isolate target, and known per-connection delays; read the SynapseCollection; and assert that the derived cell set, the contributing counts, and the min/mean/max aggregates match the constructed truth, and that GetConnections' source/target fields land in columns/rows respectively rather than transposed. Under MPI it must also confirm that rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed. The aggregation arithmetic itself is covered by hand vectors, which is the stronger evidence: two libraries can share a convention error, but arithmetic done on paper cannot."
+        }
+      },
+      "legacyIds": [
+        "nest.delay_matrix"
+      ]
+    },
+    {
+      "id": "network.spatial_map_2d",
+      "revision": 1,
+      "title": "Two-dimensional spatial map of declared node positions",
+      "renderer": {
+        "id": "figure.spatial_map_2d",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "Where, in a declared two-dimensional coordinate frame, were the nodes of a declared universe positioned at one snapshot — drawn at one equal scale on both axes, with every coordinate preserved exactly, every missing position reported rather than placed at the origin, and periodic-boundary metadata used to choose an edge chord rather than to invent duplicate nodes?",
+      "requestSchema": "contract/schemas/skills/network.spatial_map_2d.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 50000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "graph_declared_subset"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "SAMPLED_EDGES",
+        "NODE_UNIVERSE_INCOMPLETE",
+        "POSITIONS_MISSING",
+        "MULTAPSE_AGGREGATED",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "topology.scope_declared",
+        "topology.scope_supports_claim",
+        "topology.node_universe_declared",
+        "topology.edge_endpoints_in_universe",
+        "topology.delay_positive",
+        "topology.weight_group_compatible",
+        "topology.multapse_aggregation_declared",
+        "spatial.position_coverage_complete",
+        "spatial.equal_axis_units",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "ase.geometry.find_mic",
+          "version": "3.23.0",
+          "status": "not_run",
+          "notes": "ASE's minimum-image-convention helper is the intended differential oracle for the periodic chord rule ONLY — never for the layout, the equal-scale mapping, or the table, which are Cortexel's own normative constructions. The comparison is meaningful only after the conventions are pinned parameter for parameter: ASE takes an orthorhombic cell matrix while Cortexel takes centre plus extent, and the tie at exactly half the period (|d| = P/2, where two images are equally short) is resolved by rounding, which the two libraries need not resolve the same way. A hand vector covers it directly: in a 400 um periodic layer, d = 300 um must map to d' = -100 um, and d = 200 um must map to the positive image. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.spatial_map_2d",
+        "nest.spatial_2d"
+      ]
+    },
+    {
+      "id": "network.synaptic_weight_trace",
+      "revision": 1,
+      "title": "Synaptic weight over time, for identified synapses or a declared group",
+      "renderer": {
+        "id": "figure.synaptic_weight_trace",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How did the weight of a set of individually identified synapses — or the explicitly named aggregate of a declared group of synapses whose membership may change — evolve over a declared time window, under one declared observation semantics that says exactly what was observed and when?",
+      "requestSchema": "contract/schemas/skills/network.synaptic_weight_trace.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "line_envelope_minmax"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "SAMPLED_EDGES",
+        "AGGREGATE_WITHOUT_RAW_REPEATS",
+        "MISSING_VALUES_PRESENT",
+        "DUPLICATE_TIMES_AGGREGATED",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "window.valid",
+        "trace.duplicate_time_policy",
+        "trace.axis_dimension_compatible",
+        "topology.scope_declared",
+        "topology.scope_supports_claim"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "NEST stdp_synapse + weight_recorder microfixture (pinned), cross-checked by hand against the analytic STDP update",
+          "version": "NEST 3.10.0",
+          "status": "not_run",
+          "notes": "There is no library-independent oracle for most of this contract. The hold semantics, the membership-aware denominators, and the missing-update break are conventions of THIS contract and have no equivalent in Elephant, Neo, or NWB, so they rest entirely on the hand vectors. The one thing an external oracle can settle is the question this figure is most easily wrong about: whether the value a NEST weight recorder writes at a presynaptic spike is the weight BEFORE or AFTER the update that spike triggered. That is a property of stdp_synapse::send() in the pinned version, it must be established by executing a two-spike microfixture whose expected weights were computed by hand from the STDP kernel, and until it is, the adapter must not assume a convention — it must require the caller to declare one. The pinned reference environment has NOT been executed in this environment: the status is not_run, and it is not to be reported as anything else."
+        }
+      },
+      "legacyIds": [
+        "nest.plasticity_dynamics"
+      ]
+    },
+    {
+      "id": "network.weight_distribution",
+      "revision": 1,
+      "title": "Synaptic weight distribution over a declared edge population",
+      "renderer": {
+        "id": "figure.distribution",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "What is the distribution of synaptic weights over an explicitly declared edge population — a declared source universe, a declared target universe, and a network scope that says how completely those connections were observed — without hiding the sign, the synapse model, the multapse structure, or any sampling?",
+      "requestSchema": "contract/schemas/skills/network.weight_distribution.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 20000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "histogram_merge_adjacent"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "SAMPLED_EDGES",
+        "MULTAPSE_AGGREGATED",
+        "MISSING_VALUES_PRESENT",
+        "PRE_BINNED_INPUT",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "topology.scope_declared",
+        "topology.scope_supports_claim",
+        "topology.weight_group_compatible",
+        "bins.strictly_increasing",
+        "histogram.normalization_consistent",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "numpy.histogram",
+          "version": "2.1.0",
+          "status": "not_run",
+          "notes": "numpy.histogram is the intended differential oracle for the binning and normalization, and it is only meaningful parameter-for-parameter: its bins are half-open except for the last, which is closed on the right — the same convention this contract fixes — and its `density=True` divides by the LINEAR bin width, which is exactly the rule that must hold under a logarithmic axis. It has no notion of a missing value, of an out-of-range policy, or of a zero-straddling bin, so those rules are covered by hand vectors instead. NEST 3.10 GetConnections is the second intended oracle, for the multapse and MPI target-rank-local fixtures specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.weight_histogram"
+      ]
+    },
+    {
+      "id": "network.weight_matrix",
+      "revision": 1,
+      "title": "Synaptic weight matrix (target rows, source columns)",
+      "renderer": {
+        "id": "figure.matrix",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "For a declared node universe drawn as target rows and source columns, and a declared snapshot time, what is the explicitly named aggregate of the synaptic weights of every observed connection in each cell?",
+      "requestSchema": "contract/schemas/skills/network.weight_matrix.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none"
+      ],
+      "budgets": {
+        "maxObservations": 200000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "matrix_value_quantize"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "PARTIAL_NETWORK_SCOPE",
+        "RANK_LOCAL_SCOPE",
+        "NODE_UNIVERSE_INCOMPLETE",
+        "MULTAPSE_AGGREGATED",
+        "ABSENT_IS_NOT_ZERO",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "topology.scope_declared",
+        "topology.scope_supports_claim",
+        "topology.node_universe_declared",
+        "topology.edge_endpoints_in_universe",
+        "topology.multapse_aggregation_declared",
+        "topology.delay_positive",
+        "topology.weight_group_compatible",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "scipy.sparse.coo_matrix duplicate summation, cross-checked against a NEST GetConnections weight snapshot",
+          "version": "scipy 1.14.1; NEST 3.10.0",
+          "status": "not_run",
+          "notes": "coo_matrix sums duplicate (row, col) entries when converted to CSR or dense, which makes it an exact differential oracle for `aggregation: sum` and for NOTHING else: it has no mean, min, max, or no_aggregation semantics, and it maps an absent cell to 0.0 — the precise conflation this contract exists to prevent. The comparison is therefore valid only on the present cells and only under `sum`, and the absent-cell handling must be excluded before it is meaningful. Orientation must be pinned explicitly (row = target, col = source) because coo_matrix takes (row, col) positionally and a transposed oracle would agree on every symmetric fixture. The pinned reference environment has NOT been executed here, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.weight_matrix"
+      ]
+    },
+    {
+      "id": "neuro.analog_trace",
+      "revision": 1,
+      "title": "Analog quantities over a declared time axis",
+      "renderer": {
+        "id": "figure.analog_trace",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How did one or more declared analog quantities — each with its own kind and unit — evolve over a declared time window, without pretending that every signal is a membrane potential and without inventing values between the samples that were actually taken?",
+      "requestSchema": "contract/schemas/skills/neuro.analog_trace.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "line_envelope_minmax"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "MISSING_VALUES_PRESENT",
+        "DUPLICATE_TIMES_AGGREGATED",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "trace.duplicate_time_policy",
+        "trace.axis_dimension_compatible",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "neo.AnalogSignal",
+          "version": "0.13.0",
+          "status": "not_run",
+          "notes": "Neo is the intended differential oracle for the adapter path only. Neo's AnalogSignal models a REGULARLY sampled signal (t_start plus sampling_rate), while this contract models explicit (time, value) pairs that may be irregular; a comparison is therefore meaningful only for regular sampling, and the expansion of t_start/sampling_rate into an explicit time vector must be matched to the last representable binary64 step before the comparison means anything. Neo has no equivalent of the duplicate-time policy or the missing-value break, so those paths have no oracle and rest on the hand vectors. The pinned reference environment has NOT been executed in this environment: the status is not_run, and it is not to be reported as anything else."
+        }
+      },
+      "legacyIds": [
+        "nest.voltage_trace"
+      ]
+    },
+    {
+      "id": "neuro.compartment_trace",
+      "revision": 1,
+      "title": "Signal traces across the identified compartments of one cell",
+      "renderer": {
+        "id": "figure.compartment_trace",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How does a declared signal evolve over time in each identified compartment of ONE declared cell, with a compartment axis whose ordering basis is declared, disclosed, and never invented by Cortexel?",
+      "requestSchema": "contract/schemas/skills/neuro.compartment_trace.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "line_envelope_minmax",
+          "matrix_value_quantize"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "NODE_UNIVERSE_INCOMPLETE",
+        "SCHEMATIC_LAYOUT",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "MISSING_VALUES_PRESENT",
+        "DUPLICATE_TIMES_AGGREGATED",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "trace.duplicate_time_policy",
+        "trace.axis_dimension_compatible",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "nest cm_default multicompartment recorder",
+          "version": "3.10.0",
+          "status": "not_run",
+          "notes": "The derivation is near-identity, so the oracle's job is not to check arithmetic: it is to pin the RECORDER-to-CONTRACT mapping. NEST records compartment state under positional keys (v_comp0, v_comp1, ...) whose index is the compartment's position in the model's compartment list; the oracle fixture exists to prove that the adapter binds each key to a declared compartment id rather than to a row position. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.compartmental_dynamics"
+      ]
+    },
+    {
+      "id": "neuro.correlogram",
+      "revision": 1,
+      "title": "Oriented lag correlogram between two event trains",
+      "renderer": {
+        "id": "figure.correlogram",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How many ordered (reference, target) event pairs fall at each lag, or what normalized lag statistic follows from those pairs, under a fixed lag orientation, an explicit zero-lag bin, a declared self-pair treatment, and a denominator that is stated rather than assumed?",
+      "requestSchema": "contract/schemas/skills/neuro.correlogram.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 500000,
+        "maxVisibleMarks": 20001,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "LAG_ORIENTATION",
+        "ZERO_LAG_SELF_PAIRS_EXCLUDED",
+        "PRE_BINNED_INPUT",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "MISSING_VALUES_PRESENT",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "UNIT_CONVERTED",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "bins.strictly_increasing",
+        "events.within_window",
+        "events.sender_universe_declared",
+        "correlogram.lag_range_valid",
+        "correlogram.statistic_denominator",
+        "rate.denominator_positive",
+        "rate.verify_normalization",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "elephant.spike_train_correlation.cross_correlation_histogram",
+          "version": "1.2.1",
+          "status": "not_run",
+          "notes": "Elephant's CCH is the intended differential oracle, but it is only an oracle once the conventions are reconciled parameter for parameter: it correlates BinnedSpikeTrains rather than enumerating event pairs, its `window` is expressed in bins, its `border_correction` is the classical triangular correction that this contract deliberately does not offer, and `cross_correlation_coefficient=True` normalizes over the whole train rather than over the valid overlap. Until every one of those is matched bin for bin, agreement would be luck and disagreement would be uninformative. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.correlogram"
+      ]
+    },
+    {
+      "id": "neuro.isi_distribution",
+      "revision": 1,
+      "title": "Inter-spike interval distribution",
+      "renderer": {
+        "id": "figure.distribution",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How are within-train inter-spike intervals distributed across an explicitly declared selection of senders and trials, using intervals formed only between successive spikes of the same train?",
+      "requestSchema": "contract/schemas/skills/neuro.isi_distribution.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "histogram_merge_adjacent"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "bins.strictly_increasing",
+        "events.within_window",
+        "events.sender_universe_declared",
+        "events.trial_universe_declared",
+        "isi.within_train_only",
+        "isi.zero_interval_policy",
+        "histogram.normalization_consistent",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "elephant.statistics.isi",
+          "version": "1.2.1",
+          "status": "not_run",
+          "notes": "Elephant's isi() takes successive differences within ONE Neo SpikeTrain, which is the same within-train rule this contract fixes; it returns n-1 intervals for n spikes. Before the comparison means anything, three conventions must be matched parameter for parameter: Elephant does not partition by sender (the caller must present one SpikeTrain per train), it applies no bin-range exclusion, and its t_start/t_stop must be aligned to this contract's half-open window so that boundary-straddling intervals are absent on both sides rather than only on ours. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.isi_distribution"
+      ]
+    },
+    {
+      "id": "neuro.multisignal_trace",
+      "revision": 1,
+      "title": "Multiple biologically distinct signals on one declared clock",
+      "renderer": {
+        "id": "figure.multisignal_trace",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How do several biologically distinct time-varying signals — each carrying its own entity, variable identity, quantity kind, and unit — evolve together on one declared clock, without any signal being relabelled, unit-coerced, or forced onto an axis whose dimension it does not share?",
+      "requestSchema": "contract/schemas/skills/neuro.multisignal_trace.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "line_envelope_minmax"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "MISSING_VALUES_PRESENT",
+        "DUPLICATE_TIMES_AGGREGATED",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "window.valid",
+        "window.valid",
+        "events.within_window",
+        "trace.duplicate_time_policy",
+        "trace.axis_dimension_compatible"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "neo.AnalogSignal.rescale + scipy.stats.zscore",
+          "version": "neo 0.13.1 / scipy 1.14.1",
+          "status": "not_run",
+          "notes": "Neo is the intended differential oracle for unit rescaling and SciPy for the z-score. The conventions must be matched parameter for parameter before the comparison means anything: scipy.stats.zscore defaults to ddof = 0 while this contract specifies the sample standard deviation (ddof = 1), and the two disagree by a factor sqrt(N/(N-1)) — 5.4% at N = 10. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.astrocyte_dynamics"
+      ]
+    },
+    {
+      "id": "neuro.phase_plane",
+      "revision": 1,
+      "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
+      "renderer": {
+        "id": "figure.phase_plane",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "In a state space spanned by two declared state variables, where did the system's trajectory go, and what does a caller-computed vector field say about the flow at the points where it was actually evaluated?",
+      "requestSchema": "contract/schemas/skills/neuro.phase_plane.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none"
+      ],
+      "budgets": {
+        "maxObservations": 250000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "phase_plane.derivative_dimension",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "window.valid",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "numpy/scipy FitzHugh-Nagumo reference field and nullcline",
+          "version": "numpy 2.1.3 / scipy 1.14.1",
+          "status": "not_run",
+          "notes": "The intended differential check recomputes the FitzHugh-Nagumo field samples, the analytic V-nullcline, and the Newton fixed point from the published equations, and compares them with the figure's table. It checks the FIXTURE, not Cortexel's derivation: Cortexel integrates nothing and solves nothing, so the hand vectors remain the primary evidence for the parts that are actually Cortexel's - the derivative unit composition (1 mV/ms = 1 V/s exactly, via 1e-3 x 1e3), the axis-normalized speed, the convergence re-derivation from residual and tolerance, and the arrowhead orientation under backward time. The pinned reference environment has not been executed here, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.phase_plane"
+      ]
+    },
+    {
+      "id": "neuro.population_rate",
+      "revision": 1,
+      "title": "Population firing rate over time",
+      "renderer": {
+        "id": "figure.population_rate",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How does the event rate of a declared population change over time, using auditable raw counts and an explicitly declared denominator?",
+      "requestSchema": "contract/schemas/skills/neuro.population_rate.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "line_envelope_minmax"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "KERNEL_SMOOTHED_RATE",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "PRE_BINNED_INPUT",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "TABLE_EXCERPT_ONLY",
+        "UNIT_CONVERTED",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "bins.strictly_increasing",
+        "events.within_window",
+        "events.sender_universe_declared",
+        "rate.denominator_positive",
+        "rate.verify_normalization",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "elephant.statistics.time_histogram",
+          "version": "1.2.1",
+          "status": "not_run",
+          "notes": "Elephant's time_histogram is the intended differential oracle. Its bin edge and t_stop conventions must be matched parameter for parameter before the comparison means anything. The pinned reference environment has not been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.population_rate"
+      ]
+    },
+    {
+      "id": "neuro.psth",
+      "revision": 1,
+      "title": "Peri-event time histogram (trial-aligned event counts)",
+      "renderer": {
+        "id": "figure.psth",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How does the event count of a declared set of selected senders vary with time relative to a declared per-trial alignment event, using exact integer counts and an explicitly declared trial and sender denominator?",
+      "requestSchema": "contract/schemas/skills/neuro.psth.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "histogram_merge_adjacent"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "MISSING_VALUES_PRESENT",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "PRE_BINNED_INPUT",
+        "UNIT_CONVERTED",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "bins.strictly_increasing",
+        "events.sender_universe_declared",
+        "events.trial_universe_declared",
+        "psth.alignment_declared",
+        "rate.denominator_positive",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "elephant.statistics.time_histogram",
+          "version": "1.2.1",
+          "status": "not_run",
+          "notes": "Elephant's time_histogram is the intended differential oracle for the uniform-denominator policy, with one SpikeTrain per trial. Its conventions must be reconciled parameter for parameter first: its `mean` output divides by the number of SPIKETRAINS, which equals the trial count only when each train pools every selected sender — the exact per-trial versus per-neuron conflation this contract splits into two normalization ids. It also requires the input trains to share t_start and t_stop, so it cannot oracle `per_bin_covering_trials` at all; that policy is covered by hand vectors only. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.psth"
+      ]
+    },
+    {
+      "id": "neuro.response_curve",
+      "revision": 1,
+      "title": "Input-response curve across declared conditions",
+      "renderer": {
+        "id": "figure.response_curve",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "How does a declared response statistic vary with a declared controlled input across an explicitly declared set of conditions, with every repeat, its sample count, and every exclusion accounted for?",
+      "requestSchema": "contract/schemas/skills/neuro.response_curve.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none",
+        "standard_deviation",
+        "standard_error",
+        "confidence_interval",
+        "quantile_interval",
+        "ensemble_range"
+      ],
+      "budgets": {
+        "maxObservations": 20000,
+        "maxVisibleMarks": 50000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "AGGREGATE_WITHOUT_RAW_REPEATS",
+        "UNCERTAINTY_NOT_PROVIDED",
+        "MISSING_VALUES_PRESENT",
+        "UNIT_CONVERTED",
+        "TABLE_EXCERPT_ONLY",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "response_curve.estimator_declared",
+        "rate.denominator_positive",
+        "uncertainty.valid",
+        "uncertainty.supported_variant"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "elephant.statistics.mean_firing_rate",
+          "version": "1.2.1",
+          "status": "not_run",
+          "notes": "Elephant divides the event count of ONE SpikeTrain by (t_stop - t_start); Cortexel additionally divides by the recorded-sender count, so the comparison is only parameter-for-parameter meaningful with recordedSenderCount = 1 and an identical half-open window. scipy.stats.trim_mean is the intended oracle for the trimming convention, where the fraction is removed from EACH tail. The pinned reference environment has NOT been executed here, so the status is not_run rather than assumed."
+        }
+      },
+      "legacyIds": [
+        "nest.rate_response"
+      ]
+    },
+    {
+      "id": "neuro.spike_raster",
+      "revision": 1,
+      "title": "Spike raster: event times by identified sender and trial",
+      "renderer": {
+        "id": "figure.spike_raster",
+        "revision": 1
+      },
+      "releaseReady": false,
+      "canonicalQuestion": "At what times, and from which identified senders and trials, were events recorded inside a declared window — with every event preserved, and with every recorded sender and every declared trial keeping its row even when nothing happened on it?",
+      "requestSchema": "contract/schemas/skills/neuro.spike_raster.request.v1.schema.json",
+      "uncertaintySupport": [
+        "none"
+      ],
+      "budgets": {
+        "maxObservations": 2000000,
+        "maxVisibleMarks": 100000,
+        "maxInlineTableRows": 500,
+        "compactionPolicies": [
+          "none",
+          "raster_density_bins"
+        ],
+        "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      },
+      "disclosures": [
+        "SOURCE_SIMULATION",
+        "SOURCE_SYNTHETIC_FIXTURE",
+        "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
+        "SOURCE_AUTHENTICITY_UNVERIFIED",
+        "REFERENCE_COMPARISON_NOT_RUN",
+        "EVENTS_EXCLUDED_OUT_OF_WINDOW",
+        "DOWNSAMPLED_FOR_RENDERING",
+        "COMPACTION_MAY_HIDE_TRANSIENTS",
+        "TABLE_EXCERPT_ONLY",
+        "UNIT_CONVERTED",
+        "CALLER_NOTE_UNVERIFIED",
+        "NONSTANDARD_BUDGET_PROFILE"
+      ],
+      "semanticValidators": [
+        "provenance.no_caller_assurance",
+        "provenance.note_safe_display",
+        "unit.canonical_code",
+        "unit.dimension_match",
+        "series.equal_length",
+        "ids.unique",
+        "window.valid",
+        "events.within_window",
+        "events.sender_universe_declared",
+        "events.trial_universe_declared"
+      ],
+      "evidence": {
+        "handVectors": true,
+        "externalOracle": {
+          "name": "nest-simulator spike_recorder",
+          "version": "3.10.0",
+          "status": "not_run",
+          "notes": "The intended differential oracle is NEST's own spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: whether an event at exactly `stop` is recorded, whether recorder output is chronological across threads and ranks, and whether a duplicate event row can occur. A secondary parity check imports the same trains through Neo SpikeTrain (t_start/t_stop) and asserts an identical accepted event set. Neither has been executed here: the pinned reference environment has not been run in this environment, so the status is not_run rather than assumed. No claim of oracle agreement may be made until it is."
+        }
+      },
+      "legacyIds": [
+        "nest.spike_raster"
+      ]
+    }
+  ],
+  "experimentalCapabilities": [
+    {
+      "id": "experimental.network.spatial_3d",
+      "kind": "skill",
+      "requiredPeers": [
+        "three",
+        "@react-three/fiber",
+        "react",
+        "react-dom"
+      ]
+    },
+    {
+      "id": "experimental.evidence.knowledge_graph",
+      "kind": "skill",
+      "requiredPeers": [
+        "three",
+        "@react-three/fiber",
+        "d3-force-3d",
+        "react",
+        "react-dom"
+      ]
+    },
+    {
+      "id": "experimental.neuro.animation_replay",
+      "kind": "skill",
+      "requiredPeers": [
+        "react",
+        "react-dom"
+      ]
+    },
+    {
+      "id": "cortexel/adapters/ncp",
+      "kind": "export",
+      "requiredPeers": []
+    },
+    {
+      "id": "cortexel/experimental/3d",
+      "kind": "export",
+      "requiredPeers": [
+        "three",
+        "@react-three/fiber",
+        "react",
+        "react-dom"
+      ]
+    },
+    {
+      "id": "cortexel/experimental/knowledge-graph",
+      "kind": "export",
+      "requiredPeers": [
+        "three",
+        "@react-three/fiber",
+        "d3-force-3d",
+        "react",
+        "react-dom"
+      ]
+    }
+  ],
+  "removedCapabilities": [
+    {
+      "id": "nest.connectivity_matrix",
+      "replacement": null
+    },
+    {
+      "id": "nest.spatial_2d",
+      "replacement": "network.spatial_map_2d"
+    },
+    {
+      "id": "nest.stimulus_response",
+      "replacement": "figure.bundle"
+    },
+    {
+      "id": "nest.animation_replay",
+      "replacement": "experimental.neuro.animation_replay"
+    }
+  ],
+  "budgetProfiles": [
+    "standard",
+    "agent"
+  ],
+  "errorCodeCount": 114,
+  "semanticValidatorCount": 36,
+  "disclosureRuleCount": 31,
+  "normativeSources": [
+    {
+      "path": "contract/meta/contract-source.schema.json",
+      "digest": "sha256:420ebf91748493d749d3c35303c99e454ef0a6e9b8e9ad612d8937aea2aafc8a"
+    },
+    {
+      "path": "contract/registries/budget-profiles.v1.json",
+      "digest": "sha256:f9893a8353851200728ad8a1817b8d31b68f83543ace20599e61d02af2c56184"
+    },
+    {
+      "path": "contract/registries/capabilities.v1.json",
+      "digest": "sha256:9164969e3e89fda4b00a5237b5635c9f860d4dfeb5dca41a592827568feeb529"
+    },
+    {
+      "path": "contract/registries/disclosures.v1.json",
+      "digest": "sha256:984dc7ef1f689d082eaab61f7fec2c9cde3f5a6f8e99e49a3885c56066249138"
+    },
+    {
+      "path": "contract/registries/error-codes.v1.json",
+      "digest": "sha256:380a848cd406dff43717e0c2de32cdb7745bd9d1ed48207b37db0c0de6a08a53"
+    },
+    {
+      "path": "contract/registries/identity.v1.json",
+      "digest": "sha256:c4933805b1296336cf38f9f59c1ee62ce05dc26c39b56a897d28a425f8f45937"
+    },
+    {
+      "path": "contract/registries/legacy-skill-map.v1.json",
+      "digest": "sha256:361e4e73d9b0fc8f38fc50010b413e86ef246e53b87ecea2dd58aa7c76be31b6"
+    },
+    {
+      "path": "contract/registries/palettes.v1.json",
+      "digest": "sha256:277e616ba3e1880b68b1acafd1901e1138d9002dedd649a324ed828b5312b242"
+    },
+    {
+      "path": "contract/registries/renderers.v1.json",
+      "digest": "sha256:8c56f4db038347afef376068c8c44d8fb3fa98e0f51c57eb3403d9770d9edf57"
+    },
+    {
+      "path": "contract/registries/semantic-validators.v1.json",
+      "digest": "sha256:e63f9174e060d095ceb537e9afe856801f4426773c2c38a569d064f72797a6bf"
+    },
+    {
+      "path": "contract/registries/units.v1.json",
+      "digest": "sha256:277828da539ba3d267b3e87aba9634aa82a05cf1831315bae14e39365a579cb3"
+    },
+    {
+      "path": "contract/schemas/common.v1.schema.json",
+      "digest": "sha256:427a4414817a1145623afa9ec04f8d18def02f30e875e4c1d1facfbeacb5b38d"
+    },
+    {
+      "path": "contract/schemas/figure-artifact.v1.schema.json",
+      "digest": "sha256:df005a297a4bbbfdd73a0293a69b4b5e4748dec1a59304e4322797689a734d48"
+    },
+    {
+      "path": "contract/schemas/figure-request.v1.schema.json",
+      "digest": "sha256:dfbf850719a78f803786a136706fe673462c84a5b48c849481bfdf4366da2e8a"
+    },
+    {
+      "path": "contract/schemas/generated/registry-enums.v1.schema.json",
+      "digest": "sha256:fc59b8b8387bdace9065f4eb858b5128b664f1ca8806421fb3776915de4a1907"
+    },
+    {
+      "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
+      "digest": "sha256:7262c551f7b945d3bff702d88b5c4b434afbf6609ac04ee50ebfc475c081bfed"
+    },
+    {
+      "path": "contract/schemas/skills/network.connection_graph.request.v1.schema.json",
+      "digest": "sha256:5111d65187c07a7061cd0efbcf41ba4246220da288adf9943e23a454d9e4edcc"
+    },
+    {
+      "path": "contract/schemas/skills/network.degree_distribution.request.v1.schema.json",
+      "digest": "sha256:417a0f61cb450cade45f1563ffec1a131628347bb6ff65b83ccb16a687516922"
+    },
+    {
+      "path": "contract/schemas/skills/network.delay_distribution.request.v1.schema.json",
+      "digest": "sha256:e98b1938d6c0e8b4b5a6bf40f81542a121d775984bdd6e03d0e2f835dba68f9e"
+    },
+    {
+      "path": "contract/schemas/skills/network.delay_matrix.request.v1.schema.json",
+      "digest": "sha256:03bf664d5323d5087ba203f9ce32410bf107baa98b86ddf92f72d7e97f19287c"
+    },
+    {
+      "path": "contract/schemas/skills/network.spatial_map_2d.request.v1.schema.json",
+      "digest": "sha256:c3a900a8768bad05d6e3f7c39238e9420fe16ed02dfaaf64c6debbef4559b8a5"
+    },
+    {
+      "path": "contract/schemas/skills/network.synaptic_weight_trace.request.v1.schema.json",
+      "digest": "sha256:f2a9cf90dd01bc63084b3735c7f5b139f9505f3b2b792a02bbd90d9dceb7d4d6"
+    },
+    {
+      "path": "contract/schemas/skills/network.weight_distribution.request.v1.schema.json",
+      "digest": "sha256:138d88ea7484552f2233cff7fce2f8920b6ae159212d6badfac13fb3a208af7f"
+    },
+    {
+      "path": "contract/schemas/skills/network.weight_matrix.request.v1.schema.json",
+      "digest": "sha256:b6d802e843fda6820b9fc523976bbc425ce6154c7b27118faf9fe4e5d53c4539"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.analog_trace.request.v1.schema.json",
+      "digest": "sha256:a28c4456259deefa2a800aa5be8213dc9af78ee9850cb78136c5a791cad53203"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.compartment_trace.request.v1.schema.json",
+      "digest": "sha256:6eb482a74d6e43f5506b4be99a0c0551a5ce6b7643499a7fbdaa41f1e61bee5c"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.correlogram.request.v1.schema.json",
+      "digest": "sha256:6a2a6397c92fe7f8e96b720b0d8207dca195ff72019a940c08064c2ff9736d33"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.isi_distribution.request.v1.schema.json",
+      "digest": "sha256:8ba4a422088d59f156351cc3b4b97d1f4def000b5e9b43929e16f37a89280dd9"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.multisignal_trace.request.v1.schema.json",
+      "digest": "sha256:37bda3b39c3f1664d73f01dcd5259131805305e2ad014f45968429181da946b8"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.phase_plane.request.v1.schema.json",
+      "digest": "sha256:026af649e2819706980a87efdd64bdd23e0592124f57a97e02052d5fb017ac1c"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.population_rate.request.v1.schema.json",
+      "digest": "sha256:014eab7d734fd7417eb52f24280fca2159bcd2c529e04a18bfe48a6d50e7e632"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.psth.request.v1.schema.json",
+      "digest": "sha256:f06aec0ad1b22cc1703993143725de58f9795dd31c4843a9cce22295c0ca644f"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.response_curve.request.v1.schema.json",
+      "digest": "sha256:cdf5259ed5c9d9ff1eb3c27f3705f2c2aa462ca62625ee8215ed64166793fb5d"
+    },
+    {
+      "path": "contract/schemas/skills/neuro.spike_raster.request.v1.schema.json",
+      "digest": "sha256:1be4a1d3bd76ab055dee11abfa7047bbb913a1ab1494ac1f88e89bfd723e98bb"
+    },
+    {
+      "path": "contract/schemas/validation-error.v1.schema.json",
+      "digest": "sha256:ab93a2bb6afcfc1ba189b385d249b8ce2c389a1f33ac9f71ba3c8e114d4d7e6d"
+    },
+    {
+      "path": "contract/skills/network.adjacency_matrix.v1.json",
+      "digest": "sha256:060de19440e9701e33fbd6edca2b00a127163403b741f7d66766e9979d4575d3"
+    },
+    {
+      "path": "contract/skills/network.connection_graph.v1.json",
+      "digest": "sha256:8fcaa643dc219c08995840833d21ee239c3dcf5309e3cf07cafd8aa49f62e5e5"
+    },
+    {
+      "path": "contract/skills/network.degree_distribution.v1.json",
+      "digest": "sha256:994204d191f8b187fcd018525677f24a53a2c5e8d9ca44cd74a539460832d59d"
+    },
+    {
+      "path": "contract/skills/network.delay_distribution.v1.json",
+      "digest": "sha256:7e5c6d384e2ee802dfe21ffe321f474b91836ad267f189f5f981c4803a153348"
+    },
+    {
+      "path": "contract/skills/network.delay_matrix.v1.json",
+      "digest": "sha256:f8fae80acf29fca456e27df3cb07a2fc612ae936bfe3a263a31cdc5fcec95658"
+    },
+    {
+      "path": "contract/skills/network.spatial_map_2d.v1.json",
+      "digest": "sha256:5b68ba06f8ec8394b5ed6904b35233a38139efd2f97f13bf56936dbf5c90bd1a"
+    },
+    {
+      "path": "contract/skills/network.synaptic_weight_trace.v1.json",
+      "digest": "sha256:bd6db0cb99b4c6fb8d106e9b0df0d5e5596254d34183e39d65bd3aa9817ae2b8"
+    },
+    {
+      "path": "contract/skills/network.weight_distribution.v1.json",
+      "digest": "sha256:fa51dabfd8abfa7ce7f74f52b6f304e3f6d82babd9bb5132562c19e9482332f2"
+    },
+    {
+      "path": "contract/skills/network.weight_matrix.v1.json",
+      "digest": "sha256:92eb05bd45c20bd7a22ad01bfbd69da8181cbe8df257002ef4cf3001424f1e1f"
+    },
+    {
+      "path": "contract/skills/neuro.analog_trace.v1.json",
+      "digest": "sha256:ad899a3f5e6fbc8282884209c016e485262bab9e98c3bc5ef522344653117390"
+    },
+    {
+      "path": "contract/skills/neuro.compartment_trace.v1.json",
+      "digest": "sha256:e23401365473c8d895db2563c05b8953546e13e57c79e4832901b4e27c3e6406"
+    },
+    {
+      "path": "contract/skills/neuro.correlogram.v1.json",
+      "digest": "sha256:a23fe8e0188a4335c66bc9f83744c004e73f08d353d29254e3b08dc7730ac51f"
+    },
+    {
+      "path": "contract/skills/neuro.isi_distribution.v1.json",
+      "digest": "sha256:aaa65b1ab6ae46376bff9f31c796063d38ebc919e0426a6d58490afe2046fd91"
+    },
+    {
+      "path": "contract/skills/neuro.multisignal_trace.v1.json",
+      "digest": "sha256:27f251be84d8549976b572674cd076e10fdc4740a6ef779f4a1eab9752f86681"
+    },
+    {
+      "path": "contract/skills/neuro.phase_plane.v1.json",
+      "digest": "sha256:b702b19384d9788cf4c956ed7a65e8f1cc296dd7cbac646b567e59c6f0ed4e01"
+    },
+    {
+      "path": "contract/skills/neuro.population_rate.v1.json",
+      "digest": "sha256:7a5910bb726f132729db9087b73b986d543e027df3c6eae8195cc644f4402433"
+    },
+    {
+      "path": "contract/skills/neuro.psth.v1.json",
+      "digest": "sha256:9991500986f78da3e888c7ec6f0d33c921808bd1b95bc371230343b31d119a35"
+    },
+    {
+      "path": "contract/skills/neuro.response_curve.v1.json",
+      "digest": "sha256:4dc1f03b7d2342c0bd040c520aab7fd23272c08b2b58d28aeb62d1b9d39e0812"
+    },
+    {
+      "path": "contract/skills/neuro.spike_raster.v1.json",
+      "digest": "sha256:814fd5b3b0682f14f692a38f848090a3206072e0a21ac39140ac0980cd66390c"
+    }
+  ],
+  "notes": [
+    "GENERATED. Never edit by hand.",
+    "contractDigest covers the canonicalized normative source set, excluding this file (it cannot contain its own hash) and excluding the conformance corpus (vectors test the contract; they are not the contract).",
+    "catalogDigest covers the STABLE catalog only, so editing an experimental capability cannot change the stable identity.",
+    "releaseReady is false for every skill: the pinned scientific reference environment has not been executed, so no external-oracle evidence exists yet."
+  ]
+}

@@ -1,0 +1,368 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.correlogram.request.v1.schema.json",
+  "title": "neuro.correlogram request",
+  "description": "GENERATED from contract/skills/neuro.correlogram.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "neuro.correlogram"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "description": "Raw events for the correlogram. Both trains are observed over the SAME window and pooled into one time-ordered stream; the per-event sender ids identify which sender produced each event, and the recorded-sender universe is the complete set of senders (including silent ones) that were recorded.",
+          "properties": {
+            "mode": {
+              "const": "events"
+            },
+            "eventTimes": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "time"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 500000
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "maxItems": 500000,
+              "description": "Parallel to eventTimes: the sender that produced each event."
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": {
+                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier"
+              },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE set of senders that were recorded across both trains, including any that never fired. Every event sender must be a member of it."
+            },
+            "referenceEventCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of reference events inside the window. It is the per-reference-event denominator basis and is required for a correlation coefficient."
+            },
+            "targetEventCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of target events inside the window."
+            },
+            "effectiveDuration": {
+              "type": "object",
+              "description": "The effective observation duration, DERIVED as stop - start from the window when raw events are supplied, or declared explicitly here for a pre-binned figure. It is the exposure the per-reference-event rate divides by.",
+              "properties": {
+                "kind": {
+                  "const": "duration"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "value": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "eventTimes",
+            "eventSenderIds",
+            "recordedSenderIds",
+            "window"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "A pre-binned correlogram, for example a NEST correlation-detector status. Cortexel did not observe the events and cannot re-bin them; it re-derives and checks the normalized value from the integer pair counts and the declared denominators.",
+          "properties": {
+            "mode": {
+              "const": "prebinned"
+            },
+            "binEdges": {
+              "type": "object",
+              "description": "The LAG bin edges, ordered from -tauMax to +tauMax. n edges define n-1 half-open lag bins; the zero-lag bin is centred on zero.",
+              "properties": {
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 20002
+                }
+              },
+              "required": [
+                "unit",
+                "edges"
+              ],
+              "additionalProperties": false
+            },
+            "counts": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxItems": 20001,
+              "description": "Exact integer pair counts per lag bin. This is the auditable numerator; a normalized value that cannot be re-derived from it is refused. Length must be edges.length - 1."
+            },
+            "rates": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "firing_rate"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 20001
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "values"
+              ],
+              "additionalProperties": false,
+              "description": "Optional. The target rate per reference event as the source computed it. If supplied it is RE-DERIVED from the pair counts and the declared denominator and checked; it is never taken on trust."
+            },
+            "recordedSenderCount": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The per-reference-event denominator basis (the reference event count under edge correction none). It cannot be recovered from the pair counts."
+            },
+            "referenceEventCount": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The number of reference events, required for a correlation coefficient."
+            },
+            "targetEventCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "effectiveDuration": {
+              "type": "object",
+              "description": "The effective observation duration, DERIVED as stop - start from the window when raw events are supplied, or declared explicitly here for a pre-binned figure. It is the exposure the per-reference-event rate divides by.",
+              "properties": {
+                "kind": {
+                  "const": "duration"
+                },
+                "unit": {
+                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                },
+                "value": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "unit",
+                "value"
+              ],
+              "additionalProperties": false
+            },
+            "selfPairTreatment": {
+              "type": "string",
+              "enum": [
+                "excluded_by_source",
+                "no_shared_event_identity"
+              ],
+              "description": "`excluded_by_source`: shared events existed and the source removed their self-pairs. `no_shared_event_identity`: no event can appear in both trains, so no self-pair exists to exclude. A source that shared events and KEPT their self-pairs cannot be labelled honestly and is refused."
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow"
+            }
+          },
+          "required": [
+            "mode",
+            "binEdges",
+            "counts",
+            "recordedSenderCount",
+            "selfPairTreatment",
+            "window"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pairScope": {
+          "type": "string",
+          "enum": [
+            "single_pair"
+          ],
+          "description": "One reference train against one target train. `matched_pairs` and `all_pairs` are refused: they yield many correlograms or a pooled statistic with a different denominator."
+        },
+        "lagRange": {
+          "type": "object",
+          "description": "The lag axis extent. lag = t_target - t_reference; a positive lag means the target follows the reference. min is -tauMax and max is +tauMax; max must exceed min.",
+          "properties": {
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "unit",
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        "bins": {
+          "type": "object",
+          "description": "The lag bin width. It must be positive and must tile the lag range; smoothing is never offered, so the only way to change the temporal resolution is to declare a different width.",
+          "properties": {
+            "unit": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+            },
+            "width": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "unit",
+            "width"
+          ],
+          "additionalProperties": false
+        },
+        "statistic": {
+          "type": "string",
+          "enum": [
+            "raw_pair_count",
+            "weighted_pair_sum",
+            "target_rate_per_reference_event",
+            "correlation_coefficient"
+          ],
+          "description": "The per-bin quantity. `raw_pair_count` has no denominator. `target_rate_per_reference_event` divides by the reference events and the bin width. `correlation_coefficient` is the Pearson correlation of the two binned trains and requires the per-train event counts and an effective duration; it is refused when those are absent."
+        },
+        "edgeCorrection": {
+          "type": "string",
+          "enum": [
+            "none",
+            "eligible_reference_events",
+            "valid_overlap_only"
+          ],
+          "description": "`none` leaves the finite-window taper in the figure, disclosed. `eligible_reference_events` divides by the reference events whose lag-shifted bin lies inside the window. `valid_overlap_only` is the Pearson variant over the overlapping bins."
+        },
+        "normalization": {
+          "type": "string",
+          "enum": [
+            "mean_rate_per_recorded_sender",
+            "total_event_rate"
+          ],
+          "description": "How a pre-binned rate was formed, so it can be re-derived and checked. `mean_rate_per_recorded_sender` divides the pair count by the reference-event denominator and the bin width; `total_event_rate` divides by the bin width alone."
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty"
+        }
+      },
+      "required": [
+        "pairScope",
+        "lagRange",
+        "bins",
+        "statistic"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_matrix.request.v1.schema.json",
+  "title": "network.weight_matrix request",
+  "description": "GENERATED from contract/skills/network.weight_matrix.v1.json. The acceptance authority for this skill.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "cortexel-figure-request"
+        },
+        "version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "contractDigest": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+    },
+    "skill": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "const": "network.weight_matrix"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE node universe, in the order it is drawn. Rows are TARGET (postsynaptic) nodes and columns are SOURCE (presynaptic) nodes — both indexed by this one universe. For a recurrent population autapses land on the diagonal. Must be complete: a target with no incoming connection is a scientific fact, and only a declared universe can carry it. Read by topology.node_universe_declared and topology.edge_endpoints_in_universe."
+        },
+        "connections": {
+          "description": "The connection snapshot. `weights` is REQUIRED here — a weight matrix without weights is an adjacency matrix, and the two differ in how they treat an absent cell, a zero, and a repeated connection.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows"
+            },
+            {
+              "type": "object",
+              "required": [
+                "weights"
+              ]
+            }
+          ]
+        },
+        "scope": {
+          "description": "The snapshot's scope. `snapshotTime` is REQUIRED here even though the shared type leaves it optional: a weight is a state variable, and an undated weight matrix cannot be bound to a moment in the run. The scope is additionally NARROWED — only `single_process`, `global_merged`, and a COMPLETE `mpi_target_rank_local` are admitted; a `sampled` scope and a rank-local scope with `localTargetUniverseComplete: false` are refused with a structural schema error, because a cell value is an aggregate over the COMPLETE connection set mapping to it and neither scope contains that set.",
+          "allOf": [
+            {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope"
+            },
+            {
+              "type": "object",
+              "required": [
+                "snapshotTime"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "single_process",
+                    "global_merged",
+                    "mpi_target_rank_local"
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "mpi_target_rank_local"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "localTargetUniverseComplete": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "localTargetUniverseComplete"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "nodeUniverse",
+        "connections",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How multiple connections mapping to one cell are combined. Mandatory and closed. `no_aggregation` ASSERTS one connection per cell and fails with SCIENCE_AGGREGATION_REQUIRED if that is untrue; it is the only way to guarantee that a cell's colour describes a single synapse. Read by topology.multapse_aggregation_declared as parameters.multapseAggregation."
+        },
+        "synapseModelGroup": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "Optional. Names a caller-declared comparability GROUP under which two or more distinct synapse models may be pooled onto one colour scale. When the snapshot carries two or more distinct `connections.synapseModels` and this is ABSENT, the request fails with SCIENCE_WEIGHT_GROUP_INCOMPATIBLE, because `nest:weight` is one code covering values whose physical meaning differs by model: the same number 10.0 may be 10 pA of postsynaptic current under one model and 10 nS of conductance under another. Its presence records the caller's comparability judgement; Cortexel verifies that the judgement was MADE, not that it is true, and (see knownLimitations) not that the group covers exactly the models present. Read by topology.weight_group_compatible as parameters.synapseModelGroup."
+        },
+        "colorScale": {
+          "description": "The colour-map CLASS is a scientific declaration, not a style. A diverging map asserts that its centre is a meaningful neutral point and that deviations of opposite sign are comparable. Consumed by the figure.matrix renderer; the request-validation pipeline does not enforce the diverging straddle rule (see knownLimitations).",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "An ordered-magnitude map (perceptually uniform, monotonic lightness). The correct choice whenever the weight domain has no meaningful neutral point — for example a strictly non-negative conductance weight.",
+              "properties": {
+                "class": {
+                  "const": "sequential"
+                }
+              },
+              "required": [
+                "class"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "A signed map about an explicit centre. At render time it is refused with RENDER_DIVERGING_SCALE_NO_CENTER unless the contributing weights actually straddle the centre — at least one strictly below and one strictly above it.",
+              "properties": {
+                "class": {
+                  "const": "diverging"
+                },
+                "center": {
+                  "type": "number",
+                  "description": "The neutral value. For an excitatory/inhibitory weight domain this is 0: no net drive. There is no default, because a centre chosen by the library would be a scientific claim the library is not entitled to make."
+                }
+              },
+              "required": [
+                "class",
+                "center"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Required, and only the `none` variant is supported. A heatmap cell is one colour: there is no visual channel left for a band, so any other variant is REFUSED (SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL) rather than silently discarded. Within-cell spread is reachable through the contributing count and the min/max table columns."
+        }
+      },
+      "required": [
+        "multapseAggregation",
+        "colorScale",
+        "uncertainty"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sourceDeclaration"
+    },
+    "presentation": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/presentation"
+    }
+  },
+  "required": [
+    "contract",
+    "skill",
+    "data",
+    "parameters",
+    "source"
+  ],
+  "additionalProperties": false
+}

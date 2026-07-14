@@ -1,0 +1,920 @@
+{
+  "id": "network.weight_matrix",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Synaptic weight matrix (target rows, source columns)",
+
+  "purpose": {
+    "canonicalQuestion": "For a declared node universe drawn as target rows and source columns, and a declared snapshot time, what is the explicitly named aggregate of the synaptic weights of every observed connection in each cell?",
+    "cannotEstablish": [
+      "That an empty cell is a connection whose weight is zero. An absent cell means no connection was observed under the declared scope. A measured zero weight is a drawn value with its own colour.",
+      "That a cell's colour describes one synapse. Unless `no_aggregation` is in force a cell is an aggregate over every multapse mapping to it, and the aggregate hides how many synapses and how much spread produced it.",
+      "That a net-zero cell contains no connection or only zero-valued ones. A sum of +8.0 and -8.0 is 0.0 — numerically identical to a single measured zero synapse. Only the contributing count and the min/max columns separate them.",
+      "The functional strength or sign of a connection's influence. A weight is a model parameter: in NEST it may act as a current amplitude, a conductance, or a dimensionless factor depending on the synapse and neuron model.",
+      "That the weights are current. This is a SNAPSHOT at the declared time. Under a plastic synapse model the weights at any other moment are different, and this figure says nothing about them.",
+      "Anything about connections held on another MPI rank under a rank-local scope, or about any node outside the declared node universe.",
+      "That the node ordering carries structure. The order is the caller's declared order; Cortexel never seriates or clusters, so an apparent block is only as real as the declared ordering."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Matrix orientation is FROZEN: a row is a TARGET (postsynaptic) node, a column is a SOURCE (presynaptic) node — NEST's convention. Rows and columns are both indexed by the ONE declared node universe. There is no transpose parameter and no caller-supplied axis label, because a transposed weight matrix is structurally indistinguishable from the original while inverting every directional claim the figure makes.",
+      "Row and column order is the caller's declared node-universe order. Cortexel NEVER seriates, clusters, or sorts rows or columns by any data-derived criterion. A reordered matrix manufactures visible block structure, and the reader has no way to tell a real module from an artifact of the sort.",
+      "Connection order from a recorder or a SynapseCollection is not assumed. Rows are stably sorted by (row index of target, column index of source, edge id, original ordinal) before aggregation. That canonical order is normative: binary64 addition is not associative, so the summation order is what makes `sum` byte-reproducible across the TypeScript and Python implementations.",
+      "Multapses are NEVER deduplicated. Two connection rows sharing source, target, weight, and model are two synapses; both contribute to the cell aggregate and to the contributing-connection count.",
+      "A null weight is a MISSING observation. It never contributes to an aggregate and is never read as zero. A cell whose every contributing connection has a null weight is `present_without_value`: not absent — the synapse exists — and not zero.",
+      "A weight of exactly 0 is a MEASURED value and is drawn as one. An absent cell carries a distinct legend key and is never painted as the colour scale's zero, its minimum, or its neutral midpoint.",
+      "Weights carry one quantity kind and one unit for the whole snapshot, in canonical codes only. `nest:weight` has dimension `simulator_defined`: it is never converted, never mapped to SI, and never pooled with any other code — including another simulator-defined code.",
+      "Negative zero is ACCEPTED, never rejected, and canonicalized to `0` under RFC 8785: -0.0 is a MEASURED zero weight and is drawn as one. It is never treated as a distinct value, and no error code exists for it. Cortexel applies no rounding, clamping, absolute value, or sign split to a weight at any point in the pipeline."
+    ],
+    "derivation": [
+      "Cell key: (targetId, sourceId), both members of the declared node universe. Its contributing set is every connection row whose target and source match, taken in the canonical order. Only PRESENT cells are materialized: a 4,000-node universe carrying 50,000 connections costs 50,000 cells, not 16,000,000.",
+      "sum: the binary64 sum of the finite contributing weights, added in the canonical order. It is a NET. Summing +12.0 and -8.0 yields +4.0; summing +8.0 and -8.0 yields 0.0. Cancellation is invisible in the colour and is recoverable only from the contributing count and the min/max columns.",
+      "mean: sum / (number of contributing connections with a FINITE weight). The denominator is never the total contributing count when some weights are null, and it is never a cell count.",
+      "min / max: over the finite contributing weights. A tie reports the first contributing edge in the canonical order, so the reported edge id is deterministic rather than dependent on input order.",
+      "no_aggregation: ASSERTS that at most one connection maps to each cell. If any cell has two or more, the request FAILS with SCIENCE_AGGREGATION_REQUIRED. There is no implicit 'last edge wins' — it would silently discard a real synapse and can invert a cell's sign.",
+      "Colour domain, sequential: the extent of the finite aggregates. Colour domain, diverging: SYMMETRIC about the declared centre, [centre - M, centre + M] where M is the largest absolute deviation of any finite aggregate. An asymmetric diverging domain would give equal deviations of opposite sign unequal colour intensity.",
+      "A diverging scale additionally requires that the contributing WEIGHTS straddle the centre — at least one strictly below and one strictly above. This is a RENDER-stage rule (RENDER_DIVERGING_SCALE_NO_CENTER); the request-validation pipeline has no semantic validator for it (see knownLimitations).",
+      "Absent, unobserved, and present-without-value cells lie OUTSIDE the colour domain and each carries its own legend key. None of them is ever mapped to the minimum colour or to the diverging midpoint.",
+      "Complexity: O(e log e) for the canonical sort and O(e) for aggregation, in the connection count e. No step is quadratic in the node universe, and no dense row-by-column array is allocated."
+    ],
+    "scopeRules": [
+      "The node (target/source) universe must be declared COMPLETE. An incomplete universe is REFUSED (SCOPE_NODE_UNIVERSE_REQUIRED): an edge list alone can only show that no connection was observed, never that a target has no incoming connection, so under `complete: false` no absent cell could be drawn as an absence.",
+      "A NetworkScopeV1 is mandatory and MUST carry `snapshotTime`. The shared scope type leaves `snapshotTime` optional; this figure requires it STRUCTURALLY (SCHEMA_REQUIRED_PROPERTY_MISSING when absent). A synaptic weight is a state variable: under a plastic synapse model the matrix at t = 0 and at t = 10,000 ms are different figures, and an undated weight matrix cannot be bound to a moment in the run.",
+      "Only `single_process`, `global_merged`, and a COMPLETE `mpi_target_rank_local` are admitted. The scope schema is NARROWED structurally, so an unsupported scope is refused as a schema error rather than reaching a scope-stage validator.",
+      "Scope `sampled` is REFUSED STRUCTURALLY (SCHEMA_ENUM_MISMATCH on `scope.kind`). Every cell value is an aggregate over the COMPLETE set of connections mapping to that cell. A sample does not contain that set, so no cell value is computable — not even for a cell whose edges were retained, because whether ITS multapses were fully retained is unknowable.",
+      "Scope `mpi_target_rank_local` with `localTargetUniverseComplete: false` is REFUSED STRUCTURALLY (SCHEMA_ENUM_MISMATCH): the schema requires `localTargetUniverseComplete: true`. Even a locally owned target's multapse set may be incomplete otherwise, so its aggregate would be an unquantified underestimate.",
+      "Scope `mpi_target_rank_local` with `localTargetUniverseComplete: true` is ACCEPTED. Under NEST's MPI semantics a rank holds every connection whose TARGET it owns, so any row with at least one present cell is necessarily a locally owned target and its cell aggregates are complete.",
+      "Under that same scope a row with NO present cell is ambiguous: either a target this rank does not own, or a locally owned target with no incoming connection. Cortexel cannot distinguish them, so it renders the entire row as `unobserved` and never as absent. It will not assert an absence the snapshot cannot support.",
+      "Scope `global_merged` must cover ranks 0..worldSize-1 exactly once (SCOPE_MERGE_INCOMPLETE). Only under that scope and under `single_process` does an absent cell carry the meaning 'no connection was observed'.",
+      "Every connection endpoint must be a member of the declared node universe. An out-of-universe connection is REFUSED (SEMANTIC_UNKNOWN_REFERENCE), never filtered — dropping it would paint an absent cell where a synapse exists.",
+      "The diagonal is never masked. An autapse occupies cell (i, i) and is aggregated and drawn exactly like any other connection.",
+      "A `delays` column may travel in the connection snapshot. This figure never analyses or draws it, and its presence can never change a cell value — but it is still validated: a nonpositive delay is REFUSED (SCIENCE_DELAY_NONPOSITIVE). A snapshot carrying a physically impossible delay is corrupt, and Cortexel validates every scientific column it accepts, not only the ones it draws."
+    ],
+    "uncertaintySupport": ["none"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "nodeUniverse": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/nodeUniverse",
+          "description": "The COMPLETE node universe, in the order it is drawn. Rows are TARGET (postsynaptic) nodes and columns are SOURCE (presynaptic) nodes — both indexed by this one universe. For a recurrent population autapses land on the diagonal. Must be complete: a target with no incoming connection is a scientific fact, and only a declared universe can carry it. Read by topology.node_universe_declared and topology.edge_endpoints_in_universe."
+        },
+        "connections": {
+          "description": "The connection snapshot. `weights` is REQUIRED here — a weight matrix without weights is an adjacency matrix, and the two differ in how they treat an absent cell, a zero, and a repeated connection.",
+          "allOf": [
+            { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/connectionRows" },
+            { "type": "object", "required": ["weights"] }
+          ]
+        },
+        "scope": {
+          "description": "The snapshot's scope. `snapshotTime` is REQUIRED here even though the shared type leaves it optional: a weight is a state variable, and an undated weight matrix cannot be bound to a moment in the run. The scope is additionally NARROWED — only `single_process`, `global_merged`, and a COMPLETE `mpi_target_rank_local` are admitted; a `sampled` scope and a rank-local scope with `localTargetUniverseComplete: false` are refused with a structural schema error, because a cell value is an aggregate over the COMPLETE connection set mapping to it and neither scope contains that set.",
+          "allOf": [
+            { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope" },
+            { "type": "object", "required": ["snapshotTime"] },
+            {
+              "type": "object",
+              "properties": {
+                "kind": { "enum": ["single_process", "global_merged", "mpi_target_rank_local"] }
+              },
+              "required": ["kind"]
+            },
+            {
+              "if": {
+                "type": "object",
+                "properties": { "kind": { "const": "mpi_target_rank_local" } },
+                "required": ["kind"]
+              },
+              "then": {
+                "type": "object",
+                "properties": { "localTargetUniverseComplete": { "const": true } },
+                "required": ["localTargetUniverseComplete"]
+              }
+            }
+          ]
+        }
+      },
+      "required": ["nodeUniverse", "connections", "scope"],
+      "additionalProperties": false
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "multapseAggregation": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/multapseAggregation",
+          "description": "How multiple connections mapping to one cell are combined. Mandatory and closed. `no_aggregation` ASSERTS one connection per cell and fails with SCIENCE_AGGREGATION_REQUIRED if that is untrue; it is the only way to guarantee that a cell's colour describes a single synapse. Read by topology.multapse_aggregation_declared as parameters.multapseAggregation."
+        },
+        "synapseModelGroup": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label",
+          "description": "Optional. Names a caller-declared comparability GROUP under which two or more distinct synapse models may be pooled onto one colour scale. When the snapshot carries two or more distinct `connections.synapseModels` and this is ABSENT, the request fails with SCIENCE_WEIGHT_GROUP_INCOMPATIBLE, because `nest:weight` is one code covering values whose physical meaning differs by model: the same number 10.0 may be 10 pA of postsynaptic current under one model and 10 nS of conductance under another. Its presence records the caller's comparability judgement; Cortexel verifies that the judgement was MADE, not that it is true, and (see knownLimitations) not that the group covers exactly the models present. Read by topology.weight_group_compatible as parameters.synapseModelGroup."
+        },
+        "colorScale": {
+          "description": "The colour-map CLASS is a scientific declaration, not a style. A diverging map asserts that its centre is a meaningful neutral point and that deviations of opposite sign are comparable. Consumed by the figure.matrix renderer; the request-validation pipeline does not enforce the diverging straddle rule (see knownLimitations).",
+          "oneOf": [
+            {
+              "type": "object",
+              "description": "An ordered-magnitude map (perceptually uniform, monotonic lightness). The correct choice whenever the weight domain has no meaningful neutral point — for example a strictly non-negative conductance weight.",
+              "properties": { "class": { "const": "sequential" } },
+              "required": ["class"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "A signed map about an explicit centre. At render time it is refused with RENDER_DIVERGING_SCALE_NO_CENTER unless the contributing weights actually straddle the centre — at least one strictly below and one strictly above it.",
+              "properties": {
+                "class": { "const": "diverging" },
+                "center": {
+                  "type": "number",
+                  "description": "The neutral value. For an excitatory/inhibitory weight domain this is 0: no net drive. There is no default, because a centre chosen by the library would be a scientific claim the library is not entitled to make."
+                }
+              },
+              "required": ["class", "center"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "uncertainty": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
+          "description": "Required, and only the `none` variant is supported. A heatmap cell is one colour: there is no visual channel left for a band, so any other variant is REFUSED (SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL) rather than silently discarded. Within-cell spread is reachable through the contributing count and the min/max table columns."
+        }
+      },
+      "required": ["multapseAggregation", "colorScale", "uncertainty"],
+      "additionalProperties": false
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          [
+            "/data/connections/sourceIds",
+            "/data/connections/targetIds",
+            "/data/connections/edgeIds",
+            "/data/connections/weights/values",
+            "/data/connections/delays/values",
+            "/data/connections/synapseModels"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "ids.unique",
+      "parameters": {
+        "pointers": ["/data/nodeUniverse/ids", "/data/connections/edgeIds"]
+      }
+    },
+    { "id": "topology.scope_declared" },
+    { "id": "topology.scope_supports_claim" },
+    { "id": "topology.node_universe_declared" },
+    { "id": "topology.edge_endpoints_in_universe" },
+    { "id": "topology.multapse_aggregation_declared" },
+    { "id": "topology.delay_positive" },
+    { "id": "topology.weight_group_compatible" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.matrix", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 200000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "matrix_value_quantize"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": {
+    "requiredSourceFields": ["kind", "system"]
+  },
+
+  "disclosures": [
+    "SOURCE_SIMULATION",
+    "SOURCE_SYNTHETIC_FIXTURE",
+    "SOURCE_KIND_UNKNOWN",
+    "SOURCE_LITERATURE_EXTRACTION",
+    "SOURCE_MANUAL_ENTRY",
+    "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "REFERENCE_COMPARISON_NOT_RUN",
+    "PARTIAL_NETWORK_SCOPE",
+    "RANK_LOCAL_SCOPE",
+    "NODE_UNIVERSE_INCOMPLETE",
+    "MULTAPSE_AGGREGATED",
+    "ABSENT_IS_NOT_ZERO",
+    "MISSING_VALUES_PRESENT",
+    "UNIT_CONVERTED",
+    "UNCERTAINTY_NOT_PROVIDED",
+    "DOWNSAMPLED_FOR_RENDERING",
+    "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED",
+    "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Synaptic weight matrix over a declared node universe of {nodeCount} nodes; rows are targets (postsynaptic), columns are sources (presynaptic). {valuedCellCount} cells carry a weight aggregate, {presentWithoutValueCellCount} hold connections whose weight is missing, {absentCellCount} have no observed connection, {unobservedCellCount} were not observed under this scope. Aggregate: {aggregation} over {connectionCount} connections in {weightUnit}, from {aggregateMin} to {aggregateMax}. Comparability: {synapseModelGroupStatement}. Colour scale: {colorScaleStatement}. Scope: {scopeStatement} at {snapshotTime}. {multapseStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "targetId", "header": "Target (row)", "description": "The postsynaptic node. Rows are targets; this is fixed by the contract and is not caller-configurable." },
+      { "key": "sourceId", "header": "Source (column)", "description": "The presynaptic node. Null on an unobserved-row record, where the record stands for the entire row." },
+      { "key": "cellState", "header": "Cell state", "description": "valued | present_without_value | absent | unobserved. Absent means no connection was observed under a scope that can support an absence claim. Unobserved means the scope cannot support one. Neither is a zero." },
+      { "key": "aggregate", "header": "Weight aggregate", "description": "The named aggregate of the contributing weights, to full binary64 precision. Empty when the cell is not valued." },
+      { "key": "aggregation", "header": "Aggregation", "description": "The declared formula. There is no default and no 'last edge wins'." },
+      { "key": "weightUnit", "header": "Unit", "description": "A `nest:weight` unit is simulator-defined: it has no SI mapping and is never converted or compared across systems." },
+      { "key": "contributingConnectionCount", "header": "Connections", "description": "How many connection rows map to this cell. Greater than 1 means the colour is an aggregate over multapses, not a synapse." },
+      { "key": "contributingWeightCount", "header": "Weights used", "description": "How many of those connections had a finite weight. This is the denominator of `mean`; it differs from the connection count when any weight is missing." },
+      { "key": "weightMin", "header": "Min weight", "description": "The smallest contributing weight. With the max and the count, this is the only route to the spread the single cell colour conceals." },
+      { "key": "weightMax", "header": "Max weight", "description": "The largest contributing weight. A cell whose min is negative and whose max is positive contains cancelling synapses." },
+      { "key": "synapseModels", "header": "Synapse model(s)", "description": "The distinct declared models contributing to the cell, and the caller-declared comparability group (synapseModelGroup) under which they were pooled, if any." },
+      { "key": "contributingEdgeIds", "header": "Contributing edge ids", "description": "The stable ids of every contributing connection, or a digest-bound sidecar reference to them. Declared edge ids are preserved; absent ones become deterministic ordinals assigned after the canonical sort." },
+      { "key": "scope", "header": "Scope", "description": "The snapshot scope and time this cell was observed under." }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "scipy.sparse.coo_matrix duplicate summation, cross-checked against a NEST GetConnections weight snapshot",
+      "version": "scipy 1.14.1; NEST 3.10.0",
+      "status": "not_run",
+      "notes": "coo_matrix sums duplicate (row, col) entries when converted to CSR or dense, which makes it an exact differential oracle for `aggregation: sum` and for NOTHING else: it has no mean, min, max, or no_aggregation semantics, and it maps an absent cell to 0.0 — the precise conflation this contract exists to prevent. The comparison is therefore valid only on the present cells and only under `sum`, and the absent-cell handling must be excluded before it is meaningful. Orientation must be pinned explicitly (row = target, col = source) because coo_matrix takes (row, col) positionally and a transposed oracle would agree on every symmetric fixture. The pinned reference environment has NOT been executed here, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    {
+      "system": "nest.SynapseCollection",
+      "status": "supported",
+      "notes": "GetConnections plus get(['source', 'target', 'weight', 'synapse_model']). The adapter must additionally supply what a SynapseCollection cannot express: the complete node universe (an empty target row is invisible to a connection query), the scope, and the snapshot time. It accepts the official singular/scalar form or canonical plural arrays, never both; it never broadcasts a scalar weight across rows; and it never deduplicates multapses. Accessor-bearing input is rejected before any getter can run."
+    },
+    {
+      "system": "nest.GetConnections under MPI (target-rank-local)",
+      "status": "partial",
+      "notes": "Produces `mpi_target_rank_local`. Accepted only with localTargetUniverseComplete: true, and then every entirely empty target row renders as `unobserved` rather than absent. The adapter must not merge ranks implicitly: a merged claim requires every rank and is checked."
+    },
+    {
+      "system": "connectome edge table (source, target, weight, model)",
+      "status": "partial",
+      "notes": "Accepted only when the table is accompanied by the complete node universe, a scope, a snapshot time, and a declared weight quantity. A bare edge table cannot establish an isolate, a target with no input, or the difference between an absent cell and a measured zero."
+    },
+    {
+      "system": "scipy.sparse / dense NumPy weight matrix",
+      "status": "rejected",
+      "notes": "Not an input. A COO/CSR/dense matrix has already destroyed the facts this contract requires: duplicate entries were summed (or not) under no recorded policy, an absent cell and a zero weight have both become 0.0, and the contributing edge identities are gone. A matrix is an OUTPUT of this figure, never an input to it."
+    },
+    {
+      "system": "brian2.Synapses",
+      "status": "planned",
+      "notes": "Weight arrays are per-synapse and multapses are representable, so the mapping is mechanical. It is not certified until a version matrix and fixtures exist."
+    }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.weight_matrix"],
+    "notes": "A multapse aggregation is now MANDATORY: the legacy payload had no declared policy for repeated connections mapping to one cell, so its cells were whatever the last write happened to be. Migration also REQUIRES a weight quantity with a declared dimension, a complete node universe, a network scope, and a snapshot time; without any of these it BLOCKS with MIGRATION_INFORMATION_MISSING rather than guessing. The legacy `nest.connectivity_matrix` does not migrate here automatically — it is blocked with MIGRATION_AMBIGUOUS_CONNECTIVITY_MATRIX and the caller must choose adjacency, weight, or delay, because the three differ in exactly the absence, zero, and aggregation semantics a guess would get wrong."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the target-row / source-column orientation is MAJOR. It inverts every directional claim in every stored artifact while leaving the figure structurally identical.",
+    "Changing what an absent, unobserved, or present-without-value cell means is MAJOR.",
+    "Changing an aggregation formula or its denominator — in particular the `mean` denominator when weights are missing — is MAJOR.",
+    "Changing the canonical connection sort order is MAJOR: it changes the binary64 summation order for `sum` and therefore the artifact digest.",
+    "Changing which scopes are legal, or relaxing the snapshot-time requirement, is MAJOR.",
+    "Changing the diverging straddle rule or the symmetric diverging domain is MAJOR.",
+    "Adding a new aggregation id to the registry and accepting it here is MINOR.",
+    "Adding a transpose, a clustering/seriation option, a colour-domain clamp, or a diagonal mask would be MAJOR, and each is refused outright today."
+  ],
+
+  "knownLimitations": [
+    "This figure models the weight matrix over a SINGLE declared node universe: rows are targets and columns are sources, both indexed by that universe (a recurrent population's square matrix; a disjoint source/target set is expressed by listing the union). A bipartite projection with two separately declared, differently ordered universes is not offered, because the topology validators read one `data.nodeUniverse`, and a two-universe shape would leave endpoint-in-universe and universe-completeness unenforced. Registry gap.",
+    "The diverging colour-domain straddle rule — a diverging scale requires contributing weights on both sides of the centre — is enforced only at the RENDER stage (RENDER_DIVERGING_SCALE_NO_CENTER). The request-validation pipeline has no semantic validator for it, so no living request-level invalid fixture asserts it. Registry gap.",
+    "`count_weighted_mean` is named conditionally in the blueprint but is not defined in the multapse-aggregation registry, so it is not offered. Registry gap: it needs a precise definition before any implementation may accept it.",
+    "`synapseModelGroup` records a caller-declared comparability claim. Cortexel verifies only that the group was DECLARED when two or more distinct synapse models are present (topology.weight_group_compatible checks presence, not content). It cannot verify that the declared group's model set exactly matches the models in the snapshot, nor that two synapse models' weights are actually comparable — both stay attributed to the caller. No registered disclosure id carries the claim, so it is surfaced through the accessible summary and the synapse-model table column. Registry gap.",
+    "A `nest:weight` value has no SI meaning. Cortexel never converts, compares, or pools it across simulators, and it cannot check that the number means what the caller believes.",
+    "Under `mpi_target_rank_local` Cortexel cannot enumerate the rank's local target set, so an entirely empty row is reported as unobserved. This is conservative: it never asserts an absence it cannot support, and it therefore never confirms one either.",
+    "No colour-domain clamping parameter is offered, because no registered disclosure could carry a saturated-cell fact. The domain is always the extent of the finite aggregates.",
+    "Within-cell dispersion is not drawn. A cell is one colour; the spread of its contributing weights is reachable only through the count and min/max table columns.",
+    "Axis tick labels are thinned above a bounded row/column count. Thinning a LABEL never removes a cell: every row and column stays individually addressable in the table and the sidecar.",
+    "The matrix is materialized sparsely. A dense export of a node universe beyond the profile's matrix-cell limit is refused rather than streamed."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.weight_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["t1", "t2", "s1", "s2", "s3"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["s1", "s1", "s2", "s3"],
+            "targetIds": ["t1", "t1", "t2", "t1"],
+            "edgeIds": ["e1", "e2", "e3", "e4"],
+            "weights": {
+              "kind": "synaptic_weight",
+              "unit": "pA",
+              "values": [12.0, -8.0, 4.5, 0]
+            },
+            "synapseModels": ["static_synapse", "static_synapse", "static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+          }
+        },
+        "parameters": {
+          "multapseAggregation": "sum",
+          "colorScale": { "class": "diverging", "center": 0 },
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-2026-07-14-a" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.weight_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["t10", "t11", "s1", "s2"], "complete": true },
+          "connections": {
+            "sourceIds": ["s1", "s2"],
+            "targetIds": ["t10", "t10"],
+            "edgeIds": ["c-1", "c-2"],
+            "weights": {
+              "kind": "synaptic_weight",
+              "unit": "nS",
+              "values": [2.5, null]
+            },
+            "synapseModels": ["static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "mpi_target_rank_local",
+            "rank": 0,
+            "worldSize": 4,
+            "localTargetUniverseComplete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 0 }
+          }
+        },
+        "parameters": {
+          "multapseAggregation": "no_aggregation",
+          "colorScale": { "class": "sequential" },
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-2026-07-14-b" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.weight_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["n1", "n2"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["n1", "n1", "n2", "n1"],
+            "targetIds": ["n1", "n1", "n1", "n2"],
+            "edgeIds": ["a1", "a2", "a3", "a4"],
+            "weights": {
+              "kind": "synaptic_weight",
+              "unit": "nS",
+              "values": [6.0, null, 2.0, 4.0]
+            },
+            "synapseModels": ["static_synapse", "static_synapse", "stdp_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "global_merged",
+            "worldSize": 2,
+            "mergedRanks": [0, 1],
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 250 }
+          }
+        },
+        "parameters": {
+          "multapseAggregation": "mean",
+          "synapseModelGroup": "comparable_conductance_weights",
+          "colorScale": { "class": "sequential" },
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-2026-07-14-c" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.weight_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["t1", "s1", "s2"], "order": "as_declared", "complete": true },
+          "connections": {
+            "sourceIds": ["s1", "s1", "s1", "s2"],
+            "targetIds": ["t1", "t1", "t1", "t1"],
+            "edgeIds": ["m1", "m2", "m3", "m4"],
+            "weights": {
+              "kind": "synaptic_weight",
+              "unit": "pA",
+              "values": [8.0, 8.0, -3.0, -5.0]
+            },
+            "synapseModels": ["static_synapse", "static_synapse", "static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 2000 }
+          }
+        },
+        "parameters": {
+          "multapseAggregation": "max",
+          "colorScale": { "class": "diverging", "center": 0 },
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-2026-07-14-d" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "network.weight_matrix" },
+        "data": {
+          "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+          "connections": {
+            "sourceIds": ["s1", "s1"],
+            "targetIds": ["t1", "t1"],
+            "edgeIds": ["k1", "k2"],
+            "weights": {
+              "kind": "synaptic_weight",
+              "unit": "nest:weight",
+              "values": [-2.0, 5.0]
+            },
+            "synapseModels": ["static_synapse", "static_synapse"]
+          },
+          "scope": {
+            "kind": "single_process",
+            "complete": true,
+            "snapshotTime": { "kind": "time", "unit": "ms", "value": 100 }
+          }
+        },
+        "parameters": {
+          "multapseAggregation": "min",
+          "colorScale": { "class": "diverging", "center": 0 },
+          "uncertainty": { "kind": "none", "reason": "not_applicable" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0", "runId": "run-2026-07-14-e" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "`no_aggregation` asserts one connection per cell, but two connections map to (t1, s1). Under an implicit 'last edge wins' the cell would be painted -8.0 pA and read as INHIBITORY, when the net of the two synapses is +4.0 pA — excitatory. The sign of the claim inverts, so Cortexel refuses instead of picking a winner by array order.",
+        "expectedCode": "SCIENCE_AGGREGATION_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1", "s1"],
+              "targetIds": ["t1", "t1"],
+              "edgeIds": ["e1", "e2"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0, -8.0] },
+              "synapseModels": ["static_synapse", "static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "no_aggregation",
+            "colorScale": { "class": "diverging", "center": 0 },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A connection targets `t9`, which is not in the declared node universe. Filtering it — the common convenience — would leave cell (t9, s1) undrawn and every other cell unchanged, so the figure would report an absence for a synapse that exists. Cortexel refuses rather than silently narrowing a universe the caller declared complete.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "t2", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1", "s1"],
+              "targetIds": ["t1", "t9"],
+              "edgeIds": ["e1", "e2"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0, 3.0] },
+              "synapseModels": ["static_synapse", "static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Two synapse models are pooled with no declared comparability group, and the unit is the simulator-defined `nest:weight`. Both rows read 10.0, but a static_synapse weight onto a current-based iaf_psc_alpha is 10 pA of postsynaptic current while an stdp_synapse weight onto a conductance-based cell is 10 nS. Their `sum` is 20.0 — a number that is not a current, not a conductance, and not anything. Only a declared synapseModelGroup can pool them; absent it, Cortexel refuses.",
+        "expectedCode": "SCIENCE_WEIGHT_GROUP_INCOMPATIBLE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1", "s1"],
+              "targetIds": ["t1", "t1"],
+              "edgeIds": ["e1", "e2"],
+              "weights": { "kind": "synaptic_weight", "unit": "nest:weight", "values": [10.0, 10.0] },
+              "synapseModels": ["static_synapse", "stdp_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A standard deviation is supplied for the cell aggregate. A heatmap cell has exactly one colour and no second visual channel, so the dispersion could only be silently discarded: this cell aggregates 8 multapses spanning 0.1 to 20.0 pA with a mean of 5.0 and an SD of 7.0, and it would be drawn identically to a single 5.0 pA synapse. Cortexel refuses the variant instead, and routes the spread to the count and min/max table columns where it survives.",
+        "expectedCode": "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1", "s1", "s1", "s1", "s1", "s1", "s1", "s1"],
+              "targetIds": ["t1", "t1", "t1", "t1", "t1", "t1", "t1", "t1"],
+              "edgeIds": ["e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8"],
+              "weights": {
+                "kind": "synaptic_weight",
+                "unit": "pA",
+                "values": [0.1, 0.4, 1.0, 2.0, 3.0, 6.0, 7.5, 20.0]
+              },
+              "synapseModels": [
+                "static_synapse", "static_synapse", "static_synapse", "static_synapse",
+                "static_synapse", "static_synapse", "static_synapse", "static_synapse"
+              ]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "mean",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": {
+              "kind": "standard_deviation",
+              "unit": "pA",
+              "values": [7.0],
+              "sampleCount": [8],
+              "basis": "replicates"
+            }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A sampled scope cannot produce a weight matrix at all. Every cell value is an aggregate over the COMPLETE set of connections mapping to that cell, and a sample of 5,000 of 50,000 connections does not contain it: a cell whose true sum is 40.0 pA across 4 synapses may retain 1 and be drawn as 10.0 pA. This figure's schema does not admit a `sampled` scope, so the request is refused structurally on `scope.kind` rather than being drawn as an unquantified underestimate.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "t2", "s1", "s2"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1", "s2"],
+              "targetIds": ["t1", "t2"],
+              "edgeIds": ["e1", "e2"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [10.0, 4.0] },
+              "synapseModels": ["static_synapse", "static_synapse"]
+            },
+            "scope": {
+              "kind": "sampled",
+              "parentScope": "single_process",
+              "method": "deterministic_stride",
+              "sourceConnectionCount": 50000,
+              "retainedConnectionCount": 5000,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The scope carries no snapshot time. A synaptic weight is a state variable: under stdp_synapse the same network's matrix at t = 0 and at t = 10,000 ms are different figures, and a stored artifact with no snapshot time can be re-read later as evidence for whichever moment suits. The shared scope type leaves snapshotTime optional; this figure requires it structurally, because a weight matrix without one cannot be bound to a moment in the run.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "synapseModels": ["stdp_synapse"]
+            },
+            "scope": { "kind": "single_process", "complete": true }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The node universe declares `t1` twice. A duplicate node id makes the cell a connection lands in ambiguous, and the ambiguity would silently diverge the drawn matrix, the selection, and the table — the same connection can be counted into row 0 by one component and row 1 by another. Identity must fail before any binding can happen.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "`nanosiemens` is an accepted alias, not the canonical code `nS`. A stable request must use the canonical code: a silent alias conversion changes a number the caller never sees, and on a weight — the one quantity whose dimension may be simulator-defined — an unnoticed factor is exactly the class of error this contract exists to stop.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "nanosiemens", "values": [2.5] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Scope `mpi_target_rank_local` is declared with `localTargetUniverseComplete: false`. Even for a target this rank owns, the multapse set may be truncated, so the cell aggregate would be an unquantified underestimate. This figure's schema requires `localTargetUniverseComplete: true`, so the request is refused structurally on that field rather than being drawn as a shortfall the figure cannot reveal.",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "t2", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "mpi_target_rank_local",
+              "rank": 1,
+              "worldSize": 4,
+              "localTargetUniverseComplete": false,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A `global_merged` scope declares worldSize 2 but merges only rank 0. The result is a rank-local snapshot wearing a global label: every connection whose target rank 1 owns is missing, so its rows would be drawn as absent — an assertion that no connection was observed, made about data that was never collected. A merge is global only when it covers 0..worldSize-1 exactly once.",
+        "expectedCode": "SCOPE_MERGE_INCOMPLETE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "t2", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "global_merged",
+              "worldSize": 2,
+              "mergedRanks": [0],
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The node universe is declared incomplete. Every absent cell in the matrix then means 'no connection was observed among the nodes I happened to list', not 'no connection exists' — and the two are drawn identically. A weight matrix's absent cell is a scientific claim, so it requires a universe that can support one.",
+        "expectedCode": "SCOPE_NODE_UNIVERSE_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": false },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "A `delays` column travels alongside the weights and carries -1.5 ms. This figure never draws a delay, and it would be easy to let the column through untouched — but a negative transmission delay is physically impossible, so the snapshot is corrupt, and a corrupt snapshot cannot be trusted to have produced sound weights either. Cortexel validates every scientific column it accepts, not only the ones it draws.",
+        "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "delays": { "kind": "delay", "unit": "ms", "values": [-1.5] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The weights are declared `synaptic_weight` but carry the unit `ms`, whose dimension is time. A weight is not a duration. The numbers would otherwise be summed onto a colour scale labelled in milliseconds — a matrix of aggregated delays presented as synaptic strength — and every value in it would be structurally well-formed and scientifically meaningless.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "ms", "values": [1.5] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "Two connections are declared but only one weight. Pairing by best effort would bind weight 12.0 to the first connection and silently leave the second weightless — or, worse under a shifted read, bind 12.0 to the wrong (target, source) cell entirely. A parallel array is a positional claim, so a length mismatch is an unresolvable ambiguity about which synapse the number belongs to.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "t2", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1", "s1"],
+              "targetIds": ["t1", "t2"],
+              "edgeIds": ["e1", "e2"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "synapseModels": ["static_synapse", "static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" }
+        }
+      },
+      {
+        "why": "The request tries to assert that Cortexel validated it. Validation results are library-generated facts and are not caller-settable; the field is rejected, not ignored. A caller declares what its data IS, never what Cortexel concluded about it.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "network.weight_matrix" },
+          "data": {
+            "nodeUniverse": { "ids": ["t1", "s1"], "complete": true },
+            "connections": {
+              "sourceIds": ["s1"],
+              "targetIds": ["t1"],
+              "edgeIds": ["e1"],
+              "weights": { "kind": "synaptic_weight", "unit": "pA", "values": [12.0] },
+              "synapseModels": ["static_synapse"]
+            },
+            "scope": {
+              "kind": "single_process",
+              "complete": true,
+              "snapshotTime": { "kind": "time", "unit": "ms", "value": 1000 }
+            }
+          },
+          "parameters": {
+            "multapseAggregation": "sum",
+            "colorScale": { "class": "sequential" },
+            "uncertainty": { "kind": "none", "reason": "not_applicable" }
+          },
+          "source": { "kind": "simulation", "system": "NEST" },
+          "validation": { "structural": { "result": "passed" } }
+        }
+      }
+    ]
+  }
+}

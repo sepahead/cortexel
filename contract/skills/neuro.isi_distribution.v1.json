@@ -1,0 +1,724 @@
+{
+  "id": "neuro.isi_distribution",
+  "revision": 1,
+  "status": "stable",
+  "releaseReady": false,
+  "title": "Inter-spike interval distribution",
+
+  "purpose": {
+    "canonicalQuestion": "How are within-train inter-spike intervals distributed across an explicitly declared selection of senders and trials, using intervals formed only between successive spikes of the same train?",
+    "cannotEstablish": [
+      "The firing rate. The mean interval is not the reciprocal of the mean rate: 1/E[ISI] and E[1/ISI] differ whenever intervals vary, and the interval mean is dominated by long intervals while the rate is dominated by short ones.",
+      "That the train is a renewal or Poisson process. A histogram discards the ORDER of the intervals, so a train with strong serial correlation and one without can produce the identical figure. A CV near 1 is consistent with Poisson; it is not evidence for it.",
+      "That a pooled distribution describes any single neuron. Pooling intervals across senders that fire at different rates produces a mixture whose tail looks heavy even when every contributing neuron is perfectly regular.",
+      "That the process is stationary. Time order is discarded, so a neuron that fires fast for the first half of the window and slowly for the second is indistinguishable from one that alternates throughout.",
+      "Anything about intervals longer than the observation window. No interval longer than stop - start can be formed, and intervals near that length are systematically under-sampled, so the right tail is censored by the window, not by the neuron.",
+      "That a peak in the shortest bins is bursting rather than duplicate events in the source recording. The histogram cannot separate them; only the declared zero-interval policy and the source can.",
+      "Anything about senders that were not selected, or about trains with fewer than two in-window spikes. They contribute no interval, and their silence is not evidence of long intervals."
+    ]
+  },
+
+  "science": {
+    "normalization": [
+      "Recorder output is NOT assumed chronological and NOT assumed grouped by sender. Events are stably sorted by (senderId, trialId, time, original ordinal); the original order and its digest are retained in the artifact.",
+      "Sorting happens ONLY within the group that owns ordering — a train. A global sort by time would place two senders' spikes adjacent to each other and permit an interval to be formed between them, which is not an inter-spike interval at all.",
+      "Trains are partitioned by senderId, or by (senderId, trialId) whenever trial ids are supplied. The partition is NOT a caller choice. Crossing a trial boundary manufactures one spurious interval per boundary, and the value it produces is a gap between recordings, not a neuron's interval.",
+      "The observation window is half-open [start, stop) by default. A spike exactly at `stop` is EXCLUDED and the excluded count is reported and disclosed rather than silently absorbed.",
+      "An interval requires BOTH of its spikes inside the window. An interval straddling a boundary is never formed, never clipped to the boundary, and never imputed. A train with k in-window spikes yields exactly max(k - 1, 0) intervals — never k.",
+      "Duplicate identical event rows are PRESERVED. Two records of the same spike are a source-data question, not something the renderer may resolve; they produce a zero interval, which the declared zeroIntervalPolicy must address. Deduplicating them would erase the only evidence that the source duplicates events.",
+      "Histogram bins are half-open [lo, hi), except that a value exactly at the FINAL edge falls in the final bin — otherwise the largest observed interval would always be silently dropped.",
+      "Interval quantities carry kind `interspike_interval` and a unit of the time dimension. The bin unit and the interval unit must share that dimension; conversion goes through the typed unit layer in one step, never through a hard-coded factor of 1000.",
+      "The selected sender universe is the COMPLETE set of senders chosen for this figure, including those that never fired and those that fired once. Bins are ordered by ascending lower edge; there is no other ordering."
+    ],
+    "derivation": [
+      "within_train_differences: within each train, stable-sort the in-window times and take successive differences d_i = t_(i+1) - t_i for i = 1..k-1. The subtraction is exact binary64; no rounding, snapping, or smoothing is applied to a formed interval.",
+      "A negative interval cannot arise after within-train sorting. If one is observed — or supplied in `intervals` mode — it is REJECTED with SCIENCE_NEGATIVE_INTERVAL. Cortexel never takes |d|: the absolute value of a cross-train difference is still a cross-train difference, and it would enter the histogram as a plausible short interval.",
+      "A zero interval is two same-train events at one timestamp. It is admissible only under zeroIntervalPolicy = retain_as_zero, which asserts the source may record duplicate same-sender events; under `reject` it is an error, and when no policy is declared at all the semantic layer refuses the request with SCIENCE_ZERO_INTERVAL_POLICY rather than choosing one. There is deliberately no discard option: filtering zeros deletes the evidence of a corrupted source and empties the lowest bins, where a bursting claim is read.",
+      "Binning: bin membership is decided on the interval value expressed in the DECLARED bin unit after a single conversion. Bins are half-open with a final-edge-inclusive last bin.",
+      "count: the exact non-negative integer number of intervals in each bin. This is the raw observation from which probability and density are derived.",
+      "probability: count / N_binned, where N_binned is the number of formed intervals that fell inside the bin range. Values sum to 1 across the bins within a tight binary64 tolerance.",
+      "density: count / (N_binned * w), where w is the LINEAR bin width in the declared unit. The unit is the reciprocal of the bin unit (/ms for millisecond bins). Sum of density_i * w_i = 1 within tolerance.",
+      "The linear width is used even when xScale is `log`. A logarithmic axis is a presentation choice and must never change a derived value. Dividing by a log-width yields a density with respect to log-interval; plotted as if it were p(ISI) it shifts the apparent mode by an amount that depends only on the chosen bin spacing.",
+      "An empty histogram (N_binned = 0) is NEVER normalized. probability and density are undefined with a zero denominator, so the figure reports an explicit empty state (RENDER_NO_DATA) rather than a flat, NaN, or fabricated distribution.",
+      "outOfRangeIntervals = reject: every formed interval must fall inside [firstEdge, lastEdge]. Otherwise the request is refused. The refusal reuses SCIENCE_BIN_EDGES_INVALID — the edges are invalid for this data — because the code registry has no dedicated bin-range code (see knownLimitations).",
+      "outOfRangeIntervals = exclude_and_report: out-of-range intervals are excluded from the bins, counted as separate under-range and over-range totals, and carried into the artifact, the table, and the summary. N_binned is then strictly less than the formed-interval count, so the probabilities describe only the binned subset. This is why the caller must choose explicitly.",
+      "intervals mode: the supplied interval count for each train is reconciled against that train's declared in-window spike count — it must equal max(spikeCount - 1, 0), and the totals must equal the length of the interval array. This is the only integrity check available when the raw spike times were not supplied; it is what separates a verified interval list from an unverifiable bag of numbers.",
+      "intervals mode: a supplied interval greater than the window duration is impossible for two in-window spikes, so it is rejected with SCIENCE_EVENT_OUT_OF_WINDOW — the value proves that at least one constituent spike lay outside the declared window, or that the difference was taken across trains.",
+      "Stage ordering: request-stage validation (structural schema plus the named semantic validators) is what these living examples exercise. The value-level integrity checks over SUPPLIED intervals in the two paragraphs above — sign, magnitude against the window, and spike-count reconciliation — together with the outOfRangeIntervals and log-domain rules, run in the DERIVATION and RENDER stages that follow a structurally and semantically valid request. See knownLimitations.",
+      "Complexity: O(n log n) in events for the within-train stable sort, O(n) for differencing and binning, O(b) in bins for normalization. Memory O(n)."
+    ],
+    "scopeRules": [
+      "The selected sender universe must be declared, non-empty, and free of duplicate ids. Every event sender and every interval sender must be a member of it: a spike from a sender that was supposedly not selected is a contradiction, not a value to pool in silently.",
+      "When trial ids are supplied, the trial universe must be declared and complete. Trial count is never inferred from the observed trial ids, because a trial in which a neuron stayed silent is still a trial and still a train, and omitting it overstates how much of the recording contributed to the histogram.",
+      "Every train in the (selected senders x declared trials) universe is counted in the reported train total, including trains that produced zero intervals. The train total is a required context number, not a decoration: an ISI histogram assembled from 3 of 200 trains is a figure about 3 neurons.",
+      "Each (senderId, trialId) pair in `trains` must be unique. A duplicate pair makes the spike-count reconciliation ambiguous and must fail with SEMANTIC_DUPLICATE_ID before any interval is bound to a train.",
+      "The figure pools every interval from every selected train into one histogram. It makes no per-sender claim and no claim about senders outside the declared selection."
+    ],
+    "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
+  },
+
+  "requestSchema": {
+    "data": {
+      "type": "object",
+      "description": "Either raw events with their train linkage, or explicitly supplied intervals with their train linkage. There is deliberately no pre-binned histogram mode: a histogram of numbers the caller calls intervals, with no per-train linkage, cannot be checked for within-train formation — and within-train formation is the one thing this figure exists to guarantee.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "events" },
+            "eventTimes": {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "time" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 2000000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "eventSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "maxItems": 2000000,
+              "description": "Which sender produced each event. Parallel to eventTimes.values. Without it no train can be identified and no interval can be formed."
+            },
+            "eventTrialIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "maxItems": 2000000,
+              "description": "Optional. When present, trains are partitioned by (senderId, trialId) and `trialIds` becomes REQUIRED — enforced by the semantic validator events.trial_universe_declared, not by a structural default, so the failure names the scientific reason."
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE selected-sender universe this figure is about — the recorded-sender set the validator events.sender_universe_declared checks. It includes senders that never fired and senders that fired once, cannot be inferred from the events, and is what makes the reported train count truthful."
+            },
+            "trialIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The declared trial universe, as the COMPLETE list of trial ids. Required whenever eventTrialIds is present. It exists only to make the train count and the zero-interval-train count correct; every trial id that appears in eventTrialIds must be a member. The validator events.trial_universe_declared reads this field (or trialCount); it is never inferred from the observed ids, because a trial in which a neuron stayed silent is still a trial."
+            },
+            "window": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow" }
+          },
+          "required": ["mode", "eventTimes", "eventSenderIds", "recordedSenderIds", "window"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "mode": { "const": "intervals" },
+            "intervals": {
+              "type": "object",
+              "description": "Intervals the caller already formed. No lower bound is imposed structurally: a negative value is refused by the derivation layer with SCIENCE_NEGATIVE_INTERVAL, which names the science, rather than by a bare type constraint.",
+              "properties": {
+                "kind": { "const": "interspike_interval" },
+                "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+                "values": { "type": "array", "items": { "type": "number" }, "maxItems": 2000000 }
+              },
+              "required": ["kind", "unit", "values"],
+              "additionalProperties": false
+            },
+            "intervalSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "maxItems": 2000000,
+              "description": "The train each interval came from. Parallel to intervals.values. This is the source linkage that makes the interval list checkable at all, and the semantic validator series.equal_length requires it to have the same length as intervals.values."
+            },
+            "intervalTrialIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "maxItems": 2000000,
+              "description": "Optional. Required whenever the trains are partitioned by trial. Parallel to intervals.values."
+            },
+            "trains": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "Every train in the selection, with its in-window spike count. A train with k spikes can yield exactly max(k - 1, 0) intervals; the supplied intervals are reconciled against that identity in the derivation stage. Trains that produced no interval MUST still appear, otherwise the figure cannot say how much of the selection was silent.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "senderId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                  "trialId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+                  "spikeCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The number of spikes of this train INSIDE the declared window. Not the number the recorder emitted, and not the number that survived some other filter."
+                  }
+                },
+                "required": ["senderId", "spikeCount"],
+                "additionalProperties": false
+              }
+            },
+            "recordedSenderIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The COMPLETE selected-sender universe, checked for uniqueness by ids.unique. Every interval sender must be a member."
+            },
+            "trialIds": {
+              "type": "array",
+              "items": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+              "minItems": 1,
+              "maxItems": 100000,
+              "description": "The declared trial universe as the COMPLETE list of trial ids. Required whenever intervalTrialIds is present."
+            },
+            "window": {
+              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/timeWindow",
+              "description": "Required even here. It fixes the censoring bound: two spikes inside a window of duration D cannot be more than D apart, so an interval exceeding D proves a spike outside the window or a difference taken across trains."
+            }
+          },
+          "required": ["mode", "intervals", "intervalSenderIds", "trains", "recordedSenderIds", "window"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selectionId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "selectionLabel": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/label" },
+        "bins": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
+          "description": "Required. Cortexel does not choose bin edges for you. Bin width is not a cosmetic setting: with the same intervals, a 1 ms bin can show a bursting peak that a 20 ms bin dissolves entirely, so the choice is the caller's and it is recorded."
+        },
+        "normalization": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",
+          "description": "count: exact integers. probability: sums to 1 over the BINNED intervals. density: integrates to 1 over the linear bin widths, with a unit reciprocal to the bin unit."
+        },
+        "zeroIntervalPolicy": {
+          "type": "string",
+          "enum": ["reject", "retain_as_zero"],
+          "description": "How a zero-length interval is treated. `reject` refuses it: a 0 ms interval violates the absolute refractory period and is normally a duplicated event. `retain_as_zero` asserts the source may legitimately record duplicate same-sender events at one timestamp and keeps them as measured zeros. There is no discard option, because discarding would hide the corruption and bias the lowest bins. This field is OPTIONAL at the schema level ON PURPOSE: when a zero interval is present and NO policy was declared, the semantic validator isi.zero_interval_policy refuses the request with SCIENCE_ZERO_INTERVAL_POLICY — a required field would instead mask that as a bare structural omission. Declare it whenever coincident same-sender events are possible."
+        },
+        "outOfRangeIntervals": {
+          "type": "string",
+          "enum": ["reject", "exclude_and_report"],
+          "description": "What happens to a formed interval outside [firstEdge, lastEdge]. `reject` requires the bins to cover the data. `exclude_and_report` excludes it, counts it, and discloses the under-range and over-range totals — after which the plotted probabilities describe only the binned subset, not the distribution."
+        },
+        "xScale": {
+          "type": "string",
+          "enum": ["linear", "log"],
+          "default": "linear",
+          "description": "Presentation only; it never changes a derived value. `log` requires every bin edge to be strictly positive and no zero-valued interval to exist, because neither has a position on a logarithmic axis and dropping them would delete exactly the shortest intervals. This positivity is a render-stage refusal (RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN), not a request-stage semantic rule."
+        },
+        "uncertainty": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty" }
+      },
+      "required": ["selectionId", "bins", "normalization", "outOfRangeIntervals"],
+      "additionalProperties": false
+    }
+  },
+
+  "semanticValidators": [
+    { "id": "provenance.no_caller_assurance" },
+    { "id": "provenance.note_safe_display" },
+    { "id": "unit.canonical_code" },
+    { "id": "unit.dimension_match" },
+    {
+      "id": "series.equal_length",
+      "parameters": {
+        "groups": [
+          ["/data/eventTimes/values", "/data/eventSenderIds", "/data/eventTrialIds"],
+          ["/data/intervals/values", "/data/intervalSenderIds", "/data/intervalTrialIds"]
+        ]
+      }
+    },
+    { "id": "ids.unique", "parameters": { "pointers": ["/data/recordedSenderIds", "/data/trialIds"] } },
+    { "id": "window.valid", "parameters": { "pointer": "/data/window" } },
+    { "id": "bins.strictly_increasing" },
+    { "id": "events.within_window" },
+    { "id": "events.sender_universe_declared" },
+    { "id": "events.trial_universe_declared" },
+    { "id": "isi.within_train_only" },
+    { "id": "isi.zero_interval_policy" },
+    { "id": "histogram.normalization_consistent" },
+    { "id": "uncertainty.valid" },
+    { "id": "uncertainty.supported_variant" }
+  ],
+
+  "renderer": { "id": "figure.distribution", "revision": 1 },
+
+  "budgets": {
+    "maxObservations": 2000000,
+    "maxVisibleMarks": 100000,
+    "maxInlineTableRows": 500,
+    "compactionPolicies": ["none", "histogram_merge_adjacent"],
+    "tablePolicy": "excerpt_inline_with_complete_sidecar"
+  },
+
+  "provenance": { "requiredSourceFields": ["kind"] },
+
+  "disclosures": [
+    "SOURCE_SIMULATION", "SOURCE_SYNTHETIC_FIXTURE", "SOURCE_KIND_UNKNOWN", "SOURCE_AUTHENTICITY_UNVERIFIED",
+    "SOURCE_LITERATURE_EXTRACTION", "SOURCE_MANUAL_ENTRY",
+    "REFERENCE_COMPARISON_NOT_RUN", "EVENTS_EXCLUDED_OUT_OF_WINDOW", "UNCERTAINTY_NOT_PROVIDED",
+    "MISSING_VALUES_PRESENT", "UNIT_CONVERTED",
+    "DOWNSAMPLED_FOR_RENDERING", "COMPACTION_MAY_HIDE_TRANSIENTS", "TABLE_EXCERPT_ONLY",
+    "CALLER_NOTE_UNVERIFIED", "NONSTANDARD_BUDGET_PROFILE"
+  ],
+
+  "accessibility": {
+    "summaryTemplate": "Inter-spike interval distribution for {selectionLabel}. {intervalCount} intervals formed within {trainCount} trains ({senderCount} senders x {trialCount} trials) from {spikeCount} spikes in the window {windowStart} to {windowStop} {timeUnit}. Intervals are formed only between successive spikes of the same train. {trainsWithoutIntervalCount} trains produced no interval. {excludedOutOfWindowCount} spikes fell outside the window. {binCount} bins span {binMin} to {binMax} {intervalUnit} on a {xScale} axis; {underRangeCount} intervals fell below and {overRangeCount} above that range. Normalization: {normalization}, values in {valueUnit}. No interval longer than {windowDuration} {timeUnit} can be observed. {zeroIntervalStatement} {uncertaintyStatement} {compactionStatement}",
+    "tableColumns": [
+      { "key": "binStart", "header": "Bin start", "description": "Inclusive lower edge, in the declared bin unit." },
+      { "key": "binEnd", "header": "Bin end", "description": "Exclusive upper edge, except for the final bin, whose upper edge is inclusive." },
+      { "key": "binWidth", "header": "Bin width", "description": "The LINEAR width. It is the width used by the density denominator even when the axis is logarithmic." },
+      { "key": "binUnit", "header": "Bin unit" },
+      { "key": "count", "header": "Intervals", "description": "Exact integer count of intervals in this bin. This is the raw observation everything else is derived from; an empty bin is a measured zero, not missing data." },
+      { "key": "probability", "header": "Probability", "description": "count / binned-interval total. Present only when normalization is probability." },
+      { "key": "density", "header": "Density", "description": "count / (binned-interval total x linear bin width). Present only when normalization is density." },
+      { "key": "densityUnit", "header": "Density unit", "description": "The reciprocal of the bin unit, e.g. /ms for millisecond bins." },
+      { "key": "binnedIntervalCount", "header": "Binned intervals", "description": "The denominator. N_binned: the formed intervals that fell inside the bin range. Constant across rows. Without it, probability and density cannot be checked against count from the table alone." },
+      { "key": "formedIntervalCount", "header": "Formed intervals", "description": "Every interval formed within a train, including any the bin range excluded. It equals the denominator ONLY when no interval fell out of range; when it does not, the plotted probabilities describe a subset." },
+      { "key": "underRangeCount", "header": "Below bin range", "description": "Formed intervals below the first edge, excluded under outOfRangeIntervals: exclude_and_report. Never binned, never clipped into the first bin." },
+      { "key": "overRangeCount", "header": "Above bin range", "description": "Formed intervals above the last edge, excluded under outOfRangeIntervals: exclude_and_report. Never binned, never clipped into the final bin." },
+      { "key": "trainCount", "header": "Trains", "description": "Every train in the (selected senders x declared trials) universe, INCLUDING trains that produced no interval. An ISI histogram assembled from 3 of 200 trains is a figure about 3 neurons." },
+      { "key": "spikeCount", "header": "In-window spikes", "description": "The in-window spikes the intervals were formed from. A train with k in-window spikes yields exactly max(k - 1, 0) intervals — never k." },
+      { "key": "excludedOutOfWindowCount", "header": "Spikes excluded (window)", "description": "Spikes outside the declared window. They form no interval and are never clipped to the boundary; the right tail is censored by the window, not by the neuron." },
+      { "key": "uncertaintyLower", "header": "Uncertainty lower" },
+      { "key": "uncertaintyUpper", "header": "Uncertainty upper" }
+    ]
+  },
+
+  "evidence": {
+    "handVectors": true,
+    "externalOracle": {
+      "name": "elephant.statistics.isi",
+      "version": "1.2.1",
+      "status": "not_run",
+      "notes": "Elephant's isi() takes successive differences within ONE Neo SpikeTrain, which is the same within-train rule this contract fixes; it returns n-1 intervals for n spikes. Before the comparison means anything, three conventions must be matched parameter for parameter: Elephant does not partition by sender (the caller must present one SpikeTrain per train), it applies no bin-range exclusion, and its t_start/t_stop must be aligned to this contract's half-open window so that boundary-straddling intervals are absent on both sides rather than only on ours. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+    }
+  },
+
+  "adapters": [
+    { "system": "nest.spike_recorder", "status": "supported", "notes": "The adapter must supply the SELECTED sender universe, which NEST knows and the event list does not, and must not assume the recorder's output is chronological or grouped by sender. Ordering is established within each train by Cortexel." },
+    { "system": "neo.SpikeTrain", "status": "supported", "notes": "One SpikeTrain is one train, which matches the within-train rule exactly. t_start/t_stop map to the window; the unit is taken from the quantity, never guessed. Segments of a Block map to trials, and the complete Segment list must be declared even for segments in which the unit was silent." },
+    { "system": "nwb.Units.spike_times", "status": "partial", "notes": "The caller must select the unit rows explicitly. NWB carries no trial partition unless the trials table is mapped, so the trial partitioning must be declared rather than inferred; without it the intervals would be formed across trial boundaries." },
+    { "system": "ncp", "status": "planned", "notes": "Not yet certified. An adapter is never exempt from the core gate: its output is validated by this contract like any other request." }
+  ],
+
+  "migration": {
+    "legacyIds": ["nest.isi_distribution"],
+    "notes": "The legacy payload accepted a flat array of numbers labelled `isis` with no sender linkage and no per-train spike counts, so nothing could establish that the values were within-train successive differences rather than a np.diff() over a sender-concatenated array. It also carried no zero-interval policy. Migration therefore REQUIRES per-train linkage and an explicit zero-interval policy and blocks with MIGRATION_INFORMATION_MISSING rather than accepting an unverifiable bag of numbers; the error registry already fixes that migration never guesses a trial count, a unit, or a zero-lag policy."
+  },
+
+  "owner": "Sepehr Mahmoudian",
+
+  "changePolicy": [
+    "Changing the train partition (senderId, or senderId x trialId) is MAJOR.",
+    "Changing the bin boundary convention or the final-edge inclusion rule is MAJOR.",
+    "Changing the density denominator, or using anything other than the LINEAR bin width under a logarithmic axis, is MAJOR.",
+    "Changing the probability denominator from the binned-interval total is MAJOR.",
+    "Adding a discard option to zeroIntervalPolicy is MAJOR — it would remove evidence rather than represent it.",
+    "Adding a pre-binned histogram mode is MAJOR: it removes the within-train verification this figure exists to provide.",
+    "Changing the boundary-censoring rule so that a straddling interval is clipped or imputed is MAJOR.",
+    "Adding a new uncertainty variant, a new table column, or a new summary fact is MINOR."
+  ],
+
+  "knownLimitations": [
+    "The distribution is right-censored by the window. Intervals whose preceding or following spike lies outside it are never formed, so no interval longer than the window can appear and long ones are under-represented. Cortexel discloses the window; it cannot correct the censoring.",
+    "The figure is a pooled mixture. Rate heterogeneity across senders inflates the apparent irregularity of the pooled distribution, so a CV or a heavy tail read off this figure is a property of the mixture, not of any neuron in it.",
+    "Cortexel does not select bin edges. It records the choice and verifies the normalization; the choice remains the caller's, and it can change what the figure appears to show.",
+    "A logarithmic COUNT axis is not offered. An empty bin is a measured zero and has no representable position on a log axis, and the disclosure registry has no rule covering its omission — so the figure declines rather than draw a bar that silently disappears.",
+    "Stage boundary: request-stage validation checks bin-edge monotonicity, window validity, id uniqueness, sender and trial-universe membership, unit dimension, undeclared zero-interval policy, and parallel-array length. The invalid examples exercise exactly these.",
+    "Value-level checks over SUPPLIED intervals — sign, magnitude against the window, and reconciliation against per-train spike counts — run in the DERIVATION stage after a request is structurally and semantically valid, so they carry no request-stage invalid vector here. The within-train stable sort also makes SCIENCE_NEGATIVE_INTERVAL unreachable for well-formed numeric event input.",
+    "Registry gap: the error registry has no dedicated code for formed intervals falling outside the declared bin range. At derivation, SCIENCE_BIN_EDGES_INVALID is reused as the closest registered code; a future SCIENCE_BIN_RANGE_INCOMPLETE would be more precise. At request stage the same code is produced directly by non-increasing bin edges.",
+    "Registry gap: the error registry has no dedicated code for an interval count that contradicts its train's spike count. At derivation, SEMANTIC_LENGTH_MISMATCH is reused, which is accurate about the count disagreement but does not name the science. At request stage the same code is produced directly by a sender-linkage array of the wrong length.",
+    "Registry gap: the disclosure registry has no rule for `mode: intervals` (raw spike times not observed) or for intervals excluded by outOfRangeIntervals. PRE_BINNED_INPUT is deliberately NOT reused: its text would state something false. Those facts ride in the receipt, table, and summary instead.",
+    "Registry gap: ids.unique takes array pointers only, so the composite (senderId, trialId) uniqueness of `trains` is specified normatively in scopeRules and needs a validator-parameter extension before it is mechanically enforced.",
+    "Trial-universe completeness is asserted by the caller declaring the full trialIds list; no structural flag or validator mechanically confirms completeness, so an incomplete list would understate the train count without being caught at the request stage.",
+    "The log-scale nonpositive-domain refusal (RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN) is a render-stage check and never a request-stage semantic error, so it has no request-stage invalid vector."
+  ],
+
+  "examples": {
+    "valid": [
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.isi_distribution" },
+        "data": {
+          "mode": "events",
+          "eventTimes": { "kind": "time", "unit": "ms", "values": [10, 30, 12, 22, 42, 5] },
+          "eventSenderIds": ["1", "1", "2", "2", "2", "1"],
+          "eventTrialIds": ["t1", "t1", "t1", "t1", "t1", "t2"],
+          "recordedSenderIds": ["1", "2", "3"],
+          "trialIds": ["t1", "t2"],
+          "window": { "start": 0, "stop": 100, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "selectionId": "exc",
+          "selectionLabel": "Excitatory",
+          "bins": { "mode": "width", "unit": "ms", "width": 5, "start": 0, "stop": 25 },
+          "normalization": "count",
+          "zeroIntervalPolicy": "reject",
+          "outOfRangeIntervals": "reject",
+          "xScale": "linear",
+          "uncertainty": { "kind": "none", "reason": "not_computed" }
+        },
+        "source": { "kind": "simulation", "system": "NEST", "systemVersion": "3.10.0" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.isi_distribution" },
+        "data": {
+          "mode": "intervals",
+          "intervals": { "kind": "interspike_interval", "unit": "ms", "values": [4, 6, 12, 18] },
+          "intervalSenderIds": ["1", "1", "2", "2"],
+          "trains": [
+            { "senderId": "1", "spikeCount": 3 },
+            { "senderId": "2", "spikeCount": 3 },
+            { "senderId": "3", "spikeCount": 1 }
+          ],
+          "recordedSenderIds": ["1", "2", "3"],
+          "window": { "start": 0, "stop": 200, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "selectionId": "exc",
+          "bins": { "mode": "edges", "unit": "ms", "edges": [2, 8, 32], "boundary": "[lo,hi)", "finalEdgeInclusive": true },
+          "normalization": "density",
+          "zeroIntervalPolicy": "reject",
+          "outOfRangeIntervals": "reject",
+          "xScale": "log",
+          "uncertainty": { "kind": "none", "reason": "not_computed" }
+        },
+        "source": { "kind": "simulation", "system": "NEST" }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.isi_distribution" },
+        "data": {
+          "mode": "events",
+          "eventTimes": { "kind": "time", "unit": "ms", "values": [1, 1, 3, 9] },
+          "eventSenderIds": ["7", "7", "7", "7"],
+          "recordedSenderIds": ["7"],
+          "window": { "start": 0, "stop": 50, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "selectionId": "unit-7",
+          "selectionLabel": "Unit 7",
+          "bins": { "mode": "width", "unit": "ms", "width": 2, "start": 0, "stop": 4 },
+          "normalization": "probability",
+          "zeroIntervalPolicy": "retain_as_zero",
+          "outOfRangeIntervals": "exclude_and_report",
+          "xScale": "linear",
+          "uncertainty": { "kind": "none", "reason": "single_trial" }
+        },
+        "source": {
+          "kind": "simulation",
+          "system": "NEST",
+          "declaredNote": "Duplicate spike at t = 1 ms is a known recorder artifact of this run.",
+          "declaredLimitations": ["Recorder resolution is 0.1 ms; two events may share a timestamp."]
+        }
+      },
+      {
+        "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+        "skill": { "id": "neuro.isi_distribution" },
+        "data": {
+          "mode": "events",
+          "eventTimes": { "kind": "time", "unit": "ms", "values": [10, 20, 35, 50] },
+          "eventSenderIds": ["5", "5", "5", "5"],
+          "recordedSenderIds": ["5"],
+          "window": { "start": 0, "stop": 60, "unit": "ms", "boundary": "[start,stop)" }
+        },
+        "parameters": {
+          "selectionId": "unit-5",
+          "selectionLabel": "Unit 5",
+          "bins": { "mode": "edges", "unit": "ms", "edges": [0, 10, 20, 30], "boundary": "[lo,hi)", "finalEdgeInclusive": true },
+          "normalization": "count",
+          "zeroIntervalPolicy": "reject",
+          "outOfRangeIntervals": "reject",
+          "xScale": "linear",
+          "uncertainty": { "kind": "none", "reason": "single_trial" }
+        },
+        "source": { "kind": "simulation", "system": "NEST" }
+      }
+    ],
+
+    "invalid": [
+      {
+        "why": "Trial ids are supplied but the trial universe is not declared. Cortexel would then have to infer the trials from the ids it happens to see — here 1 trial, when 4 were run. The histogram would be described as coming from 1 train instead of 4, and the 3 trials in which the neuron stayed silent would vanish, making a sparsely firing neuron look continuously active. A trial with no spikes is still a trial and still a train.",
+        "expectedCode": "SCIENCE_TRIAL_UNIVERSE_REQUIRED",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [10, 30] },
+            "eventSenderIds": ["1", "1"],
+            "eventTrialIds": ["t2", "t2"],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 0, "stop": 100, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 5, "start": 0, "stop": 50 },
+            "normalization": "count",
+            "zeroIntervalPolicy": "reject",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "Two events of sender 7 share the timestamp t = 1 ms, which would produce a 0 ms interval, and NO zeroIntervalPolicy was declared. A 0 ms inter-spike interval violates the absolute refractory period of roughly 1-2 ms and is normally a duplicated record or two merged recorders, so Cortexel refuses to choose silently: the caller must state whether the source may legitimately record coincident same-sender events (retain_as_zero) or not (reject). There is deliberately no discard option, because discarding would empty the first bin — exactly where a burstiness claim is read.",
+        "expectedCode": "SCIENCE_ZERO_INTERVAL_POLICY",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1, 1, 3] },
+            "eventSenderIds": ["7", "7", "7"],
+            "recordedSenderIds": ["7"],
+            "window": { "start": 0, "stop": 50, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "unit-7",
+            "bins": { "mode": "width", "unit": "ms", "width": 1, "start": 0, "stop": 10 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "A recorded spike at t = 60 ms lies outside the declared half-open window [0, 50). A spike outside the window can form no in-window interval and is never clipped to the boundary; Cortexel reports the excluded count rather than quietly ignoring an observation the caller declared. The right tail of an ISI distribution is censored by the window, not by the neuron.",
+        "expectedCode": "SCIENCE_EVENT_OUT_OF_WINDOW",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [10, 60] },
+            "eventSenderIds": ["1", "1"],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 0, "stop": 50, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 10, "start": 0, "stop": 60 },
+            "normalization": "count",
+            "zeroIntervalPolicy": "reject",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The selected-sender universe lists sender 1 twice. An ambiguous sender identity must fail before any spike, interval, or train can bind to it: with two entries sharing an id, selection and per-train reconciliation could each resolve it a different way and the figure would quietly stop being about the population the caller described.",
+        "expectedCode": "SEMANTIC_DUPLICATE_ID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [10, 20] },
+            "eventSenderIds": ["1", "1"],
+            "recordedSenderIds": ["1", "1"],
+            "window": { "start": 0, "stop": 50, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 5, "start": 0, "stop": 25 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The interval array has 4 entries but the parallel sender-linkage array has only 3, so the fourth interval has no train it can be attributed to. Cortexel never pairs an interval with a sender by best effort — a shorter linkage array means the export is broken, not that the last sender should be reused. This is the same class of defect as np.diff() over a sender-concatenated array, which manufactures one spurious interval per sender boundary.",
+        "expectedCode": "SEMANTIC_LENGTH_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "intervals",
+            "intervals": { "kind": "interspike_interval", "unit": "ms", "values": [4, 6, 12, 18] },
+            "intervalSenderIds": ["1", "1", "2"],
+            "trains": [
+              { "senderId": "1", "spikeCount": 3 },
+              { "senderId": "2", "spikeCount": 3 }
+            ],
+            "recordedSenderIds": ["1", "2"],
+            "window": { "start": 0, "stop": 200, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 5, "start": 0, "stop": 25 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "An event's sender is not in the declared selection. Sender 99 was never selected, so its 2 spikes and the interval between them would be pooled into a distribution the caller believes describes senders 1 and 2 alone. Cortexel never silently widens a universe the caller declared; the contradiction is in the selection or in the event filter, and it must be fixed there.",
+        "expectedCode": "SEMANTIC_UNKNOWN_REFERENCE",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "events",
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [10, 20, 30, 41] },
+            "eventSenderIds": ["1", "1", "99", "99"],
+            "recordedSenderIds": ["1", "2"],
+            "window": { "start": 0, "stop": 100, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 5, "start": 0, "stop": 25 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The bin edges [0, 10, 5] are not strictly increasing: edge 2 (5) is not greater than edge 1 (10). n edges must define n-1 half-open bins in ascending order, and a zero-width or inverted bin has no meaning, so Cortexel refuses rather than draw a bar over a range that runs backwards.",
+        "expectedCode": "SCIENCE_BIN_EDGES_INVALID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "intervals",
+            "intervals": { "kind": "interspike_interval", "unit": "ms", "values": [2, 4] },
+            "intervalSenderIds": ["1", "1"],
+            "trains": [{ "senderId": "1", "spikeCount": 3 }],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 0, "stop": 200, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "edges", "unit": "ms", "edges": [0, 10, 5] },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The quantity kind is `interspike_interval`, whose dimension is time, but the unit is Hz, whose dimension is frequency. This is what a reciprocal looks like after someone converted intervals to instantaneous rates and left the kind alone. The resulting figure is not the ISI distribution: the histogram of 1/ISI has mean E[1/ISI], which is not 1/E[ISI], and for a train with any short intervals the reciprocal distribution is dominated by them and its mean can diverge. Two arrays are not comparable merely because both are numbers.",
+        "expectedCode": "SCIENCE_UNIT_DIMENSION_MISMATCH",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "intervals",
+            "intervals": { "kind": "interspike_interval", "unit": "Hz", "values": [125, 50] },
+            "intervalSenderIds": ["1", "1"],
+            "trains": [{ "senderId": "1", "spikeCount": 3 }],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 0, "stop": 200, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 5, "start": 0, "stop": 50 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The observation window is inverted: start 50 is not less than stop 0. An empty or inverted window admits no interval at all — two spikes cannot both lie inside a duration that does not exist — so Cortexel refuses it rather than form a distribution over a negative span. The default convention is the half-open interval [start, stop) and it requires start < stop.",
+        "expectedCode": "SCIENCE_WINDOW_INVALID",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "intervals",
+            "intervals": { "kind": "interspike_interval", "unit": "ms", "values": [4, 6] },
+            "intervalSenderIds": ["1", "1"],
+            "trains": [{ "senderId": "1", "spikeCount": 3 }],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 50, "stop": 0, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 2, "start": 0, "stop": 10 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "`ms` is canonical; `milliseconds` is only an alias. A stable request must use the canonical code, and the alias is rejected with a repair rather than silently converted, because a silent conversion changes a number the caller never sees. The failure mode this guards is not hypothetical: an unnoticed ms/s confusion in a bin unit rescales every edge by 1000 and moves a 10 ms mode to 10 s.",
+        "expectedCode": "SCIENCE_UNIT_ALIAS_NOT_CANONICAL",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "intervals",
+            "intervals": { "kind": "interspike_interval", "unit": "ms", "values": [4, 6] },
+            "intervalSenderIds": ["1", "1"],
+            "trains": [{ "senderId": "1", "spikeCount": 3 }],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 0, "stop": 200, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "milliseconds", "width": 2, "start": 0, "stop": 10 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "`binWidthMs` is not a field of this contract — the legacy shape of a bare `bin_ms` alongside a free-text unit. Because parameters are closed, it fails rather than being ignored. If it were ignored the caller would believe the figure used 1 ms bins while it actually used the 10 ms bins in `bins`, and a bursting peak visible at 1 ms would be invisible at 10 ms with nothing on the figure to say so.",
+        "expectedCode": "SCHEMA_UNKNOWN_PROPERTY",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "intervals",
+            "intervals": { "kind": "interspike_interval", "unit": "ms", "values": [4, 6] },
+            "intervalSenderIds": ["1", "1"],
+            "trains": [{ "senderId": "1", "spikeCount": 3 }],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 0, "stop": 200, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 10, "start": 0, "stop": 50 },
+            "binWidthMs": 1,
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" }
+        }
+      },
+      {
+        "why": "The request tries to assert that Cortexel validated it and that its reference comparison passed. Validation results are library-generated facts and are not caller-settable; the field is rejected on the RAW request, before any normalization, so it cannot be smuggled in through a default. A caller declares what its data IS, never what Cortexel concluded about it.",
+        "expectedCode": "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.isi_distribution" },
+          "data": {
+            "mode": "intervals",
+            "intervals": { "kind": "interspike_interval", "unit": "ms", "values": [4, 6] },
+            "intervalSenderIds": ["1", "1"],
+            "trains": [{ "senderId": "1", "spikeCount": 3 }],
+            "recordedSenderIds": ["1"],
+            "window": { "start": 0, "stop": 200, "unit": "ms" }
+          },
+          "parameters": {
+            "selectionId": "exc",
+            "bins": { "mode": "width", "unit": "ms", "width": 2, "start": 0, "stop": 10 },
+            "normalization": "count",
+            "outOfRangeIntervals": "reject"
+          },
+          "source": { "kind": "simulation" },
+          "validation": { "referenceComparison": { "status": "passed" } }
+        }
+      }
+    ]
+  }
+}
