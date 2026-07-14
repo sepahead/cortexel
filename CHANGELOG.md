@@ -6,6 +6,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Pre-1.0 baseline and evidence ledger.** `docs/release/BASELINE-2026-07-14.md`
+  freezes commit `16f2da7` with its toolchain, tracked-file inventory digest, and
+  the first independently executed command receipts (446 tests passing).
+  `docs/release/evidence-ledger.v1.json` records all 155 release gates with an
+  explicit `PASS`/`FAIL`/`NOT_RUN`/`NOT_APPLICABLE`/`BLOCKED` state.
+- `scripts/check-evidence-ledger.ts` parses the ledger strictly, rejects a `PASS`
+  that carries no reproducible receipt, requires a rationale for
+  `NOT_APPLICABLE`, and blocks a stable (1.x+) release tag while any
+  release-blocking gate is unproven. Pre-1.0 tags assert no stable contract and
+  are gated on ledger integrity alone.
+- `docs/release/known-consumers.v1.json` records downstream consumers with an
+  explicit verification state. Being listed is not certification.
+- A release-blocker issue form.
+
+### Changed
+
+- README now carries an explicit pre-1.0 status box. HEAD must not be cited as a
+  released product.
+
+---
+
 Repository-wide contract, renderer, and release hardening for agent-authored
 visualizations. The skill-axis contract version is now `1.6.0`; callers should
 regenerate cached descriptors/manifests before adopting this release.

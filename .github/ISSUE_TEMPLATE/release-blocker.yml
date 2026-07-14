@@ -1,0 +1,83 @@
+name: Release blocker
+description: A defect or missing evidence that must be resolved before a stable release.
+title: "[release-blocker] "
+labels: ["release-blocker"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for anything that blocks a stable Cortexel release: a wrong
+        scientific result, a forgeable disclosure, an unsafe parser or output path,
+        a nondeterministic stable digest, a TypeScript/Python divergence, an install
+        failure, missing sidecar data, or an unreproducible release artifact.
+
+        **Do not paste private research data, credentials, or unpublished datasets.**
+        Reduce the input to the smallest redistributable reproducer.
+
+        For security vulnerabilities, use private vulnerability reporting instead —
+        do not open a public issue.
+
+  - type: input
+    id: gate
+    attributes:
+      label: Release gate
+      description: The affected gate ID from `docs/release/evidence-ledger.v1.json`, if known (e.g. `R037`).
+      placeholder: R037
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Use the definitions in the blueprint risk register.
+      options:
+        - "P0 — active compromise, code execution, credential leak, or published dangerous output"
+        - "P1 — a stable path can silently produce materially wrong scientific meaning or bypass a critical boundary"
+        - "P2 — a stable interoperability, determinism, accessibility, packaging, or bounded-resource promise is materially false"
+        - "P3 — localized defect with a workaround that does not corrupt scientific meaning or security"
+    validations:
+      required: true
+
+  - type: input
+    id: identity
+    attributes:
+      label: Contract and package identity
+      description: Output of `cortexel identity --json`, or the package/contract versions and contract digest.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior and its source
+      description: State the convention you expected and where it comes from — a formula, an upstream library and version, or a publication.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Observed behavior
+      description: What Cortexel actually did. Include the error code and JSON pointer, or the artifact digest, rather than prose alone.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: The smallest request/command that shows the defect.
+      render: shell
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: impact
+    attributes:
+      label: Impact
+      options:
+        - label: This may affect figures that have already been published or archived.
+        - label: Correcting this changes the accepted meaning of previously valid input.
+        - label: I have confirmed this reproducer contains no private or unlicensed data.
+          required: true

@@ -11,6 +11,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![types: TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6.svg)](#)
 
+> **Status: pre-1.0 development. There is no stable release. `main` may break.**
+> **Do not cite HEAD as Cortexel 1.0.**
+>
+> Cortexel is being rebuilt against a versioned 1.0 contract. The machine-readable
+> state of every release gate is in
+> [`docs/release/evidence-ledger.v1.json`](./docs/release/evidence-ledger.v1.json);
+> the frozen starting point is [`docs/release/BASELINE-2026-07-14.md`](./docs/release/BASELINE-2026-07-14.md).
+> A gate is only `PASS` when it carries a reproducible receipt. No package has been
+> published to npm or PyPI, and no DOI has been minted.
+
 **Cortexel** is an agent-consumable scientific-visualization *contract* for neural
 simulations. An AI agent emits a declarative **`VizSpec`** (plain JSON); Cortexel
 validates it, routes it to a scene, and enforces **scientific-honesty provenance

@@ -1,0 +1,39 @@
+{
+  "$comment": "Downstream consumers of Cortexel. A consumer listed here is NOT thereby certified. 'state' is the only claim.",
+  "registryVersion": 1,
+  "states": [
+    "unknown",
+    "unverified",
+    "planned",
+    "local-source-pass",
+    "installed-artifact-pass",
+    "live-integration-pass",
+    "certified-for-release",
+    "failed",
+    "stale"
+  ],
+  "consumers": [
+    {
+      "id": "engram",
+      "repository": "private",
+      "visibility": "private",
+      "pinnedCortexelRevision": "unknown",
+      "integrationOwner": "Sepehr Mahmoudian",
+      "surfaceUsed": ["cortexel/core", "cortexel/react"],
+      "lastTestedAt": null,
+      "state": "unverified",
+      "notes": "Engram consumes published Cortexel commits as a pinned git dependency and may carry a generated manifest snapshot. No integration run against the 0.9.0 contract has been executed from this repository, so no compatibility claim is made."
+    },
+    {
+      "id": "ncp",
+      "repository": "https://github.com/sepahead/NCP",
+      "visibility": "public",
+      "pinnedCortexelRevision": null,
+      "integrationOwner": "Sepehr Mahmoudian",
+      "surfaceUsed": ["cortexel/adapters/ncp"],
+      "lastTestedAt": null,
+      "state": "planned",
+      "notes": "The NCP observation adapter targets an immutable released NCP identity only. NCP's own HEAD was described upstream as an unreleased, release-blocked 1.0 candidate; Cortexel must not certify against moving HEAD. No NCP release has been certified."
+    }
+  ]
+}

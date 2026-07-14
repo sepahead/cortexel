@@ -1,0 +1,1406 @@
+{
+  "$schema": "./evidence-ledger.schema.json",
+  "ledgerVersion": 1,
+  "project": "cortexel",
+  "targetRelease": "1.0.0",
+  "currentRelease": "0.9.0",
+  "statement": "This ledger records what was actually executed. A gate is PASS only with a linked receipt. 0.9.0 is a pre-1.0 development release and makes no 1.0 stable-contract claim.",
+  "baselineCommit": "16f2da71a5beb863235a90e552e6772639638be3",
+  "gates": [
+    {
+      "id": "R001",
+      "section": "Product boundary and identity",
+      "requirement": "Stable documentation defines Cortexel as a closed figure-contract catalog, not a general visualization grammar.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R002",
+      "section": "Product boundary and identity",
+      "requirement": "The stable catalog contains only the approved v1 identifiers and `FigureBundleV1`.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R003",
+      "section": "Product boundary and identity",
+      "requirement": "No stable catalog entry has `scene: null`, wildcard payloads, host-enforced captions, or an unowned renderer.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R004",
+      "section": "Product boundary and identity",
+      "requirement": "Every catalog entry has status, contract version, semantic-validator id/version, output types, limits, examples, and owner.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R005",
+      "section": "Product boundary and identity",
+      "requirement": "Experimental entries are absent from stable counts, default discovery, stable conformance badges, and root exports.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R006",
+      "section": "Product boundary and identity",
+      "requirement": "Package, contract, catalog, semantic-validator, canonicalizer, renderer, theme, budget-profile, conformance-corpus, and build identities are emitted and documented.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R007",
+      "section": "Product boundary and identity",
+      "requirement": "All identities in npm, PyPI, schemas, manifests, artifacts, SVG reports, release metadata, and GitHub Release agree.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R008",
+      "section": "Product boundary and identity",
+      "requirement": "Compatibility and version-impact policy is applied to every accepted-meaning or canonical-byte change.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R009",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Raw JSON parsing rejects duplicate object names before materialization.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R010",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Raw JSON parsing enforces byte, depth, member, array, string, number-token, and total-node limits before expensive work.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R011",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Malformed UTF input, invalid JSON numbers, dangerous keys, and trailing data fail with stable bounded diagnostics.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R012",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Materialized JavaScript validation snapshots values without invoking accessors and rejects unsupported prototypes, cycles, sparse/decorated arrays, non-finite numbers, bigint, functions, symbols, and mutation hazards.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R013",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Draft 2020-12 schemas are closed where stable contracts are closed and use explicit unevaluated/additional-property behavior.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R014",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Ajv strict mode produces no ignored-keyword or unknown-format warnings.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R015",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Generated TypeScript validators, Python models/validators, manifest descriptors, docs fragments, and schemas share the same source digest.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R016",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Named semantic validators are the only authority for cross-field scientific rules.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R017",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Every error code has phase, severity, bounded path, safe details, corrective action, documentation, and regression test.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R018",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Diagnostics never include unbounded input, secrets, raw file paths, prototype content, or huge arrays.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R019",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Positive, negative, boundary, metamorphic, and migration conformance vectors pass in TypeScript and Python.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R020",
+      "section": "Parser, schema, validation, and diagnostics",
+      "requirement": "Generated-source freshness passes from a clean checkout.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R021",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "RFC 8785 canonicalization vectors match independent implementations for strings, Unicode, object ordering, and finite-number edge cases.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R022",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "SHA-256 digests are computed over explicitly named canonical byte domains with domain separation where appropriate.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R023",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "`FigureRequestV1` contains no library assurance, conformance, completeness, accessibility, or validation-result field.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R024",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "`FigureArtifactV1` records normalized request, identity, validation results, derivations, scope, counts, compaction, uncertainty, provenance, disclosures, sidecars, and digest.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R025",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "Caller declarations, library-derived facts, external attestations, and unresolved claims are represented as distinct types.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R026",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "Required disclosures are generated from artifact facts and cannot be suppressed in stable mode.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R027",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "Scope values distinguish single-process, rank-local, merged-global, subset, sampled, and complete claims.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R028",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "Data sidecars and exact-value tables are content-addressed and bound to the artifact.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R029",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "Artifacts and reports omit timestamps or volatile values from deterministic digest domains unless the field is explicitly outside that domain.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R030",
+      "section": "Canonicalization, artifacts, provenance, and disclosures",
+      "requirement": "Tampering with request, artifact, sidecar, SVG report, schema, catalog, or identity is detected by verification tests.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R031",
+      "section": "Scientific semantics",
+      "requirement": "Every stable contract has a versioned convention page and independent golden vectors.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R032",
+      "section": "Scientific semantics",
+      "requirement": "Analog and multisignal traces define time, units, ordering, missingness, interpolation, gaps, alignment, and channel identity.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R033",
+      "section": "Scientific semantics",
+      "requirement": "Spike raster defines event bounds, sender/trial/population identity, duplicate policy, ordering, scope, and displayed/total counts.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R034",
+      "section": "Scientific semantics",
+      "requirement": "Population rate defines bin/kernel method, denominator, interval convention, units, edge handling, smoothing, trials, and population scope.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R035",
+      "section": "Scientific semantics",
+      "requirement": "Response curves define condition variable, response variable, repeats, estimand, uncertainty method/level/meaning, sample counts, and missingness.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R036",
+      "section": "Scientific semantics",
+      "requirement": "ISI distribution computes intervals only within identified trains and states binning/normalization and insufficient-data behavior.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R037",
+      "section": "Scientific semantics",
+      "requirement": "PSTH defines alignment event, trial universe including empty trials, window, bins, count/rate/probability normalization, and edge convention.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R038",
+      "section": "Scientific semantics",
+      "requirement": "Correlogram defines lag sign/orientation, bins, zero-lag/self-pair policy, normalization, edge correction, and symmetry conditions.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R039",
+      "section": "Scientific semantics",
+      "requirement": "Phase-plane modes distinguish observed trajectory from supplied/computed vector field and check variable/derivative units and grid orientation.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R040",
+      "section": "Scientific semantics",
+      "requirement": "Network primitives require a node universe when isolate or zero-degree completeness matters.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R041",
+      "section": "Scientific semantics",
+      "requirement": "Connection graph and matrices preserve directedness, target-row/source-column orientation, autapses, multapses, absent versus unobserved, node ordering, and snapshot scope.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R042",
+      "section": "Scientific semantics",
+      "requirement": "Weight and delay matrices state the multapse aggregate and distinguish missing edges from numerical zero.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R043",
+      "section": "Scientific semantics",
+      "requirement": "Degree distributions include zero-degree nodes when the declared universe is complete and state multapse/autapse counting.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R044",
+      "section": "Scientific semantics",
+      "requirement": "Delay/weight distributions define edge population, sign, units, weighting, sampling, and scope.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R045",
+      "section": "Scientific semantics",
+      "requirement": "Spatial maps define coordinate frame, dimensionality, units, source of positions, node universe, scope, and missing positions.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R046",
+      "section": "Scientific semantics",
+      "requirement": "Synaptic-weight traces define stable synapse identity, time/order, units, missingness, and connection lifecycle.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R047",
+      "section": "Scientific semantics",
+      "requirement": "No renderer silently sorts, bins, smooths, aggregates, interpolates, excludes, imputes, normalizes, or changes units.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R048",
+      "section": "Scientific semantics",
+      "requirement": "All scientific reference comparisons record upstream version, source command, tolerance rationale, and reviewer.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R049",
+      "section": "Adapters and ecosystem",
+      "requirement": "NEST recorder adapters are tested against real supported NEST output and do not assume chronological events.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R050",
+      "section": "Adapters and ecosystem",
+      "requirement": "NEST connection adapters preserve source, target, synapse model/id where available, weight, delay, autapses, multapses, snapshot, node universe, and MPI scope.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R051",
+      "section": "Adapters and ecosystem",
+      "requirement": "NEST rank-local evidence is never labeled complete/global without a documented merge.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R052",
+      "section": "Adapters and ecosystem",
+      "requirement": "Neo adapters preserve quantities/units, `t_start`, `t_stop`, sampling/timestamps, segment relationships, annotations used for identity, and missingness.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R053",
+      "section": "Adapters and ecosystem",
+      "requirement": "Elephant mappings name the exact supported method/result semantics and agree with versioned differential vectors.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R054",
+      "section": "Adapters and ecosystem",
+      "requirement": "NWB mappings preserve object paths, file identity, Units/TimeSeries semantics, units, timestamps/rate, intervals, and conversions.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R055",
+      "section": "Adapters and ecosystem",
+      "requirement": "NCP adapter is pure and read-only, performs no Zenoh/network/simulator control, and is certified against an immutable NCP release.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R056",
+      "section": "Adapters and ecosystem",
+      "requirement": "Unsupported adapter forms fail explicitly rather than falling through to generic arrays.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R057",
+      "section": "Adapters and ecosystem",
+      "requirement": "Adapter output passes the same stable request/artifact gate as direct input.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R058",
+      "section": "Adapters and ecosystem",
+      "requirement": "Support matrix lists tested upstream versions and exact status: supported, partial, experimental, or rejected.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R059",
+      "section": "Adapters and ecosystem",
+      "requirement": "Adapter fixtures contain no private or unlicensed research data.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R060",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "`RenderPlanV1` is framework-neutral and contains no React element, DOM node, callback, network operation, random state, or scientific derivation.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R061",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "One pure compiler exists for every stable contract and generated dispatch is exhaustive.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R062",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Stable layout, scales, ticks, formatting, legends, ids, clipping, and text wrapping are versioned and locale-independent.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R063",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Normative SVG contains no script, `foreignObject`, event handler, caller markup, external reference, remote font, ambient CSS dependency, random id, or timestamp.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R064",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Normalized SVG bytes are deterministic for the documented identity tuple on every supported Node/OS combination, or any intentional platform field is excluded and disclosed.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R065",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "CLI and React use the same artifact and render-plan compilers.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R066",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Full data, an explicit excerpt plus complete sidecar, or an explicit summary plus complete sidecar is available; truncation is never presented as complete.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R067",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Hard limits fail before expensive allocation; display budgets never masquerade as hard safety limits.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R068",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Only named deterministic compaction methods are used by default and before/after counts plus parameters/version are recorded.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R069",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Random sampling is nondefault, explicitly seeded, and disclosed.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R070",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "FigureBundle enforces panel/count/output/sidecar budgets and compatible shared scales.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R071",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Benchmark claims include hardware, OS, runtime, versions, input, profile, warmup, repetitions, percentile, memory method, and artifact.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R072",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "No supported input causes unbounded recursion, quadratic surprise without a documented low bound, or output explosion beyond profile limits.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R073",
+      "section": "Rendering, output, budgets, and performance",
+      "requirement": "Performance regression thresholds are justified and stable enough not to produce rerun-to-green behavior.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R074",
+      "section": "Accessibility and visual communication",
+      "requirement": "Every stable figure has deterministic figure and panel summaries derived from artifact facts.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R075",
+      "section": "Accessibility and visual communication",
+      "requirement": "Every stable figure has an exact-value or explicit excerpt/summary table alternative with full sidecar.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R076",
+      "section": "Accessibility and visual communication",
+      "requirement": "Scientific distinctions do not rely on color alone.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R077",
+      "section": "Accessibility and visual communication",
+      "requirement": "Text, non-text, focus, and state contrast meet the versioned accessibility profile.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R078",
+      "section": "Accessibility and visual communication",
+      "requirement": "Keyboard interaction, visible focus, names/roles/states, and reading order are tested for Cortexel-owned interactions.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R079",
+      "section": "Accessibility and visual communication",
+      "requirement": "Zoom/reflow and high-magnification behavior are manually checked for the documented host sizes.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R080",
+      "section": "Accessibility and visual communication",
+      "requirement": "Reduced-motion behavior exists for every animated experimental surface and a static alternative is available.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R081",
+      "section": "Accessibility and visual communication",
+      "requirement": "Scope, sampling, aggregation, missingness, uncertainty, synthetic/example data, and experimental status appear in visual and alternative forms.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R082",
+      "section": "Accessibility and visual communication",
+      "requirement": "Palettes have stable ids, source/license attribution, color-vision-deficiency checks, grayscale checks, and semantic use rules.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R083",
+      "section": "Accessibility and visual communication",
+      "requirement": "Uncertainty is never shown without method, level/meaning, sample information, and visual/table interpretation.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R084",
+      "section": "Accessibility and visual communication",
+      "requirement": "Host-page responsibilities are separated from Cortexel-owned conformance; the package does not claim whole-page WCAG compliance.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R085",
+      "section": "Accessibility and visual communication",
+      "requirement": "Automated accessibility results are supplemented by the documented manual checklist and reviewer evidence.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R086",
+      "section": "Security and privacy",
+      "requirement": "Threat model covers raw JSON, JS objects, adapters, SVG, tables, file output, data references, React, experiments, CLI, resolvers, MCP, packaging, and CI.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R087",
+      "section": "Security and privacy",
+      "requirement": "Stable core performs no network access and accepts no arbitrary executable callback, HTML, SVG, CSS, shader, expression, code, or path traversal input.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R088",
+      "section": "Security and privacy",
+      "requirement": "CLI writes atomically, rejects overwrite by default, constrains output paths as documented, and cleans temporary files on failure.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R089",
+      "section": "Security and privacy",
+      "requirement": "Data references are resolved by an explicit host policy and verified by digest before stable core use.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R090",
+      "section": "Security and privacy",
+      "requirement": "Experimental resolvers enforce scheme/host allowlists, DNS/IP rebinding defenses where applicable, byte/time/redirect limits, content verification, and safe caching.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R091",
+      "section": "Security and privacy",
+      "requirement": "MCP remains experimental, reuses stable schemas, has bounded output, no ambient authority, explicit user consent, and dedicated security tests.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R092",
+      "section": "Security and privacy",
+      "requirement": "SVG and HTML documentation are sanitized and tested with malicious fixtures.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R093",
+      "section": "Security and privacy",
+      "requirement": "Fuzzing covers parser, snapshot, validators, canonicalizer, migrations, adapter boundaries, and serializer.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R094",
+      "section": "Security and privacy",
+      "requirement": "Dependency review, lockfile integrity, vulnerability scanning, CodeQL, secret scanning, and pinned actions are configured.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R095",
+      "section": "Security and privacy",
+      "requirement": "Release jobs use least privilege, protected environments, OIDC/trusted publishing, and no long-lived registry token.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R096",
+      "section": "Security and privacy",
+      "requirement": "Security policy names supported versions, private reporting route, response expectations, embargo process, credit, and scientific-data handling.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R097",
+      "section": "Security and privacy",
+      "requirement": "No fixture, log, diagnostic, attestation, source map, or release artifact leaks credentials, local home paths, private data, or unpublished datasets.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R098",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Node engine policy is restricted to tested majors (`^22.0.0 || ^24.0.0 || ^26.0.0`) and CI tests Node 22, 24, and 26 according to the release policy.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R099",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Stable root/core/render-SVG/CLI imports do not load React, DOM, Three, R3F, D3 force, WebGL, or experimental modules.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R100",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Optional React and experimental peer dependencies are marked optional and fail with clear diagnostics only when those subpaths are imported.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R101",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Export map, type declarations, ESM/CJS policy, `files` allowlist, `sideEffects`, `bin`, repository, license, funding, keywords, and provenance metadata are correct.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R102",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "`npm pack --dry-run` contains only intended files and no secrets, caches, giant fixtures, local paths, or unreviewed build products.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R103",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "The exact npm tarball passes clean consumer tests on supported Node/OS combinations.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R104",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Python wheel and sdist contain intended schemas/conformance data, correct metadata, typed marker, license, and no repository junk.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R105",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "The exact wheel/sdist passes clean install/import/conformance and supported adapter tests on the Python/OS matrix.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R106",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Source maps, if shipped, reveal no unintended absolute paths or private source; decision is documented.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R107",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Committed compiled `dist` has been removed or a documented immutable reason remains; clean build and generated freshness are enforced.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R108",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "npm and PyPI names are owned and the public registry pages show the correct project/repository/license links.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R109",
+      "section": "Packaging and runtime compatibility",
+      "requirement": "Package size and import-time budgets are measured and regression-tested.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R110",
+      "section": "Testing and reproducibility",
+      "requirement": "Unit tests cover every pure module and error branch of critical code.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R111",
+      "section": "Testing and reproducibility",
+      "requirement": "Shared conformance corpus runs in TypeScript and Python from source and packed artifacts.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R112",
+      "section": "Testing and reproducibility",
+      "requirement": "Independent science goldens are not generated by the function under test.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R113",
+      "section": "Testing and reproducibility",
+      "requirement": "Property tests cover invariants such as permutation, duplication, unit conversion, orientation, empty inputs, and digest stability where appropriate.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R114",
+      "section": "Testing and reproducibility",
+      "requirement": "Fuzz failures are minimized and committed as regression fixtures.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R115",
+      "section": "Testing and reproducibility",
+      "requirement": "Mutation testing reaches the agreed threshold for parser, semantic validators, canonicalizer, migrations, and critical render logic.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R116",
+      "section": "Testing and reproducibility",
+      "requirement": "Browser tests cover Chromium, Firefox, and WebKit for representative stable figures and interactions.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R117",
+      "section": "Testing and reproducibility",
+      "requirement": "Visual regressions use controlled fonts/environment and never replace semantic DOM/table assertions.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R118",
+      "section": "Testing and reproducibility",
+      "requirement": "Package-consumer tests do not resolve workspace/source files accidentally.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R119",
+      "section": "Testing and reproducibility",
+      "requirement": "Tests use fixed seeds and record them; time/locale/timezone/environment are controlled.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R120",
+      "section": "Testing and reproducibility",
+      "requirement": "No required test is skipped, quarantined, or allowed to fail without a linked blocker and release decision.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R121",
+      "section": "Testing and reproducibility",
+      "requirement": "All release evidence is retained with source commit and artifact digests.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R122",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "README companion draft has been reconciled with final APIs and every executable block passes from release artifacts.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R123",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "Stable catalog, identities, limits, ecosystem versions, schemas, and CLI tables are generated into docs.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R124",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "Every stable contract has reference documentation, valid/invalid examples, limits, failure modes, adapter notes, table behavior, accessibility, and migration notes.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R125",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "`MIGRATION.md` covers every current 0.5 identifier/shape and breaking behavior.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R126",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "`docs/VERSIONING.md`, `SECURITY.md`, `CONTRIBUTING.md`, `docs/SCIENTIFIC_ERRATA.md`, accessibility, limits, and support policies are complete.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R127",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "README claim ledger marks every consequential claim verified and links evidence.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R128",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "GitHub description, topics, homepage, issue forms, PR template, CODEOWNERS, citation metadata, and ruleset match Sections 35–36.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R129",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "No docs call experimental capabilities stable or make unqualified performance/scientific/accessibility guarantees.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R130",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "Examples and gallery are generated from committed requests/artifacts and include data/provenance/output digests and alt text.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R131",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "Third-party notices cover palettes, fixtures, code, schemas, fonts if any, and reference data.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R132",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "At least one scientific reviewer and one external package consumer have reviewed the release candidate.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R133",
+      "section": "Documentation, governance, and public claims",
+      "requirement": "Historical audit is retained with baseline/date and resolution links; it is not rewritten to imply issues never existed.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R134",
+      "section": "Supply chain and release",
+      "requirement": "Release workflow checks out the intended signed/tagged commit and verifies a clean tree.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R135",
+      "section": "Supply chain and release",
+      "requirement": "Version files and generated identities are updated once by automation and agree before build.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R136",
+      "section": "Supply chain and release",
+      "requirement": "npm tarball, wheel, sdist, schemas, catalog, conformance corpus, examples, checksums, SBOM, and notices are built once.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R137",
+      "section": "Supply chain and release",
+      "requirement": "Tests run against the exact built artifacts; publishing does not rebuild.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R138",
+      "section": "Supply chain and release",
+      "requirement": "npm uses trusted publishing/provenance and PyPI uses trusted publishing.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R139",
+      "section": "Supply chain and release",
+      "requirement": "GitHub artifact attestations and checksums bind every release asset to source workflow and commit.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R140",
+      "section": "Supply chain and release",
+      "requirement": "SBOM includes JavaScript, Python, optional/experimental dependency information and artifact identity.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R141",
+      "section": "Supply chain and release",
+      "requirement": "Release notes list breaking changes, stable catalog, experimental status, certified ecosystem versions, known limitations, migrations, identities, checksums, and verification commands.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R142",
+      "section": "Supply chain and release",
+      "requirement": "`v1.0.0` tag, GitHub Release, npm version, PyPI version, artifact metadata, CITATION version/date, and docs version agree.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R143",
+      "section": "Supply chain and release",
+      "requirement": "Release environment requires approval and grants only minimal publish/id-token permissions.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R144",
+      "section": "Supply chain and release",
+      "requirement": "Rollback/yank/deprecation procedure is rehearsed without rewriting an immutable tag.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R145",
+      "section": "Supply chain and release",
+      "requirement": "Post-publish verification installs unauthenticated from public registries and verifies imports, CLI, schemas, digests, provenance, attestations, and examples.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R146",
+      "section": "Final review and release authorization",
+      "requirement": "Architecture/contract review pass is signed and all findings are closed or explicitly nonblocking.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R147",
+      "section": "Final review and release authorization",
+      "requirement": "Scientific/interoperability review pass is signed and all findings are closed or explicitly nonblocking.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R148",
+      "section": "Final review and release authorization",
+      "requirement": "Security/accessibility/release review pass is signed and all findings are closed or explicitly nonblocking.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R149",
+      "section": "Final review and release authorization",
+      "requirement": "No open P0, P1, or P2 release issue remains.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R150",
+      "section": "Final review and release authorization",
+      "requirement": "No unresolved scientific-semantic defect can cause a plausible but materially wrong stable figure.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R151",
+      "section": "Final review and release authorization",
+      "requirement": "No known parser/security defect permits code execution, network access, prototype effects, unbounded resource use, or disclosure suppression in stable paths.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R152",
+      "section": "Final review and release authorization",
+      "requirement": "No flaky required check has been rerun into a green state without root-cause resolution.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R153",
+      "section": "Final review and release authorization",
+      "requirement": "RC artifacts completed the defined soak and at least one external clean-room reproduction.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R154",
+      "section": "Final review and release authorization",
+      "requirement": "Maintainer explicitly signs the `RELEASE_AUTHORIZATION.md` identity/digest list.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    },
+    {
+      "id": "R155",
+      "section": "Final review and release authorization",
+      "requirement": "Release is made only by the protected workflow; no manual local publish.",
+      "releaseBlocking": true,
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": ""
+    }
+  ]
+}

@@ -95,6 +95,7 @@
     "build": "tsup && tsx scripts/emit-manifest.ts",
     "manifest": "tsx scripts/emit-manifest.ts",
     "typecheck": "tsc --noEmit",
+    "check:ledger": "tsx scripts/check-evidence-ledger.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "tsc --noEmit && vitest run",
