@@ -6,6 +6,33 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — deterministic rendering and CLI (M4)
+
+- **`RenderPlanV1`** — the framework-neutral figure description compiled between
+  validation and drawing. A closed mark union (no raw-SVG escape hatch), no JSX, no
+  callback, no random state. Both the headless renderer and (later) React consume the
+  same plan, so they cannot disagree about a value.
+- **A deterministic, safe SVG serializer.** No clock, no random id, no locale; element
+  ids derive from the artifact digest; attribute order is fixed; `-0` is normalized to
+  `0`. A purpose-built writer over a closed vocabulary — a hostile title, unit, or note
+  becomes escaped text, never a `<script>`, an `on*` handler, a `<foreignObject>`, or an
+  external URL, because those are not elements the writer can emit.
+- **Deterministic locale-independent number/coordinate formatting and "nice-number"
+  linear scales and ticks** (no d3 in the stable render path).
+- **`buildFigure`** — the end-to-end pipeline: validate → derive (via `src/analysis`) →
+  compile plan → render SVG → assemble `FigureArtifactV1` with disclosures, table, and
+  cross-referenced digests. Rendering accepts only a branded validated request; a
+  look-alike object cannot be rendered. The population-rate and trace families render end
+  to end; other families produce a complete artifact with an honest `renderPending`
+  marker (see `docs/KNOWN_LIMITATIONS.md`).
+- **The `cortexel` CLI** (`identity`, `catalog`, `validate`, `render`, `inspect`,
+  `migrate`): offline, no network, no shell hook, atomic writes that refuse to overwrite
+  without `--force`, and stable exit codes (0 ok, 2 usage, 3 parse, 4 schema, 5 semantic,
+  6 budget, 7 I/O, 8 internal). `catalog` lists only the 19 stable skills unless
+  `--include-experimental` is passed, so an agent cannot select an experiment by accident.
+- **`docs/KNOWN_LIMITATIONS.md`** — the honest, gate-referenced list of what 0.9.0 does
+  not yet do.
+
 ### Added — analysis layer and scientific evidence (M2)
 
 - **`src/analysis/`** — the deterministic scientific core the figures are built on:

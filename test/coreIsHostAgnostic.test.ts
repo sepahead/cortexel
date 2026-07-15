@@ -36,7 +36,11 @@ describe('core is host-agnostic', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('imports cortexel/core skill axis in this Node process', async () => {
+  // This dynamically imports the legacy core/ module, which is a large cold-start under
+  // parallel load and can exceed the default 5 s. A generous timeout removes the flake
+  // without weakening the assertion. The deeper fix is removing the legacy core/ tree in
+  // the source-layout migration (docs/KNOWN_LIMITATIONS.md).
+  it('imports cortexel/core skill axis in this Node process', { timeout: 30_000 }, async () => {
     const mod = await import('../core/index');
     expect(typeof mod.validateSkillInvocation).toBe('function');
     expect(typeof mod.routeToScene).toBe('function');

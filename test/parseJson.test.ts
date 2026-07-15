@@ -145,13 +145,33 @@ describe('strict JSON parser — never throws, always returns a result', () => {
     );
   });
 
-  it('round-trips any JSON value fast-check can generate', () => {
+  /**
+   * A value that a JSON parser would happily accept but Cortexel intentionally rejects:
+   * a prototype-polluting key at any depth. The round-trip property below holds for
+   * values WITHOUT such a key; a value with one is rejected on purpose, which the
+   * dangerous-key tests above already cover.
+   */
+  function containsDangerousKey(value: unknown): boolean {
+    if (value === null || typeof value !== 'object') return false;
+    if (Array.isArray(value)) return value.some(containsDangerousKey);
+    for (const key of Object.keys(value)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') return true;
+      if (containsDangerousKey((value as Record<string, unknown>)[key])) return true;
+    }
+    return false;
+  }
+
+  it('round-trips any JSON value that does not use a prototype-polluting key', () => {
     fc.assert(
       fc.property(fc.jsonValue(), (value) => {
         const text = JSON.stringify(value);
         // JSON.stringify drops undefined; only test what it actually emits.
         if (text === undefined) return true;
         const result = parse(text);
+        if (containsDangerousKey(value)) {
+          // Rejected on purpose — prototype pollution is not a value Cortexel accepts.
+          return !result.ok;
+        }
         return result.ok && JSON.stringify(result.value) === text;
       }),
       { numRuns: 2000 },
