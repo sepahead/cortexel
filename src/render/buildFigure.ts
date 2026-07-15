@@ -467,11 +467,53 @@ function assembleArtifact(
   return { ...artifactWithoutDigest, artifactDigest };
 }
 
+/**
+ * Count the observations a request carries, by summing the lengths of the arrays that
+ * hold data. This is a conservative preflight: it never has to be exact, only an upper
+ * bound that catches an input which would blow the derivation or render budget.
+ */
+function countObservations(node: unknown, depth = 0): number {
+  if (depth > 32 || node === null || typeof node !== 'object') return 0;
+  if (Array.isArray(node)) {
+    // A leaf array of numbers/strings is the observation carrier; count it, and still
+    // descend in case it holds objects.
+    let total = node.length;
+    for (const item of node) total += countObservations(item, depth + 1);
+    return total;
+  }
+  let total = 0;
+  for (const value of Object.values(node as Record<string, unknown>)) {
+    total += countObservations(value, depth + 1);
+  }
+  return total;
+}
+
 /** Build a figure from an already-validated request. */
 export function buildFigureFromValidated(validated: ValidatedRequest): FigureResult | FigureFailure {
   const request = validated.canonicalRequest;
   const catalog = SKILL_CATALOG[validated.skillId];
   const presentation = rec(request.presentation) ?? {};
+
+  // Budget preflight, BEFORE derivation. The parser already bounded the raw input, but the
+  // per-figure observation budget is a distinct, tighter limit: it protects the derivation
+  // and render stages from an input that is within parser limits yet still too large to
+  // draw. A hard limit fails; it is never silently truncated.
+  const observations = countObservations(request.data);
+  if (observations > catalog.budgets.maxObservations) {
+    return {
+      ok: false,
+      errors: [
+        {
+          code: 'RESOURCE_OBSERVATIONS_EXCEEDED',
+          severity: 'error',
+          stage: 'budget',
+          instancePath: '/data',
+          message: `this request carries about ${observations} observations, over the ${catalog.budgets.maxObservations} budget for ${validated.skillId}. Reduce the data or reference it with a DataRef. Cortexel never silently truncates.`,
+          limit: { name: 'maxObservations', limit: catalog.budgets.maxObservations, observed: observations },
+        },
+      ],
+    };
+  }
 
   const makeContext = (rowsTotal: number): CompileContext => {
     const facts = disclosureFacts(request, { tableRowsTotal: rowsTotal, tableRowsInline: Math.min(rowsTotal, 500) });
@@ -506,16 +548,74 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
     };
   }
 
-  const { plan } = compiled;
+  const context = makeContext(compiled.plan.table.rowsTotal);
+
+  // Replace the ellipsis-filled template with a real, value-filled accessible summary
+  // derived from the compiled figure, then render — so the SVG <desc> and the artifact
+  // carry the SAME true summary rather than a placeholder.
+  const summary = buildSummary(compiled.plan, context.title);
+  const plan: RenderPlanV1 = {
+    ...compiled.plan,
+    accessibility: { ...compiled.plan.accessibility, summary },
+  };
+
   const report = renderSvg(plan, sha256Digest);
-  const context = makeContext(plan.table.rowsTotal);
 
   const artifact = assembleArtifact(validated, context.disclosures, report, report.digest, {
     inline: plan.table.rowsInline,
     total: plan.table.rowsTotal,
   });
+  // Carry the real summary into the artifact's accessibility record too.
+  const accessibility = (artifact as { accessibility?: Record<string, unknown> }).accessibility;
+  if (accessibility) accessibility.summary = summary;
 
   return { ok: true, artifact, svg: report.svg, plan, table: plan.table, disclosures: context.disclosures };
+}
+
+/**
+ * A deterministic, value-filled accessible summary from the compiled plan.
+ *
+ * Built from the figure's OWN data (its title, its row count, the numeric range of its
+ * last table column, its disclosures) rather than an interpretive claim. It states what
+ * is plotted, not what it means — a screen reader hears real numbers, never "significant"
+ * or "increased".
+ */
+function buildSummary(plan: RenderPlanV1, title: string): string {
+  const rows = plan.table.rowsTotal;
+  const valueColumn = plan.table.columns.length - 1;
+
+  const numericValues: number[] = [];
+  for (const row of plan.table.rows) {
+    const cell = row[valueColumn];
+    const value = typeof cell === 'number' ? cell : typeof cell === 'string' ? Number(cell) : NaN;
+    if (Number.isFinite(value)) numericValues.push(value);
+  }
+
+  const parts = [`${title}.`];
+  parts.push(`${rows} ${rows === 1 ? 'row' : 'rows'} of data.`);
+
+  if (numericValues.length > 0 && plan.table.columns.length >= 1) {
+    const header = plan.table.columns[valueColumn]?.header ?? 'value';
+    const min = Math.min(...numericValues);
+    const max = Math.max(...numericValues);
+    parts.push(`${header} ranges from ${formatSummaryNumber(min)} to ${formatSummaryNumber(max)}.`);
+  }
+
+  const disclosureCount = plan.disclosures.length;
+  if (disclosureCount > 0) {
+    parts.push(`${disclosureCount} ${disclosureCount === 1 ? 'disclosure applies' : 'disclosures apply'}; see the figure caption and table.`);
+  }
+  if (plan.panels[0]?.noData) {
+    parts.push(`No data: ${plan.panels[0].noData.reason}.`);
+  }
+
+  return parts.join(' ');
+}
+
+function formatSummaryNumber(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  const rounded = Math.round(value * 1000) / 1000;
+  return Object.is(rounded, -0) ? '0' : String(rounded);
 }
 
 /** Build a figure from raw JSON request text (the strong, duplicate-key-aware boundary). */
@@ -533,6 +633,11 @@ export function buildFigure(value: unknown): FigureResult | FigureFailure {
 function dispatch(outcome: ValidationOutcome): FigureResult | FigureFailure {
   if (!outcome.ok) return { ok: false, errors: outcome.errors };
   return buildFigureFromValidated(outcome.request);
+}
+
+/** Exposed for tests: the observation-count preflight logic. */
+export function countObservationsForTest(data: unknown): number {
+  return countObservations(data);
 }
 
 export { canonicalDigest };

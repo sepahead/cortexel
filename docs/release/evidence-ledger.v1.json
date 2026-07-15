@@ -66,8 +66,14 @@
       "section": "Product boundary and identity",
       "requirement": "Experimental entries are absent from stable counts, default discovery, stable conformance badges, and root exports.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test",
+        "receipt": "contract/registries/capabilities.v1.json experiments excluded from STABLE_SKILL_IDS/catalog default; cli catalog hides them; test/importBoundary.test.ts"
+      },
       "notes": ""
     },
     {
@@ -1005,8 +1011,14 @@
       "section": "Security and privacy",
       "requirement": "CLI writes atomically, rejects overwrite by default, constrains output paths as documented, and cleans temporary files on failure.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test",
+        "receipt": "src/render/buildFigure.ts countObservations preflight + test/budgetAndSummary.test.ts — an oversized request is refused before derivation, never truncated"
+      },
       "notes": ""
     },
     {
@@ -1095,8 +1107,14 @@
       "section": "Packaging and runtime compatibility",
       "requirement": "Node engine policy is restricted to tested majors (`^22.0.0 || ^24.0.0 || ^26.0.0`) and CI tests Node 22, 24, and 26 according to the release policy.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test",
+        "receipt": "test/budgetAndSummary.test.ts — accessibility summary value-filled with the figure own numbers; same text in plan, SVG desc, and artifact"
+      },
       "notes": ""
     },
     {
@@ -1398,8 +1416,14 @@
       "section": "Documentation, governance, and public claims",
       "requirement": "No docs call experimental capabilities stable or make unqualified performance/scientific/accessibility guarantees.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test",
+        "receipt": "test/importBoundary.test.ts — stable core/analysis/render/cli import no react/three/d3/experimental; render layer is browser-safe"
+      },
       "notes": ""
     },
     {

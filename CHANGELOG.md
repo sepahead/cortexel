@@ -6,6 +6,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — budgets, accessibility, quarantine, and CI (M5/M6/M7)
+
+- **Runtime observation-budget preflight.** Before any derivation, `buildFigure` counts a
+  request's observations and refuses one over the figure's budget — a distinct, tighter
+  limit than the parser's node bound. A hard limit fails; it never silently truncates.
+- **Value-filled accessibility summaries.** The `{placeholder}` template is replaced with a
+  deterministic summary built from the figure's own data — its title, row count, the
+  numeric range of its value column, and its disclosures. The same text appears in the
+  render plan, the SVG `<desc>`, and the artifact. No interpretive claim ("significant",
+  "increased") is generated.
+- **Import-boundary test (experimental quarantine, proven).** A static scan
+  (`test/importBoundary.test.ts`) asserts the stable core, analysis, render, and CLI layers
+  import no `react`, `three`, `@react-three/fiber`, `d3`, or `experimental/` module, and
+  that the render layer stays browser-safe (no Node-only imports).
+- **CI additions.** A `contract` job runs `check:generated` (freshness + determinism) and
+  `check:ledger` (no forged PASS); a `python` job runs the standard-library Python suite.
+
 ### Added — independent Python reader and cross-language parity (M3)
 
 - **`python/src/cortexel/`** — a genuinely independent Python implementation that
