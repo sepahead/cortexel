@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:ff53616e3a79a3281102d9714a3b0d768731bd645bd0e79d271db88386231358",
+  "contractDigest": "sha256:2f9f27f342c052cd495a5982439def61237fbd9061c610fd0e3ec6294c3c9a62",
   "catalogDigest": "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691",
   "stableSkillCount": 19,
   "stableSkills": [
@@ -1556,7 +1556,7 @@
     },
     {
       "path": "contract/schemas/common.v1.schema.json",
-      "digest": "sha256:427a4414817a1145623afa9ec04f8d18def02f30e875e4c1d1facfbeacb5b38d"
+      "digest": "sha256:51d8474d741b0e62aef71f3933ed9ce89a0e0aba6eb34a4c101cf41c22d70fbf"
     },
     {
       "path": "contract/schemas/figure-artifact.v1.schema.json",
@@ -1568,7 +1568,7 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:fc59b8b8387bdace9065f4eb858b5128b664f1ca8806421fb3776915de4a1907"
+      "digest": "sha256:2742741cfca008eba722f798dc3e8431cf5daef613ee19e60775dfac2aab6904"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",

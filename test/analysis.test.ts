@@ -232,6 +232,26 @@ describe('topology — degree and multapse handling', () => {
     expect(summed.cells[0]).toMatchObject({ value: 4, contributingCount: 2 });
     expect(meaned.cells[0]).toMatchObject({ value: 2, contributingCount: 2 });
   });
+
+  it('keeps the value array index-aligned when a value is null (missing)', () => {
+    // Three edges: A->B (null weight), A->C (weight 5), B->C (weight 7). If the null were
+    // filtered up front, edge A->C would be drawn with 7 and B->C with nothing — a silent
+    // corruption. With per-cell skipping, cell (C,A) is 5 and cell (C,B) is 7, and cell
+    // (B,A) has no finite contribution so it is absent.
+    const matrix = computeMatrix(
+      ['A', 'B', 'C'], ['A', 'B', 'C'],
+      ['A', 'A', 'B'], ['B', 'C', 'C'],
+      [null, 5, 7], 'sum',
+    );
+    const cellValue = (rowId: string, colId: string) => {
+      const r = ['A', 'B', 'C'].indexOf(rowId);
+      const c = ['A', 'B', 'C'].indexOf(colId);
+      return matrix.cells.find((cell) => cell.row === r && cell.col === c)?.value;
+    };
+    expect(cellValue('C', 'A')).toBe(5); // target C, source A -> weight 5, NOT 7
+    expect(cellValue('C', 'B')).toBe(7); // target C, source B -> weight 7
+    expect(cellValue('B', 'A')).toBeUndefined(); // null weight -> no finite value, absent
+  });
 });
 
 describe('window partitioning — half-open by default', () => {

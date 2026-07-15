@@ -79,14 +79,44 @@ function rec(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-/** Build the disclosure facts from the canonical request and derivation outcome. */
+/**
+ * Build the disclosure facts from the canonical request.
+ *
+ * This is where the honesty promise is actually kept: a rank-local network figure only
+ * gets its "partial network view" disclosure if `scopeKind` is threaded here from the
+ * request, and a compacted figure only gets its downsampling disclosure if `compacted`
+ * is set. So this reads the request's scope, node universe, multapse aggregation, missing
+ * values, and uncertainty — not just the source — because every one of those is a fact a
+ * disclosure rule fires on.
+ */
 function disclosureFacts(
   request: Record<string, unknown>,
   extra: Partial<DisclosureFacts>,
 ): DisclosureFacts {
   const source = rec(request.source) ?? {};
-  const uncertainty = rec(rec(request.parameters)?.uncertainty);
-  return {
+  const data = rec(request.data) ?? {};
+  const parameters = rec(request.parameters) ?? {};
+  const uncertainty = rec(parameters.uncertainty) ?? rec(data.uncertainty);
+  const scope = rec(data.scope);
+  const nodeUniverse = rec(data.nodeUniverse);
+
+  // Count missing observations across any series/value array, so MISSING_VALUES_PRESENT
+  // fires when a null observation is actually present.
+  let missing = 0;
+  const countMissing = (node: unknown, depth = 0): void => {
+    if (depth > 20 || node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        if (item === null) missing++;
+        else countMissing(item, depth + 1);
+      }
+      return;
+    }
+    for (const v of Object.values(node as Record<string, unknown>)) countMissing(v, depth + 1);
+  };
+  countMissing(data.series);
+
+  const facts: DisclosureFacts = {
     sourceKind: (source.kind as string) ?? 'unknown',
     sourceAuthenticityVerified: false,
     referenceComparisonRun: false,
@@ -96,8 +126,82 @@ function disclosureFacts(
     callerNotePresent: typeof source.declaredNote === 'string',
     uncertaintyKind: uncertainty ? (uncertainty.kind as string) : undefined,
     uncertaintyReason: uncertainty ? (uncertainty.reason as string) : undefined,
+    ...(scope ? { scopeKind: scope.kind as string } : {}),
+    ...(scope && typeof scope.rank === 'number' ? { rank: scope.rank as number } : {}),
+    ...(scope && typeof scope.worldSize === 'number' ? { worldSize: scope.worldSize as number } : {}),
+    ...(scope && typeof scope.retainedConnectionCount === 'number'
+      ? { retainedConnectionCount: scope.retainedConnectionCount as number, sampledRetained: scope.retainedConnectionCount as number }
+      : {}),
+    ...(scope && typeof scope.sourceConnectionCount === 'number'
+      ? { sourceConnectionCount: scope.sourceConnectionCount as number, sampledSource: scope.sourceConnectionCount as number }
+      : {}),
+    ...(nodeUniverse && typeof nodeUniverse.complete === 'boolean'
+      ? { nodeUniverseComplete: nodeUniverse.complete as boolean }
+      : {}),
+    ...(typeof parameters.multapseAggregation === 'string'
+      ? { multapseAggregation: parameters.multapseAggregation as string }
+      : {}),
+    ...(missing > 0 ? { missingValueCount: missing } : {}),
+    // A schematic layout carries no spatial meaning; disclose it whenever the layout mode
+    // says so, in addition to the compiler-forced case for the connection graph.
+    ...(typeof rec(parameters.layout)?.mode === 'string' &&
+    (rec(parameters.layout)!.mode as string).startsWith('schematic')
+      ? { schematicLayout: true }
+      : {}),
     ...extra,
   };
+
+  // Uncertainty fails closed: if a figure that CAN show uncertainty was given none — whether
+  // by an explicit kind:'none' or by omitting the field entirely — it must disclose the
+  // absence, so a missing band is never read as a small one.
+  if (facts.uncertaintyKind === undefined) {
+    (facts as { uncertaintyKind?: string; uncertaintyReason?: string }).uncertaintyKind = 'none';
+    (facts as { uncertaintyReason?: string }).uncertaintyReason = 'not_provided';
+  }
+
+  // Spatial position coverage: a node in the universe with no declared position is omitted,
+  // not placed at the origin, and that omission is disclosed.
+  const positions = rec(data.positions);
+  const universeIds = arr(nodeUniverse?.ids);
+  const positionIds = arr(positions?.nodeIds);
+  if (universeIds && positionIds && positionIds.length < universeIds.length) {
+    (facts as { positionsMissing?: number; positionsTotal?: number }).positionsMissing =
+      universeIds.length - positionIds.length;
+    (facts as { positionsTotal?: number }).positionsTotal = universeIds.length;
+  }
+
+  return facts;
+}
+
+/**
+ * Disclosures a figure must ALWAYS emit because they depend on a fact the compiler knows
+ * rather than a field in the request — the correlogram's lag orientation, the matrix's
+ * absent-is-not-zero, the schematic graph layout. These have a `() => false` predicate in
+ * the registry precisely because the compiler, not a request field, decides they fire.
+ */
+function forcedDisclosures(skillId: string, request: Record<string, unknown>): string[] {
+  const data = rec(request.data) ?? {};
+  const forced: string[] = [];
+
+  if (skillId === 'neuro.correlogram') {
+    forced.push('LAG_ORIENTATION');
+    // An autocorrelogram (one train) excludes each event's self-pairing.
+    const distinctSenders = new Set(
+      (arr(data.eventSenderIds) ?? []).filter((s): s is string => typeof s === 'string'),
+    );
+    if (distinctSenders.size < 2) forced.push('ZERO_LAG_SELF_PAIRS_EXCLUDED');
+  }
+
+  if (skillId === 'network.adjacency_matrix' || skillId === 'network.weight_matrix' || skillId === 'network.delay_matrix') {
+    forced.push('ABSENT_IS_NOT_ZERO');
+  }
+
+  if (skillId === 'network.connection_graph') {
+    // The 0.9.0 graph compiler uses a schematic circular layout, never measured positions.
+    forced.push('SCHEMATIC_LAYOUT');
+  }
+
+  return forced;
 }
 
 function numbers(value: unknown): number[] {
@@ -105,6 +209,35 @@ function numbers(value: unknown): number[] {
 }
 function strings(value: unknown): string[] {
   return (arr(value) ?? []).filter((v): v is string => typeof v === 'string');
+}
+
+/**
+ * The declared final-edge convention for a bin spec, or undefined if not stated.
+ *
+ * A binned figure must honour the request's boundary rather than assume one, or the
+ * largest observation could be included or dropped against the caller's intent.
+ */
+function binBoundaryInclusive(spec: Record<string, unknown> | undefined): boolean | undefined {
+  if (!spec) return undefined;
+  if (typeof spec.finalEdgeInclusive === 'boolean') return spec.finalEdgeInclusive;
+  if (spec.boundary === '[start,stop]' || spec.boundary === '[lo,hi]') return true;
+  if (spec.boundary === '[start,stop)' || spec.boundary === '[lo,hi)') return false;
+  return undefined;
+}
+
+/** Apply the PSTH normalization the request declared, not a hardcoded per-trial divisor. */
+function normalizePsth(counts: readonly number[], trials: number, normalization: string): number[] {
+  switch (normalization) {
+    case 'count':
+      return [...counts];
+    case 'count_per_trial':
+    default:
+      return counts.map((c) => c / trials);
+  }
+}
+
+function psthYLabel(normalization: string): string {
+  return normalization === 'count' ? 'count' : 'count / trial';
 }
 
 /**
@@ -140,7 +273,7 @@ function compile(
       const width = num(bins?.width) ?? stop - start;
       const timeUnit = (bins?.unit as string) ?? (rec(data.eventTimes)?.unit as string) ?? 'ms';
       const normalization = (parameters.normalization as 'mean_rate_per_recorded_sender' | 'total_event_rate') ?? 'total_event_rate';
-      const binSpec: Bins = { edges: edgesFromWidth(start, stop, width), finalEdgeInclusive: true };
+      const binSpec: Bins = { edges: edgesFromWidth(start, stop, width), finalEdgeInclusive: binBoundaryInclusive(bins) ?? binBoundaryInclusive(window) ?? true };
       const result = computePopulationRate(times, binSpec, timeUnit, recorded.length || 1, normalization);
       return done(compileStepFigure(context(result.count.length), result.binStart, result.binEnd, result.rateHz, `time (${unitLabel(timeUnit)})`, 'rate (Hz)', skillId));
     }
@@ -220,7 +353,7 @@ function compile(
       const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
       const unit = (bins?.unit as string) ?? 'ms';
       const edges = edgesFromWidth(start, stop, width);
-      const { counts } = binCounts(isi.intervals, { edges, finalEdgeInclusive: true });
+      const { counts } = binCounts(isi.intervals, { edges, finalEdgeInclusive: binBoundaryInclusive(bins) ?? true });
       return done(compileBarFigure(context(counts.length), edges, counts, `ISI (${unitLabel(unit)})`, 'count', skillId));
     }
 
@@ -248,7 +381,7 @@ function compile(
     const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
     const unit = (bins?.unit as string) ?? (skillId === 'network.delay_distribution' ? 'ms' : '');
     const edges = start < stop ? edgesFromWidth(start, stop, width) : [start, start + 1];
-    const { counts } = binCounts(values, { edges, finalEdgeInclusive: true });
+    const { counts } = binCounts(values, { edges, finalEdgeInclusive: binBoundaryInclusive(bins) ?? true });
     const label = skillId === 'network.delay_distribution' ? `delay (${unitLabel(unit)})` : 'weight';
     return done(compileBarFigure(context(counts.length), edges, counts, label, 'count', skillId));
   }
@@ -260,10 +393,14 @@ function compile(
     const sources = strings(conns?.sourceIds);
     const targets = strings(conns?.targetIds);
     const aggregation = (parameters.multapseAggregation as 'sum' | 'mean' | 'min' | 'max' | 'no_aggregation') ?? 'sum';
-    const values =
-      skillId === 'network.weight_matrix' ? numbers(rec(conns?.weights)?.values)
-        : skillId === 'network.delay_matrix' ? numbers(rec(conns?.delays)?.values)
+    // Keep the value array INDEX-ALIGNED with the edge arrays — do not filter out nulls
+    // here, or every later edge would be drawn with the wrong cell's value. computeMatrix
+    // skips a null per-cell.
+    const rawValues =
+      skillId === 'network.weight_matrix' ? arr(rec(conns?.weights)?.values)
+        : skillId === 'network.delay_matrix' ? arr(rec(conns?.delays)?.values)
           : undefined;
+    const values = rawValues?.map((v) => (typeof v === 'number' ? v : null));
     const cellMode = (parameters.cellMode as string) ?? 'multiplicity';
     const method = skillId === 'network.adjacency_matrix' && cellMode !== 'multiplicity' ? 'count' : (values ? aggregation : 'count');
     const matrix = computeMatrix(ids, ids, sources, targets, values, method);
@@ -314,25 +451,44 @@ function compile(
 
   // ---- PSTH ----------------------------------------------------------------
   if (skillId === 'neuro.psth') {
-    // Align each event to its trial reference, then bin over the relative window.
+    const trialIds = strings(data.trialIds);
+    const trials = Math.max(1, trialIds.length || num(data.trialCount) || 1);
+    const normalization = (parameters.normalization as string) ?? 'count_per_trial';
+    const bins = rec(parameters.bins);
+
+    if (data.mode === 'prebinned') {
+      // A pre-binned PSTH carries its own edges and counts; draw them, do not treat the
+      // absence of raw events as an all-zero figure. The counts stay INDEX-ALIGNED with the
+      // edges: a missing (null) bin count is rendered as an empty bar, never filtered out,
+      // which would shift every later bar onto the wrong bin.
+      const edges = (arr(rec(bins)?.edges) ?? arr(rec(data.binEdges)?.edges) ?? []).map((v) =>
+        typeof v === 'number' ? v : 0,
+      );
+      const counts = (arr(data.counts) ?? []).map((v) => (typeof v === 'number' ? v : 0));
+      const unit = (rec(bins)?.unit as string) ?? 'ms';
+      const values = normalizePsth(counts, trials, normalization);
+      return done(
+        compileBarFigure(context(values.length), edges.length ? edges : [0, 1], values, `time from alignment (${unitLabel(unit)})`, psthYLabel(normalization), skillId),
+      );
+    }
+
+    // Events mode: align each event to its trial reference, then bin over the relative window.
     const times = numbers(rec(data.eventTimes)?.values);
     const eventTrials = strings(data.eventTrialIds);
     const alignTimes = numbers(data.alignmentTimes);
-    const trialIds = strings(data.trialIds);
     const alignByTrial = new Map<string, number>();
     trialIds.forEach((id, i) => { if (i < alignTimes.length) alignByTrial.set(id, alignTimes[i]); });
     const relative = times.map((t, i) => t - (alignByTrial.get(eventTrials[i]) ?? 0)).filter((v) => Number.isFinite(v));
     const win = rec(data.relativeWindow);
-    const bins = rec(parameters.bins);
     const start = num(win?.start) ?? num(bins?.start) ?? (relative.length ? Math.min(...relative) : -1);
     const stop = num(win?.stop) ?? num(bins?.stop) ?? (relative.length ? Math.max(...relative) : 1);
     const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
     const unit = (win?.unit as string) ?? (bins?.unit as string) ?? 'ms';
     const edges = start < stop ? edgesFromWidth(start, stop, width) : [start, start + 1];
-    const { counts } = binCounts(relative, { edges, finalEdgeInclusive: true });
-    const trials = Math.max(1, trialIds.length);
-    const perTrial = counts.map((c) => c / trials);
-    return done(compileBarFigure(context(perTrial.length), edges, perTrial, `time from alignment (${unitLabel(unit)})`, 'count / trial', skillId));
+    const boundary = binBoundaryInclusive(bins) ?? binBoundaryInclusive(win) ?? true;
+    const { counts } = binCounts(relative, { edges, finalEdgeInclusive: boundary });
+    const values = normalizePsth(counts, trials, normalization);
+    return done(compileBarFigure(context(values.length), edges, values, `time from alignment (${unitLabel(unit)})`, psthYLabel(normalization), skillId));
   }
 
   // ---- phase plane ---------------------------------------------------------
@@ -515,9 +671,11 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
     };
   }
 
+  const forced = forcedDisclosures(validated.skillId, request);
+
   const makeContext = (rowsTotal: number): CompileContext => {
     const facts = disclosureFacts(request, { tableRowsTotal: rowsTotal, tableRowsInline: Math.min(rowsTotal, 500) });
-    const disclosures = deriveDisclosures(facts, catalog.disclosures, ['LAG_ORIENTATION'].filter(() => false));
+    const disclosures = deriveDisclosures(facts, catalog.disclosures, forced);
     return {
       artifactDigest: validated.requestDigest,
       width: num(presentation.width) ?? 720,

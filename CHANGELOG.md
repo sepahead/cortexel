@@ -6,6 +6,30 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — adversarial review reconciliation (12 findings)
+
+An adversarial multi-lens review (science, security, honesty, coherence) with independent
+verification surfaced 12 confirmed defects; all are resolved. Full record in
+`docs/release/evidence/0.9.0/REVIEW-2026-07-15.md`.
+
+- **(P0, honesty) Topology/spatial/scope disclosures were dead.** `disclosureFacts` never
+  derived `scopeKind`, node-universe completeness, multapse aggregation, schematic layout,
+  or missing positions, and the `forced` disclosures argument was hardcoded empty — so a
+  rank-local, sampled, or incomplete network rendered with none of its mandatory
+  disclosures, and a correlogram never stated its lag orientation. Both are fixed and
+  guarded by `test/disclosureCompleteness.test.ts`: scope/multapse/layout facts are derived
+  from the request, and a per-skill forced-disclosure set fires the compiler-only rules.
+- **(P1, science) Matrix value arrays lost index alignment on a null**, drawing every later
+  cell with another edge's value; and a **pre-binned PSTH rendered as all zeros**. Both
+  fixed with index-aligned handling and hand-vector / render regression tests.
+- **(P2) Binned branches now honour the request's declared final-edge convention** instead
+  of a hardcoded `true`; **omitted uncertainty fails closed** to the not-provided disclosure;
+  **themes and budget profiles are now generated enums** with one authority; the generator's
+  typed-keyword check covers numeric keywords.
+- **(P3)** `cortexel migrate` now routes through the strict parser (limits + duplicate-key
+  rejection) instead of raw `JSON.parse`; the generator asserts the renderer id agrees
+  between the skill contract and the capability record.
+
 ### Added — budgets, accessibility, quarantine, and CI (M5/M6/M7)
 
 - **Runtime observation-budget preflight.** Before any derivation, `buildFigure` counts a

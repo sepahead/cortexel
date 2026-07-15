@@ -15,6 +15,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from '
 import path from 'node:path';
 
 import { parseAndValidateRequest } from '../core/request.js';
+import { parseJsonStrict } from '../core/parse-json.js';
+import { getBudgetLimits } from '../core/limits.js';
 import { migrateLegacyRequest } from '../core/migrate-v0.js';
 import { getBuildIdentity } from '../generated/identity.js';
 import { SKILL_CATALOG, STABLE_SKILL_IDS, EXPERIMENTAL_CAPABILITY_IDS } from '../generated/catalog.js';
@@ -240,14 +242,15 @@ function cmdMigrate(args: string[]): number {
     process.stderr.write(`I/O error: ${String(error)}\n`);
     return EXIT.io;
   }
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    process.stderr.write('input is not valid JSON\n');
-    return EXIT.parse;
+  // Route legacy input through the SAME strict boundary as validate/render — the raw
+  // JSON.parse here bypassed the byte/depth/node limits and the duplicate-key rejection,
+  // which is exactly the hardening a legacy (untrusted) payload most needs.
+  const parsed = parseJsonStrict(text, { limits: getBudgetLimits('standard') });
+  if (!parsed.ok) {
+    printDiagnostics(parsed.errors, optionValue(args, '--format') === 'json');
+    return exitForErrors(parsed.errors);
   }
-  const result = migrateLegacyRequest(value);
+  const result = migrateLegacyRequest(parsed.value);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   return result.report.errors.length > 0 ? EXIT.semantic : EXIT.ok;
 }

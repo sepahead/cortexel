@@ -415,11 +415,11 @@
       "properties": {
         "title": { "$ref": "#/$defs/label" },
         "subtitle": { "$ref": "#/$defs/label" },
-        "themeId": { "type": "string", "enum": ["light", "dark", "print", "grayscale"], "default": "light" },
+        "themeId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/themeId", "default": "light" },
         "paletteId": { "$ref": "#/$defs/label" },
         "width": { "type": "integer", "minimum": 160, "maximum": 4096, "default": 720 },
         "height": { "type": "integer", "minimum": 120, "maximum": 4096, "default": 440 },
-        "budgetProfile": { "type": "string", "enum": ["standard", "agent"], "default": "standard" }
+        "budgetProfile": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/budgetProfileId", "default": "standard" }
       },
       "additionalProperties": false
     }

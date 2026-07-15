@@ -114,6 +114,11 @@ const KEYWORD_TYPES: Readonly<Record<string, string>> = {
   minLength: 'string',
   maxLength: 'string',
   pattern: 'string',
+  minimum: 'number',
+  maximum: 'number',
+  exclusiveMinimum: 'number',
+  exclusiveMaximum: 'number',
+  multipleOf: 'number',
 };
 
 const unitCodes = new Set<string>(units.units.map((u: any) => u.code));
@@ -151,10 +156,19 @@ for (const skill of skills) {
   const capability = capabilityIds.get(skill.id);
   if (!capability) {
     problems.push(`${where}: has no record in capabilities.v1.json`);
-  } else if (capability.status !== skill.status) {
-    problems.push(
-      `${where}: status "${skill.status}" disagrees with capabilities.v1.json "${capability.status}"`,
-    );
+  } else {
+    if (capability.status !== skill.status) {
+      problems.push(
+        `${where}: status "${skill.status}" disagrees with capabilities.v1.json "${capability.status}"`,
+      );
+    }
+    // The renderer is declared in both the skill contract and the capability record. They
+    // must agree, or the two sources of truth can drift.
+    if (capability.renderer !== undefined && capability.renderer !== skill.renderer?.id) {
+      problems.push(
+        `${where}: renderer "${skill.renderer?.id}" disagrees with capabilities.v1.json "${capability.renderer}"`,
+      );
+    }
   }
 
   // A stable skill pointing at an experimental renderer would be a stable promise
@@ -368,6 +382,18 @@ const enumSchema = {
     disclosureId: {
       type: 'string',
       enum: [...disclosureIds].sort(),
+    },
+    // Themes and budget profiles are $ref'd by the presentation schema so their sets have
+    // ONE authority (palettes.v1.json / budget-profiles.v1.json), not a hand-copied enum.
+    themeId: {
+      type: 'string',
+      description: 'A theme id from contract/registries/palettes.v1.json.',
+      enum: palettes.themes.map((t: any) => t.id).sort(),
+    },
+    budgetProfileId: {
+      type: 'string',
+      description: 'A budget-profile id from contract/registries/budget-profiles.v1.json.',
+      enum: budgets.profiles.map((p: any) => p.id).sort(),
     },
   },
 };

@@ -238,6 +238,24 @@
         "UNIT_CONVERTED",
         "ZERO_LAG_SELF_PAIRS_EXCLUDED"
       ]
+    },
+    "themeId": {
+      "type": "string",
+      "description": "A theme id from contract/registries/palettes.v1.json.",
+      "enum": [
+        "dark",
+        "grayscale",
+        "light",
+        "print"
+      ]
+    },
+    "budgetProfileId": {
+      "type": "string",
+      "description": "A budget-profile id from contract/registries/budget-profiles.v1.json.",
+      "enum": [
+        "agent",
+        "standard"
+      ]
     }
   }
 }

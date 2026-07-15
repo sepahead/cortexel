@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 PACKAGE_VERSION: str = "0.9.0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:ff53616e3a79a3281102d9714a3b0d768731bd645bd0e79d271db88386231358"
+CONTRACT_DIGEST: str = "sha256:2f9f27f342c052cd495a5982439def61237fbd9061c610fd0e3ec6294c3c9a62"
 CATALOG_DIGEST: str = "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691"
 
 STABLE_SKILL_IDS: List[str] = [

@@ -116,6 +116,29 @@ describe('SVG safety — a hostile label cannot become active content', () => {
   });
 });
 
+describe('a pre-binned PSTH draws its counts, not an all-zero figure', () => {
+  const psth = JSON.parse(
+    readFileSync(path.resolve(import.meta.dirname, '../contract/skills/neuro.psth.v1.json'), 'utf8'),
+  );
+  const prebinned = psth.examples.valid.find(
+    (e: { data: { mode?: string } }) => e.data.mode === 'prebinned',
+  );
+
+  it('renders non-zero bars aligned to the declared edges', () => {
+    expect(prebinned).toBeDefined();
+    const result = buildFigure(prebinned);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // One bar per bin (edges.length - 1), and at least one is non-zero — the prebinned
+    // counts are drawn rather than ignored.
+    const edges = prebinned.data.binEdges?.edges ?? prebinned.parameters.bins?.edges ?? [];
+    const barValues = result.table.rows.map((row) => Number(row[row.length - 1]));
+    expect(barValues.length).toBe(edges.length - 1);
+    expect(barValues.some((v) => v > 0)).toBe(true);
+  });
+});
+
 describe('end-to-end render — from raw JSON text', () => {
   it('renders from the strong duplicate-key-aware boundary', () => {
     const result = buildFigureFromJson(JSON.stringify(populationRate));

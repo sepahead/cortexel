@@ -89,7 +89,7 @@ export function computeMatrix(
   colIds: readonly string[],
   sourceIds: readonly string[],
   targetIds: readonly string[],
-  values: readonly number[] | undefined,
+  values: readonly (number | null)[] | undefined,
   aggregation: 'sum' | 'mean' | 'min' | 'max' | 'no_aggregation' | 'count',
 ): SparseMatrix {
   const rowIndex = new Map<string, number>();
@@ -107,9 +107,21 @@ export function computeMatrix(
     const col = colIndex.get(sourceIds[e]);
     if (row === undefined || col === undefined) continue;
 
-    const key = `${row} ${col}`;
-    const value = aggregation === 'count' ? 1 : values ? values[e] : 1;
+    // The value array is INDEX-ALIGNED with the edge arrays. A null/missing value is
+    // skipped for THIS cell only — it never shifts a later edge onto another cell's value,
+    // which is exactly the corruption that filtering the array up front would cause.
+    let value: number;
+    if (aggregation === 'count') {
+      value = 1;
+    } else if (values) {
+      const raw = values[e];
+      if (raw === null || !Number.isFinite(raw)) continue;
+      value = raw;
+    } else {
+      value = 1;
+    }
 
+    const key = `${row} ${col}`;
     const list = accumulator.get(key);
     if (list) list.push(value);
     else accumulator.set(key, [value]);
