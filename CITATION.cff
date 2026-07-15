@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: >-
+  If you use Cortexel in your research, please cite it using the metadata below.
+title: Cortexel
+abstract: >-
+  A closed, versioned catalog of scientifically constrained neural-data figure
+  contracts, with strict validation, coordinated contract identity, explicit
+  units, scope and uncertainty, provenance that fails closed, and deterministic
+  accessible SVG rendering for neural-simulation data and AI agents.
+type: software
+authors:
+  - family-names: Mahmoudian
+    given-names: Sepehr
+repository-code: https://github.com/sepahead/cortexel
+license: MIT
+version: 0.9.0
+date-released: 2026-07-15
+keywords:
+  - scientific-visualization
+  - computational-neuroscience
+  - spiking-neural-networks
+  - nest-simulator
+  - neuroscience
+  - data-provenance
+  - reproducible-research
+  - accessibility
+# A DOI is intentionally omitted at 0.9.0. It will be added only after a real
+# archived release exists; a placeholder DOI is never inserted.

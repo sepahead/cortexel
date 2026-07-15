@@ -6,7 +6,7 @@
  * `bun run check:generated` fails if this file drifts from its source.
  */
 
-export const PACKAGE_VERSION = "0.5.0";
+export const PACKAGE_VERSION = "0.9.0";
 export const REQUEST_CONTRACT = 'cortexel-figure-request/1.0';
 export const ARTIFACT_CONTRACT = 'cortexel-figure-artifact/1.0';
 export const CONTRACT_DIGEST = "sha256:ff53616e3a79a3281102d9714a3b0d768731bd645bd0e79d271db88386231358";

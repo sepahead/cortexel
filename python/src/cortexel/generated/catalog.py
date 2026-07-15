@@ -6,7 +6,7 @@ Edit the normative source and run `bun run generate`.
 
 from typing import Any, Dict, List
 
-PACKAGE_VERSION: str = "0.5.0"
+PACKAGE_VERSION: str = "0.9.0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
 CONTRACT_DIGEST: str = "sha256:ff53616e3a79a3281102d9714a3b0d768731bd645bd0e79d271db88386231358"

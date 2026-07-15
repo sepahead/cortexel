@@ -4,6 +4,17 @@
 > to turn simulation output into figures. If you are modifying Cortexel itself
 > (build, tests, design laws, conventions), read [CLAUDE.md](./CLAUDE.md) instead.
 
+> **0.9.0 direction note.** The sections below document the pre-1.0 `VizSpec` API that
+> ships in the current `core/` build. The 0.9.0 line introduces the versioned
+> **`FigureRequestV1` / `FigureArtifactV1`** contract under `contract/` and `src/`,
+> with a strict validation pipeline, a deterministic SVG renderer, and the `cortexel`
+> CLI (`identity`, `catalog`, `validate`, `render`, `migrate`). The defining rule of
+> the new contract: **a caller declares what its data *is*, never what Cortexel
+> concluded about it** — see [`docs/PROVENANCE.md`](./docs/PROVENANCE.md) and
+> [`docs/SCOPE.md`](./docs/SCOPE.md). The two surfaces coexist during the migration;
+> [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) tracks what is not yet
+> wired into the packaged build.
+
 You hold the output of a neural simulation — a NEST device dump, arrays of spike
 times, a cross-paper corpus graph — and you want an **honest, render-ready figure**
 without hand-rolling validation, provenance, or a WebGL scene. Cortexel is the

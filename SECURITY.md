@@ -1,11 +1,15 @@
 # Security Policy
 
+> The technical threat model — assets, trust boundaries, controls, and residual risks
+> — is in [`docs/SECURITY_MODEL.md`](./docs/SECURITY_MODEL.md). This file is the
+> reporting policy.
+
 ## Reporting a vulnerability
 
 Please report security issues privately via GitHub's
 [security advisories](https://github.com/sepahead/cortexel/security/advisories/new)
-rather than opening a public issue. We aim to acknowledge reports within a few
-business days.
+rather than opening a public issue. This is a single-maintainer, pre-1.0 project;
+reports are handled on a best-effort basis without a guaranteed response time.
 
 ## Scope
 

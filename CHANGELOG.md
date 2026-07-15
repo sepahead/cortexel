@@ -6,6 +6,30 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — documentation, governance, and repository metadata (M8)
+
+- **Normative docs:** `docs/SCOPE.md` (what Cortexel is and is not), `docs/PROVENANCE.md`
+  (the authority boundary and disclosure model), `docs/VERSIONING.md` (coordinated
+  identity and compatibility policy), and `docs/SECURITY_MODEL.md` (the STRIDE-style
+  threat model). Where prose and a registry disagree, the registry wins and the prose is
+  the bug.
+- **Governance and community:** `GOVERNANCE.md` (honest about the single-maintainer
+  reality; stable scientific-algorithm changes require recorded external review before
+  1.0), `SUPPORT.md`, and `ROADMAP.md` (the gate-linked path from 0.9.0 to 1.0).
+- **`MIGRATION.md`** — the deterministic outcome for all 26 pre-1.0 skill ids and the
+  explicit list of information migration refuses to invent.
+- **`CITATION.cff`** with Sepehr Mahmoudian as author. No DOI (added only after a real
+  archived release exists).
+- **README** rewritten to describe the 0.9.0 product accurately — the request→artifact
+  pipeline, the 19 stable contracts, the invariants, and the honest pre-1.0 status — with
+  the npm/PyPI/CI badges inactive by design.
+- **GitHub repository metadata** set: the provenance-first description and twelve topics.
+
+### Changed
+
+- Package version set to `0.9.0`; description updated. `AGENTS.md` and `SECURITY.md`
+  carry 0.9.0 direction notes pointing at the new contract and threat model.
+
 ### Added — deterministic rendering and CLI (M4)
 
 - **`RenderPlanV1`** — the framework-neutral figure description compiled between
