@@ -6,6 +6,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — render compilers for every stable family
+
+- **All 19 stable skills now render end to end.** Family compilers were added for bars
+  (ISI / degree / delay / weight distributions and PSTH), spike-raster ticks, matrix
+  cells (absent cell stays distinct from a measured zero), 2D spatial scatter (one equal
+  x/y scale, positions never jittered), correlogram stems (independent per lag, no
+  invented lag-zero), response-curve points with an ordered-only guide line, phase-plane
+  trajectories, and a schematic circular connection graph (every node placed, so isolates
+  and autapses stay visible). Each derives through the certified `src/analysis` layer, so
+  the drawn figure and the hand-checked arithmetic cannot diverge.
+- `test/renderAllFamilies.test.ts` asserts all 19 families render a byte-deterministic,
+  injection-safe SVG with a well-formed artifact digest, and that none falls back to the
+  honest `renderPending` state.
+
 ### Added — documentation, governance, and repository metadata (M8)
 
 - **Normative docs:** `docs/SCOPE.md` (what Cortexel is and is not), `docs/PROVENANCE.md`

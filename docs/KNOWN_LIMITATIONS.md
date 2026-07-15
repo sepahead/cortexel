@@ -23,18 +23,24 @@ The machine-readable state of every release gate is in
 
 ## Rendering
 
-- **Render-plan compilers cover the trace and population-rate families end to end.** A
-  validated request for any other family produces a complete, correct artifact
-  (validation, provenance, disclosures, digests) with an explicit `renderPending` marker
-  naming the renderer, rather than a crash or a fabricated figure. The remaining family
-  compilers (raster, distribution bars, matrix, spatial map, graph, phase plane,
-  correlogram, response curve) land incrementally, each with its own goldens. *Gate:
-  R081–R082.*
-- **The compiler is family-based, not one-file-per-skill.** The blueprint's target is one
-  compiler file per stable skill for reviewability. 0.9.0 uses a single well-tested
-  compiler per geometric family, which is more trustworthy than fifteen near-duplicates
-  but is a different file layout. Splitting is a pre-1.0 refactor; it changes the layout,
-  never the output.
+- **All 19 stable families now render end to end.** Every stable skill's valid example
+  derives through `src/analysis` and compiles to a deterministic, byte-stable SVG
+  (`test/renderAllFamilies.test.ts` asserts this for all 19, including SVG safety). The
+  compilers are geometric approximations sufficient for the contract's semantics —
+  faithful to the analysis, but not yet publication-tuned (see the visual-system note
+  below). *Gate: R081–R082.*
+- **Render compilers are family-based, not one-file-per-skill.** The blueprint's target is
+  one compiler file per stable skill for reviewability. 0.9.0 uses a single well-tested
+  compiler per geometric family (trace, step, bars, raster, matrix, scatter, stems,
+  points-with-guide, trajectory, graph), which is more trustworthy than fifteen
+  near-duplicates but is a different file layout. Splitting is a pre-1.0 refactor; it
+  changes the layout, never the output.
+- **The visual system is functional, not yet publication-tuned.** Figures render with the
+  correct semantics, a single accent colour, and fixed layout. The full versioned palette
+  application (per-series Okabe-Ito tuples, perceptual colour maps for matrices,
+  uncertainty bands), legends, and print/grayscale themes are specified in
+  `contract/registries/palettes.v1.json` but not yet fully applied by the compilers.
+  *Gate: R096–R106.*
 - **Accessibility summaries are not yet fully value-filled.** The deterministic summary
   template is emitted, but its `{placeholder}` tokens are not all substituted with the
   derived values yet, so a screen reader currently hears the template with ellipses in
