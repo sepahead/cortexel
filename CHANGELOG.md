@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — repository hygiene
+
+- Removed tracked Python bytecode caches and one-off scratch repro scripts with stale
+  machine-local paths; Python cache artifacts are now ignored so source archives and
+  audits contain only reproducible inputs.
+
 ### Fixed — adversarial review reconciliation (12 findings)
 
 An adversarial multi-lens review (science, security, honesty, coherence) with independent
