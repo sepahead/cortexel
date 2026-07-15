@@ -72,7 +72,7 @@ export {
 } from './errors.js';
 
 // Identity primitives
-export { sha256Digest, sha256Hex } from './sha256.js';
+export { sha256Digest, sha256Hex, utf8ByteLength } from './sha256.js';
 export { canonicalize, canonicalDigest, canonicalDigestExcluding, CanonicalizationError } from './canonicalize.js';
 
 // Boundaries

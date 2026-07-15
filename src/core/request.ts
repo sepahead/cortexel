@@ -23,6 +23,7 @@
  */
 
 import { canonicalDigest } from './canonicalize.js';
+import { deepFreeze } from './deep-freeze.js';
 import {
   finalizeErrors,
   makeError,
@@ -47,13 +48,16 @@ export interface InputAssurance {
 }
 
 const VALIDATED = Symbol('cortexel.validated');
+const VALIDATED_REQUESTS = new WeakSet<object>();
 
 /**
  * A request that has actually been through the pipeline.
  *
- * The symbol cannot be forged by shape — an object literal with the same fields is
- * not assignable, and the runtime check looks for the symbol itself. This is the
- * mechanism behind "rendering cannot be invoked with a plain look-alike object".
+ * The private symbol prevents accidental TypeScript construction. Runtime authority is
+ * stronger: only object identities minted by this module are entered in a private
+ * `WeakSet`. A proxy cannot forge membership with a `get` trap, and a copied object has
+ * a different identity. The whole token is deeply frozen before it is minted so the
+ * request and its digest cannot diverge after validation.
  */
 export interface ValidatedRequest {
   readonly [VALIDATED]: true;
@@ -67,11 +71,7 @@ export interface ValidatedRequest {
 }
 
 export function isValidatedRequest(value: unknown): value is ValidatedRequest {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as Record<symbol, unknown>)[VALIDATED] === true
-  );
+  return typeof value === 'object' && value !== null && VALIDATED_REQUESTS.has(value);
 }
 
 export type ValidationOutcome =
@@ -295,7 +295,7 @@ function validateSnapshot(
   // STAGE 6 — canonicalize.
   const canonicalRequest = canonicalizeRequest(request);
 
-  const validated: ValidatedRequest = {
+  const validated = deepFreeze<ValidatedRequest>({
     [VALIDATED]: true,
     skillId,
     skillRevision: catalog.revision,
@@ -304,7 +304,8 @@ function validateSnapshot(
     requestDigest: canonicalDigest(canonicalRequest),
     warnings: semanticErrors.filter((error) => error.severity === 'warning'),
     checkedValidatorIds: catalog.semanticValidators.map((validator) => validator.id),
-  };
+  });
+  VALIDATED_REQUESTS.add(validated);
 
   return { ok: true, request: validated };
 }

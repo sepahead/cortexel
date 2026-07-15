@@ -22,7 +22,7 @@ import { unitLabel } from '../core/units.js';
 import type { Disclosure } from '../core/disclosures.js';
 
 export interface CompileContext {
-  readonly artifactDigest: string;
+  readonly sourceRequestDigest: string;
   readonly width: number;
   readonly height: number;
   readonly themeId: string;
@@ -71,18 +71,18 @@ function buildTable(
 
 function frame(context: CompileContext, disclosures: readonly Disclosure[]): Pick<
   RenderPlanV1,
-  'version' | 'figureId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceArtifactDigest'
+  'version' | 'figureId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceRequestDigest'
 > & { subtitle?: string } {
   return {
     version: 1,
-    figureId: `fig-${context.artifactDigest.slice(7, 19)}`,
+    figureId: `fig-${context.sourceRequestDigest.slice(7, 19)}`,
     width: context.width,
     height: context.height,
     title: context.title,
     ...(context.subtitle ? { subtitle: context.subtitle } : {}),
     themeId: context.themeId,
     disclosures: disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
-    sourceArtifactDigest: context.artifactDigest,
+    sourceRequestDigest: context.sourceRequestDigest,
   };
 }
 

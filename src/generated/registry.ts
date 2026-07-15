@@ -59,6 +59,7 @@ export const ERROR_CODES = [
   "RENDER_SERIES_LIMIT_EXCEEDED",
   "RENDER_THEME_NONCONFORMING",
   "RENDER_UNSUPPORTED_SKILL",
+  "RENDER_UNVALIDATED_REQUEST",
   "RESOURCE_BUDGET_EXCEEDED",
   "RESOURCE_COMPACTION_UNAVAILABLE",
   "RESOURCE_MARKS_EXCEEDED",
@@ -731,6 +732,12 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "severity": "error",
     "summary": "More series were supplied than the visual system can distinguish.",
     "correctiveAction": "Use small multiples or group the series. Cortexel refuses to mint dozens of indistinguishable colours."
+  },
+  "RENDER_UNVALIDATED_REQUEST": {
+    "stage": "render",
+    "severity": "error",
+    "summary": "Rendering was invoked without a validation token minted by this Cortexel instance.",
+    "correctiveAction": "Call parseAndValidateRequest or validateRequestValue, require an ok result, and pass that exact frozen token to the renderer. A cast or look-alike object has no validation authority."
   },
   "RENDER_UNSUPPORTED_SKILL": {
     "stage": "render",

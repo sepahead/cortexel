@@ -129,6 +129,11 @@ export function toHex(bytes: Uint8Array): string {
 
 const UTF8 = new TextEncoder();
 
+/** The number of UTF-8 bytes in a string, never its UTF-16 code-unit count. */
+export function utf8ByteLength(text: string): number {
+  return UTF8.encode(text).byteLength;
+}
+
 /** SHA-256 of a UTF-8 string, as 64 lowercase hex characters. */
 export function sha256Hex(text: string): string {
   return toHex(sha256Bytes(UTF8.encode(text)));

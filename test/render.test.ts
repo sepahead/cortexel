@@ -10,9 +10,17 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { buildFigure, buildFigureFromJson, renderSvg } from '../src/render/index.js';
+import {
+  buildFigure,
+  buildFigureFromJson,
+  buildFigureFromValidated,
+  renderSvg,
+} from '../src/render/index.js';
 import { formatNumber, formatCoordinate } from '../src/render/format.js';
 import { linearTicks } from '../src/render/scale.js';
+import { canonicalDigestExcluding } from '../src/core/canonicalize.js';
+import { isValidatedRequest, validateRequestValue } from '../src/core/request.js';
+import { sha256Digest, utf8ByteLength } from '../src/core/sha256.js';
 
 const populationRate = JSON.parse(
   readFileSync(
@@ -68,11 +76,20 @@ describe('end-to-end render — population rate', () => {
     const result = buildFigure(populationRate);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const outputs = (result.artifact.outputs as { role: string; sha256: string }[]) ?? [];
+    const outputs = (result.artifact.outputs as {
+      role: string;
+      sha256: string;
+      byteLength: number;
+    }[]) ?? [];
     const svgOutput = outputs.find((o) => o.role === 'figure_svg');
     expect(svgOutput).toBeDefined();
-    // The artifact records the exact SVG bytes it produced.
-    expect(result.svg.length).toBeGreaterThan(0);
+    expect(svgOutput?.sha256).toBe(sha256Digest(result.svg));
+    expect(svgOutput?.byteLength).toBe(utf8ByteLength(result.svg));
+    expect(result.artifact.artifactDigest).toBe(
+      canonicalDigestExcluding(result.artifact, 'artifactDigest'),
+    );
+    expect(Object.isFrozen(result.artifact)).toBe(true);
+    expect(Object.isFrozen(result.artifact.accessibility as object)).toBe(true);
   });
 
   it('carries the simulation and reference-not-run disclosures', () => {
@@ -87,6 +104,62 @@ describe('end-to-end render — population rate', () => {
   it('rejects an invalid request before rendering', () => {
     const result = buildFigure({ contract: { name: 'cortexel-figure-request', version: '1.0' }, skill: { id: 'neuro.population_rate' }, data: {}, parameters: {}, source: { kind: 'simulation' } });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('validation authority is an immutable runtime capability', () => {
+  it('mints a deeply frozen token whose identity cannot be copied', () => {
+    const outcome = validateRequestValue(populationRate);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    const token = outcome.request;
+    expect(isValidatedRequest(token)).toBe(true);
+    expect(Object.isFrozen(token)).toBe(true);
+    expect(Object.isFrozen(token.canonicalRequest)).toBe(true);
+    expect(Object.isFrozen(token.canonicalRequest.data as object)).toBe(true);
+
+    const copied = { ...token };
+    expect(isValidatedRequest(copied)).toBe(false);
+    const copiedResult = buildFigureFromValidated(copied as never);
+    expect(copiedResult).toMatchObject({
+      ok: false,
+      errors: [{ code: 'RENDER_UNVALIDATED_REQUEST', stage: 'render' }],
+    });
+  });
+
+  it('does not execute proxy traps while refusing a forged token', () => {
+    let reads = 0;
+    const hostile = new Proxy(
+      {},
+      {
+        get() {
+          reads += 1;
+          throw new Error('renderer inspected an untrusted proxy');
+        },
+      },
+    );
+
+    expect(() => buildFigureFromValidated(hostile as never)).not.toThrow();
+    expect(buildFigureFromValidated(hostile as never)).toMatchObject({
+      ok: false,
+      errors: [{ code: 'RENDER_UNVALIDATED_REQUEST' }],
+    });
+    expect(reads).toBe(0);
+  });
+
+  it('prevents post-validation mutation of nested scientific data', () => {
+    const outcome = validateRequestValue(populationRate);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    const before = outcome.request.requestDigest;
+    const data = outcome.request.canonicalRequest.data as {
+      eventTimes: { values: number[] };
+    };
+    expect(() => data.eventTimes.values.push(99)).toThrow(TypeError);
+    expect(outcome.request.requestDigest).toBe(before);
+    expect(buildFigureFromValidated(outcome.request).ok).toBe(true);
   });
 });
 
@@ -113,6 +186,63 @@ describe('SVG safety — a hostile label cannot become active content', () => {
     // The ONLY URL permitted anywhere in the output is the SVG namespace declaration.
     const urls = result.svg.match(/https?:\/\/[^\s"']+/g) ?? [];
     expect(urls.every((u) => u === 'http://www.w3.org/2000/svg')).toBe(true);
+  });
+
+  it('declares its metadata namespace and labels the request digest truthfully', () => {
+    const result = buildFigure(populationRate);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.svg).toContain('xmlns:cortexel="urn:cortexel:metadata:1"');
+    expect(result.svg).toContain('<cortexel:requestDigest>sha256:');
+    expect(result.svg).not.toContain('<cortexel:artifactDigest>');
+  });
+
+  it('rejects XML-forbidden display noncharacters before rendering', () => {
+    for (const character of ['\ufffe', '\uffff']) {
+      const invalid = structuredClone(populationRate);
+      invalid.presentation = { title: `invalid${character}xml` };
+      expect(() => buildFigure(invalid)).not.toThrow();
+      expect(buildFigure(invalid).ok).toBe(false);
+    }
+  });
+
+  it('records UTF-8 byte length rather than JavaScript string length', () => {
+    const unicode = structuredClone(populationRate);
+    unicode.presentation = { title: 'Population rate 🧪 µHz' };
+    const result = buildFigure(unicode);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const output = (result.artifact.outputs as { role: string; byteLength: number }[]).find(
+      (item) => item.role === 'figure_svg',
+    );
+    expect(output?.byteLength).toBe(new TextEncoder().encode(result.svg).byteLength);
+    expect(output?.byteLength).toBeGreaterThan(result.svg.length);
+  });
+});
+
+describe('disclosure accessibility parity', () => {
+  it('carries every mandatory disclosure verbatim in the artifact summary and SVG description', () => {
+    const result = buildFigure(populationRate);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const summary = (result.artifact.accessibility as { summary: string }).summary;
+    const descMatch = result.svg.match(/<desc\b[^>]*>([\s\S]*?)<\/desc>/u);
+    expect(descMatch).not.toBeNull();
+    const decodedDescription = (descMatch?.[1] ?? '')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&');
+
+    for (const disclosure of result.disclosures) {
+      expect(summary).toContain(disclosure.text);
+      expect(decodedDescription).toContain(disclosure.text);
+    }
+    expect(result.plan.accessibility.summary).toBe(summary);
   });
 });
 

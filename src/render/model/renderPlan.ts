@@ -30,8 +30,8 @@ export interface RenderPlanV1 {
   readonly disclosures: readonly DisclosureBlock[];
   readonly table: TableModel;
   readonly accessibility: AccessibilityModel;
-  /** Binds the plan to the artifact it was compiled from. */
-  readonly sourceArtifactDigest: string;
+  /** Binds the plan to the validated canonical request it was compiled from. */
+  readonly sourceRequestDigest: string;
 }
 
 export interface DisclosureBlock {

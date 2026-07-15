@@ -6,6 +6,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — validation and artifact integrity
+
+- Made validated-request authority identity-based and deeply immutable: the renderer now
+  accepts only the exact token minted by this module, so look-alike objects, copied symbol
+  brands, hostile proxies, and post-validation nested mutation cannot bypass or invalidate
+  the checked request digest.
+- Artifacts are assembled and frozen only after their accessibility and render fields are
+  final. Their self-digest now recomputes exactly, SVG byte lengths count UTF-8 bytes, and a
+  missing stable compiler fails closed instead of returning a schema-invalid partial artifact.
+- SVG metadata now names the bound request digest truthfully and declares its XML namespace;
+  rendered strings reject XML-forbidden U+FFFE/U+FFFF, and the accessible description carries
+  every mandatory disclosure verbatim.
+
 ### Fixed — repository hygiene
 
 - Removed tracked Python bytecode caches and one-off scratch repro scripts with stale

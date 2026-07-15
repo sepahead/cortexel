@@ -77,7 +77,7 @@ const MAX_SUMMARY_LENGTH = 120;
  * source file itself stays pure ASCII and cannot carry the very bytes it bans.
  */
 const UNSAFE_DISPLAY_CLASS =
-  '[\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]';
+  '[\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff\\ufffe-\\uffff]';
 
 /** Matches a single unsafe display character. */
 export const UNSAFE_DISPLAY_PATTERN = new RegExp(UNSAFE_DISPLAY_CLASS, 'gu');

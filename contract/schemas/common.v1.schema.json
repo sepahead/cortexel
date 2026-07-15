@@ -21,9 +21,9 @@
 
     "displayString": {
       "type": "string",
-      "description": "Human-readable text that will be rendered. Control characters, C1 codes, bidi overrides/isolates, and zero-width characters are excluded because they can visually spoof an axis label, a legend entry, or a mandatory disclosure.",
+      "description": "Human-readable text that will be rendered. Control characters, C1 codes, bidi overrides/isolates, zero-width characters, and the XML-forbidden U+FFFE/U+FFFF noncharacters are excluded because they can visually spoof text or make the normative SVG ill-formed.",
       "maxLength": 200,
-      "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$"
+      "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff\\ufffe-\\uffff]*$"
     },
 
     "label": {

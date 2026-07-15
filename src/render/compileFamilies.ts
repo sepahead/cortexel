@@ -39,11 +39,11 @@ function missingColor(themeId: string): string {
 
 function frame(context: CompileContext, skillId: string): Pick<
   RenderPlanV1,
-  'version' | 'figureId' | 'skillId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceArtifactDigest' | 'accessibility'
+  'version' | 'figureId' | 'skillId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceRequestDigest' | 'accessibility'
 > & { subtitle?: string } {
   return {
     version: 1,
-    figureId: `fig-${context.artifactDigest.slice(7, 19)}`,
+    figureId: `fig-${context.sourceRequestDigest.slice(7, 19)}`,
     skillId,
     width: context.width,
     height: context.height,
@@ -51,7 +51,7 @@ function frame(context: CompileContext, skillId: string): Pick<
     ...(context.subtitle ? { subtitle: context.subtitle } : {}),
     themeId: context.themeId,
     disclosures: context.disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
-    sourceArtifactDigest: context.artifactDigest,
+    sourceRequestDigest: context.sourceRequestDigest,
     accessibility: { summary: context.summary, panelSummaries: [] },
   };
 }

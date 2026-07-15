@@ -14,13 +14,15 @@
  */
 
 import {
+  isValidatedRequest,
   parseAndValidateRequest,
   validateRequestValue,
   type ValidatedRequest,
   type ValidationOutcome,
 } from '../core/request.js';
 import { canonicalDigest, canonicalDigestExcluding } from '../core/canonicalize.js';
-import { sha256Digest } from '../core/sha256.js';
+import { deepFreeze } from '../core/deep-freeze.js';
+import { sha256Digest, utf8ByteLength } from '../core/sha256.js';
 import { deriveDisclosures, type Disclosure, type DisclosureFacts } from '../core/disclosures.js';
 import { SKILL_CATALOG } from '../generated/catalog.js';
 import { unitLabel } from '../core/units.js';
@@ -51,7 +53,7 @@ import {
 import type { CompileContext } from './compile.js';
 import type { RenderPlanV1 } from './model/renderPlan.js';
 import { getBuildIdentity } from '../generated/identity.js';
-import type { CortexelError } from '../core/errors.js';
+import { makeError, type CortexelError } from '../core/errors.js';
 
 export interface FigureResult {
   readonly ok: true;
@@ -526,12 +528,13 @@ function compile(
 function assembleArtifact(
   validated: ValidatedRequest,
   disclosures: readonly Disclosure[],
-  render: SvgReport | null,
-  svgDigest: string | null,
-  tableRows: { inline: number; total: number },
+  plan: RenderPlanV1,
+  render: SvgReport,
+  summary: string,
 ): Record<string, unknown> {
   const identity = getBuildIdentity();
   const catalog = SKILL_CATALOG[validated.skillId];
+  const tableRows = { inline: plan.table.rowsInline, total: plan.table.rowsTotal };
 
   const artifactWithoutDigest: Record<string, unknown> = {
     artifact: { name: 'cortexel-figure-artifact', version: '1.0' },
@@ -582,45 +585,37 @@ function assembleArtifact(
       attestations: [],
     },
     disclosures: disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
-    ...(render
-      ? {
-          render: {
-            rendererId: catalog.renderer.id,
-            rendererRevision: catalog.renderer.revision,
-            width: render.width,
-            height: render.height,
-            themeId: 'light',
-            markCount: render.markCount,
-            textCount: render.textCount,
-            idSeed: validated.requestDigest,
-          },
-          accessibility: {
-            profileId: 'cortexel-accessibility',
-            profileVersion: '1.0',
-            summary: '',
-            tablePolicy: tableRows.total > tableRows.inline
-              ? 'excerpt_inline_with_complete_sidecar'
-              : 'complete_inline',
-            tableRowsInline: tableRows.inline,
-            tableRowsTotal: tableRows.total,
-          },
-          outputs: svgDigest
-            ? [
-                {
-                  role: 'figure_svg',
-                  mediaType: 'image/svg+xml',
-                  sha256: svgDigest,
-                  byteLength: render.svg.length,
-                  normative: true,
-                },
-              ]
-            : [],
-        }
-      : {}),
+    render: {
+      rendererId: catalog.renderer.id,
+      rendererRevision: catalog.renderer.revision,
+      width: render.width,
+      height: render.height,
+      themeId: plan.themeId,
+      markCount: render.markCount,
+      textCount: render.textCount,
+      idSeed: validated.requestDigest,
+    },
+    accessibility: {
+      profileId: 'cortexel-accessibility',
+      profileVersion: '1.0',
+      summary,
+      tablePolicy: plan.table.policy,
+      tableRowsInline: tableRows.inline,
+      tableRowsTotal: tableRows.total,
+    },
+    outputs: [
+      {
+        role: 'figure_svg',
+        mediaType: 'image/svg+xml',
+        sha256: render.digest,
+        byteLength: utf8ByteLength(render.svg),
+        normative: true,
+      },
+    ],
   };
 
   const artifactDigest = canonicalDigestExcluding(artifactWithoutDigest, 'artifactDigest');
-  return { ...artifactWithoutDigest, artifactDigest };
+  return deepFreeze({ ...artifactWithoutDigest, artifactDigest });
 }
 
 /**
@@ -646,6 +641,23 @@ function countObservations(node: unknown, depth = 0): number {
 
 /** Build a figure from an already-validated request. */
 export function buildFigureFromValidated(validated: ValidatedRequest): FigureResult | FigureFailure {
+  // Check module-owned identity before reading even one property. In particular, a proxy
+  // cannot use a `get` trap to forge the private TypeScript symbol or execute code while
+  // this failure is being diagnosed.
+  if (!isValidatedRequest(validated)) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RENDER_UNVALIDATED_REQUEST',
+          stage: 'render',
+          message:
+            'buildFigureFromValidated requires the exact frozen token returned by a successful Cortexel validation. Plain objects, copies, proxies, and type casts have no validation authority.',
+        }),
+      ],
+    };
+  }
+
   const request = validated.canonicalRequest;
   const catalog = SKILL_CATALOG[validated.skillId];
   const presentation = rec(request.presentation) ?? {};
@@ -677,7 +689,7 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
     const facts = disclosureFacts(request, { tableRowsTotal: rowsTotal, tableRowsInline: Math.min(rowsTotal, 500) });
     const disclosures = deriveDisclosures(facts, catalog.disclosures, forced);
     return {
-      artifactDigest: validated.requestDigest,
+      sourceRequestDigest: validated.requestDigest,
       width: num(presentation.width) ?? 720,
       height: num(presentation.height) ?? 440,
       themeId: (presentation.themeId as string) ?? 'light',
@@ -690,19 +702,16 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
   const compiled = compile(validated, makeContext);
 
   if ('pending' in compiled) {
-    // Honest: a validated request whose family compiler is not in 0.9.0 yet produces a
-    // real artifact (validation, provenance, disclosures) but no SVG, with the renderer
-    // named. It never fabricates a figure.
-    const context = makeContext(0);
-    const artifact = assembleArtifact(validated, context.disclosures, null, null, { inline: 0, total: 0 });
-    (artifact as Record<string, unknown>).renderPending = compiled.pending;
     return {
-      ok: true,
-      artifact,
-      svg: '',
-      plan: { ...(({} as unknown) as RenderPlanV1) },
-      table: { policy: 'reference_only', columns: [], rows: [], rowsInline: 0, rowsTotal: 0 },
-      disclosures: context.disclosures,
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RENDER_UNSUPPORTED_SKILL',
+          stage: 'render',
+          skillId: validated.skillId,
+          message: `stable skill ${validated.skillId} selected renderer ${compiled.pending}, but its compiler produced no render plan. Cortexel refuses to emit a schema-invalid partial artifact.`,
+        }),
+      ],
     };
   }
 
@@ -712,20 +721,14 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
   // derived from the compiled figure, then render — so the SVG <desc> and the artifact
   // carry the SAME true summary rather than a placeholder.
   const summary = buildSummary(compiled.plan, context.title);
-  const plan: RenderPlanV1 = {
+  const plan = deepFreeze<RenderPlanV1>({
     ...compiled.plan,
     accessibility: { ...compiled.plan.accessibility, summary },
-  };
+  });
 
   const report = renderSvg(plan, sha256Digest);
 
-  const artifact = assembleArtifact(validated, context.disclosures, report, report.digest, {
-    inline: plan.table.rowsInline,
-    total: plan.table.rowsTotal,
-  });
-  // Carry the real summary into the artifact's accessibility record too.
-  const accessibility = (artifact as { accessibility?: Record<string, unknown> }).accessibility;
-  if (accessibility) accessibility.summary = summary;
+  const artifact = assembleArtifact(validated, context.disclosures, plan, report, summary);
 
   return { ok: true, artifact, svg: report.svg, plan, table: plan.table, disclosures: context.disclosures };
 }
@@ -761,7 +764,11 @@ function buildSummary(plan: RenderPlanV1, title: string): string {
 
   const disclosureCount = plan.disclosures.length;
   if (disclosureCount > 0) {
-    parts.push(`${disclosureCount} ${disclosureCount === 1 ? 'disclosure applies' : 'disclosures apply'}; see the figure caption and table.`);
+    parts.push(
+      `${disclosureCount} ${disclosureCount === 1 ? 'disclosure applies' : 'disclosures apply'}: ${plan.disclosures
+        .map((disclosure) => disclosure.text)
+        .join(' ')}`,
+    );
   }
   if (plan.panels[0]?.noData) {
     parts.push(`No data: ${plan.panels[0].noData.reason}.`);

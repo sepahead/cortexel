@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:2f9f27f342c052cd495a5982439def61237fbd9061c610fd0e3ec6294c3c9a62",
+  "contractDigest": "sha256:bdf269629293da218b24e62c56e03016faec6bd4e85770fd1d756f416d3ec7b9",
   "catalogDigest": "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691",
   "stableSkillCount": 19,
   "stableSkills": [
@@ -1506,7 +1506,7 @@
     "standard",
     "agent"
   ],
-  "errorCodeCount": 114,
+  "errorCodeCount": 115,
   "semanticValidatorCount": 36,
   "disclosureRuleCount": 31,
   "normativeSources": [
@@ -1528,7 +1528,7 @@
     },
     {
       "path": "contract/registries/error-codes.v1.json",
-      "digest": "sha256:380a848cd406dff43717e0c2de32cdb7745bd9d1ed48207b37db0c0de6a08a53"
+      "digest": "sha256:1784642418efe9ad31e6dceb8f4d2ffb49d054dccb55493b0744b006b24d4a37"
     },
     {
       "path": "contract/registries/identity.v1.json",
@@ -1556,11 +1556,11 @@
     },
     {
       "path": "contract/schemas/common.v1.schema.json",
-      "digest": "sha256:51d8474d741b0e62aef71f3933ed9ce89a0e0aba6eb34a4c101cf41c22d70fbf"
+      "digest": "sha256:4e18fbb746de19f39a100a23d697b9ad8c26926504959473e6f24f36a1820536"
     },
     {
       "path": "contract/schemas/figure-artifact.v1.schema.json",
-      "digest": "sha256:df005a297a4bbbfdd73a0293a69b4b5e4748dec1a59304e4322797689a734d48"
+      "digest": "sha256:41f65149092ffbf596a373212fdce850c38949563866ac2d5fc7a151bb7de50d"
     },
     {
       "path": "contract/schemas/figure-request.v1.schema.json",
@@ -1568,7 +1568,7 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:2742741cfca008eba722f798dc3e8431cf5daef613ee19e60775dfac2aab6904"
+      "digest": "sha256:342fea650cd53a712b28bcf7ae4ab0e166c33928c89549de06bfe43c03ad6cf8"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",

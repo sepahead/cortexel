@@ -208,7 +208,11 @@
       "properties": {
         "profileId": { "type": "string" },
         "profileVersion": { "type": "string" },
-        "summary": { "type": "string", "maxLength": 2000 },
+        "summary": {
+          "type": "string",
+          "maxLength": 12000,
+          "description": "Deterministic non-interpretive description. It contains every mandatory disclosure verbatim so the SVG description and visible footer carry the same honesty statements."
+        },
         "tablePolicy": {
           "type": "string",
           "enum": ["complete_inline", "excerpt_inline_with_complete_sidecar", "summary_inline_with_complete_sidecar", "reference_only"]

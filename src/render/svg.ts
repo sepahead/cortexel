@@ -347,6 +347,7 @@ export function renderSvg(
 
   writer.open('svg', [
     ['xmlns', 'http://www.w3.org/2000/svg'],
+    ['xmlns:cortexel', 'urn:cortexel:metadata:1'],
     ['viewBox', `0 0 ${plan.width} ${plan.height}`],
     ['width', plan.width],
     ['height', plan.height],
@@ -363,7 +364,7 @@ export function renderSvg(
   writer.open('metadata');
   writer.text('cortexel:contract', 'cortexel-figure-artifact/1.0');
   writer.text('cortexel:skill', plan.skillId);
-  writer.text('cortexel:artifactDigest', plan.sourceArtifactDigest);
+  writer.text('cortexel:requestDigest', plan.sourceRequestDigest);
   writer.close('metadata');
 
   writer.leaf('rect', [
