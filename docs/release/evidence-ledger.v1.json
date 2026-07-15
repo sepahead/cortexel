@@ -252,8 +252,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Positive, negative, boundary, metamorphic, and migration conformance vectors pass in TypeScript and Python.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "4147e6b46a9576b65198f4a88bb2c4dd0d7cbe59",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test && bun run test:python",
+        "receipt": "test/crossLanguageParity.test.ts + python/tests — valid examples accepted by both TS and Python; contract examples are the positive corpus"
+      },
       "notes": ""
     },
     {
@@ -804,8 +810,14 @@
       "section": "Rendering, output, budgets, and performance",
       "requirement": "Benchmark claims include hardware, OS, runtime, versions, input, profile, warmup, repetitions, percentile, memory method, and artifact.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "4147e6b46a9576b65198f4a88bb2c4dd0d7cbe59",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test && bun run test:python",
+        "receipt": "python/src/cortexel — independent Python reader (parse, canonicalize, digest, structural + unit validation), no Node, no jsonschema; python/tests pass"
+      },
       "notes": ""
     },
     {

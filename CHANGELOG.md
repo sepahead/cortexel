@@ -6,6 +6,26 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — independent Python reader and cross-language parity (M3)
+
+- **`python/src/cortexel/`** — a genuinely independent Python implementation that
+  validates, canonicalizes, and digests requests without invoking Node or importing any
+  generated JavaScript. Pure standard library: no `jsonschema`, no NumPy.
+  - Strict parsing rejects duplicate object members (via `object_pairs_hook`),
+    prototype-polluting keys, and non-finite numbers.
+  - RFC 8785 canonicalization implemented from the scheme's rules, including the
+    ECMAScript `Number::toString` algorithm and UTF-16 code-unit key ordering — matching
+    the TypeScript canonicalizer to the byte, including astral-character (emoji) sort.
+  - Structural validation reads the same normative schemas the TypeScript side reads;
+    the caller-authority boundary and the unit rules (alias rejection, dimension matching)
+    are ported and agree with TypeScript.
+- **`test/crossLanguageParity.test.ts`** — the proof: TypeScript and Python agree
+  **byte-for-byte** on the canonical digest of every contract example, and agree on
+  acceptance and on rejecting a forged conclusion and a unit alias. It skips gracefully
+  when Python 3 is unavailable.
+- `python/tests/` (11 tests, standard-library `unittest`), `python/pyproject.toml`
+  (pure-stdlib base, adapters as optional extras), and a `test:python` script.
+
 ### Added — render compilers for every stable family
 
 - **All 19 stable skills now render end to end.** Family compilers were added for bars

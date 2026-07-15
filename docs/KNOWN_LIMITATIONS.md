@@ -52,12 +52,19 @@ The machine-readable state of every release gate is in
 
 ## Cross-language
 
-- **The Python package is generated but not a full independent validator yet.** The
-  contract, identity, units, and budgets are mirrored into `python/src/cortexel/generated`
-  and stay in lockstep via the generator. An independent Python parser, canonicalizer,
-  and semantic-validator implementation — the second reader that would let the portable
-  schema be cross-checked — is not yet built. *Gate: R019 Python side, R022 Python
-  parity, R071–R076, R134–R135.*
+- **The independent Python reader exists and agrees with TypeScript byte-for-byte on
+  digests.** `python/src/cortexel/` provides strict parsing (duplicate-key and
+  prototype-key rejection), RFC 8785 canonicalization matching ECMAScript number
+  formatting and UTF-16 key ordering, SHA-256 digests, contract identity, and structural
+  + unit-semantic validation — all pure standard library, no Node, no `jsonschema`. The
+  cross-language parity test (`test/crossLanguageParity.test.ts`) confirms the two agree
+  on the canonical digest of every contract example and on acceptance/rejection.
+- **The Python semantic-validator port is partial.** The caller-authority boundary and the
+  unit rules (alias rejection, dimension matching) are ported and agree with TypeScript.
+  The deeper scientific validators (rate re-derivation, reference-in-universe, correlogram
+  denominator, topology scope) are TypeScript-only for 0.9.0 and are ported incrementally;
+  the parity test asserts agreement only on what Python actually implements. *Gate: R019
+  Python side, R071–R076.*
 
 ## Adapters
 

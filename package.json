@@ -104,7 +104,8 @@
     "audit": "bun audit",
     "lint:package": "publint",
     "test:package": "bun scripts/smoke-package.ts",
-    "prepublishOnly": "bun run build && bun run check && bun run audit && bun run lint:package && bun run test:package"
+    "prepublishOnly": "bun run build && bun run check && bun run audit && bun run lint:package && bun run test:package",
+    "test:python": "PYTHONPATH=python/src python3 -m unittest discover -s python/tests"
   },
   "dependencies": {
     "ajv": "^8.17.1",

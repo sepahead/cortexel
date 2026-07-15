@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cortexel"
+version = "0.9.0"
+description = "Independent Python reader for Cortexel scientific figure contracts: strict parsing, RFC 8785 canonicalization, SHA-256 digests, and structural + semantic validation."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Sepehr Mahmoudian" }]
+keywords = [
+  "scientific-visualization",
+  "computational-neuroscience",
+  "spiking-neural-networks",
+  "data-provenance",
+  "reproducible-research",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Visualization",
+]
+# The base package is pure standard library on purpose: no jsonschema, no NumPy, and it
+# never invokes Node. Independence is the point — its agreement with the TypeScript side
+# is evidence only because it shares no code with it.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/sepahead/cortexel"
+Repository = "https://github.com/sepahead/cortexel.git"
+Issues = "https://github.com/sepahead/cortexel/issues"
+
+# Optional scientific adapters (Neo, Elephant, PyNWB, NEST) are declared here for the 1.0
+# line but are not yet implemented; see docs/KNOWN_LIMITATIONS.md.
+[project.optional-dependencies]
+neo = ["neo>=0.13,<0.15"]
+elephant = ["elephant>=1.1,<1.3"]
+nwb = ["pynwb>=3,<5"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cortexel"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/cortexel", "README.md", "tests"]
