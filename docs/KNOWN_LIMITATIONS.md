@@ -68,10 +68,14 @@ The machine-readable state of every release gate is in
 
 ## Adapters
 
-- **NEST/Neo/NWB/NCP adapters are specified in the contracts but not implemented.** Each
-  skill's `adapters` block records the intended mapping and its status. The NCP adapter is
-  and will remain `experimental` until an immutable NCP release is certified; it is never
-  certified against NCP's moving HEAD. *Gate: R065–R077.*
+- **The NEST spike-recorder adapter (plain-data path) is implemented** (`src/adapters/nest/`):
+  it snapshots an exported NEST spike-recorder object, requires the recorded sender universe
+  (never inferring it), does not assume chronological events, and produces a
+  `neuro.spike_raster` request that passes the full validation gate and renders end to end.
+  The remaining NEST paths (connections, positions, multimeter) and the Neo/NWB/NCP adapters
+  are specified in the contracts but not yet implemented. The NCP adapter is and will remain
+  `experimental` until an immutable NCP release is certified — never against moving HEAD.
+  *Gate: R065–R077.*
 
 ## Packaging and release
 
