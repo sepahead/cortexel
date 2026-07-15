@@ -204,8 +204,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Generated TypeScript validators, Python models/validators, manifest descriptors, docs fragments, and schemas share the same source digest.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "1155d456df1a42ab909dbeb3bcaf636ba673d165",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test && bun run test:python",
+        "receipt": "test/crossLanguageParity.test.ts — generated TS + Python share the source digest and agree on canonical bytes for every example"
+      },
       "notes": ""
     },
     {
@@ -762,8 +768,14 @@
       "section": "Rendering, output, budgets, and performance",
       "requirement": "CLI and React use the same artifact and render-plan compilers.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
+        "sourceCommit": "1155d456df1a42ab909dbeb3bcaf636ba673d165",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test && bun run test:python",
+        "receipt": "src/adapters/nest/recorders.ts + test/nestAdapter.test.ts — NEST spike-recorder adapter: snapshots input, requires the recorded universe, does not assume order; output validates and renders"
+      },
       "notes": ""
     },
     {

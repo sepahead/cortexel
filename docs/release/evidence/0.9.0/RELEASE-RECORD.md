@@ -24,8 +24,8 @@ what was and was not executed.
 
 ## Evidence
 
-- **Tests:** 865 passing across 30 files (`bun run test`).
-- **Evidence ledger:** 38 of 155 gates `PASS` with reproducible receipts; 117 `NOT_RUN`.
+- **Tests:** 921 passing across 36 files (plus the independent Python suite) (`bun run test`).
+- **Evidence ledger:** 46 of 155 gates `PASS` with reproducible receipts; 109 `NOT_RUN`.
   Every `NOT_RUN` is an honest state, enumerated in
   [`../../KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md). The ledger checker
   ([`scripts/check-evidence-ledger.ts`](../../../scripts/check-evidence-ledger.ts))
