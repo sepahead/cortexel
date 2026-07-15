@@ -1,0 +1,30 @@
+{
+  "manifest": "cortexel-golden-vectors",
+  "version": 1,
+  "description": "The golden-vector index. Three evidence layers: hand (arithmetic checkable on paper, mandatory), external (an independent library, pinned), and cross-implementation (TypeScript vs Python). An external vector never replaces a hand vector.",
+
+  "honestStatus": "For 0.9.0, only the HAND layer has been executed. No pinned reference environment (NEST, Elephant, Neo, PyNWB) has run in this repository, so every external vector is NOT_RUN and no contract claims its oracle passed. Committing an external vector with a passed status without a receipt is prohibited.",
+
+  "referenceEnvironment": {
+    "status": "not_run",
+    "pins": {
+      "nest-simulator": "3.10.0",
+      "elephant": "1.2.1",
+      "neo": "0.14.5",
+      "pynwb": "4.0.0"
+    }
+  },
+
+  "vectors": [
+    { "id": "bins.half_open", "algorithm": "bins", "layer": "hand", "location": "test/analysis.test.ts", "status": "passed", "tolerance": "exact" },
+    { "id": "population_rate.formula", "algorithm": "population_rate.binned", "layer": "hand", "location": "test/analysis.test.ts", "status": "passed", "tolerance": "1e-9 relative" },
+    { "id": "population_rate.elephant", "algorithm": "population_rate.binned", "layer": "external", "oracle": "elephant.time_histogram", "oracleVersion": "1.2.1", "status": "not_run" },
+    { "id": "isi.within_train", "algorithm": "isi.within_train", "layer": "hand", "location": "test/analysis.test.ts", "status": "passed", "tolerance": "exact" },
+    { "id": "isi.elephant", "algorithm": "isi.within_train", "layer": "external", "oracle": "elephant.isi", "oracleVersion": "1.2.1", "status": "not_run" },
+    { "id": "correlogram.orientation", "algorithm": "correlogram.pair_count", "layer": "hand", "location": "test/analysis.test.ts", "status": "passed", "tolerance": "exact" },
+    { "id": "correlogram.elephant", "algorithm": "correlogram.pair_count", "layer": "external", "oracle": "elephant.cross_correlation_histogram", "oracleVersion": "1.2.1", "status": "not_run" },
+    { "id": "degree.multapse", "algorithm": "degree.count", "layer": "hand", "location": "test/analysis.test.ts", "status": "passed", "tolerance": "exact" },
+    { "id": "matrix.sparse_absent_is_not_zero", "algorithm": "matrix.build", "layer": "hand", "location": "test/analysis.test.ts", "status": "passed", "tolerance": "exact" },
+    { "id": "topology.nest_multirank", "algorithm": "topology.merge", "layer": "external", "oracle": "nest.GetConnections", "oracleVersion": "3.10.0", "status": "not_run" }
+  ]
+}

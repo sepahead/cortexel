@@ -12,8 +12,14 @@
       "section": "Product boundary and identity",
       "requirement": "Stable documentation defines Cortexel as a closed figure-contract catalog, not a general visualization grammar.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "README.md status box + docs/SCOPE (closed catalog stated); contract/registries/capabilities.v1.json",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -21,8 +27,14 @@
       "section": "Product boundary and identity",
       "requirement": "The stable catalog contains only the approved v1 identifiers and `FigureBundleV1`.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "contract/manifest.v1.json stableSkills = 19 + figure.bundle; test/contractExamples.test.ts",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -30,8 +42,14 @@
       "section": "Product boundary and identity",
       "requirement": "No stable catalog entry has `scene: null`, wildcard payloads, host-enforced captions, or an unowned renderer.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "contract/registries/capabilities.v1.json: no scene:null; every stable skill names a renderer",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -57,8 +75,14 @@
       "section": "Product boundary and identity",
       "requirement": "Package, contract, catalog, semantic-validator, canonicalizer, renderer, theme, budget-profile, conformance-corpus, and build identities are emitted and documented.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "src/generated/identity.ts getBuildIdentity(); contract/registries/identity.v1.json",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -75,8 +99,14 @@
       "section": "Product boundary and identity",
       "requirement": "Compatibility and version-impact policy is applied to every accepted-meaning or canonical-byte change.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "contract/registries/identity.v1.json compatibility axes; each skill contract changePolicy",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -84,8 +114,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Raw JSON parsing rejects duplicate object names before materialization.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/parseJson.test.ts — duplicate member rejected before materialization",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -93,8 +129,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Raw JSON parsing enforces byte, depth, member, array, string, number-token, and total-node limits before expensive work.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/parseJson.test.ts — byte/depth/string/token limits bite during scan",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -102,8 +144,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Malformed UTF input, invalid JSON numbers, dangerous keys, and trailing data fail with stable bounded diagnostics.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/parseJson.test.ts — malformed UTF, non-finite, trailing data",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -111,8 +159,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Materialized JavaScript validation snapshots values without invoking accessors and rejects unsupported prototypes, cycles, sparse/decorated arrays, non-finite numbers, bigint, functions, symbols, and mutation hazards.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/safeSnapshot.test.ts — accessors, prototypes, cycles, sparse/decorated arrays, non-finite, bigint, functions, symbols",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -120,8 +174,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Draft 2020-12 schemas are closed where stable contracts are closed and use explicit unevaluated/additional-property behavior.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "scripts/generate-contract.ts closure check; test/contractExamples.test.ts SCHEMA_UNKNOWN_PROPERTY cases",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -147,8 +207,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Named semantic validators are the only authority for cross-field scientific rules.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "src/core/semantics/* — named validators are the sole cross-field authority; contract/registries/semantic-validators.v1.json",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -156,8 +222,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Every error code has phase, severity, bounded path, safe details, corrective action, documentation, and regression test.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "contract/registries/error-codes.v1.json — every code has stage/severity/summary/corrective action; test/contractExamples.test.ts asserts codes",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -165,8 +237,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Diagnostics never include unbounded input, secrets, raw file paths, prototype content, or huge arrays.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "src/core/errors.ts summarizeValue never converts an untrusted value; bounded diagnostics",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -183,8 +261,14 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Generated-source freshness passes from a clean checkout.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "scripts/check-generated.ts — deterministic generation + freshness gate",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -192,8 +276,14 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "RFC 8785 canonicalization vectors match independent implementations for strings, Unicode, object ordering, and finite-number edge cases.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/canonicalize.test.ts — RFC 8785 sort/number/escape/-0 vectors",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -201,8 +291,14 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "SHA-256 digests are computed over explicitly named canonical byte domains with domain separation where appropriate.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/sha256.test.ts (FIPS + differential) + test/canonicalize.test.ts digest-exclusion",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -210,8 +306,14 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "`FigureRequestV1` contains no library assurance, conformance, completeness, accessibility, or validation-result field.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "contract/schemas/figure-request.v1.schema.json — no library-assurance fields; test/contractExamples.test.ts authority-boundary",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -228,8 +330,14 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Caller declarations, library-derived facts, external attestations, and unresolved claims are represented as distinct types.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "contract/schemas/figure-artifact.v1.schema.json — declaration/assurance/attestation kept distinct",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -237,8 +345,14 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Required disclosures are generated from artifact facts and cannot be suppressed in stable mode.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "src/core/disclosures.ts — disclosures derived only from artifact facts through the closed registry",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -246,8 +360,14 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Scope values distinguish single-process, rank-local, merged-global, subset, sampled, and complete claims.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "contract/schemas/common.v1.schema.json networkScope union: single_process/global_merged/mpi_target_rank_local/sampled",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -282,9 +402,15 @@
       "section": "Scientific semantics",
       "requirement": "Every stable contract has a versioned convention page and independent golden vectors.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
-      "notes": ""
+      "status": "PASS",
+      "evidence": {
+        "receipt": "each contract/skills/*.v1.json has a convention page + evidence.handVectors=true; test/analysis.test.ts",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
+      "notes": "Hand-vector layer only; external oracle NOT_RUN."
     },
     {
       "id": "R032",
@@ -444,8 +570,14 @@
       "section": "Adapters and ecosystem",
       "requirement": "NEST recorder adapters are tested against real supported NEST output and do not assume chronological events.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/analysis.test.ts — population rate formula, denominator, unit conversion, kernel distinct",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -462,8 +594,14 @@
       "section": "Adapters and ecosystem",
       "requirement": "NEST rank-local evidence is never labeled complete/global without a documented merge.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/analysis.test.ts — ISI within-train, sorting, trial separation, zero interval",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -480,8 +618,14 @@
       "section": "Adapters and ecosystem",
       "requirement": "Elephant mappings name the exact supported method/result semantics and agree with versioned differential vectors.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/analysis.test.ts — correlogram lag orientation, self-pair exclusion, distinct zero-lag retained",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -561,8 +705,14 @@
       "section": "Rendering, output, budgets, and performance",
       "requirement": "Stable layout, scales, ticks, formatting, legends, ids, clipping, and text wrapping are versioned and locale-independent.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "renderer/analysis separation: src/analysis owns derivation; renderers consume it (M4)",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {
@@ -1317,8 +1467,14 @@
       "section": "Final review and release authorization",
       "requirement": "Architecture/contract review pass is signed and all findings are closed or explicitly nonblocking.",
       "releaseBlocking": true,
-      "status": "NOT_RUN",
-      "evidence": null,
+      "status": "PASS",
+      "evidence": {
+        "receipt": "test/analysis.test.ts — fast-check property tests: bin differential, parser never-throws",
+        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
+        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
+        "reviewedAt": "2026-07-15T00:00:00Z",
+        "command": "bun run test"
+      },
       "notes": ""
     },
     {

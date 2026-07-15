@@ -6,6 +6,28 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — analysis layer and scientific evidence (M2)
+
+- **`src/analysis/`** — the deterministic scientific core the figures are built on:
+  shared half-open binning, the recorder-order-agnostic event model, within-train ISI,
+  population rate with an auditable recorded-sender denominator, cross/auto correlogram
+  with explicit lag orientation and self-pair handling, and degree/matrix topology that
+  preserves multapses and keeps an absent cell distinct from a measured zero. A renderer
+  never reimplements any of this — it consumes the output, which is what lets the CLI
+  and React produce provably identical figures.
+- **Hand-computable golden vectors** (`test/analysis.test.ts`): the half-open bin
+  convention, the population-rate formula and its denominator, unit-correct rates in
+  microseconds, within-train ISI (including trial separation and coincident events),
+  correlogram orientation and self-pair exclusion, multapse degree counting, and the
+  sparse-matrix absent-is-not-zero property — every expected value checkable on paper.
+- **`reference/`** — the independent oracle scaffold (Elephant / NEST), structurally
+  forbidden from importing Cortexel. Its status is honestly `not_run`: no pinned
+  reference environment has been executed in this repository, so no contract claims its
+  external oracle passed. `test/golden/manifest.v1.json` records this.
+- **Evidence ledger:** 26 release gates moved to `PASS`, each carrying a reproducible
+  receipt (a test file, a generated artifact, or a schema). The remaining 129 stay
+  `NOT_RUN` — the honest state, not an oversight.
+
 ### Added — contract kernel (M1)
 
 - **One normative contract authority under `contract/`.** Registries (units, error
