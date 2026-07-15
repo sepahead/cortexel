@@ -18,7 +18,9 @@ what was and was not executed.
 | Contract authority (`contract/`) | 19 stable skill contracts + shared schemas + registries, one generated authority |
 | Contract kernel (`src/core/`) | strict parser, safe snapshot, RFC 8785 canonicalization, dependency-free SHA-256, validation pipeline, 35 semantic validators, disclosure engine, migration |
 | Analysis (`src/analysis/`) | bins, events, ISI, rate, correlogram, topology — certified by hand-computable golden vectors |
-| Render (`src/render/`) | RenderPlanV1, deterministic safe SVG, family compilers (population-rate + trace end to end) |
+| Render (`src/render/`) | RenderPlanV1, deterministic safe SVG, compilers for all 19 stable families, mandatory disclosures wired |
+| Adapters (`src/adapters/`) | NEST spike-recorder adapter (plain-data path); output validates and renders |
+| Cross-language (`python/`) | independent Python reader agreeing with TypeScript byte-for-byte on digests |
 | CLI (`src/cli/`) | identity, catalog, validate, render, inspect, migrate — offline, stable exit codes |
 | Docs & governance | SCOPE, PROVENANCE, VERSIONING, SECURITY_MODEL, GOVERNANCE, SUPPORT, ROADMAP, MIGRATION, KNOWN_LIMITATIONS |
 
