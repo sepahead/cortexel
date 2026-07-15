@@ -30,8 +30,23 @@ function run(command: string, args: string[], cwd: string): string {
     cwd,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
+    timeout: 5 * 60_000,
   }).trim();
 }
+
+// npm still resolves omitted peers into its ideal tree. For a package with optional
+// React/R3F peers that can traverse the React Native and Expo graphs before the
+// core-only probe even starts. Ignore peers during installation here because each
+// documented peer set is installed explicitly below and then exercised at runtime
+// and through NodeNext declarations.
+const NPM_INSTALL_FLAGS = [
+  'install',
+  '--ignore-scripts',
+  '--no-audit',
+  '--no-fund',
+  '--no-package-lock',
+  '--legacy-peer-deps',
+] as const;
 
 const runtimeAnalysisProbe = `
   const inclusiveLeft = core.spikeTrialsToPsthParams(
@@ -233,7 +248,7 @@ try {
   );
   run(
     'npm',
-    ['install', '--ignore-scripts', '--no-audit', '--no-fund', tarball],
+    [...NPM_INSTALL_FLAGS, tarball],
     consumer,
   );
 
@@ -304,10 +319,7 @@ try {
   run(
     'npm',
     [
-      'install',
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
+      ...NPM_INSTALL_FLAGS,
       'react@^19',
       'react-dom@^19',
       'typescript@^5.9',
@@ -362,10 +374,7 @@ try {
   run(
     'npm',
     [
-      'install',
-      '--ignore-scripts',
-      '--no-audit',
-      '--no-fund',
+      ...NPM_INSTALL_FLAGS,
       'three@>=0.184 <0.186',
       '@react-three/fiber@^9.6',
       'd3-force-3d@^3.0.5',

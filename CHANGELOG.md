@@ -11,6 +11,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Removed tracked Python bytecode caches and one-off scratch repro scripts with stale
   machine-local paths; Python cache artifacts are now ignored so source archives and
   audits contain only reproducible inputs.
+- Kept the clean-consumer package smoke bounded and truly core-only at its first stage:
+  npm no longer traverses optional React Native/Expo peer metadata before the core probe,
+  while every documented peer set is still installed explicitly and exercised.
 
 ### Fixed — adversarial review reconciliation (12 findings)
 
