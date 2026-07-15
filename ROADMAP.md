@@ -94,31 +94,30 @@ be signed without it.
 
 **Status today.** `RenderPlanV1` (a framework-neutral, closed mark union with no
 raw-SVG escape hatch), the deterministic safe SVG serializer, and `buildFigure` exist
-and are tested. The **trace** and **population-rate** families render end to end. Every
-other stable family already produces a *complete, correct* artifact — validation,
-provenance, disclosures, digests, exact-value table — with an explicit `renderPending`
-marker naming the missing renderer, rather than a crash or a fabricated figure.
+and are tested. **All 19 stable families render end to end** to deterministic,
+injection-safe SVG, with their mandatory disclosures wired
+(`test/renderAllFamilies.test.ts`, `test/disclosureCompleteness.test.ts`). Each derives
+through the certified `src/analysis` layer, so the drawn figure and the hand-checked
+golden arithmetic cannot diverge.
 
 **What remains.**
 
-- Land the remaining family compilers incrementally, each with its own goldens: raster,
-  distribution bars, matrix, spatial map, graph, phase plane, correlogram, and response
-  curve.
 - Split the family-based compilers toward the blueprint target of **one pure compiler
   per stable skill** with exhaustive generated dispatch (gate **R061**). 0.9.0 uses one
   well-tested compiler per geometric family — more trustworthy than fifteen
   near-duplicates, but a different file layout. This is a layout refactor: it changes
   the file structure, never the output.
-- Fully substitute the deterministic accessibility-summary template. The exact-value
-  **table** and the **disclosures** are already complete and correct; the prose summary
-  still emits some `{placeholder}` tokens, so a screen reader currently hears ellipses
-  in place of a few derived numbers.
+- Publication-tune the visual system: apply the versioned per-series palette tuples,
+  perceptual colour maps for matrices, legends, uncertainty bands, and print/grayscale
+  themes that `contract/registries/palettes.v1.json` already specifies.
+- Extend the value-filled accessibility summary with the full per-skill detail its
+  contract template describes (exact bin width, trial count, and so on). The generic
+  summary, the exact-value **table**, and the **disclosures** are already complete.
 - Replace nominal text metrics with a bundled metrics table so a very long tick label
   cannot overflow its gutter. Byte-determinism already holds regardless.
 
-**Why it blocks 1.0.** A stable catalog of **19 figure contracts plus the
-`figure.bundle` artifact kind** cannot ship while most families render only a
-`renderPending` placeholder. The *Rendering, output, budgets, and performance*
+**Why it blocks 1.0.** The visual system is functional, not yet publication-grade, and
+the compilers are family-based rather than one-per-skill. The *Rendering, output, budgets, and performance*
 (R060–R073) and *Accessibility and visual communication* (R074–R085) ledger sections
 close here, including `RENDER_UNSUPPORTED_SKILL` being provably unreachable for any
 stable skill.

@@ -41,11 +41,12 @@ The machine-readable state of every release gate is in
   uncertainty bands), legends, and print/grayscale themes are specified in
   `contract/registries/palettes.v1.json` but not yet fully applied by the compilers.
   *Gate: R096–R106.*
-- **Accessibility summaries are not yet fully value-filled.** The deterministic summary
-  template is emitted, but its `{placeholder}` tokens are not all substituted with the
-  derived values yet, so a screen reader currently hears the template with ellipses in
-  place of some numbers. The exact-value **table** and the **disclosures** are complete
-  and correct. *Gate: R098, R104–R109.*
+- **Accessibility summaries are value-filled but generic.** Each figure's accessible
+  summary now states its title, row count, the numeric range of its value column, and its
+  disclosures with the figure's own numbers (the same text in the plan, the SVG `<desc>`,
+  and the artifact). It does not yet include every per-skill detail the summary *template*
+  in each contract describes (for example the exact bin width or trial count). The
+  exact-value **table** and the **disclosures** are complete and correct. *Gate: R104–R109.*
 - **Text metrics are nominal.** Layout uses fixed margins and a generic font stack rather
   than a bundled metrics table, so a very long tick label could overflow its gutter.
   Byte-determinism holds regardless. *Gate: R083–R085.*

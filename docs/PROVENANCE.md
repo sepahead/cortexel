@@ -132,11 +132,12 @@ The consequences of "facts, not text or flags" are precise and worth stating pla
   data sidecar and the accessible description always carry the **complete** list, so
   nothing that overflowed the footer is actually lost.
 
-> **Status note for `0.9.0`.** Render-plan compilers currently cover the trace and
-> population-rate families end to end; other families emit a complete artifact
-> (validation, provenance, **disclosures**, digests) with an explicit `renderPending`
-> marker rather than a drawn figure. The disclosure *engine* is contract-level and
-> applies to every family; what is still landing is per-family drawing, not honesty.
+> **Status note for `0.9.0`.** All 19 stable families render end to end, and their
+> mandatory disclosures are wired and tested (`test/disclosureCompleteness.test.ts`): a
+> rank-local snapshot says so, a correlogram states its lag orientation, a matrix keeps an
+> absent cell distinct from a measured zero. The disclosure *engine* is contract-level and
+> applies to every family. What is still landing is publication-grade visual tuning, not
+> honesty.
 
 ---
 
