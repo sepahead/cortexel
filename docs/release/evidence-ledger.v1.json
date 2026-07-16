@@ -12,45 +12,27 @@
       "section": "Product boundary and identity",
       "requirement": "Stable documentation defines Cortexel as a closed figure-contract catalog, not a general visualization grammar.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "README.md status box + docs/SCOPE (closed catalog stated); contract/registries/capabilities.v1.json",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited source commit predates docs/SCOPE.md and the closed-catalog README wording, and `bun run test` did not verify this documentation claim."
     },
     {
       "id": "R002",
       "section": "Product boundary and identity",
       "requirement": "The stable catalog contains only the approved v1 identifiers and `FigureBundleV1`.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "contract/manifest.v1.json stableSkills = 19 + figure.bundle; test/contractExamples.test.ts",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The receipt is factually inaccurate: manifest.stableSkills contains 19 skill ids, not `19 + figure.bundle`, and the cited test checks only the count rather than the approved identifier set or a FigureBundleV1 contract."
     },
     {
       "id": "R003",
       "section": "Product boundary and identity",
       "requirement": "No stable catalog entry has `scene: null`, wildcard payloads, host-enforced captions, or an unowned renderer.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "contract/registries/capabilities.v1.json: no scene:null; every stable skill names a renderer",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The capability registry shows renderer ownership but does not prove the wildcard-payload or caption-ownership clauses; it has no `scene` field to audit for `scene: null`."
     },
     {
       "id": "R004",
@@ -66,30 +48,18 @@
       "section": "Product boundary and identity",
       "requirement": "Experimental entries are absent from stable counts, default discovery, stable conformance badges, and root exports.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test",
-        "receipt": "contract/registries/capabilities.v1.json experiments excluded from STABLE_SKILL_IDS/catalog default; cli catalog hides them; test/importBoundary.test.ts"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited source commit does not contain test/importBoundary.test.ts, and the remaining receipt does not verify stable badges or every root export."
     },
     {
       "id": "R006",
       "section": "Product boundary and identity",
       "requirement": "Package, contract, catalog, semantic-validator, canonicalizer, renderer, theme, budget-profile, conformance-corpus, and build identities are emitted and documented.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/generated/identity.ts getBuildIdentity(); contract/registries/identity.v1.json",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "getBuildIdentity and identity.v1.json do not emit all identities named by this gate, notably semantic-validator, canonicalizer, theme, budget-profile, and conformance-corpus identities."
     },
     {
       "id": "R007",
@@ -105,15 +75,9 @@
       "section": "Product boundary and identity",
       "requirement": "Compatibility and version-impact policy is applied to every accepted-meaning or canonical-byte change.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "contract/registries/identity.v1.json compatibility axes; each skill contract changePolicy",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Policy declarations describe intended handling but do not demonstrate that the policy was applied to every accepted-meaning or canonical-byte change."
     },
     {
       "id": "R009",
@@ -135,30 +99,18 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Raw JSON parsing enforces byte, depth, member, array, string, number-token, and total-node limits before expensive work.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/parseJson.test.ts — byte/depth/string/token limits bite during scan",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited tests cover byte, depth, string, and number-token limits only; member-count, array-length, total-node, and pre-expensive-work behavior were not demonstrated."
     },
     {
       "id": "R011",
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Malformed UTF input, invalid JSON numbers, dangerous keys, and trailing data fail with stable bounded diagnostics.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/parseJson.test.ts — malformed UTF, non-finite, trailing data",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The parser tests exercise representative failures, but the receipt does not verify the gate's diagnostic stability and boundedness requirements across these classes."
     },
     {
       "id": "R012",
@@ -204,120 +156,72 @@
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Generated TypeScript validators, Python models/validators, manifest descriptors, docs fragments, and schemas share the same source digest.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "1155d456df1a42ab909dbeb3bcaf636ba673d165",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test && bun run test:python",
-        "receipt": "test/crossLanguageParity.test.ts — generated TS + Python share the source digest and agree on canonical bytes for every example"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited parity test compares request digests and selected validation outcomes; it does not assert one source digest across TypeScript validators, Python validators, manifest descriptors, docs fragments, and schemas."
     },
     {
       "id": "R016",
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Named semantic validators are the only authority for cross-field scientific rules.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/core/semantics/* — named validators are the sole cross-field authority; contract/registries/semantic-validators.v1.json",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "A validator registry and semantics directory do not prove the negative claim that no cross-field scientific rule is implemented elsewhere."
     },
     {
       "id": "R017",
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Every error code has phase, severity, bounded path, safe details, corrective action, documentation, and regression test.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "contract/registries/error-codes.v1.json — every code has stage/severity/summary/corrective action; test/contractExamples.test.ts asserts codes",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The registry documents metadata, but contract examples do not provide a regression test for every registered error code or every bounded-path/safe-detail behavior."
     },
     {
       "id": "R018",
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Diagnostics never include unbounded input, secrets, raw file paths, prototype content, or huge arrays.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/core/errors.ts summarizeValue never converts an untrusted value; bounded diagnostics",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "summarizeValue is one diagnostic path; the receipt does not audit every diagnostic, repair value, adapter, CLI, and serialization path for the prohibited content."
     },
     {
       "id": "R019",
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Positive, negative, boundary, metamorphic, and migration conformance vectors pass in TypeScript and Python.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "4147e6b46a9576b65198f4a88bb2c4dd0d7cbe59",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test && bun run test:python",
-        "receipt": "test/crossLanguageParity.test.ts + python/tests — valid examples accepted by both TS and Python; contract examples are the positive corpus"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited source commit predates the Python reader, and the later parity suite covers positive examples plus two selected negatives, not the required negative, boundary, metamorphic, and migration corpus."
     },
     {
       "id": "R020",
       "section": "Parser, schema, validation, and diagnostics",
       "requirement": "Generated-source freshness passes from a clean checkout.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "scripts/check-generated.ts — deterministic generation + freshness gate",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The receipt points to a checker but records only `bun run test`, which does not execute the generated-source freshness check or establish a clean checkout."
     },
     {
       "id": "R021",
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "RFC 8785 canonicalization vectors match independent implementations for strings, Unicode, object ordering, and finite-number edge cases.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/canonicalize.test.ts — RFC 8785 sort/number/escape/-0 vectors",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited tests use hand-written expected values from the same implementation environment; they do not compare the full string, Unicode, ordering, and finite-number corpus with an independent implementation."
     },
     {
       "id": "R022",
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "SHA-256 digests are computed over explicitly named canonical byte domains with domain separation where appropriate.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/sha256.test.ts (FIPS + differential) + test/canonicalize.test.ts digest-exclusion",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The tests establish SHA-256 correctness and one self-digest exclusion, but do not inventory every digest domain or verify domain separation where required."
     },
     {
       "id": "R023",
@@ -363,15 +267,9 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Required disclosures are generated from artifact facts and cannot be suppressed in stable mode.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/core/disclosures.ts — disclosures derived only from artifact facts through the closed registry",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The rule engine alone does not prove that every required artifact fact is populated and every compiler-forced disclosure is supplied; later review found both paths incomplete."
     },
     {
       "id": "R027",
@@ -402,45 +300,27 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Artifacts and reports omit timestamps or volatile values from deterministic digest domains unless the field is explicitly outside that domain.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/canonicalize.test.ts + test/render.test.ts — no timestamp/volatile value enters the artifact digest domain (deterministic bytes across runs)",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "A repeated in-process render of one example and a self-digest exclusion test do not audit every artifact/report field or all deterministic digest domains for volatile values."
     },
     {
       "id": "R030",
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Tampering with request, artifact, sidecar, SVG report, schema, catalog, or identity is detected by verification tests.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/render.test.ts + test/canonicalize.test.ts — digest-exclusion and tamper detection; artifact binds SVG by sha256",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited tests do not mutate and verify request, artifact, sidecar, SVG report, schema, catalog, and identity; the SVG test only checks that an output record exists."
     },
     {
       "id": "R031",
       "section": "Scientific semantics",
       "requirement": "Every stable contract has a versioned convention page and independent golden vectors.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "each contract/skills/*.v1.json has a convention page + evidence.handVectors=true; test/analysis.test.ts",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": "Hand-vector layer only; external oracle NOT_RUN."
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited source commit predates test/analysis.test.ts, and that test covers selected bin, rate, ISI, correlogram, and topology rules rather than independent golden vectors for every one of the 19 stable contracts."
     },
     {
       "id": "R032",
@@ -600,15 +480,9 @@
       "section": "Adapters and ecosystem",
       "requirement": "NEST recorder adapters are tested against real supported NEST output and do not assume chronological events.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/analysis.test.ts — population rate formula, denominator, unit conversion, kernel distinct",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The receipt is unrelated to adapters and contains no real NEST fixture or supported-version execution; it tests hand-authored population-rate arithmetic."
     },
     {
       "id": "R050",
@@ -624,15 +498,9 @@
       "section": "Adapters and ecosystem",
       "requirement": "NEST rank-local evidence is never labeled complete/global without a documented merge.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/analysis.test.ts — ISI within-train, sorting, trial separation, zero interval",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited ISI tests do not exercise NEST MPI rank-local snapshots, merge documentation, or complete/global labeling."
     },
     {
       "id": "R052",
@@ -648,15 +516,9 @@
       "section": "Adapters and ecosystem",
       "requirement": "Elephant mappings name the exact supported method/result semantics and agree with versioned differential vectors.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/analysis.test.ts — correlogram lag orientation, self-pair exclusion, distinct zero-lag retained",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The hand-computable correlogram tests do not run Elephant, pin an Elephant version/method, or compare versioned differential vectors."
     },
     {
       "id": "R054",
@@ -735,15 +597,9 @@
       "section": "Rendering, output, budgets, and performance",
       "requirement": "Stable layout, scales, ticks, formatting, legends, ids, clipping, and text wrapping are versioned and locale-independent.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "renderer/analysis separation: src/analysis owns derivation; renderers consume it (M4)",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Separating analysis from rendering does not verify versioned layout, scales, ticks, formatting, legends, ids, clipping, text wrapping, or locale independence."
     },
     {
       "id": "R063",
@@ -768,15 +624,9 @@
       "section": "Rendering, output, budgets, and performance",
       "requirement": "CLI and React use the same artifact and render-plan compilers.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "1155d456df1a42ab909dbeb3bcaf636ba673d165",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test && bun run test:python",
-        "receipt": "src/adapters/nest/recorders.ts + test/nestAdapter.test.ts — NEST spike-recorder adapter: snapshots input, requires the recorded universe, does not assume order; output validates and renders"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The receipt concerns a NEST adapter and does not compare CLI and React artifact/render-plan compiler paths."
     },
     {
       "id": "R066",
@@ -828,15 +678,9 @@
       "section": "Rendering, output, budgets, and performance",
       "requirement": "Benchmark claims include hardware, OS, runtime, versions, input, profile, warmup, repetitions, percentile, memory method, and artifact.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "4147e6b46a9576b65198f4a88bb2c4dd0d7cbe59",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test && bun run test:python",
-        "receipt": "python/src/cortexel — independent Python reader (parse, canonicalize, digest, structural + unit validation), no Node, no jsonschema; python/tests pass"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The Python-reader receipt contains no benchmark, hardware/OS description, warmup/repetition protocol, percentile, memory method, or benchmark artifact."
     },
     {
       "id": "R072",
@@ -924,30 +768,18 @@
       "section": "Accessibility and visual communication",
       "requirement": "Scope, sampling, aggregation, missingness, uncertainty, synthetic/example data, and experimental status appear in visual and alternative forms.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/render/model/renderPlan.ts — closed mark union, no JSX/DOM/callback/random state; test/render.test.ts",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "A closed mark union and generic render tests do not verify every listed scientific fact in both visual and alternative forms; later disclosure review found missing fact wiring."
     },
     {
       "id": "R082",
       "section": "Accessibility and visual communication",
       "requirement": "Palettes have stable ids, source/license attribution, color-vision-deficiency checks, grayscale checks, and semantic use rules.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/render/compile.ts — family compilers consume derivation output; population-rate + trace render end to end (docs/KNOWN_LIMITATIONS.md tracks the rest)",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Compiler smoke tests do not verify palette attribution, color-vision-deficiency checks, grayscale checks, or semantic-use rules; the limitations document explicitly says palette application is incomplete."
     },
     {
       "id": "R083",
@@ -963,75 +795,45 @@
       "section": "Accessibility and visual communication",
       "requirement": "Host-page responsibilities are separated from Cortexel-owned conformance; the package does not claim whole-page WCAG compliance.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/render/svg.ts — no script/foreignObject/on*/external URL/random id/timestamp; test/render.test.ts SVG-safety corpus",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "SVG active-content checks do not audit host/Cortexel responsibility boundaries or all public WCAG claims."
     },
     {
       "id": "R085",
       "section": "Accessibility and visual communication",
       "requirement": "Automated accessibility results are supplemented by the documented manual checklist and reviewer evidence.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/render.test.ts — byte-identical SVG across repeated runs in this process",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Repeated SVG determinism is unrelated to a manual accessibility checklist or signed reviewer evidence."
     },
     {
       "id": "R086",
       "section": "Security and privacy",
       "requirement": "Threat model covers raw JSON, JS objects, adapters, SVG, tables, file output, data references, React, experiments, CLI, resolvers, MCP, packaging, and CI.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/render/buildFigure.ts — the CLI and buildFigure share one render plan and analysis layer",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "A shared render-plan implementation does not demonstrate threat-model coverage of the thirteen named surfaces."
     },
     {
       "id": "R087",
       "section": "Security and privacy",
       "requirement": "Stable core performs no network access and accepts no arbitrary executable callback, HTML, SVG, CSS, shader, expression, code, or path traversal input.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "src/render/compile.ts table policy: complete_inline vs excerpt_inline_with_complete_sidecar; test/render.test.ts",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Table-sidecar policy and one SVG test do not audit stable-core network access or every prohibited executable/markup/path input."
     },
     {
       "id": "R088",
       "section": "Security and privacy",
       "requirement": "CLI writes atomically, rejects overwrite by default, constrains output paths as documented, and cleans temporary files on failure.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test",
-        "receipt": "src/render/buildFigure.ts countObservations preflight + test/budgetAndSummary.test.ts — an oversized request is refused before derivation, never truncated"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Budget preflight is unrelated to atomic file writes, overwrite refusal, output-path confinement, and temporary-file cleanup."
     },
     {
       "id": "R089",
@@ -1119,15 +921,9 @@
       "section": "Packaging and runtime compatibility",
       "requirement": "Node engine policy is restricted to tested majors (`^22.0.0 || ^24.0.0 || ^26.0.0`) and CI tests Node 22, 24, and 26 according to the release policy.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test",
-        "receipt": "test/budgetAndSummary.test.ts — accessibility summary value-filled with the figure own numbers; same text in plan, SVG desc, and artifact"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The accessibility-summary receipt is unrelated; the cited commit predates the CI matrix, and the current matrix is Node 20/22/24 rather than the gate's required 22/24/26 policy."
     },
     {
       "id": "R099",
@@ -1143,15 +939,9 @@
       "section": "Packaging and runtime compatibility",
       "requirement": "Optional React and experimental peer dependencies are marked optional and fail with clear diagnostics only when those subpaths are imported.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "README.md rewritten for 0.9.0; every claim honest and gate-linked; badges inactive by design",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "README prose does not verify peer optionality metadata or the required clear failure behavior for each optional subpath."
     },
     {
       "id": "R101",
@@ -1167,15 +957,9 @@
       "section": "Packaging and runtime compatibility",
       "requirement": "`npm pack --dry-run` contains only intended files and no secrets, caches, giant fixtures, local paths, or unreviewed build products.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "MIGRATION.md, docs/VERSIONING.md, docs/SECURITY_MODEL.md, docs/PROVENANCE.md, docs/SCOPE.md, docs/KNOWN_LIMITATIONS.md",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Documentation files are not an `npm pack --dry-run` receipt and do not inspect the packed file inventory for secrets, caches, fixtures, local paths, or unreviewed products."
     },
     {
       "id": "R103",
@@ -1191,30 +975,18 @@
       "section": "Packaging and runtime compatibility",
       "requirement": "Python wheel and sdist contain intended schemas/conformance data, correct metadata, typed marker, license, and no repository junk.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "GOVERNANCE.md single-maintainer honesty; SUPPORT.md; .github/ISSUE_TEMPLATE/release-blocker.yml; CITATION.cff",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Governance, support, issue-template, and citation files do not build or inspect a Python wheel/sdist or prove its metadata and contents."
     },
     {
       "id": "R105",
       "section": "Packaging and runtime compatibility",
       "requirement": "The exact wheel/sdist passes clean install/import/conformance and supported adapter tests on the Python/OS matrix.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "gh repo edit — description + 12 topics set and read back",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "a2873961f2f7adfcfcd314c3d11cb1aa1db5d3d8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "GitHub repository metadata is unrelated to building exact Python artifacts or testing their clean installation across a Python/OS matrix."
     },
     {
       "id": "R106",
@@ -1428,15 +1200,9 @@
       "section": "Documentation, governance, and public claims",
       "requirement": "No docs call experimental capabilities stable or make unqualified performance/scientific/accessibility guarantees.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "toolchain": "node v26.3.0 / bun 1.3.14 / python 3.14.6",
-        "sourceCommit": "1b4d4b5f95139b4bbc46ac3199d1f371c297cad8",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test",
-        "receipt": "test/importBoundary.test.ts — stable core/analysis/render/cli import no react/three/d3/experimental; render layer is browser-safe"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The cited source commit lacks test/importBoundary.test.ts, and an import-boundary test cannot audit public documentation claims; KNOWN_LIMITATIONS.md itself overstated compiler faithfulness."
     },
     {
       "id": "R130",
@@ -1587,15 +1353,9 @@
       "section": "Final review and release authorization",
       "requirement": "Architecture/contract review pass is signed and all findings are closed or explicitly nonblocking.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "test/analysis.test.ts — fast-check property tests: bin differential, parser never-throws",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Property tests are not a signed architecture/contract review, and the cited source commit predates both the analysis suite and the later adversarial review findings."
     },
     {
       "id": "R147",
