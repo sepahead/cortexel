@@ -104,7 +104,7 @@
     "sameDimensionOnly": "A conversion is legal only between two codes of the same dimension. Cross-dimension conversion is never attempted.",
     "simulatorDefinedNeverConverted": "A code whose dimension is `simulator_defined` has `toCanonical: null` and can never be converted, compared, or pooled with any other code — including another simulator-defined code.",
     "aliasesAreNotCanonical": "Aliases are accepted ONLY by adapters and by `cortexel migrate`. A stable 1.0 request that uses an alias is rejected with a repair suggesting the canonical code. Silent alias conversion in the normal validation path is prohibited.",
-    "conversionsAreRecorded": "Every conversion performed during canonicalization appends a derivation operation recording `from`, `to`, the exact factor, and the algorithm id.",
-    "exactFactors": "Factors here are exact binary64 values where the decimal scale is representable. Conversion multiplies once; it never chains through an intermediate unit."
+    "conversionsAreRecorded": "Every conversion performed during canonicalization appends a derivation operation recording `from`, `to`, a rounded display factor, the exact rational numerator/denominator plus binary exponent, and the one-rounding algorithm id. The display factor alone is not a replay authority.",
+    "exactFactors": "A registered power-of-ten scale is interpreted as that exact decimal rational, not as the quotient of two rounded binary64 constants. Other scales use the exact registered binary64 value. Conversion forms the exact scale ratio and rounds once to binary64; it never chains through an intermediate unit or double-rounds a factor."
   }
 }

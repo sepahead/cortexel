@@ -14,10 +14,12 @@ import {
   materializeWidthBins,
 } from '../src/core/binning.js';
 import { topologyScopeSupportsClaim } from '../src/core/semantics/topology.js';
+import { eventsWithinWindow } from '../src/core/semantics/events.js';
 import { unitCanonicalCode, unitDimensionMatch } from '../src/core/semantics/units.js';
 import {
   axesAreCompatible,
   conversionFactor,
+  conversionReceipt,
   convert,
   dimensionOf,
   isKnownUnit,
@@ -64,9 +66,14 @@ describe('unit conversion hardening', () => {
         expect(axesAreCompatible(from, to), `${from} and ${to}`).toBe(convertible);
 
         if (convertible) {
-          const expectedFactor = UNITS[from].toCanonical! / UNITS[to].toCanonical!;
-          expect(conversionFactor(from, to), `${from} -> ${to}`).toBe(expectedFactor);
+          const expectedFactor = conversionFactor(from, to);
           expect(convert(1, from, to), `${from} -> ${to}`).toBe(expectedFactor);
+          expect(conversionReceipt(from, to)).toMatchObject({
+            from,
+            to,
+            factor: expectedFactor,
+            algorithm: 'exact_rational_round_to_binary64',
+          });
           if (from === to) {
             expect(convert(-0, from, to), `${from} identity preserves its input`).toBe(-0);
           }
@@ -80,6 +87,38 @@ describe('unit conversion hardening', () => {
     expect(isSimulatorDefined('nest:weight')).toBe(true);
     expect(() => convert(1, 'nest:weight', 'nest:weight')).toThrow(/simulator-defined/);
     expect(() => conversionFactor('nest:weight', 'nest:weight')).toThrow();
+  });
+
+  it('uses exact decimal scale ratios and rounds the converted value only once', () => {
+    expect(conversionFactor('ms', 'us')).toBe(1000);
+    expect(conversionFactor('A', 'nA')).toBe(1_000_000_000);
+    expect(convert(161556.8363554151, 'ms', 's')).toBe(161.55683635541507);
+    expect(convert(6.902111393129918e199, 'us', 's')).toBe(6.902111393129918e193);
+    expect(conversionReceipt('ms', 's').exactFactor).toEqual({
+      numerator: '1',
+      denominator: '1000',
+      binaryExponent: 0,
+    });
+    expect(161556.8363554151 * conversionFactor('ms', 's')).not.toBe(
+      convert(161556.8363554151, 'ms', 's'),
+    );
+  });
+
+  it('assigns cross-unit event-window membership from exact rational quantities', () => {
+    const validate = (values: number[], start: number, stop: number) => eventsWithinWindow({
+      request: {
+        data: {
+          window: { start, stop, unit: 's', boundary: '[start,stop)' },
+          eventTimes: { values, unit: 'ms' },
+        },
+      },
+      skillId: 'test.events',
+    });
+    expect(validate([0, 10, 20, 30], 0, 0.04)).toEqual([]);
+    expect(validate([1000.0000000000001], 0, 1.0000000000000002)).toEqual([]);
+    expect(validate([1000.0000000000001], 1.0000000000000002, 2)[0]?.code).toBe(
+      'SCIENCE_EVENT_OUT_OF_WINDOW',
+    );
   });
 
   it('rejects unknown and hostile runtime values without coercing them', () => {

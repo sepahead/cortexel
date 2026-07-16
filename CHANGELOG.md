@@ -6,6 +6,43 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — exact numeric and unit authority
+
+- Unit conversions now compose registered decimal powers as exact integer ratios and round
+  only the final binary64 result. Conversion receipts preserve that exact ratio, and
+  window membership, converted differences, clock offsets, duplicate means, baseline
+  normalization, and min/max normalization use exact-integer intermediates so cancellation,
+  subnormals, or a large coordinate origin cannot silently change the scientific result.
+- Linear scales now preserve both endpoints over the complete finite binary64 range.
+  Logarithmic and symmetric-logarithmic scales use vendored fdlibm-derived `log`, `log1p`,
+  and `exp` kernels with pinned low-bit vectors, monotonicity/property tests, explicit
+  inner-resolution refusal, and bounded full-range round-trip error.
+- Simulator-defined synaptic weights remain non-convertible, but the weight-trace contract's
+  explicit model-comparability declaration is now checked against every series before an
+  identical opaque unit code may share an axis.
+
+### Fixed — analog and multi-signal trace semantics
+
+- Replaced the first-series-only trace shortcut for `neuro.analog_trace` and
+  `neuro.multisignal_trace` with a shared deterministic derivation that renders every
+  declared series and panel. It stably sorts samples, enforces half-open windows, preserves
+  missing values as path breaks, applies declared duplicate-time resolution, converts units
+  once, applies declared clock offsets, and implements sample-standard-deviation z-scores.
+- Shared-axis overlays now use the registered categorical colour/dash/marker tuples and emit
+  a visible, accessible-table-backed legend; small multiples retain declared panel order and
+  shared-time-axis geometry. Every retained sample from every series reaches the table rather
+  than silently disappearing after `series[0]`.
+- Duplicate-time validation now understands both the string and structured policy shapes,
+  checks shared clocks as well as per-series clocks, and rejects an explicit `reject` policy
+  when duplicate timestamps are actually present.
+- Trace uncertainty now has contract-generated mark semantics: standard deviation/error use
+  capped whiskers, intervals use outlined bands, and missingness masks must agree with the
+  central observations and sample counts. The renderer refuses uncertainty transforms whose
+  widths collapse or materially distort at binary64 resolution.
+- Trace layouts fail closed when mandatory panels, axes, legends, tables, accessibility text,
+  and disclosures cannot leave a positive plotting region. Isolated retained observations
+  receive visible markers instead of disappearing when they cannot form a path segment.
+
 ### Fixed — validation and artifact integrity
 
 - Made validated-request authority identity-based and deeply immutable: the renderer now
@@ -56,6 +93,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Kept the clean-consumer package smoke bounded and truly core-only at its first stage:
   npm no longer traverses optional React Native/Expo peer metadata before the core probe,
   while every documented peer set is still installed explicitly and exercised.
+- Added a complete third-party notice bundle for shipped colour-map data/approximations and
+  the fdlibm-derived deterministic kernels. The npm package allowlist and clean-consumer smoke
+  now require the notice and every referenced license file to be present in the tarball.
 
 ### Fixed — adversarial review reconciliation (12 findings)
 

@@ -10,10 +10,20 @@
  */
 
 import type { RenderPlanV1, Panel, Mark, Axis } from './model/renderPlan.js';
-import { linearScale, linearTicks } from './scale.js';
-import { THEMES } from '../generated/catalog.js';
+import {
+  linearNumericScale,
+  linearScale,
+  linearTicks,
+  logNumericScale,
+  symlogNumericScale,
+  type NumericScale,
+} from './scale.js';
+import { CATEGORICAL_SERIES_STYLES, THEMES } from '../generated/catalog.js';
 import type { CompileContext } from './compile.js';
 import { finiteExtent, finiteExtentBy } from '../core/numeric.js';
+import { legendPlotInset } from './layout.js';
+import type { PreparedTraceSeries } from '../analysis/traces.js';
+import { formatNumber } from './format.js';
 
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
 
@@ -33,8 +43,26 @@ function accent(themeId: string): string {
 function gridColor(themeId: string): string {
   return (THEMES as Record<string, Record<string, string>>)[themeId]?.grid ?? '#e2e6ea';
 }
+function uncertaintyStroke(themeId: string): string {
+  return (THEMES as Record<string, Record<string, string>>)[themeId]?.axis ?? '#3a4046';
+}
 function missingColor(themeId: string): string {
   return (THEMES as Record<string, Record<string, string>>)[themeId]?.missing ?? '#767e87';
+}
+
+type MarkerShape = Extract<Mark, { type: 'point' }>['shape'];
+
+function categoricalStyle(index: number): {
+  readonly color: string;
+  readonly dash: string;
+  readonly marker: MarkerShape;
+} {
+  const style = CATEGORICAL_SERIES_STYLES[index % CATEGORICAL_SERIES_STYLES.length];
+  return {
+    color: style.color,
+    dash: style.dash,
+    marker: style.marker as MarkerShape,
+  };
 }
 
 function frame(context: CompileContext, skillId: string): Pick<
@@ -58,6 +86,385 @@ function frame(context: CompileContext, skillId: string): Pick<
 
 function emptyPanel(box: ReturnType<typeof panelBox>, reason: string): Panel {
   return { id: 'main', ...box, axes: [], marks: [], noData: { reason } };
+}
+
+export interface TracePanelSeries {
+  readonly series: PreparedTraceSeries;
+  readonly styleIndex: number;
+  readonly tableMetadata?: Readonly<Record<string, string | number | null>>;
+  readonly uncertaintyLower?: readonly (number | null)[];
+  readonly uncertaintyUpper?: readonly (number | null)[];
+  readonly uncertainty?: {
+    readonly kind: string;
+    readonly mark: 'band' | 'whisker';
+    readonly label: string;
+  };
+}
+
+export interface TracePanelSpec {
+  readonly id: string;
+  readonly label: string;
+  readonly yLabel: string;
+  readonly series: readonly TracePanelSeries[];
+  readonly scale?: 'linear' | 'log' | 'symlog';
+  readonly symlogLinearThreshold?: number;
+}
+
+export interface TraceFigureOptions {
+  readonly xLabel: string;
+  readonly xDomain?: readonly [number, number];
+  readonly sharedXAxis?: boolean;
+  readonly sharedYDomain?: boolean;
+  readonly showSamplePoints?: boolean;
+  readonly tableColumns?: readonly { readonly key: string; readonly header: string }[];
+  readonly tableRow?: (
+    entry: TracePanelSeries,
+    observationIndex: number,
+    panel: TracePanelSpec,
+  ) => readonly (string | number | null)[];
+  readonly summaryStatements?: readonly string[];
+}
+
+function traceYValues(entry: TracePanelSeries): number[] {
+  return [
+    ...entry.series.values,
+    ...(entry.uncertaintyLower ?? []),
+    ...(entry.uncertaintyUpper ?? []),
+  ].filter((value): value is number => value !== null && Number.isFinite(value));
+}
+
+function traceSubpaths(
+  series: PreparedTraceSeries,
+  xScale: ReturnType<typeof linearScale>,
+  yScale: ReturnType<typeof linearScale>,
+): { x: number; y: number }[][] {
+  const subpaths: { x: number; y: number }[][] = [];
+  let current: { x: number; y: number }[] = [];
+  for (let index = 0; index < series.times.length; index++) {
+    const value = series.values[index];
+    if (value === null || !Number.isFinite(value)) {
+      if (current.length > 0) {
+        if (series.observationKind === 'piecewise_constant') {
+          const previous = current[current.length - 1];
+          current.push({ x: xScale.map(series.times[index]), y: previous.y });
+        }
+        subpaths.push(current);
+      }
+      current = [];
+      continue;
+    }
+    const point = { x: xScale.map(series.times[index]), y: yScale.map(value) };
+    if (series.observationKind === 'piecewise_constant' && current.length > 0) {
+      const previous = current[current.length - 1];
+      current.push({ x: point.x, y: previous.y });
+    }
+    current.push(point);
+  }
+  if (current.length > 0) subpaths.push(current);
+  return subpaths;
+}
+
+function traceAreaSubpaths(
+  entry: TracePanelSeries,
+  xScale: ReturnType<typeof linearScale>,
+  yScale: ReturnType<typeof linearScale>,
+): { x: number; y0: number; y1: number }[][] {
+  const lower = entry.uncertaintyLower;
+  const upper = entry.uncertaintyUpper;
+  if (!lower || !upper || lower.length !== entry.series.times.length || upper.length !== lower.length) {
+    return [];
+  }
+  const subpaths: { x: number; y0: number; y1: number }[][] = [];
+  let current: { x: number; y0: number; y1: number }[] = [];
+  for (let index = 0; index < lower.length; index++) {
+    const lo = lower[index];
+    const hi = upper[index];
+    const x = xScale.map(entry.series.times[index]);
+    if (lo === null || hi === null || !Number.isFinite(lo) || !Number.isFinite(hi)) {
+      if (current.length > 0) {
+        if (entry.series.observationKind === 'piecewise_constant') {
+          const previous = current[current.length - 1];
+          current.push({ x, y0: previous.y0, y1: previous.y1 });
+        }
+        subpaths.push(current);
+      }
+      current = [];
+      continue;
+    }
+    const point = { x, y0: yScale.map(lo), y1: yScale.map(hi) };
+    if (entry.series.observationKind === 'piecewise_constant' && current.length > 0) {
+      const previous = current[current.length - 1];
+      current.push({ x, y0: previous.y0, y1: previous.y1 });
+    }
+    current.push(point);
+  }
+  if (current.length > 0) subpaths.push(current);
+  return subpaths;
+}
+
+function traceWhiskerMarks(
+  entry: TracePanelSeries,
+  xScale: ReturnType<typeof linearScale>,
+  yScale: ReturnType<typeof linearScale>,
+  color: string,
+): Mark | undefined {
+  const lower = entry.uncertaintyLower;
+  const upper = entry.uncertaintyUpper;
+  if (!lower || !upper || lower.length !== entry.series.times.length || upper.length !== lower.length) {
+    return undefined;
+  }
+  const vertical: { position: number; from: number; to: number }[] = [];
+  const caps: { position: number; from: number; to: number }[] = [];
+  const halfCap = 3;
+  for (let index = 0; index < lower.length; index++) {
+    const lo = lower[index];
+    const hi = upper[index];
+    if (lo === null || hi === null || !Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+    const x = xScale.map(entry.series.times[index]);
+    const y0 = yScale.map(lo);
+    const y1 = yScale.map(hi);
+    vertical.push({ position: x, from: y0, to: y1 });
+    caps.push(
+      { position: y0, from: x - halfCap, to: x + halfCap },
+      { position: y1, from: x - halfCap, to: x + halfCap },
+    );
+  }
+  if (vertical.length === 0) return undefined;
+  return {
+    type: 'group',
+    id: `uncertainty-${entry.styleIndex}`,
+    marks: [
+      { type: 'rule', orientation: 'vertical', lines: vertical, stroke: color, strokeWidth: 1.25 },
+      { type: 'rule', orientation: 'horizontal', lines: caps, stroke: color, strokeWidth: 1.25 },
+    ],
+  };
+}
+
+function subpathPaintsLine(subpath: readonly { readonly x: number; readonly y: number }[]): boolean {
+  if (subpath.length < 2) return false;
+  const first = subpath[0];
+  return subpath.some((point) => point.x !== first.x || point.y !== first.y);
+}
+
+/** Render every accepted trace series, either overlaid or grouped into explicit panels. */
+export function compileTraceFigure(
+  context: CompileContext,
+  panels: readonly TracePanelSpec[],
+  options: TraceFigureOptions,
+  skillId: string,
+): RenderPlanV1 {
+  const allSeries = panels.flatMap((panel) => panel.series);
+  const legendById = new Map<string, TracePanelSeries>();
+  for (const entry of allSeries) {
+    if (!legendById.has(entry.series.id)) legendById.set(entry.series.id, entry);
+  }
+  const legendEntries = [...legendById.values()];
+  const uncertaintyLegendEntries = legendEntries.filter((entry) => entry.uncertainty !== undefined);
+  const base = panelBox(context);
+  const legendInset = legendPlotInset(
+    context.width,
+    legendEntries.length + uncertaintyLegendEntries.length,
+    context.subtitle !== undefined,
+  );
+  const panelGap = panels.length > 1 ? (options.sharedXAxis ? 22 : 50) : 0;
+  const availableHeight = base.height - legendInset - panelGap * Math.max(0, panels.length - 1);
+  const panelHeight = panels.length > 0 ? availableHeight / panels.length : availableHeight;
+
+  const globalYValues = allSeries.flatMap(traceYValues);
+  const globalYExtent = options.sharedYDomain ? finiteExtent(globalYValues) : undefined;
+  const entriesWithPointMarks = new Set<TracePanelSeries>();
+
+  const compiledPanels: Panel[] = panels.map((panelSpec, panelIndex) => {
+    const box = {
+      x: base.x,
+      y: base.y + legendInset + panelIndex * (panelHeight + panelGap),
+      width: base.width,
+      height: panelHeight,
+    };
+    const finiteTimes = panelSpec.series.flatMap((entry) =>
+      entry.series.times.filter((value) => Number.isFinite(value)),
+    );
+    const finiteValues = panelSpec.series.flatMap(traceYValues);
+    if (finiteTimes.length === 0 || finiteValues.length === 0) {
+      return { ...emptyPanel(box, 'no finite observations to plot'), id: panelSpec.id, label: panelSpec.label };
+    }
+
+    const xExtent = options.xDomain
+      ? { min: options.xDomain[0], max: options.xDomain[1] }
+      : finiteExtent(finiteTimes)!;
+    const yExtent = globalYExtent ?? finiteExtent(finiteValues)!;
+    const xScale = linearScale(xExtent.min, xExtent.max, box.x, box.x + box.width);
+    const scaleKind = panelSpec.scale ?? 'linear';
+    const yScale: NumericScale = scaleKind === 'log'
+      ? logNumericScale(yExtent.min, yExtent.max, box.y + box.height, box.y)
+      : scaleKind === 'symlog'
+        ? symlogNumericScale(
+          yExtent.min,
+          yExtent.max,
+          box.y + box.height,
+          box.y,
+          panelSpec.symlogLinearThreshold!,
+        )
+        : linearNumericScale(yExtent.min, yExtent.max, box.y + box.height, box.y);
+    const marks: Mark[] = [];
+
+    for (const entry of panelSpec.series) {
+      const style = categoricalStyle(entry.styleIndex);
+      const boundaryColor = uncertaintyStroke(context.themeId);
+      if (entry.uncertainty?.mark === 'whisker') {
+        const whiskers = traceWhiskerMarks(entry, xScale, yScale, boundaryColor);
+        if (whiskers) marks.push(whiskers);
+      } else if (entry.uncertainty?.mark === 'band') {
+        const uncertaintySubpaths = traceAreaSubpaths(entry, xScale, yScale);
+        if (uncertaintySubpaths.length > 0) {
+          marks.push({
+            type: 'area',
+            subpaths: uncertaintySubpaths,
+            fill: style.color,
+            opacity: 0.18,
+            stroke: boundaryColor,
+            strokeWidth: 1.25,
+          });
+          const degeneratePoints = uncertaintySubpaths
+            .filter((subpath) => subpath.length > 0 && subpath.every((point) =>
+              point.x === subpath[0].x && point.y0 === subpath[0].y0 && point.y1 === subpath[0].y1,
+            ) && subpath[0].y0 === subpath[0].y1)
+            .map((subpath) => ({ x: subpath[0].x, y: subpath[0].y0 }));
+          if (degeneratePoints.length > 0) {
+            marks.push({ type: 'point', points: degeneratePoints, fill: boundaryColor, radius: 4, shape: 'diamond' });
+          }
+        }
+      }
+      const lineSubpaths = traceSubpaths(entry.series, xScale, yScale);
+      const drawableLines = lineSubpaths.filter(subpathPaintsLine);
+      if (drawableLines.length > 0) {
+        marks.push({
+          type: 'line',
+          subpaths: drawableLines,
+          stroke: style.color,
+          strokeWidth: 1.5,
+          dash: style.dash,
+        });
+      }
+      // An SVG path containing only `M x,y` paints no pixels. Isolated observations must
+      // therefore receive a marker even when the caller did not request markers on every
+      // sample; otherwise a valid one-point trace would succeed as a blank figure.
+      const points: { x: number; y: number }[] = [];
+      if (options.showSamplePoints) {
+        for (let index = 0; index < entry.series.times.length; index++) {
+          const value = entry.series.values[index];
+          if (value !== null && Number.isFinite(value)) {
+            points.push({ x: xScale.map(entry.series.times[index]), y: yScale.map(value) });
+          }
+        }
+      } else {
+        for (const subpath of lineSubpaths) if (!subpathPaintsLine(subpath)) points.push(subpath[0]);
+      }
+      if (points.length > 0) {
+        marks.push({ type: 'point', points, fill: style.color, radius: 2.4, shape: style.marker });
+        entriesWithPointMarks.add(entry);
+      }
+    }
+
+    return {
+      id: panelSpec.id,
+      label: panelSpec.label,
+      ...box,
+      axes: [
+        ...(options.sharedXAxis && panels.length > 1 && panelIndex < panels.length - 1
+          ? []
+          : [xAxis(options.xLabel, xScale)]),
+        transformedYAxis(panelSpec.yLabel, yScale),
+      ],
+      marks,
+    };
+  });
+
+  const rowsTotal = allSeries.reduce((total, entry) => total + entry.series.outputCount, 0);
+  const rows: (string | number | null)[][] = [];
+  outer: for (const panel of panels) {
+    for (const entry of panel.series) {
+      for (let index = 0; index < entry.series.times.length; index++) {
+        if (rows.length >= context.inlineTableRows) break outer;
+        rows.push(options.tableRow
+          ? [...options.tableRow(entry, index, panel)]
+          : [
+            entry.series.id,
+            entry.series.label,
+            entry.series.times[index],
+            entry.series.values[index],
+            entry.series.timeUnit,
+            entry.series.valueUnit,
+            entry.series.replicateCounts[index],
+          ]);
+      }
+    }
+  }
+
+  return {
+    ...frame(context, skillId),
+    panels: compiledPanels.length > 0
+      ? compiledPanels
+      : [emptyPanel({ ...base, y: base.y + legendInset, height: availableHeight }, 'no trace panels declared')],
+    legend: [
+      ...legendEntries.map((entry) => {
+        const style = categoricalStyle(entry.styleIndex);
+        return {
+          label: entry.series.label || entry.series.id,
+          color: style.color,
+          glyph: 'series' as const,
+          dash: style.dash,
+          ...(entriesWithPointMarks.has(entry)
+            ? { marker: style.marker }
+            : {}),
+        };
+      }),
+      ...uncertaintyLegendEntries.map((entry) => {
+        const style = categoricalStyle(entry.styleIndex);
+        return {
+          label: `${entry.series.label || entry.series.id}: ${entry.uncertainty!.label}`,
+          color: style.color,
+          outlineColor: uncertaintyStroke(context.themeId),
+          glyph: entry.uncertainty!.mark,
+        };
+      }),
+    ],
+    accessibility: {
+      summary: context.summary,
+      panelSummaries: [
+        ...(options.summaryStatements ?? []),
+        ...panels.map((panel) => {
+          const extent = finiteExtent(panel.series.flatMap(traceYValues));
+          return `${panel.label}: ${panel.series.length} ${panel.series.length === 1 ? 'series' : 'series'}; y axis ${panel.yLabel}; ${panel.scale ?? 'linear'} value scale${extent ? `; displayed range ${formatNumber(extent.min)} to ${formatNumber(extent.max)}` : ''}.`;
+        }),
+      ],
+      ...(panels.length > 1 ? { suppressGlobalValueRange: true } : {}),
+    },
+    table: {
+      policy: rowsTotal > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+      columns: options.tableColumns ?? [
+        { key: 'seriesId', header: 'Series' },
+        { key: 'seriesLabel', header: 'Label' },
+        { key: 'time', header: 'Time' },
+        { key: 'value', header: 'Value' },
+        { key: 'timeUnit', header: 'Time unit' },
+        { key: 'valueUnit', header: 'Value unit' },
+        { key: 'replicateCount', header: 'Replicates' },
+      ],
+      rows,
+      rowsInline: rows.length,
+      rowsTotal,
+    },
+  };
+}
+
+function transformedYAxis(label: string, scale: NumericScale): Axis {
+  return {
+    orientation: 'left',
+    label,
+    transform: scale.transform,
+    ticks: scale.ticks().map((tick) => ({ position: scale.map(tick.value), label: tick.label })),
+  };
 }
 
 function xAxis(label: string, scale: ReturnType<typeof linearScale>): Axis {

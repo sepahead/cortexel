@@ -17,7 +17,7 @@
  */
 
 import { makeError, pointer, type CortexelError } from '../errors.js';
-import { dimensionOf } from '../units.js';
+import { axesAreCompatible, dimensionOf } from '../units.js';
 import { SKILL_CATALOG } from '../../generated/catalog.js';
 import {
   asArray,
@@ -89,6 +89,23 @@ export const uncertaintyValid: SemanticValidator = (
         }
       }
     }
+    const sampleCounts = asArray(node.sampleCount);
+    if (values && sampleCounts) {
+      for (let i = 0; i < Math.min(values.length, sampleCounts.length); i++) {
+        if ((values[i] === null) !== (sampleCounts[i] === null)) {
+          errors.push(
+            makeError({
+              code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+              stage: 'science',
+              instancePath: pointer(...path, 'sampleCount', i),
+              validatorId: 'uncertainty.valid',
+              message: `at index ${i}, ${kind.replace('_', ' ')} and sampleCount must be present or missing together. A sample count cannot qualify an absent dispersion, and a dispersion without its required count is incomplete.`,
+            }),
+          );
+          break;
+        }
+      }
+    }
   }
 
   // An interval's bounds must be ordered and equal in length.
@@ -110,7 +127,19 @@ export const uncertaintyValid: SemanticValidator = (
       for (let i = 0; i < lower.length; i++) {
         const lo = lower[i];
         const hi = upper[i];
-        if (lo === null || hi === null) continue;
+        if ((lo === null) !== (hi === null)) {
+          errors.push(
+            makeError({
+              code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+              stage: 'science',
+              instancePath: pointer(...path, hi === null ? 'upper' : 'lower', i),
+              validatorId: 'uncertainty.valid',
+              message: `at index ${i}, lower and upper uncertainty bounds must be present or missing together. A one-sided value is not the declared two-sided interval.`,
+            }),
+          );
+          break;
+        }
+        if (lo === null) continue;
         const loValue = asNumber(lo);
         const hiValue = asNumber(hi);
         if (loValue !== undefined && hiValue !== undefined && loValue > hiValue) {
@@ -130,6 +159,23 @@ export const uncertaintyValid: SemanticValidator = (
   }
 
   const sampleCounts = asArray(node.sampleCount);
+  if (lower && upper && sampleCounts) {
+    for (let i = 0; i < Math.min(lower.length, upper.length, sampleCounts.length); i++) {
+      const boundsMissing = lower[i] === null && upper[i] === null;
+      if (boundsMissing !== (sampleCounts[i] === null)) {
+        errors.push(
+          makeError({
+            code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+            stage: 'science',
+            instancePath: pointer(...path, 'sampleCount', i),
+            validatorId: 'uncertainty.valid',
+            message: `at index ${i}, interval bounds and sampleCount must share one missingness mask. A count cannot qualify an absent interval, and a counted interval cannot omit its count.`,
+          }),
+        );
+        break;
+      }
+    }
+  }
   if (sampleCounts) {
     for (let i = 0; i < sampleCounts.length; i++) {
       const count = sampleCounts[i];
@@ -199,7 +245,7 @@ export const uncertaintySupportedVariant: SemanticValidator = (
   const supported = catalog.uncertaintySupport;
   const errors: CortexelError[] = [];
 
-  if (!supported.includes(kind)) {
+  if (!(supported as readonly string[]).includes(kind)) {
     errors.push(
       makeError({
         code: 'SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL',
@@ -240,29 +286,41 @@ export const traceDuplicateTimePolicy: SemanticValidator = (
   const data = getData(context);
   const parameters = getParameters(context);
 
-  const policy = asString(parameters.duplicateTimePolicy);
-  if (policy !== undefined) return [];
+  const policyNode = parameters.duplicateTimePolicy;
+  const policy = asString(policyNode) ?? asString(asRecord(policyNode)?.policy);
+  const candidates: { readonly times: unknown[]; readonly label: string }[] = [];
+
+  // Multi-signal traces may declare one shared clock instead of a time vector per series.
+  const sharedTimes = asArray(asRecord(data.eventTimes)?.values);
+  if (data.timeBase === 'shared' && sharedTimes) {
+    candidates.push({ times: sharedTimes, label: 'the shared time base' });
+  }
 
   const series = asArray(data.series);
-  if (!series) return [];
+  if (series) {
+    for (let index = 0; index < series.length; index++) {
+      const times = asArray(asRecord(asRecord(series[index])?.time)?.values);
+      if (times) candidates.push({ times, label: `series ${index}` });
+    }
+  }
 
-  for (let s = 0; s < series.length; s++) {
-    const entry = asRecord(series[s]);
-    const times = asArray(asRecord(entry?.time)?.values);
-    if (!times) continue;
-
+  for (const candidate of candidates) {
     const seen = new Set<number>();
-    for (const time of times) {
+    for (const time of candidate.times) {
       const value = asNumber(time);
       if (value === undefined) continue;
       if (seen.has(value)) {
+        const declaration = policy === undefined
+          ? 'no duplicate-time policy was declared'
+          : `the declared policy is "${policy}", which requires duplicates to be absent`;
+        if (policy === 'keep_replicates' || policy === 'aggregate') return [];
         return [
           makeError({
             code: 'SCIENCE_DUPLICATE_TIME_POLICY',
             stage: 'science',
             instancePath: pointer('parameters', 'duplicateTimePolicy'),
             validatorId: 'trace.duplicate_time_policy',
-            message: `series ${s} has more than one sample at t = ${value}, and no duplicate-time policy was declared. Choose reject, keep_replicates, or a named aggregate. Cortexel does not apply last-write-wins, because which sample survives would then depend on array order rather than on anything scientific.`,
+            message: `${candidate.label} has more than one sample at t = ${value}, and ${declaration}. Choose keep_replicates, or a named aggregate. Cortexel does not apply last-write-wins, because which sample survives would then depend on array order rather than on anything scientific.`,
           }),
         ];
       }
@@ -281,8 +339,10 @@ export const traceAxisDimensionCompatible: SemanticValidator = (
   if (!series || series.length < 2) return [];
 
   const layout = asString(getParameters(context).layout);
-  // Small multiples give each series its own axis, so incompatibility is fine there.
-  if (layout === 'small_multiples') return [];
+  // Normalized overlays compare per-series dimensionless ratios, not source magnitudes.
+  // Small-multiple panel membership is object-array data this registry validator cannot
+  // resolve yet; the render boundary performs the within-panel check independently.
+  if (layout === 'small_multiples' || layout === 'normalized_overlay') return [];
 
   const units: { unit: string; index: number }[] = [];
   for (let i = 0; i < series.length; i++) {
@@ -294,28 +354,69 @@ export const traceAxisDimensionCompatible: SemanticValidator = (
   const errors: CortexelError[] = [];
   const first = units[0];
 
+  // A simulator-defined code is not intrinsically comparable, even with itself.
+  // The weight-trace contract is the one deliberate exception: it requires a
+  // separate, explicit model-comparability claim and keeps every value in the
+  // identical opaque unit code (there is still no conversion or SI mapping).
+  if (
+    context.skillId === 'network.synaptic_weight_trace' &&
+    dimensionOf(first.unit) === 'simulator_defined' &&
+    units.every((entry) => entry.unit === first.unit)
+  ) {
+    const comparability = asRecord(getParameters(context).weightComparability);
+    const mode = asString(comparability?.mode);
+    const models = series
+      .map((entry) => asString(asRecord(entry)?.synapseModel))
+      .filter((model): model is string => model !== undefined);
+    const distinctModels = new Set(models);
+    const declaredModels = asArray(comparability?.comparableModels)
+      ?.filter((model): model is string => typeof model === 'string');
+    const declaredSet = new Set(declaredModels ?? []);
+    const claimMatches =
+      (mode === 'single_synapse_model' && distinctModels.size === 1) ||
+      (
+        mode === 'declared_comparable_models' &&
+        declaredSet.size === distinctModels.size &&
+        [...distinctModels].every((model) => declaredSet.has(model))
+      );
+
+    if (models.length === series.length && claimMatches) return [];
+
+    return [
+      makeError({
+        code: 'SCIENCE_WEIGHT_GROUP_INCOMPATIBLE',
+        stage: 'science',
+        instancePath: pointer('parameters', 'weightComparability'),
+        validatorId: 'trace.axis_dimension_compatible',
+        message:
+          'simulator-defined synaptic weights may share an axis only when the required model-comparability claim exactly matches the synapse models present. The opaque unit code alone does not make two model-dependent values comparable.',
+      }),
+    ];
+  }
+
   for (const entry of units.slice(1)) {
-    if (entry.unit !== first.unit) {
-      // A different code with the SAME dimension is fine — it is converted. A
-      // different dimension is not.
-      if (dimensionOf(entry.unit) !== dimensionOf(first.unit)) {
-        errors.push(
-          makeError({
-            code: 'SCIENCE_UNIT_DIMENSION_MISMATCH',
-            stage: 'science',
-            instancePath: pointer('data', 'series', entry.index, 'values', 'unit'),
-            validatorId: 'trace.axis_dimension_compatible',
-            message: `series ${entry.index} is in "${entry.unit}" but series ${first.index} is in "${first.unit}", and these are different dimensions. Overlaying them on one axis produces something that looks exactly like a comparison and is not one. Use layout "small_multiples".`,
-            repair: {
-              operation: 'replace',
-              path: pointer('parameters', 'layout'),
-              value: 'small_multiples',
-              reasonCode: 'SCIENCE_UNIT_DIMENSION_MISMATCH',
-            },
-          }),
-        );
-        break;
-      }
+    if (!axesAreCompatible(entry.unit, first.unit)) {
+      const simulatorDefined =
+        dimensionOf(entry.unit) === 'simulator_defined' ||
+        dimensionOf(first.unit) === 'simulator_defined';
+      errors.push(
+        makeError({
+          code: 'SCIENCE_UNIT_DIMENSION_MISMATCH',
+          stage: 'science',
+          instancePath: pointer('data', 'series', entry.index, 'values', 'unit'),
+          validatorId: 'trace.axis_dimension_compatible',
+          message: simulatorDefined
+            ? `series ${entry.index} and series ${first.index} use simulator-defined units. Even an identical code cannot establish cross-series comparability because its physical meaning depends on the source model. Put each series on its own panel.`
+            : `series ${entry.index} is in "${entry.unit}" but series ${first.index} is in "${first.unit}", and these are different dimensions. Overlaying them on one axis produces something that looks exactly like a comparison and is not one. Use layout "small_multiples".`,
+          repair: {
+            operation: 'replace',
+            path: pointer('parameters', 'layout'),
+            value: 'small_multiples',
+            reasonCode: 'SCIENCE_UNIT_DIMENSION_MISMATCH',
+          },
+        }),
+      );
+      break;
     }
   }
 

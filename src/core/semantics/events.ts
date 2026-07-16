@@ -7,7 +7,7 @@
  */
 
 import { makeError, pointer, type CortexelError } from '../errors.js';
-import { toSeconds } from '../units.js';
+import { compareExactUnitSumToValue, convert, toSeconds } from '../units.js';
 import {
   approximatelyEqual,
   asArray,
@@ -196,8 +196,12 @@ export const eventsWithinWindow: SemanticValidator = (
 
   const inclusiveStop = asString(window.boundary) === '[start,stop]';
 
-  const times = asArray(asRecord(data.eventTimes)?.values);
+  const eventTimes = asRecord(data.eventTimes);
+  const times = asArray(eventTimes?.values);
   if (!times) return [];
+  const eventUnit = asString(eventTimes?.unit);
+  const windowUnit = asString(window.unit);
+  if (!eventUnit || !windowUnit) return [];
 
   let outside = 0;
   let firstIndex = -1;
@@ -205,8 +209,32 @@ export const eventsWithinWindow: SemanticValidator = (
   for (let i = 0; i < times.length; i++) {
     const time = asNumber(times[i]);
     if (time === undefined) continue;
-    const inside = inclusiveStop ? time >= start && time <= stop : time >= start && time < stop;
-    if (!inside) {
+    let beforeStart: boolean;
+    let beyondStop: boolean;
+    try {
+      if (eventUnit !== windowUnit) convert(time, eventUnit, windowUnit);
+      const terms = [{ value: time, unit: eventUnit }];
+      beforeStart = compareExactUnitSumToValue(terms, { value: start, unit: windowUnit }) < 0;
+      const stopComparison = compareExactUnitSumToValue(terms, { value: stop, unit: windowUnit });
+      beyondStop = inclusiveStop ? stopComparison > 0 : stopComparison >= 0;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'event-time unit conversion failed';
+      const numericResolution = message.includes('overflowed') || message.includes('underflowed');
+      return [
+        makeError({
+          code: numericResolution
+            ? 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE'
+            : 'SCIENCE_UNIT_DIMENSION_MISMATCH',
+          stage: 'science',
+          instancePath: pointer('data', 'eventTimes', 'values', i),
+          validatorId: 'events.within_window',
+          message: numericResolution
+            ? `event ${i} cannot be converted from ${eventUnit} to ${windowUnit} without overflowing or underflowing finite binary64, so its window membership is not representable.`
+            : `event times in ${eventUnit} cannot be compared with a window in ${windowUnit}: ${message}`,
+        }),
+      ];
+    }
+    if (beforeStart || beyondStop) {
       outside++;
       if (firstIndex < 0) firstIndex = i;
     }
@@ -220,7 +248,7 @@ export const eventsWithinWindow: SemanticValidator = (
       stage: 'science',
       instancePath: pointer('data', 'eventTimes', 'values', firstIndex),
       validatorId: 'events.within_window',
-      message: `${outside} of ${times.length} events fall outside the declared window [${start}, ${stop}${inclusiveStop ? ']' : ')'}. Widen the window, or remove them deliberately — Cortexel will not quietly ignore an observation you told it about.`,
+      message: `${outside} of ${times.length} events fall outside the declared window [${start}, ${stop}${inclusiveStop ? ']' : ')'} ${windowUnit} after converting the event clock from ${eventUnit}. Widen the window, or remove them deliberately — Cortexel will not quietly ignore an observation you told it about.`,
     }),
   ];
 };

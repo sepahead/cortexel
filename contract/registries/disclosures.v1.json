@@ -125,7 +125,7 @@
       "id": "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "severity": "important",
       "trigger": "derivation receipt reports excludedOutOfWindow > 0",
-      "text": "{excludedCount} events fell outside the declared observation window and are excluded from this analysis."
+      "text": "{excludedCount} observations fell outside the declared observation window and are excluded from this analysis."
     },
     {
       "id": "MISSING_VALUES_PRESENT",
@@ -137,13 +137,19 @@
       "id": "UNIT_CONVERTED",
       "severity": "informational",
       "trigger": "derivation contains a unit conversion operation",
-      "text": "Units were converted during canonicalization: {conversions}. The original values are preserved in the artifact."
+      "text": "Units were converted during derivation: {conversions}. Source values remain in the canonical request embedded in the artifact; converted table values identify their units."
     },
     {
       "id": "UNCERTAINTY_NOT_PROVIDED",
       "severity": "important",
       "trigger": "uncertainty.kind == 'none'",
-      "text": "No uncertainty is shown ({reason}). The absence of a band means uncertainty was not supplied — not that it is small."
+      "text": "No uncertainty is shown ({reason}). The absence of an uncertainty mark means uncertainty was not supplied — not that it is small."
+    },
+    {
+      "id": "UNCERTAINTY_COVERAGE_INCOMPLETE",
+      "severity": "important",
+      "trigger": "at least one non-none uncertainty is declared and fewer than all displayed series have complete drawable uncertainty at every non-missing central observation",
+      "text": "Complete drawable uncertainty is present for {shownCount} of {seriesCount} displayed series; non-none uncertainty was declared for {declaredCount}. A missing uncertainty mark or bound means drawable uncertainty was absent there — not that it is small."
     },
     {
       "id": "AGGREGATE_WITHOUT_RAW_REPEATS",
@@ -180,6 +186,12 @@
       "severity": "important",
       "trigger": "trace.duplicateTimePolicy is an aggregate",
       "text": "Samples sharing a timestamp were combined using {method}."
+    },
+    {
+      "id": "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
+      "severity": "important",
+      "trigger": "one or more null replicate values were excluded from a duplicate-time aggregate that retained a non-null result",
+      "text": "{missingReplicateCount} missing replicate values were excluded from duplicate-time aggregates. An all-missing replicate group remains a visible gap rather than becoming zero."
     },
 
     {

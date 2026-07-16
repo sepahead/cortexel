@@ -11,7 +11,7 @@
  * looking at the picture can tell.
  */
 
-import { checkQuantityUnit, isKnownUnit, resolveAlias } from '../units.js';
+import { checkQuantityUnit, isKnownUnit, isQuantityKind, resolveAlias } from '../units.js';
 import { makeError, type CortexelError } from '../errors.js';
 import { asRecord, asString, type SemanticContext, type SemanticValidator } from './types.js';
 
@@ -46,7 +46,7 @@ function collectQuantities(
     const record = current.node as Record<string, unknown>;
     const kind = asString(record.kind);
     const unit = asString(record.unit);
-    if (kind !== undefined && unit !== undefined) {
+    if (kind !== undefined && unit !== undefined && isQuantityKind(kind)) {
       out.push({ kind, unit, path: current.path });
     }
 
@@ -84,7 +84,8 @@ function collectBareUnits(
 
     const record = current.node as Record<string, unknown>;
     const unit = asString(record.unit);
-    if (unit !== undefined && asString(record.kind) === undefined) {
+    const kind = asString(record.kind);
+    if (unit !== undefined && (kind === undefined || !isQuantityKind(kind))) {
       out.push({ unit, path: [...current.path, 'unit'] });
     }
 

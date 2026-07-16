@@ -33,6 +33,7 @@
     "derivation": [
       "No smoothing, no resampling, no filtering, and no interpolation is ever applied. There is no smoothing parameter, because a smoothed trace is a DIFFERENT quantity: it must arrive as a series whose `origin` is `derived` with a named method, so the figure can never present a filtered signal as a recorded one.",
       "point_sample rendering: consecutive retained samples of one series are joined by a straight segment. This is a stated convention and is disclosed in the accessible summary; it asserts nothing about the values in between.",
+      "An isolated point or a run whose retained screen coordinates are all identical receives one mandatory marker even when showSamplePoints=false. This is not a sampling-style request: it prevents a valid observation from becoming an SVG path that paints no pixels.",
       "piecewise_constant rendering: the value is held from its sample until the next sample of the same series and drawn as a step. A step-held signal (an injected current, a clamped command, an event-updated state) drawn as a sloped line would invent a ramp that never existed, so the two observation kinds are never drawn the same way.",
       "duplicateTimePolicy=aggregate: at each distinct timestamp the replicates OF THAT SERIES ONLY are combined. mean = sum of non-null replicates / count of non-null replicates. median = the middle order statistic, or for an even count the mean of the two central order statistics — stated, because otherwise the definition is ambiguous. min and max are the extreme non-null replicates.",
       "Nulls are excluded from every duplicate-time aggregate. If every replicate at a timestamp is null the aggregated sample is null, never 0. The replicate count is recorded on the drawn row and appears in the table, so an aggregate can never be read as a single observation.",
@@ -43,6 +44,8 @@
       "Samples outside the declared window are excluded from the path and from every derived statistic, counted per series, and disclosed. The path is never extended to the window edge and no sample is ever moved onto it.",
       "A series with NO sample inside the window must not be drawn as an empty panel — an empty panel is indistinguishable from a signal that was flat or silent, and a reader would take it as evidence about the neuron. Registry 1.0 has no analog-sample within-window validator (events.within_window reads an events shape this figure does not carry), so this refusal lives in the render plan rather than at semantic validation; see knownLimitations.",
       "A request whose series contain no observations at all reports the explicit empty state RENDER_NO_DATA with a reason. Cortexel never draws a bare coordinate system, which a reader would read as a measured zero.",
+      "Registry 1.0 declares uncertainty once for the whole analog figure. A non-`none` uncertainty object is therefore rendered only when the figure contains exactly one series; with multiple series the association would be ambiguous, so the render boundary refuses it with SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL rather than attaching one mark to every channel. SD and SEM are capped whiskers; interval/range variants are contrast-outlined bands; the legend resolves and binds the exact declaration to the series.",
+      "Uncertainty arrays use coupled missingness: lower and upper bounds are null together; dispersion and its required sample count are null together; any supplied interval sample count shares the bounds' mask; and uncertainty at a missing central observation is also null. Partial uncertainty at a non-missing central observation is permitted only as a paired null and triggers the incomplete-coverage disclosure.",
       "Complexity: O(n log n) per series for the stable sort, O(n) for window filtering, duplicate resolution, unit conversion, and path building. Cost is linear in the total number of samples across series."
     ],
     "scopeRules": [
@@ -192,7 +195,7 @@
         "showSamplePoints": {
           "type": "boolean",
           "default": false,
-          "description": "Draw a marker at every retained sample. Presentation only: it changes no value. It is the honest way to reveal where the sampler actually looked, which a bare line conceals."
+          "description": "Draw a marker at every retained sample. Presentation only: it changes no value. An isolated or zero-length run still receives one mandatory fallback marker when false, because a move-only/zero-length SVG path paints no evidence."
         },
         "uncertainty": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
@@ -271,6 +274,8 @@
     "EVENTS_EXCLUDED_OUT_OF_WINDOW",
     "UNIT_CONVERTED",
     "UNCERTAINTY_NOT_PROVIDED",
+    "UNCERTAINTY_COVERAGE_INCOMPLETE",
+    "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
     "DOWNSAMPLED_FOR_RENDERING",
     "TABLE_EXCERPT_ONLY",
     "CALLER_NOTE_UNVERIFIED",
@@ -293,7 +298,7 @@
       { "key": "replicateCount", "header": "Replicates", "description": "How many samples at this timestamp produced this row. 1 for a single observation; greater than 1 means the row is an aggregate." },
       { "key": "uncertaintyLower", "header": "Uncertainty lower" },
       { "key": "uncertaintyUpper", "header": "Uncertainty upper" },
-      { "key": "uncertaintyMethod", "header": "Uncertainty method", "description": "The variant, level, and basis. A dispersion is never relabelled as an interval." },
+      { "key": "uncertaintyMethod", "header": "Uncertainty declaration", "description": "The exact variant metadata for this row: basis and sample count for dispersions/ranges; method, level and coverage for confidence intervals; method and both quantiles for quantile intervals. A dispersion is never relabelled as an interval." },
       { "key": "sourceOrdinal", "header": "Source row", "description": "The sample's index in the caller's original array, before stable sorting. Every drawn point can be traced back to the row it came from." }
     ]
   },
@@ -332,6 +337,7 @@
     "Raising the shared-axis series cap above the palette registry's `categoricalSeries.maxStableSeries` is MAJOR: it would mint colours outside the colour-vision-deficiency-safe set while the legend still claimed the series were distinguishable.",
     "Adding a quantity kind to the accepted enum is MINOR.",
     "Adding an uncertainty variant to uncertaintySupport is MINOR.",
+    "Changing the single-series binding rule for figure-level uncertainty is MAJOR: it changes which observations the declared uncertainty is allowed to qualify.",
     "Adding a small-multiples group key is MINOR, but only once a validator exists that can prove the key is populated on every series."
   ],
 
@@ -339,7 +345,7 @@
     "Registry 1.0 has no disclosure for a `derived` series, for the segment drawn between point samples, or for partial window coverage, though the blueprint asks for all three. Those facts reach the artifact, table and summary but raise no footer disclosure. The rules belong in the registry.",
     "Per-sample out-of-window exclusion has NO semantic validator in registry 1.0: events.within_window reads data.eventTimes, an events shape an analog trace does not carry, so it is not declared here. The exclusion count, its attribution, and the empty-panel refusal live in the render plan. A trace-shaped within-window validator would close this.",
     "series.equal_length has no index-wildcard pointer in registry 1.0, so the per-series time/value length checks are declared as an explicit enumeration of concrete indices (0..15), capping the figure at 16 series. ids.unique reads one flat id array, so series identity is declared in a single data.seriesIds vector rather than inside each series object.",
-    "Uncertainty is declared once at parameters.uncertainty (figure-level): uncertainty.valid and uncertainty.supported_variant read a single top-level object, so per-series uncertainty bands are outside the registry-1.0 validator surface and would need a per-series uncertainty validator.",
+    "Uncertainty is declared once at parameters.uncertainty (figure-level). The strict request validators check the object, and the render boundary checks bounds, lengths and unit conversion, but a non-`none` declaration can qualify only a one-series figure. Per-series uncertainty for multi-series analog figures would require a new request shape and validator.",
     "Registry 1.0 binds `derivative` to the per_time dimension, so a dimensioned derivative such as dV/dt (mV/ms) cannot be expressed. Calling it dimensionless or inventing a unit would be a false statement about the dimension, so the trace is refused. A `voltage_per_time` dimension would close this.",
     "Only extrema-preserving compaction is accepted (`none`, `line_envelope_minmax`), so a one-sample transient always survives and COMPACTION_MAY_HIDE_TRANSIENTS can never fire here. The envelope is still not a resampled signal: marks drawn are not samples taken, and exact values come from the table.",
     "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that the channel was what the caller says it was, that a gain or reference was applied correctly upstream, or that a `derived` series was produced by the method it names.",

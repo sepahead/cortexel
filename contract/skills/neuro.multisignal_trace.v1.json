@@ -22,7 +22,7 @@
       "The analysis window is half-open [start, stop) by default and applies to the DISPLAY clock, after any declared offset. A sample outside it is a contradiction between the declared window and the supplied samples: it is REFUSED, never silently cropped.",
       "A recorder that emits a sample exactly at `stop` must declare `boundary: \"[start,stop]\"`. Cortexel does not guess an endpoint convention, because guessing it changes the sample count — and the sample it decides about is the last one.",
       "Duplicate timestamps within one series require an explicit policy: `reject`, `keep_replicates`, or `aggregate` with a named method. Last-write-wins is never applied; which duplicate 'won' would depend on array order. Duplicates are detected on the SUPPLIED times in the supplied unit by exact binary64 equality, before any conversion, so a conversion can never merge two times the source kept apart.",
-      "`null` is a MISSING sample. It is never drawn as zero, never interpolated across, and never dropped from the count: the path breaks at every gap and the missing count reaches the disclosure, the summary, and the table. Non-finite numbers and negative zero are rejected at the parse and snapshot stages.",
+      "`null` is a MISSING sample. It is never drawn as zero, never interpolated across, and never dropped from the count: the path breaks at every gap and the missing count reaches the disclosure, the summary, and the table. Non-finite numbers are rejected. Negative zero is accepted and canonicalized to zero, matching the error-registry and RFC 8785 policy.",
       "Unit conversion happens only WITHIN a panel, only between codes of the same dimension, and only into the panel's declared display unit. Each conversion multiplies once by the exact registry factor, is recorded as a derivation operation, and is disclosed. Raw supplied values remain in the table.",
       "A simulator-defined unit (dimension `simulator_defined`, for example `nest:weight`) is never converted and is never dimension-compatible with any other code — including another simulator-defined code. Such a series therefore always occupies a panel of its own and can never be overlaid or normalized against a physical quantity.",
       "Panel order is the declared order of `parameters.panels`; series order within a panel is the declared order of `data.series`. Series are NEVER reordered by amplitude, variance, or peak time — a sort that depends on the data would make the legend a claim about the data.",
@@ -30,20 +30,22 @@
     ],
     "derivation": [
       "Time base: either one `eventTimes` vector that every series is sampled on, or a per-series `time` vector. The two are mutually exclusive at the request level, because a mixture would make 'the same length as the time vector' ambiguous. Sampling intervals may differ between series and are NEVER resampled onto a common grid.",
-      "Time alignment: `same_clock` asserts every series is already on one clock. `declared_offsets` requires a per-series `timeOffset` duration and maps t_display = t_recorded + offset, recorded as a derivation operation. Because the offset lives ON the series, coverage is structural: no series can silently receive an offset of zero.",
+      "Time alignment: `same_clock` asserts every series is already on one clock. `declared_offsets` requires a per-series `timeOffset` duration and maps t_display = t_recorded + offset, recorded as a derivation operation. Because the offset lives ON the series, coverage is structural: no series can silently receive an offset of zero. The effective displacement and every representable adjacent spacing are checked by an exact-integer relative predicate bounded at 8 * Number.EPSILON; material distortion at a large clock origin is refused with SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE.",
       "small_multiples: one panel per declared panel, vertically stacked, all sharing one x domain (the analysis window). Each panel keeps its own y domain and its own unit. Panel y domains are never forced to a common scale, and no cross-panel height comparison is drawable.",
       "shared_axis_overlay: exactly one panel. Every series is converted into that panel's display unit, so every member must share the panel unit's dimension. Two arrays are not comparable merely because they are the same length and both are called 'signals'.",
       "normalized_overlay: exactly one panel whose display unit is `1`. Each series is mapped SEPARATELY by an affine transform to a dimensionless ratio, so between-series dimension compatibility is not required — and that is exactly why this layout supports no magnitude claim at all.",
-      "The three normalizations, computed over the declared statistics window and over the non-missing samples only. z_score: (x − mean_S) / sd_S, with the SAMPLE standard deviation (ddof = 1) and N ≥ 2. min_max: (x − min_S) / (max_S − min_S), requiring max_S > min_S. divide_by_baseline_mean: x / mean_S, requiring mean_S finite and strictly positive.",
+      "The three normalizations, computed over the declared statistics window and over the non-missing samples only. z_score: (x − mean_S) / sd_S, with the SAMPLE standard deviation (ddof = 1) and N ≥ 2. min_max: (x − min_S) / (max_S − min_S), requiring max_S > min_S. divide_by_baseline_mean: x / mean_S, requiring the exact mean to be strictly positive. Min-max and baseline ratios are correctly rounded from exact binary64-input rationals; z-score statistics use a canonical coordinate system. Every map preserves strict order. Exact min-max endpoints and the published z/baseline accumulation bounds are postconditions; an unrepresentable result is refused.",
+      "Panel value scales are literal. linear uses the declared values directly. log uses deterministic logarithmic distances and refuses any zero or negative displayed value. symlog is exactly x / threshold for |x| <= threshold and sign(x) * (1 + ln(|x| / threshold)) outside; it is continuous with a continuous first derivative at both thresholds. The contract-owned fdlibm kernels avoid implementation-approximated Math.log/exp low bits. A non-zero inner value whose transform materially loses binary64 resolution is refused. The declared threshold is never inferred from the data.",
       "A non-positive `divide_by_baseline_mean` denominator is refused with SCIENCE_DENOMINATOR_INVALID. A membrane potential with a −70 mV baseline would otherwise map a depolarization to −65/−70 = 0.93 — BELOW the 1.0 baseline — drawing every excitatory event as a decrease, in a figure that looks entirely plausible.",
-      "Under a normalization, uncertainty bounds are carried through the SAME affine map (all three methods have a strictly positive scale), and a dispersion is scaled by the map's scale factor and not re-centred. A variant that cannot be mapped by that affine transform is not drawn rather than approximated. Missing samples stay missing.",
+      "Under a normalization, uncertainty bounds are carried through the SAME affine map and a dispersion is scaled but not re-centred. Recovered bound widths and centre-to-whisker displacements use an exact relative comparison: 8 * Number.EPSILON without normalization and 32 * Number.EPSILON after the longer normalization path. Distinct uncertainty magnitudes/bounds must remain strictly ordered; a variant that collapses or materially distorts its own displayed width is refused. Missingness masks are coupled, and uncertainty at a missing central observation is null.",
       "Duplicate-time aggregation (`mean`, `median`, `min`, `max`) is computed over the replicate group, and the group's uncertainty is not synthesized from the replicates — an aggregate of replicates is not an uncertainty estimate unless the caller supplies one.",
       "A model state with no standard quantity (a gating variable, an adaptation variable) uses the `state_variable` kind with a unit that declares its dimension. Two `state_variable` series share a panel only when their units share a dimension.",
-      "Rendering: a `point_sample` series is drawn as straight segments between successive samples; a `piecewise_constant` series is drawn as horizontal steps held until the next sample. Sample points are drawn only when `showSamplePoints` is set. Series in one panel may carry different observation kinds; each keeps its own mark.",
+      "Rendering: a `point_sample` series is drawn as straight segments between successive samples; a `piecewise_constant` series is drawn as horizontal steps held until the next sample. `showSamplePoints` draws a marker at every retained sample. Independently, an isolated or zero-length run always receives one marker because an SVG move-only or zero-length path paints no evidence at all. Series in one panel may carry different observation kinds; each keeps its own mark.",
+      "Uncertainty presentation follows the palette registry literally: standard deviation and standard error are capped whiskers; confidence, quantile, credible, and ensemble-range declarations are outlined bands. Every uncertainty legend item is bound to its series and resolves the exact level/method/basis/sample-count semantics. A zero-area pointwise band receives a fixed-screen outlined point fallback rather than an invented time width.",
       "`observationKind` is declared per series and never defaulted: drawing a held, event-updated signal as a sloped line invents a ramp that never existed, and in a figure read for lead and lag an invented ramp is an invented onset.",
       "`origin` declares whether a series was recorded or computed. A derived series names the method that produced it and is never relabelled as recorded; Cortexel records and displays that method and never re-derives or verifies it.",
       "There is no smoothing, at any layout, by default or by request — a smoothed trace is a different derived artifact with a declared method, window, and edge policy, and it does not belong to this contract.",
-      "Complexity: O(n log n) per series for the stable sort, O(n) for conversion and normalization, O(s) in series for the dimension checks. Tolerances: time equality is exact binary64; window containment is an exact comparison with no epsilon."
+      "Complexity: O(n log n) per series for sorting, O(n) conversion/normalization, O(s) dimension checks, plus exact-integer arithmetic proportional to binary64 exponent span. Time equality and containment are exact comparisons. Converted spacings and clock effects use an exact 8*epsilon relative predicate; normalized uncertainty widths use 32*epsilon. Correctly rounded sums enforce: z |sum| <= 16*epsilon*sqrt(N*(N−1)); z |sumSquares−(N−1)| <= 32*epsilon*max(1,N−1); baseline |sum(ratios)−N| <= 16*epsilon*N; epsilon = Number.EPSILON."
     ],
     "scopeRules": [
       "Every series declares the entity it was recorded from and the variable it IS. Two series with the same `variableId` on different entities are distinct series and are never merged or averaged.",
@@ -176,8 +178,17 @@
                 "description": "The declared panel this series is drawn in. Membership is structural: every series belongs to exactly one panel, so no series can be silently dropped from the layout and no panel partition can be left incomplete."
               },
               "timeOffset": {
-                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
-                "description": "A `duration` added to this series' recorded times to place it on the display clock. Required when timeAlignment.kind is `declared_offsets`, forbidden when it is `same_clock` — an implicit zero offset would be an undeclared claim about synchronization."
+                "type": "object",
+                "description": "A `duration` added to this series' recorded times to place it on the display clock. Required when timeAlignment.kind is `declared_offsets`, forbidden when it is `same_clock` — an implicit zero offset would be an undeclared claim about synchronization.",
+                "properties": {
+                  "kind": { "const": "duration" },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "value": { "type": "number" }
+                },
+                "required": ["kind", "unit", "value"],
+                "additionalProperties": false
               },
               "time": {
                 "type": "object",
@@ -445,12 +456,13 @@
                   "log",
                   "symlog"
                 ],
-                "default": "linear"
+                "default": "linear",
+                "description": "linear draws values affinely. log uses log10 and is refused when any displayed value is non-positive. symlog uses the exact piecewise transform stated in science.normalization; it never chooses a threshold from the data."
               },
               "symlogLinearThreshold": {
                 "type": "number",
                 "exclusiveMinimum": 0,
-                "description": "The half-width of the linear region around zero. Required for `symlog`, because a symlog axis with an undeclared threshold changes shape when the data changes."
+                "description": "The half-width of the exactly linear region around zero. Required for `symlog`, whose transform is x/threshold inside and sign(x)*(1+ln(|x|/threshold)) outside."
               }
             },
             "required": [
@@ -562,7 +574,7 @@
         "showSamplePoints": {
           "type": "boolean",
           "default": false,
-          "description": "Draw the individual samples in addition to the line. Useful precisely because the line between two samples is a rendering of adjacency, not a measurement."
+          "description": "Draw a marker at every retained sample in addition to the line. Even when false, Cortexel still marks an isolated or zero-length run once, because an SVG move-only/zero-length path would otherwise succeed as a blank observation."
         }
       },
       "allOf": [
@@ -810,6 +822,8 @@
     "DUPLICATE_TIMES_AGGREGATED",
     "UNIT_CONVERTED",
     "UNCERTAINTY_NOT_PROVIDED",
+    "UNCERTAINTY_COVERAGE_INCOMPLETE",
+    "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
     "DOWNSAMPLED_FOR_RENDERING",
     "TABLE_EXCERPT_ONLY",
     "CALLER_NOTE_UNVERIFIED",
@@ -874,9 +888,19 @@
         "description": "AS SUPPLIED, before any declared offset. The raw time the source reported."
       },
       {
+        "key": "recordedTimeUnit",
+        "header": "Recorded time unit",
+        "description": "The source clock unit AS SUPPLIED. It may differ from the display-clock unit."
+      },
+      {
         "key": "timeOffset",
         "header": "Declared offset",
         "description": "The offset added to the recorded time to place this series on the display clock. Zero under `same_clock`, where no offset may be declared at all."
+      },
+      {
+        "key": "timeOffsetUnit",
+        "header": "Declared offset unit",
+        "description": "The offset unit AS SUPPLIED. The derivation receipt records its one-step conversion into the display-clock unit."
       },
       {
         "key": "time",
@@ -890,7 +914,7 @@
       {
         "key": "value",
         "header": "Value",
-        "description": "AS SUPPLIED, before any panel unit conversion or overlay normalization. This is the raw observation everything drawn is derived from."
+        "description": "AS SUPPLIED, before any panel unit conversion or overlay normalization. A duplicate-time aggregate carries the contributing raw values as a canonical JSON array; otherwise this is the scalar source observation."
       },
       {
         "key": "unit",
@@ -914,7 +938,7 @@
       {
         "key": "replicateCount",
         "header": "Replicates",
-        "description": "How many supplied samples share this timestamp. 1 unless duplicates were kept or aggregated; an aggregate row states how many replicates it combines."
+        "description": "How many supplied samples produced this table row. Kept replicates remain separate rows with 1 each; an aggregate row states how many replicates it combines."
       },
       {
         "key": "uncertaintyKind",
@@ -930,13 +954,18 @@
       },
       {
         "key": "uncertaintyMethod",
-        "header": "Uncertainty method",
-        "description": "The declared method and level of an interval variant. An interval with no method is never drawn as one."
+        "header": "Uncertainty declaration",
+        "description": "The exact row-level declaration: basis and sample count for dispersions/ranges; method, level and coverage for confidence intervals; method and both quantiles for quantile intervals. An interval with no method is never drawn as one."
+      },
+      {
+        "key": "normalizationParameters",
+        "header": "Normalization parameters",
+        "description": "Null outside normalized_overlay. Otherwise the exact per-series statistics window, sample count, and constants used for the affine map, serialized deterministically so every displayed value can be re-derived from the raw value."
       },
       {
         "key": "sourceRowIndex",
         "header": "Source row",
-        "description": "The original ordinal in the caller's array, retained through stable sorting so any drawn point can be traced back to the row it came from."
+        "description": "The original ordinal in the caller's array, retained through stable sorting. A duplicate-time aggregate carries the contributing ordinals as a canonical JSON array."
       }
     ]
   },
@@ -992,18 +1021,18 @@
     "Permitting a simulator-defined unit to share a panel with any other series is MAJOR.",
     "Adding a time-alignment kind whose clock relation is unknown is MAJOR, and would need a mechanized disclosure first.",
     "Changing panel or series draw order, or sorting series by amplitude, variance, or peak time, is MAJOR.",
+    "Changing the exact symlog transform, its natural-log outer branch, or its declared linear threshold semantics is MAJOR: every non-linear y coordinate and tick would move.",
     "Giving `observationKind` a default, or drawing a `piecewise_constant` series as a sloped line, is MAJOR: it would invent intermediate values that were never recorded.",
     "Permitting a derived series to omit its method, or presenting a derived series as a recorded one, is MAJOR.",
     "Adding an uncertainty variant is MINOR; removing one is MAJOR."
   ],
   "knownLimitations": [
-    "Panel membership (a series' panelId names a declared panel; a declared panel holds at least one series) has no semantic validator in this build, so an undeclared panelId or an empty declared panel is not refused during request validation. A `trace.panel_membership_declared` validator should own it.",
-    "`ids.unique` reads one flat identifier array, but this figure's series ids and panel ids live inside arrays of objects (data.series[].seriesId, parameters.panels[].panelId). No resolvable pointer exists, so the validator was removed; series-id and panel-id uniqueness are unenforced until the registry gains object-array pointer support.",
-    "`series.equal_length` resolves concrete JSON Pointers, not index wildcards, so its groups are enumerated per series index (0..3). A length mismatch in a later series index would not be caught until the registry adopts index-wildcard pointers.",
-    "`uncertainty.valid` and `uncertainty.supported_variant` read a single top-level parameters/data uncertainty; this figure carries uncertainty PER SERIES, which those validators do not traverse. Both were removed and per-series uncertainty is validated only structurally, pending a per-series uncertainty validator.",
-    "Because `unit.dimension_match` treats any {kind,unit} object as a physical quantity, a series uncertainty that carries a unit and a non-quantity kind (standard_deviation, confidence_interval, ...) is rejected as a dimension mismatch. Only kind:none series uncertainties validate until the walker excludes uncertainty nodes.",
-    "A non-positive `divide_by_baseline_mean` denominator is described by the science but has no semantic validator in this build, so a sign-flipping baseline is not refused at validation time. A normalization validator should own SCIENCE_DENOMINATOR_INVALID for this figure.",
-    "Log/symlog domain checks and the empty-panel RENDER_NO_DATA check belong to the render stage, which request validation does not reach; a non-positive log domain is not refused during validation.",
+    "Panel membership still has no request-stage semantic validator. The render boundary independently refuses undeclared membership, empty panels and duplicate panel or series identities before it builds geometry, so no series can be silently dropped or duplicated; a future `trace.panel_membership_declared` validator should move the same refusal earlier.",
+    "`ids.unique` reads one flat identifier array, but this figure's series ids and panel ids live inside arrays of objects (data.series[].seriesId, parameters.panels[].panelId). The request-stage validator cannot express those paths; the render boundary independently refuses duplicate ids before legend, table or geometry construction.",
+    "`series.equal_length` resolves concrete JSON Pointers, not index wildcards, so request-stage groups are enumerated per series index (0..3). The render boundary checks every later series and every uncertainty array before transformation; a future wildcard validator should move the same refusal earlier.",
+    "`uncertainty.valid` and `uncertainty.supported_variant` read a single top-level parameters/data uncertainty, while this figure carries uncertainty per series. The render boundary independently validates every series' variant, basis, levels, bounds, lengths, registered unit and dimensional compatibility, and transforms supported bounds through the same conversion/normalization map. A per-series semantic validator would move those checks before rendering.",
+    "A non-positive `divide_by_baseline_mean` denominator has no request-stage semantic validator. The render derivation computes the declared statistics window and refuses a non-finite or non-positive denominator with SCIENCE_NORMALIZATION_UNVERIFIABLE before geometry is emitted; a normalization validator should move that refusal earlier and own SCIENCE_DENOMINATOR_INVALID.",
+    "Log/symlog domain checks and the empty-panel RENDER_NO_DATA check belong to the render stage rather than request validation. The renderer applies the contract-owned transforms and refuses a non-positive log domain before geometry is emitted.",
     "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that a channel was what the caller says it was, or that a `derived` series was produced by the method it names.",
     "Cortexel cannot verify that two recorders shared a clock. `same_clock` is a caller declaration; all Cortexel can do is refuse to draw signals on one time axis unless the caller states which clock they are on.",
     "Series may be sampled at different intervals. Cortexel never resamples onto a common grid, so a vertical alignment must not be read finer than the coarser series' sampling interval.",

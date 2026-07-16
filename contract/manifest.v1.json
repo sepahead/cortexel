@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:022fb3a76eb66cecdd8e54184cce22a9246c069ab34bb2a2f57e6025b7c13063",
+  "contractDigest": "sha256:a49097fff2676ff50e0b382576f8933e252c68b4813117c93e9a0c10678e8d56",
   "catalogDigest": "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691",
   "stableSkillCount": 19,
   "stableSkills": [
@@ -742,6 +742,8 @@
         "EVENTS_EXCLUDED_OUT_OF_WINDOW",
         "UNIT_CONVERTED",
         "UNCERTAINTY_NOT_PROVIDED",
+        "UNCERTAINTY_COVERAGE_INCOMPLETE",
+        "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
         "DOWNSAMPLED_FOR_RENDERING",
         "TABLE_EXCERPT_ONLY",
         "CALLER_NOTE_UNVERIFIED",
@@ -1046,6 +1048,8 @@
         "DUPLICATE_TIMES_AGGREGATED",
         "UNIT_CONVERTED",
         "UNCERTAINTY_NOT_PROVIDED",
+        "UNCERTAINTY_COVERAGE_INCOMPLETE",
+        "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
         "DOWNSAMPLED_FOR_RENDERING",
         "TABLE_EXCERPT_ONLY",
         "CALLER_NOTE_UNVERIFIED",
@@ -1506,9 +1510,9 @@
     "standard",
     "agent"
   ],
-  "errorCodeCount": 120,
+  "errorCodeCount": 121,
   "semanticValidatorCount": 36,
-  "disclosureRuleCount": 31,
+  "disclosureRuleCount": 33,
   "normativeSources": [
     {
       "path": "contract/meta/contract-source.schema.json",
@@ -1524,11 +1528,11 @@
     },
     {
       "path": "contract/registries/disclosures.v1.json",
-      "digest": "sha256:28d54cfe7d263b3bb4f35337e1a5466fae7dde32f5f22bbbbfe2b0d5528b9eb6"
+      "digest": "sha256:88bf4114feca507a0c180a8b68ca8eb2fa1c78efea8cd2202834c80e61ca2430"
     },
     {
       "path": "contract/registries/error-codes.v1.json",
-      "digest": "sha256:01db396a4aea4a83b2e38c35d010fa1965dc85c725b8e738ed2f759de83a1e3b"
+      "digest": "sha256:bd1bdab9bfed64187da8f33ca98c7cab197e7c66b19d51f4c9b19aeb800a5fc4"
     },
     {
       "path": "contract/registries/identity.v1.json",
@@ -1540,7 +1544,7 @@
     },
     {
       "path": "contract/registries/palettes.v1.json",
-      "digest": "sha256:277e616ba3e1880b68b1acafd1901e1138d9002dedd649a324ed828b5312b242"
+      "digest": "sha256:02ef3b22712d89a166dd87f6c735f50a8ec4c74608a199346eb91ceb57b1beac"
     },
     {
       "path": "contract/registries/renderers.v1.json",
@@ -1552,11 +1556,11 @@
     },
     {
       "path": "contract/registries/units.v1.json",
-      "digest": "sha256:277828da539ba3d267b3e87aba9634aa82a05cf1831315bae14e39365a579cb3"
+      "digest": "sha256:590fdf9c2775b8d896bd867735823de9d9ccb988cb6c22aac17ea01bfd38feb5"
     },
     {
       "path": "contract/schemas/common.v1.schema.json",
-      "digest": "sha256:50bb1ab76a4d0146ac8d8cad96e2f1688d1ccbd36e561c9940efe3e6fac19918"
+      "digest": "sha256:e6e6a63ed8d29a33256aa1334ed04a8e862a1695ea3ab18a6ae2e02195097f5f"
     },
     {
       "path": "contract/schemas/figure-artifact.v1.schema.json",
@@ -1568,7 +1572,7 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:36b240e8c7f38a92ba8247ff478a1cb78ee95589a2611534856123f261f9a56f"
+      "digest": "sha256:b60b078a9711e9eae968b6d1138565c4d1ae767f3caa424e0cc9c5a583824977"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
@@ -1608,7 +1612,7 @@
     },
     {
       "path": "contract/schemas/skills/neuro.analog_trace.request.v1.schema.json",
-      "digest": "sha256:a28c4456259deefa2a800aa5be8213dc9af78ee9850cb78136c5a791cad53203"
+      "digest": "sha256:fc57d89fe69c4cce7050f3c23721aa7e1b6066349a2fc84e7ff8d091a7f6bf1a"
     },
     {
       "path": "contract/schemas/skills/neuro.compartment_trace.request.v1.schema.json",
@@ -1624,7 +1628,7 @@
     },
     {
       "path": "contract/schemas/skills/neuro.multisignal_trace.request.v1.schema.json",
-      "digest": "sha256:37bda3b39c3f1664d73f01dcd5259131805305e2ad014f45968429181da946b8"
+      "digest": "sha256:7977fec4bb776a5a336f6bfc57b5b7955bed3102d399fab9c425fa7e657475a5"
     },
     {
       "path": "contract/schemas/skills/neuro.phase_plane.request.v1.schema.json",
@@ -1676,7 +1680,7 @@
     },
     {
       "path": "contract/skills/network.synaptic_weight_trace.v1.json",
-      "digest": "sha256:bd6db0cb99b4c6fb8d106e9b0df0d5e5596254d34183e39d65bd3aa9817ae2b8"
+      "digest": "sha256:f3ba186772d16e4f3c2b56f8e6d10412e8eedcdf333ebc744990b685eb27b9e5"
     },
     {
       "path": "contract/skills/network.weight_distribution.v1.json",
@@ -1688,7 +1692,7 @@
     },
     {
       "path": "contract/skills/neuro.analog_trace.v1.json",
-      "digest": "sha256:ad899a3f5e6fbc8282884209c016e485262bab9e98c3bc5ef522344653117390"
+      "digest": "sha256:2f1d87f0ee03ba531cbd9982f3b7f0435bc9f249a03d6a39fea4b853c61d2508"
     },
     {
       "path": "contract/skills/neuro.compartment_trace.v1.json",
@@ -1704,7 +1708,7 @@
     },
     {
       "path": "contract/skills/neuro.multisignal_trace.v1.json",
-      "digest": "sha256:27f251be84d8549976b572674cd076e10fdc4740a6ef779f4a1eab9752f86681"
+      "digest": "sha256:831b4cf075c3a8b9f0ae5a466b3110b2d19fa30cbf3ed7729895823628601db0"
     },
     {
       "path": "contract/skills/neuro.phase_plane.v1.json",

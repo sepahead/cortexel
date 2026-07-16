@@ -136,7 +136,7 @@
     },
 
     "uncertainty": {
-      "description": "A closed union. A shaded band is meaningless without its method, level, basis, and units — so there is no generic {lower, upper, label}. Absence is stated explicitly rather than left blank.",
+      "description": "A closed union. An uncertainty mark is meaningless without its method, level, basis, and units — so there is no generic {lower, upper, label}. Absence is stated explicitly rather than left blank. Parallel uncertainty arrays use one missingness mask: lower/upper are null together, and any supplied sampleCount is null exactly where its dispersion or interval is null.",
       "oneOf": [
         {
           "type": "object",

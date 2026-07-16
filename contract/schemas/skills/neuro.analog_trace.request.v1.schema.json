@@ -263,7 +263,7 @@
         "showSamplePoints": {
           "type": "boolean",
           "default": false,
-          "description": "Draw a marker at every retained sample. Presentation only: it changes no value. It is the honest way to reveal where the sampler actually looked, which a bare line conceals."
+          "description": "Draw a marker at every retained sample. Presentation only: it changes no value. An isolated or zero-length run still receives one mandatory fallback marker when false, because a move-only/zero-length SVG path paints no evidence."
         },
         "uncertainty": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",

@@ -25,8 +25,21 @@ import { canonicalDigest, canonicalDigestExcluding } from '../core/canonicalize.
 import { deepFreeze } from '../core/deep-freeze.js';
 import { sha256Digest, utf8ByteLength } from '../core/sha256.js';
 import { deriveDisclosures, type Disclosure, type DisclosureFacts } from '../core/disclosures.js';
-import { SKILL_CATALOG } from '../generated/catalog.js';
-import { unitLabel } from '../core/units.js';
+import {
+  CATEGORICAL_SERIES_STYLES,
+  SKILL_CATALOG,
+  UNCERTAINTY_STYLES_BY_KIND,
+} from '../generated/catalog.js';
+import {
+  axesAreCompatible,
+  conversionFactor,
+  conversionReceipt,
+  convert,
+  convertDifference,
+  dimensionOf,
+  unitLabel,
+  type ConversionReceipt,
+} from '../core/units.js';
 import {
   edgesFromWidth,
   tryEdgesFromWidth,
@@ -39,9 +52,21 @@ import {
   computeCorrelogram,
   countEligibleCorrelogramPairs,
   makeEventTable,
+  applyTraceNormalization,
+  binary64EffectWasPreserved,
+  prepareTraceSeries,
   type Bins,
+  type TraceAggregateMethod,
+  type TraceDuplicatePolicy,
+  type TraceNormalization,
+  type TraceObservationKind,
+  type PreparedTraceSeries,
+  type TraceSeriesInput,
+  type TraceWindow,
 } from '../analysis/index.js';
 import { countPlanResources, renderSvg, type SvgReport } from './svg.js';
+import { formatNumber } from './format.js';
+import { MIN_PLOT_PANEL_HEIGHT } from './layout.js';
 import { compileLineFigure, compileStepFigure } from './compile.js';
 import {
   compileBarFigure,
@@ -52,6 +77,8 @@ import {
   compilePointsLineFigure,
   compileTrajectoryFigure,
   compileGraphFigure,
+  compileTraceFigure,
+  type TracePanelSpec,
 } from './compileFamilies.js';
 import type { CompileContext } from './compile.js';
 import type { RenderPlanV1 } from './model/renderPlan.js';
@@ -64,6 +91,7 @@ import {
 } from '../core/limits.js';
 import { finiteExtent } from '../core/numeric.js';
 import { materializeCenteredLagBins } from '../core/binning.js';
+import type { ErrorCode, ErrorStage } from '../generated/registry.js';
 
 export interface FigureResult {
   readonly ok: true;
@@ -78,6 +106,28 @@ export interface FigureFailure {
   readonly ok: false;
   readonly errors: readonly CortexelError[];
 }
+
+interface DerivationOperation {
+  readonly id: string;
+  readonly algorithm: string;
+  readonly algorithmRevision: number;
+  readonly parameters: Record<string, unknown>;
+  readonly inputDigest?: string;
+  readonly outputDigest?: string;
+  readonly receipt: Record<string, unknown>;
+}
+
+interface CompiledFigure {
+  readonly plan: RenderPlanV1;
+  readonly rendererId: string;
+  readonly derivationOperations: readonly DerivationOperation[];
+  readonly derivedDisclosureFacts: Partial<DisclosureFacts>;
+}
+
+type CompileOutcome =
+  | CompiledFigure
+  | { readonly pending: string }
+  | { readonly errors: readonly CortexelError[] };
 
 function num(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -290,26 +340,753 @@ function psthYLabel(normalization: string): string {
   return normalization === 'count' ? 'count' : 'count / trial';
 }
 
+function traceWindowFrom(
+  node: Record<string, unknown> | undefined,
+  targetUnit?: string,
+): TraceWindow | undefined {
+  const start = num(node?.start);
+  const stop = num(node?.stop);
+  const sourceUnit = typeof node?.unit === 'string' ? node.unit : undefined;
+  if (start === undefined || stop === undefined || sourceUnit === undefined) return undefined;
+  const unit = targetUnit ?? sourceUnit;
+  const convertedStart = sourceUnit === unit ? start : convert(start, sourceUnit, unit);
+  const convertedStop = sourceUnit === unit ? stop : convert(stop, sourceUnit, unit);
+  if (sourceUnit !== unit) {
+    const expectedWidth = convertDifference(start, stop, sourceUnit, unit);
+    const actualWidth = convertedStop - convertedStart;
+    if (
+      !(expectedWidth > 0) ||
+      !Number.isFinite(expectedWidth) ||
+      !Number.isFinite(actualWidth) ||
+      !binary64EffectWasPreserved(expectedWidth, actualWidth)
+    ) {
+      throw new Error('trace window conversion materially distorted its width at binary64 resolution');
+    }
+  }
+  return {
+    start: convertedStart,
+    stop: convertedStop,
+    unit,
+    finalEdgeInclusive: typeof node?.boundary === 'string' && node.boundary.endsWith(']'),
+  };
+}
+
+function traceDuplicateOptions(parameters: Record<string, unknown>): {
+  readonly duplicatePolicy?: TraceDuplicatePolicy;
+  readonly aggregateMethod?: TraceAggregateMethod;
+} {
+  const policyNode = parameters.duplicateTimePolicy;
+  const structuredPolicy = rec(policyNode);
+  const duplicatePolicy = (
+    typeof policyNode === 'string' ? policyNode : structuredPolicy?.policy
+  ) as TraceDuplicatePolicy | undefined;
+  const structuredAggregate = structuredPolicy?.aggregate;
+  const aggregateMethod = (
+    parameters.aggregateMethod ??
+    parameters.duplicateTimeAggregate ??
+    (typeof structuredAggregate === 'string'
+      ? structuredAggregate
+      : rec(structuredAggregate)?.method)
+  ) as TraceAggregateMethod | undefined;
+  return {
+    ...(duplicatePolicy ? { duplicatePolicy } : {}),
+    ...(aggregateMethod ? { aggregateMethod } : {}),
+  };
+}
+
+function traceValues(node: Record<string, unknown> | undefined): (number | null)[] {
+  return (arr(node?.values) ?? []).map((value) =>
+    value === null ? null : typeof value === 'number' && Number.isFinite(value) ? value : null,
+  );
+}
+
+function traceNormalizationFrom(
+  parameters: Record<string, unknown>,
+  displayWindow: TraceWindow,
+): TraceNormalization | undefined {
+  const normalization = rec(parameters.normalization);
+  const method = normalization?.method as TraceNormalization['method'] | undefined;
+  if (!normalization || !method) return undefined;
+  const statisticsWindow = traceWindowFrom(rec(normalization.statisticsWindow), displayWindow.unit);
+  return statisticsWindow ? { method, statisticsWindow } : undefined;
+}
+
+function prepareTrace(
+  input: TraceSeriesInput,
+  window: TraceWindow,
+  parameters: Record<string, unknown>,
+  targetValueUnit?: string,
+  normalization?: TraceNormalization,
+) {
+  return prepareTraceSeries(input, {
+    window,
+    ...traceDuplicateOptions(parameters),
+    ...(targetValueUnit ? { targetValueUnit } : {}),
+    ...(normalization ? { normalization } : {}),
+  });
+}
+
+function traceCell(values: readonly (string | number | null)[]): string | number | null {
+  return values.length === 1 ? values[0] : JSON.stringify(values);
+}
+
+function traceUncertaintyTransform(
+  declared: Record<string, unknown>,
+  prepared: PreparedTraceSeries,
+  value: unknown,
+  dispersion: boolean,
+): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const sourceUnit = typeof declared.unit === 'string' ? declared.unit : prepared.valueUnit;
+  if (!prepared.normalization) {
+    const converted = sourceUnit === prepared.valueUnit
+      ? value
+      : convert(value, sourceUnit, prepared.valueUnit);
+    return Number.isFinite(converted) ? converted : null;
+  }
+  const sourceValue = sourceUnit === prepared.sourceValueUnit
+    ? value
+    : convert(value, sourceUnit, prepared.sourceValueUnit);
+  return applyTraceNormalization(sourceValue, prepared.normalization, dispersion);
+}
+
+function traceUncertaintyDifferenceTransform(
+  declared: Record<string, unknown>,
+  prepared: PreparedTraceSeries,
+  lower: number,
+  upper: number,
+): number {
+  const sourceUnit = typeof declared.unit === 'string' ? declared.unit : prepared.valueUnit;
+  const targetUnit = prepared.normalization ? prepared.sourceValueUnit : prepared.valueUnit;
+  const convertedDifference = convertDifference(lower, upper, sourceUnit, targetUnit);
+  return prepared.normalization
+    ? applyTraceNormalization(convertedDifference, prepared.normalization, true)
+    : convertedDifference;
+}
+
+function assertUncertaintyAffineSequence(
+  sourceValues: readonly unknown[],
+  transformedValues: readonly (number | null)[],
+  transformDifference?: (lower: number, upper: number) => number | null,
+  effectEpsilonMultiples?: number,
+): void {
+  const pairs = sourceValues.flatMap((source, index) =>
+    typeof source === 'number' && Number.isFinite(source) &&
+    typeof transformedValues[index] === 'number' && Number.isFinite(transformedValues[index])
+      ? [{ source, transformed: transformedValues[index] as number }]
+      : []);
+  pairs.sort((left, right) => left.source - right.source || left.transformed - right.transformed);
+  for (let index = 1; index < pairs.length; index++) {
+    const previous = pairs[index - 1];
+    const current = pairs[index];
+    if (current.source === previous.source) continue;
+    const actualDifference = current.transformed - previous.transformed;
+    if (!(actualDifference > 0) || !Number.isFinite(actualDifference)) {
+      throw new Error('uncertainty affine transform collapsed distinct values below binary64 resolution');
+    }
+    if (effectEpsilonMultiples === undefined || !transformDifference) continue;
+    const expectedDifference = transformDifference(previous.source, current.source);
+    if (
+      expectedDifference === null ||
+      !(expectedDifference > 0) ||
+      !Number.isFinite(expectedDifference) ||
+      !binary64EffectWasPreserved(expectedDifference, actualDifference, effectEpsilonMultiples)
+    ) {
+      throw new Error('uncertainty affine transform materially distorted distinct values at binary64 resolution');
+    }
+  }
+}
+
+function traceUncertaintyCells(
+  uncertainty: Record<string, unknown> | undefined,
+  sourceOrdinal: number | undefined,
+  prepared: PreparedTraceSeries,
+  displayedValue: number | null,
+): readonly [number | null, number | null, string | null] {
+  const kind = typeof uncertainty?.kind === 'string' ? uncertainty.kind : undefined;
+  if (!kind || kind === 'none' || sourceOrdinal === undefined) {
+    const reason = typeof uncertainty?.reason === 'string' ? uncertainty.reason : undefined;
+    return [null, null, kind === 'none' ? `none${reason ? ` (${reason})` : ''}` : null];
+  }
+  const declared = uncertainty ?? {};
+  const effectEpsilonMultiples = prepared.normalization ? 32 : 8;
+  const transform = (value: unknown, dispersion: boolean): number | null =>
+    traceUncertaintyTransform(declared, prepared, value, dispersion);
+  const describe = (extra: string[] = []): string => [kind, ...extra].join('; ');
+  const sampleCount = arr(declared.sampleCount)?.[sourceOrdinal];
+  if (kind === 'standard_deviation' || kind === 'standard_error') {
+    const description = describe([
+      `basis=${String(declared.basis ?? 'unspecified')}`,
+      ...(typeof sampleCount === 'number' ? [`sampleCount=${sampleCount}`] : []),
+    ]);
+    const dispersion = transform(arr(declared.values)?.[sourceOrdinal], true);
+    if (displayedValue === null || dispersion === null) return [null, null, description];
+    const lower = displayedValue - dispersion;
+    const upper = displayedValue + dispersion;
+    if (!Number.isFinite(lower) || !Number.isFinite(upper)) {
+      throw new Error('uncertainty transformation produced a non-finite bound');
+    }
+    if (
+      dispersion !== 0 &&
+      (!binary64EffectWasPreserved(dispersion, displayedValue - lower, effectEpsilonMultiples) ||
+        !binary64EffectWasPreserved(dispersion, upper - displayedValue, effectEpsilonMultiples))
+    ) {
+      throw new Error('uncertainty dispersion is distorted below binary64 resolution');
+    }
+    return [lower, upper, description];
+  }
+  const sourceLower = arr(declared.lower)?.[sourceOrdinal];
+  const sourceUpper = arr(declared.upper)?.[sourceOrdinal];
+  const lower = transform(sourceLower, false);
+  const upper = transform(sourceUpper, false);
+  if (
+    typeof sourceLower === 'number' &&
+    typeof sourceUpper === 'number' &&
+    sourceLower < sourceUpper &&
+    lower !== null &&
+    upper !== null &&
+    lower === upper
+  ) {
+    throw new Error('uncertainty interval collapsed below binary64 resolution');
+  }
+  if (
+    typeof sourceLower === 'number' &&
+    typeof sourceUpper === 'number' &&
+    sourceLower < sourceUpper &&
+    lower !== null &&
+    upper !== null
+  ) {
+    const expectedWidth = traceUncertaintyDifferenceTransform(
+      declared,
+      prepared,
+      sourceLower,
+      sourceUpper,
+    );
+    const actualWidth = upper - lower;
+    if (
+      expectedWidth !== null &&
+      expectedWidth > 0 &&
+      Number.isFinite(expectedWidth) &&
+      (!Number.isFinite(actualWidth) ||
+        !binary64EffectWasPreserved(expectedWidth, actualWidth, effectEpsilonMultiples))
+    ) {
+      throw new Error('uncertainty interval width is distorted below binary64 resolution');
+    }
+  }
+  const description = describe([
+    ...(typeof declared.method === 'string' ? [`method=${declared.method}`] : []),
+    ...(typeof declared.level === 'number' ? [`level=${declared.level}`] : []),
+    ...(typeof declared.coverage === 'string' ? [`coverage=${declared.coverage}`] : []),
+    ...(typeof declared.lowerQuantile === 'number'
+      ? [`lowerQuantile=${declared.lowerQuantile}`]
+      : []),
+    ...(typeof declared.upperQuantile === 'number'
+      ? [`upperQuantile=${declared.upperQuantile}`]
+      : []),
+    ...(typeof declared.basis === 'string' ? [`basis=${declared.basis}`] : []),
+    ...(typeof sampleCount === 'number' ? [`sampleCount=${sampleCount}`] : []),
+  ]);
+  return [lower, upper, description];
+}
+
+function traceUncertaintyPresentation(
+  uncertainty: Record<string, unknown> | undefined,
+  prepared: PreparedTraceSeries,
+): TracePanelSpec['series'][number]['uncertainty'] | undefined {
+  const kind = typeof uncertainty?.kind === 'string' ? uncertainty.kind : 'none';
+  if (kind === 'none') return undefined;
+  const registeredStyle = (UNCERTAINTY_STYLES_BY_KIND as Readonly<Record<string, {
+    readonly mark: string;
+    readonly label: string;
+  }>>)[kind];
+  if (!registeredStyle || (registeredStyle.mark !== 'band' && registeredStyle.mark !== 'whisker')) {
+    throw new Error(`uncertainty kind ${kind} has no registered drawable mark`);
+  }
+  const basis = String(uncertainty?.basis ?? 'unspecified basis');
+  const counts = prepared.observations
+    .flatMap((observation) => observation.sourceOrdinals.length === 1
+      ? [arr(uncertainty?.sampleCount)?.[observation.sourceOrdinals[0]]]
+      : [])
+    .filter((value): value is number => typeof value === 'number' && Number.isInteger(value));
+  const uniqueCounts = [...new Set(counts)].sort((a, b) => a - b);
+  const countLabel = uniqueCounts.length === 0
+    ? 'not supplied'
+    : uniqueCounts.length === 1
+      ? String(uniqueCounts[0])
+      : `${uniqueCounts[0]}–${uniqueCounts[uniqueCounts.length - 1]}, varying by point; exact n is in the table`;
+  const substitutions: Readonly<Record<string, string>> = {
+    level: typeof uncertainty?.level === 'number'
+      ? formatNumber(uncertainty.level * 100)
+      : 'not supplied',
+    coverage: String(uncertainty?.coverage ?? 'not supplied'),
+    method: String(uncertainty?.method ?? 'not supplied'),
+    lowerQuantile: typeof uncertainty?.lowerQuantile === 'number'
+      ? formatNumber(uncertainty.lowerQuantile)
+      : 'not supplied',
+    upperQuantile: typeof uncertainty?.upperQuantile === 'number'
+      ? formatNumber(uncertainty.upperQuantile)
+      : 'not supplied',
+    basis,
+    sampleCount: countLabel,
+    reason: String(uncertainty?.reason ?? 'not supplied'),
+  };
+  const label = registeredStyle.label.replace(/\{(\w+)\}/g, (_whole, key: string) => {
+    const replacement = substitutions[key];
+    if (replacement === undefined) {
+      throw new Error(`uncertainty style ${kind} has unresolved label placeholder ${key}`);
+    }
+    return replacement;
+  });
+  if (/\{\w+\}/.test(label)) {
+    throw new Error(`uncertainty style ${kind} has an unresolved label placeholder`);
+  }
+  return {
+    kind,
+    mark: registeredStyle.mark,
+    label,
+  };
+}
+
+function traceUncertaintyArrays(
+  uncertainty: Record<string, unknown> | undefined,
+  prepared: PreparedTraceSeries,
+): {
+  readonly uncertaintyLower?: readonly (number | null)[];
+  readonly uncertaintyUpper?: readonly (number | null)[];
+  readonly uncertainty?: TracePanelSpec['series'][number]['uncertainty'];
+} {
+  const kind = typeof uncertainty?.kind === 'string' ? uncertainty.kind : 'none';
+  if (kind === 'none') return {};
+  const lower: (number | null)[] = [];
+  const upper: (number | null)[] = [];
+  for (const observation of prepared.observations) {
+    if (observation.sourceOrdinals.length !== 1) {
+      throw new Error('uncertainty cannot be synthesized for an aggregated duplicate-time group');
+    }
+    const [lo, hi] = traceUncertaintyCells(
+      uncertainty,
+      observation.sourceOrdinals[0],
+      prepared,
+      observation.value,
+    );
+    // A declared interval remains inspectable in the table/canonical request, but it cannot
+    // make a missing central observation visually present. Break the band at the same null
+    // that breaks the trace instead of synthesizing continuous evidence through the gap.
+    lower.push(observation.value === null ? null : lo);
+    upper.push(observation.value === null ? null : hi);
+  }
+  const transformDifference = (lowerValue: number, upperValue: number): number | null =>
+    traceUncertaintyDifferenceTransform(uncertainty ?? {}, prepared, lowerValue, upperValue);
+  const effectEpsilonMultiples = prepared.normalization ? undefined : 8;
+  if (kind === 'standard_deviation' || kind === 'standard_error') {
+    const sourceDispersions = prepared.observations.map((observation) =>
+      observation.sourceOrdinals.length === 1
+        ? arr(uncertainty?.values)?.[observation.sourceOrdinals[0]]
+        : null);
+    const transformedDispersions = sourceDispersions.map((value) =>
+      traceUncertaintyTransform(uncertainty ?? {}, prepared, value, true));
+    assertUncertaintyAffineSequence(
+      sourceDispersions,
+      transformedDispersions,
+      transformDifference,
+      effectEpsilonMultiples,
+    );
+  } else {
+    const sourceLower = prepared.observations.map((observation) =>
+      observation.sourceOrdinals.length === 1
+        ? arr(uncertainty?.lower)?.[observation.sourceOrdinals[0]]
+        : null);
+    const sourceUpper = prepared.observations.map((observation) =>
+      observation.sourceOrdinals.length === 1
+        ? arr(uncertainty?.upper)?.[observation.sourceOrdinals[0]]
+        : null);
+    assertUncertaintyAffineSequence(sourceLower, lower, transformDifference, effectEpsilonMultiples);
+    assertUncertaintyAffineSequence(sourceUpper, upper, transformDifference, effectEpsilonMultiples);
+  }
+  return {
+    uncertaintyLower: lower,
+    uncertaintyUpper: upper,
+    uncertainty: traceUncertaintyPresentation(uncertainty, prepared),
+  };
+}
+
+function traceSeriesHasCompleteDrawableUncertainty(entry: TracePanelSpec['series'][number]): boolean {
+  const lower = entry.uncertaintyLower;
+  const upper = entry.uncertaintyUpper;
+  if (!lower || !upper || !entry.uncertainty) return false;
+  let observed = false;
+  for (let index = 0; index < entry.series.values.length; index++) {
+    if (entry.series.values[index] === null) continue;
+    observed = true;
+    if (
+      typeof lower[index] !== 'number' || !Number.isFinite(lower[index]) ||
+      typeof upper[index] !== 'number' || !Number.isFinite(upper[index])
+    ) return false;
+  }
+  return observed;
+}
+
+function traceUncertaintyLengthMismatch(
+  uncertainty: Record<string, unknown> | undefined,
+  expected: number,
+): { readonly key: string; readonly observed: number } | undefined {
+  if (!uncertainty || uncertainty.kind === 'none') return undefined;
+  for (const key of ['values', 'lower', 'upper', 'sampleCount'] as const) {
+    const values = arr(uncertainty[key]);
+    if (values && values.length !== expected) return { key, observed: values.length };
+  }
+  return undefined;
+}
+
+function traceUncertaintyValidationError(
+  uncertainty: Record<string, unknown> | undefined,
+  valueUnit: string,
+  sourceValues: readonly (number | null)[],
+  skillId: string,
+  instancePath: string,
+): CortexelError | undefined {
+  const kind = typeof uncertainty?.kind === 'string' ? uncertainty.kind : 'none';
+  if (kind === 'none') return undefined;
+  if (!(SKILL_CATALOG[skillId].uncertaintySupport as readonly string[]).includes(kind)) {
+    return makeError({
+      code: 'SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL',
+      stage: 'science',
+      instancePath: `${instancePath}/kind`,
+      skillId,
+      message: `${skillId} does not support uncertainty kind ${kind}.`,
+    });
+  }
+  if (kind === 'credible_interval') {
+    return makeError({
+      code: 'PROVENANCE_ATTESTATION_UNVERIFIED',
+      stage: 'provenance',
+      instancePath: `${instancePath}/kind`,
+      skillId,
+      message: 'a credible interval requires a verified external posterior attestation; request data cannot author that assurance.',
+    });
+  }
+  const uncertaintyUnit = typeof uncertainty?.unit === 'string' ? uncertainty.unit : undefined;
+  if (
+    uncertaintyUnit &&
+    (dimensionOf(uncertaintyUnit) !== dimensionOf(valueUnit) ||
+      (dimensionOf(valueUnit) === 'simulator_defined' && uncertaintyUnit !== valueUnit))
+  ) {
+    return makeError({
+      code: 'SCIENCE_UNIT_DIMENSION_MISMATCH',
+      stage: 'science',
+      instancePath: `${instancePath}/unit`,
+      skillId,
+      message: `uncertainty unit ${uncertaintyUnit} is not compatible with series unit ${valueUnit}.`,
+    });
+  }
+  if (kind === 'standard_deviation' || kind === 'standard_error') {
+    const values = arr(uncertainty?.values) ?? [];
+    const sampleCount = arr(uncertainty?.sampleCount) ?? [];
+    const invalid = values.findIndex((value) => typeof value === 'number' && value < 0);
+    if (invalid >= 0) {
+      return makeError({
+        code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+        stage: 'science',
+        instancePath: `${instancePath}/values/${invalid}`,
+        skillId,
+        message: `${kind} is a non-negative distance; a negative dispersion cannot be drawn.`,
+      });
+    }
+    for (let index = 0; index < Math.min(values.length, sampleCount.length); index++) {
+      if ((values[index] === null) !== (sampleCount[index] === null)) {
+        return makeError({
+          code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+          stage: 'science',
+          instancePath: `${instancePath}/sampleCount/${index}`,
+          skillId,
+          message: `${kind} and sampleCount must be present or missing together at every point.`,
+        });
+      }
+      if (sourceValues[index] === null && values[index] !== null) {
+        return makeError({
+          code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+          stage: 'science',
+          instancePath: `${instancePath}/values/${index}`,
+          skillId,
+          message: `uncertainty at index ${index} cannot qualify a missing central observation. The uncertainty value and sample count must also be null.`,
+        });
+      }
+    }
+  }
+  const lower = arr(uncertainty?.lower);
+  const upper = arr(uncertainty?.upper);
+  if (lower && upper) {
+    const sampleCount = arr(uncertainty?.sampleCount);
+    for (let index = 0; index < Math.min(lower.length, upper.length); index++) {
+      const lo = lower[index];
+      const hi = upper[index];
+      if ((lo === null) !== (hi === null)) {
+        return makeError({
+          code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+          stage: 'science',
+          instancePath: `${instancePath}/${hi === null ? 'upper' : 'lower'}/${index}`,
+          skillId,
+          message: `lower and upper uncertainty bounds must be present or missing together at index ${index}.`,
+        });
+      }
+      if (sampleCount && index < sampleCount.length && ((lo === null) !== (sampleCount[index] === null))) {
+        return makeError({
+          code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+          stage: 'science',
+          instancePath: `${instancePath}/sampleCount/${index}`,
+          skillId,
+          message: `uncertainty bounds and sampleCount must share one missingness mask at index ${index}.`,
+        });
+      }
+      if (sourceValues[index] === null && lo !== null) {
+        return makeError({
+          code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+          stage: 'science',
+          instancePath: `${instancePath}/lower/${index}`,
+          skillId,
+          message: `uncertainty bounds at index ${index} cannot qualify a missing central observation. Both bounds${sampleCount ? ' and sampleCount' : ''} must also be null.`,
+        });
+      }
+      if (typeof lo === 'number' && typeof hi === 'number' && lo > hi) {
+        return makeError({
+          code: 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID',
+          stage: 'science',
+          instancePath: `${instancePath}/lower/${index}`,
+          skillId,
+          message: `uncertainty lower bound ${lo} exceeds upper bound ${hi}.`,
+        });
+      }
+    }
+  }
+  if (
+    kind === 'quantile_interval' &&
+    typeof uncertainty?.lowerQuantile === 'number' &&
+    typeof uncertainty?.upperQuantile === 'number' &&
+    !(uncertainty.lowerQuantile < uncertainty.upperQuantile)
+  ) {
+    return makeError({
+      code: 'SCIENCE_UNCERTAINTY_LEVEL_INVALID',
+      stage: 'science',
+      instancePath: `${instancePath}/upperQuantile`,
+      skillId,
+      message: 'the lower uncertainty quantile must be strictly below the upper quantile.',
+    });
+  }
+  return undefined;
+}
+
+function traceOperation(
+  inputPayload: unknown,
+  prepared: PreparedTraceSeries,
+  window: TraceWindow,
+  parameters: Record<string, unknown>,
+  uncertainty?: {
+    readonly lower?: readonly (number | null)[];
+    readonly upper?: readonly (number | null)[];
+    readonly conversion?: ConversionReceipt;
+  },
+): DerivationOperation {
+  const duplicate = traceDuplicateOptions(parameters);
+  const retainedSourceCount = prepared.replicateCounts.reduce((sum, count) => sum + count, 0);
+  return {
+    id: `trace.prepare.${prepared.id}`,
+    algorithm: 'cortexel.trace.prepare_series',
+    algorithmRevision: 1,
+    parameters: {
+      window,
+      duplicateTimePolicy: duplicate.duplicatePolicy ?? 'reject_if_present',
+      ...(duplicate.aggregateMethod ? { aggregateMethod: duplicate.aggregateMethod } : {}),
+      targetTimeUnit: prepared.timeUnit,
+      targetValueUnit: prepared.valueUnit,
+      ...(prepared.normalization ? { normalization: prepared.normalization.method } : {}),
+    },
+    inputDigest: canonicalDigest(inputPayload),
+    outputDigest: canonicalDigest({
+      id: prepared.id,
+      observations: prepared.observations,
+      timeUnit: prepared.timeUnit,
+      valueUnit: prepared.valueUnit,
+      sourceTimeUnit: prepared.sourceTimeUnit,
+      sourceValueUnit: prepared.sourceValueUnit,
+      ...(uncertainty?.lower ? { uncertaintyLower: uncertainty.lower } : {}),
+      ...(uncertainty?.upper ? { uncertaintyUpper: uncertainty.upper } : {}),
+    }),
+    receipt: {
+      inputObservationCount: prepared.inputCount,
+      retainedObservationCount: retainedSourceCount,
+      outputRowCount: prepared.outputCount,
+      excludedBelowWindow: prepared.excludedBelow,
+      excludedAboveWindow: prepared.excludedAbove,
+      excludedOutOfWindow: prepared.excludedBelow + prepared.excludedAbove,
+      missingObservationCount: prepared.missingCount,
+      duplicateGroupCount: prepared.duplicateGroups,
+      reordered: prepared.reordered,
+      sourceOrderBoundByInputDigest: true,
+      retainedSourceOrdinalDigest: canonicalDigest(
+        prepared.observations.flatMap((observation) => observation.sourceOrdinals),
+      ),
+      ...(prepared.timeConversion ? { timeConversion: prepared.timeConversion } : {}),
+      ...(prepared.valueConversion ? { valueConversion: prepared.valueConversion } : {}),
+      ...(prepared.timeOffset ? { timeOffset: prepared.timeOffset } : {}),
+      ...(prepared.normalization ? { normalization: prepared.normalization } : {}),
+      ...(uncertainty?.lower || uncertainty?.upper
+        ? {
+          uncertaintyTransformed: true,
+          ...(uncertainty.conversion ? { uncertaintyConversion: uncertainty.conversion } : {}),
+        }
+        : {}),
+    },
+  };
+}
+
+function traceDerivedFacts(
+  series: readonly PreparedTraceSeries[],
+  aggregateMethod?: TraceAggregateMethod,
+  uncertainties: readonly (Record<string, unknown> | undefined)[] = [],
+): Partial<DisclosureFacts> {
+  const conversions: string[] = [];
+  for (const prepared of series) {
+    if (prepared.timeConversion) {
+      conversions.push(
+        `${prepared.id}: ${prepared.timeConversion.from} -> ${prepared.timeConversion.to} (factor ${prepared.timeConversion.factor})`,
+      );
+    }
+    if (prepared.valueConversion) {
+      conversions.push(
+        `${prepared.id}: ${prepared.valueConversion.from} -> ${prepared.valueConversion.to} (factor ${prepared.valueConversion.factor})`,
+      );
+    }
+    if (prepared.timeOffset && prepared.timeOffset.sourceUnit !== prepared.timeOffset.displayUnit) {
+      conversions.push(
+        `${prepared.id} offset: ${prepared.timeOffset.sourceUnit} -> ${prepared.timeOffset.displayUnit} (factor ${conversionFactor(prepared.timeOffset.sourceUnit, prepared.timeOffset.displayUnit)})`,
+      );
+    }
+  }
+  for (let index = 0; index < Math.min(series.length, uncertainties.length); index++) {
+    const uncertainty = uncertainties[index];
+    const sourceUnit = typeof uncertainty?.unit === 'string' ? uncertainty.unit : undefined;
+    if (!sourceUnit || uncertainty?.kind === 'none') continue;
+    const targetUnit = series[index].normalization
+      ? series[index].sourceValueUnit
+      : series[index].valueUnit;
+    if (sourceUnit !== targetUnit) {
+      conversions.push(
+        `${series[index].id} uncertainty: ${sourceUnit} -> ${targetUnit} (factor ${conversionFactor(sourceUnit, targetUnit)})`,
+      );
+    }
+  }
+  const duplicateGroups = series.reduce((sum, prepared) => sum + prepared.duplicateGroups, 0);
+  const missingOutputRows = series.reduce(
+    (sum, prepared) => sum + prepared.observations.filter((observation) => observation.value === null).length,
+    0,
+  );
+  const missingAggregateReplicateCount = series.reduce(
+    (sum, prepared) => sum + prepared.observations.reduce(
+      (seriesSum, observation) => seriesSum + (
+        observation.replicateCount > 1 && observation.value !== null
+          ? observation.sourceValues.filter((value) => value === null).length
+          : 0
+      ),
+      0,
+    ),
+    0,
+  );
+  return {
+    excludedOutOfWindow: series.reduce(
+      (sum, prepared) => sum + prepared.excludedBelow + prepared.excludedAbove,
+      0,
+    ),
+    missingValueCount: missingOutputRows,
+    ...(missingAggregateReplicateCount > 0 ? { missingAggregateReplicateCount } : {}),
+    ...(conversions.length > 0 ? { unitConversions: conversions } : {}),
+    ...(duplicateGroups > 0 && aggregateMethod
+      ? { duplicateTimeAggregateMethod: aggregateMethod }
+      : {}),
+  };
+}
+
+function tracePreparationError(
+  error: unknown,
+  skillId: string,
+  instancePath: string,
+): CortexelError {
+  const message = error instanceof Error ? error.message : 'trace preparation failed';
+  let code: ErrorCode = 'INTERNAL_INVARIANT_VIOLATED';
+  let stage: ErrorStage = 'internal';
+  if (message.includes('equal length')) {
+    code = 'SEMANTIC_LENGTH_MISMATCH';
+    stage = 'semantic';
+  } else if (message.includes('duplicate')) {
+    code = 'SCIENCE_DUPLICATE_TIME_POLICY';
+    stage = 'science';
+  } else if (
+    message.includes('binary64 resolution') ||
+    message.includes('overflowed') ||
+    message.includes('overflows') ||
+    message.includes('underflowed') ||
+    message.includes('underflows to zero') ||
+    message.includes('unrepresentable binary64') ||
+    message.includes('collapsed') ||
+    message.includes('clock conversion produced a non-finite time')
+  ) {
+    code = 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE';
+    stage = 'science';
+  } else if (message.includes('normalization') || message.includes('z_score') || message.includes('min_max')) {
+    code = 'SCIENCE_NORMALIZATION_UNVERIFIABLE';
+    stage = 'science';
+  } else if (message.includes('uncertainty cannot be synthesized')) {
+    code = 'SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL';
+    stage = 'science';
+  } else if (message.includes('uncertainty')) {
+    code = 'SCIENCE_UNCERTAINTY_BOUNDS_INVALID';
+    stage = 'science';
+  } else if (message.includes('convert') || message.includes('dimension') || message.includes('unit')) {
+    code = 'SCIENCE_UNIT_DIMENSION_MISMATCH';
+    stage = 'science';
+  }
+  return makeError({
+    code,
+    stage,
+    instancePath,
+    skillId,
+    message: code === 'INTERNAL_INVARIANT_VIOLATED'
+      ? 'validated trace data could not be transformed without violating a finite-output invariant'
+      : message,
+  });
+}
+
 /**
  * Dispatch a validated request to its family compiler.
  *
- * Every stable family now derives (via src/analysis) and compiles to a real figure. The
- * derivation is the SAME code the golden vectors certify, so the drawn figure and the
- * hand-checked arithmetic cannot diverge. A family whose input is genuinely absent falls
- * back to an explicit `pending` state rather than a fabricated figure.
+ * Specialized families derive through audited analysis helpers before geometry is built.
+ * Other registered families still use their legacy compiler until their scientific
+ * postconditions are closed; the dispatcher must therefore preserve typed refusal and
+ * pending outcomes rather than imply that every renderer is already contract-complete.
  */
 function compile(
   validated: ValidatedRequest,
-  context: (rowsTotal: number) => CompileContext,
+  context: (rowsTotal: number, extraFacts?: Partial<DisclosureFacts>) => CompileContext,
   pairwiseOperations: number,
-): { plan: RenderPlanV1; rendererId: string } | { pending: string } {
+): CompileOutcome {
   const request = validated.canonicalRequest;
   const data = rec(request.data) ?? {};
   const parameters = rec(request.parameters) ?? {};
   const skillId = validated.skillId;
   const rendererId = SKILL_CATALOG[skillId].renderer.id;
 
-  const done = (plan: RenderPlanV1) => ({ plan, rendererId });
+  const done = (
+    plan: RenderPlanV1,
+    derivationOperations: readonly DerivationOperation[] = [],
+    derivedDisclosureFacts: Partial<DisclosureFacts> = {},
+  ): CompiledFigure => ({ plan, rendererId, derivationOperations, derivedDisclosureFacts });
+  const fail = (
+    code: ErrorCode,
+    stage: ErrorStage,
+    message: string,
+    instancePath = '',
+  ): CompileOutcome => ({
+    errors: [makeError({ code, stage, message, instancePath, skillId })],
+  });
 
   // ---- population rate -----------------------------------------------------
   if (skillId === 'neuro.population_rate') {
@@ -334,14 +1111,617 @@ function compile(
     return done(compileStepFigure(context(values.length), edges.slice(0, -1), edges.slice(1), values, 'time', 'rate (Hz)', skillId));
   }
 
-  // ---- trace families ------------------------------------------------------
-  if (rendererId === 'figure.analog_trace' || rendererId === 'figure.multisignal_trace' || rendererId === 'figure.compartment_trace' || rendererId === 'figure.synaptic_weight_trace') {
+  // ---- analog trace --------------------------------------------------------
+  if (skillId === 'neuro.analog_trace') {
+    const window = traceWindowFrom(rec(data.window));
+    const rawSeries = arr(data.series) ?? [];
+    const seriesIds = strings(data.seriesIds);
+    if (!window || rawSeries.length === 0) return { pending: rendererId };
+
+    const inputs = rawSeries.map((value, index): TraceSeriesInput => {
+      const entry = rec(value) ?? {};
+      const time = rec(entry.time) ?? {};
+      const values = rec(entry.values) ?? {};
+      return {
+        id: seriesIds[index] ?? `series-${index + 1}`,
+        label: typeof entry.label === 'string' ? entry.label : seriesIds[index] ?? `Series ${index + 1}`,
+        observationKind: (entry.observationKind as TraceObservationKind) ?? 'point_sample',
+        times: numbers(time.values),
+        timeUnit: (time.unit as string) ?? window.unit,
+        values: traceValues(values),
+        valueUnit: (values.unit as string) ?? '1',
+      };
+    });
+    const analogUncertainty = rec(parameters.uncertainty);
+    if (analogUncertainty?.kind !== undefined && analogUncertainty.kind !== 'none' && inputs.length !== 1) {
+      return fail(
+        'SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL',
+        'science',
+        'registry 1.0 analog uncertainty is figure-level and therefore unambiguous only for exactly one series. Use separate figures or declare uncertainty:none for a multi-series trace.',
+        '/parameters/uncertainty',
+      );
+    }
+    if (inputs.length === 1) {
+      const uncertaintyError = traceUncertaintyValidationError(
+        analogUncertainty,
+        inputs[0].valueUnit,
+        inputs[0].values,
+        skillId,
+        '/parameters/uncertainty',
+      );
+      if (uncertaintyError) return { errors: [uncertaintyError] };
+      const mismatch = traceUncertaintyLengthMismatch(analogUncertainty, inputs[0].values.length);
+      if (mismatch) {
+        return fail(
+          'SEMANTIC_LENGTH_MISMATCH',
+          'semantic',
+          `analog uncertainty.${mismatch.key} has ${mismatch.observed} entries for ${inputs[0].values.length} samples.`,
+          `/parameters/uncertainty/${mismatch.key}`,
+        );
+      }
+    }
+
+    const layout = parameters.layout as string;
+    if (layout === 'shared_axis' && inputs.length > CATEGORICAL_SERIES_STYLES.length) {
+      return fail(
+        'RENDER_SERIES_LIMIT_EXCEEDED',
+        'render',
+        `${inputs.length} series were assigned to one shared axis, but the registered palette has only ${CATEGORICAL_SERIES_STYLES.length} stable distinguishable style tuples.`,
+        '/data/series',
+      );
+    }
+    const panels: TracePanelSpec[] = [];
+    if (layout === 'small_multiples') {
+      const groupBy = (parameters.groupBy as string) ?? 'series';
+      const groups = new Map<string, number[]>();
+      for (let index = 0; index < inputs.length; index++) {
+        const key = groupBy === 'quantity_kind'
+          ? String(rec(rawSeries[index]) && rec(rec(rawSeries[index])!.values)?.kind)
+          : inputs[index].id;
+        const members = groups.get(key) ?? [];
+        members.push(index);
+        groups.set(key, members);
+      }
+      for (const [key, indexes] of groups) {
+        if (indexes.length > CATEGORICAL_SERIES_STYLES.length) {
+          return fail(
+            'RENDER_SERIES_LIMIT_EXCEEDED',
+            'render',
+            `panel ${key} would overlay ${indexes.length} series, above the ${CATEGORICAL_SERIES_STYLES.length}-style distinguishability limit.`,
+            '/data/series',
+          );
+        }
+        if (groupBy === 'quantity_kind') {
+          const dimensions = new Set(indexes.map((index) => dimensionOf(inputs[index].valueUnit)));
+          const incompatible = indexes.length > 1 && indexes
+            .slice(1)
+            .some((index) => !axesAreCompatible(inputs[indexes[0]].valueUnit, inputs[index].valueUnit));
+          if (dimensions.size > 1 || incompatible) {
+            return fail(
+              'SCIENCE_UNIT_DIMENSION_MISMATCH',
+              'science',
+              `quantity-kind group ${key} cannot share one numeric axis. Use groupBy=series; Cortexel will not force dimensionally incompatible or simulator-defined state variables into a comparison.`,
+              '/parameters/groupBy',
+            );
+          }
+        }
+        const targetUnit = inputs[indexes[0]].valueUnit;
+        const prepared: TracePanelSpec['series'][number][] = [];
+        for (const index of indexes) {
+          try {
+            const series = prepareTrace(inputs[index], window, parameters, targetUnit);
+            prepared.push({
+              series,
+              styleIndex: index,
+              tableMetadata: { sourceIndex: index },
+              ...traceUncertaintyArrays(analogUncertainty, series),
+            });
+          } catch (error) {
+            return { errors: [tracePreparationError(error, skillId, `/data/series/${index}`)] };
+          }
+        }
+        panels.push({
+          id: `panel-${panels.length + 1}`,
+          label: groupBy === 'series' ? prepared[0].series.label : key,
+          yLabel: `value (${unitLabel(targetUnit)})`,
+          series: prepared,
+        });
+      }
+    } else {
+      const targetUnit = (parameters.valueUnit as string) ?? inputs[0].valueUnit;
+      const prepared: TracePanelSpec['series'][number][] = [];
+      for (let index = 0; index < inputs.length; index++) {
+        try {
+          const series = prepareTrace(inputs[index], window, parameters, targetUnit);
+          prepared.push({
+            series,
+            styleIndex: index,
+            tableMetadata: { sourceIndex: index },
+            ...traceUncertaintyArrays(analogUncertainty, series),
+          });
+        } catch (error) {
+          return { errors: [tracePreparationError(error, skillId, `/data/series/${index}`)] };
+        }
+      }
+      panels.push({
+        id: 'main',
+        label: 'Shared value axis',
+        yLabel: `value (${unitLabel(targetUnit)})`,
+        series: prepared,
+      });
+    }
+    const allEntries = panels.flatMap((panel) => panel.series);
+    const allPrepared = allEntries.map((entry) => entry.series);
+    const empty = allPrepared.find((prepared) => prepared.outputCount === 0);
+    if (empty) {
+      return fail(
+        'RENDER_NO_DATA',
+        'render',
+        `series ${empty.id} has no observation inside the declared display window. Cortexel refuses an empty trace because it is visually indistinguishable from a measured flat or silent signal.`,
+        '/data/window',
+      );
+    }
+    const rowsTotal = allPrepared.reduce(
+      (total, entry) => total + entry.outputCount,
+      0,
+    );
+    const duplicate = traceDuplicateOptions(parameters);
+    const uncertaintyDeclared = analogUncertainty?.kind !== undefined && analogUncertainty.kind !== 'none';
+    const derivedFacts: Partial<DisclosureFacts> = {
+      ...traceDerivedFacts(
+        allPrepared,
+        duplicate.aggregateMethod,
+        allPrepared.map(() => analogUncertainty),
+      ),
+      uncertaintySeriesDeclared: uncertaintyDeclared ? 1 : 0,
+      uncertaintySeriesShown: allEntries.filter(traceSeriesHasCompleteDrawableUncertainty).length,
+      uncertaintySeriesTotal: allEntries.length,
+    };
+    const operations = allEntries.map((entry) => {
+      const sourceIndex = Number(entry.tableMetadata?.sourceIndex ?? 0);
+      const uncertaintySourceUnit = typeof analogUncertainty?.unit === 'string'
+        ? analogUncertainty.unit
+        : entry.series.valueUnit;
+      const uncertaintyTargetUnit = entry.series.normalization
+        ? entry.series.sourceValueUnit
+        : entry.series.valueUnit;
+      return traceOperation({ series: rawSeries[sourceIndex], uncertainty: analogUncertainty }, entry.series, window, parameters, {
+        lower: entry.uncertaintyLower,
+        upper: entry.uncertaintyUpper,
+        ...(analogUncertainty?.kind &&
+          analogUncertainty.kind !== 'none' &&
+          uncertaintySourceUnit !== uncertaintyTargetUnit
+          ? { conversion: conversionReceipt(uncertaintySourceUnit, uncertaintyTargetUnit) }
+          : {}),
+      });
+    });
+    return done(compileTraceFigure(
+      context(rowsTotal, derivedFacts),
+      panels,
+      {
+        xLabel: `time (${unitLabel(window.unit)})`,
+        ...(layout !== 'small_multiples' || parameters.sharedTimeAxis !== false
+          ? { xDomain: [window.start, window.stop] as const }
+          : {}),
+        sharedXAxis: layout !== 'small_multiples' || parameters.sharedTimeAxis !== false,
+        showSamplePoints: parameters.showSamplePoints === true,
+        summaryStatements: [
+          `Display window [${formatNumber(window.start)}, ${formatNumber(window.stop)}${window.finalEdgeInclusive ? ']' : ')'} ${unitLabel(window.unit)}.`,
+          `Layout ${layout}; ${layout === 'small_multiples' && parameters.sharedTimeAxis === false ? 'panel time domains are independent' : 'all panels share the declared time domain'}.`,
+          ...(layout === 'small_multiples'
+            ? ['Panel y domains are independent; curve heights are not comparable across panels.']
+            : []),
+        ],
+        tableColumns: [
+          { key: 'seriesId', header: 'Series' },
+          { key: 'seriesLabel', header: 'Label' },
+          { key: 'quantityKind', header: 'Quantity' },
+          { key: 'observationKind', header: 'Observation' },
+          { key: 'origin', header: 'Origin' },
+          { key: 'time', header: 'Time' },
+          { key: 'timeUnit', header: 'Time unit' },
+          { key: 'value', header: 'Value' },
+          { key: 'valueUnit', header: 'Unit' },
+          { key: 'missing', header: 'Missing' },
+          { key: 'replicateCount', header: 'Replicates' },
+          { key: 'uncertaintyLower', header: 'Uncertainty lower' },
+          { key: 'uncertaintyUpper', header: 'Uncertainty upper' },
+          { key: 'uncertaintyMethod', header: 'Uncertainty declaration' },
+          { key: 'sourceOrdinal', header: 'Source row' },
+        ],
+        tableRow: (entry, observationIndex) => {
+          const sourceIndex = Number(entry.tableMetadata?.sourceIndex ?? 0);
+          const raw = rec(rawSeries[sourceIndex]) ?? {};
+          const origin = rec(raw.origin) ?? {};
+          const observation = entry.series.observations[observationIndex];
+          const sourceOrdinal = observation.sourceOrdinals.length === 1
+            ? observation.sourceOrdinals[0]
+            : undefined;
+          const [uncertaintyLower, uncertaintyUpper, uncertaintyMethod] = traceUncertaintyCells(
+            rec(parameters.uncertainty),
+            sourceOrdinal,
+            entry.series,
+            observation.value,
+          );
+          return [
+            entry.series.id,
+            entry.series.label,
+            String(rec(raw.values)?.kind ?? 'unknown'),
+            entry.series.observationKind,
+            origin.kind === 'derived'
+              ? `derived: ${String(origin.method ?? 'unspecified')}`
+              : String(origin.kind ?? 'unknown'),
+            observation.time,
+            entry.series.timeUnit,
+            observation.value,
+            entry.series.valueUnit,
+            observation.value === null ? 'true' : 'false',
+            observation.replicateCount,
+            uncertaintyLower,
+            uncertaintyUpper,
+            uncertaintyMethod,
+            traceCell(observation.sourceOrdinals),
+          ];
+        },
+      },
+      skillId,
+    ), operations, derivedFacts);
+  }
+
+  // ---- multi-signal trace --------------------------------------------------
+  if (skillId === 'neuro.multisignal_trace') {
+    const window = traceWindowFrom(rec(data.window));
+    const rawSeries = arr(data.series) ?? [];
+    const declaredPanels = arr(parameters.panels) ?? [];
+    if (!window || rawSeries.length === 0 || declaredPanels.length === 0) return { pending: rendererId };
+
+    const sharedTime = rec(data.eventTimes);
+    const inputs = rawSeries.map((value, index): TraceSeriesInput & { readonly panelId: string } => {
+      const entry = rec(value) ?? {};
+      const time = data.timeBase === 'shared' ? sharedTime ?? {} : rec(entry.time) ?? {};
+      const values = rec(entry.values) ?? {};
+      const offset = rec(entry.timeOffset);
+      return {
+        id: (entry.seriesId as string) ?? `series-${index + 1}`,
+        label: (entry.label as string) ?? (entry.seriesId as string) ?? `Series ${index + 1}`,
+        panelId: (entry.panelId as string) ?? 'main',
+        observationKind: (entry.observationKind as TraceObservationKind) ?? 'point_sample',
+        times: numbers(time.values),
+        timeUnit: (time.unit as string) ?? window.unit,
+        values: traceValues(values),
+        valueUnit: (values.unit as string) ?? '1',
+        ...(offset && num(offset.value) !== undefined && typeof offset.unit === 'string'
+          ? { timeOffset: { value: num(offset.value)!, unit: offset.unit } }
+          : {}),
+      };
+    });
+    let normalization: TraceNormalization | undefined;
+    try {
+      normalization = traceNormalizationFrom(parameters, window);
+    } catch (error) {
+      return { errors: [tracePreparationError(error, skillId, '/parameters/normalization/statisticsWindow')] };
+    }
+    const seriesIds = inputs.map((input) => input.id);
+    if (new Set(seriesIds).size !== seriesIds.length) {
+      return fail(
+        'SEMANTIC_DUPLICATE_ID',
+        'semantic',
+        'multi-signal series ids must be unique; duplicate identities cannot bind an unambiguous legend or table.',
+        '/data/series',
+      );
+    }
+    const orderedPanelRecords = declaredPanels.map((value, panelIndex) => ({
+      panel: rec(value) ?? {},
+      declaredIndex: panelIndex,
+    }));
+    const panelIds = orderedPanelRecords.map(({ panel, declaredIndex }) =>
+      (panel.panelId as string) ?? `panel-${declaredIndex + 1}`);
+    if (new Set(panelIds).size !== panelIds.length) {
+      return fail(
+        'SEMANTIC_DUPLICATE_ID',
+        'semantic',
+        'multi-signal panel ids must be unique; duplicate panels would duplicate observations in the artifact.',
+        '/parameters/panels',
+      );
+    }
+    const panelIdSet = new Set(panelIds);
+    const undeclared = inputs.find((input) => !panelIdSet.has(input.panelId));
+    if (undeclared) {
+      return fail(
+        'RENDER_NO_DATA',
+        'render',
+        `series ${undeclared.id} names undeclared panel ${undeclared.panelId}. Cortexel refuses rather than silently dropping the series.`,
+        '/data/series',
+      );
+    }
+    if (parameters.panelOrder === 'by_panel_id') {
+      orderedPanelRecords.sort((a, b) => {
+        const left = String(a.panel.panelId ?? '');
+        const right = String(b.panel.panelId ?? '');
+        return left < right ? -1 : left > right ? 1 : a.declaredIndex - b.declaredIndex;
+      });
+    }
+    const panels: TracePanelSpec[] = [];
+    for (const { panel, declaredIndex } of orderedPanelRecords) {
+      const panelId = (panel.panelId as string) ?? `panel-${declaredIndex + 1}`;
+      const memberInputs = inputs
+        .map((input, index) => ({ input, index }))
+        .filter(({ input }) => input.panelId === panelId);
+      if (memberInputs.length === 0) {
+        return fail(
+          'RENDER_NO_DATA',
+          'render',
+          `declared panel ${panelId} has no member series. Cortexel refuses an empty coordinate system.`,
+          '/parameters/panels',
+        );
+      }
+      if (memberInputs.length > CATEGORICAL_SERIES_STYLES.length) {
+        return fail(
+          'RENDER_SERIES_LIMIT_EXCEEDED',
+          'render',
+          `panel ${panelId} contains ${memberInputs.length} overlaid series, above the ${CATEGORICAL_SERIES_STYLES.length}-style distinguishability limit.`,
+          '/data/series',
+        );
+      }
+      const targetUnit = normalization ? '1' : (panel.unit as string) ?? '1';
+      const members: TracePanelSpec['series'][number][] = [];
+      if (
+        memberInputs.length > 1 &&
+        memberInputs.some(({ input }) => dimensionOf(input.valueUnit) === 'simulator_defined')
+      ) {
+        return fail(
+          'SCIENCE_UNIT_DIMENSION_MISMATCH',
+          'science',
+          `panel ${panelId} contains a simulator-defined unit alongside another series. Its meaning is model-dependent even when the unit codes are identical, so it must occupy a panel of its own.`,
+          `/parameters/panels/${declaredIndex}`,
+        );
+      }
+      for (const { input, index } of memberInputs) {
+        if (input.times.length !== input.values.length) {
+          return fail(
+            'SEMANTIC_LENGTH_MISMATCH',
+            'semantic',
+            `series ${input.id} has ${input.times.length} timestamps and ${input.values.length} values.`,
+            `/data/series/${index}`,
+          );
+        }
+        const seriesUncertainty = rec(rec(rawSeries[index])?.uncertainty);
+        const uncertaintyError = traceUncertaintyValidationError(
+          seriesUncertainty,
+          input.valueUnit,
+          input.values,
+          skillId,
+          `/data/series/${index}/uncertainty`,
+        );
+        if (uncertaintyError) return { errors: [uncertaintyError] };
+        const uncertaintyMismatch = traceUncertaintyLengthMismatch(
+          seriesUncertainty,
+          input.values.length,
+        );
+        if (uncertaintyMismatch) {
+          return fail(
+            'SEMANTIC_LENGTH_MISMATCH',
+            'semantic',
+            `series ${input.id} uncertainty.${uncertaintyMismatch.key} has ${uncertaintyMismatch.observed} entries for ${input.values.length} samples.`,
+            `/data/series/${index}/uncertainty/${uncertaintyMismatch.key}`,
+          );
+        }
+        let prepared: PreparedTraceSeries;
+        let uncertaintyArrays: ReturnType<typeof traceUncertaintyArrays>;
+        try {
+          prepared = prepareTrace(input, window, parameters, targetUnit, normalization);
+          uncertaintyArrays = traceUncertaintyArrays(seriesUncertainty, prepared);
+        } catch (error) {
+          return { errors: [tracePreparationError(error, skillId, `/data/series/${index}`)] };
+        }
+        if (prepared.excludedBelow + prepared.excludedAbove > 0) {
+          return fail(
+            'SCIENCE_EVENT_OUT_OF_WINDOW',
+            'science',
+            `series ${input.id} has ${prepared.excludedBelow + prepared.excludedAbove} samples outside the declared display window after applying its clock offset. Multi-signal traces refuse this contradiction rather than cropping it.`,
+            `/data/series/${index}`,
+          );
+        }
+        if (prepared.outputCount === 0) {
+          return fail(
+            'RENDER_NO_DATA',
+            'render',
+            `series ${input.id} has no observation to draw.`,
+            `/data/series/${index}`,
+          );
+        }
+        members.push({
+          series: prepared,
+          styleIndex: index,
+          tableMetadata: { sourceIndex: index, panelId },
+          ...uncertaintyArrays,
+        });
+      }
+      const scale = (panel.scale as 'linear' | 'log' | 'symlog' | undefined) ?? 'linear';
+      if (
+        scale === 'log' &&
+        members.some((entry) => [
+          ...entry.series.values,
+          ...(entry.uncertaintyLower ?? []),
+          ...(entry.uncertaintyUpper ?? []),
+        ].some((value) => value !== null && value <= 0))
+      ) {
+        return fail(
+          'RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN',
+          'render',
+          `panel ${panelId} requests a logarithmic scale but contains a zero or negative displayed value. Cortexel never clips those observations.`,
+          `/parameters/panels/${declaredIndex}/scale`,
+        );
+      }
+      panels.push({
+        id: panelId,
+        label: (panel.label as string) ?? panelId,
+        yLabel: normalization
+          ? `${normalization.method} (${unitLabel('1')})`
+          : `value (${unitLabel(targetUnit)})`,
+        series: members,
+        scale,
+        ...(scale === 'symlog' && typeof panel.symlogLinearThreshold === 'number'
+          ? { symlogLinearThreshold: panel.symlogLinearThreshold }
+          : {}),
+      });
+    }
+    const allEntries = panels.flatMap((panel) => panel.series);
+    const allPrepared = allEntries.map((entry) => entry.series);
+    const rowsTotal = allPrepared.reduce((total, entry) => total + entry.outputCount, 0);
+    const duplicate = traceDuplicateOptions(parameters);
+    const declaredUncertainties = allEntries.map((entry) => {
+      const sourceIndex = Number(entry.tableMetadata?.sourceIndex ?? 0);
+      return rec(rec(rawSeries[sourceIndex])?.uncertainty);
+    });
+    const declaredUncertaintyCount = declaredUncertainties.filter(
+      (uncertainty) => uncertainty?.kind !== undefined && uncertainty.kind !== 'none',
+    ).length;
+    const shownUncertaintyCount = allEntries.filter(traceSeriesHasCompleteDrawableUncertainty).length;
+    const uncertaintyReasons = declaredUncertainties
+      .map((uncertainty) => uncertainty?.reason)
+      .filter((reason): reason is string => typeof reason === 'string');
+    const derivedFacts: Partial<DisclosureFacts> = {
+      ...traceDerivedFacts(allPrepared, duplicate.aggregateMethod, declaredUncertainties),
+      uncertaintyKind: declaredUncertaintyCount > 0 ? 'provided' : 'none',
+      uncertaintySeriesDeclared: declaredUncertaintyCount,
+      uncertaintySeriesShown: shownUncertaintyCount,
+      uncertaintySeriesTotal: declaredUncertainties.length,
+      ...(declaredUncertaintyCount === 0 && uncertaintyReasons.length > 0
+        ? { uncertaintyReason: [...new Set(uncertaintyReasons)].join(', ') }
+        : {}),
+    };
+    const operations = allEntries.map((entry) => {
+      const sourceIndex = Number(entry.tableMetadata?.sourceIndex ?? 0);
+      const raw = rawSeries[sourceIndex];
+      const rawRecord = rec(raw) ?? {};
+      const uncertainty = rec(rawRecord.uncertainty);
+      const uncertaintySourceUnit = typeof uncertainty?.unit === 'string'
+        ? uncertainty.unit
+        : entry.series.valueUnit;
+      const uncertaintyTargetUnit = entry.series.normalization
+        ? entry.series.sourceValueUnit
+        : entry.series.valueUnit;
+      return traceOperation(
+        data.timeBase === 'shared' ? { series: raw, eventTimes: sharedTime } : raw,
+        entry.series,
+        window,
+        parameters,
+        {
+          lower: entry.uncertaintyLower,
+          upper: entry.uncertaintyUpper,
+          ...(uncertainty?.kind &&
+            uncertainty.kind !== 'none' &&
+            uncertaintySourceUnit !== uncertaintyTargetUnit
+            ? { conversion: conversionReceipt(uncertaintySourceUnit, uncertaintyTargetUnit) }
+            : {}),
+        },
+      );
+    });
+    return done(compileTraceFigure(
+      context(rowsTotal, derivedFacts),
+      panels,
+      {
+        xLabel: `time (${unitLabel(window.unit)})`,
+        xDomain: [window.start, window.stop],
+        sharedXAxis: true,
+        showSamplePoints: parameters.showSamplePoints === true,
+        summaryStatements: [
+          `Display window [${formatNumber(window.start)}, ${formatNumber(window.stop)}${window.finalEdgeInclusive ? ']' : ')'} ${unitLabel(window.unit)}.`,
+          `Layout ${String(parameters.layout)}; panel order ${String(parameters.panelOrder ?? 'as_declared')}; time alignment ${String(rec(data.timeAlignment)?.kind ?? 'unknown')}.`,
+          ...(parameters.layout === 'small_multiples'
+            ? ['Panel y domains and units are independent; curve heights are not comparable across panels.']
+            : []),
+        ],
+        tableColumns: [
+          { key: 'seriesId', header: 'Series' },
+          { key: 'seriesLabel', header: 'Label' },
+          { key: 'entityId', header: 'Entity' },
+          { key: 'entityKind', header: 'Entity kind' },
+          { key: 'compartmentId', header: 'Compartment' },
+          { key: 'pathwayId', header: 'Pathway' },
+          { key: 'variableId', header: 'Variable' },
+          { key: 'panelId', header: 'Panel' },
+          { key: 'observationKind', header: 'Observation kind' },
+          { key: 'origin', header: 'Origin' },
+          { key: 'originMethod', header: 'Derivation method' },
+          { key: 'recordedTime', header: 'Recorded time' },
+          { key: 'recordedTimeUnit', header: 'Recorded time unit' },
+          { key: 'timeOffset', header: 'Declared offset' },
+          { key: 'timeOffsetUnit', header: 'Declared offset unit' },
+          { key: 'time', header: 'Time' },
+          { key: 'timeUnit', header: 'Time unit' },
+          { key: 'value', header: 'Value' },
+          { key: 'unit', header: 'Unit' },
+          { key: 'displayValue', header: 'Drawn value' },
+          { key: 'displayUnit', header: 'Drawn unit' },
+          { key: 'missing', header: 'Missing' },
+          { key: 'replicateCount', header: 'Replicates' },
+          { key: 'uncertaintyKind', header: 'Uncertainty kind' },
+          { key: 'uncertaintyLower', header: 'Uncertainty lower' },
+          { key: 'uncertaintyUpper', header: 'Uncertainty upper' },
+          { key: 'uncertaintyMethod', header: 'Uncertainty declaration' },
+          { key: 'normalizationParameters', header: 'Normalization parameters' },
+          { key: 'sourceRowIndex', header: 'Source row' },
+        ],
+        tableRow: (entry, observationIndex, panel) => {
+          const sourceIndex = Number(entry.tableMetadata?.sourceIndex ?? 0);
+          const raw = rec(rawSeries[sourceIndex]) ?? {};
+          const origin = rec(raw.origin) ?? {};
+          const uncertainty = rec(raw.uncertainty);
+          const rawValues = rec(raw.values) ?? {};
+          const observation = entry.series.observations[observationIndex];
+          const sourceOrdinal = observation.sourceOrdinals.length === 1
+            ? observation.sourceOrdinals[0]
+            : undefined;
+          const [uncertaintyLower, uncertaintyUpper, uncertaintyMethod] = traceUncertaintyCells(
+            uncertainty,
+            sourceOrdinal,
+            entry.series,
+            observation.value,
+          );
+          return [
+            entry.series.id,
+            entry.series.label,
+            String(raw.entityId ?? ''),
+            String(raw.entityKind ?? ''),
+            typeof raw.compartmentId === 'string' ? raw.compartmentId : null,
+            typeof raw.pathwayId === 'string' ? raw.pathwayId : null,
+            String(raw.variableId ?? ''),
+            panel.id,
+            entry.series.observationKind,
+            String(origin.kind ?? 'unknown'),
+            typeof origin.method === 'string' ? origin.method : null,
+            observation.recordedTime,
+            entry.series.sourceTimeUnit,
+            entry.series.timeOffset?.sourceValue ?? 0,
+            entry.series.timeOffset?.sourceUnit ?? entry.series.sourceTimeUnit,
+            observation.time,
+            entry.series.timeUnit,
+            traceCell(observation.sourceValues),
+            String(rawValues.unit ?? entry.series.valueUnit),
+            observation.value,
+            entry.series.valueUnit,
+            observation.value === null ? 'true' : 'false',
+            observation.replicateCount,
+            String(uncertainty?.kind ?? 'none'),
+            uncertaintyLower,
+            uncertaintyUpper,
+            uncertaintyMethod,
+            entry.series.normalization ? JSON.stringify(entry.series.normalization) : null,
+            traceCell(observation.sourceOrdinals),
+          ];
+        },
+      },
+      skillId,
+    ), operations, derivedFacts);
+  }
+
+  // ---- remaining trace families -------------------------------------------
+  if (rendererId === 'figure.compartment_trace' || rendererId === 'figure.synaptic_weight_trace') {
     const series = arr(data.series);
     const first = series && rec(series[0]);
     if (first) {
-      // Trace series carry time per-series as `time`, or share one time base at the top
-      // level (`data.eventTimes` when `timeBase: "shared"`, or `data.sharedTime`). Values
-      // live under `values` (analog/multisignal) or `value`/`weight` (weight trace).
       const timeRec = rec(first.time) ?? rec(data.eventTimes) ?? rec(data.sharedTime);
       const valueRec = rec(first.values) ?? rec(first.value) ?? rec(first.weight);
       const time = numbers(timeRec?.values);
@@ -576,6 +1956,7 @@ function assembleArtifact(
   render: SvgReport,
   summary: string,
   budgetProfile: BudgetProfileId,
+  derivationOperations: readonly DerivationOperation[],
 ): Record<string, unknown> {
   const identity = getBuildIdentity();
   const catalog = SKILL_CATALOG[validated.skillId];
@@ -612,7 +1993,7 @@ function assembleArtifact(
         message: w.message,
       })),
     },
-    derivation: { operations: [] },
+    derivation: { operations: derivationOperations },
     budgetDecision: {
       outcome: 'accepted_full',
       profileId: budgetProfile,
@@ -927,8 +2308,12 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
 
   const forced = forcedDisclosures(validated.skillId, request);
 
-  const makeContext = (rowsTotal: number): CompileContext => {
+  const makeContext = (
+    rowsTotal: number,
+    extraFacts: Partial<DisclosureFacts> = {},
+  ): CompileContext => {
     const facts = disclosureFacts(request, {
+      ...extraFacts,
       tableRowsTotal: rowsTotal,
       tableRowsInline: Math.min(rowsTotal, limits.inlineTableRows),
       budgetProfileId: activeBudget.profile,
@@ -964,6 +2349,8 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
     };
   }
 
+  if ('errors' in compiled) return { ok: false, errors: compiled.errors };
+
   if ('pending' in compiled) {
     return {
       ok: false,
@@ -986,7 +2373,8 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
         !Number.isFinite(panel.width) ||
         !Number.isFinite(panel.height) ||
         panel.width <= 0 ||
-        panel.height <= 0,
+        panel.height <= 0 ||
+        (panel.axes.length > 0 && panel.height < MIN_PLOT_PANEL_HEIGHT),
     )
   ) {
     return {
@@ -998,13 +2386,16 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
           instancePath: '/presentation',
           skillId: validated.skillId,
           message:
-            'the requested dimensions leave no positive finite plotting region after axes and mandatory disclosures are reserved. Increase the width or height.',
+            `the requested dimensions leave no finite plotting region of at least ${MIN_PLOT_PANEL_HEIGHT} CSS pixels per data panel after axes, legends, and mandatory disclosures are reserved. Increase the height or reduce the panel count.`,
         }),
       ],
     };
   }
 
-  const context = makeContext(compiled.plan.table.rowsTotal);
+  const context = makeContext(
+    compiled.plan.table.rowsTotal,
+    compiled.derivedDisclosureFacts,
+  );
 
   // Replace the ellipsis-filled template with a real, value-filled accessible summary
   // derived from the compiled figure, then render — so the SVG <desc> and the artifact
@@ -1107,6 +2498,7 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
     report,
     summary,
     activeBudget.profile,
+    compiled.derivationOperations,
   );
 
   return { ok: true, artifact, svg: report.svg, plan, table: plan.table, disclosures: context.disclosures };
@@ -1115,14 +2507,29 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
 /**
  * A deterministic, value-filled accessible summary from the compiled plan.
  *
- * Built from the figure's OWN data (its title, its row count, the numeric range of its
- * last table column, its disclosures) rather than an interpretive claim. It states what
+ * Built from the figure's OWN data (its title, identities, row count, a named scientific
+ * value column, its disclosures) rather than an interpretive claim. It states what
  * is plotted, not what it means — a screen reader hears real numbers, never "significant"
  * or "increased".
  */
 function buildSummary(plan: RenderPlanV1, title: string): string {
   const rows = plan.table.rowsTotal;
-  const valueColumn = plan.table.columns.length - 1;
+  const preferredValueKeys = [
+    'displayValue',
+    'value',
+    'rate',
+    'count',
+    'probability',
+    'density',
+    'weight',
+    'delay',
+    'degree',
+  ];
+  let valueColumn = -1;
+  for (const key of preferredValueKeys) {
+    valueColumn = plan.table.columns.findIndex((column) => column.key === key);
+    if (valueColumn >= 0) break;
+  }
 
   const numericValues: number[] = [];
   for (const row of plan.table.rows) {
@@ -1132,14 +2539,39 @@ function buildSummary(plan: RenderPlanV1, title: string): string {
   }
 
   const parts = [`${title}.`];
+  if (plan.legend && plan.legend.length > 0) {
+    const seriesItems = plan.legend.filter((entry) => (entry.glyph ?? 'series') === 'series');
+    const uncertaintyItems = plan.legend.filter((entry) => entry.glyph === 'band' || entry.glyph === 'whisker');
+    if (seriesItems.length > 0) parts.push(`Series: ${seriesItems.map((entry) => entry.label).join(', ')}.`);
+    if (uncertaintyItems.length > 0) {
+      parts.push(`Uncertainty marks: ${uncertaintyItems.map((entry) => entry.label).join(', ')}.`);
+    }
+  }
+  const panelLabels = plan.panels
+    .map((panel) => panel.label)
+    .filter((label): label is string => typeof label === 'string' && label.length > 0);
+  if (panelLabels.length > 1) parts.push(`Panels: ${panelLabels.join(', ')}.`);
+  for (const statement of plan.accessibility.panelSummaries) parts.push(statement);
   parts.push(`${rows} ${rows === 1 ? 'row' : 'rows'} of data.`);
 
-  if (numericValues.length > 0 && plan.table.columns.length >= 1) {
+  if (
+    valueColumn >= 0 &&
+    numericValues.length > 0 &&
+    plan.accessibility.suppressGlobalValueRange !== true
+  ) {
     const header = plan.table.columns[valueColumn]?.header ?? 'value';
     const extent = finiteExtent(numericValues)!;
     const min = extent.min;
     const max = extent.max;
     parts.push(`${header} ranges from ${formatSummaryNumber(min)} to ${formatSummaryNumber(max)}.`);
+  }
+
+  const uncertaintyColumn = plan.table.columns.findIndex((column) => column.key === 'uncertaintyMethod');
+  if (uncertaintyColumn >= 0) {
+    const methods = [...new Set(plan.table.rows
+      .map((row) => row[uncertaintyColumn])
+      .filter((value): value is string => typeof value === 'string' && value.length > 0))];
+    if (methods.length > 0) parts.push(`Uncertainty declarations: ${methods.join(', ')}.`);
   }
 
   const disclosureCount = plan.disclosures.length;
@@ -1150,17 +2582,16 @@ function buildSummary(plan: RenderPlanV1, title: string): string {
         .join(' ')}`,
     );
   }
-  if (plan.panels[0]?.noData) {
-    parts.push(`No data: ${plan.panels[0].noData.reason}.`);
+  const emptyPanels = plan.panels.filter((panel) => panel.noData);
+  if (emptyPanels.length > 0) {
+    parts.push(`No data: ${emptyPanels.map((panel) => panel.noData!.reason).join('; ')}.`);
   }
 
   return parts.join(' ');
 }
 
 function formatSummaryNumber(value: number): string {
-  if (!Number.isFinite(value)) return '—';
-  const rounded = Math.round(value * 1000) / 1000;
-  return Object.is(rounded, -0) ? '0' : String(rounded);
+  return formatNumber(value);
 }
 
 /** Build a figure from raw JSON request text (the strong, duplicate-key-aware boundary). */

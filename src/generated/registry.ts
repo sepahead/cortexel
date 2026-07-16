@@ -91,6 +91,7 @@ export const ERROR_CODES = freezeGenerated([
   "SCIENCE_LAG_RANGE_INVALID",
   "SCIENCE_NEGATIVE_INTERVAL",
   "SCIENCE_NORMALIZATION_UNVERIFIABLE",
+  "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
   "SCIENCE_POPULATION_UNIVERSE_REQUIRED",
   "SCIENCE_TRIAL_UNIVERSE_REQUIRED",
   "SCIENCE_UNCERTAINTY_BOUNDS_INVALID",
@@ -518,6 +519,12 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "summary": "A supplied normalized value could not be verified against its raw count and denominator.",
     "correctiveAction": "Supply the raw integer count and the denominators, or correct the normalized value. Cortexel re-derives and checks pre-normalized input rather than trusting it."
   },
+  "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE": {
+    "stage": "science",
+    "severity": "error",
+    "summary": "A declared conversion, offset, normalization, or uncertainty transform cannot be represented without collapsing or materially distorting a scientific difference in binary64.",
+    "correctiveAction": "Choose a better-scaled canonical unit or split the view so the required effect is representable. Cortexel refuses instead of publishing a rounded offset, variation, or uncertainty width as though it still matched the declaration."
+  },
   "SCIENCE_DENSITY_DOES_NOT_INTEGRATE": {
     "stage": "science",
     "severity": "error",
@@ -944,10 +951,23 @@ export const QUANTITY_KINDS = freezeGenerated([
 ] as const);
 export type QuantityKind = (typeof QUANTITY_KINDS)[number];
 
+export const UNCERTAINTY_KINDS = freezeGenerated([
+  "confidence_interval",
+  "credible_interval",
+  "ensemble_range",
+  "none",
+  "quantile_interval",
+  "standard_deviation",
+  "standard_error"
+] as const);
+export type UncertaintyKind = (typeof UNCERTAINTY_KINDS)[number];
+
 export interface UnitRecord {
   readonly code: string;
   readonly dimension: string;
   readonly toCanonical: number | null;
+  /** Exact decimal exponent when the registry scale is a power of ten. */
+  readonly toCanonicalDecimalExponent: number | null;
   readonly label: string;
   readonly aliases: readonly string[];
 }
@@ -957,6 +977,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "1",
     "dimension": "dimensionless",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "",
     "aliases": [
       "",
@@ -970,6 +991,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "s",
     "dimension": "time",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "s",
     "aliases": [
       "sec",
@@ -981,6 +1003,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "ms",
     "dimension": "time",
     "toCanonical": 0.001,
+    "toCanonicalDecimalExponent": -3,
     "label": "ms",
     "aliases": [
       "msec",
@@ -992,6 +1015,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "us",
     "dimension": "time",
     "toCanonical": 0.000001,
+    "toCanonicalDecimalExponent": -6,
     "label": "µs",
     "aliases": [
       "µs",
@@ -1004,6 +1028,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "Hz",
     "dimension": "frequency",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "Hz",
     "aliases": [
       "hz",
@@ -1016,6 +1041,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "kHz",
     "dimension": "frequency",
     "toCanonical": 1000,
+    "toCanonicalDecimalExponent": 3,
     "label": "kHz",
     "aliases": [
       "khz"
@@ -1025,6 +1051,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "V",
     "dimension": "voltage",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "V",
     "aliases": [
       "volt",
@@ -1035,6 +1062,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "mV",
     "dimension": "voltage",
     "toCanonical": 0.001,
+    "toCanonicalDecimalExponent": -3,
     "label": "mV",
     "aliases": [
       "millivolt",
@@ -1045,6 +1073,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "uV",
     "dimension": "voltage",
     "toCanonical": 0.000001,
+    "toCanonicalDecimalExponent": -6,
     "label": "µV",
     "aliases": [
       "µV",
@@ -1056,6 +1085,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "A",
     "dimension": "current",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "A",
     "aliases": [
       "amp",
@@ -1067,6 +1097,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "nA",
     "dimension": "current",
     "toCanonical": 1e-9,
+    "toCanonicalDecimalExponent": -9,
     "label": "nA",
     "aliases": [
       "nanoamp",
@@ -1077,6 +1108,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "pA",
     "dimension": "current",
     "toCanonical": 1e-12,
+    "toCanonicalDecimalExponent": -12,
     "label": "pA",
     "aliases": [
       "picoamp",
@@ -1087,6 +1119,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "S",
     "dimension": "conductance",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "S",
     "aliases": [
       "siemens"
@@ -1096,6 +1129,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "nS",
     "dimension": "conductance",
     "toCanonical": 1e-9,
+    "toCanonicalDecimalExponent": -9,
     "label": "nS",
     "aliases": [
       "nanosiemens"
@@ -1105,6 +1139,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "pS",
     "dimension": "conductance",
     "toCanonical": 1e-12,
+    "toCanonicalDecimalExponent": -12,
     "label": "pS",
     "aliases": [
       "picosiemens"
@@ -1114,6 +1149,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "mol/L",
     "dimension": "concentration",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "M",
     "aliases": [
       "M",
@@ -1124,6 +1160,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "mmol/L",
     "dimension": "concentration",
     "toCanonical": 0.001,
+    "toCanonicalDecimalExponent": -3,
     "label": "mM",
     "aliases": [
       "mM",
@@ -1134,6 +1171,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "umol/L",
     "dimension": "concentration",
     "toCanonical": 0.000001,
+    "toCanonicalDecimalExponent": -6,
     "label": "µM",
     "aliases": [
       "µM",
@@ -1145,6 +1183,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "nmol/L",
     "dimension": "concentration",
     "toCanonical": 1e-9,
+    "toCanonicalDecimalExponent": -9,
     "label": "nM",
     "aliases": [
       "nM",
@@ -1155,6 +1194,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "m",
     "dimension": "length",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "m",
     "aliases": [
       "metre",
@@ -1167,6 +1207,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "mm",
     "dimension": "length",
     "toCanonical": 0.001,
+    "toCanonicalDecimalExponent": -3,
     "label": "mm",
     "aliases": [
       "millimetre",
@@ -1177,6 +1218,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "um",
     "dimension": "length",
     "toCanonical": 0.000001,
+    "toCanonicalDecimalExponent": -6,
     "label": "µm",
     "aliases": [
       "µm",
@@ -1189,6 +1231,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "rad",
     "dimension": "angle",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "rad",
     "aliases": [
       "radian",
@@ -1199,6 +1242,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "deg",
     "dimension": "angle",
     "toCanonical": 0.017453292519943295,
+    "toCanonicalDecimalExponent": null,
     "label": "°",
     "aliases": [
       "degree",
@@ -1210,6 +1254,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/s",
     "dimension": "per_time",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "s⁻¹",
     "aliases": [
       "1/s",
@@ -1220,6 +1265,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/ms",
     "dimension": "per_time",
     "toCanonical": 1000,
+    "toCanonicalDecimalExponent": 3,
     "label": "ms⁻¹",
     "aliases": [
       "1/ms",
@@ -1230,6 +1276,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/V",
     "dimension": "per_voltage",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "V⁻¹",
     "aliases": [
       "1/V"
@@ -1239,6 +1286,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/mV",
     "dimension": "per_voltage",
     "toCanonical": 1000,
+    "toCanonicalDecimalExponent": 3,
     "label": "mV⁻¹",
     "aliases": [
       "1/mV"
@@ -1248,6 +1296,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/A",
     "dimension": "per_current",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "A⁻¹",
     "aliases": [
       "1/A"
@@ -1257,6 +1306,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/nA",
     "dimension": "per_current",
     "toCanonical": 1000000000,
+    "toCanonicalDecimalExponent": 9,
     "label": "nA⁻¹",
     "aliases": [
       "1/nA"
@@ -1266,6 +1316,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/pA",
     "dimension": "per_current",
     "toCanonical": 1000000000000,
+    "toCanonicalDecimalExponent": 12,
     "label": "pA⁻¹",
     "aliases": [
       "1/pA"
@@ -1275,6 +1326,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/S",
     "dimension": "per_conductance",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "S⁻¹",
     "aliases": [
       "1/S"
@@ -1284,6 +1336,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/nS",
     "dimension": "per_conductance",
     "toCanonical": 1000000000,
+    "toCanonicalDecimalExponent": 9,
     "label": "nS⁻¹",
     "aliases": [
       "1/nS"
@@ -1293,6 +1346,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/m",
     "dimension": "per_length",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "m⁻¹",
     "aliases": [
       "1/m"
@@ -1302,6 +1356,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/mm",
     "dimension": "per_length",
     "toCanonical": 1000,
+    "toCanonicalDecimalExponent": 3,
     "label": "mm⁻¹",
     "aliases": [
       "1/mm"
@@ -1311,6 +1366,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/um",
     "dimension": "per_length",
     "toCanonical": 1000000,
+    "toCanonicalDecimalExponent": 6,
     "label": "µm⁻¹",
     "aliases": [
       "1/um"
@@ -1320,6 +1376,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "/1",
     "dimension": "per_dimensionless",
     "toCanonical": 1,
+    "toCanonicalDecimalExponent": 0,
     "label": "",
     "aliases": [
       "1/1"
@@ -1329,6 +1386,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "nest:weight",
     "dimension": "simulator_defined",
     "toCanonical": null,
+    "toCanonicalDecimalExponent": null,
     "label": "weight (NEST)",
     "aliases": []
   },
@@ -1336,6 +1394,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
     "code": "nest:delay",
     "dimension": "time",
     "toCanonical": 0.001,
+    "toCanonicalDecimalExponent": -3,
     "label": "ms",
     "aliases": []
   }
@@ -1600,7 +1659,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "EVENTS_EXCLUDED_OUT_OF_WINDOW",
     "severity": "important",
-    "text": "{excludedCount} events fell outside the declared observation window and are excluded from this analysis."
+    "text": "{excludedCount} observations fell outside the declared observation window and are excluded from this analysis."
   },
   {
     "id": "MISSING_VALUES_PRESENT",
@@ -1610,12 +1669,17 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "UNIT_CONVERTED",
     "severity": "informational",
-    "text": "Units were converted during canonicalization: {conversions}. The original values are preserved in the artifact."
+    "text": "Units were converted during derivation: {conversions}. Source values remain in the canonical request embedded in the artifact; converted table values identify their units."
   },
   {
     "id": "UNCERTAINTY_NOT_PROVIDED",
     "severity": "important",
-    "text": "No uncertainty is shown ({reason}). The absence of a band means uncertainty was not supplied — not that it is small."
+    "text": "No uncertainty is shown ({reason}). The absence of an uncertainty mark means uncertainty was not supplied — not that it is small."
+  },
+  {
+    "id": "UNCERTAINTY_COVERAGE_INCOMPLETE",
+    "severity": "important",
+    "text": "Complete drawable uncertainty is present for {shownCount} of {seriesCount} displayed series; non-none uncertainty was declared for {declaredCount}. A missing uncertainty mark or bound means drawable uncertainty was absent there — not that it is small."
   },
   {
     "id": "AGGREGATE_WITHOUT_RAW_REPEATS",
@@ -1646,6 +1710,11 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
     "id": "DUPLICATE_TIMES_AGGREGATED",
     "severity": "important",
     "text": "Samples sharing a timestamp were combined using {method}."
+  },
+  {
+    "id": "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
+    "severity": "important",
+    "text": "{missingReplicateCount} missing replicate values were excluded from duplicate-time aggregates. An all-missing replicate group remains a visible gap rather than becoming zero."
   },
   {
     "id": "CALLER_NOTE_UNVERIFIED",

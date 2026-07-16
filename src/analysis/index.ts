@@ -42,3 +42,16 @@ export {
   type DegreeResult,
   type SparseMatrix,
 } from './topology.js';
+export {
+  applyTraceNormalization,
+  binary64EffectWasPreserved,
+  prepareTraceSeries,
+  type TraceObservationKind,
+  type TraceDuplicatePolicy,
+  type TraceAggregateMethod,
+  type TraceWindow,
+  type TraceNormalization,
+  type TraceSeriesInput,
+  type PrepareTraceOptions,
+  type PreparedTraceSeries,
+} from './traces.js';

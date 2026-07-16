@@ -74,9 +74,9 @@
   },
 
   "uncertaintyStyles": [
-    { "kind": "confidence_interval", "mark": "band",    "label": "{level}% {coverage} {method} confidence interval", "note": "The legend states exactly what is drawn. It never says merely 'error'." },
-    { "kind": "credible_interval",   "mark": "band",    "label": "{level}% {coverage} {method} credible interval",   "note": "Requires an attestation establishing a posterior analysis." },
-    { "kind": "quantile_interval",   "mark": "band",    "label": "{lowerQuantile}-{upperQuantile} quantile interval" },
+    { "kind": "confidence_interval", "mark": "band",    "label": "{level}% {coverage} {method} confidence interval (over {basis}, n = {sampleCount})", "note": "The legend states exactly what is drawn. It never says merely 'error'." },
+    { "kind": "credible_interval",   "mark": "band",    "label": "{level}% {coverage} {method} credible interval (over {basis}, n = {sampleCount})",   "note": "Requires an attestation establishing a posterior analysis." },
+    { "kind": "quantile_interval",   "mark": "band",    "label": "{lowerQuantile}-{upperQuantile} quantile interval ({method}, over {basis}, n = {sampleCount})" },
     { "kind": "standard_deviation",  "mark": "whisker", "label": "+/-1 SD (n = {sampleCount}, over {basis})",        "note": "A dispersion, drawn as a whisker. It is NOT an interval and is never relabelled as one." },
     { "kind": "standard_error",      "mark": "whisker", "label": "+/-1 SEM (n = {sampleCount}, over {basis})" },
     { "kind": "ensemble_range",      "mark": "band",    "label": "observed min-max across {basis} (n = {sampleCount})", "note": "Carries NO coverage probability. Never drawn or captioned as a confidence interval." },

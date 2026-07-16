@@ -29,6 +29,7 @@ import type {
 } from './model/renderPlan.js';
 import { formatCoordinate } from './format.js';
 import { THEMES } from '../generated/catalog.js';
+import { LEGEND_ROW_HEIGHT, legendColumnCount, legendStartY } from './layout.js';
 
 /** Escape text content: the five XML text-significant characters. */
 function escapeText(value: string): string {
@@ -125,6 +126,24 @@ const MARKER_PATHS: Record<string, (x: number, y: number, r: number) => string> 
   square: (x, y, r) => `M${formatCoordinate(x - r)},${formatCoordinate(y - r)}h${2 * r}v${2 * r}h${-2 * r}z`,
   triangle: (x, y, r) => `M${formatCoordinate(x)},${formatCoordinate(y - r)}L${formatCoordinate(x + r)},${formatCoordinate(y + r)}L${formatCoordinate(x - r)},${formatCoordinate(y + r)}z`,
   diamond: (x, y, r) => `M${formatCoordinate(x)},${formatCoordinate(y - r)}L${formatCoordinate(x + r)},${formatCoordinate(y)}L${formatCoordinate(x)},${formatCoordinate(y + r)}L${formatCoordinate(x - r)},${formatCoordinate(y)}z`,
+  cross: (x, y, r) => `M${formatCoordinate(x - r)},${formatCoordinate(y - r)}L${formatCoordinate(x + r)},${formatCoordinate(y + r)}M${formatCoordinate(x + r)},${formatCoordinate(y - r)}L${formatCoordinate(x - r)},${formatCoordinate(y + r)}`,
+  plus: (x, y, r) => `M${formatCoordinate(x - r)},${formatCoordinate(y)}L${formatCoordinate(x + r)},${formatCoordinate(y)}M${formatCoordinate(x)},${formatCoordinate(y - r)}L${formatCoordinate(x)},${formatCoordinate(y + r)}`,
+  star: (x, y, r) => {
+    const points: { x: number; y: number }[] = [];
+    for (let index = 0; index < 10; index++) {
+      const radius = index % 2 === 0 ? r : r * 0.42;
+      const angle = -Math.PI / 2 + index * Math.PI / 5;
+      points.push({ x: x + radius * Math.cos(angle), y: y + radius * Math.sin(angle) });
+    }
+    return `${pointsToPath(points)} Z`;
+  },
+  hexagon: (x, y, r) => {
+    const points = Array.from({ length: 6 }, (_value, index) => {
+      const angle = Math.PI / 6 + index * Math.PI / 3;
+      return { x: x + r * Math.cos(angle), y: y + r * Math.sin(angle) };
+    });
+    return `${pointsToPath(points)} Z`;
+  },
 };
 
 function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>): void {
@@ -165,6 +184,8 @@ function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>)
         writer.leaf('path', [
           ['d', build(point.x, point.y, mark.radius)],
           ['fill', mark.fill],
+          ['stroke', mark.fill],
+          ['stroke-width', 1],
         ]);
       }
       break;
@@ -211,12 +232,14 @@ function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>)
         const top = subpath.map((p) => ({ x: p.x, y: p.y1 }));
         const bottom = subpath.map((p) => ({ x: p.x, y: p.y0 })).reverse();
         const d = `${pointsToPath(top)} ${pointsToPath(bottom).replace(/^M/, 'L')} Z`;
-        writer.leaf('path', [
+        const attrs: [string, string | number][] = [
           ['d', d],
           ['fill', mark.fill],
           ['fill-opacity', mark.opacity],
-          ['stroke', 'none'],
-        ]);
+          ['stroke', mark.stroke ?? 'none'],
+        ];
+        if (mark.stroke) attrs.push(['stroke-width', mark.strokeWidth ?? 1]);
+        writer.leaf('path', attrs);
       }
       break;
     }
@@ -417,6 +440,7 @@ export function countPlanResources(plan: RenderPlanV1): {
   let textCount = 1 + (plan.subtitle ? 1 : 0) + plan.disclosures.length;
 
   for (const panel of plan.panels) {
+    if (panel.label) textCount++;
     if (panel.noData) {
       textCount++;
       continue;
@@ -426,6 +450,7 @@ export function countPlanResources(plan: RenderPlanV1): {
     markCount += counts.marks;
     textCount += counts.texts;
   }
+  textCount += plan.legend?.length ?? 0;
 
   return { markCount, textCount };
 }
@@ -495,8 +520,91 @@ export function renderSvg(
     });
   }
 
+  if (plan.legend && plan.legend.length > 0) {
+    const startY = legendStartY(plan.subtitle !== undefined);
+    const columns = legendColumnCount(plan.width, plan.legend.length);
+    const itemWidth = (plan.width - 48) / columns;
+    writer.open('g', [['data-legend', 'true'], ['aria-hidden', 'true']]);
+    for (let index = 0; index < plan.legend.length; index++) {
+      const item = plan.legend[index];
+      const outlineColor = item.outlineColor ?? item.color;
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = 24 + column * itemWidth;
+      const y = startY + row * LEGEND_ROW_HEIGHT;
+      const glyph = item.glyph ?? 'series';
+      if (glyph === 'band') {
+        writer.leaf('rect', [
+          ['x', x],
+          ['y', y - 9],
+          ['width', 24],
+          ['height', 10],
+          ['fill', item.color],
+          ['fill-opacity', 0.18],
+          ['stroke', outlineColor],
+          ['stroke-width', 1.5],
+        ]);
+      } else if (glyph === 'whisker') {
+        writer.leaf('line', [
+          ['x1', x + 12], ['y1', y - 10], ['x2', x + 12], ['y2', y + 2],
+          ['stroke', outlineColor], ['stroke-width', 1.5],
+        ]);
+        for (const capY of [y - 10, y + 2]) {
+          writer.leaf('line', [
+            ['x1', x + 7], ['y1', capY], ['x2', x + 17], ['y2', capY],
+            ['stroke', outlineColor], ['stroke-width', 1.5],
+          ]);
+        }
+      } else {
+        const attrs: [string, string | number][] = [
+          ['x1', x],
+          ['y1', y - 4],
+          ['x2', x + 24],
+          ['y2', y - 4],
+          ['stroke', item.color],
+          ['stroke-width', 1.5],
+        ];
+        if (item.dash && item.dash !== 'none') attrs.push(['stroke-dasharray', item.dash]);
+        writer.leaf('line', attrs);
+        if (item.marker) {
+          const marker = MARKER_PATHS[item.marker] ?? MARKER_PATHS.circle;
+          writer.leaf('path', [
+            ['d', marker(x + 12, y - 4, 2.5)],
+            ['fill', item.color],
+            ['stroke', item.color],
+            ['stroke-width', 1],
+          ]);
+        }
+      }
+      emitText(writer, {
+        type: 'text',
+        x: x + 32,
+        y,
+        text: item.label,
+        anchor: 'start',
+        fontSize: 10,
+        fill: colors.text,
+        decorative: true,
+      });
+    }
+    writer.close('g');
+  }
+
   for (const panel of plan.panels) {
     writer.open('g', [['data-panel', panel.id]]);
+
+    if (panel.label) {
+      emitText(writer, {
+        type: 'text',
+        x: panel.x,
+        y: panel.y - 8,
+        text: panel.label,
+        anchor: 'start',
+        fontSize: 11,
+        fill: colors.text,
+        decorative: true,
+      });
+    }
 
     if (panel.noData) {
       emitText(writer, {

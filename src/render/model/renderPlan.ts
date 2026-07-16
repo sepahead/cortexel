@@ -43,6 +43,8 @@ export interface DisclosureBlock {
 export interface LegendItem {
   readonly label: string;
   readonly color: string;
+  readonly outlineColor?: string;
+  readonly glyph?: 'series' | 'band' | 'whisker';
   readonly dash?: string;
   readonly marker?: string;
 }
@@ -129,6 +131,9 @@ export interface AreaMark {
   }[])[];
   readonly fill: string;
   readonly opacity: number;
+  /** Full-opacity boundary needed for non-text contrast and zero-area pointwise intervals. */
+  readonly stroke?: string;
+  readonly strokeWidth?: number;
 }
 
 export interface PathMark {
@@ -173,4 +178,6 @@ export interface TableModel {
 export interface AccessibilityModel {
   readonly summary: string;
   readonly panelSummaries: readonly string[];
+  /** True when each panel publishes its own value range and pooling them would mix axes. */
+  readonly suppressGlobalValueRange?: boolean;
 }

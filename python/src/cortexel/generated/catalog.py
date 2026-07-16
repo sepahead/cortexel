@@ -20,7 +20,7 @@ def _freeze(value: Any) -> Any:
 PACKAGE_VERSION: str = "0.9.0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:022fb3a76eb66cecdd8e54184cce22a9246c069ab34bb2a2f57e6025b7c13063"
+CONTRACT_DIGEST: str = "sha256:a49097fff2676ff50e0b382576f8933e252c68b4813117c93e9a0c10678e8d56"
 CATALOG_DIGEST: str = "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691"
 
 STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([
@@ -128,6 +128,7 @@ ERROR_CODES: Final[tuple[str, ...]] = _freeze([
     "SCIENCE_LAG_RANGE_INVALID",
     "SCIENCE_NEGATIVE_INTERVAL",
     "SCIENCE_NORMALIZATION_UNVERIFIABLE",
+    "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
     "SCIENCE_POPULATION_UNIVERSE_REQUIRED",
     "SCIENCE_TRIAL_UNIVERSE_REQUIRED",
     "SCIENCE_UNCERTAINTY_BOUNDS_INVALID",
@@ -190,6 +191,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "1": {
         "dimension": "dimensionless",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "",
         "aliases": [
             "",
@@ -202,6 +204,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "s": {
         "dimension": "time",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "s",
         "aliases": [
             "sec",
@@ -212,6 +215,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "ms": {
         "dimension": "time",
         "to_canonical": 0.001,
+        "to_canonical_decimal_exponent": -3,
         "label": "ms",
         "aliases": [
             "msec",
@@ -222,6 +226,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "us": {
         "dimension": "time",
         "to_canonical": 0.000001,
+        "to_canonical_decimal_exponent": -6,
         "label": "µs",
         "aliases": [
             "µs",
@@ -233,6 +238,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "Hz": {
         "dimension": "frequency",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "Hz",
         "aliases": [
             "hz",
@@ -244,6 +250,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "kHz": {
         "dimension": "frequency",
         "to_canonical": 1000,
+        "to_canonical_decimal_exponent": 3,
         "label": "kHz",
         "aliases": [
             "khz"
@@ -252,6 +259,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "V": {
         "dimension": "voltage",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "V",
         "aliases": [
             "volt",
@@ -261,6 +269,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "mV": {
         "dimension": "voltage",
         "to_canonical": 0.001,
+        "to_canonical_decimal_exponent": -3,
         "label": "mV",
         "aliases": [
             "millivolt",
@@ -270,6 +279,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "uV": {
         "dimension": "voltage",
         "to_canonical": 0.000001,
+        "to_canonical_decimal_exponent": -6,
         "label": "µV",
         "aliases": [
             "µV",
@@ -280,6 +290,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "A": {
         "dimension": "current",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "A",
         "aliases": [
             "amp",
@@ -290,6 +301,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "nA": {
         "dimension": "current",
         "to_canonical": 1e-9,
+        "to_canonical_decimal_exponent": -9,
         "label": "nA",
         "aliases": [
             "nanoamp",
@@ -299,6 +311,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "pA": {
         "dimension": "current",
         "to_canonical": 1e-12,
+        "to_canonical_decimal_exponent": -12,
         "label": "pA",
         "aliases": [
             "picoamp",
@@ -308,6 +321,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "S": {
         "dimension": "conductance",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "S",
         "aliases": [
             "siemens"
@@ -316,6 +330,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "nS": {
         "dimension": "conductance",
         "to_canonical": 1e-9,
+        "to_canonical_decimal_exponent": -9,
         "label": "nS",
         "aliases": [
             "nanosiemens"
@@ -324,6 +339,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "pS": {
         "dimension": "conductance",
         "to_canonical": 1e-12,
+        "to_canonical_decimal_exponent": -12,
         "label": "pS",
         "aliases": [
             "picosiemens"
@@ -332,6 +348,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "mol/L": {
         "dimension": "concentration",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "M",
         "aliases": [
             "M",
@@ -341,6 +358,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "mmol/L": {
         "dimension": "concentration",
         "to_canonical": 0.001,
+        "to_canonical_decimal_exponent": -3,
         "label": "mM",
         "aliases": [
             "mM",
@@ -350,6 +368,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "umol/L": {
         "dimension": "concentration",
         "to_canonical": 0.000001,
+        "to_canonical_decimal_exponent": -6,
         "label": "µM",
         "aliases": [
             "µM",
@@ -360,6 +379,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "nmol/L": {
         "dimension": "concentration",
         "to_canonical": 1e-9,
+        "to_canonical_decimal_exponent": -9,
         "label": "nM",
         "aliases": [
             "nM",
@@ -369,6 +389,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "m": {
         "dimension": "length",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "m",
         "aliases": [
             "metre",
@@ -380,6 +401,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "mm": {
         "dimension": "length",
         "to_canonical": 0.001,
+        "to_canonical_decimal_exponent": -3,
         "label": "mm",
         "aliases": [
             "millimetre",
@@ -389,6 +411,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "um": {
         "dimension": "length",
         "to_canonical": 0.000001,
+        "to_canonical_decimal_exponent": -6,
         "label": "µm",
         "aliases": [
             "µm",
@@ -400,6 +423,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "rad": {
         "dimension": "angle",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "rad",
         "aliases": [
             "radian",
@@ -409,6 +433,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "deg": {
         "dimension": "angle",
         "to_canonical": 0.017453292519943295,
+        "to_canonical_decimal_exponent": None,
         "label": "°",
         "aliases": [
             "degree",
@@ -419,6 +444,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/s": {
         "dimension": "per_time",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "s⁻¹",
         "aliases": [
             "1/s",
@@ -428,6 +454,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/ms": {
         "dimension": "per_time",
         "to_canonical": 1000,
+        "to_canonical_decimal_exponent": 3,
         "label": "ms⁻¹",
         "aliases": [
             "1/ms",
@@ -437,6 +464,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/V": {
         "dimension": "per_voltage",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "V⁻¹",
         "aliases": [
             "1/V"
@@ -445,6 +473,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/mV": {
         "dimension": "per_voltage",
         "to_canonical": 1000,
+        "to_canonical_decimal_exponent": 3,
         "label": "mV⁻¹",
         "aliases": [
             "1/mV"
@@ -453,6 +482,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/A": {
         "dimension": "per_current",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "A⁻¹",
         "aliases": [
             "1/A"
@@ -461,6 +491,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/nA": {
         "dimension": "per_current",
         "to_canonical": 1000000000,
+        "to_canonical_decimal_exponent": 9,
         "label": "nA⁻¹",
         "aliases": [
             "1/nA"
@@ -469,6 +500,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/pA": {
         "dimension": "per_current",
         "to_canonical": 1000000000000,
+        "to_canonical_decimal_exponent": 12,
         "label": "pA⁻¹",
         "aliases": [
             "1/pA"
@@ -477,6 +509,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/S": {
         "dimension": "per_conductance",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "S⁻¹",
         "aliases": [
             "1/S"
@@ -485,6 +518,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/nS": {
         "dimension": "per_conductance",
         "to_canonical": 1000000000,
+        "to_canonical_decimal_exponent": 9,
         "label": "nS⁻¹",
         "aliases": [
             "1/nS"
@@ -493,6 +527,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/m": {
         "dimension": "per_length",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "m⁻¹",
         "aliases": [
             "1/m"
@@ -501,6 +536,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/mm": {
         "dimension": "per_length",
         "to_canonical": 1000,
+        "to_canonical_decimal_exponent": 3,
         "label": "mm⁻¹",
         "aliases": [
             "1/mm"
@@ -509,6 +545,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/um": {
         "dimension": "per_length",
         "to_canonical": 1000000,
+        "to_canonical_decimal_exponent": 6,
         "label": "µm⁻¹",
         "aliases": [
             "1/um"
@@ -517,6 +554,7 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "/1": {
         "dimension": "per_dimensionless",
         "to_canonical": 1,
+        "to_canonical_decimal_exponent": 0,
         "label": "",
         "aliases": [
             "1/1"
@@ -525,12 +563,14 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "nest:weight": {
         "dimension": "simulator_defined",
         "to_canonical": None,
+        "to_canonical_decimal_exponent": None,
         "label": "weight (NEST)",
         "aliases": []
     },
     "nest:delay": {
         "dimension": "time",
         "to_canonical": 0.001,
+        "to_canonical_decimal_exponent": -3,
         "label": "ms",
         "aliases": []
     }

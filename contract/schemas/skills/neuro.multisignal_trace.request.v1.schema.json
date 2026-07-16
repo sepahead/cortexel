@@ -159,8 +159,25 @@
                 "description": "The declared panel this series is drawn in. Membership is structural: every series belongs to exactly one panel, so no series can be silently dropped from the layout and no panel partition can be left incomplete."
               },
               "timeOffset": {
-                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
-                "description": "A `duration` added to this series' recorded times to place it on the display clock. Required when timeAlignment.kind is `declared_offsets`, forbidden when it is `same_clock` — an implicit zero offset would be an undeclared claim about synchronization."
+                "type": "object",
+                "description": "A `duration` added to this series' recorded times to place it on the display clock. Required when timeAlignment.kind is `declared_offsets`, forbidden when it is `same_clock` — an implicit zero offset would be an undeclared claim about synchronization.",
+                "properties": {
+                  "kind": {
+                    "const": "duration"
+                  },
+                  "unit": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode"
+                  },
+                  "value": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "unit",
+                  "value"
+                ],
+                "additionalProperties": false
               },
               "time": {
                 "type": "object",
@@ -428,12 +445,13 @@
                   "log",
                   "symlog"
                 ],
-                "default": "linear"
+                "default": "linear",
+                "description": "linear draws values affinely. log uses log10 and is refused when any displayed value is non-positive. symlog uses the exact piecewise transform stated in science.normalization; it never chooses a threshold from the data."
               },
               "symlogLinearThreshold": {
                 "type": "number",
                 "exclusiveMinimum": 0,
-                "description": "The half-width of the linear region around zero. Required for `symlog`, because a symlog axis with an undeclared threshold changes shape when the data changes."
+                "description": "The half-width of the exactly linear region around zero. Required for `symlog`, whose transform is x/threshold inside and sign(x)*(1+ln(|x|/threshold)) outside."
               }
             },
             "required": [
@@ -545,7 +563,7 @@
         "showSamplePoints": {
           "type": "boolean",
           "default": false,
-          "description": "Draw the individual samples in addition to the line. Useful precisely because the line between two samples is a rendering of adjacency, not a measurement."
+          "description": "Draw a marker at every retained sample in addition to the line. Even when false, Cortexel still marks an isolated or zero-length run once, because an SVG move-only/zero-length path would otherwise succeed as a blank observation."
         }
       },
       "allOf": [

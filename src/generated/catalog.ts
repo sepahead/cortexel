@@ -1,13 +1,13 @@
 /**
  * GENERATED FILE — DO NOT EDIT.
  *
- * Produced by scripts/generate-contract.ts from contract/skills/ and contract/registries/capabilities.v1.json.
+ * Produced by scripts/generate-contract.ts from contract/skills/, contract/registries/capabilities.v1.json, and contract/registries/palettes.v1.json.
  * Edit the normative source and run `bun run generate`.
  * `bun run check:generated` fails if this file drifts from its source.
  */
 
 import { freezeGenerated } from '../core/deep-freeze.js';
-import type { SemanticValidatorId, DisclosureId } from './registry.js';
+import type { SemanticValidatorId, DisclosureId, UncertaintyKind } from './registry.js';
 
 export interface SkillCatalogEntry {
   readonly id: string;
@@ -27,7 +27,7 @@ export interface SkillCatalogEntry {
     readonly compactionPolicies: readonly string[];
     readonly tablePolicy: string;
   };
-  readonly uncertaintySupport: readonly string[];
+  readonly uncertaintySupport: readonly UncertaintyKind[];
   readonly accessibility: {
     readonly summaryTemplate: string;
     readonly tableColumns: readonly { readonly key: string; readonly header: string; readonly description?: string }[];
@@ -1741,7 +1741,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
       "Duplicate observation times within one synapse are caught by `trace.duplicate_time_policy`, which reads `data.series[].time.values`. That validator suppresses only on a STRING policy; this figure declares `duplicateTimePolicy` as an object, so it never suppresses the check and a clean recording is required.",
       "Observation kind is declared once in the schema-required `data.observation`, not in `parameters.observationKind`. The registered `weight_trace.observation_kind_declared` reads only that parameters field, so it is not declared here; the required `data.observation` carries the obligation instead.",
       "Edge-id uniqueness and the rule that a declared member names a declared edge have no registered validator here: `ids.unique` reads a flat id list and `topology.edge_endpoints_in_universe` reads `data.connections`/`data.nodeUniverse`, neither of which this figure carries. Structural closure enforces shape; registry gap.",
-      "Weight comparability across synapse models is declared in `parameters.weightComparability` and shown in the table, but the registered `topology.weight_group_compatible` reads `data.connections.synapseModels`, a shape this figure does not use, so the model-comparability claim is not semantically enforced. Registry gap.",
+      "Weight comparability across synapse models is declared in `parameters.weightComparability`, checked against every series by `trace.axis_dimension_compatible`, and shown in the table. This establishes only that the caller made a structurally complete claim matching the models present; Cortexel still cannot establish that distinct models' opaque weights are physically comparable.",
       "The aggregate-denominator rules (contributingCount is the mean's denominator; a zero contributing count yields null, never 0; contributingCount <= memberCount) are drawn faithfully but not validator-enforced: `rate.denominator_positive` reads `data.recordedSenderCount`, not the aggregate's counts. Registry gap.",
       "Per-edge and per-aggregate uncertainty is validated structurally by the shared UncertaintyV1 union, but `uncertainty.valid` and `uncertainty.supported_variant` read a single top-level `data.uncertainty`/`parameters.uncertainty` this figure does not carry, so the supported-variant list is not semantically enforced. Registry gap.",
       "`series.equal_length` has no index wildcard in the reference evaluator, so its pointer groups enumerate concrete series indices rather than every synapse. The registry should adopt an index wildcard so an off-by-one in any synapse's arrays fails, not only in the enumerated ones.",
@@ -2333,6 +2333,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
       "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
+      "UNCERTAINTY_COVERAGE_INCOMPLETE",
+      "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
       "DOWNSAMPLED_FOR_RENDERING",
       "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
@@ -2422,8 +2424,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
         },
         {
           "key": "uncertaintyMethod",
-          "header": "Uncertainty method",
-          "description": "The variant, level, and basis. A dispersion is never relabelled as an interval."
+          "header": "Uncertainty declaration",
+          "description": "The exact variant metadata for this row: basis and sample count for dispersions/ranges; method, level and coverage for confidence intervals; method and both quantiles for quantile intervals. A dispersion is never relabelled as an interval."
         },
         {
           "key": "sourceOrdinal",
@@ -2449,7 +2451,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
       "Registry 1.0 has no disclosure for a `derived` series, for the segment drawn between point samples, or for partial window coverage, though the blueprint asks for all three. Those facts reach the artifact, table and summary but raise no footer disclosure. The rules belong in the registry.",
       "Per-sample out-of-window exclusion has NO semantic validator in registry 1.0: events.within_window reads data.eventTimes, an events shape an analog trace does not carry, so it is not declared here. The exclusion count, its attribution, and the empty-panel refusal live in the render plan. A trace-shaped within-window validator would close this.",
       "series.equal_length has no index-wildcard pointer in registry 1.0, so the per-series time/value length checks are declared as an explicit enumeration of concrete indices (0..15), capping the figure at 16 series. ids.unique reads one flat id array, so series identity is declared in a single data.seriesIds vector rather than inside each series object.",
-      "Uncertainty is declared once at parameters.uncertainty (figure-level): uncertainty.valid and uncertainty.supported_variant read a single top-level object, so per-series uncertainty bands are outside the registry-1.0 validator surface and would need a per-series uncertainty validator.",
+      "Uncertainty is declared once at parameters.uncertainty (figure-level). The strict request validators check the object, and the render boundary checks bounds, lengths and unit conversion, but a non-`none` declaration can qualify only a one-series figure. Per-series uncertainty for multi-series analog figures would require a new request shape and validator.",
       "Registry 1.0 binds `derivative` to the per_time dimension, so a dimensioned derivative such as dV/dt (mV/ms) cannot be expressed. Calling it dimensionless or inventing a unit would be a false statement about the dimension, so the trace is refused. A `voltage_per_time` dimension would close this.",
       "Only extrema-preserving compaction is accepted (`none`, `line_envelope_minmax`), so a one-sample transient always survives and COMPACTION_MAY_HIDE_TRANSIENTS can never fire here. The envelope is still not a resampled signal: marks drawn are not samples taken, and exact values come from the table.",
       "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that the channel was what the caller says it was, that a gain or reference was applied correctly upstream, or that a `derived` series was produced by the method it names.",
@@ -3295,6 +3297,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
       "DUPLICATE_TIMES_AGGREGATED",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
+      "UNCERTAINTY_COVERAGE_INCOMPLETE",
+      "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
       "DOWNSAMPLED_FOR_RENDERING",
       "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
@@ -3377,9 +3381,19 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
           "description": "AS SUPPLIED, before any declared offset. The raw time the source reported."
         },
         {
+          "key": "recordedTimeUnit",
+          "header": "Recorded time unit",
+          "description": "The source clock unit AS SUPPLIED. It may differ from the display-clock unit."
+        },
+        {
           "key": "timeOffset",
           "header": "Declared offset",
           "description": "The offset added to the recorded time to place this series on the display clock. Zero under `same_clock`, where no offset may be declared at all."
+        },
+        {
+          "key": "timeOffsetUnit",
+          "header": "Declared offset unit",
+          "description": "The offset unit AS SUPPLIED. The derivation receipt records its one-step conversion into the display-clock unit."
         },
         {
           "key": "time",
@@ -3393,7 +3407,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
         {
           "key": "value",
           "header": "Value",
-          "description": "AS SUPPLIED, before any panel unit conversion or overlay normalization. This is the raw observation everything drawn is derived from."
+          "description": "AS SUPPLIED, before any panel unit conversion or overlay normalization. A duplicate-time aggregate carries the contributing raw values as a canonical JSON array; otherwise this is the scalar source observation."
         },
         {
           "key": "unit",
@@ -3417,7 +3431,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
         {
           "key": "replicateCount",
           "header": "Replicates",
-          "description": "How many supplied samples share this timestamp. 1 unless duplicates were kept or aggregated; an aggregate row states how many replicates it combines."
+          "description": "How many supplied samples produced this table row. Kept replicates remain separate rows with 1 each; an aggregate row states how many replicates it combines."
         },
         {
           "key": "uncertaintyKind",
@@ -3433,13 +3447,18 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
         },
         {
           "key": "uncertaintyMethod",
-          "header": "Uncertainty method",
-          "description": "The declared method and level of an interval variant. An interval with no method is never drawn as one."
+          "header": "Uncertainty declaration",
+          "description": "The exact row-level declaration: basis and sample count for dispersions/ranges; method, level and coverage for confidence intervals; method and both quantiles for quantile intervals. An interval with no method is never drawn as one."
+        },
+        {
+          "key": "normalizationParameters",
+          "header": "Normalization parameters",
+          "description": "Null outside normalized_overlay. Otherwise the exact per-series statistics window, sample count, and constants used for the affine map, serialized deterministically so every displayed value can be re-derived from the raw value."
         },
         {
           "key": "sourceRowIndex",
           "header": "Source row",
-          "description": "The original ordinal in the caller's array, retained through stable sorting so any drawn point can be traced back to the row it came from."
+          "description": "The original ordinal in the caller's array, retained through stable sorting. A duplicate-time aggregate carries the contributing ordinals as a canonical JSON array."
         }
       ]
     },
@@ -3457,13 +3476,12 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "Panel membership (a series' panelId names a declared panel; a declared panel holds at least one series) has no semantic validator in this build, so an undeclared panelId or an empty declared panel is not refused during request validation. A `trace.panel_membership_declared` validator should own it.",
-      "`ids.unique` reads one flat identifier array, but this figure's series ids and panel ids live inside arrays of objects (data.series[].seriesId, parameters.panels[].panelId). No resolvable pointer exists, so the validator was removed; series-id and panel-id uniqueness are unenforced until the registry gains object-array pointer support.",
-      "`series.equal_length` resolves concrete JSON Pointers, not index wildcards, so its groups are enumerated per series index (0..3). A length mismatch in a later series index would not be caught until the registry adopts index-wildcard pointers.",
-      "`uncertainty.valid` and `uncertainty.supported_variant` read a single top-level parameters/data uncertainty; this figure carries uncertainty PER SERIES, which those validators do not traverse. Both were removed and per-series uncertainty is validated only structurally, pending a per-series uncertainty validator.",
-      "Because `unit.dimension_match` treats any {kind,unit} object as a physical quantity, a series uncertainty that carries a unit and a non-quantity kind (standard_deviation, confidence_interval, ...) is rejected as a dimension mismatch. Only kind:none series uncertainties validate until the walker excludes uncertainty nodes.",
-      "A non-positive `divide_by_baseline_mean` denominator is described by the science but has no semantic validator in this build, so a sign-flipping baseline is not refused at validation time. A normalization validator should own SCIENCE_DENOMINATOR_INVALID for this figure.",
-      "Log/symlog domain checks and the empty-panel RENDER_NO_DATA check belong to the render stage, which request validation does not reach; a non-positive log domain is not refused during validation.",
+      "Panel membership still has no request-stage semantic validator. The render boundary independently refuses undeclared membership, empty panels and duplicate panel or series identities before it builds geometry, so no series can be silently dropped or duplicated; a future `trace.panel_membership_declared` validator should move the same refusal earlier.",
+      "`ids.unique` reads one flat identifier array, but this figure's series ids and panel ids live inside arrays of objects (data.series[].seriesId, parameters.panels[].panelId). The request-stage validator cannot express those paths; the render boundary independently refuses duplicate ids before legend, table or geometry construction.",
+      "`series.equal_length` resolves concrete JSON Pointers, not index wildcards, so request-stage groups are enumerated per series index (0..3). The render boundary checks every later series and every uncertainty array before transformation; a future wildcard validator should move the same refusal earlier.",
+      "`uncertainty.valid` and `uncertainty.supported_variant` read a single top-level parameters/data uncertainty, while this figure carries uncertainty per series. The render boundary independently validates every series' variant, basis, levels, bounds, lengths, registered unit and dimensional compatibility, and transforms supported bounds through the same conversion/normalization map. A per-series semantic validator would move those checks before rendering.",
+      "A non-positive `divide_by_baseline_mean` denominator has no request-stage semantic validator. The render derivation computes the declared statistics window and refuses a non-finite or non-positive denominator with SCIENCE_NORMALIZATION_UNVERIFIABLE before geometry is emitted; a normalization validator should move that refusal earlier and own SCIENCE_DENOMINATOR_INVALID.",
+      "Log/symlog domain checks and the empty-panel RENDER_NO_DATA check belong to the render stage rather than request validation. The renderer applies the contract-owned transforms and refuses a non-positive log domain before geometry is emitted.",
       "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that a channel was what the caller says it was, or that a `derived` series was produced by the method it names.",
       "Cortexel cannot verify that two recorders shared a clock. `same_clock` is a caller declaration; all Cortexel can do is refuse to draw signals on one time axis unless the caller states which clock they are on.",
       "Series may be sampled at different intervals. Cortexel never resamples onto a common grid, so a vertical alignment must not be read finer than the coarser series' sampling interval.",
@@ -5176,5 +5194,56 @@ export const CATEGORICAL_SERIES_STYLES = freezeGenerated([
     "label": "series 8"
   }
 ]);
+
+/** Normative uncertainty mark and label templates, keyed by the closed uncertainty kind. */
+export interface UncertaintyStyleRecord {
+  readonly kind: UncertaintyKind;
+  readonly mark: 'band' | 'whisker' | 'none';
+  readonly label: string;
+  readonly note?: string;
+}
+
+export const UNCERTAINTY_STYLES_BY_KIND: Readonly<Record<UncertaintyKind, UncertaintyStyleRecord>> = freezeGenerated({
+  "confidence_interval": {
+    "kind": "confidence_interval",
+    "mark": "band",
+    "label": "{level}% {coverage} {method} confidence interval (over {basis}, n = {sampleCount})",
+    "note": "The legend states exactly what is drawn. It never says merely 'error'."
+  },
+  "credible_interval": {
+    "kind": "credible_interval",
+    "mark": "band",
+    "label": "{level}% {coverage} {method} credible interval (over {basis}, n = {sampleCount})",
+    "note": "Requires an attestation establishing a posterior analysis."
+  },
+  "quantile_interval": {
+    "kind": "quantile_interval",
+    "mark": "band",
+    "label": "{lowerQuantile}-{upperQuantile} quantile interval ({method}, over {basis}, n = {sampleCount})"
+  },
+  "standard_deviation": {
+    "kind": "standard_deviation",
+    "mark": "whisker",
+    "label": "+/-1 SD (n = {sampleCount}, over {basis})",
+    "note": "A dispersion, drawn as a whisker. It is NOT an interval and is never relabelled as one."
+  },
+  "standard_error": {
+    "kind": "standard_error",
+    "mark": "whisker",
+    "label": "+/-1 SEM (n = {sampleCount}, over {basis})"
+  },
+  "ensemble_range": {
+    "kind": "ensemble_range",
+    "mark": "band",
+    "label": "observed min-max across {basis} (n = {sampleCount})",
+    "note": "Carries NO coverage probability. Never drawn or captioned as a confidence interval."
+  },
+  "none": {
+    "kind": "none",
+    "mark": "none",
+    "label": "no uncertainty shown ({reason})",
+    "note": "Rendered as an explicit statement. The renderer never invents a ribbon to fill the space."
+  }
+});
 
 export const MAX_STABLE_SERIES = 8;

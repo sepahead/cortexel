@@ -4,6 +4,7 @@
 
 import { execFileSync } from 'node:child_process';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -251,6 +252,19 @@ try {
     [...NPM_INSTALL_FLAGS, tarball],
     consumer,
   );
+
+  const installedRoot = join(consumer, 'node_modules', 'cortexel');
+  for (const requiredNotice of [
+    'THIRD_PARTY_NOTICES.md',
+    'LICENSES/Apache-2.0.txt',
+    'LICENSES/CC0-1.0.txt',
+    'LICENSES/Matplotlib.txt',
+    'LICENSES/PNNL-cividis.txt',
+  ]) {
+    if (!existsSync(join(installedRoot, requiredNotice))) {
+      throw new Error(`packed package is missing required third-party notice ${requiredNotice}`);
+    }
+  }
 
   run(
     'node',

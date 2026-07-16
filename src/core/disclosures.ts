@@ -42,8 +42,13 @@ export interface DisclosureFacts {
   readonly excludedOutOfWindow?: number;
   readonly missingValueCount?: number;
   readonly unitConversions?: readonly string[];
+  readonly duplicateTimeAggregateMethod?: string;
   readonly uncertaintyKind?: string;
   readonly uncertaintyReason?: string;
+  readonly uncertaintySeriesDeclared?: number;
+  readonly uncertaintySeriesShown?: number;
+  readonly uncertaintySeriesTotal?: number;
+  readonly missingAggregateReplicateCount?: number;
   readonly kernelSmoothed?: boolean;
   readonly preBinned?: boolean;
   readonly callerNotePresent?: boolean;
@@ -92,12 +97,17 @@ const RULE_PREDICATES: Readonly<Record<string, (facts: DisclosureFacts) => boole
   MISSING_VALUES_PRESENT: (f) => (f.missingValueCount ?? 0) > 0,
   UNIT_CONVERTED: (f) => (f.unitConversions?.length ?? 0) > 0,
   UNCERTAINTY_NOT_PROVIDED: (f) => f.uncertaintyKind === 'none',
+  UNCERTAINTY_COVERAGE_INCOMPLETE: (f) =>
+    (f.uncertaintySeriesDeclared ?? 0) > 0 &&
+    (f.uncertaintySeriesShown ?? 0) < (f.uncertaintySeriesTotal ?? 0),
   AGGREGATE_WITHOUT_RAW_REPEATS: () => false, // response-curve compiler sets this
   KERNEL_SMOOTHED_RATE: (f) => f.kernelSmoothed === true,
   ZERO_LAG_SELF_PAIRS_EXCLUDED: () => false, // correlogram compiler sets this
   LAG_ORIENTATION: () => false, // correlogram compiler always emits this
   PRE_BINNED_INPUT: (f) => f.preBinned === true,
-  DUPLICATE_TIMES_AGGREGATED: () => false,
+  DUPLICATE_TIMES_AGGREGATED: (f) => f.duplicateTimeAggregateMethod !== undefined,
+  MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE: (f) =>
+    (f.missingAggregateReplicateCount ?? 0) > 0,
 
   CALLER_NOTE_UNVERIFIED: (f) => f.callerNotePresent === true,
   EXPERIMENTAL_RENDERER: (f) => f.experimentalRenderer === true,
@@ -131,6 +141,11 @@ function fillTemplate(text: string, facts: DisclosureFacts): string {
     reason: facts.uncertaintyReason,
     aggregation: facts.multapseAggregation,
     conversions: facts.unitConversions?.join(', '),
+    method: facts.duplicateTimeAggregateMethod,
+    declaredCount: facts.uncertaintySeriesDeclared,
+    shownCount: facts.uncertaintySeriesShown,
+    seriesCount: facts.uncertaintySeriesTotal,
+    missingReplicateCount: facts.missingAggregateReplicateCount,
     profileId:
       facts.budgetProfileId ?? (facts.nonStandardBudgetProfile ? 'custom' : 'standard'),
   };

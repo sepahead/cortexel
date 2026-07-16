@@ -52,6 +52,14 @@ function ensureDir(dir: string): void {
   mkdirSync(dir, { recursive: true });
 }
 
+function decimalPowerExponent(value: unknown): number | null {
+  if (typeof value !== 'number' || !(value > 0) || !Number.isFinite(value)) return null;
+  for (let exponent = -24; exponent <= 24; exponent++) {
+    if (value === Number(`1e${exponent}`)) return exponent;
+  }
+  return null;
+}
+
 function writeIfChanged(file: string, content: string): boolean {
   const existing = existsSync(file) ? readFileSync(file, 'utf8') : null;
   if (existing === content) return false;
@@ -75,6 +83,8 @@ const budgets = readJson(path.join(CONTRACT, 'registries', 'budget-profiles.v1.j
 const legacyMap = readJson(path.join(CONTRACT, 'registries', 'legacy-skill-map.v1.json'));
 const renderers = readJson(path.join(CONTRACT, 'registries', 'renderers.v1.json'));
 const palettes = readJson(path.join(CONTRACT, 'registries', 'palettes.v1.json'));
+const commonSchema = readJson(path.join(CONTRACT, 'schemas', 'common.v1.schema.json'));
+const contractSourceSchema = readJson(path.join(CONTRACT, 'meta', 'contract-source.schema.json'));
 
 const skillFiles = listJson(path.join(CONTRACT, 'skills'));
 const skills = skillFiles.map((file) => readJson(path.join(CONTRACT, 'skills', file)));
@@ -131,6 +141,28 @@ function assertUniqueStrings(values: readonly unknown[], where: string): void {
   });
 }
 
+function assertSameStringSet(actual: readonly string[], expected: readonly string[], where: string): void {
+  const actualSet = new Set(actual);
+  const expectedSet = new Set(expected);
+  const missing = [...expectedSet].filter((value) => !actualSet.has(value)).sort();
+  const extra = [...actualSet].filter((value) => !expectedSet.has(value)).sort();
+  if (missing.length > 0 || extra.length > 0) {
+    problems.push(`${where}: set mismatch; missing [${missing.join(', ')}], extra [${extra.join(', ')}]`);
+  }
+}
+
+const uncertaintyKinds = (commonSchema.$defs.uncertainty.oneOf as any[]).flatMap((branch: any) => {
+  const kind = branch?.properties?.kind;
+  return typeof kind?.const === 'string'
+    ? [kind.const]
+    : Array.isArray(kind?.enum)
+      ? kind.enum
+      : [];
+});
+const metaUncertaintyKinds = contractSourceSchema.properties.science.properties
+  .uncertaintySupport.items.enum as string[];
+const paletteUncertaintyKinds = palettes.uncertaintyStyles.map((style: any) => style.kind) as string[];
+
 function assertNoDangerousObjectKeys(value: unknown, where: string): void {
   if (value === null || typeof value !== 'object') return;
   if (Array.isArray(value)) {
@@ -157,7 +189,31 @@ assertUniqueMapKeys(capabilities.capabilities, 'id', 'capabilities.capabilities'
 assertUniqueMapKeys(legacyMap.entries, 'legacyId', 'legacy-skill-map.entries');
 assertUniqueMapKeys(renderers.renderers, 'id', 'renderers.renderers');
 assertUniqueMapKeys(palettes.themes, 'id', 'palettes.themes');
+assertUniqueMapKeys(palettes.uncertaintyStyles, 'kind', 'palettes.uncertaintyStyles');
 assertUniqueMapKeys(skills, 'id', 'contract/skills');
+assertUniqueStrings(uncertaintyKinds, 'common.$defs.uncertainty kinds');
+assertUniqueStrings(metaUncertaintyKinds, 'contract-source uncertainty kinds');
+assertSameStringSet(metaUncertaintyKinds, uncertaintyKinds, 'contract-source uncertainty kinds');
+assertSameStringSet(paletteUncertaintyKinds, uncertaintyKinds, 'palette uncertainty kinds');
+for (const [index, style] of palettes.uncertaintyStyles.entries()) {
+  if (!['band', 'whisker', 'none'].includes(style.mark)) {
+    problems.push(`palettes.uncertaintyStyles[${index}].mark: expected band, whisker, or none`);
+  }
+  if (typeof style.label !== 'string' || style.label.trim().length === 0) {
+    problems.push(`palettes.uncertaintyStyles[${index}].label: expected a non-empty string`);
+  }
+  if ((style.kind === 'none') !== (style.mark === 'none')) {
+    problems.push(`palettes.uncertaintyStyles[${index}]: only uncertainty kind none may use mark none`);
+  }
+}
+for (const [index, skill] of skills.entries()) {
+  const support = skill.science?.uncertaintySupport ?? [];
+  assertUniqueStrings(support, `contract/skills[${index}].science.uncertaintySupport`);
+  const unsupported = support.filter((kind: string) => !uncertaintyKinds.includes(kind));
+  if (unsupported.length > 0) {
+    problems.push(`contract/skills[${index}].science.uncertaintySupport: unknown kinds [${unsupported.join(', ')}]`);
+  }
+}
 
 for (const [where, value] of [
   ['units', units],
@@ -587,10 +643,15 @@ export type UnitCode = (typeof UNIT_CODES)[number];
 export const QUANTITY_KINDS = freezeGenerated(${JSON.stringify([...quantityKinds].sort(), null, 2)} as const);
 export type QuantityKind = (typeof QUANTITY_KINDS)[number];
 
+export const UNCERTAINTY_KINDS = freezeGenerated(${JSON.stringify([...uncertaintyKinds].sort(), null, 2)} as const);
+export type UncertaintyKind = (typeof UNCERTAINTY_KINDS)[number];
+
 export interface UnitRecord {
   readonly code: string;
   readonly dimension: string;
   readonly toCanonical: number | null;
+  /** Exact decimal exponent when the registry scale is a power of ten. */
+  readonly toCanonicalDecimalExponent: number | null;
   readonly label: string;
   readonly aliases: readonly string[];
 }
@@ -603,6 +664,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated(${JSO
         code: u.code,
         dimension: u.dimension,
         toCanonical: u.toCanonical,
+        toCanonicalDecimalExponent: decimalPowerExponent(u.toCanonical),
         label: u.label,
         aliases: u.aliases ?? [],
       },
@@ -686,9 +748,9 @@ export type CompactionPolicyId = keyof typeof COMPACTION_POLICIES;
 `;
 
 /** The runtime catalog. Discovery, routing, budgets, and disclosures all read this. */
-const catalogTs = `${BANNER('contract/skills/ and contract/registries/capabilities.v1.json')}
+const catalogTs = `${BANNER('contract/skills/, contract/registries/capabilities.v1.json, and contract/registries/palettes.v1.json')}
 import { freezeGenerated } from '../core/deep-freeze.js';
-import type { SemanticValidatorId, DisclosureId } from './registry.js';
+import type { SemanticValidatorId, DisclosureId, UncertaintyKind } from './registry.js';
 
 export interface SkillCatalogEntry {
   readonly id: string;
@@ -708,7 +770,7 @@ export interface SkillCatalogEntry {
     readonly compactionPolicies: readonly string[];
     readonly tablePolicy: string;
   };
-  readonly uncertaintySupport: readonly string[];
+  readonly uncertaintySupport: readonly UncertaintyKind[];
   readonly accessibility: {
     readonly summaryTemplate: string;
     readonly tableColumns: readonly { readonly key: string; readonly header: string; readonly description?: string }[];
@@ -803,6 +865,20 @@ export const THEMES = freezeGenerated(${JSON.stringify(
 
 export const CATEGORICAL_SERIES_STYLES = freezeGenerated(${JSON.stringify(
   palettes.categoricalSeries.styles,
+  null,
+  2,
+)});
+
+/** Normative uncertainty mark and label templates, keyed by the closed uncertainty kind. */
+export interface UncertaintyStyleRecord {
+  readonly kind: UncertaintyKind;
+  readonly mark: 'band' | 'whisker' | 'none';
+  readonly label: string;
+  readonly note?: string;
+}
+
+export const UNCERTAINTY_STYLES_BY_KIND: Readonly<Record<UncertaintyKind, UncertaintyStyleRecord>> = freezeGenerated(${JSON.stringify(
+  Object.fromEntries(palettes.uncertaintyStyles.map((style: any) => [style.kind, style])),
   null,
   2,
 )});
@@ -996,7 +1072,13 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
   Object.fromEntries(
     units.units.map((u: any) => [
       u.code,
-      { dimension: u.dimension, to_canonical: u.toCanonical, label: u.label, aliases: u.aliases ?? [] },
+      {
+        dimension: u.dimension,
+        to_canonical: u.toCanonical,
+        to_canonical_decimal_exponent: decimalPowerExponent(u.toCanonical),
+        label: u.label,
+        aliases: u.aliases ?? [],
+      },
     ]),
   ),
   null,

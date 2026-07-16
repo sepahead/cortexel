@@ -33,6 +33,8 @@
     "CONTRIBUTING.md",
     "SECURITY.md",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "LICENSES",
     "CHANGELOG.md"
   ],
   "exports": {
