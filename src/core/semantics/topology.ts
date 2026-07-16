@@ -123,21 +123,34 @@ export const topologyScopeSupportsClaim: SemanticValidator = (
     const merged = asArray(scope.mergedRanks);
 
     if (worldSize !== undefined && merged) {
-      const ranks = new Set(merged.filter((r): r is number => typeof r === 'number'));
+      const numericRanks = merged.filter(
+        (rank): rank is number => typeof rank === 'number' && Number.isSafeInteger(rank),
+      );
+      const ranks = new Set(numericRanks);
+      const inRange = [...ranks].filter((rank) => rank >= 0 && rank < worldSize);
+      const outOfRange = [...ranks].filter((rank) => rank < 0 || rank >= worldSize);
+      const missingCount = Math.max(0, worldSize - inRange.length);
 
-      const missing: number[] = [];
-      for (let r = 0; r < worldSize; r++) {
-        if (!ranks.has(r)) missing.push(r);
-      }
+      if (missingCount > 0) {
+        // Produce at most eight examples without iterating to worldSize. Work is bounded by
+        // the supplied rank list even for a hostile declaration near the structural cap.
+        const sorted = inRange.sort((a, b) => a - b);
+        const missing: number[] = [];
+        let expected = 0;
+        for (const rank of sorted) {
+          while (expected < rank && missing.length < 8) missing.push(expected++);
+          expected = rank + 1;
+          if (missing.length >= 8) break;
+        }
+        while (expected < worldSize && missing.length < 8) missing.push(expected++);
 
-      if (missing.length > 0) {
         errors.push(
           makeError({
             code: 'SCOPE_MERGE_INCOMPLETE',
             stage: 'scope',
             instancePath: pointer('data', 'scope', 'mergedRanks'),
             validatorId: 'topology.scope_supports_claim',
-            message: `this claims a global merge of a ${worldSize}-rank run, but rank${missing.length > 1 ? 's' : ''} ${missing.slice(0, 8).join(', ')}${missing.length > 8 ? ', ...' : ''} ${missing.length > 1 ? 'are' : 'is'} missing. A partial rank set stays partial; it cannot be upgraded to a global claim by declaring one.`,
+            message: `this claims a global merge of a ${worldSize}-rank run, but ${missingCount} rank${missingCount === 1 ? ' is' : 's are'} missing${missing.length > 0 ? ` (first: ${missing.join(', ')}${missingCount > missing.length ? ', ...' : ''})` : ''}. A partial rank set stays partial; it cannot be upgraded to a global claim by declaring one.`,
           }),
         );
       }
@@ -151,6 +164,18 @@ export const topologyScopeSupportsClaim: SemanticValidator = (
             validatorId: 'topology.scope_supports_claim',
             message:
               'a rank appears more than once in the merge. Merging one rank twice would double-count every connection it owns.',
+          }),
+        );
+      }
+
+      if (outOfRange.length > 0) {
+        errors.push(
+          makeError({
+            code: 'SCOPE_MERGE_CONFLICT',
+            stage: 'scope',
+            instancePath: pointer('data', 'scope', 'mergedRanks'),
+            validatorId: 'topology.scope_supports_claim',
+            message: `${outOfRange.length} merged rank${outOfRange.length === 1 ? ' is' : 's are'} outside the valid range 0..${worldSize - 1} (first: ${outOfRange.slice(0, 8).join(', ')}). Extra ranks are a merge conflict, not evidence of global coverage.`,
           }),
         );
       }
@@ -306,7 +331,7 @@ export const topologyMultapseAggregationDeclared: SemanticValidator = (
     const source = sources[i];
     const target = targets[i];
     if (typeof source !== 'string' || typeof target !== 'string') continue;
-    const key = `${target} ${source}`;
+    const key = `${target}\u0000${source}`;
     const next = (cells.get(key) ?? 0) + 1;
     cells.set(key, next);
     if (next > maxPerCell) {

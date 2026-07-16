@@ -11,9 +11,9 @@
 
 import type { RenderPlanV1, Panel, Mark, Axis } from './model/renderPlan.js';
 import { linearScale, linearTicks } from './scale.js';
-import { formatNumber } from './format.js';
 import { THEMES } from '../generated/catalog.js';
 import type { CompileContext } from './compile.js';
+import { finiteExtent, finiteExtentBy } from '../core/numeric.js';
 
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
 
@@ -91,12 +91,12 @@ export function compileBarFigure(
 ): RenderPlanV1 {
   const box = panelBox(context);
   if (values.length === 0 || edges.length < 2) {
-    return { ...frame(context, skillId), panels: [emptyPanel(box, 'no bins to plot')], table: barTable(edges, values), legend: [] };
+    return { ...frame(context, skillId), panels: [emptyPanel(box, 'no bins to plot')], table: barTable(edges, values, context.inlineTableRows), legend: [] };
   }
 
   const xMin = edges[0];
   const xMax = edges[edges.length - 1];
-  const yMax = Math.max(0, ...values);
+  const yMax = Math.max(0, finiteExtent(values)?.max ?? 0);
   const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
   const yScale = linearScale(0, yMax, box.y + box.height, box.y);
   const baseline = yScale.map(0);
@@ -111,21 +111,29 @@ export function compileBarFigure(
   const marks: Mark[] = [{ type: 'rect', rects }];
   const axes: Axis[] = [xAxis(xLabel, xScale), yAxis(yLabel, yScale)];
 
-  return { ...frame(context, skillId), panels: [{ id: 'main', ...box, axes, marks }], table: barTable(edges, values), legend: [] };
+  return { ...frame(context, skillId), panels: [{ id: 'main', ...box, axes, marks }], table: barTable(edges, values, context.inlineTableRows), legend: [] };
 }
 
-function barTable(edges: readonly number[], values: readonly number[]): RenderPlanV1['table'] {
-  const rows = values.map((v, i) => [formatNumber(edges[i]), formatNumber(edges[i + 1]), formatNumber(v)] as (string | number | null)[]);
+function barTable(
+  edges: readonly number[],
+  values: readonly number[],
+  inlineLimit: number,
+): RenderPlanV1['table'] {
+  const inline = Math.min(values.length, inlineLimit);
+  const rows = Array.from(
+    { length: inline },
+    (_value, i) => [edges[i], edges[i + 1], values[i]] as (string | number | null)[],
+  );
   return {
-    policy: rows.length > 500 ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+    policy: values.length > inlineLimit ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
     columns: [
       { key: 'binStart', header: 'Bin start' },
       { key: 'binEnd', header: 'Bin end' },
       { key: 'value', header: 'Value' },
     ],
-    rows: rows.slice(0, 500),
-    rowsInline: Math.min(rows.length, 500),
-    rowsTotal: rows.length,
+    rows,
+    rowsInline: inline,
+    rowsTotal: values.length,
   };
 }
 
@@ -173,10 +181,10 @@ export function compileRasterFigure(
     ...frame(context, skillId),
     panels: [{ id: 'main', ...box, axes, marks }],
     table: {
-      policy: eventTimes.length > 500 ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+      policy: eventTimes.length > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
       columns: [{ key: 'sender', header: 'Sender' }, { key: 'time', header: timeLabel }],
-      rows: eventTimes.slice(0, 500).map((t, i) => [eventSenders[i], formatNumber(t)] as (string | number | null)[]),
-      rowsInline: Math.min(eventTimes.length, 500),
+      rows: eventTimes.slice(0, context.inlineTableRows).map((t, i) => [eventSenders[i], t] as (string | number | null)[]),
+      rowsInline: Math.min(eventTimes.length, context.inlineTableRows),
       rowsTotal: eventTimes.length,
     },
     legend: [],
@@ -211,7 +219,7 @@ export function compileMatrixFigure(
 
   const cellW = box.width / colIds.length;
   const cellH = box.height / rowIds.length;
-  const maxAbs = Math.max(1e-9, ...cells.map((c) => Math.abs(c.value)));
+  const maxAbs = Math.max(1e-9, finiteExtentBy(cells, (cell) => Math.abs(cell.value))?.max ?? 0);
 
   const rects = cells.map((cell) => {
     // Opacity encodes magnitude; a present zero is drawn with a faint but visible fill so
@@ -244,10 +252,10 @@ export function compileMatrixFigure(
     ...frame(context, skillId),
     panels: [{ id: 'main', ...box, axes, marks }],
     table: {
-      policy: cells.length > 500 ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+      policy: cells.length > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
       columns: [{ key: 'target', header: 'Target' }, { key: 'source', header: 'Source' }, { key: 'value', header: 'Value' }],
-      rows: cells.slice(0, 500).map((c) => [rowIds[c.row], colIds[c.col], formatNumber(c.value)] as (string | number | null)[]),
-      rowsInline: Math.min(cells.length, 500),
+      rows: cells.slice(0, context.inlineTableRows).map((c) => [rowIds[c.row], colIds[c.col], c.value] as (string | number | null)[]),
+      rowsInline: Math.min(cells.length, context.inlineTableRows),
       rowsTotal: cells.length,
     },
     legend: [],
@@ -280,10 +288,12 @@ export function compileScatterFigure(
   }
 
   // One equal scale on both axes: distances on the page must be comparable.
-  const xMin = Math.min(...xs);
-  const xMax = Math.max(...xs);
-  const yMin = Math.min(...ys);
-  const yMax = Math.max(...ys);
+  const xExtent = finiteExtent(xs)!;
+  const yExtent = finiteExtent(ys)!;
+  const xMin = xExtent.min;
+  const xMax = xExtent.max;
+  const yMin = yExtent.min;
+  const yMax = yExtent.max;
   const dataSpan = Math.max(xMax - xMin, yMax - yMin) || 1;
   const pageSpan = Math.min(box.width, box.height);
   const scaleFactor = pageSpan / dataSpan;
@@ -307,10 +317,10 @@ export function compileScatterFigure(
     ...frame(context, skillId),
     panels: [{ id: 'main', ...box, axes, marks }],
     table: {
-      policy: xs.length > 500 ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+      policy: xs.length > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
       columns: [{ key: 'node', header: 'Node' }, { key: 'x', header: xLabel }, { key: 'y', header: yLabel }],
-      rows: xs.slice(0, 500).map((x, i) => [ids[i], formatNumber(x), formatNumber(ys[i])] as (string | number | null)[]),
-      rowsInline: Math.min(xs.length, 500),
+      rows: xs.slice(0, context.inlineTableRows).map((x, i) => [ids[i], x, ys[i]] as (string | number | null)[]),
+      rowsInline: Math.min(xs.length, context.inlineTableRows),
       rowsTotal: xs.length,
     },
     legend: [],
@@ -333,7 +343,7 @@ export function compileStemFigure(
 
   const xMin = binCenters[0];
   const xMax = binCenters[binCenters.length - 1];
-  const yMax = Math.max(0, ...counts);
+  const yMax = Math.max(0, finiteExtent(counts)?.max ?? 0);
   const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
   const yScale = linearScale(0, yMax, box.y + box.height, box.y);
   const baseline = yScale.map(0);
@@ -351,10 +361,10 @@ export function compileStemFigure(
     ...frame(context, skillId),
     panels: [{ id: 'main', ...box, axes, marks }],
     table: {
-      policy: 'complete_inline',
+      policy: counts.length > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
       columns: [{ key: 'lag', header: xLabel }, { key: 'count', header: yLabel }],
-      rows: counts.map((c, i) => [formatNumber(binCenters[i]), formatNumber(c)] as (string | number | null)[]),
-      rowsInline: counts.length,
+      rows: counts.slice(0, context.inlineTableRows).map((c, i) => [binCenters[i], c] as (string | number | null)[]),
+      rowsInline: Math.min(counts.length, context.inlineTableRows),
       rowsTotal: counts.length,
     },
     legend: [],
@@ -376,10 +386,12 @@ export function compilePointsLineFigure(
     return { ...frame(context, skillId), panels: [emptyPanel(box, 'no conditions to plot')], table: emptyTable(), legend: [] };
   }
 
-  const xMin = Math.min(...x);
-  const xMax = Math.max(...x);
-  const yMin = Math.min(0, ...y);
-  const yMax = Math.max(...y);
+  const xExtent = finiteExtent(x)!;
+  const yExtent = finiteExtent(y)!;
+  const xMin = xExtent.min;
+  const xMax = xExtent.max;
+  const yMin = Math.min(0, yExtent.min);
+  const yMax = yExtent.max;
   const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
   const yScale = linearScale(yMin, yMax, box.y + box.height, box.y);
 
@@ -397,10 +409,10 @@ export function compilePointsLineFigure(
     ...frame(context, skillId),
     panels: [{ id: 'main', ...box, axes, marks }],
     table: {
-      policy: 'complete_inline',
+      policy: x.length > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
       columns: [{ key: 'input', header: xLabel }, { key: 'response', header: yLabel }],
-      rows: x.map((xv, i) => [formatNumber(xv), formatNumber(y[i])] as (string | number | null)[]),
-      rowsInline: x.length,
+      rows: x.slice(0, context.inlineTableRows).map((xv, i) => [xv, y[i]] as (string | number | null)[]),
+      rowsInline: Math.min(x.length, context.inlineTableRows),
       rowsTotal: x.length,
     },
     legend: [],
@@ -420,10 +432,12 @@ export function compileTrajectoryFigure(
   if (xs.length === 0) {
     return { ...frame(context, skillId), panels: [emptyPanel(box, 'no trajectory to plot')], table: emptyTable(), legend: [] };
   }
-  const xMin = Math.min(...xs);
-  const xMax = Math.max(...xs);
-  const yMin = Math.min(...ys);
-  const yMax = Math.max(...ys);
+  const xExtent = finiteExtent(xs)!;
+  const yExtent = finiteExtent(ys)!;
+  const xMin = xExtent.min;
+  const xMax = xExtent.max;
+  const yMin = yExtent.min;
+  const yMax = yExtent.max;
   const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
   const yScale = linearScale(yMin, yMax, box.y + box.height, box.y);
 
@@ -439,10 +453,10 @@ export function compileTrajectoryFigure(
     ...frame(context, skillId),
     panels: [{ id: 'main', ...box, axes, marks }],
     table: {
-      policy: xs.length > 500 ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+      policy: xs.length > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
       columns: [{ key: 'x', header: xLabel }, { key: 'y', header: yLabel }],
-      rows: xs.slice(0, 500).map((x, i) => [formatNumber(x), formatNumber(ys[i])] as (string | number | null)[]),
-      rowsInline: Math.min(xs.length, 500),
+      rows: xs.slice(0, context.inlineTableRows).map((x, i) => [x, ys[i]] as (string | number | null)[]),
+      rowsInline: Math.min(xs.length, context.inlineTableRows),
       rowsTotal: xs.length,
     },
     legend: [],
@@ -501,10 +515,10 @@ export function compileGraphFigure(
     ...frame(context, skillId),
     panels: [{ id: 'main', x: box.x, y: box.y, width: box.width, height: box.height, axes: [], marks }],
     table: {
-      policy: n > 500 ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+      policy: n > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
       columns: [{ key: 'source', header: 'Source' }, { key: 'target', header: 'Target' }],
-      rows: Array.from({ length: Math.min(n, 500) }, (_v, i) => [sourceIds[i], targetIds[i]] as (string | number | null)[]),
-      rowsInline: Math.min(n, 500),
+      rows: Array.from({ length: Math.min(n, context.inlineTableRows) }, (_v, i) => [sourceIds[i], targetIds[i]] as (string | number | null)[]),
+      rowsInline: Math.min(n, context.inlineTableRows),
       rowsTotal: n,
     },
     legend: [],

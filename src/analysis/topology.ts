@@ -156,9 +156,9 @@ function aggregate(
     case 'mean':
       return values.reduce((a, b) => a + b, 0) / values.length;
     case 'min':
-      return Math.min(...values);
+      return values.reduce((minimum, value) => (value < minimum ? value : minimum), Infinity);
     case 'max':
-      return Math.max(...values);
+      return values.reduce((maximum, value) => (value > maximum ? value : maximum), -Infinity);
     case 'no_aggregation':
       // The upstream validator guarantees a single contributor here, but if somehow more
       // arrive we sum rather than silently pick one — the honest failure being visible.

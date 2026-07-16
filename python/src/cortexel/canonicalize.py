@@ -26,6 +26,8 @@ import hashlib
 import math
 from typing import Any
 
+_MAX_SAFE_INTEGER = (1 << 53) - 1
+
 
 class CanonicalizationError(ValueError):
     """A value outside the JCS domain has no canonical form."""
@@ -146,6 +148,11 @@ def canonicalize(value: Any, _depth: int = 0) -> str:
     if isinstance(value, bool):  # pragma: no cover - covered by the two lines above
         return "true" if value else "false"
     if isinstance(value, int):
+        # Python integers are arbitrary precision, while the JCS data model is IEEE-754.
+        # Values outside the I-JSON safe range must be represented as strings or as an
+        # explicitly approximate float; silently rounding them would create digest aliases.
+        if abs(value) > _MAX_SAFE_INTEGER:
+            raise CanonicalizationError("integer is outside the interoperable exact range")
         return str(value)
     if isinstance(value, float):
         return _js_number(value)

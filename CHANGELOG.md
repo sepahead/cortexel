@@ -19,6 +19,35 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rendered strings reject XML-forbidden U+FFFE/U+FFFF, and the accessible description carries
   every mandatory disclosure verbatim.
 
+### Fixed — boundary, numeric, and resource authority
+
+- Budget profiles are now a closed, deeply immutable registry. Unknown, inherited,
+  accessor-backed, boxed, and proxy-trapped profile selections fail closed; host and request
+  profiles compose only by selecting the component-wise tighter published envelope. A
+  request-selected tighter profile is re-parsed or re-snapshotted before validation, and the
+  effective profile is recorded in the artifact and its mandatory disclosure.
+- Raw and materialized boundaries now enforce the same bounded string authority, reject
+  oversized bare integer tokens that would diverge between binary64 and exact-integer JSON
+  readers, count UTF-8 without allocating a second input-sized buffer, and remain total for
+  hostile API arguments. Canonicalization rejects accessors, symbols, sparse/decorated arrays,
+  and uninspectable proxies without invoking ordinary getters, with escaped RFC 6901 paths.
+- Generated TypeScript and Python registries are recursively immutable; generated object maps
+  use null prototypes. Contract generation now rejects duplicate/dangerous map keys and parses
+  every normative JSON source with duplicate-member detection, including escaped-equivalent
+  names, before emitting any authority.
+- Width-mode bins now require an exact, bounded binary64 tiling; correlogram lag bins use the
+  contract's centred `2m+1` geometry. Correlogram preflight and filling use monotone windows with
+  a hard pair-operation bound and agree with a quadratic oracle over randomized inputs.
+- Render preflight now enforces per-series/request observations, graph nodes/edges, exact matrix
+  cell products, pairwise operations, drawn marks, text nodes, inline-table completeness, SVG
+  bytes, and positive layout geometry. Large extrema no longer use spread calls that overflow
+  the JavaScript argument stack, and artifact mark counts equal the SVG data marks actually
+  emitted rather than packed path vertices.
+- Added adversarial/property suites covering every registered unit pair, 1,500 randomized
+  bin/correlogram cases, million-rank topology declarations, hostile boundary objects, immutable
+  generated authority, and exact resource receipts. The independent Python mirror carries the
+  same integer-domain and immutability checks.
+
 ### Fixed — repository hygiene
 
 - Removed tracked Python bytecode caches and one-off scratch repro scripts with stale

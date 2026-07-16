@@ -4,15 +4,26 @@ Produced by scripts/generate-contract.ts from contract/.
 Edit the normative source and run `bun run generate`.
 """
 
-from typing import Any, Dict, List
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Any, Final
+
+
+def _freeze(value: Any) -> Any:
+    """Recursively detach and freeze generated JSON authority."""
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
+    return value
 
 PACKAGE_VERSION: str = "0.9.0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:bdf269629293da218b24e62c56e03016faec6bd4e85770fd1d756f416d3ec7b9"
+CONTRACT_DIGEST: str = "sha256:022fb3a76eb66cecdd8e54184cce22a9246c069ab34bb2a2f57e6025b7c13063"
 CATALOG_DIGEST: str = "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691"
 
-STABLE_SKILL_IDS: List[str] = [
+STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([
     "network.adjacency_matrix",
     "network.connection_graph",
     "network.degree_distribution",
@@ -32,9 +43,9 @@ STABLE_SKILL_IDS: List[str] = [
     "neuro.psth",
     "neuro.response_curve",
     "neuro.spike_raster"
-]
+])
 
-ERROR_CODES: List[str] = [
+ERROR_CODES: Final[tuple[str, ...]] = _freeze([
     "ADAPTER_ACCESSOR_INPUT_REJECTED",
     "ADAPTER_MAPPING_REQUIRED",
     "ADAPTER_NEST_UNSUPPORTED_SHAPE",
@@ -59,6 +70,7 @@ ERROR_CODES: List[str] = [
     "JSON_DEPTH_EXCEEDED",
     "JSON_DUPLICATE_KEY",
     "JSON_EMPTY_INPUT",
+    "JSON_INTEGER_OUT_OF_RANGE",
     "JSON_INVALID_NUMBER",
     "JSON_INVALID_UNICODE",
     "JSON_NON_FINITE_NUMBER",
@@ -82,6 +94,7 @@ ERROR_CODES: List[str] = [
     "PROVENANCE_SOURCE_REQUIRED",
     "RENDER_DEGENERATE_DOMAIN",
     "RENDER_DIVERGING_SCALE_NO_CENTER",
+    "RENDER_LAYOUT_UNAVAILABLE",
     "RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN",
     "RENDER_NO_DATA",
     "RENDER_SERIES_LIMIT_EXCEEDED",
@@ -89,6 +102,7 @@ ERROR_CODES: List[str] = [
     "RENDER_UNSUPPORTED_SKILL",
     "RENDER_UNVALIDATED_REQUEST",
     "RESOURCE_BUDGET_EXCEEDED",
+    "RESOURCE_BUDGET_PROFILE_UNKNOWN",
     "RESOURCE_COMPACTION_UNAVAILABLE",
     "RESOURCE_MARKS_EXCEEDED",
     "RESOURCE_MATRIX_CELLS_EXCEEDED",
@@ -143,16 +157,18 @@ ERROR_CODES: List[str] = [
     "SNAPSHOT_DECORATED_ARRAY",
     "SNAPSHOT_DEPTH_EXCEEDED",
     "SNAPSHOT_HOSTILE_REFLECTION",
+    "SNAPSHOT_INTEGER_OUT_OF_RANGE",
     "SNAPSHOT_MALFORMED_STRING",
     "SNAPSHOT_NODES_EXCEEDED",
     "SNAPSHOT_NON_FINITE_NUMBER",
     "SNAPSHOT_NON_PLAIN_OBJECT",
     "SNAPSHOT_SPARSE_ARRAY",
+    "SNAPSHOT_STRING_TOO_LONG",
     "SNAPSHOT_SYMBOL_KEY",
     "SNAPSHOT_UNSUPPORTED_TYPE"
-]
+])
 
-ERROR_STAGES: List[str] = [
+ERROR_STAGES: Final[tuple[str, ...]] = _freeze([
     "parse",
     "snapshot",
     "identity",
@@ -168,9 +184,9 @@ ERROR_STAGES: List[str] = [
     "migrate",
     "adapter",
     "internal"
-]
+])
 
-UNITS: Dict[str, Any] = {
+UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze({
     "1": {
         "dimension": "dimensionless",
         "to_canonical": 1,
@@ -518,9 +534,9 @@ UNITS: Dict[str, Any] = {
         "label": "ms",
         "aliases": []
     }
-}
+})
 
-UNIT_ALIASES: Dict[str, str] = {
+UNIT_ALIASES: Final[Mapping[str, str]] = _freeze({
     "sec": "s",
     "seconds": "s",
     "second": "s",
@@ -596,9 +612,9 @@ UNIT_ALIASES: Dict[str, str] = {
     "1/mm": "/mm",
     "1/um": "/um",
     "1/1": "/1"
-}
+})
 
-QUANTITY_KIND_DIMENSIONS: Dict[str, List[str]] = {
+QUANTITY_KIND_DIMENSIONS: Final[Mapping[str, tuple[str, ...]]] = _freeze({
     "time": [
         "time"
     ],
@@ -681,9 +697,9 @@ QUANTITY_KIND_DIMENSIONS: Dict[str, List[str]] = {
     "derivative": [
         "per_time"
     ]
-}
+})
 
-BUDGET_PROFILES: Dict[str, Dict[str, int]] = {
+BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze({
     "standard": {
         "rawInputBytes": 33554432,
         "jsonDepth": 64,
@@ -728,4 +744,4 @@ BUDGET_PROFILES: Dict[str, Dict[str, int]] = {
         "errorRecords": 32,
         "bundlePanels": 8
     }
-}
+})

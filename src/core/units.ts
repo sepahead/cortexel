@@ -41,11 +41,11 @@ export interface QuantitySeries {
 }
 
 export function isKnownUnit(code: string): boolean {
-  return Object.prototype.hasOwnProperty.call(UNITS, code);
+  return typeof code === 'string' && Object.prototype.hasOwnProperty.call(UNITS, code);
 }
 
 export function dimensionOf(code: string): string | undefined {
-  return isKnownUnit(code) ? UNITS[code].dimension : undefined;
+  return typeof code === 'string' && isKnownUnit(code) ? UNITS[code].dimension : undefined;
 }
 
 /** True when the unit has no safe SI mapping and must never be converted. */
@@ -55,6 +55,7 @@ export function isSimulatorDefined(code: string): boolean {
 
 /** The canonical code an alias means, or undefined when the string is not an alias. */
 export function resolveAlias(code: string): string | undefined {
+  if (typeof code !== 'string') return undefined;
   if (isKnownUnit(code)) return undefined;
   return Object.prototype.hasOwnProperty.call(UNIT_ALIASES, code)
     ? UNIT_ALIASES[code]
@@ -63,6 +64,7 @@ export function resolveAlias(code: string): string | undefined {
 
 /** Whether a quantity kind may legally carry a unit of this dimension. */
 export function kindAcceptsDimension(kind: string, dimension: string): boolean {
+  if (typeof kind !== 'string' || typeof dimension !== 'string') return false;
   const allowed = QUANTITY_KIND_DIMENSIONS[kind];
   return Array.isArray(allowed) && allowed.includes(dimension);
 }
@@ -81,8 +83,9 @@ export interface ConversionReceipt {
  * lose a digit for no reason.
  */
 export function convert(value: number, from: string, to: string): number {
-  if (from === to) return value;
-
+  if (!Number.isFinite(value) || typeof from !== 'string' || typeof to !== 'string') {
+    throw new Error('conversion requires a finite value and two registered unit codes');
+  }
   const fromUnit = UNITS[from];
   const toUnit = UNITS[to];
 
@@ -100,17 +103,31 @@ export function convert(value: number, from: string, to: string): number {
     );
   }
 
-  return value * (fromUnit.toCanonical / toUnit.toCanonical);
+  if (from === to) return value;
+
+  const converted = value * (fromUnit.toCanonical / toUnit.toCanonical);
+  if (!Number.isFinite(converted) || (value !== 0 && converted === 0)) {
+    throw new Error('unit conversion overflowed or underflowed binary64');
+  }
+  return converted;
 }
 
 /** The single factor a conversion would apply, for the derivation receipt. */
 export function conversionFactor(from: string, to: string): number {
-  if (from === to) return 1;
+  if (typeof from !== 'string' || typeof to !== 'string') {
+    throw new Error('conversion factor requires two registered unit codes');
+  }
   const fromUnit = UNITS[from];
   const toUnit = UNITS[to];
   if (!fromUnit || !toUnit || fromUnit.toCanonical === null || toUnit.toCanonical === null) {
     throw new Error(`no conversion factor exists for ${from} -> ${to}`);
   }
+  if (fromUnit.dimension !== toUnit.dimension) {
+    throw new Error(
+      `no conversion factor exists across dimensions: ${from} (${fromUnit.dimension}) -> ${to} (${toUnit.dimension})`,
+    );
+  }
+  if (from === to) return 1;
   return fromUnit.toCanonical / toUnit.toCanonical;
 }
 
@@ -197,18 +214,19 @@ export function checkQuantityUnit(
  * comparison and is not one.
  */
 export function axesAreCompatible(unitA: string, unitB: string): boolean {
+  if (typeof unitA !== 'string' || typeof unitB !== 'string') return false;
   const a = dimensionOf(unitA);
   const b = dimensionOf(unitB);
   if (a === undefined || b === undefined) return false;
   // Two simulator-defined units are NOT compatible, even with each other: their
   // meanings come from models that may differ.
-  if (a === 'simulator_defined' || b === 'simulator_defined') return unitA === unitB;
+  if (a === 'simulator_defined' || b === 'simulator_defined') return false;
   return a === b;
 }
 
 /** The display label for a unit ("" for the dimensionless unit). */
 export function unitLabel(code: string): string {
-  return isKnownUnit(code) ? UNITS[code].label : code;
+  return typeof code === 'string' && isKnownUnit(code) ? UNITS[code].label : '';
 }
 
 /**
@@ -218,6 +236,7 @@ export function unitLabel(code: string): string {
  * unit ms^-1, and labelling it "probability" would overstate what it is.
  */
 export function reciprocalUnit(code: string): string | undefined {
+  if (typeof code !== 'string') return undefined;
   const reciprocal = `/${code}`;
   return isKnownUnit(reciprocal) ? reciprocal : undefined;
 }

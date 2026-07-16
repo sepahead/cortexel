@@ -111,10 +111,19 @@ describe('safe snapshot — rejects non-JSON shapes', () => {
     expect(codes(undefined)).toContain('SNAPSHOT_UNSUPPORTED_TYPE');
   });
 
-  it('rejects non-finite and negative-zero numbers', () => {
+  it('rejects non-finite numbers and accepts negative zero under the JCS policy', () => {
     expect(codes(NaN)).toContain('SNAPSHOT_NON_FINITE_NUMBER');
     expect(codes(Infinity)).toContain('SNAPSHOT_NON_FINITE_NUMBER');
     expect(codes({ v: NaN })).toContain('SNAPSHOT_NON_FINITE_NUMBER');
+    expect(codes(-0)).toEqual([]);
+    expect(codes(1e21)).toEqual([]);
+  });
+
+  it('enforces the active materialized-string limit', () => {
+    expect(codes('x'.repeat(limits.jsonStringLength))).toEqual([]);
+    expect(codes('x'.repeat(limits.jsonStringLength + 1))).toContain(
+      'SNAPSHOT_STRING_TOO_LONG',
+    );
   });
 
   it('rejects a symbol-keyed property', () => {

@@ -27,30 +27,37 @@ function collectQuantities(
   node: unknown,
   path: (string | number)[],
   out: { kind: string; unit: string; path: (string | number)[] }[],
-  depth: number,
 ): void {
-  if (depth > 32 || node === null || typeof node !== 'object') return;
+  if (node === null || typeof node !== 'object') return;
 
-  if (Array.isArray(node)) {
-    for (let i = 0; i < node.length; i++) {
-      path.push(i);
-      collectQuantities(node[i], path, out, depth + 1);
-      path.pop();
+  const pending: { node: object; path: (string | number)[] }[] = [{ node, path }];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (Array.isArray(current.node)) {
+      for (let i = current.node.length - 1; i >= 0; i--) {
+        const child = current.node[i];
+        if (child !== null && typeof child === 'object') {
+          pending.push({ node: child, path: [...current.path, i] });
+        }
+      }
+      continue;
     }
-    return;
-  }
 
-  const record = node as Record<string, unknown>;
-  const kind = asString(record.kind);
-  const unit = asString(record.unit);
-  if (kind !== undefined && unit !== undefined) {
-    out.push({ kind, unit, path: [...path] });
-  }
+    const record = current.node as Record<string, unknown>;
+    const kind = asString(record.kind);
+    const unit = asString(record.unit);
+    if (kind !== undefined && unit !== undefined) {
+      out.push({ kind, unit, path: current.path });
+    }
 
-  for (const key of Object.keys(record)) {
-    path.push(key);
-    collectQuantities(record[key], path, out, depth + 1);
-    path.pop();
+    const keys = Object.keys(record);
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const key = keys[i];
+      const child = record[key];
+      if (child !== null && typeof child === 'object') {
+        pending.push({ node: child, path: [...current.path, key] });
+      }
+    }
   }
 }
 
@@ -59,29 +66,36 @@ function collectBareUnits(
   node: unknown,
   path: (string | number)[],
   out: { unit: string; path: (string | number)[] }[],
-  depth: number,
 ): void {
-  if (depth > 32 || node === null || typeof node !== 'object') return;
+  if (node === null || typeof node !== 'object') return;
 
-  if (Array.isArray(node)) {
-    for (let i = 0; i < node.length; i++) {
-      path.push(i);
-      collectBareUnits(node[i], path, out, depth + 1);
-      path.pop();
+  const pending: { node: object; path: (string | number)[] }[] = [{ node, path }];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (Array.isArray(current.node)) {
+      for (let i = current.node.length - 1; i >= 0; i--) {
+        const child = current.node[i];
+        if (child !== null && typeof child === 'object') {
+          pending.push({ node: child, path: [...current.path, i] });
+        }
+      }
+      continue;
     }
-    return;
-  }
 
-  const record = node as Record<string, unknown>;
-  const unit = asString(record.unit);
-  if (unit !== undefined && asString(record.kind) === undefined) {
-    out.push({ unit, path: [...path, 'unit'] });
-  }
+    const record = current.node as Record<string, unknown>;
+    const unit = asString(record.unit);
+    if (unit !== undefined && asString(record.kind) === undefined) {
+      out.push({ unit, path: [...current.path, 'unit'] });
+    }
 
-  for (const key of Object.keys(record)) {
-    path.push(key);
-    collectBareUnits(record[key], path, out, depth + 1);
-    path.pop();
+    const keys = Object.keys(record);
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const key = keys[i];
+      const child = record[key];
+      if (child !== null && typeof child === 'object') {
+        pending.push({ node: child, path: [...current.path, key] });
+      }
+    }
   }
 }
 
@@ -89,8 +103,8 @@ export const unitDimensionMatch: SemanticValidator = (
   context: SemanticContext,
 ): CortexelError[] => {
   const quantities: { kind: string; unit: string; path: (string | number)[] }[] = [];
-  collectQuantities(asRecord(context.request.data), ['data'], quantities, 0);
-  collectQuantities(asRecord(context.request.parameters), ['parameters'], quantities, 0);
+  collectQuantities(asRecord(context.request.data), ['data'], quantities);
+  collectQuantities(asRecord(context.request.parameters), ['parameters'], quantities);
 
   const errors: CortexelError[] = [];
   for (const quantity of quantities) {
@@ -110,8 +124,8 @@ export const unitCanonicalCode: SemanticValidator = (
   context: SemanticContext,
 ): CortexelError[] => {
   const bare: { unit: string; path: (string | number)[] }[] = [];
-  collectBareUnits(asRecord(context.request.data), ['data'], bare, 0);
-  collectBareUnits(asRecord(context.request.parameters), ['parameters'], bare, 0);
+  collectBareUnits(asRecord(context.request.data), ['data'], bare);
+  collectBareUnits(asRecord(context.request.parameters), ['parameters'], bare);
 
   const errors: CortexelError[] = [];
   for (const entry of bare) {

@@ -51,6 +51,13 @@ describe('runtime budget preflight', () => {
     expect(countObservationsForTest(data)).toBeGreaterThan(250);
   });
 
+  it('does not lose observation carriers beyond the historical recursion cutoff', async () => {
+    const { countObservationsForTest } = await import('../src/render/buildFigure.js');
+    let data: unknown = [1, 2, 3];
+    for (let depth = 0; depth < 48; depth++) data = { nested: data };
+    expect(countObservationsForTest(data)).toBe(3);
+  });
+
   it('accepts a request within budget', () => {
     expect(buildFigure(populationRate).ok).toBe(true);
   });

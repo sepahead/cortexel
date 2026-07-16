@@ -14,6 +14,7 @@ import json
 from typing import Any
 
 _DANGEROUS_KEYS = {"__proto__", "constructor", "prototype"}
+_MAX_SAFE_INTEGER = (1 << 53) - 1
 
 
 class JsonParseError(ValueError):
@@ -66,7 +67,12 @@ def parse_json_strict(text: str) -> Any:
 
     try:
         # allow_nan=False rejects NaN/Infinity literals during parsing.
-        value = json.loads(text, object_pairs_hook=_pairs_hook, parse_constant=_reject_constant)
+        value = json.loads(
+            text,
+            object_pairs_hook=_pairs_hook,
+            parse_constant=_reject_constant,
+            parse_int=_parse_integer,
+        )
     except JsonParseError:
         raise
     except json.JSONDecodeError as exc:
@@ -78,3 +84,13 @@ def parse_json_strict(text: str) -> Any:
 
 def _reject_constant(_name: str):
     raise JsonParseError("JSON_NON_FINITE_NUMBER", "NaN and Infinity are not valid JSON")
+
+
+def _parse_integer(token: str) -> int:
+    value = int(token)
+    if abs(value) > _MAX_SAFE_INTEGER:
+        raise JsonParseError(
+            "JSON_INTEGER_OUT_OF_RANGE",
+            "the bare integer token is outside the interoperable exact range",
+        )
+    return value

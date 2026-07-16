@@ -81,7 +81,7 @@
       "id": "MULTAPSE_AGGREGATED",
       "severity": "important",
       "trigger": "derivation contains a multapse aggregation with countBefore > cells",
-      "text": "Multiple connections between the same pair were combined using {aggregation}. Each cell shows an aggregate of {contributingCount} connections, not a single synapse."
+      "text": "Multiple connections between the same endpoint pair were combined using {aggregation}. The drawn value is an aggregate, not a single synapse."
     },
     {
       "id": "ABSENT_IS_NOT_ZERO",

@@ -21,6 +21,7 @@ import {
   type SemanticValidator,
 } from './types.js';
 import { checkReferencesInUniverse } from './structure.js';
+import { MAX_MATERIALIZED_BINS, materializeWidthBins } from '../binning.js';
 
 /** Resolve bin edges from either an explicit edge list or a width that tiles a range. */
 export function resolveBinEdges(spec: Record<string, unknown> | undefined): number[] | undefined {
@@ -44,16 +45,8 @@ export function resolveBinEdges(spec: Record<string, unknown> | undefined): numb
     if (width === undefined || start === undefined || stop === undefined) return undefined;
     if (!(width > 0) || !(stop > start)) return undefined;
 
-    const edges: number[] = [];
-    // Accumulate from the index rather than by repeated addition: `start + i*width`
-    // keeps the error bounded, while `edge += width` lets it compound across a
-    // thousand bins and drift the last edge off the window.
-    const count = Math.ceil((stop - start) / width);
-    if (count > 100000) return undefined;
-    for (let i = 0; i <= count; i++) {
-      edges.push(start + i * width);
-    }
-    return edges;
+    const result = materializeWidthBins(start, stop, width);
+    return result.ok ? [...result.edges] : undefined;
   }
 
   return undefined;
@@ -135,6 +128,20 @@ export const binsStrictlyIncreasing: SemanticValidator = (
           message: 'the binned range must be non-empty: stop must be greater than start.',
         }),
       );
+    }
+    if (width !== undefined && start !== undefined && stop !== undefined && width > 0 && stop > start) {
+      const materialized = materializeWidthBins(start, stop, width);
+      if (!materialized.ok) {
+        errors.push(
+          makeError({
+            code: 'SCIENCE_BIN_EDGES_INVALID',
+            stage: 'science',
+            instancePath: pointer(...at, 'width'),
+            validatorId: 'bins.strictly_increasing',
+            message: `the width-mode specification cannot be materialized as at most ${MAX_MATERIALIZED_BINS} strictly increasing binary64 bins over the declared range. Increase the width or use explicit edges.`,
+          }),
+        );
+      }
     }
   }
 

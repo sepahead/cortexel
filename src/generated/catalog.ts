@@ -6,6 +6,7 @@
  * `bun run check:generated` fails if this file drifts from its source.
  */
 
+import { freezeGenerated } from '../core/deep-freeze.js';
 import type { SemanticValidatorId, DisclosureId } from './registry.js';
 
 export interface SkillCatalogEntry {
@@ -37,7 +38,7 @@ export interface SkillCatalogEntry {
   readonly knownLimitations: readonly string[];
 }
 
-export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object.freeze({
+export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freezeGenerated({
   "network.adjacency_matrix": {
     "id": "network.adjacency_matrix",
     "revision": 1,
@@ -4527,7 +4528,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
 });
 
 /** The stable catalog, in a deliberate discovery order: traces, events, distributions, topology, spatial. */
-export const STABLE_SKILL_IDS = [
+export const STABLE_SKILL_IDS = freezeGenerated([
   "network.adjacency_matrix",
   "network.connection_graph",
   "network.degree_distribution",
@@ -4547,21 +4548,21 @@ export const STABLE_SKILL_IDS = [
   "neuro.psth",
   "neuro.response_curve",
   "neuro.spike_raster"
-] as const;
+] as const);
 export type StableSkillId = (typeof STABLE_SKILL_IDS)[number];
 
-export const EXPERIMENTAL_CAPABILITY_IDS = [
+export const EXPERIMENTAL_CAPABILITY_IDS = freezeGenerated([
   "experimental.evidence.knowledge_graph",
   "experimental.network.spatial_3d",
   "experimental.neuro.animation_replay"
-] as const;
+] as const);
 
-export const REMOVED_CAPABILITY_IDS = [
+export const REMOVED_CAPABILITY_IDS = freezeGenerated([
   "nest.animation_replay",
   "nest.connectivity_matrix",
   "nest.spatial_2d",
   "nest.stimulus_response"
-] as const;
+] as const);
 
 export interface LegacyMapEntry {
   readonly legacyId: string;
@@ -4576,7 +4577,7 @@ export interface LegacyMapEntry {
 }
 
 /** Every pre-1.0 id has a deterministic outcome here. There is no fall-through. */
-export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object.freeze({
+export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = freezeGenerated({
   "nest.voltage_trace": {
     "legacyId": "nest.voltage_trace",
     "outcome": "migrate",
@@ -4865,7 +4866,7 @@ export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object
   }
 });
 
-export const RENDERERS = Object.freeze({
+export const RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
     "revision": 1,
@@ -5066,7 +5067,7 @@ export const RENDERERS = Object.freeze({
   }
 });
 
-export const THEMES = Object.freeze({
+export const THEMES = freezeGenerated({
   "light": {
     "id": "light",
     "background": "#ffffff",
@@ -5117,7 +5118,7 @@ export const THEMES = Object.freeze({
   }
 });
 
-export const CATEGORICAL_SERIES_STYLES = Object.freeze([
+export const CATEGORICAL_SERIES_STYLES = freezeGenerated([
   {
     "index": 0,
     "color": "#0072b2",

@@ -14,7 +14,7 @@ export {
   type FigureFailure,
 } from './buildFigure.js';
 
-export { renderSvg, type SvgReport } from './svg.js';
+export { countPlanResources, renderSvg, type SvgReport } from './svg.js';
 
 export type {
   RenderPlanV1,

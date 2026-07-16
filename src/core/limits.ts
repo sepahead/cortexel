@@ -16,7 +16,12 @@
  * calling the result a figure.
  */
 
-import { BUDGET_PROFILES, type BudgetProfileId } from '../generated/budgets.js';
+import {
+  BUDGET_PROFILES,
+  BUDGET_PROFILE_IDS,
+  type BudgetProfileId,
+} from '../generated/budgets.js';
+import { freezeGenerated } from './deep-freeze.js';
 
 export type { BudgetProfileId };
 
@@ -48,12 +53,59 @@ export interface BudgetLimits {
 
 export const DEFAULT_PROFILE: BudgetProfileId = 'standard';
 
+/** Resolve an untrusted profile id without coercion, prototype lookup, or throwing. */
+export function tryGetBudgetLimits(profile: unknown = DEFAULT_PROFILE): BudgetLimits | undefined {
+  if (
+    typeof profile !== 'string' ||
+    !(BUDGET_PROFILE_IDS as readonly string[]).includes(profile) ||
+    !Object.prototype.hasOwnProperty.call(BUDGET_PROFILES, profile)
+  ) {
+    return undefined;
+  }
+  return BUDGET_PROFILES[profile as BudgetProfileId] as unknown as BudgetLimits;
+}
+
 export function getBudgetLimits(profile: BudgetProfileId = DEFAULT_PROFILE): BudgetLimits {
-  const found = BUDGET_PROFILES[profile];
+  const found = tryGetBudgetLimits(profile);
   if (!found) {
-    throw new Error(`unknown budget profile: ${String(profile)}`);
+    throw new Error('unknown budget profile');
   }
   return found;
+}
+
+export interface ResolvedBudgetProfile {
+  readonly profile: BudgetProfileId;
+  readonly limits: BudgetLimits;
+}
+
+/**
+ * Select the component-wise tighter of two published profiles.
+ *
+ * Profiles are deliberately ordered resource envelopes. If a future registry adds two
+ * incomparable profiles, this returns `undefined` rather than silently mixing them under
+ * a misleading profile id. The generator/test suite then has to establish an explicit
+ * composition contract first.
+ */
+export function trySelectTighterBudgetProfile(
+  hostProfile: unknown,
+  requestedProfile: unknown,
+): ResolvedBudgetProfile | undefined {
+  const host = tryGetBudgetLimits(hostProfile);
+  const requested = tryGetBudgetLimits(requestedProfile);
+  if (!host || !requested || typeof hostProfile !== 'string' || typeof requestedProfile !== 'string') {
+    return undefined;
+  }
+
+  const noGreaterThan = (left: BudgetLimits, right: BudgetLimits): boolean =>
+    (Object.keys(left) as (keyof BudgetLimits)[]).every((key) => left[key] <= right[key]);
+
+  if (noGreaterThan(requested, host)) {
+    return { profile: requestedProfile as BudgetProfileId, limits: requested };
+  }
+  if (noGreaterThan(host, requested)) {
+    return { profile: hostProfile as BudgetProfileId, limits: host };
+  }
+  return undefined;
 }
 
 /**
@@ -68,13 +120,51 @@ export function restrictLimits(
   base: BudgetLimits,
   overrides: Partial<BudgetLimits>,
 ): BudgetLimits {
-  const out: Record<string, number> = { ...base };
-  for (const [key, value] of Object.entries(overrides)) {
+  const INVALID_BASE = Symbol('invalid-base-budget');
+  const out: Record<string, number> = Object.create(null);
+  const limitKeys = Object.keys(BUDGET_PROFILES[DEFAULT_PROFILE]);
+  try {
+    for (const key of limitKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(base, key);
+      const value = descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'value')
+        ? descriptor.value
+        : undefined;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        throw INVALID_BASE;
+      }
+      out[key] = value;
+    }
+  } catch (error) {
+    if (error === INVALID_BASE) {
+      throw new Error('base budget limits must be own finite non-negative data properties');
+    }
+    throw new Error('base budget limits could not be inspected safely');
+  }
+
+  let keys: readonly PropertyKey[];
+  try {
+    keys = Reflect.ownKeys(overrides as object);
+  } catch {
+    // Proxy traps are an unavoidable property of accepting a materialized JS value.
+    // A trap failure cannot widen limits or mutate the returned authority.
+    return freezeGenerated(out) as unknown as BudgetLimits;
+  }
+
+  for (const key of keys) {
+    if (typeof key !== 'string' || !limitKeys.includes(key)) continue;
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(overrides, key);
+    } catch {
+      return freezeGenerated(out) as unknown as BudgetLimits;
+    }
+    // Never read an accessor. Ordinary getters therefore cannot execute here.
+    if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) continue;
+    const value = descriptor.value;
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) continue;
     const current = out[key];
-    if (current === undefined) continue;
     // min(), never max(). This is the whole point of the function.
     out[key] = Math.min(current, value);
   }
-  return out as unknown as BudgetLimits;
+  return freezeGenerated(out) as unknown as BudgetLimits;
 }

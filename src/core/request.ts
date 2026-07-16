@@ -29,7 +29,13 @@ import {
   makeError,
   type CortexelError,
 } from './errors.js';
-import { getBudgetLimits, type BudgetProfileId } from './limits.js';
+import {
+  DEFAULT_PROFILE,
+  tryGetBudgetLimits,
+  trySelectTighterBudgetProfile,
+  type BudgetProfileId,
+  type BudgetLimits,
+} from './limits.js';
 import { parseJsonStrict, type JsonValue } from './parse-json.js';
 import { snapshotValue } from './safe-snapshot.js';
 import { checkCallerAuthority, runSemanticValidators } from './semantics/index.js';
@@ -80,6 +86,78 @@ export type ValidationOutcome =
 
 export interface ValidateOptions {
   readonly budgetProfile?: BudgetProfileId;
+}
+
+function resolveBudgetProfile(options: ValidateOptions): {
+  readonly profile: string;
+  readonly limits?: BudgetLimits;
+} {
+  let requested: unknown = DEFAULT_PROFILE;
+  try {
+    if (options !== null && options !== undefined) {
+      if (typeof options !== 'object') throw new Error('invalid options');
+      const descriptor = Object.getOwnPropertyDescriptor(options, 'budgetProfile');
+      if (descriptor !== undefined) {
+        if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+          throw new Error('accessor-backed options');
+        }
+        requested = descriptor.value ?? DEFAULT_PROFILE;
+      }
+    }
+  } catch {
+    // An accessor or throwing Proxy is not an omission. Preserve it as invalid without
+    // invoking ordinary getters or granting inherited properties resource authority.
+    requested = null;
+  }
+
+  return {
+    profile: typeof requested === 'string' ? requested : '<invalid>',
+    limits: tryGetBudgetLimits(requested),
+  };
+}
+
+function invalidBudgetProfile(assurance: InputAssurance): ValidationOutcome {
+  return fail(
+    [
+      makeError({
+        code: 'RESOURCE_BUDGET_PROFILE_UNKNOWN',
+        stage: 'budget',
+        message:
+          'the selected budget profile is not in this build\'s closed registry. Unknown and inherited profile ids cannot disable resource limits.',
+      }),
+    ],
+    assurance,
+  );
+}
+
+/** Read the request's profile only after it has been reduced to a plain JSON tree. */
+function requestedBudgetProfile(value: JsonValue): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return DEFAULT_PROFILE;
+  const presentation = (value as Record<string, unknown>).presentation;
+  if (presentation === null || typeof presentation !== 'object' || Array.isArray(presentation)) {
+    return DEFAULT_PROFILE;
+  }
+  return Object.prototype.hasOwnProperty.call(presentation, 'budgetProfile')
+    ? (presentation as Record<string, unknown>).budgetProfile
+    : DEFAULT_PROFILE;
+}
+
+function assuranceFor(
+  boundary: InputAssurance['boundary'],
+  profile: unknown,
+): InputAssurance {
+  return {
+    boundary,
+    duplicateKeys:
+      boundary === 'raw_json_text'
+        ? 'rejected_before_materialization'
+        : 'not_observable_after_materialization',
+    parserProfile:
+      boundary === 'raw_json_text'
+        ? 'cortexel-strict-json/1.0'
+        : 'cortexel-safe-snapshot/1.0',
+    budgetProfile: typeof profile === 'string' ? profile : '<invalid>',
+  };
 }
 
 function fail(errors: readonly CortexelError[], assurance: InputAssurance): ValidationOutcome {
@@ -321,18 +399,39 @@ export function parseAndValidateRequest(
   text: string,
   options: ValidateOptions = {},
 ): ValidationOutcome {
-  const profile = options.budgetProfile ?? 'standard';
-  const limits = getBudgetLimits(profile);
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor('raw_json_text', host.profile);
 
-  const assurance: InputAssurance = {
-    boundary: 'raw_json_text',
-    duplicateKeys: 'rejected_before_materialization',
-    parserProfile: 'cortexel-strict-json/1.0',
-    budgetProfile: profile,
-  };
+  if (!host.limits) return invalidBudgetProfile(assurance);
 
-  const parsed = parseJsonStrict(text, { limits });
+  if (typeof text !== 'string') {
+    return fail(
+      [
+        makeError({
+          code: 'JSON_SYNTAX',
+          stage: 'parse',
+          message: 'the raw request boundary accepts a JSON text string only.',
+        }),
+      ],
+      assurance,
+    );
+  }
+
+  let parsed = parseJsonStrict(text, { limits: host.limits });
   if (!parsed.ok) return fail(parsed.errors, assurance);
+
+  const requested = requestedBudgetProfile(parsed.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor('raw_json_text', effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+
+  // A request may narrow its own authority. Re-run the raw boundary under that tighter
+  // envelope so the recorded profile covers bytes, depth, nodes, strings, and arrays —
+  // not merely the later derivation/render stages.
+  if (effective.profile !== host.profile) {
+    parsed = parseJsonStrict(text, { limits: effective.limits });
+    if (!parsed.ok) return fail(parsed.errors, assurance);
+  }
 
   return validateSnapshot(parsed.value, assurance);
 }
@@ -350,18 +449,23 @@ export function validateRequestValue(
   value: unknown,
   options: ValidateOptions = {},
 ): ValidationOutcome {
-  const profile = options.budgetProfile ?? 'standard';
-  const limits = getBudgetLimits(profile);
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor('materialized_value', host.profile);
 
-  const assurance: InputAssurance = {
-    boundary: 'materialized_value',
-    duplicateKeys: 'not_observable_after_materialization',
-    parserProfile: 'cortexel-safe-snapshot/1.0',
-    budgetProfile: profile,
-  };
+  if (!host.limits) return invalidBudgetProfile(assurance);
 
-  const snapshot = snapshotValue(value, limits);
+  let snapshot = snapshotValue(value, host.limits);
   if (!snapshot.ok) return fail(snapshot.errors, assurance);
+
+  const requested = requestedBudgetProfile(snapshot.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor('materialized_value', effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+
+  if (effective.profile !== host.profile) {
+    snapshot = snapshotValue(value, effective.limits);
+    if (!snapshot.ok) return fail(snapshot.errors, assurance);
+  }
 
   return validateSnapshot(snapshot.value, assurance);
 }

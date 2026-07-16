@@ -49,6 +49,7 @@ export interface DisclosureFacts {
   readonly callerNotePresent?: boolean;
   readonly experimentalRenderer?: boolean;
   readonly nonStandardBudgetProfile?: boolean;
+  readonly budgetProfileId?: string;
   readonly sampledRetained?: number;
   readonly sampledSource?: number;
   readonly retainedConnectionCount?: number;
@@ -100,7 +101,10 @@ const RULE_PREDICATES: Readonly<Record<string, (facts: DisclosureFacts) => boole
 
   CALLER_NOTE_UNVERIFIED: (f) => f.callerNotePresent === true,
   EXPERIMENTAL_RENDERER: (f) => f.experimentalRenderer === true,
-  NONSTANDARD_BUDGET_PROFILE: (f) => f.nonStandardBudgetProfile === true,
+  NONSTANDARD_BUDGET_PROFILE: (f) =>
+    f.budgetProfileId !== undefined
+      ? f.budgetProfileId !== 'standard'
+      : f.nonStandardBudgetProfile === true,
 };
 
 const SEVERITY_ORDER: Readonly<Record<string, number>> = {
@@ -127,7 +131,8 @@ function fillTemplate(text: string, facts: DisclosureFacts): string {
     reason: facts.uncertaintyReason,
     aggregation: facts.multapseAggregation,
     conversions: facts.unitConversions?.join(', '),
-    profileId: facts.nonStandardBudgetProfile ? 'custom' : 'standard',
+    profileId:
+      facts.budgetProfileId ?? (facts.nonStandardBudgetProfile ? 'custom' : 'standard'),
   };
 
   return text.replace(/\{(\w+)\}/g, (whole, key: string) => {

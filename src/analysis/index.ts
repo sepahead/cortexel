@@ -10,7 +10,16 @@
  * before either of them ran.
  */
 
-export { edgesFromWidth, binIndex, binCounts, binWidths, binCenters, type Bins } from './bins.js';
+export {
+  MAX_MATERIALIZED_BINS,
+  edgesFromWidth,
+  tryEdgesFromWidth,
+  binIndex,
+  binCounts,
+  binWidths,
+  binCenters,
+  type Bins,
+} from './bins.js';
 export {
   makeEventTable,
   stableEventOrder,
@@ -20,7 +29,13 @@ export {
 } from './events.js';
 export { computeIsi, type IsiResult } from './isi.js';
 export { computePopulationRate, verifyRates, type RateResult } from './rates.js';
-export { computeCorrelogram, type CorrelogramResult } from './correlogram.js';
+export {
+  DEFAULT_MAX_PAIRWISE_OPERATIONS,
+  PairwiseBudgetExceededError,
+  countEligibleCorrelogramPairs,
+  computeCorrelogram,
+  type CorrelogramResult,
+} from './correlogram.js';
 export {
   computeDegrees,
   computeMatrix,

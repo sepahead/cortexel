@@ -6,7 +6,9 @@
  * `bun run check:generated` fails if this file drifts from its source.
  */
 
-export const ERROR_CODES = [
+import { freezeGenerated } from '../core/deep-freeze.js';
+
+export const ERROR_CODES = freezeGenerated([
   "ADAPTER_ACCESSOR_INPUT_REJECTED",
   "ADAPTER_MAPPING_REQUIRED",
   "ADAPTER_NEST_UNSUPPORTED_SHAPE",
@@ -31,6 +33,7 @@ export const ERROR_CODES = [
   "JSON_DEPTH_EXCEEDED",
   "JSON_DUPLICATE_KEY",
   "JSON_EMPTY_INPUT",
+  "JSON_INTEGER_OUT_OF_RANGE",
   "JSON_INVALID_NUMBER",
   "JSON_INVALID_UNICODE",
   "JSON_NON_FINITE_NUMBER",
@@ -54,6 +57,7 @@ export const ERROR_CODES = [
   "PROVENANCE_SOURCE_REQUIRED",
   "RENDER_DEGENERATE_DOMAIN",
   "RENDER_DIVERGING_SCALE_NO_CENTER",
+  "RENDER_LAYOUT_UNAVAILABLE",
   "RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN",
   "RENDER_NO_DATA",
   "RENDER_SERIES_LIMIT_EXCEEDED",
@@ -61,6 +65,7 @@ export const ERROR_CODES = [
   "RENDER_UNSUPPORTED_SKILL",
   "RENDER_UNVALIDATED_REQUEST",
   "RESOURCE_BUDGET_EXCEEDED",
+  "RESOURCE_BUDGET_PROFILE_UNKNOWN",
   "RESOURCE_COMPACTION_UNAVAILABLE",
   "RESOURCE_MARKS_EXCEEDED",
   "RESOURCE_MATRIX_CELLS_EXCEEDED",
@@ -115,17 +120,19 @@ export const ERROR_CODES = [
   "SNAPSHOT_DECORATED_ARRAY",
   "SNAPSHOT_DEPTH_EXCEEDED",
   "SNAPSHOT_HOSTILE_REFLECTION",
+  "SNAPSHOT_INTEGER_OUT_OF_RANGE",
   "SNAPSHOT_MALFORMED_STRING",
   "SNAPSHOT_NODES_EXCEEDED",
   "SNAPSHOT_NON_FINITE_NUMBER",
   "SNAPSHOT_NON_PLAIN_OBJECT",
   "SNAPSHOT_SPARSE_ARRAY",
+  "SNAPSHOT_STRING_TOO_LONG",
   "SNAPSHOT_SYMBOL_KEY",
   "SNAPSHOT_UNSUPPORTED_TYPE"
-] as const;
+] as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
-export const ERROR_STAGES = [
+export const ERROR_STAGES = freezeGenerated([
   "parse",
   "snapshot",
   "identity",
@@ -141,10 +148,10 @@ export const ERROR_STAGES = [
   "migrate",
   "adapter",
   "internal"
-] as const;
+] as const);
 export type ErrorStage = (typeof ERROR_STAGES)[number];
 
-export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: ErrorStage; readonly severity: 'error' | 'warning'; readonly summary: string; readonly correctiveAction: string }>> = Object.freeze({
+export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: ErrorStage; readonly severity: 'error' | 'warning'; readonly summary: string; readonly correctiveAction: string }>> = freezeGenerated({
   "JSON_EMPTY_INPUT": {
     "stage": "parse",
     "severity": "error",
@@ -180,6 +187,12 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "severity": "error",
     "summary": "A number is outside the finite binary64 model.",
     "correctiveAction": "Cortexel accepts only finite binary64 values. Represent a missing observation as null, not as a non-finite number."
+  },
+  "JSON_INTEGER_OUT_OF_RANGE": {
+    "stage": "parse",
+    "severity": "error",
+    "summary": "A bare JSON integer token is outside the interoperable exact range.",
+    "correctiveAction": "Use an integer between -(2^53-1) and +(2^53-1), or encode a non-arithmetic identifier as a string. Larger integer tokens do not survive JSON runtimes portably."
   },
   "JSON_INVALID_UNICODE": {
     "stage": "parse",
@@ -300,6 +313,18 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "severity": "error",
     "summary": "A number was NaN or infinite.",
     "correctiveAction": "Use null for a missing observation. A non-finite value is never a measurement."
+  },
+  "SNAPSHOT_INTEGER_OUT_OF_RANGE": {
+    "stage": "snapshot",
+    "severity": "error",
+    "summary": "A host-language arbitrary-precision integer is outside the interoperable exact range.",
+    "correctiveAction": "Use an exact safe integer, an IEEE-754 floating value when the quantity is genuinely approximate, or encode a non-arithmetic identifier as a string."
+  },
+  "SNAPSHOT_STRING_TOO_LONG": {
+    "stage": "snapshot",
+    "severity": "error",
+    "summary": "A materialized string exceeds the active profile's length limit.",
+    "correctiveAction": "Shorten the string or use a bounded content-addressed reference. Materialized input cannot bypass raw JSON string budgets."
   },
   "SNAPSHOT_DANGEROUS_KEY": {
     "stage": "snapshot",
@@ -637,6 +662,12 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "summary": "The request exceeds a hard limit of the active budget profile.",
     "correctiveAction": "Reduce the input. A hard limit protects the process and cannot be raised from untrusted input; it may only be lowered."
   },
+  "RESOURCE_BUDGET_PROFILE_UNKNOWN": {
+    "stage": "budget",
+    "severity": "error",
+    "summary": "The host selected a budget profile that is not in the closed registry.",
+    "correctiveAction": "Use a profile returned by the installed Cortexel build. Unknown, inherited, and caller-invented profile ids fail closed."
+  },
   "RESOURCE_OBSERVATIONS_EXCEEDED": {
     "stage": "budget",
     "severity": "error",
@@ -751,6 +782,12 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "summary": "A theme override failed its contrast or format constraints.",
     "correctiveAction": "Use an approved semantic token within the documented limits. Raw CSS, URLs, gradients, and font files are never accepted."
   },
+  "RENDER_LAYOUT_UNAVAILABLE": {
+    "stage": "render",
+    "severity": "error",
+    "summary": "The requested dimensions cannot contain a positive plotting region and mandatory figure content.",
+    "correctiveAction": "Increase the figure dimensions. Cortexel never emits negative or collapsed panel geometry to make required disclosures fit."
+  },
   "MIGRATION_LEGACY_ID_NOT_ACCEPTED": {
     "stage": "structural",
     "severity": "error",
@@ -837,7 +874,7 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
   }
 });
 
-export const UNIT_CODES = [
+export const UNIT_CODES = freezeGenerated([
   "/1",
   "/A",
   "/S",
@@ -877,10 +914,10 @@ export const UNIT_CODES = [
   "um",
   "umol/L",
   "us"
-] as const;
+] as const);
 export type UnitCode = (typeof UNIT_CODES)[number];
 
-export const QUANTITY_KINDS = [
+export const QUANTITY_KINDS = freezeGenerated([
   "angle",
   "concentration",
   "conductance",
@@ -904,7 +941,7 @@ export const QUANTITY_KINDS = [
   "synaptic_weight",
   "time",
   "voltage"
-] as const;
+] as const);
 export type QuantityKind = (typeof QUANTITY_KINDS)[number];
 
 export interface UnitRecord {
@@ -915,7 +952,7 @@ export interface UnitRecord {
   readonly aliases: readonly string[];
 }
 
-export const UNITS: Readonly<Record<string, UnitRecord>> = Object.freeze({
+export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated({
   "1": {
     "code": "1",
     "dimension": "dimensionless",
@@ -1306,7 +1343,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = Object.freeze({
 
 /** Alias -> canonical code. Used ONLY by adapters and `cortexel migrate`; normal
  *  validation rejects an alias with a repair rather than converting it silently. */
-export const UNIT_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+export const UNIT_ALIASES: Readonly<Record<string, string>> = freezeGenerated({
   "sec": "s",
   "seconds": "s",
   "second": "s",
@@ -1384,7 +1421,7 @@ export const UNIT_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   "1/1": "/1"
 });
 
-export const QUANTITY_KIND_DIMENSIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+export const QUANTITY_KIND_DIMENSIONS: Readonly<Record<string, readonly string[]>> = freezeGenerated({
   "time": [
     "time"
   ],
@@ -1469,7 +1506,7 @@ export const QUANTITY_KIND_DIMENSIONS: Readonly<Record<string, readonly string[]
   ]
 });
 
-export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity: 'critical' | 'important' | 'informational'; readonly text: string }[] = Object.freeze([
+export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity: 'critical' | 'important' | 'informational'; readonly text: string }[] = freezeGenerated([
   {
     "id": "SOURCE_SIMULATION",
     "severity": "important",
@@ -1528,7 +1565,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "MULTAPSE_AGGREGATED",
     "severity": "important",
-    "text": "Multiple connections between the same pair were combined using {aggregation}. Each cell shows an aggregate of {contributingCount} connections, not a single synapse."
+    "text": "Multiple connections between the same endpoint pair were combined using {aggregation}. The drawn value is an aggregate, not a single synapse."
   },
   {
     "id": "ABSENT_IS_NOT_ZERO",
@@ -1629,7 +1666,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
 
 export type DisclosureId = (typeof DISCLOSURE_RULES)[number]['id'];
 
-export const SEMANTIC_VALIDATOR_IDS = [
+export const SEMANTIC_VALIDATOR_IDS = freezeGenerated([
   "bins.strictly_increasing",
   "correlogram.lag_range_valid",
   "correlogram.statistic_denominator",
@@ -1666,5 +1703,5 @@ export const SEMANTIC_VALIDATOR_IDS = [
   "unit.dimension_match",
   "weight_trace.observation_kind_declared",
   "window.valid"
-] as const;
+] as const);
 export type SemanticValidatorId = (typeof SEMANTIC_VALIDATOR_IDS)[number];

@@ -12,6 +12,11 @@
  * Half-open is the only convention under which bins tile a line without gap or overlap.
  */
 
+import {
+  MAX_MATERIALIZED_BINS,
+  materializeWidthBins,
+} from '../core/binning.js';
+
 export interface Bins {
   /** n+1 strictly increasing edges defining n bins. */
   readonly edges: readonly number[];
@@ -19,19 +24,19 @@ export interface Bins {
   readonly finalEdgeInclusive: boolean;
 }
 
+export { MAX_MATERIALIZED_BINS };
+
 /** Build edges from a width that tiles [start, stop). */
 export function edgesFromWidth(start: number, stop: number, width: number): number[] {
-  if (!(width > 0) || !(stop > start)) {
-    throw new Error('binning requires width > 0 and stop > start');
-  }
-  const count = Math.ceil((stop - start) / width);
-  const edges: number[] = [];
-  // Accumulate from the index, never `edge += width`: repeated addition lets binary64
-  // error compound across thousands of bins and drift the final edge off the window.
-  for (let i = 0; i <= count; i++) {
-    edges.push(start + i * width);
-  }
-  return edges;
+  const result = materializeWidthBins(start, stop, width);
+  if (!result.ok) throw new Error(`invalid width-mode bin specification (${result.reason})`);
+  return [...result.edges];
+}
+
+/** The no-throw form for public boundaries and preflight code. */
+export function tryEdgesFromWidth(start: number, stop: number, width: number): number[] | undefined {
+  const result = materializeWidthBins(start, stop, width);
+  return result.ok ? [...result.edges] : undefined;
 }
 
 /**

@@ -82,10 +82,13 @@ export { snapshotValue } from './safe-snapshot.js';
 // Budgets
 export {
   getBudgetLimits,
+  tryGetBudgetLimits,
+  trySelectTighterBudgetProfile,
   restrictLimits,
   DEFAULT_PROFILE,
   type BudgetLimits,
   type BudgetProfileId,
+  type ResolvedBudgetProfile,
 } from './limits.js';
 
 // Units

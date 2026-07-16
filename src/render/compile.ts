@@ -16,10 +16,10 @@
 
 import type { RenderPlanV1, Panel, Mark, Axis } from './model/renderPlan.js';
 import { linearScale, linearTicks } from './scale.js';
-import { formatNumber } from './format.js';
 import { SKILL_CATALOG, THEMES } from '../generated/catalog.js';
 import { unitLabel } from '../core/units.js';
 import type { Disclosure } from '../core/disclosures.js';
+import { finiteExtent } from '../core/numeric.js';
 
 export interface CompileContext {
   readonly sourceRequestDigest: string;
@@ -30,6 +30,7 @@ export interface CompileContext {
   readonly subtitle?: string;
   readonly disclosures: readonly Disclosure[];
   readonly summary: string;
+  readonly inlineTableRows: number;
 }
 
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
@@ -55,17 +56,18 @@ function seriesColor(themeId: string, index: number): string {
 /** A row-shaped table from parallel columns. */
 function buildTable(
   columns: readonly { key: string; header: string }[],
-  rowData: readonly (readonly (string | number | null)[])[],
+  rowsTotal: number,
+  rowAt: (index: number) => readonly (string | number | null)[],
   inlineLimit: number,
 ): RenderPlanV1['table'] {
-  const total = rowData.length;
-  const inline = rowData.slice(0, inlineLimit);
+  const rowsInline = Math.min(rowsTotal, inlineLimit);
+  const inline = Array.from({ length: rowsInline }, (_value, index) => rowAt(index));
   return {
-    policy: total > inlineLimit ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+    policy: rowsTotal > inlineLimit ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
     columns,
     rows: inline,
     rowsInline: inline.length,
-    rowsTotal: total,
+    rowsTotal,
   };
 }
 
@@ -118,8 +120,9 @@ export function compileLineFigure(
         { key: 'x', header: xLabel },
         { key: 'y', header: yLabel },
       ],
-      x.map((xv, i) => [Number.isFinite(xv) ? formatNumber(xv) : null, y[i] === null ? null : formatNumber(y[i] as number)]),
-      500,
+      x.length,
+      (i) => [Number.isFinite(x[i]) ? x[i] : null, y[i] === null ? null : (y[i] as number)],
+      context.inlineTableRows,
     ),
     accessibility: { summary: context.summary, panelSummaries: [] },
   };
@@ -135,10 +138,12 @@ function buildLinePanel(
 ): Panel {
   const finiteX = x.filter((v) => Number.isFinite(v));
   const finiteY = y.filter((v): v is number => v !== null && Number.isFinite(v));
-  const xMin = Math.min(...finiteX);
-  const xMax = Math.max(...finiteX);
-  const yMin = Math.min(0, ...finiteY);
-  const yMax = Math.max(...finiteY);
+  const xExtent = finiteExtent(finiteX)!;
+  const yExtent = finiteExtent(finiteY)!;
+  const xMin = xExtent.min;
+  const xMax = xExtent.max;
+  const yMin = Math.min(0, yExtent.min);
+  const yMax = yExtent.max;
 
   const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
   const yScale = linearScale(yMin, yMax, box.y + box.height, box.y);
@@ -210,7 +215,7 @@ export function compileStepFigure(
   } else {
     const xMin = binStart[0];
     const xMax = binEnd[binEnd.length - 1];
-    const yMax = Math.max(0, ...values);
+    const yMax = Math.max(0, finiteExtent(values)?.max ?? 0);
     const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
     const yScale = linearScale(0, yMax, box.y + box.height, box.y);
 
@@ -252,8 +257,9 @@ export function compileStepFigure(
         { key: 'binEnd', header: 'Bin end' },
         { key: 'value', header: yLabel },
       ],
-      values.map((v, i) => [formatNumber(binStart[i]), formatNumber(binEnd[i]), formatNumber(v)]),
-      500,
+      values.length,
+      (i) => [binStart[i], binEnd[i], values[i]],
+      context.inlineTableRows,
     ),
     accessibility: { summary: context.summary, panelSummaries: [] },
   };

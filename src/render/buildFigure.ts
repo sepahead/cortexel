@@ -19,6 +19,7 @@ import {
   validateRequestValue,
   type ValidatedRequest,
   type ValidationOutcome,
+  type ValidateOptions,
 } from '../core/request.js';
 import { canonicalDigest, canonicalDigestExcluding } from '../core/canonicalize.js';
 import { deepFreeze } from '../core/deep-freeze.js';
@@ -28,6 +29,7 @@ import { SKILL_CATALOG } from '../generated/catalog.js';
 import { unitLabel } from '../core/units.js';
 import {
   edgesFromWidth,
+  tryEdgesFromWidth,
   binCounts,
   binCenters,
   computePopulationRate,
@@ -35,10 +37,11 @@ import {
   computeDegrees,
   computeMatrix,
   computeCorrelogram,
+  countEligibleCorrelogramPairs,
   makeEventTable,
   type Bins,
 } from '../analysis/index.js';
-import { renderSvg, type SvgReport } from './svg.js';
+import { countPlanResources, renderSvg, type SvgReport } from './svg.js';
 import { compileLineFigure, compileStepFigure } from './compile.js';
 import {
   compileBarFigure,
@@ -54,6 +57,13 @@ import type { CompileContext } from './compile.js';
 import type { RenderPlanV1 } from './model/renderPlan.js';
 import { getBuildIdentity } from '../generated/identity.js';
 import { makeError, type CortexelError } from '../core/errors.js';
+import {
+  DEFAULT_PROFILE,
+  trySelectTighterBudgetProfile,
+  type BudgetProfileId,
+} from '../core/limits.js';
+import { finiteExtent } from '../core/numeric.js';
+import { materializeCenteredLagBins } from '../core/binning.js';
 
 export interface FigureResult {
   readonly ok: true;
@@ -105,16 +115,19 @@ function disclosureFacts(
   // Count missing observations across any series/value array, so MISSING_VALUES_PRESENT
   // fires when a null observation is actually present.
   let missing = 0;
-  const countMissing = (node: unknown, depth = 0): void => {
-    if (depth > 20 || node === null || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        if (item === null) missing++;
-        else countMissing(item, depth + 1);
+  const countMissing = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return;
+    const pending: object[] = [node];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      const values = Array.isArray(current)
+        ? current
+        : Object.values(current as Record<string, unknown>);
+      for (const value of values) {
+        if (value === null) missing++;
+        else if (typeof value === 'object') pending.push(value);
       }
-      return;
     }
-    for (const v of Object.values(node as Record<string, unknown>)) countMissing(v, depth + 1);
   };
   countMissing(data.series);
 
@@ -227,6 +240,41 @@ function binBoundaryInclusive(spec: Record<string, unknown> | undefined): boolea
   return undefined;
 }
 
+function eventCorrelogramInputs(
+  data: Record<string, unknown>,
+  parameters: Record<string, unknown>,
+): {
+  readonly ref: number[];
+  readonly tgt: number[];
+  readonly spec: Bins;
+  readonly kind: 'auto' | 'cross';
+  readonly lagUnit: string;
+} | undefined {
+  if (data.mode !== 'events') return undefined;
+  const times = numbers(rec(data.eventTimes)?.values);
+  const senders = strings(data.eventSenderIds);
+  const lag = rec(parameters.lagRange);
+  const bins = rec(parameters.bins);
+  const min = num(lag?.min);
+  const max = num(lag?.max);
+  const width = num(bins?.width);
+  if (min === undefined || max === undefined || width === undefined) return undefined;
+
+  const distinct = [...new Set(senders)];
+  const refId = distinct[0];
+  const tgtId = distinct[1] ?? distinct[0];
+  const kind: 'auto' | 'cross' = distinct.length < 2 ? 'auto' : 'cross';
+  const materialized = materializeCenteredLagBins(min, max, width, 20_001);
+  if (!materialized.ok) return undefined;
+  return {
+    ref: times.filter((_time, index) => senders[index] === refId),
+    tgt: times.filter((_time, index) => senders[index] === tgtId),
+    spec: { edges: [...materialized.edges], finalEdgeInclusive: true },
+    kind,
+    lagUnit: (lag?.unit as string) ?? 'ms',
+  };
+}
+
 /** Apply the PSTH normalization the request declared, not a hardcoded per-trial divisor. */
 function normalizePsth(counts: readonly number[], trials: number, normalization: string): number[] {
   switch (normalization) {
@@ -253,6 +301,7 @@ function psthYLabel(normalization: string): string {
 function compile(
   validated: ValidatedRequest,
   context: (rowsTotal: number) => CompileContext,
+  pairwiseOperations: number,
 ): { plan: RenderPlanV1; rendererId: string } | { pending: string } {
   const request = validated.canonicalRequest;
   const data = rec(request.data) ?? {};
@@ -312,8 +361,9 @@ function compile(
     const senders = strings(data.eventSenderIds);
     const recorded = strings(data.recordedSenderIds);
     const window = rec(data.window);
-    const start = num(window?.start) ?? (times.length ? Math.min(...times) : 0);
-    const stop = num(window?.stop) ?? (times.length ? Math.max(...times) : 1);
+    const timeExtent = finiteExtent(times);
+    const start = num(window?.start) ?? timeExtent?.min ?? 0;
+    const stop = num(window?.stop) ?? timeExtent?.max ?? 1;
     const timeUnit = (rec(data.eventTimes)?.unit as string) ?? 'ms';
     const order = recorded.length ? recorded : [...new Set(senders)];
     return done(compileRasterFigure(context(times.length), times, senders, order, start, stop, `time (${unitLabel(timeUnit)})`, skillId));
@@ -321,24 +371,16 @@ function compile(
 
   // ---- correlogram ---------------------------------------------------------
   if (skillId === 'neuro.correlogram') {
-    const times = numbers(rec(data.eventTimes)?.values);
-    const senders = strings(data.eventSenderIds);
-    const lag = rec(parameters.lagRange);
-    const bins = rec(parameters.bins);
-    const min = num(lag?.min) ?? -10;
-    const max = num(lag?.max) ?? 10;
-    const width = num(bins?.width) ?? 1;
-    const lagUnit = (lag?.unit as string) ?? 'ms';
-    // A single-pair correlogram: reference = first sender, target = second (or auto).
-    const distinct = [...new Set(senders)];
-    const refId = distinct[0];
-    const tgtId = distinct[1] ?? distinct[0];
-    const kind: 'auto' | 'cross' = distinct.length < 2 ? 'auto' : 'cross';
-    const ref = times.filter((_t, i) => senders[i] === refId);
-    const tgt = times.filter((_t, i) => senders[i] === tgtId);
-    const spec: Bins = { edges: edgesFromWidth(min, max, width), finalEdgeInclusive: true };
-    const result = computeCorrelogram(ref, tgt, spec, kind);
-    return done(compileStemFigure(context(result.counts.length), binCenters(spec), result.counts, `lag (${unitLabel(lagUnit)})`, 'pair count', skillId));
+    const inputs = eventCorrelogramInputs(data, parameters);
+    if (!inputs) return { pending: rendererId };
+    const result = computeCorrelogram(
+      inputs.ref,
+      inputs.tgt,
+      inputs.spec,
+      inputs.kind,
+      pairwiseOperations,
+    );
+    return done(compileStemFigure(context(result.counts.length), binCenters(inputs.spec), result.counts, `lag (${unitLabel(inputs.lagUnit)})`, 'pair count', skillId));
   }
 
   // ---- distributions -------------------------------------------------------
@@ -351,7 +393,7 @@ function compile(
       const isi = computeIsi(events);
       const bins = rec(parameters.bins);
       const start = num(bins?.start) ?? 0;
-      const stop = num(bins?.stop) ?? (isi.intervals.length ? Math.max(...isi.intervals) : 1);
+      const stop = num(bins?.stop) ?? finiteExtent(isi.intervals)?.max ?? 1;
       const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
       const unit = (bins?.unit as string) ?? 'ms';
       const edges = edgesFromWidth(start, stop, width);
@@ -368,7 +410,7 @@ function compile(
       const counting = (parameters.countingPolicy as 'count_edges' | 'count_unique_neighbours') ?? 'count_edges';
       const degrees = computeDegrees(ids, sources, targets, direction, counting);
       // Integer-degree histogram: one bar per degree value.
-      const maxDeg = Math.max(0, ...degrees.degree);
+      const maxDeg = Math.max(0, finiteExtent(degrees.degree)?.max ?? 0);
       const edges = Array.from({ length: maxDeg + 2 }, (_v, i) => i - 0.5);
       const { counts } = binCounts(degrees.degree, { edges, finalEdgeInclusive: true });
       return done(compileBarFigure(context(counts.length), edges, counts, `${direction}-degree`, 'node count', skillId));
@@ -378,8 +420,9 @@ function compile(
     const conns = rec(data.connections);
     const values = skillId === 'network.delay_distribution' ? numbers(rec(conns?.delays)?.values) : numbers(rec(conns?.weights)?.values);
     const bins = rec(parameters.bins);
-    const start = num(bins?.start) ?? (values.length ? Math.min(...values) : 0);
-    const stop = num(bins?.stop) ?? (values.length ? Math.max(...values) : 1);
+    const valueExtent = finiteExtent(values);
+    const start = num(bins?.start) ?? valueExtent?.min ?? 0;
+    const stop = num(bins?.stop) ?? valueExtent?.max ?? 1;
     const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
     const unit = (bins?.unit as string) ?? (skillId === 'network.delay_distribution' ? 'ms' : '');
     const edges = start < stop ? edgesFromWidth(start, stop, width) : [start, start + 1];
@@ -482,8 +525,9 @@ function compile(
     trialIds.forEach((id, i) => { if (i < alignTimes.length) alignByTrial.set(id, alignTimes[i]); });
     const relative = times.map((t, i) => t - (alignByTrial.get(eventTrials[i]) ?? 0)).filter((v) => Number.isFinite(v));
     const win = rec(data.relativeWindow);
-    const start = num(win?.start) ?? num(bins?.start) ?? (relative.length ? Math.min(...relative) : -1);
-    const stop = num(win?.stop) ?? num(bins?.stop) ?? (relative.length ? Math.max(...relative) : 1);
+    const relativeExtent = finiteExtent(relative);
+    const start = num(win?.start) ?? num(bins?.start) ?? relativeExtent?.min ?? -1;
+    const stop = num(win?.stop) ?? num(bins?.stop) ?? relativeExtent?.max ?? 1;
     const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
     const unit = (win?.unit as string) ?? (bins?.unit as string) ?? 'ms';
     const edges = start < stop ? edgesFromWidth(start, stop, width) : [start, start + 1];
@@ -531,6 +575,7 @@ function assembleArtifact(
   plan: RenderPlanV1,
   render: SvgReport,
   summary: string,
+  budgetProfile: BudgetProfileId,
 ): Record<string, unknown> {
   const identity = getBuildIdentity();
   const catalog = SKILL_CATALOG[validated.skillId];
@@ -570,7 +615,7 @@ function assembleArtifact(
     derivation: { operations: [] },
     budgetDecision: {
       outcome: 'accepted_full',
-      profileId: validated.inputAssurance.budgetProfile,
+      profileId: budgetProfile,
       countBefore: tableRows.total,
       countAfter: tableRows.total,
     },
@@ -623,20 +668,55 @@ function assembleArtifact(
  * hold data. This is a conservative preflight: it never has to be exact, only an upper
  * bound that catches an input which would blow the derivation or render budget.
  */
-function countObservations(node: unknown, depth = 0): number {
-  if (depth > 32 || node === null || typeof node !== 'object') return 0;
-  if (Array.isArray(node)) {
-    // A leaf array of numbers/strings is the observation carrier; count it, and still
-    // descend in case it holds objects.
-    let total = node.length;
-    for (const item of node) total += countObservations(item, depth + 1);
-    return total;
-  }
+function countObservations(node: unknown): number {
+  if (node === null || typeof node !== 'object') return 0;
+
+  // The accepted JSON depth is profile-controlled and may exceed the historical
+  // recursion cutoff. Walk iteratively so a deeply nested, schema-valid carrier cannot
+  // disappear from the budget count and so this preflight cannot exhaust the JS stack.
+  const pending: object[] = [node];
   let total = 0;
-  for (const value of Object.values(node as Record<string, unknown>)) {
-    total += countObservations(value, depth + 1);
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (Array.isArray(current)) {
+      // Count every array dimension conservatively. Nested arrays therefore contribute
+      // both their outer cardinality and their leaf observations, which is an upper bound.
+      total = Math.min(Number.MAX_SAFE_INTEGER, total + current.length);
+      for (const item of current) {
+        if (item !== null && typeof item === 'object') pending.push(item);
+      }
+    } else {
+      for (const value of Object.values(current as Record<string, unknown>)) {
+        if (value !== null && typeof value === 'object') pending.push(value);
+      }
+    }
   }
   return total;
+}
+
+function maxLeafArrayLength(node: unknown): number {
+  if (node === null || typeof node !== 'object') return 0;
+
+  const pending: object[] = [node];
+  let maximum = 0;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (Array.isArray(current)) {
+      let hasNestedValue = false;
+      for (const item of current) {
+        if (item !== null && typeof item === 'object') {
+          hasNestedValue = true;
+          pending.push(item);
+        }
+      }
+      if (!hasNestedValue) maximum = Math.max(maximum, current.length);
+    } else {
+      for (const value of Object.values(current as Record<string, unknown>)) {
+        if (value !== null && typeof value === 'object') pending.push(value);
+      }
+    }
+  }
+  return maximum;
 }
 
 /** Build a figure from an already-validated request. */
@@ -661,13 +741,140 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
   const request = validated.canonicalRequest;
   const catalog = SKILL_CATALOG[validated.skillId];
   const presentation = rec(request.presentation) ?? {};
+  const requestedProfile = presentation.budgetProfile ?? DEFAULT_PROFILE;
+  const activeBudget = trySelectTighterBudgetProfile(
+    validated.inputAssurance.budgetProfile,
+    requestedProfile,
+  );
+  if (!activeBudget) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'INTERNAL_INVARIANT_VIOLATED',
+          stage: 'internal',
+          message:
+            'the host and request budget profiles are absent or incomparable in this build. Cortexel cannot combine resource authority without an explicit composition contract.',
+        }),
+      ],
+    };
+  }
+  const { limits } = activeBudget;
+  const markLimit = Math.min(catalog.budgets.maxVisibleMarks, limits.visibleMarks);
+
+  const data = rec(request.data) ?? {};
+  const universeSize = arr(rec(data.nodeUniverse)?.ids)?.length ?? 0;
+  const connections = rec(data.connections);
+  const connectionCount = Math.max(
+    arr(connections?.sourceIds)?.length ?? 0,
+    arr(connections?.targetIds)?.length ?? 0,
+  );
+
+  const preflightMarks =
+    validated.skillId === 'neuro.spike_raster'
+      ? arr(rec(data.eventTimes)?.values)?.length ?? 0
+      : validated.skillId === 'network.connection_graph'
+        ? universeSize + connectionCount
+        : 0;
+  if (preflightMarks > markLimit) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_MARKS_EXCEEDED',
+          stage: 'budget',
+          instancePath: '/data',
+          skillId: validated.skillId,
+          message: `the request requires at least ${preflightMarks} visible data marks, over the active limit of ${markLimit}. Cortexel refused it before allocating render geometry.`,
+          limit: { name: 'visibleMarks', limit: markLimit, observed: preflightMarks },
+        }),
+      ],
+    };
+  }
+
+  if (universeSize > limits.graphNodes) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_BUDGET_EXCEEDED',
+          stage: 'budget',
+          instancePath: '/data/nodeUniverse/ids',
+          skillId: validated.skillId,
+          message: `the declared node universe contains ${universeSize} nodes, over the active limit of ${limits.graphNodes}.`,
+          limit: { name: 'graphNodes', limit: limits.graphNodes, observed: universeSize },
+        }),
+      ],
+    };
+  }
+  if (connectionCount > limits.graphEdges) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_BUDGET_EXCEEDED',
+          stage: 'budget',
+          instancePath: '/data/connections',
+          skillId: validated.skillId,
+          message: `the connection snapshot contains ${connectionCount} rows, over the active limit of ${limits.graphEdges}.`,
+          limit: { name: 'graphEdges', limit: limits.graphEdges, observed: connectionCount },
+        }),
+      ],
+    };
+  }
+
+  if (catalog.renderer.id === 'figure.matrix') {
+    // The structural request budget bounds a node universe far below sqrt(2^53), so
+    // this product is an exact safe integer. Preserve that exact observation in the
+    // diagnostic instead of returning a saturating sentinel that looks measured.
+    const matrixCells = universeSize * universeSize;
+    if (matrixCells > limits.matrixCells) {
+      return {
+        ok: false,
+        errors: [
+          makeError({
+            code: 'RESOURCE_MATRIX_CELLS_EXCEEDED',
+            stage: 'budget',
+            instancePath: '/data/nodeUniverse/ids',
+            skillId: validated.skillId,
+            message: `the ${universeSize} by ${universeSize} declared matrix exceeds the active limit of ${limits.matrixCells} logical cells. Cortexel preflights the universe product without materializing a dense matrix.`,
+            limit: { name: 'matrixCells', limit: limits.matrixCells, observed: matrixCells },
+          }),
+        ],
+      };
+    }
+  }
 
   // Budget preflight, BEFORE derivation. The parser already bounded the raw input, but the
   // per-figure observation budget is a distinct, tighter limit: it protects the derivation
   // and render stages from an input that is within parser limits yet still too large to
   // draw. A hard limit fails; it is never silently truncated.
   const observations = countObservations(request.data);
-  if (observations > catalog.budgets.maxObservations) {
+  const longestSeries = maxLeafArrayLength(request.data);
+  if (longestSeries > limits.observationsPerSeries) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_OBSERVATIONS_EXCEEDED',
+          stage: 'budget',
+          instancePath: '/data',
+          skillId: validated.skillId,
+          message: `a single observation array carries ${longestSeries} entries, over the active per-series limit of ${limits.observationsPerSeries}.`,
+          limit: {
+            name: 'observationsPerSeries',
+            limit: limits.observationsPerSeries,
+            observed: longestSeries,
+          },
+        }),
+      ],
+    };
+  }
+  const observationLimit = Math.min(
+    catalog.budgets.maxObservations,
+    limits.observationsPerRequest,
+  );
+  if (observations > observationLimit) {
     return {
       ok: false,
       errors: [
@@ -676,17 +883,56 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
           severity: 'error',
           stage: 'budget',
           instancePath: '/data',
-          message: `this request carries about ${observations} observations, over the ${catalog.budgets.maxObservations} budget for ${validated.skillId}. Reduce the data or reference it with a DataRef. Cortexel never silently truncates.`,
-          limit: { name: 'maxObservations', limit: catalog.budgets.maxObservations, observed: observations },
+          message: `this request carries about ${observations} observations, over the ${observationLimit} active request budget for ${validated.skillId}. Reduce the data or reference it with a DataRef. Cortexel never silently truncates.`,
+          limit: { name: 'observationsPerRequest', limit: observationLimit, observed: observations },
         },
       ],
     };
   }
 
+  if (validated.skillId === 'neuro.correlogram') {
+    const inputs = eventCorrelogramInputs(
+      rec(request.data) ?? {},
+      rec(request.parameters) ?? {},
+    );
+    if (inputs) {
+      const pairs = countEligibleCorrelogramPairs(
+        inputs.ref,
+        inputs.tgt,
+        inputs.spec,
+        inputs.kind,
+        limits.pairwiseOperations,
+      );
+      if (pairs > limits.pairwiseOperations) {
+        return {
+          ok: false,
+          errors: [
+            makeError({
+              code: 'RESOURCE_PAIRWISE_EXCEEDED',
+              stage: 'budget',
+              instancePath: '/data/eventTimes/values',
+              skillId: validated.skillId,
+              message: `the eligible correlogram pair count is at least ${limits.pairwiseOperations + 1}, over the active limit of ${limits.pairwiseOperations}. The bounded preflight formed no pairs and Cortexel refuses the derivation.`,
+              limit: {
+                name: 'pairwiseOperations',
+                limit: limits.pairwiseOperations,
+                observed: pairs,
+              },
+            }),
+          ],
+        };
+      }
+    }
+  }
+
   const forced = forcedDisclosures(validated.skillId, request);
 
   const makeContext = (rowsTotal: number): CompileContext => {
-    const facts = disclosureFacts(request, { tableRowsTotal: rowsTotal, tableRowsInline: Math.min(rowsTotal, 500) });
+    const facts = disclosureFacts(request, {
+      tableRowsTotal: rowsTotal,
+      tableRowsInline: Math.min(rowsTotal, limits.inlineTableRows),
+      budgetProfileId: activeBudget.profile,
+    });
     const disclosures = deriveDisclosures(facts, catalog.disclosures, forced);
     return {
       sourceRequestDigest: validated.requestDigest,
@@ -696,10 +942,27 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
       title: (presentation.title as string) ?? catalog.title,
       disclosures,
       summary: catalog.accessibility.summaryTemplate.replace(/\{[^}]+\}/g, '…'),
+      inlineTableRows: limits.inlineTableRows,
     };
   };
 
-  const compiled = compile(validated, makeContext);
+  let compiled: ReturnType<typeof compile>;
+  try {
+    compiled = compile(validated, makeContext, limits.pairwiseOperations);
+  } catch {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'INTERNAL_INVARIANT_VIOLATED',
+          stage: 'internal',
+          skillId: validated.skillId,
+          message:
+            'a request passed validation but its render-plan compiler could not process it. Cortexel refused to emit a partial or potentially misleading artifact.',
+        }),
+      ],
+    };
+  }
 
   if ('pending' in compiled) {
     return {
@@ -710,6 +973,32 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
           stage: 'render',
           skillId: validated.skillId,
           message: `stable skill ${validated.skillId} selected renderer ${compiled.pending}, but its compiler produced no render plan. Cortexel refuses to emit a schema-invalid partial artifact.`,
+        }),
+      ],
+    };
+  }
+
+  if (
+    compiled.plan.panels.some(
+      (panel) =>
+        !Number.isFinite(panel.x) ||
+        !Number.isFinite(panel.y) ||
+        !Number.isFinite(panel.width) ||
+        !Number.isFinite(panel.height) ||
+        panel.width <= 0 ||
+        panel.height <= 0,
+    )
+  ) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RENDER_LAYOUT_UNAVAILABLE',
+          stage: 'render',
+          instancePath: '/presentation',
+          skillId: validated.skillId,
+          message:
+            'the requested dimensions leave no positive finite plotting region after axes and mandatory disclosures are reserved. Increase the width or height.',
         }),
       ],
     };
@@ -726,9 +1015,99 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
     accessibility: { ...compiled.plan.accessibility, summary },
   });
 
-  const report = renderSvg(plan, sha256Digest);
+  const resourceCounts = countPlanResources(plan);
+  if (resourceCounts.markCount > markLimit) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_MARKS_EXCEEDED',
+          stage: 'budget',
+          instancePath: '/data',
+          skillId: validated.skillId,
+          message: `the compiled figure requires ${resourceCounts.markCount} visible data marks, over the active limit of ${markLimit}. The requested representation was not silently truncated.`,
+          limit: { name: 'visibleMarks', limit: markLimit, observed: resourceCounts.markCount },
+        }),
+      ],
+    };
+  }
+  if (resourceCounts.textCount > limits.svgTextNodes) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_MARKS_EXCEEDED',
+          stage: 'budget',
+          skillId: validated.skillId,
+          message: `the compiled figure requires ${resourceCounts.textCount} SVG text nodes, over the active limit of ${limits.svgTextNodes}.`,
+          limit: {
+            name: 'svgTextNodes',
+            limit: limits.svgTextNodes,
+            observed: resourceCounts.textCount,
+          },
+        }),
+      ],
+    };
+  }
 
-  const artifact = assembleArtifact(validated, context.disclosures, plan, report, summary);
+  if (plan.table.rowsInline > limits.inlineTableRows) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_COMPACTION_UNAVAILABLE',
+          stage: 'budget',
+          skillId: validated.skillId,
+          message: `the compiler produced ${plan.table.rowsInline} inline table rows, over the active limit of ${limits.inlineTableRows}. No complete digest-bound sidecar was assembled, so Cortexel refuses instead of silently excerpting the table.`,
+          limit: {
+            name: 'inlineTableRows',
+            limit: limits.inlineTableRows,
+            observed: plan.table.rowsInline,
+          },
+        }),
+      ],
+    };
+  }
+  if (plan.table.rowsInline < plan.table.rowsTotal && plan.table.sidecarDigest === undefined) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_COMPACTION_UNAVAILABLE',
+          stage: 'budget',
+          skillId: validated.skillId,
+          message:
+            'the compiled table is an excerpt but has no digest-bound complete sidecar. Cortexel refuses an incomplete artifact rather than claiming the full accepted data remains available.',
+        }),
+      ],
+    };
+  }
+
+  const report = renderSvg(plan, sha256Digest);
+  const outputBytes = utf8ByteLength(report.svg);
+  if (outputBytes > limits.svgBytes) {
+    return {
+      ok: false,
+      errors: [
+        makeError({
+          code: 'RESOURCE_OUTPUT_BYTES_EXCEEDED',
+          stage: 'serialize',
+          skillId: validated.skillId,
+          message: `the normative SVG is ${outputBytes} UTF-8 bytes, over the active limit of ${limits.svgBytes}. Cortexel refuses the output rather than emitting an unbounded artifact.`,
+          limit: { name: 'svgBytes', limit: limits.svgBytes, observed: outputBytes },
+        }),
+      ],
+    };
+  }
+
+  const artifact = assembleArtifact(
+    validated,
+    context.disclosures,
+    plan,
+    report,
+    summary,
+    activeBudget.profile,
+  );
 
   return { ok: true, artifact, svg: report.svg, plan, table: plan.table, disclosures: context.disclosures };
 }
@@ -757,8 +1136,9 @@ function buildSummary(plan: RenderPlanV1, title: string): string {
 
   if (numericValues.length > 0 && plan.table.columns.length >= 1) {
     const header = plan.table.columns[valueColumn]?.header ?? 'value';
-    const min = Math.min(...numericValues);
-    const max = Math.max(...numericValues);
+    const extent = finiteExtent(numericValues)!;
+    const min = extent.min;
+    const max = extent.max;
     parts.push(`${header} ranges from ${formatSummaryNumber(min)} to ${formatSummaryNumber(max)}.`);
   }
 
@@ -784,14 +1164,20 @@ function formatSummaryNumber(value: number): string {
 }
 
 /** Build a figure from raw JSON request text (the strong, duplicate-key-aware boundary). */
-export function buildFigureFromJson(text: string): FigureResult | FigureFailure {
-  const outcome = parseAndValidateRequest(text);
+export function buildFigureFromJson(
+  text: string,
+  options: ValidateOptions = {},
+): FigureResult | FigureFailure {
+  const outcome = parseAndValidateRequest(text, options);
   return dispatch(outcome);
 }
 
 /** Build a figure from an already-materialized JS request value. */
-export function buildFigure(value: unknown): FigureResult | FigureFailure {
-  const outcome = validateRequestValue(value);
+export function buildFigure(
+  value: unknown,
+  options: ValidateOptions = {},
+): FigureResult | FigureFailure {
+  const outcome = validateRequestValue(value, options);
   return dispatch(outcome);
 }
 

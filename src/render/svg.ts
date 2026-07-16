@@ -251,6 +251,7 @@ function emitAxis(writer: SvgWriter, axis: Axis, panel: Panel, colors: Record<st
 
   const isBottom = axis.orientation === 'bottom';
   const isLeft = axis.orientation === 'left';
+  const isTop = axis.orientation === 'top';
 
   for (const tick of axis.ticks) {
     if (isBottom) {
@@ -291,13 +292,61 @@ function emitAxis(writer: SvgWriter, axis: Axis, panel: Panel, colors: Record<st
         fill: colors.mutedText,
         decorative: true,
       });
+    } else if (isTop) {
+      writer.leaf('line', [
+        ['x1', formatCoordinate(tick.position)],
+        ['y1', formatCoordinate(panel.y - 5)],
+        ['x2', formatCoordinate(tick.position)],
+        ['y2', formatCoordinate(panel.y)],
+        ['stroke', colors.axis],
+        ['stroke-width', 1],
+      ]);
+      emitText(writer, {
+        type: 'text',
+        x: tick.position,
+        y: panel.y - 8,
+        text: tick.label,
+        anchor: 'middle',
+        fontSize: 11,
+        fill: colors.mutedText,
+        decorative: true,
+      });
+    } else {
+      writer.leaf('line', [
+        ['x1', formatCoordinate(panel.x + panel.width)],
+        ['y1', formatCoordinate(tick.position)],
+        ['x2', formatCoordinate(panel.x + panel.width + 5)],
+        ['y2', formatCoordinate(tick.position)],
+        ['stroke', colors.axis],
+        ['stroke-width', 1],
+      ]);
+      emitText(writer, {
+        type: 'text',
+        x: panel.x + panel.width + 8,
+        y: tick.position + 4,
+        text: tick.label,
+        anchor: 'start',
+        fontSize: 11,
+        fill: colors.mutedText,
+        decorative: true,
+      });
     }
   }
 
   emitText(writer, {
     type: 'text',
-    x: isBottom ? panel.x + panel.width / 2 : panel.x - 44,
-    y: isBottom ? panel.y + panel.height + 38 : panel.y + panel.height / 2,
+    x:
+      isBottom || isTop
+        ? panel.x + panel.width / 2
+        : isLeft
+          ? panel.x - 44
+          : panel.x + panel.width + 44,
+    y:
+      isBottom
+        ? panel.y + panel.height + 38
+        : isTop
+          ? panel.y - 28
+          : panel.y + panel.height / 2,
     text: axis.label,
     anchor: 'middle',
     fontSize: 12,
@@ -322,16 +371,63 @@ function countMarks(marks: readonly Mark[]): { marks: number; texts: number } {
   let textCount = 0;
   const walk = (list: readonly Mark[]): void => {
     for (const mark of list) {
-      if (mark.type === 'group') {
-        walk(mark.marks);
-      } else {
-        markCount++;
-        if (mark.type === 'text') textCount++;
+      switch (mark.type) {
+        case 'group':
+          walk(mark.marks);
+          break;
+        case 'line':
+        case 'path':
+          // The artifact's markCount and the `visibleMarks` budget name DRAWN marks, so
+          // count the single SVG path this mark emits when it has any geometry. Vertex
+          // work is bounded separately by observations and output bytes; calling every
+          // vertex a visible mark would make a 10-bin step plot claim 20 marks while the
+          // renderer actually draws one path.
+          if (mark.subpaths.some((subpath) => subpath.length > 0)) markCount++;
+          break;
+        case 'point':
+          markCount += mark.points.length;
+          break;
+        case 'rect':
+          markCount += mark.rects.length;
+          break;
+        case 'rule':
+          markCount += mark.lines.length;
+          break;
+        case 'area':
+          markCount += mark.subpaths.filter((subpath) => subpath.length > 0).length;
+          break;
+        case 'text':
+          markCount++;
+          textCount++;
+          break;
       }
     }
   };
   walk(marks);
   return { marks: markCount, texts: textCount };
+}
+
+/** Exact data-mark and SVG `<text>` counts implied by a render plan. */
+export function countPlanResources(plan: RenderPlanV1): {
+  readonly markCount: number;
+  readonly textCount: number;
+} {
+  let markCount = 0;
+  // The visible figure title is a `<text>` node; SVG `<title>` and `<desc>` are not.
+  let textCount = 1 + (plan.subtitle ? 1 : 0) + plan.disclosures.length;
+
+  for (const panel of plan.panels) {
+    if (panel.noData) {
+      textCount++;
+      continue;
+    }
+    for (const axis of panel.axes) textCount += axis.ticks.length + 1;
+    const counts = countMarks(panel.marks);
+    markCount += counts.marks;
+    textCount += counts.texts;
+  }
+
+  return { markCount, textCount };
 }
 
 /**
@@ -399,7 +495,6 @@ export function renderSvg(
     });
   }
 
-  let allMarks: Mark[] = [];
   for (const panel of plan.panels) {
     writer.open('g', [['data-panel', panel.id]]);
 
@@ -418,7 +513,6 @@ export function renderSvg(
       for (const axis of panel.axes) emitAxis(writer, axis, panel, colors);
       for (const mark of panel.marks) {
         emitMark(writer, mark, colors);
-        allMarks.push(mark);
       }
     }
 
@@ -447,13 +541,13 @@ export function renderSvg(
   writer.close('svg');
 
   const svg = writer.toString();
-  const counts = countMarks(allMarks);
+  const counts = countPlanResources(plan);
 
   return {
     svg,
     digest: digestOf(svg),
-    markCount: counts.marks,
-    textCount: counts.texts,
+    markCount: counts.markCount,
+    textCount: counts.textCount,
     width: plan.width,
     height: plan.height,
   };

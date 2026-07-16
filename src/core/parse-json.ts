@@ -25,6 +25,7 @@
 
 import { makeError, type CortexelError, type Result, err, ok } from './errors.js';
 import type { BudgetLimits } from './limits.js';
+import { utf8ByteLength } from './sha256.js';
 
 /** A value inside the JSON domain, with objects null-prototyped. */
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
@@ -475,6 +476,20 @@ class Scanner {
         'the number is outside the finite binary64 model; use null for a missing observation',
       );
     }
+    // A bare integer token is exact syntax. Above the I-JSON safe range, Python keeps
+    // that exact integer while JavaScript immediately rounds it to binary64, so the two
+    // readers can digest different values. Exponential/decimal notation denotes a
+    // binary64 measurement and remains in the RFC 8785 domain (for example 1e21).
+    if (!/[.eE]/u.test(token)) {
+      const integer = BigInt(token);
+      const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+      if (integer < -maxSafe || integer > maxSafe) {
+        this.fail(
+          'JSON_INTEGER_OUT_OF_RANGE',
+          'the bare integer token is outside the interoperable exact range -(2^53-1)..+(2^53-1); encode a non-arithmetic identifier as a string',
+        );
+      }
+    }
 
     return value;
   }
@@ -492,11 +507,68 @@ class Scanner {
  * records `duplicateKeys: "rejected_before_materialization"`.
  */
 export function parseJsonStrict(text: string, options: ParseOptions): Result<JsonValue> {
-  const { limits } = options;
+  if (typeof text !== 'string') {
+    return err([
+      makeError({
+        code: 'JSON_SYNTAX',
+        stage: 'parse',
+        message: 'the strict JSON boundary accepts a text string only',
+      }),
+    ]);
+  }
+
+  const limitKeys = [
+    'rawInputBytes',
+    'jsonDepth',
+    'jsonTotalNodes',
+    'jsonStringLength',
+    'jsonNumberTokenLength',
+    'jsonObjectKeys',
+    'jsonArrayItems',
+  ] as const;
+  const limitsSnapshot: Record<string, number> = Object.create(null);
+  let allowBom = false;
+  try {
+    if (options === null || typeof options !== 'object') throw new Error('invalid options');
+    const limitsDescriptor = Object.getOwnPropertyDescriptor(options, 'limits');
+    if (
+      limitsDescriptor === undefined ||
+      !Object.prototype.hasOwnProperty.call(limitsDescriptor, 'value')
+    ) {
+      throw new Error('invalid limits');
+    }
+    const supplied = limitsDescriptor.value;
+    if (supplied === null || typeof supplied !== 'object') throw new Error('invalid limits');
+    for (const key of limitKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(supplied, key);
+      if (descriptor === undefined || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+        throw new Error('invalid limit');
+      }
+      const value = descriptor.value;
+      if (!Number.isSafeInteger(value) || value < 0) throw new Error('invalid limit');
+      limitsSnapshot[key] = value;
+    }
+    const bomDescriptor = Object.getOwnPropertyDescriptor(options, 'allowBom');
+    if (bomDescriptor !== undefined) {
+      if (!Object.prototype.hasOwnProperty.call(bomDescriptor, 'value')) {
+        throw new Error('invalid allowBom');
+      }
+      allowBom = bomDescriptor.value === true;
+    }
+  } catch {
+    return err([
+      makeError({
+        code: 'INTERNAL_INVARIANT_VIOLATED',
+        stage: 'internal',
+        message: 'the strict parser requires a valid finite non-negative budget object',
+      }),
+    ]);
+  }
+  const limits = Object.freeze(limitsSnapshot) as unknown as BudgetLimits;
 
   // Byte length first, before a single character is examined. Checking the size of
   // a parse tree you already built is checking too late.
-  const byteLength = new TextEncoder().encode(text).length;
+  const byteLength = utf8ByteLength(text);
   if (byteLength > limits.rawInputBytes) {
     return err([
       makeError({
@@ -510,7 +582,7 @@ export function parseJsonStrict(text: string, options: ParseOptions): Result<Jso
 
   let source = text;
   if (source.charCodeAt(0) === 0xfeff) {
-    if (!options.allowBom) {
+    if (!allowBom) {
       return err([
         makeError({
           code: 'JSON_BOM_NOT_ALLOWED',

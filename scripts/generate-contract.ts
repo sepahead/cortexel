@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 import { canonicalize } from '../src/core/canonicalize.js';
 import { sha256Hex } from '../src/core/sha256.js';
+import { parseJsonSourceStrict } from './lib/strict-json-source.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACT = path.join(ROOT, 'contract');
@@ -36,7 +37,7 @@ const PY_BANNER = (source: string): string =>
   `"""GENERATED FILE - DO NOT EDIT.\n\nProduced by scripts/generate-contract.ts from ${source}.\nEdit the normative source and run \`bun run generate\`.\n"""\n`;
 
 function readJson<T = any>(file: string): T {
-  return JSON.parse(readFileSync(file, 'utf8')) as T;
+  return parseJsonSourceStrict<T>(readFileSync(file, 'utf8'), path.relative(ROOT, file));
 }
 
 /** Deterministic file listing: sorted, so the digest cannot depend on the filesystem. */
@@ -87,6 +88,111 @@ const stableSkills = skills.filter((s) => s.status === 'stable');
 // ---------------------------------------------------------------------------
 
 const problems: string[] = [];
+
+const DANGEROUS_GENERATED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Object.fromEntries and emitted object literals are map construction boundaries.
+ * Duplicate ids would silently let the last record win, while `__proto__` has special
+ * object-literal semantics and could disappear before freezeGenerated sees it. Refuse
+ * both at generation time instead of emitting an authority different from its source.
+ */
+function assertUniqueMapKeys(
+  records: readonly any[],
+  field: string,
+  where: string,
+): void {
+  const seen = new Set<string>();
+  records.forEach((record, index) => {
+    const key = record?.[field];
+    if (typeof key !== 'string' || key.length === 0) {
+      problems.push(`${where}[${index}].${field}: expected a non-empty string map key`);
+      return;
+    }
+    if (DANGEROUS_GENERATED_KEYS.has(key)) {
+      problems.push(`${where}[${index}].${field}: dangerous generated map key "${key}" is forbidden`);
+    }
+    if (seen.has(key)) {
+      problems.push(`${where}[${index}].${field}: duplicate generated map key "${key}"`);
+    }
+    seen.add(key);
+  });
+}
+
+function assertUniqueStrings(values: readonly unknown[], where: string): void {
+  const seen = new Set<string>();
+  values.forEach((value, index) => {
+    if (typeof value !== 'string' || value.length === 0) {
+      problems.push(`${where}[${index}]: expected a non-empty string`);
+      return;
+    }
+    if (seen.has(value)) problems.push(`${where}[${index}]: duplicate value "${value}"`);
+    seen.add(value);
+  });
+}
+
+function assertNoDangerousObjectKeys(value: unknown, where: string): void {
+  if (value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertNoDangerousObjectKeys(child, `${where}[${index}]`));
+    return;
+  }
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (DANGEROUS_GENERATED_KEYS.has(key)) {
+      problems.push(`${where}: dangerous object member "${key}" cannot be emitted safely`);
+    }
+    assertNoDangerousObjectKeys((value as Record<string, unknown>)[key], `${where}.${key}`);
+  }
+}
+
+assertUniqueMapKeys(errorCodes.codes, 'code', 'error-codes.codes');
+assertUniqueStrings(errorCodes.stages, 'error-codes.stages');
+assertUniqueMapKeys(units.units, 'code', 'units.units');
+assertUniqueMapKeys(units.quantityKinds, 'kind', 'units.quantityKinds');
+assertUniqueMapKeys(semanticValidators.validators, 'id', 'semantic-validators.validators');
+assertUniqueMapKeys(disclosures.rules, 'id', 'disclosures.rules');
+assertUniqueMapKeys(budgets.profiles, 'id', 'budget-profiles.profiles');
+assertUniqueMapKeys(budgets.compactionPolicies, 'id', 'budget-profiles.compactionPolicies');
+assertUniqueMapKeys(capabilities.capabilities, 'id', 'capabilities.capabilities');
+assertUniqueMapKeys(legacyMap.entries, 'legacyId', 'legacy-skill-map.entries');
+assertUniqueMapKeys(renderers.renderers, 'id', 'renderers.renderers');
+assertUniqueMapKeys(palettes.themes, 'id', 'palettes.themes');
+assertUniqueMapKeys(skills, 'id', 'contract/skills');
+
+for (const [where, value] of [
+  ['units', units],
+  ['error-codes', errorCodes],
+  ['capabilities', capabilities],
+  ['semantic-validators', semanticValidators],
+  ['disclosures', disclosures],
+  ['budget-profiles', budgets],
+  ['legacy-skill-map', legacyMap],
+  ['renderers', renderers],
+  ['palettes', palettes],
+] as const) {
+  assertNoDangerousObjectKeys(value, where);
+}
+skills.forEach((skill, index) => assertNoDangerousObjectKeys(skill, `contract/skills[${index}]`));
+
+const aliasOwners = new Map<string, string>();
+const canonicalUnitCodes = new Set<string>(units.units.map((unit: any) => unit.code));
+for (const unit of units.units) {
+  for (const alias of unit.aliases ?? []) {
+    if (typeof alias !== 'string' || alias.length === 0) continue;
+    if (DANGEROUS_GENERATED_KEYS.has(alias)) {
+      problems.push(`unit ${unit.code}: dangerous generated alias key "${alias}" is forbidden`);
+    }
+    if (canonicalUnitCodes.has(alias)) {
+      problems.push(`unit ${unit.code}: alias "${alias}" collides with a canonical unit code`);
+    }
+    const prior = aliasOwners.get(alias);
+    if (prior !== undefined) {
+      problems.push(`unit ${unit.code}: alias "${alias}" duplicates the alias owned by unit ${prior}`);
+    } else {
+      aliasOwners.set(alias, unit.code);
+    }
+  }
+}
 
 // `if` / `then` / `else` / `not` are PREDICATES over an instance, not declarations of
 // one. Closing an `if` with additionalProperties:false would make it match only objects
@@ -451,13 +557,15 @@ function composeRequestSchema(skill: any): object {
 // ---------------------------------------------------------------------------
 
 const registryTs = `${BANNER('contract/registries/')}
-export const ERROR_CODES = ${JSON.stringify([...errorCodeIds].sort(), null, 2)} as const;
+import { freezeGenerated } from '../core/deep-freeze.js';
+
+export const ERROR_CODES = freezeGenerated(${JSON.stringify([...errorCodeIds].sort(), null, 2)} as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
-export const ERROR_STAGES = ${JSON.stringify(errorCodes.stages, null, 2)} as const;
+export const ERROR_STAGES = freezeGenerated(${JSON.stringify(errorCodes.stages, null, 2)} as const);
 export type ErrorStage = (typeof ERROR_STAGES)[number];
 
-export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: ErrorStage; readonly severity: 'error' | 'warning'; readonly summary: string; readonly correctiveAction: string }>> = Object.freeze(${JSON.stringify(
+export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: ErrorStage; readonly severity: 'error' | 'warning'; readonly summary: string; readonly correctiveAction: string }>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     errorCodes.codes.map((c: any) => [
       c.code,
@@ -473,10 +581,10 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
   2,
 )});
 
-export const UNIT_CODES = ${JSON.stringify([...unitCodes].sort(), null, 2)} as const;
+export const UNIT_CODES = freezeGenerated(${JSON.stringify([...unitCodes].sort(), null, 2)} as const);
 export type UnitCode = (typeof UNIT_CODES)[number];
 
-export const QUANTITY_KINDS = ${JSON.stringify([...quantityKinds].sort(), null, 2)} as const;
+export const QUANTITY_KINDS = freezeGenerated(${JSON.stringify([...quantityKinds].sort(), null, 2)} as const);
 export type QuantityKind = (typeof QUANTITY_KINDS)[number];
 
 export interface UnitRecord {
@@ -487,7 +595,7 @@ export interface UnitRecord {
   readonly aliases: readonly string[];
 }
 
-export const UNITS: Readonly<Record<string, UnitRecord>> = Object.freeze(${JSON.stringify(
+export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     units.units.map((u: any) => [
       u.code,
@@ -506,7 +614,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = Object.freeze(${JSON.
 
 /** Alias -> canonical code. Used ONLY by adapters and \`cortexel migrate\`; normal
  *  validation rejects an alias with a repair rather than converting it silently. */
-export const UNIT_ALIASES: Readonly<Record<string, string>> = Object.freeze(${JSON.stringify(
+export const UNIT_ALIASES: Readonly<Record<string, string>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     units.units.flatMap((u: any) =>
       (u.aliases ?? [])
@@ -518,13 +626,13 @@ export const UNIT_ALIASES: Readonly<Record<string, string>> = Object.freeze(${JS
   2,
 )});
 
-export const QUANTITY_KIND_DIMENSIONS: Readonly<Record<string, readonly string[]>> = Object.freeze(${JSON.stringify(
+export const QUANTITY_KIND_DIMENSIONS: Readonly<Record<string, readonly string[]>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(units.quantityKinds.map((q: any) => [q.kind, q.dimensions])),
   null,
   2,
 )});
 
-export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity: 'critical' | 'important' | 'informational'; readonly text: string }[] = Object.freeze(${JSON.stringify(
+export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity: 'critical' | 'important' | 'informational'; readonly text: string }[] = freezeGenerated(${JSON.stringify(
   disclosures.rules.map((r: any) => ({ id: r.id, severity: r.severity, text: r.text })),
   null,
   2,
@@ -532,15 +640,17 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
 
 export type DisclosureId = (typeof DISCLOSURE_RULES)[number]['id'];
 
-export const SEMANTIC_VALIDATOR_IDS = ${JSON.stringify([...validatorIds].sort(), null, 2)} as const;
+export const SEMANTIC_VALIDATOR_IDS = freezeGenerated(${JSON.stringify([...validatorIds].sort(), null, 2)} as const);
 export type SemanticValidatorId = (typeof SEMANTIC_VALIDATOR_IDS)[number];
 `;
 
 const budgetsTs = `${BANNER('contract/registries/budget-profiles.v1.json')}
-export const BUDGET_PROFILE_IDS = ${JSON.stringify(budgets.profiles.map((p: any) => p.id), null, 2)} as const;
+import { freezeGenerated } from '../core/deep-freeze.js';
+
+export const BUDGET_PROFILE_IDS = freezeGenerated(${JSON.stringify(budgets.profiles.map((p: any) => p.id), null, 2)} as const);
 export type BudgetProfileId = (typeof BUDGET_PROFILE_IDS)[number];
 
-export const BUDGET_PROFILES = Object.freeze(${JSON.stringify(
+export const BUDGET_PROFILES = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     budgets.profiles.map((profile: any) => [
       profile.id,
@@ -551,9 +661,9 @@ export const BUDGET_PROFILES = Object.freeze(${JSON.stringify(
   ),
   null,
   2,
-)}) as Readonly<Record<BudgetProfileId, Readonly<Record<string, number>>>> as any;
+)}) as Readonly<Record<BudgetProfileId, Readonly<Record<string, number>>>>;
 
-export const COMPACTION_POLICIES = Object.freeze(${JSON.stringify(
+export const COMPACTION_POLICIES = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     budgets.compactionPolicies.map((p: any) => [
       p.id,
@@ -577,6 +687,7 @@ export type CompactionPolicyId = keyof typeof COMPACTION_POLICIES;
 
 /** The runtime catalog. Discovery, routing, budgets, and disclosures all read this. */
 const catalogTs = `${BANNER('contract/skills/ and contract/registries/capabilities.v1.json')}
+import { freezeGenerated } from '../core/deep-freeze.js';
 import type { SemanticValidatorId, DisclosureId } from './registry.js';
 
 export interface SkillCatalogEntry {
@@ -608,7 +719,7 @@ export interface SkillCatalogEntry {
   readonly knownLimitations: readonly string[];
 }
 
-export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object.freeze(${JSON.stringify(
+export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     skills.map((s) => [
       s.id,
@@ -638,26 +749,26 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
 )});
 
 /** The stable catalog, in a deliberate discovery order: traces, events, distributions, topology, spatial. */
-export const STABLE_SKILL_IDS = ${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 2)} as const;
+export const STABLE_SKILL_IDS = freezeGenerated(${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 2)} as const);
 export type StableSkillId = (typeof STABLE_SKILL_IDS)[number];
 
-export const EXPERIMENTAL_CAPABILITY_IDS = ${JSON.stringify(
+export const EXPERIMENTAL_CAPABILITY_IDS = freezeGenerated(${JSON.stringify(
   capabilities.capabilities
     .filter((c: any) => c.status === 'experimental' && c.kind === 'skill')
     .map((c: any) => c.id)
     .sort(),
   null,
   2,
-)} as const;
+)} as const);
 
-export const REMOVED_CAPABILITY_IDS = ${JSON.stringify(
+export const REMOVED_CAPABILITY_IDS = freezeGenerated(${JSON.stringify(
   capabilities.capabilities
     .filter((c: any) => c.status === 'removed')
     .map((c: any) => c.id)
     .sort(),
   null,
   2,
-)} as const;
+)} as const);
 
 export interface LegacyMapEntry {
   readonly legacyId: string;
@@ -672,25 +783,25 @@ export interface LegacyMapEntry {
 }
 
 /** Every pre-1.0 id has a deterministic outcome here. There is no fall-through. */
-export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object.freeze(${JSON.stringify(
+export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(legacyMap.entries.map((e: any) => [e.legacyId, e])),
   null,
   2,
 )});
 
-export const RENDERERS = Object.freeze(${JSON.stringify(
+export const RENDERERS = freezeGenerated(${JSON.stringify(
   Object.fromEntries(renderers.renderers.map((r: any) => [r.id, r])),
   null,
   2,
 )});
 
-export const THEMES = Object.freeze(${JSON.stringify(
+export const THEMES = freezeGenerated(${JSON.stringify(
   Object.fromEntries(palettes.themes.map((t: any) => [t.id, t])),
   null,
   2,
 )});
 
-export const CATEGORICAL_SERIES_STYLES = Object.freeze(${JSON.stringify(
+export const CATEGORICAL_SERIES_STYLES = freezeGenerated(${JSON.stringify(
   palettes.categoricalSeries.styles,
   null,
   2,
@@ -856,7 +967,18 @@ export function getBuildIdentity(): BuildIdentity {
 `;
 
 const pyCatalog = `${PY_BANNER('contract/')}
-from typing import Any, Dict, List
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Any, Final
+
+
+def _freeze(value: Any) -> Any:
+    """Recursively detach and freeze generated JSON authority."""
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
+    return value
 
 PACKAGE_VERSION: str = ${JSON.stringify(packageJson.version)}
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
@@ -864,13 +986,13 @@ ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
 CONTRACT_DIGEST: str = ${JSON.stringify(contractDigest)}
 CATALOG_DIGEST: str = ${JSON.stringify(catalogDigest)}
 
-STABLE_SKILL_IDS: List[str] = ${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 4)}
+STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze(${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 4)})
 
-ERROR_CODES: List[str] = ${JSON.stringify([...errorCodeIds].sort(), null, 4)}
+ERROR_CODES: Final[tuple[str, ...]] = _freeze(${JSON.stringify([...errorCodeIds].sort(), null, 4)})
 
-ERROR_STAGES: List[str] = ${JSON.stringify(errorCodes.stages, null, 4)}
+ERROR_STAGES: Final[tuple[str, ...]] = _freeze(${JSON.stringify(errorCodes.stages, null, 4)})
 
-UNITS: Dict[str, Any] = ${JSON.stringify(
+UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
   Object.fromEntries(
     units.units.map((u: any) => [
       u.code,
@@ -879,9 +1001,9 @@ UNITS: Dict[str, Any] = ${JSON.stringify(
   ),
   null,
   4,
-)}
+)})
 
-UNIT_ALIASES: Dict[str, str] = ${JSON.stringify(
+UNIT_ALIASES: Final[Mapping[str, str]] = _freeze(${JSON.stringify(
   Object.fromEntries(
     units.units.flatMap((u: any) =>
       (u.aliases ?? [])
@@ -891,15 +1013,15 @@ UNIT_ALIASES: Dict[str, str] = ${JSON.stringify(
   ),
   null,
   4,
-)}
+)})
 
-QUANTITY_KIND_DIMENSIONS: Dict[str, List[str]] = ${JSON.stringify(
+QUANTITY_KIND_DIMENSIONS: Final[Mapping[str, tuple[str, ...]]] = _freeze(${JSON.stringify(
   Object.fromEntries(units.quantityKinds.map((q: any) => [q.kind, q.dimensions])),
   null,
   4,
-)}
+)})
 
-BUDGET_PROFILES: Dict[str, Dict[str, int]] = ${JSON.stringify(
+BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze(${JSON.stringify(
   Object.fromEntries(
     budgets.profiles.map((profile: any) => [
       profile.id,
@@ -910,7 +1032,7 @@ BUDGET_PROFILES: Dict[str, Dict[str, int]] = ${JSON.stringify(
   ),
   null,
   4,
-)}
+)})
 `.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
 
 const written: string[] = [];

@@ -262,11 +262,12 @@
           "properties": {
             "kind": { "const": "global_merged" },
             "snapshotTime": { "$ref": "#/$defs/quantity" },
-            "worldSize": { "type": "integer", "minimum": 1 },
+            "worldSize": { "type": "integer", "minimum": 1, "maximum": 1000000 },
             "mergedRanks": {
               "type": "array",
               "items": { "type": "integer", "minimum": 0 },
               "minItems": 1,
+              "maxItems": 1000000,
               "description": "Every rank actually merged. The semantic validator requires that these cover 0..worldSize-1 exactly once; a partial rank set remains partial."
             }
           },
@@ -278,8 +279,8 @@
           "properties": {
             "kind": { "const": "mpi_target_rank_local" },
             "snapshotTime": { "$ref": "#/$defs/quantity" },
-            "rank": { "type": "integer", "minimum": 0 },
-            "worldSize": { "type": "integer", "minimum": 1 },
+            "rank": { "type": "integer", "minimum": 0, "maximum": 999999 },
+            "worldSize": { "type": "integer", "minimum": 1, "maximum": 1000000 },
             "localTargetUniverseComplete": {
               "type": "boolean",
               "description": "Whether every connection whose target this rank owns is present. Under NEST's MPI semantics this is what makes a LOCAL in-degree computable — and what still makes a global out-degree impossible."

@@ -14,7 +14,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import cortexel  # noqa: E402
 from cortexel.canonicalize import canonicalize, CanonicalizationError  # noqa: E402
+from cortexel.generated import BUDGET_PROFILES, STABLE_SKILL_IDS, UNITS  # noqa: E402
 from cortexel.parse_json import parse_json_strict, JsonParseError  # noqa: E402
+from cortexel.validate import _collect_quantities  # noqa: E402
 
 CONTRACT_SKILLS = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "..", "contract", "skills")
@@ -49,6 +51,11 @@ class TestCanonicalization(unittest.TestCase):
         with self.assertRaises(CanonicalizationError):
             canonicalize(float("inf"))
 
+    def test_rejects_arbitrary_precision_integers_without_rejecting_large_floats(self):
+        with self.assertRaises(CanonicalizationError):
+            canonicalize(9007199254740992)
+        self.assertEqual(canonicalize(1e21), "1e+21")
+
     def test_digest_is_key_order_insensitive(self):
         a = cortexel.canonical_digest({"x": 1, "y": 2})
         b = cortexel.canonical_digest({"y": 2, "x": 1})
@@ -71,8 +78,37 @@ class TestStrictParser(unittest.TestCase):
         with self.assertRaises(JsonParseError):
             parse_json_strict("NaN")
 
+    def test_rejects_nonportable_integer_tokens_but_accepts_finite_exponents(self):
+        self.assertEqual(parse_json_strict("9007199254740991"), 9007199254740991)
+        for token in ("9007199254740992", "-9007199254740992", "9007199254740993"):
+            with self.assertRaises(JsonParseError) as ctx:
+                parse_json_strict(token)
+            self.assertEqual(ctx.exception.code, "JSON_INTEGER_OUT_OF_RANGE")
+        self.assertEqual(parse_json_strict("1e21"), 1e21)
+
+
+class TestGeneratedAuthority(unittest.TestCase):
+    def test_generated_registries_are_recursively_immutable(self):
+        with self.assertRaises(TypeError):
+            UNITS["ms"] = {"dimension": "voltage"}
+        with self.assertRaises(TypeError):
+            UNITS["ms"]["dimension"] = "voltage"
+        with self.assertRaises(TypeError):
+            BUDGET_PROFILES["agent"]["rawInputBytes"] = 2**63
+        with self.assertRaises(TypeError):
+            STABLE_SKILL_IDS[0] = "forged.skill"
+
 
 class TestValidation(unittest.TestCase):
+    def test_unit_collection_has_no_arbitrary_depth_cutoff(self):
+        node = {"kind": "time", "unit": "mV"}
+        for _ in range(48):
+            node = {"nested": node}
+        quantities = []
+        _collect_quantities(node, "/data", quantities)
+        self.assertEqual(len(quantities), 1)
+        self.assertEqual(quantities[0][0:2], ("time", "mV"))
+
     def _contracts(self):
         for name in sorted(os.listdir(CONTRACT_SKILLS)):
             if name.endswith(".json"):
@@ -96,6 +132,20 @@ class TestValidation(unittest.TestCase):
             codes = [e.code for e in cortexel.validate_request(forged)]
             self.assertIn("PROVENANCE_CALLER_ASSURANCE_FORBIDDEN", codes, contract["id"])
             break  # one is enough; the rule is source-shape, not per-skill
+
+    def test_materialized_python_integer_outside_portable_range_is_rejected(self):
+        contract = next(self._contracts())
+        request = json.loads(json.dumps(contract["examples"]["valid"][0]))
+        request["unsafeInteger"] = 9007199254740992
+        errors = cortexel.validate_request(request)
+        self.assertEqual(errors[0].code, "SNAPSHOT_INTEGER_OUT_OF_RANGE")
+
+    def test_materialized_nonfinite_number_is_rejected_at_the_snapshot_stage(self):
+        contract = next(self._contracts())
+        request = json.loads(json.dumps(contract["examples"]["valid"][0]))
+        request["nonfinite"] = float("nan")
+        errors = cortexel.validate_request(request)
+        self.assertEqual(errors[0].code, "SNAPSHOT_NON_FINITE_NUMBER")
 
     def test_unit_alias_rejected(self):
         # A structurally-valid request whose only fault is a unit alias.

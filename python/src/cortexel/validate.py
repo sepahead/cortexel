@@ -17,6 +17,7 @@ validators are ported incrementally.
 from __future__ import annotations
 
 import json
+import math
 import os
 from typing import Any, Optional
 
@@ -54,6 +55,8 @@ _LIBRARY_AUTHORED = {
 }
 
 from .generated.catalog import UNITS, UNIT_ALIASES, QUANTITY_KIND_DIMENSIONS
+
+_MAX_SAFE_INTEGER = (1 << 53) - 1
 
 _schema_cache: dict[str, dict] = {}
 
@@ -219,20 +222,50 @@ def _find_authored(node: Any, path: str, errors: list, depth: int = 0) -> None:
         _find_authored(child, path + _pointer(key), errors, depth + 1)
 
 
-def _collect_quantities(node: Any, path: str, out: list, depth: int = 0) -> None:
-    """Find every {kind, unit} quantity, and every bare {unit} field, with its path."""
-    if depth > 32 or not isinstance(node, (dict, list)):
+def _validate_host_number_domain(node: Any, path: str, errors: list, depth: int = 0) -> None:
+    """Mirror the materialized boundary's finite and portable numeric domain."""
+    if depth > 64:
+        return
+    if isinstance(node, float):
+        if not math.isfinite(node):
+            errors.append(CortexelError(
+                "SNAPSHOT_NON_FINITE_NUMBER", "snapshot", path,
+                "NaN and Infinity are not measurements"))
+        return
+    if isinstance(node, int) and not isinstance(node, bool):
+        if abs(node) > _MAX_SAFE_INTEGER:
+            errors.append(CortexelError(
+                "SNAPSHOT_INTEGER_OUT_OF_RANGE", "snapshot", path,
+                "the host integer is outside the interoperable exact range"))
         return
     if isinstance(node, list):
-        for i, item in enumerate(node):
-            _collect_quantities(item, path + _pointer(i), out, depth + 1)
+        for index, child in enumerate(node):
+            _validate_host_number_domain(child, path + _pointer(index), errors, depth + 1)
+    elif isinstance(node, dict):
+        for key, child in node.items():
+            _validate_host_number_domain(child, path + _pointer(key), errors, depth + 1)
+
+
+def _collect_quantities(node: Any, path: str, out: list) -> None:
+    """Find every {kind, unit} quantity, and every bare {unit} field, with its path."""
+    if not isinstance(node, (dict, list)):
         return
-    kind = node.get("kind")
-    unit = node.get("unit")
-    if isinstance(unit, str):
-        out.append((kind if isinstance(kind, str) else None, unit, path))
-    for key, child in node.items():
-        _collect_quantities(child, path + _pointer(key), out, depth + 1)
+    pending = [(node, path)]
+    while pending:
+        current, current_path = pending.pop()
+        if isinstance(current, list):
+            for i in range(len(current) - 1, -1, -1):
+                child = current[i]
+                if isinstance(child, (dict, list)):
+                    pending.append((child, current_path + _pointer(i)))
+            continue
+        kind = current.get("kind")
+        unit = current.get("unit")
+        if isinstance(unit, str):
+            out.append((kind if isinstance(kind, str) else None, unit, current_path))
+        for key, child in reversed(list(current.items())):
+            if isinstance(child, (dict, list)):
+                pending.append((child, current_path + _pointer(key)))
 
 
 def _validate_units(request: dict, errors: list) -> None:
@@ -281,6 +314,10 @@ def validate_request(request: Any) -> list:
     if not isinstance(request, dict):
         errors.append(CortexelError("SCHEMA_TYPE_MISMATCH", "structural", "",
                                      "a figure request must be a JSON object"))
+        return errors
+
+    _validate_host_number_domain(request, "", errors)
+    if errors:
         return errors
 
     # Authority first, on the raw request.

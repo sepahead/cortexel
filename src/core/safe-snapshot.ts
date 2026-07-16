@@ -126,6 +126,13 @@ function snapshotNode(value: unknown, path: string, depth: number, state: Snapsh
           'the string contains a lone surrogate and is not well-formed Unicode',
         );
       }
+      if (value.length > state.limits.jsonStringLength) {
+        fail(
+          'SNAPSHOT_STRING_TOO_LONG',
+          path,
+          `the string contains ${value.length} UTF-16 code units, over the active limit of ${state.limits.jsonStringLength}`,
+        );
+      }
       return value;
 
     case 'undefined':
