@@ -16,6 +16,10 @@ import {
   MAX_MATERIALIZED_BINS,
   materializeWidthBins,
 } from '../core/binning.js';
+import {
+  exactBinary64Sum,
+  roundedBinary64Mean,
+} from '../core/exact-binary64.js';
 
 export interface Bins {
   /** n+1 strictly increasing edges defining n bins. */
@@ -48,7 +52,7 @@ export function tryEdgesFromWidth(start: number, stop: number, width: number): n
 export function binIndex(value: number, bins: Bins): number {
   const { edges, finalEdgeInclusive } = bins;
   const n = edges.length - 1;
-  if (n < 1) return -1;
+  if (!Number.isFinite(value) || n < 1) return -1;
 
   if (value < edges[0]) return -1;
   if (value > edges[n]) return -1;
@@ -102,7 +106,7 @@ export function binCounts(
 export function binWidths(bins: Bins): number[] {
   const widths: number[] = [];
   for (let i = 0; i < bins.edges.length - 1; i++) {
-    widths.push(bins.edges[i + 1] - bins.edges[i]);
+    widths.push(exactBinary64Sum([bins.edges[i + 1], -bins.edges[i]]));
   }
   return widths;
 }
@@ -110,7 +114,7 @@ export function binWidths(bins: Bins): number[] {
 export function binCenters(bins: Bins): number[] {
   const centers: number[] = [];
   for (let i = 0; i < bins.edges.length - 1; i++) {
-    centers.push((bins.edges[i] + bins.edges[i + 1]) / 2);
+    centers.push(roundedBinary64Mean([bins.edges[i], bins.edges[i + 1]]));
   }
   return centers;
 }

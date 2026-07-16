@@ -1664,7 +1664,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "MISSING_VALUES_PRESENT",
     "severity": "important",
-    "text": "{missingCount} observations are missing. Lines are broken at each gap; missing values are never interpolated across or drawn as zero."
+    "text": "{missingCount} observations are missing. Missing values are omitted rather than interpolated, imputed, or drawn as zero."
   },
   {
     "id": "UNIT_CONVERTED",
@@ -1704,7 +1704,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "PRE_BINNED_INPUT",
     "severity": "informational",
-    "text": "Input was pre-binned by the caller. Cortexel re-derived and checked the normalization but did not observe the raw events."
+    "text": "Input was pre-binned by the caller. Cortexel re-derived and checked the normalization but did not observe the raw observations."
   },
   {
     "id": "DUPLICATE_TIMES_AGGREGATED",

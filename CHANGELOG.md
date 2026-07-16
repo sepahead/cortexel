@@ -20,6 +20,43 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Simulator-defined synaptic weights remain non-convertible, but the weight-trace contract's
   explicit model-comparability declaration is now checked against every series before an
   identical opaque unit code may share an axis.
+- Width-bin materialization, bin centres, and bin widths now avoid overflowing finite endpoint
+  arithmetic. Population-rate denominators use exact quotient arithmetic, and supplied rates
+  are verified in their declared unit without a near-zero absolute-tolerance loophole.
+
+### Fixed — binned scientific compilers
+
+- Population-rate rendering now converts event clocks into the declared bin frame, re-derives
+  prebinned rates from exact counts and denominators, emits Hz consistently, and records the
+  conversion and denominator receipt. Unsupported kernel modes fail closed instead of being
+  substituted with a binned step plot.
+- ISI rendering now supports both event and supplied-interval modes, exact within-train
+  differences, explicit edge and width bins, count/probability/density normalization, log
+  axes, exact window-duration checks, bin-range policy, and derivation receipts. Event mode
+  counts the complete sender-by-trial train universe, supplied mode reconciles every train
+  and its total interval span, and a rounded derived interval that would change exact
+  half-open bin ownership is refused.
+- Delay and weight distributions now honor declared/prebinned edges, measurement-unit
+  conversion, per-connection versus per-ordered-pair counting, multapse aggregation,
+  count/probability/density normalization, and log axes. Synapse-model groups are partitioned
+  before aggregation and normalized independently; missing weights remain row-aligned and
+  invalidate a node-pair observation rather than shrinking its sum. Prebinned histograms are
+  no longer replaced by invented empty ten-bin plots, and reject-range policy is enforced in
+  both modes.
+- Histogram validation now rejects negative probability/density values, requires reciprocal
+  density units, uses exact binary64 accumulation for probability totals and density
+  integrals, requires safe-integer counts, and reports an explicit no-data refusal instead of
+  fabricating an all-zero probability or density when the denominator is zero.
+- Unit-bearing derivations now surface their conversion receipts through the mandatory
+  `UNIT_CONVERTED` disclosure, and identical simulator-defined trace units no longer attempt
+  an impossible physical conversion during affine-integrity checks.
+- Histogram exclusions and missing-measurement accounting now reach the accessible summary
+  and render-plan audit columns as well as the derivation receipt. Pre-binned and missing-value
+  disclosures use observation-neutral wording, and `MULTAPSE_AGGREGATED` fires only when
+  connection rows were actually collapsed into a rendered aggregate.
+- Unique-neighbor degree rendering now uses the contract spelling
+  `count_unique_neighbors`; the former internal British spelling silently selected edge
+  counting for a valid contract request and is removed.
 
 ### Fixed — analog and multi-signal trace semantics
 

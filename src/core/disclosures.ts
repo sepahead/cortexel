@@ -60,6 +60,7 @@ export interface DisclosureFacts {
   readonly retainedConnectionCount?: number;
   readonly sourceConnectionCount?: number;
   readonly multapseAggregation?: string;
+  readonly multapseAggregated?: boolean;
   readonly schematicLayout?: boolean;
   readonly positionsMissing?: number;
   readonly positionsTotal?: number;
@@ -84,7 +85,10 @@ const RULE_PREDICATES: Readonly<Record<string, (facts: DisclosureFacts) => boole
   RANK_LOCAL_SCOPE: (f) => f.scopeKind === 'mpi_target_rank_local',
   SAMPLED_EDGES: (f) => f.scopeKind === 'sampled',
   NODE_UNIVERSE_INCOMPLETE: (f) => f.nodeUniverseComplete === false,
-  MULTAPSE_AGGREGATED: (f) => f.multapseAggregation !== undefined && f.multapseAggregation !== 'no_aggregation',
+  MULTAPSE_AGGREGATED: (f) =>
+    f.multapseAggregated === true &&
+    f.multapseAggregation !== undefined &&
+    f.multapseAggregation !== 'no_aggregation',
   ABSENT_IS_NOT_ZERO: () => false, // matrix compilers set this explicitly
   SCHEMATIC_LAYOUT: (f) => f.schematicLayout === true,
   POSITIONS_MISSING: (f) => (f.positionsMissing ?? 0) > 0,

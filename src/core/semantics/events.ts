@@ -7,15 +7,27 @@
  */
 
 import { makeError, pointer, type CortexelError } from '../errors.js';
-import { compareExactUnitSumToValue, convert, toSeconds } from '../units.js';
 import {
-  approximatelyEqual,
+  binary64RelativeDifferenceWithinTolerance,
+  exactBinary64Sum,
+  exactRationalToBinary64,
+  finiteBinary64ToMinSubnormalUnits,
+} from '../exact-binary64.js';
+import {
+  compareExactUnitSumToValue,
+  convert,
+  convertDifference,
+  divideExactIntegerByConvertedDifference,
+  reciprocalUnit,
+} from '../units.js';
+import {
   asArray,
   asNumber,
   asRecord,
   asString,
   getData,
   getParameters,
+  NUMERIC_TOLERANCE,
   readPointer,
   type SemanticContext,
   type SemanticValidator,
@@ -50,6 +62,106 @@ export function resolveBinEdges(spec: Record<string, unknown> | undefined): numb
   }
 
   return undefined;
+}
+
+/**
+ * A population-rate figure has one declared observation window and one binned
+ * domain. Their physical outer endpoints must be the same quantities, even when
+ * written in different registered time units.
+ *
+ * This comparison stays exact. Converting an edge to binary64 first can make two
+ * physically distinct declarations round to the same number (for example
+ * `0.3 ms` and `0.0003 s`), after which validation could no longer recover the
+ * contradiction.
+ */
+function populationRateBinsBindWindow(context: SemanticContext): CortexelError[] {
+  if (context.skillId !== 'neuro.population_rate') return [];
+
+  const data = getData(context);
+  const parameters = getParameters(context);
+  const window = asRecord(data.window);
+  const windowStart = asNumber(window?.start);
+  const windowStop = asNumber(window?.stop);
+  const windowUnit = asString(window?.unit);
+  if (windowStart === undefined || windowStop === undefined || !windowUnit) return [];
+
+  let firstEdge: number | undefined;
+  let lastEdge: number | undefined;
+  let binUnit: string | undefined;
+  let firstPath: (string | number)[];
+  let lastPath: (string | number)[];
+
+  if (asString(data.mode) === 'events') {
+    const bins = asRecord(parameters.bins);
+    binUnit = asString(bins?.unit);
+    if (asString(bins?.mode) === 'width') {
+      firstEdge = asNumber(bins?.start);
+      lastEdge = asNumber(bins?.stop);
+      firstPath = ['parameters', 'bins', 'start'];
+      lastPath = ['parameters', 'bins', 'stop'];
+    } else {
+      const edgeValues = asArray(bins?.edges);
+      firstEdge = asNumber(edgeValues?.[0]);
+      lastEdge = asNumber(edgeValues?.[Math.max(0, (edgeValues?.length ?? 1) - 1)]);
+      firstPath = ['parameters', 'bins', 'edges', 0];
+      lastPath = ['parameters', 'bins', 'edges', Math.max(0, (edgeValues?.length ?? 1) - 1)];
+    }
+  } else if (asString(data.mode) === 'prebinned') {
+    const binEdges = asRecord(data.binEdges);
+    const edgeValues = asArray(binEdges?.edges);
+    firstEdge = asNumber(edgeValues?.[0]);
+    lastEdge = asNumber(edgeValues?.[Math.max(0, (edgeValues?.length ?? 1) - 1)]);
+    binUnit = asString(binEdges?.unit);
+    firstPath = ['data', 'binEdges', 'edges', 0];
+    lastPath = ['data', 'binEdges', 'edges', Math.max(0, (edgeValues?.length ?? 1) - 1)];
+  } else {
+    return [];
+  }
+
+  if (firstEdge === undefined || lastEdge === undefined || !binUnit) return [];
+
+  const errors: CortexelError[] = [];
+  const checks = [
+    {
+      edge: firstEdge,
+      windowValue: windowStart,
+      windowName: 'start',
+      at: firstPath,
+    },
+    {
+      edge: lastEdge,
+      windowValue: windowStop,
+      windowName: 'stop',
+      at: lastPath,
+    },
+  ] as const;
+
+  for (const check of checks) {
+    let comparison: -1 | 0 | 1;
+    try {
+      comparison = compareExactUnitSumToValue(
+        [{ value: check.edge, unit: binUnit }],
+        { value: check.windowValue, unit: windowUnit },
+      );
+    } catch {
+      // Canonical-code and dimension validators own invalid/incompatible units.
+      // This rule owns only the equality of otherwise comparable endpoints.
+      continue;
+    }
+    if (comparison === 0) continue;
+
+    errors.push(
+      makeError({
+        code: 'SCIENCE_BIN_EDGES_INVALID',
+        stage: 'science',
+        instancePath: pointer(...check.at),
+        validatorId: 'bins.strictly_increasing',
+        message: `population-rate bins must tile exactly the declared observation window: the ${check.windowName} bin edge ${check.edge} ${binUnit} is not exactly equal to window ${check.windowName} ${check.windowValue} ${windowUnit}. Rounded unit conversion is not sufficient because it can conceal a real boundary mismatch.`,
+      }),
+    );
+  }
+
+  return errors;
 }
 
 export const binsStrictlyIncreasing: SemanticValidator = (
@@ -145,6 +257,7 @@ export const binsStrictlyIncreasing: SemanticValidator = (
     }
   }
 
+  errors.push(...populationRateBinsBindWindow(context));
   return errors;
 };
 
@@ -353,14 +466,14 @@ export const rateDenominatorPositive: SemanticValidator = (
   const count = asNumber(data.recordedSenderCount);
   if (count === undefined) return [];
 
-  if (!Number.isInteger(count) || count < 1) {
+  if (!Number.isSafeInteger(count) || count < 1) {
     return [
       makeError({
         code: 'SCIENCE_DENOMINATOR_INVALID',
         stage: 'science',
         instancePath: pointer('data', 'recordedSenderCount'),
         validatorId: 'rate.denominator_positive',
-        message: `the recorded-sender count must be a positive integer; got ${count}.`,
+        message: `the recorded-sender count must be a positive safe integer; got ${count}. Counts above Number.MAX_SAFE_INTEGER cannot be represented as arbitrary exact JSON integers.`,
       }),
     ];
   }
@@ -390,9 +503,16 @@ export const rateVerifyNormalization: SemanticValidator = (
   const senderCount = asNumber(data.recordedSenderCount);
   const edges = asArray(asRecord(data.binEdges)?.edges);
   const edgeUnit = asString(asRecord(data.binEdges)?.unit);
+  const rateUnit = asString(asRecord(data.rates)?.unit);
   const normalization = asString(parameters.normalization);
 
-  if (senderCount === undefined || !edges || !edgeUnit || !normalization) return [];
+  if (
+    senderCount === undefined ||
+    !edges ||
+    !edgeUnit ||
+    !rateUnit ||
+    !normalization
+  ) return [];
 
   const errors: CortexelError[] = [];
 
@@ -404,39 +524,63 @@ export const rateVerifyNormalization: SemanticValidator = (
 
     if (count === undefined || rate === undefined || lo === undefined || hi === undefined) continue;
 
-    if (!Number.isInteger(count) || count < 0) {
+    if (!Number.isSafeInteger(count) || count < 0) {
       errors.push(
         makeError({
           code: 'SCIENCE_COUNT_NOT_INTEGER',
           stage: 'science',
           instancePath: pointer('data', 'counts', i),
           validatorId: 'rate.verify_normalization',
-          message: `a bin count must be an exact non-negative integer; got ${count}.`,
+          message: `a bin count must be an exact non-negative safe integer; got ${count}. Counts above Number.MAX_SAFE_INTEGER cannot be represented as arbitrary exact JSON integers.`,
         }),
       );
       continue;
     }
 
-    let widthSeconds: number;
+    let expected: number;
+    let rateHz: number;
     try {
-      widthSeconds = toSeconds(hi - lo, edgeUnit);
-    } catch {
-      continue;
-    }
-    if (!(widthSeconds > 0)) continue;
-
-    const denominator =
-      normalization === 'mean_rate_per_recorded_sender' ? senderCount * widthSeconds : widthSeconds;
-    const expected = count / denominator;
-
-    if (!approximatelyEqual(rate, expected)) {
+      const integerFactor =
+        normalization === 'mean_rate_per_recorded_sender' ? senderCount : 1;
+      expected = divideExactIntegerByConvertedDifference(
+        count,
+        integerFactor,
+        lo,
+        hi,
+        edgeUnit,
+        's',
+      );
+      rateHz = convert(rate, rateUnit, 'Hz');
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'numeric conversion failed';
       errors.push(
         makeError({
           code: 'SCIENCE_NORMALIZATION_UNVERIFIABLE',
           stage: 'science',
           instancePath: pointer('data', 'rates', 'values', i),
           validatorId: 'rate.verify_normalization',
-          message: `bin ${i}: the supplied rate ${rate} does not follow from its count. ${count} events over ${widthSeconds} s${normalization === 'mean_rate_per_recorded_sender' ? ` and ${senderCount} recorded senders` : ''} gives ${expected}. Cortexel re-derives the rate rather than drawing the number it was handed.`,
+          message: `bin ${i}: the supplied rate cannot be verified from its count, bin endpoints, units, and denominator because the required exact binary64 derivation failed (${detail}). Cortexel refuses rather than trusting a pre-normalized value it could not re-derive.`,
+        }),
+      );
+      continue;
+    }
+
+    const zeroClassMatches = (rateHz === 0) === (expected === 0);
+    const signMatches =
+      rateHz === 0 || expected === 0 || Math.sign(rateHz) === Math.sign(expected);
+    const relativeMatch = binary64RelativeDifferenceWithinTolerance(
+      rateHz,
+      expected,
+      NUMERIC_TOLERANCE.relative,
+    );
+    if (!zeroClassMatches || !signMatches || !relativeMatch) {
+      errors.push(
+        makeError({
+          code: 'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+          stage: 'science',
+          instancePath: pointer('data', 'rates', 'values', i),
+          validatorId: 'rate.verify_normalization',
+          message: `bin ${i}: the supplied rate ${rate} ${rateUnit} (${rateHz} Hz) does not follow from its count. ${count} events over the exact converted interval [${lo}, ${hi}] ${edgeUnit}${normalization === 'mean_rate_per_recorded_sender' ? ` and ${senderCount} recorded senders` : ''} gives ${expected} Hz. Cortexel re-derives the rate rather than drawing the number it was handed.`,
         }),
       );
     }
@@ -466,8 +610,13 @@ export const histogramNormalizationConsistent: SemanticValidator = (
   if (!normalization) return [];
 
   const values = asArray(data.values) ?? asArray(asRecord(data.histogram)?.values);
+  const valuesAtHistogram = asArray(asRecord(data.histogram)?.values) !== undefined;
   const edges =
     asArray(asRecord(data.binEdges)?.edges) ?? resolveBinEdges(asRecord(parameters.bins));
+  const binUnit =
+    asString(asRecord(data.binEdges)?.unit) ?? asString(asRecord(parameters.bins)?.unit);
+  const histogramUnit = asString(asRecord(data.histogram)?.unit);
+  const valuePath = valuesAtHistogram ? ['data', 'histogram', 'values'] as const : ['data', 'values'] as const;
 
   if (!values || !edges || values.length === 0) return [];
   if (edges.length !== values.length + 1) return [];
@@ -478,12 +627,12 @@ export const histogramNormalizationConsistent: SemanticValidator = (
     for (let i = 0; i < values.length; i++) {
       const value = asNumber(values[i]);
       if (value === undefined) continue;
-      if (!Number.isInteger(value) || value < 0) {
+      if (!Number.isSafeInteger(value) || value < 0) {
         errors.push(
           makeError({
             code: 'SCIENCE_COUNT_NOT_INTEGER',
             stage: 'science',
-            instancePath: pointer('data', 'values', i),
+            instancePath: pointer(...valuePath, i),
             validatorId: 'histogram.normalization_consistent',
             message: `a count must be an exact non-negative integer; got ${value}.`,
           }),
@@ -493,27 +642,79 @@ export const histogramNormalizationConsistent: SemanticValidator = (
     return errors;
   }
 
-  let total = 0;
+  if (
+    normalization === 'density' &&
+    binUnit !== undefined &&
+    histogramUnit !== undefined &&
+    reciprocalUnit(binUnit) !== histogramUnit
+  ) {
+    errors.push(
+      makeError({
+        code: 'SCIENCE_UNIT_DIMENSION_MISMATCH',
+        stage: 'science',
+        instancePath: pointer('data', 'histogram', 'unit'),
+        validatorId: 'histogram.normalization_consistent',
+        message: `a density over bins in ${binUnit} must use the registered reciprocal unit ${String(reciprocalUnit(binUnit))}; got ${histogramUnit}.`,
+      }),
+    );
+  }
+
+  const probabilities: number[] = [];
+  let exactIntegralUnits = 0n;
   let anyValue = false;
 
   for (let i = 0; i < values.length; i++) {
     const value = asNumber(values[i]);
     if (value === undefined) continue;
     anyValue = true;
+    if (value < 0) {
+      errors.push(
+        makeError({
+          code: 'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+          stage: 'science',
+          instancePath: pointer(...valuePath, i),
+          validatorId: 'histogram.normalization_consistent',
+          message: `${normalization} values must be non-negative; got ${value}.`,
+        }),
+      );
+      continue;
+    }
 
     if (normalization === 'probability') {
-      total += value;
+      probabilities.push(value);
     } else {
       const lo = asNumber(edges[i]);
       const hi = asNumber(edges[i + 1]);
       if (lo === undefined || hi === undefined) return errors;
       // The density rule: value x width, not value. With unequal bins these differ,
       // and the resulting figure is wrong in a way no reader can see.
-      total += value * (hi - lo);
+      const widthUnits =
+        finiteBinary64ToMinSubnormalUnits(hi) - finiteBinary64ToMinSubnormalUnits(lo);
+      exactIntegralUnits += finiteBinary64ToMinSubnormalUnits(value) * widthUnits;
     }
   }
 
   if (!anyValue) return errors;
+
+  let total: number;
+  try {
+    total = normalization === 'probability'
+      ? exactBinary64Sum(probabilities)
+      : exactRationalToBinary64(exactIntegralUnits, 1n, -2148);
+  } catch {
+    errors.push(
+      makeError({
+        code: normalization === 'density'
+          ? 'SCIENCE_DENSITY_DOES_NOT_INTEGRATE'
+          : 'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+        stage: 'science',
+        instancePath: pointer(...valuePath),
+        validatorId: 'histogram.normalization_consistent',
+        message: `the ${normalization} total is outside the finite binary64 range and cannot be verified.`,
+      }),
+    );
+    return errors;
+  }
 
   // A tolerance loose enough for accumulated binary64 error over many bins, and
   // tight enough that a genuinely unnormalized histogram cannot slip through.
@@ -525,7 +726,7 @@ export const histogramNormalizationConsistent: SemanticValidator = (
             ? 'SCIENCE_DENSITY_DOES_NOT_INTEGRATE'
             : 'SCIENCE_NORMALIZATION_UNVERIFIABLE',
         stage: 'science',
-        instancePath: pointer('data', 'values'),
+        instancePath: pointer(...valuePath),
         validatorId: 'histogram.normalization_consistent',
         message:
           normalization === 'density'

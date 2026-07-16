@@ -34,9 +34,14 @@ import {
   axesAreCompatible,
   conversionFactor,
   conversionReceipt,
+  compareExactUnitSumToValue,
+  compareExactUnitArraySumToDifference,
   convert,
   convertDifference,
+  convertExactUnitSum,
+  divideExactIntegerByConvertedDifference,
   dimensionOf,
+  reciprocalUnit,
   unitLabel,
   type ConversionReceipt,
 } from '../core/units.js';
@@ -45,6 +50,7 @@ import {
   tryEdgesFromWidth,
   binCounts,
   binCenters,
+  binIndex,
   computePopulationRate,
   computeIsi,
   computeDegrees,
@@ -70,6 +76,7 @@ import { MIN_PLOT_PANEL_HEIGHT } from './layout.js';
 import { compileLineFigure, compileStepFigure } from './compile.js';
 import {
   compileBarFigure,
+  compileGroupedBarFigure,
   compileRasterFigure,
   compileMatrixFigure,
   compileScatterFigure,
@@ -91,6 +98,11 @@ import {
 } from '../core/limits.js';
 import { finiteExtent } from '../core/numeric.js';
 import { materializeCenteredLagBins } from '../core/binning.js';
+import {
+  exactBinary64DivideByIntegerProduct,
+  exactBinary64Mean,
+  exactBinary64Sum,
+} from '../core/exact-binary64.js';
 import type { ErrorCode, ErrorStage } from '../generated/registry.js';
 
 export interface FigureResult {
@@ -203,9 +215,6 @@ function disclosureFacts(
     ...(nodeUniverse && typeof nodeUniverse.complete === 'boolean'
       ? { nodeUniverseComplete: nodeUniverse.complete as boolean }
       : {}),
-    ...(typeof parameters.multapseAggregation === 'string'
-      ? { multapseAggregation: parameters.multapseAggregation as string }
-      : {}),
     ...(missing > 0 ? { missingValueCount: missing } : {}),
     // A schematic layout carries no spatial meaning; disclose it whenever the layout mode
     // says so, in addition to the compiler-forced case for the connection graph.
@@ -288,6 +297,348 @@ function binBoundaryInclusive(spec: Record<string, unknown> | undefined): boolea
   if (spec.boundary === '[start,stop]' || spec.boundary === '[lo,hi]') return true;
   if (spec.boundary === '[start,stop)' || spec.boundary === '[lo,hi)') return false;
   return undefined;
+}
+
+interface DeclaredBins {
+  readonly spec: Bins;
+  readonly unit: string;
+}
+
+function declaredBins(
+  node: Record<string, unknown> | undefined,
+  fallbackUnit?: string,
+): DeclaredBins | undefined {
+  if (!node) return undefined;
+  const unit = typeof node.unit === 'string' ? node.unit : fallbackUnit;
+  if (!unit) return undefined;
+  const finalEdgeInclusive = binBoundaryInclusive(node) ?? true;
+  if (node.mode === 'edges' || arr(node.edges)) {
+    const edges = numbers(node.edges);
+    return edges.length >= 2 ? { spec: { edges, finalEdgeInclusive }, unit } : undefined;
+  }
+  const start = num(node.start);
+  const stop = num(node.stop);
+  const width = num(node.width);
+  if (start === undefined || stop === undefined || width === undefined) return undefined;
+  return {
+    spec: { edges: edgesFromWidth(start, stop, width), finalEdgeInclusive },
+    unit,
+  };
+}
+
+function binValuesInDeclaredUnit(
+  values: readonly number[],
+  sourceUnit: string,
+  bins: DeclaredBins,
+): {
+  readonly converted: readonly number[];
+  readonly counts: readonly number[];
+  readonly underflow: number;
+  readonly overflow: number;
+  readonly conversion?: ConversionReceipt;
+} {
+  // These are declared raw observations. Their contract fixes one typed conversion into
+  // the bin unit and then applies half-open membership to that converted binary64 value.
+  // Derived differences use binExactUnitSums instead, because there the subtraction itself
+  // must not round an interval across an edge before membership is decided.
+  const converted = sourceUnit === bins.unit
+    ? [...values]
+    : values.map((value) => convert(value, sourceUnit, bins.unit));
+  const counts = new Array<number>(bins.spec.edges.length - 1).fill(0);
+  let underflow = 0;
+  let overflow = 0;
+  for (const value of converted) {
+    const index = binIndex(value, bins.spec);
+    if (index >= 0) counts[index]++;
+    else if (value < bins.spec.edges[0]) underflow++;
+    else overflow++;
+  }
+  return {
+    converted,
+    counts,
+    underflow,
+    overflow,
+    ...(sourceUnit !== bins.unit ? { conversion: conversionReceipt(sourceUnit, bins.unit) } : {}),
+  };
+}
+
+function binExactUnitSums(
+  observations: readonly (readonly { readonly value: number; readonly unit: string }[])[],
+  bins: DeclaredBins,
+): {
+  readonly converted: readonly number[];
+  readonly counts: readonly number[];
+  readonly underflow: number;
+  readonly overflow: number;
+} {
+  const edges = bins.spec.edges;
+  const binCount = edges.length - 1;
+  const counts = new Array<number>(binCount).fill(0);
+  const converted: number[] = [];
+  let underflow = 0;
+  let overflow = 0;
+  for (const terms of observations) {
+    const compare = (edge: number): -1 | 0 | 1 => compareExactUnitSumToValue(
+      terms,
+      { value: edge, unit: bins.unit },
+    );
+    let exactIndex: number;
+    if (compare(edges[0]) < 0) exactIndex = -1;
+    else {
+      const finalComparison = compare(edges[binCount]);
+      if (finalComparison > 0 || (finalComparison === 0 && !bins.spec.finalEdgeInclusive)) {
+        exactIndex = -1;
+      } else if (finalComparison === 0) {
+        exactIndex = binCount - 1;
+      } else {
+        let lo = 0;
+        let hi = binCount;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          if (compare(edges[mid]) >= 0) lo = mid;
+          else hi = mid - 1;
+        }
+        exactIndex = lo;
+      }
+    }
+    const convertedValue = convertExactUnitSum(terms, bins.unit);
+    const roundedIndex = binIndex(convertedValue, bins.spec);
+    if (exactIndex !== roundedIndex) {
+      throw new Error('exact derived quantity rounds across a declared bin boundary');
+    }
+    converted.push(convertedValue);
+    if (exactIndex >= 0) counts[exactIndex]++;
+    else if (compare(edges[0]) < 0) underflow++;
+    else overflow++;
+  }
+  return { converted, counts, underflow, overflow };
+}
+
+class EmptyHistogramNormalizationError extends Error {}
+
+function histogramValues(
+  counts: readonly number[],
+  edges: readonly number[],
+  binUnit: string,
+  normalization: string,
+): number[] {
+  let total = 0;
+  for (const count of counts) {
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error('histogram counts must be non-negative safe integers');
+    }
+    total += count;
+    if (!Number.isSafeInteger(total)) {
+      throw new Error('histogram observation total exceeds the safe-integer domain');
+    }
+  }
+  if (normalization === 'count') return [...counts];
+  if (total === 0) {
+    throw new EmptyHistogramNormalizationError(
+      'probability and density are undefined for an empty histogram',
+    );
+  }
+  if (normalization === 'probability') {
+    return counts.map((count) => exactBinary64DivideByIntegerProduct(count, total, 1));
+  }
+  if (normalization === 'density') {
+    return counts.map((count, index) =>
+      divideExactIntegerByConvertedDifference(
+        count,
+        total,
+        edges[index],
+        edges[index + 1],
+        binUnit,
+        binUnit,
+      ));
+  }
+  throw new Error(`unsupported histogram normalization ${normalization}`);
+}
+
+function histogramYAxisLabel(normalization: string, binUnit: string): string {
+  if (normalization === 'count') return 'count';
+  if (normalization === 'probability') return 'probability';
+  if (normalization === 'density') {
+    const unit = reciprocalUnit(binUnit);
+    if (!unit) {
+      throw new Error(`density requires a registered reciprocal unit for ${binUnit}`);
+    }
+    return `density (${unitLabel(unit) || unit})`;
+  }
+  throw new Error(`unsupported histogram normalization ${normalization}`);
+}
+
+function conversionDisclosureText(label: string, receipt: ConversionReceipt): string {
+  return `${label}: ${receipt.from} -> ${receipt.to} (factor ${receipt.factor})`;
+}
+
+interface ConnectionValueGroup {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly connectionCount: number;
+  /** Extra connection rows collapsed into already-formed ordered-pair observations. */
+  readonly aggregatedMultapseCount: number;
+  readonly missingMeasurementCount: number;
+  readonly missingObservationCount: number;
+}
+
+function aggregateConnectionValueGroups(
+  values: readonly (number | null)[],
+  sourceIds: readonly string[],
+  targetIds: readonly string[],
+  synapseModels: readonly string[],
+  countingPolicy: string,
+  aggregation: string | undefined,
+  groupByModel: boolean,
+  missingPairInvalidates: boolean,
+  meanAlgorithm: 'canonical_binary64' | 'exact',
+): ConnectionValueGroup[] {
+  if (sourceIds.length !== values.length || targetIds.length !== values.length) {
+    throw new Error('connection measurements must remain index-aligned with both endpoint arrays');
+  }
+  if (groupByModel && synapseModels.length !== values.length) {
+    throw new Error('grouping by synapse model requires one model label per connection row');
+  }
+
+  interface MutableGroup {
+    id: string;
+    values: number[];
+    connectionCount: number;
+    aggregatedMultapseCount: number;
+    missingMeasurementCount: number;
+    missingObservationCount: number;
+  }
+  const canonicalGroups = (groups: Iterable<MutableGroup>): MutableGroup[] =>
+    [...groups].sort((left, right) =>
+      left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+    );
+  const groups = new Map<string, MutableGroup>();
+  const groupFor = (index: number): MutableGroup => {
+    const id = groupByModel ? synapseModels[index] : 'all';
+    if (!id) throw new Error('a connection row has no synapse-model group label');
+    const existing = groups.get(id);
+    if (existing) return existing;
+    const created: MutableGroup = {
+      id,
+      values: [],
+      connectionCount: 0,
+      aggregatedMultapseCount: 0,
+      missingMeasurementCount: 0,
+      missingObservationCount: 0,
+    };
+    groups.set(id, created);
+    return created;
+  };
+
+  if (countingPolicy === 'per_connection') {
+    for (let index = 0; index < values.length; index++) {
+      const group = groupFor(index);
+      group.connectionCount++;
+      const value = values[index];
+      if (value === null) {
+        group.missingMeasurementCount++;
+        group.missingObservationCount++;
+      } else {
+        group.values.push(value);
+      }
+    }
+    return canonicalGroups(groups.values());
+  }
+  if (countingPolicy !== 'per_ordered_pair') {
+    throw new Error(`unsupported connection counting policy ${countingPolicy}`);
+  }
+  if (!aggregation) throw new Error('per-ordered-pair counting requires an aggregation');
+
+  interface PairAccumulator {
+    readonly group: MutableGroup;
+    readonly values: number[];
+    connectionCount: number;
+    missing: boolean;
+  }
+  const pairs = new Map<string, PairAccumulator>();
+  for (let index = 0; index < values.length; index++) {
+    const group = groupFor(index);
+    group.connectionCount++;
+    const key = `${group.id}\u0000${sourceIds[index]}\u0000${targetIds[index]}`;
+    const pair = pairs.get(key) ?? { group, values: [], connectionCount: 0, missing: false };
+    pair.connectionCount++;
+    const value = values[index];
+    if (value === null) {
+      group.missingMeasurementCount++;
+      pair.missing = true;
+    } else {
+      pair.values.push(value);
+    }
+    pairs.set(key, pair);
+  }
+
+  const aggregate = (pair: PairAccumulator): number | undefined => {
+    if (aggregation === 'no_aggregation' && pair.connectionCount !== 1) {
+      throw new Error('no_aggregation was declared for a node pair with multiple connections');
+    }
+    if (pair.values.length === 0 || (missingPairInvalidates && pair.missing)) {
+      pair.group.missingObservationCount++;
+      return undefined;
+    }
+    switch (aggregation) {
+      case 'min':
+        return pair.values.reduce(
+          (minimum, value) => value < minimum ? value : minimum,
+          pair.values[0],
+        );
+      case 'max':
+        return pair.values.reduce(
+          (maximum, value) => value > maximum ? value : maximum,
+          pair.values[0],
+        );
+      case 'sum':
+        return exactBinary64Sum(pair.values);
+      case 'mean':
+        if (meanAlgorithm === 'exact') return exactBinary64Mean(pair.values);
+        {
+          const ordered = [...pair.values].sort((left, right) => left - right);
+          const sum = ordered.reduce((running, value) => running + value, 0);
+          const mean = sum / ordered.length;
+          if (!Number.isFinite(mean)) {
+            throw new Error('canonical binary64 pair mean is not finite');
+          }
+          return Object.is(mean, -0) ? 0 : mean;
+        }
+      case 'no_aggregation':
+        return pair.values[0];
+      default:
+        throw new Error(`unsupported per-pair aggregation ${aggregation}`);
+    }
+  };
+  for (const pair of pairs.values()) {
+    const value = aggregate(pair);
+    if (value !== undefined) {
+      pair.group.values.push(value);
+      if (pair.connectionCount > 1) {
+        pair.group.aggregatedMultapseCount += pair.connectionCount - 1;
+      }
+    }
+  }
+  return canonicalGroups(groups.values());
+}
+
+function derivationOperation(
+  id: string,
+  algorithm: string,
+  parameters: Record<string, unknown>,
+  input: unknown,
+  output: unknown,
+  receipt: Record<string, unknown>,
+): DerivationOperation {
+  return {
+    id,
+    algorithm,
+    algorithmRevision: 1,
+    parameters,
+    inputDigest: canonicalDigest(input),
+    outputDigest: canonicalDigest(output),
+    receipt,
+  };
 }
 
 function eventCorrelogramInputs(
@@ -458,7 +809,9 @@ function traceUncertaintyDifferenceTransform(
 ): number {
   const sourceUnit = typeof declared.unit === 'string' ? declared.unit : prepared.valueUnit;
   const targetUnit = prepared.normalization ? prepared.sourceValueUnit : prepared.valueUnit;
-  const convertedDifference = convertDifference(lower, upper, sourceUnit, targetUnit);
+  const convertedDifference = sourceUnit === targetUnit
+    ? exactBinary64Sum([upper, -lower])
+    : convertDifference(lower, upper, sourceUnit, targetUnit);
   return prepared.normalization
     ? applyTraceNormalization(convertedDifference, prepared.normalization, true)
     : convertedDifference;
@@ -1092,23 +1445,160 @@ function compile(
   if (skillId === 'neuro.population_rate') {
     const mode = data.mode as string;
     if (mode === 'events') {
-      const times = numbers(rec(data.eventTimes)?.values);
-      const recorded = strings(data.recordedSenderIds);
-      const bins = rec(parameters.bins);
-      const window = rec(data.window);
-      const start = num(bins?.start) ?? num(window?.start) ?? 0;
-      const stop = num(bins?.stop) ?? num(window?.stop) ?? 1;
-      const width = num(bins?.width) ?? stop - start;
-      const timeUnit = (bins?.unit as string) ?? (rec(data.eventTimes)?.unit as string) ?? 'ms';
-      const normalization = (parameters.normalization as 'mean_rate_per_recorded_sender' | 'total_event_rate') ?? 'total_event_rate';
-      const binSpec: Bins = { edges: edgesFromWidth(start, stop, width), finalEdgeInclusive: binBoundaryInclusive(bins) ?? binBoundaryInclusive(window) ?? true };
-      const result = computePopulationRate(times, binSpec, timeUnit, recorded.length || 1, normalization);
-      return done(compileStepFigure(context(result.count.length), result.binStart, result.binEnd, result.rateHz, `time (${unitLabel(timeUnit)})`, 'rate (Hz)', skillId));
+      if (parameters.rateMode !== 'binned_count') {
+        return fail(
+          'RENDER_UNSUPPORTED_SKILL',
+          'render',
+          `population rate mode ${String(parameters.rateMode)} has no contract-faithful compiler in this build. Cortexel will not substitute a binned count.`,
+          '/parameters/rateMode',
+        );
+      }
+      try {
+        const timeRecord = rec(data.eventTimes) ?? {};
+        const sourceUnit = (timeRecord.unit as string) ?? 'ms';
+        const resolvedBins = declaredBins(rec(parameters.bins));
+        if (!resolvedBins) return { pending: rendererId };
+        const times = numbers(timeRecord.values);
+        const recorded = strings(data.recordedSenderIds);
+        const normalization = (parameters.normalization as 'mean_rate_per_recorded_sender' | 'total_event_rate') ?? 'total_event_rate';
+        const binned = binValuesInDeclaredUnit(times, sourceUnit, resolvedBins);
+        const result = computePopulationRate(
+          binned.converted,
+          resolvedBins.spec,
+          resolvedBins.unit,
+          recorded.length,
+          normalization,
+        );
+        const operation = derivationOperation(
+          'population_rate.binned',
+          'cortexel.population_rate.binned_count',
+          { bins: resolvedBins, normalization },
+          data,
+          {
+            counts: result.count,
+            binWidths: result.binWidth,
+            binWidthUnit: resolvedBins.unit,
+            ratesHz: result.rateHz,
+          },
+          {
+            recordedSenderCount: recorded.length,
+            excludedBelow: result.excludedBelow,
+            excludedAbove: result.excludedAbove,
+            ...(binned.conversion ? { eventTimeConversion: binned.conversion } : {}),
+          },
+        );
+        const derivedFacts: Partial<DisclosureFacts> = binned.conversion
+          ? {
+            unitConversions: [
+              conversionDisclosureText('population-rate event times', binned.conversion),
+            ],
+          }
+          : {};
+        return done(
+          compileStepFigure(
+            context(result.count.length, derivedFacts),
+            result.binStart,
+            result.binEnd,
+            result.rateHz,
+            `time (${unitLabel(resolvedBins.unit)})`,
+            'rate (Hz)',
+            skillId,
+          ),
+          [operation],
+          derivedFacts,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'population-rate derivation failed';
+        return fail(
+          'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+          'science',
+          message,
+          '/data',
+        );
+      }
     }
-    const edges = numbers(rec(data.binEdges)?.edges);
-    const rates = arr(rec(data.rates)?.values) ?? arr(data.counts) ?? [];
-    const values = rates.map((v) => (typeof v === 'number' ? v : 0));
-    return done(compileStepFigure(context(values.length), edges.slice(0, -1), edges.slice(1), values, 'time', 'rate (Hz)', skillId));
+    try {
+      const edgeRecord = rec(data.binEdges) ?? {};
+      const edges = numbers(edgeRecord.edges);
+      const timeUnit = (edgeRecord.unit as string) ?? 'ms';
+      const counts = numbers(data.counts);
+      const recordedSenderCount = num(data.recordedSenderCount) ?? 1;
+      const normalization = (parameters.normalization as 'mean_rate_per_recorded_sender' | 'total_event_rate') ?? 'total_event_rate';
+      const integerFactor = normalization === 'mean_rate_per_recorded_sender'
+        ? recordedSenderCount
+        : 1;
+      const binWidthConversion = timeUnit !== 's'
+        ? conversionReceipt(timeUnit, 's')
+        : undefined;
+      const suppliedRates = rec(data.rates);
+      const suppliedRateUnit = typeof suppliedRates?.unit === 'string'
+        ? suppliedRates.unit
+        : undefined;
+      const suppliedRateConversion = suppliedRateUnit && suppliedRateUnit !== 'Hz'
+        ? conversionReceipt(suppliedRateUnit, 'Hz')
+        : undefined;
+      // Pre-binned input must satisfy the same finite-width obligation as events
+      // mode. A rate can remain representable across [-MAX_VALUE, MAX_VALUE], but
+      // the figure/table cannot truthfully carry a binary64 bin width for that
+      // interval, so materialize every exact endpoint difference and fail closed.
+      const binWidths = counts.map((_, index) =>
+        convertDifference(edges[index], edges[index + 1], timeUnit, timeUnit));
+      const ratesHz = counts.map((count, index) => {
+        return divideExactIntegerByConvertedDifference(
+          count,
+          integerFactor,
+          edges[index],
+          edges[index + 1],
+          timeUnit,
+          's',
+        );
+      });
+      const operation = derivationOperation(
+        'population_rate.prebinned_verify',
+        'cortexel.population_rate.rederive_prebinned',
+        { normalization, timeUnit },
+        data,
+        { counts, binWidths, binWidthUnit: timeUnit, ratesHz },
+        {
+          recordedSenderCount,
+          suppliedRatesReverified: suppliedRates !== undefined,
+          ...(binWidthConversion ? { binWidthConversion } : {}),
+          ...(suppliedRateConversion ? { suppliedRateConversion } : {}),
+        },
+      );
+      const unitConversions = [
+        ...(binWidthConversion
+          ? [conversionDisclosureText('population-rate bin widths', binWidthConversion)]
+          : []),
+        ...(suppliedRateConversion
+          ? [conversionDisclosureText('supplied population rates', suppliedRateConversion)]
+          : []),
+      ];
+      const derivedFacts: Partial<DisclosureFacts> = {
+        preBinned: true,
+        ...(unitConversions.length > 0 ? { unitConversions } : {}),
+      };
+      return done(
+        compileStepFigure(
+          context(ratesHz.length, derivedFacts),
+          edges.slice(0, -1),
+          edges.slice(1),
+          ratesHz,
+          `time (${unitLabel(timeUnit)})`,
+          'rate (Hz)',
+          skillId,
+        ),
+        [operation],
+        derivedFacts,
+      );
+    } catch (error) {
+      return fail(
+        'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+        'science',
+        error instanceof Error ? error.message : 'prebinned population-rate derivation failed',
+        '/data',
+      );
+    }
   }
 
   // ---- analog trace --------------------------------------------------------
@@ -1766,19 +2256,314 @@ function compile(
   // ---- distributions -------------------------------------------------------
   if (rendererId === 'figure.distribution') {
     if (skillId === 'neuro.isi_distribution') {
-      const times = numbers(rec(data.eventTimes)?.values);
-      const senders = strings(data.eventSenderIds);
-      const trials = strings(data.eventTrialIds);
-      const events = makeEventTable(times, senders, trials.length === times.length ? trials : undefined);
-      const isi = computeIsi(events);
-      const bins = rec(parameters.bins);
-      const start = num(bins?.start) ?? 0;
-      const stop = num(bins?.stop) ?? finiteExtent(isi.intervals)?.max ?? 1;
-      const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
-      const unit = (bins?.unit as string) ?? 'ms';
-      const edges = edgesFromWidth(start, stop, width);
-      const { counts } = binCounts(isi.intervals, { edges, finalEdgeInclusive: binBoundaryInclusive(bins) ?? true });
-      return done(compileBarFigure(context(counts.length), edges, counts, `ISI (${unitLabel(unit)})`, 'count', skillId));
+      const resolvedBins = declaredBins(rec(parameters.bins));
+      if (!resolvedBins) return { pending: rendererId };
+      let intervals: number[];
+      let sourceUnit: string;
+      let exactIntervalTerms:
+        | readonly (readonly { readonly value: number; readonly unit: string }[])[]
+        | undefined;
+      let trainCount = 0;
+      let trainsWithoutInterval = 0;
+      let spikeCount = 0;
+      try {
+        if (data.mode === 'intervals') {
+          const intervalRecord = rec(data.intervals) ?? {};
+          intervals = numbers(intervalRecord.values);
+          sourceUnit = (intervalRecord.unit as string) ?? resolvedBins.unit;
+          if (intervals.some((interval) => interval < 0)) {
+            return fail(
+              'SCIENCE_NEGATIVE_INTERVAL',
+              'science',
+              'a supplied inter-spike interval is negative.',
+              '/data/intervals/values',
+            );
+          }
+          const intervalSenders = strings(data.intervalSenderIds);
+          const intervalTrials = strings(data.intervalTrialIds);
+          const trains = arr(data.trains) ?? [];
+          const recordedSenders = strings(data.recordedSenderIds);
+          const declaredTrials = strings(data.trialIds);
+          const trialMode = arr(data.intervalTrialIds) !== undefined ||
+            arr(data.trialIds) !== undefined ||
+            trains.some((train) => typeof rec(train)?.trialId === 'string');
+          if (trialMode && declaredTrials.length === 0) {
+            return fail(
+              'SCIENCE_TRIAL_UNIVERSE_REQUIRED',
+              'science',
+              'trial-partitioned intervals require the complete declared trial universe.',
+              '/data/trialIds',
+            );
+          }
+          const expectedTrainCount = recordedSenders.length * (trialMode ? declaredTrials.length : 1);
+          if (!Number.isSafeInteger(expectedTrainCount)) {
+            throw new Error('the declared sender-by-trial train universe exceeds the safe-integer domain');
+          }
+          if (trains.length !== expectedTrainCount) {
+            return fail(
+              'SEMANTIC_LENGTH_MISMATCH',
+              'semantic',
+              `the complete sender-by-trial universe contains ${expectedTrainCount} trains, but ${trains.length} train records were supplied.`,
+              '/data/trains',
+            );
+          }
+          const actualByTrain = new Map<string, number[]>();
+          for (let index = 0; index < intervals.length; index++) {
+            const key = trialMode
+              ? `${intervalSenders[index]}\u0000${intervalTrials[index]}`
+              : intervalSenders[index];
+            const values = actualByTrain.get(key) ?? [];
+            values.push(intervals[index]);
+            actualByTrain.set(key, values);
+          }
+          const senderUniverse = new Set(recordedSenders);
+          const trialUniverse = new Set(declaredTrials);
+          const declaredTrainKeys = new Set<string>();
+          let expectedIntervalCount = 0;
+          trainCount = expectedTrainCount;
+          for (const trainValue of trains) {
+            const train = rec(trainValue) ?? {};
+            const senderId = String(train.senderId ?? '');
+            const trialId = typeof train.trialId === 'string' ? train.trialId : undefined;
+            if (!senderUniverse.has(senderId) ||
+              (trialMode && (!trialId || !trialUniverse.has(trialId))) ||
+              (!trialMode && trialId !== undefined)) {
+              return fail(
+                'SEMANTIC_UNKNOWN_REFERENCE',
+                'semantic',
+                `train (${senderId}, ${trialId ?? 'no trial'}) is not a member of the declared sender-by-trial universe.`,
+                '/data/trains',
+              );
+            }
+            const count = num(train.spikeCount);
+            if (count === undefined || !Number.isSafeInteger(count) || count < 0) {
+              throw new Error('train spike counts must be non-negative safe integers');
+            }
+            const expected = Math.max(0, count - 1);
+            expectedIntervalCount += expected;
+            if (!Number.isSafeInteger(expectedIntervalCount)) {
+              throw new Error('the expected interval total exceeds the safe-integer domain');
+            }
+            const key = trialMode ? `${senderId}\u0000${trialId}` : senderId;
+            if (declaredTrainKeys.has(key)) {
+              return fail(
+                'SEMANTIC_DUPLICATE_ID',
+                'semantic',
+                `train ${key} is declared more than once.`,
+                '/data/trains',
+              );
+            }
+            declaredTrainKeys.add(key);
+            const actual = actualByTrain.get(key)?.length ?? 0;
+            if (actual !== expected) {
+              return fail(
+                'SEMANTIC_LENGTH_MISMATCH',
+                'semantic',
+                `train ${key} declares ${count} in-window spikes and therefore must contribute ${expected} intervals, but ${actual} were supplied.`,
+                '/data/trains',
+              );
+            }
+            spikeCount += count;
+            if (!Number.isSafeInteger(spikeCount)) {
+              throw new Error('the declared spike total exceeds the safe-integer domain');
+            }
+            if (expected === 0) trainsWithoutInterval++;
+          }
+          const undeclaredIntervalTrain = [...actualByTrain.keys()].find(
+            (key) => !declaredTrainKeys.has(key),
+          );
+          if (undeclaredIntervalTrain !== undefined || expectedIntervalCount !== intervals.length) {
+            return fail(
+              'SEMANTIC_LENGTH_MISMATCH',
+              'semantic',
+              undeclaredIntervalTrain !== undefined
+                ? `intervals are linked to undeclared train ${undeclaredIntervalTrain}.`
+                : `the declared trains imply ${expectedIntervalCount} intervals, but ${intervals.length} were supplied.`,
+              '/data/intervalSenderIds',
+            );
+          }
+          const window = rec(data.window) ?? {};
+          const windowStart = num(window.start);
+          const windowStop = num(window.stop);
+          const windowUnit = window.unit as string;
+          if (windowStart !== undefined && windowStop !== undefined && typeof windowUnit === 'string') {
+            const closedStop = window.boundary === '[start,stop]';
+            const impossibleTrain = [...actualByTrain.entries()].find(([, trainIntervals]) => {
+              const comparison = compareExactUnitArraySumToDifference(
+                trainIntervals,
+                sourceUnit,
+                { value: windowStart, unit: windowUnit },
+                { value: windowStop, unit: windowUnit },
+              );
+              return comparison > 0 || (comparison === 0 && !closedStop);
+            });
+            if (impossibleTrain) {
+              return fail(
+                'SCIENCE_EVENT_OUT_OF_WINDOW',
+                'science',
+                `the successive intervals of train ${impossibleTrain[0]} span longer than the declared observation window and cannot all join in-window spikes.`,
+                '/data/intervals/values',
+              );
+            }
+          }
+        } else {
+          const timeRecord = rec(data.eventTimes) ?? {};
+          const times = numbers(timeRecord.values);
+          const senders = strings(data.eventSenderIds);
+          const trials = strings(data.eventTrialIds);
+          sourceUnit = (timeRecord.unit as string) ?? resolvedBins.unit;
+          const events = makeEventTable(
+            times,
+            senders,
+            trials.length === times.length ? trials : undefined,
+          );
+          const isi = computeIsi(events);
+          intervals = isi.intervals;
+          exactIntervalTerms = isi.sourcePairs.map((pair) => [
+            { value: pair.upper, unit: sourceUnit },
+            { value: -pair.lower, unit: sourceUnit },
+          ]);
+          const recordedSenders = strings(data.recordedSenderIds);
+          const declaredTrials = strings(data.trialIds);
+          const trialMode = arr(data.eventTrialIds) !== undefined;
+          trainCount = recordedSenders.length * (trialMode ? declaredTrials.length : 1);
+          if (!Number.isSafeInteger(trainCount)) {
+            throw new Error('the declared sender-by-trial train universe exceeds the safe-integer domain');
+          }
+          const observedTrainsWithIntervals = isi.trainCount - isi.trainsWithoutInterval;
+          trainsWithoutInterval = trainCount - observedTrainsWithIntervals;
+          spikeCount = times.length;
+        }
+
+        if (intervals.some((interval) => interval < 0)) {
+          return fail(
+            'SCIENCE_NEGATIVE_INTERVAL',
+            'science',
+            'an inter-spike interval is negative after within-train formation.',
+            data.mode === 'intervals' ? '/data/intervals/values' : '/data/eventTimes/values',
+          );
+        }
+        if (intervals.some((interval) => interval === 0) && parameters.zeroIntervalPolicy !== 'retain_as_zero') {
+          return fail(
+            'SCIENCE_ZERO_INTERVAL_POLICY',
+            'science',
+            'a zero-length same-train interval is present but the declared policy does not retain it.',
+            '/parameters/zeroIntervalPolicy',
+          );
+        }
+        if (
+          parameters.xScale === 'log' &&
+          (resolvedBins.spec.edges.some((edge) => !(edge > 0)) ||
+            intervals.some((interval) => !(interval > 0)))
+        ) {
+          return fail(
+            'RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN',
+            'render',
+            'a logarithmic ISI axis requires every declared bin edge to be strictly positive.',
+            '/parameters/bins',
+          );
+        }
+        const binned = exactIntervalTerms
+          ? binExactUnitSums(exactIntervalTerms, resolvedBins)
+          : binValuesInDeclaredUnit(intervals, sourceUnit, resolvedBins);
+        if (
+          parameters.outOfRangeIntervals === 'reject' &&
+          (binned.underflow > 0 || binned.overflow > 0)
+        ) {
+          return fail(
+            'SCIENCE_BIN_EDGES_INVALID',
+            'science',
+            `${binned.underflow} intervals fall below and ${binned.overflow} above the declared bin range under the reject policy.`,
+            '/parameters/bins',
+          );
+        }
+        const normalization = String(parameters.normalization ?? 'count');
+        const values = histogramValues(
+          binned.counts,
+          resolvedBins.spec.edges,
+          resolvedBins.unit,
+          normalization,
+        );
+        const yLabel = histogramYAxisLabel(normalization, resolvedBins.unit);
+        const intervalConversion = sourceUnit !== resolvedBins.unit
+          ? conversionReceipt(sourceUnit, resolvedBins.unit)
+          : undefined;
+        const operation = derivationOperation(
+          'isi.within_train_histogram',
+          'cortexel.isi.within_train_histogram',
+          {
+            bins: resolvedBins,
+            normalization,
+            zeroIntervalPolicy: parameters.zeroIntervalPolicy,
+            outOfRangeIntervals: parameters.outOfRangeIntervals,
+          },
+          data,
+          { counts: binned.counts, values },
+          {
+            formedIntervalCount: intervals.length,
+            binnedIntervalCount: binned.counts.reduce((sum, count) => sum + count, 0),
+            underRangeCount: binned.underflow,
+            overRangeCount: binned.overflow,
+            trainCount,
+            trainsWithoutInterval,
+            spikeCount,
+            ...(intervalConversion ? { intervalConversion } : {}),
+          },
+        );
+        const binnedIntervalCount = binned.counts.reduce((sum, count) => sum + count, 0);
+        const excludedIntervalCount = binned.underflow + binned.overflow;
+        const rangeMetadata = excludedIntervalCount > 0
+          ? [
+            { key: 'formedIntervalCount', header: 'Formed intervals', value: intervals.length },
+            { key: 'binnedIntervalCount', header: 'Binned intervals', value: binnedIntervalCount },
+            { key: 'underRangeCount', header: 'Under range', value: binned.underflow },
+            { key: 'overRangeCount', header: 'Over range', value: binned.overflow },
+          ]
+          : [];
+        const rangeSummary = excludedIntervalCount > 0
+          ? [
+            `${excludedIntervalCount} of ${intervals.length} formed intervals were outside the declared histogram range and excluded (${binned.underflow} below, ${binned.overflow} above).`,
+          ]
+          : [];
+        const derivedFacts: Partial<DisclosureFacts> = intervalConversion
+          ? { unitConversions: [conversionDisclosureText('inter-spike intervals', intervalConversion)] }
+          : {};
+        return done(
+          compileBarFigure(
+            context(values.length, derivedFacts),
+            resolvedBins.spec.edges,
+            values,
+            `ISI (${unitLabel(resolvedBins.unit)})`,
+            yLabel,
+            skillId,
+            parameters.xScale === 'log' ? 'log' : 'linear',
+            { tableMetadata: rangeMetadata, summaryStatements: rangeSummary },
+          ),
+          [operation],
+          derivedFacts,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'ISI derivation failed';
+        if (error instanceof EmptyHistogramNormalizationError) {
+          return fail('RENDER_NO_DATA', 'render', message, '/data');
+        }
+        const numericResolutionFailure =
+          message.includes('overflows') ||
+          message.includes('unrepresentable') ||
+          message.includes('rounds across') ||
+          message.includes('rounded') ||
+          message.includes('safe-integer');
+        return fail(
+          numericResolutionFailure
+            ? 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE'
+            : 'INTERNAL_INVARIANT_VIOLATED',
+          numericResolutionFailure
+            ? 'science'
+            : 'render',
+          message,
+          '/data',
+        );
+      }
     }
 
     if (skillId === 'network.degree_distribution') {
@@ -1787,28 +2572,449 @@ function compile(
       const sources = strings(conns?.sourceIds);
       const targets = strings(conns?.targetIds);
       const direction = (parameters.direction as 'in' | 'out') ?? 'in';
-      const counting = (parameters.countingPolicy as 'count_edges' | 'count_unique_neighbours') ?? 'count_edges';
+      const counting = (parameters.countingPolicy as 'count_edges' | 'count_unique_neighbors') ?? 'count_edges';
       const degrees = computeDegrees(ids, sources, targets, direction, counting);
+      let collapsedMultapse = false;
+      if (counting === 'count_unique_neighbors') {
+        const seenPairs = new Set<string>();
+        for (let index = 0; index < Math.min(sources.length, targets.length); index++) {
+          const key = `${sources[index]}\u0000${targets[index]}`;
+          if (seenPairs.has(key)) {
+            collapsedMultapse = true;
+            break;
+          }
+          seenPairs.add(key);
+        }
+      }
+      const derivedFacts: Partial<DisclosureFacts> = collapsedMultapse
+        ? {
+          multapseAggregated: true,
+          multapseAggregation: 'count_unique_neighbors',
+        }
+        : {};
       // Integer-degree histogram: one bar per degree value.
       const maxDeg = Math.max(0, finiteExtent(degrees.degree)?.max ?? 0);
       const edges = Array.from({ length: maxDeg + 2 }, (_v, i) => i - 0.5);
       const { counts } = binCounts(degrees.degree, { edges, finalEdgeInclusive: true });
-      return done(compileBarFigure(context(counts.length), edges, counts, `${direction}-degree`, 'node count', skillId));
+      return done(
+        compileBarFigure(
+          context(counts.length, derivedFacts),
+          edges,
+          counts,
+          `${direction}-degree`,
+          'node count',
+          skillId,
+        ),
+        [],
+        derivedFacts,
+      );
     }
 
-    // delay / weight distribution: histogram the edge value population.
-    const conns = rec(data.connections);
-    const values = skillId === 'network.delay_distribution' ? numbers(rec(conns?.delays)?.values) : numbers(rec(conns?.weights)?.values);
-    const bins = rec(parameters.bins);
-    const valueExtent = finiteExtent(values);
-    const start = num(bins?.start) ?? valueExtent?.min ?? 0;
-    const stop = num(bins?.stop) ?? valueExtent?.max ?? 1;
-    const width = num(bins?.width) ?? ((stop - start) / 10 || 1);
-    const unit = (bins?.unit as string) ?? (skillId === 'network.delay_distribution' ? 'ms' : '');
-    const edges = start < stop ? edgesFromWidth(start, stop, width) : [start, start + 1];
-    const { counts } = binCounts(values, { edges, finalEdgeInclusive: binBoundaryInclusive(bins) ?? true });
-    const label = skillId === 'network.delay_distribution' ? `delay (${unitLabel(unit)})` : 'weight';
-    return done(compileBarFigure(context(counts.length), edges, counts, label, 'count', skillId));
+    // delay / weight distribution: preserve declared binning, observation unit,
+    // multapse aggregation and normalization. A pre-binned request is rendered from
+    // its checked values rather than fabricated empty raw observations.
+    try {
+      const isDelay = skillId === 'network.delay_distribution';
+      const normalization = String(parameters.normalization ?? 'count');
+      let resolvedBins: DeclaredBins | undefined;
+      let histogramGroups: {
+        readonly id: string;
+        readonly label: string;
+        readonly values: readonly number[];
+        readonly counts?: readonly number[];
+        readonly connectionCount: number;
+        readonly aggregatedMultapseCount: number;
+        readonly observationCount: number;
+        readonly binnedObservationCount: number;
+        readonly underRangeCount: number;
+        readonly overRangeCount: number;
+        readonly missingMeasurementCount: number;
+        readonly missingObservationCount?: number;
+      }[] = [];
+      let measurementConversion: ConversionReceipt | undefined;
+      let renderAsGroups = false;
+
+      if (data.mode === 'prebinned') {
+        const histogram = rec(data.histogram);
+        const edgeRecord = rec(data.binEdges);
+        resolvedBins = declaredBins(
+          edgeRecord
+            ? { mode: 'edges', unit: edgeRecord.unit, edges: edgeRecord.edges, finalEdgeInclusive: true }
+            : rec(parameters.bins),
+        );
+        if (!resolvedBins) return { pending: rendererId };
+        if (isDelay && parameters.countingPolicy === 'per_ordered_pair') {
+          return fail(
+            'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+            'science',
+            'prebinned per-ordered-pair delays do not declare the formed pair-observation count, so their normalization denominator cannot be bound to the requested counting policy.',
+            '/parameters/countingPolicy',
+          );
+        }
+        const suppliedCounts = arr(data.counts) ? numbers(data.counts) : undefined;
+        const underRangeCount = num(data.underRangeCount) ?? num(data.excludedUnderRangeCount) ?? 0;
+        const overRangeCount = num(data.overRangeCount) ?? num(data.excludedOverRangeCount) ?? 0;
+        const observationCount = num(data.totalObservationCount) ?? num(data.consideredConnectionCount) ?? 0;
+        let values: number[];
+        let binnedObservationCount: number;
+        if (suppliedCounts) {
+          values = histogramValues(
+            suppliedCounts,
+            resolvedBins.spec.edges,
+            resolvedBins.unit,
+            normalization,
+          );
+          binnedObservationCount = suppliedCounts.reduce((sum, count) => sum + count, 0);
+        } else {
+          values = numbers(histogram?.values);
+          binnedObservationCount = observationCount - underRangeCount - overRangeCount;
+          if (!Number.isSafeInteger(binnedObservationCount) || binnedObservationCount < 0) {
+            throw new Error('prebinned histogram conservation produced an invalid observation count');
+          }
+          if (normalization !== 'count' && binnedObservationCount === 0) {
+            throw new EmptyHistogramNormalizationError(
+              'probability and density are undefined for an empty histogram',
+            );
+          }
+        }
+        histogramGroups = [{
+          id: 'all',
+          label: String(parameters.selectionLabel ?? 'All observations'),
+          values,
+          ...(suppliedCounts ? { counts: suppliedCounts } : {}),
+          connectionCount: num(data.sourceConnectionCount) ?? num(data.consideredConnectionCount) ?? observationCount,
+          // Pre-binned rows no longer reveal pair multiplicity, so Cortexel cannot
+          // assert that any multapse was actually collapsed.
+          aggregatedMultapseCount: 0,
+          observationCount,
+          binnedObservationCount,
+          underRangeCount,
+          overRangeCount,
+          missingMeasurementCount: num(data.missingWeightCount) ?? 0,
+          ...(!isDelay && parameters.observationUnit === 'synapse'
+            ? { missingObservationCount: num(data.missingWeightCount) ?? 0 }
+            : {}),
+        }];
+      } else {
+        const connections = rec(data.connections) ?? {};
+        const measurement = rec(isDelay ? connections.delays : connections.weights) ?? {};
+        const sourceUnit = (measurement.unit as string) ?? (isDelay ? 'ms' : 'nest:weight');
+        resolvedBins = declaredBins(rec(parameters.bins), sourceUnit);
+        if (!resolvedBins) return { pending: rendererId };
+        const sourceIds = strings(connections.sourceIds);
+        const targetIds = strings(connections.targetIds);
+        const synapseModels = strings(connections.synapseModels);
+        const measured = (arr(measurement.values) ?? []).map((value) =>
+          typeof value === 'number' && Number.isFinite(value) ? value : null,
+        );
+        if (isDelay && measured.some((value) => value === null)) {
+          throw new Error('a delay connection row is missing its measurement');
+        }
+        const countingPolicy = isDelay
+          ? String(parameters.countingPolicy)
+          : parameters.observationUnit === 'node_pair'
+            ? 'per_ordered_pair'
+            : parameters.observationUnit === 'synapse'
+              ? 'per_connection'
+              : String(parameters.observationUnit);
+        const aggregation = isDelay
+          ? typeof parameters.multapseAggregation === 'string'
+            ? parameters.multapseAggregation
+            : undefined
+          : typeof parameters.aggregation === 'string'
+            ? parameters.aggregation
+            : undefined;
+        const groupByModel = isDelay
+          ? data.groupBy === 'synapse_model'
+          : parameters.grouping === 'by_synapse_model';
+        renderAsGroups = groupByModel;
+        const aggregatedGroups = aggregateConnectionValueGroups(
+          measured,
+          sourceIds,
+          targetIds,
+          synapseModels,
+          countingPolicy,
+          aggregation,
+          groupByModel,
+          !isDelay,
+          isDelay ? 'canonical_binary64' : 'exact',
+        );
+        if (aggregatedGroups.length > 8) {
+          return fail(
+            'RENDER_SERIES_LIMIT_EXCEEDED',
+            'render',
+            `${aggregatedGroups.length} synapse-model histogram groups exceed the renderer limit of 8.`,
+            isDelay ? '/data/groupBy' : '/parameters/grouping',
+          );
+        }
+        const signTreatment = isDelay ? 'preserve' : String(parameters.signTreatment);
+        histogramGroups = aggregatedGroups.map((group) => {
+          const observations = signTreatment === 'magnitude'
+            ? group.values.map((value) => Math.abs(value))
+            : [...group.values];
+          if (parameters.xScale === 'log' && observations.some((value) => !(value > 0))) {
+            throw new Error('logarithmic distribution observations must be strictly positive');
+          }
+          const binned = binValuesInDeclaredUnit(observations, sourceUnit, resolvedBins!);
+          measurementConversion = binned.conversion;
+          const binnedObservationCount = binned.counts.reduce((sum, count) => sum + count, 0);
+          return {
+            id: group.id,
+            label: group.id === 'all'
+              ? String(parameters.selectionLabel ?? 'All observations')
+              : group.id,
+            values: histogramValues(
+              binned.counts,
+              resolvedBins!.spec.edges,
+              resolvedBins!.unit,
+              normalization,
+            ),
+            counts: binned.counts,
+            connectionCount: group.connectionCount,
+            aggregatedMultapseCount: group.aggregatedMultapseCount,
+            observationCount: group.values.length,
+            binnedObservationCount,
+            underRangeCount: binned.underflow,
+            overRangeCount: binned.overflow,
+            missingMeasurementCount: group.missingMeasurementCount,
+            missingObservationCount: group.missingObservationCount,
+          };
+        });
+      }
+
+      const binCount = resolvedBins.spec.edges.length - 1;
+      for (const group of histogramGroups) {
+        if (group.values.length !== binCount) {
+          return fail(
+            'SEMANTIC_LENGTH_MISMATCH',
+            'semantic',
+            `group ${group.id} has ${group.values.length} histogram values for ${binCount} declared bins.`,
+            data.mode === 'prebinned' ? '/data' : '/parameters/bins',
+          );
+        }
+        if (group.values.some((value) => !Number.isFinite(value) || value < 0)) {
+          return fail(
+            'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+            'science',
+            `group ${group.id} contains a histogram value that is not finite and non-negative.`,
+            data.mode === 'prebinned' ? '/data' : '/parameters/normalization',
+          );
+        }
+      }
+      const underflow = histogramGroups.reduce((sum, group) => sum + group.underRangeCount, 0);
+      const overflow = histogramGroups.reduce((sum, group) => sum + group.overRangeCount, 0);
+      if (
+        (isDelay ? parameters.outOfRangeDelays : parameters.outOfRangeWeights) === 'reject' &&
+        (underflow > 0 || overflow > 0)
+      ) {
+        return fail(
+          'SCIENCE_BIN_EDGES_INVALID',
+          'science',
+          `${underflow} observations fall below and ${overflow} above the declared bin range under the reject policy.`,
+          '/parameters/bins',
+        );
+      }
+      if (parameters.xScale === 'log' && resolvedBins.spec.edges.some((edge) => !(edge > 0))) {
+        return fail(
+          'RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN',
+          'render',
+          'a logarithmic distribution axis requires strictly positive bin edges.',
+          '/parameters/bins',
+        );
+      }
+      const yLabel = histogramYAxisLabel(normalization, resolvedBins.unit);
+      const sourceConnectionRowCount = histogramGroups.reduce(
+        (sum, group) => sum + group.connectionCount,
+        0,
+      );
+      const formedObservationCount = histogramGroups.reduce(
+        (sum, group) => sum + group.observationCount,
+        0,
+      );
+      const aggregatedMultapseCount = histogramGroups.reduce(
+        (sum, group) => sum + group.aggregatedMultapseCount,
+        0,
+      );
+      const missingMeasurementCount = histogramGroups.reduce(
+        (sum, group) => sum + group.missingMeasurementCount,
+        0,
+      );
+      const missingObservationCount = histogramGroups.reduce(
+        (sum, group) => sum + (group.missingObservationCount ?? 0),
+        0,
+      );
+      const missingObservationCountKnown = histogramGroups.every(
+        (group) => group.missingObservationCount !== undefined,
+      );
+      const operation = derivationOperation(
+        `${isDelay ? 'delay' : 'weight'}_distribution.histogram`,
+        `cortexel.${isDelay ? 'delay' : 'weight'}_distribution.histogram`,
+        {
+          bins: resolvedBins,
+          normalization,
+          observationUnit: isDelay ? parameters.countingPolicy : parameters.observationUnit,
+          ...((isDelay ? parameters.multapseAggregation : parameters.aggregation) !== undefined
+            ? { aggregation: isDelay ? parameters.multapseAggregation : parameters.aggregation }
+            : {}),
+          ...((isDelay ? data.groupBy : parameters.grouping) !== undefined
+            ? { grouping: isDelay ? data.groupBy : parameters.grouping }
+            : {}),
+          ...(isDelay ? {} : { signTreatment: parameters.signTreatment }),
+        },
+        data,
+        {
+          groups: histogramGroups.map((group) => ({
+            id: group.id,
+            ...(group.counts ? { counts: group.counts } : {}),
+            values: group.values,
+          })),
+        },
+        {
+          sourceConnectionRowCount,
+          aggregatedMultapseCount,
+          formedObservationCount,
+          binnedObservationCount: histogramGroups.reduce(
+            (sum, group) => sum + group.binnedObservationCount,
+            0,
+          ),
+          underRangeCount: underflow,
+          overRangeCount: overflow,
+          missingMeasurementCount,
+          ...(missingObservationCountKnown ? { missingObservationCount } : {}),
+          prebinned: data.mode === 'prebinned',
+          ...(measurementConversion ? { measurementConversion } : {}),
+          groups: histogramGroups.map((group) => ({
+            id: group.id,
+            connectionCount: group.connectionCount,
+            aggregatedMultapseCount: group.aggregatedMultapseCount,
+            observationCount: group.observationCount,
+            binnedObservationCount: group.binnedObservationCount,
+            underRangeCount: group.underRangeCount,
+            overRangeCount: group.overRangeCount,
+            missingMeasurementCount: group.missingMeasurementCount,
+            ...(group.missingObservationCount !== undefined
+              ? { missingObservationCount: group.missingObservationCount }
+              : {}),
+          })),
+        },
+      );
+      const conversionFacts = measurementConversion
+        ? [conversionDisclosureText(`${isDelay ? 'delay' : 'weight'} observations`, measurementConversion)]
+        : [];
+      const derivedFacts: Partial<DisclosureFacts> = {
+        preBinned: data.mode === 'prebinned',
+        missingValueCount: missingMeasurementCount,
+        ...(conversionFacts.length > 0 ? { unitConversions: conversionFacts } : {}),
+        ...(aggregatedMultapseCount > 0
+          ? {
+            multapseAggregated: true,
+            multapseAggregation: String(
+              isDelay ? parameters.multapseAggregation : parameters.aggregation,
+            ),
+          }
+          : {}),
+      };
+      const rowsTotal = renderAsGroups ? histogramGroups.length * binCount : binCount;
+      const xLabelBase = isDelay
+        ? 'delay'
+        : parameters.signTreatment === 'magnitude'
+          ? '|weight|'
+          : parameters.observationUnit === 'node_pair'
+            ? 'per-pair weight'
+            : 'weight';
+      const excludedObservationCount = underflow + overflow;
+      const reportUngroupedAccounting =
+        !renderAsGroups &&
+        (excludedObservationCount > 0 || missingMeasurementCount > 0);
+      const ungroupedAccountingMetadata = reportUngroupedAccounting
+        ? [
+          { key: 'connectionCount', header: 'Connection rows', value: sourceConnectionRowCount },
+          { key: 'observationCount', header: 'Formed observations', value: formedObservationCount },
+          {
+            key: 'binnedObservationCount',
+            header: 'Binned observations',
+            value: histogramGroups.reduce(
+              (sum, group) => sum + group.binnedObservationCount,
+              0,
+            ),
+          },
+          { key: 'underRangeCount', header: 'Under range', value: underflow },
+          { key: 'overRangeCount', header: 'Over range', value: overflow },
+          {
+            key: 'missingMeasurementCount',
+            header: 'Missing measurements',
+            value: missingMeasurementCount,
+          },
+          {
+            key: 'missingObservationCount',
+            header: 'Missing observations',
+            value: missingObservationCountKnown ? missingObservationCount : null,
+          },
+        ]
+        : [];
+      const ungroupedAccountingSummary = reportUngroupedAccounting
+        ? [
+          `${formedObservationCount} observations were formed from ${sourceConnectionRowCount} connection rows; ${histogramGroups.reduce((sum, group) => sum + group.binnedObservationCount, 0)} were binned, ${underflow} fell below the range, ${overflow} above it, and ${missingMeasurementCount} measurements were missing.`,
+        ]
+        : [];
+      const groupedAccountingSummary = renderAsGroups
+        ? histogramGroups.map(
+          (group) =>
+            `Group ${group.id}: ${group.observationCount} observations were formed from ${group.connectionCount} connection rows; ${group.binnedObservationCount} were binned, ${group.underRangeCount} fell below the range, ${group.overRangeCount} above it, and ${group.missingMeasurementCount} measurements were missing.`,
+        )
+        : [];
+      const plan = renderAsGroups
+        ? compileGroupedBarFigure(
+          context(rowsTotal, derivedFacts),
+          resolvedBins.spec.edges,
+          histogramGroups,
+          `${xLabelBase} (${unitLabel(resolvedBins.unit)})`,
+          yLabel,
+          skillId,
+          parameters.xScale === 'log' ? 'log' : 'linear',
+          { summaryStatements: groupedAccountingSummary },
+        )
+        : compileBarFigure(
+          context(rowsTotal, derivedFacts),
+          resolvedBins.spec.edges,
+          histogramGroups[0]?.values ?? [],
+          `${xLabelBase} (${unitLabel(resolvedBins.unit)})`,
+          yLabel,
+          skillId,
+          parameters.xScale === 'log' ? 'log' : 'linear',
+          {
+            tableMetadata: ungroupedAccountingMetadata,
+            summaryStatements: ungroupedAccountingSummary,
+          },
+        );
+      return done(plan, [operation], derivedFacts);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'distribution derivation failed';
+      if (error instanceof EmptyHistogramNormalizationError) {
+        return fail('RENDER_NO_DATA', 'render', message, '/data');
+      }
+      if (message.includes('no_aggregation')) {
+        return fail('SCIENCE_AGGREGATION_REQUIRED', 'science', message, '/parameters');
+      }
+      if (message.includes('logarithmic distribution observations')) {
+        return fail(
+          'RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN',
+          'render',
+          message,
+          '/parameters/xScale',
+        );
+      }
+      return fail(
+        message.includes('unit') || message.includes('reciprocal')
+          ? 'SCIENCE_UNIT_DIMENSION_MISMATCH'
+          : message.includes('histogram') || message.includes('safe-integer')
+            ? 'SCIENCE_NORMALIZATION_UNVERIFIABLE'
+            : 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+        'science',
+        message,
+        '/data',
+      );
+    }
   }
 
   // ---- matrices ------------------------------------------------------------
@@ -1829,7 +3035,24 @@ function compile(
     const cellMode = (parameters.cellMode as string) ?? 'multiplicity';
     const method = skillId === 'network.adjacency_matrix' && cellMode !== 'multiplicity' ? 'count' : (values ? aggregation : 'count');
     const matrix = computeMatrix(ids, ids, sources, targets, values, method);
-    return done(compileMatrixFigure(context(matrix.cells.length), matrix.cells, ids, ids, skillId));
+    const aggregatedMultapse = matrix.cells.some((cell) => cell.contributingCount > 1);
+    const derivedFacts: Partial<DisclosureFacts> = aggregatedMultapse
+      ? {
+        multapseAggregated: true,
+        multapseAggregation: method,
+      }
+      : {};
+    return done(
+      compileMatrixFigure(
+        context(matrix.cells.length, derivedFacts),
+        matrix.cells,
+        ids,
+        ids,
+        skillId,
+      ),
+      [],
+      derivedFacts,
+    );
   }
 
   // ---- spatial map ---------------------------------------------------------
@@ -2100,6 +3323,64 @@ function maxLeafArrayLength(node: unknown): number {
   return maximum;
 }
 
+/**
+ * Conservative visible-mark lower bound for declared-bin compilers.
+ *
+ * This runs before derivation and geometry allocation. A request with 100000 bins and
+ * eight model groups otherwise materializes hundreds of thousands of normalized values
+ * and rectangle objects only to fail the mark budget after compilation; the same law
+ * prevents a single 100000-bin ISI/PSTH figure from doing equivalent work first.
+ */
+function binnedMarkPreflight(
+  skillId: string,
+  data: Record<string, unknown>,
+  parameters: Record<string, unknown>,
+): number {
+  const supported = new Set([
+    'neuro.isi_distribution',
+    'neuro.psth',
+    'network.delay_distribution',
+    'network.weight_distribution',
+  ]);
+  if (!supported.has(skillId)) return 0;
+
+  const binRecord =
+    rec(data.binEdges) ??
+    rec(parameters.bins);
+  let binCount = 0;
+  const explicitEdges = arr(binRecord?.edges);
+  if (explicitEdges) {
+    binCount = Math.max(0, explicitEdges.length - 1);
+  } else if (binRecord?.mode === 'width') {
+    const start = num(binRecord.start);
+    const stop = num(binRecord.stop);
+    const width = num(binRecord.width);
+    if (start !== undefined && stop !== undefined && width !== undefined) {
+      const materialized = tryEdgesFromWidth(start, stop, width);
+      binCount = materialized ? materialized.length - 1 : 0;
+    }
+  }
+  if (binCount === 0) return 0;
+
+  if (
+    skillId !== 'network.delay_distribution' &&
+    skillId !== 'network.weight_distribution'
+  ) return binCount;
+
+  const groupingRequested = skillId === 'network.delay_distribution'
+    ? data.groupBy === 'synapse_model'
+    : parameters.grouping === 'by_synapse_model';
+  if (!groupingRequested || data.mode === 'prebinned') return binCount;
+
+  const models = arr(rec(data.connections)?.synapseModels) ?? [];
+  const groupIds = new Set<string>();
+  for (const model of models) {
+    if (typeof model === 'string') groupIds.add(model);
+  }
+  const groupCount = Math.max(1, groupIds.size);
+  return binCount * groupCount;
+}
+
 /** Build a figure from an already-validated request. */
 export function buildFigureFromValidated(validated: ValidatedRequest): FigureResult | FigureFailure {
   // Check module-owned identity before reading even one property. In particular, a proxy
@@ -2146,17 +3427,19 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
   const data = rec(request.data) ?? {};
   const universeSize = arr(rec(data.nodeUniverse)?.ids)?.length ?? 0;
   const connections = rec(data.connections);
+  const parameters = rec(request.parameters) ?? {};
   const connectionCount = Math.max(
     arr(connections?.sourceIds)?.length ?? 0,
     arr(connections?.targetIds)?.length ?? 0,
   );
 
+  const binnedMarks = binnedMarkPreflight(validated.skillId, data, parameters);
   const preflightMarks =
     validated.skillId === 'neuro.spike_raster'
       ? arr(rec(data.eventTimes)?.values)?.length ?? 0
       : validated.skillId === 'network.connection_graph'
         ? universeSize + connectionCount
-        : 0;
+        : binnedMarks;
   if (preflightMarks > markLimit) {
     return {
       ok: false,

@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
 import {
+  binCenters,
   binIndex,
+  binWidths,
   computeCorrelogram,
   countEligibleCorrelogramPairs,
+  edgesFromWidth,
   PairwiseBudgetExceededError,
   type Bins,
 } from '../src/analysis/index.js';
@@ -20,6 +23,7 @@ import {
   axesAreCompatible,
   conversionFactor,
   conversionReceipt,
+  compareExactUnitArraySumToDifference,
   convert,
   dimensionOf,
   isKnownUnit,
@@ -102,6 +106,23 @@ describe('unit conversion hardening', () => {
     expect(161556.8363554151 * conversionFactor('ms', 's')).not.toBe(
       convert(161556.8363554151, 'ms', 's'),
     );
+  });
+
+  it('compares recorder-sized same-unit sums to cross-unit durations without denominator growth', () => {
+    const intervals = new Array<number>(10_000).fill(0.125);
+    expect(compareExactUnitArraySumToDifference(
+      intervals,
+      'ms',
+      { value: 0, unit: 's' },
+      { value: 1.25, unit: 's' },
+    )).toBe(0);
+    intervals[intervals.length - 1] = 0.25;
+    expect(compareExactUnitArraySumToDifference(
+      intervals,
+      'ms',
+      { value: 0, unit: 's' },
+      { value: 1.25, unit: 's' },
+    )).toBe(1);
   });
 
   it('assigns cross-unit event-window membership from exact rational quantities', () => {
@@ -194,6 +215,22 @@ describe('bounded binary64 bin materialization', () => {
     expect(binIndex(0, bins)).toBe(0);
     expect(binIndex(0.25, bins)).toBe(1);
     expect(binIndex(1, bins)).toBe(3);
+  });
+
+  it('materializes a finite tiling even when the naive total span overflows', () => {
+    expect(edgesFromWidth(-Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE)).toEqual([
+      -Number.MAX_VALUE,
+      0,
+      Number.MAX_VALUE,
+    ]);
+    expect(binCenters({
+      edges: [Number.MAX_VALUE / 2, Number.MAX_VALUE],
+      finalEdgeInclusive: true,
+    })).toEqual([Number.MAX_VALUE * 0.75]);
+    expect(() => binWidths({
+      edges: [-Number.MAX_VALUE, Number.MAX_VALUE],
+      finalEdgeInclusive: true,
+    })).toThrow(/overflows/);
   });
 
   it('refuses remainders, collapsed adjacent edges, excess bins, and hostile types', () => {

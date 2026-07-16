@@ -84,6 +84,30 @@ describe('trace render completeness', () => {
     expect(ip3.map((row) => row[column(converted, 'displayValue')])).toEqual([0.16, 0.61, 0.44, 0.21]);
     expect(ip3.every((row) => row[column(converted, 'displayUnit')] === 'umol/L')).toBe(true);
     expect(converted.disclosures.map((disclosure) => disclosure.id)).toContain('UNIT_CONVERTED');
+
+    const opaque = structuredClone(examples[2]) as any;
+    opaque.data.series = [opaque.data.series[0]];
+    opaque.data.series[0].seriesId = 'weight';
+    opaque.data.series[0].label = 'Recorded synaptic weight';
+    opaque.data.series[0].variableId = 'weight';
+    opaque.data.series[0].values = {
+      kind: 'synaptic_weight',
+      unit: 'nest:weight',
+      values: [1, 2, 3, 4],
+    };
+    opaque.parameters.panels = [{
+      panelId: 'chemistry',
+      label: 'Simulator-defined weight',
+      unit: 'nest:weight',
+      scale: 'linear',
+    }];
+    expect(validateRequestValue(opaque).ok).toBe(true);
+    const opaqueResult = buildFigure(opaque);
+    expect(opaqueResult.ok).toBe(true);
+    if (!opaqueResult.ok) return;
+    expect(opaqueResult.plan.table.rows.map(
+      (row) => row[column(opaqueResult, 'displayValue')],
+    )).toEqual([1, 2, 3, 4]);
   });
 });
 

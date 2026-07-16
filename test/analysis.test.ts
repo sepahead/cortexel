@@ -9,6 +9,7 @@
  * ledger) sit on top of them, never in place of them.
  */
 
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
@@ -26,6 +27,73 @@ import {
   partitionByWindow,
   type Bins,
 } from '../src/analysis/index.js';
+import {
+  rateDenominatorPositive,
+  rateVerifyNormalization,
+} from '../src/core/semantics/events.js';
+import { exactBinary64DivideByIntegerProduct } from '../src/core/exact-binary64.js';
+import {
+  convertDifference,
+  divideExactIntegerByConvertedDifference,
+} from '../src/core/units.js';
+
+interface EndpointRateOracleCase {
+  readonly lower: number;
+  readonly upper: number;
+  readonly unit: 's' | 'ms' | 'us';
+  readonly count: number;
+  readonly factor: number;
+}
+
+type EndpointRateOracleResult =
+  | { readonly status: 'value'; readonly value: number }
+  | { readonly status: 'overflow' | 'underflow' };
+
+function pythonFractionEndpointRates(
+  cases: readonly EndpointRateOracleCase[],
+): EndpointRateOracleResult[] | undefined {
+  const script = `
+import json, math, sys
+from fractions import Fraction
+
+scales = {
+    "s": Fraction(1, 1),
+    "ms": Fraction(1, 1000),
+    "us": Fraction(1, 1000000),
+}
+out = []
+for case in json.load(sys.stdin):
+    width = (
+        Fraction.from_float(float(case["upper"])) -
+        Fraction.from_float(float(case["lower"]))
+    ) * scales[case["unit"]]
+    quotient = Fraction(case["count"], case["factor"]) / width
+    try:
+        value = float(quotient)
+    except OverflowError:
+        out.append({"status": "overflow"})
+        continue
+    if math.isinf(value):
+        out.append({"status": "overflow"})
+    elif value == 0.0 and quotient != 0:
+        out.append({"status": "underflow"})
+    else:
+        out.append({"status": "value", "value": value})
+print(json.dumps(out, allow_nan=False))
+`;
+  const result = spawnSync('python3', ['-c', script], {
+    encoding: 'utf8',
+    input: JSON.stringify(cases),
+  });
+  if (result.error) {
+    if ((result.error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`Python Fraction endpoint-rate oracle failed: ${result.stderr}`);
+  }
+  return JSON.parse(result.stdout) as EndpointRateOracleResult[];
+}
 
 describe('bins — the half-open convention', () => {
   const bins: Bins = { edges: [0, 5, 10], finalEdgeInclusive: true };
@@ -50,6 +118,8 @@ describe('bins — the half-open convention', () => {
   it('reports out-of-range values as -1 rather than clamping them', () => {
     expect(binIndex(-1, bins)).toBe(-1);
     expect(binIndex(10.001, bins)).toBe(-1);
+    expect(binIndex(Number.NaN, bins)).toBe(-1);
+    expect(binIndex(Number.POSITIVE_INFINITY, bins)).toBe(-1);
   });
 
   it('counts a hand example exactly and reports overflow honestly', () => {
@@ -114,6 +184,155 @@ describe('population rate — the formula and its denominator', () => {
     expect(result.rateHz[0]).toBeCloseTo(200, 6);
   });
 
+  it('rounds the exact endpoint-defined rate once instead of rounding the width first', () => {
+    const roundedWidthSeconds = convertDifference(0, 0.3, 'ms', 's');
+    const oldTwoRoundResult = exactBinary64DivideByIntegerProduct(
+      3,
+      10,
+      roundedWidthSeconds,
+    );
+    const exactOneRoundResult = divideExactIntegerByConvertedDifference(
+      3,
+      10,
+      0,
+      0.3,
+      'ms',
+      's',
+    );
+
+    expect(roundedWidthSeconds).toBe(0.0003);
+    expect(oldTwoRoundResult).toBe(1000.0000000000001);
+    expect(exactOneRoundResult).toBe(1000);
+    expect(
+      divideExactIntegerByConvertedDifference(5, 7, 0, 1, 'ms', 's'),
+    ).toBe(714.2857142857143);
+
+    const result = computePopulationRate(
+      [0.05, 0.1, 0.2],
+      { edges: [0, 0.3], finalEdgeInclusive: true },
+      'ms',
+      10,
+      'mean_rate_per_recorded_sender',
+    );
+    expect(result.count).toEqual([3]);
+    expect(result.rateHz).toEqual([1000]);
+  });
+
+  it('matches a Python Fraction oracle from endpoints through the final rounding', () => {
+    const cases: EndpointRateOracleCase[] = [
+      { lower: 0, upper: 0.3, unit: 'ms', count: 3, factor: 10 },
+      { lower: 0, upper: 1, unit: 'ms', count: 5, factor: 7 },
+      {
+        lower: -Number.MAX_VALUE,
+        upper: Number.MAX_VALUE,
+        unit: 's',
+        count: 1,
+        factor: 1,
+      },
+      { lower: 0, upper: Number.MIN_VALUE, unit: 's', count: 1, factor: 1 },
+      {
+        lower: -Number.MAX_VALUE,
+        upper: Number.MAX_VALUE,
+        unit: 's',
+        count: 1,
+        factor: Number.MAX_SAFE_INTEGER,
+      },
+      { lower: -1, upper: 1, unit: 'us', count: 0, factor: 1 },
+    ];
+
+    for (let i = 1; i <= 256; i++) {
+      const magnitude = 2 ** ((i % 41) - 20);
+      const lower = (((i * 7919) % 10001) - 5000) * magnitude;
+      const width = (((i * 104729) % 1000) + 1) * 2 ** ((i % 37) - 25);
+      const upper = lower + width;
+      if (!Number.isFinite(lower) || !Number.isFinite(upper) || !(upper > lower)) continue;
+      cases.push({
+        lower,
+        upper,
+        unit: (['s', 'ms', 'us'] as const)[i % 3],
+        count: (i * 97) % 1001,
+        factor: ((i * 193) % 997) + 1,
+      });
+    }
+
+    const expected = pythonFractionEndpointRates(cases);
+    if (!expected) return;
+    expect(expected).toHaveLength(cases.length);
+
+    cases.forEach((entry, index) => {
+      let actual: EndpointRateOracleResult;
+      try {
+        actual = {
+          status: 'value',
+          value: divideExactIntegerByConvertedDifference(
+            entry.count,
+            entry.factor,
+            entry.lower,
+            entry.upper,
+            entry.unit,
+            's',
+          ),
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (message.includes('underflowed')) actual = { status: 'underflow' };
+        else if (message.includes('overflowed')) actual = { status: 'overflow' };
+        else throw error;
+      }
+      expect(actual, `Python Fraction endpoint-rate case ${index}`).toEqual(expected[index]);
+    });
+  });
+
+  it('handles endpoint-rate extremes and refuses unsafe or unrepresentable inputs', () => {
+    expect(
+      divideExactIntegerByConvertedDifference(
+        1,
+        1,
+        -Number.MAX_VALUE,
+        Number.MAX_VALUE,
+        's',
+        's',
+      ),
+    ).toBe(2.781342323134e-309);
+    expect(() =>
+      divideExactIntegerByConvertedDifference(
+        1,
+        1,
+        0,
+        Number.MIN_VALUE,
+        's',
+        's',
+      ),
+    ).toThrow(/overflowed binary64/);
+    expect(() =>
+      divideExactIntegerByConvertedDifference(
+        1,
+        Number.MAX_SAFE_INTEGER,
+        -Number.MAX_VALUE,
+        Number.MAX_VALUE,
+        's',
+        's',
+      ),
+    ).toThrow(/underflowed binary64/);
+
+    for (const count of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        divideExactIntegerByConvertedDifference(count, 1, 0, 1, 's', 's'),
+      ).toThrow(/non-negative safe-integer numerator/);
+    }
+    for (const factor of [0, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        divideExactIntegerByConvertedDifference(1, factor, 0, 1, 's', 's'),
+      ).toThrow(/positive safe-integer factor/);
+    }
+    expect(() =>
+      divideExactIntegerByConvertedDifference(1, 1, 1, 0, 's', 's'),
+    ).toThrow(/strictly ordered endpoints/);
+    expect(() =>
+      divideExactIntegerByConvertedDifference(1, 1, 0, 1, 'ms', 'mV'),
+    ).toThrow(/across dimensions/);
+  });
+
   it('flags a supplied rate that does not follow from its count', () => {
     // 5 events / (4 * 0.005 s) = 250, not 999.
     const mismatches = verifyRates([5, 1], [999, 50], [0, 5, 10], 'ms', 4, 'mean_rate_per_recorded_sender');
@@ -122,6 +341,297 @@ describe('population rate — the formula and its denominator', () => {
 
   it('accepts a correctly supplied rate within tolerance', () => {
     expect(verifyRates([5, 1], [250, 50], [0, 5, 10], 'ms', 4, 'mean_rate_per_recorded_sender')).toEqual([]);
+    expect(
+      verifyRates(
+        [5],
+        [250 * (1 + 0.5e-9)],
+        [0, 5],
+        'ms',
+        4,
+        'mean_rate_per_recorded_sender',
+      ),
+    ).toEqual([]);
+    expect(
+      verifyRates(
+        [5],
+        [250 * (1 + 2e-9)],
+        [0, 5],
+        'ms',
+        4,
+        'mean_rate_per_recorded_sender',
+      ),
+    ).toEqual([0]);
+  });
+
+  it('keeps a representable rate when sender-count times MAX_VALUE seconds would overflow', () => {
+    const bins = {
+      edges: [0, Number.MAX_VALUE],
+      finalEdgeInclusive: true,
+    } as Bins;
+    const result = computePopulationRate(
+      [0],
+      bins,
+      's',
+      2,
+      'mean_rate_per_recorded_sender',
+    );
+
+    // 1 / (2 * MAX_VALUE) is finite and non-zero even though the binary64 product
+    // 2 * MAX_VALUE is Infinity.
+    expect(result.rateHz).toEqual([2.781342323134e-309]);
+    expect(
+      verifyRates(
+        [1],
+        result.rateHz,
+        bins.edges,
+        's',
+        2,
+        'mean_rate_per_recorded_sender',
+      ),
+    ).toEqual([]);
+    expect(
+      verifyRates([1], [0], bins.edges, 's', 2, 'mean_rate_per_recorded_sender'),
+    ).toEqual([0]);
+    expect(
+      verifyRates(
+        [1],
+        [-Number.MIN_VALUE],
+        bins.edges,
+        's',
+        2,
+        'mean_rate_per_recorded_sender',
+      ),
+    ).toEqual([0]);
+
+    const invalidPositiveRates = [
+      Number.MIN_VALUE,
+      1e-320,
+      1e-100,
+      1e-13,
+      1e-12,
+    ];
+    for (const suppliedRate of invalidPositiveRates) {
+      expect(
+        verifyRates(
+          [1],
+          [suppliedRate],
+          bins.edges,
+          's',
+          2,
+          'mean_rate_per_recorded_sender',
+        ),
+        `supplied ${suppliedRate} Hz`,
+      ).toEqual([0]);
+    }
+
+    const adjacentSubnormal = result.rateHz[0] + Number.MIN_VALUE;
+    expect(
+      verifyRates(
+        [1],
+        [adjacentSubnormal],
+        bins.edges,
+        's',
+        2,
+        'mean_rate_per_recorded_sender',
+      ),
+    ).toEqual([]);
+
+    const suppliedZero = rateVerifyNormalization({
+      request: {
+        data: {
+          binEdges: { unit: 's', edges: bins.edges },
+          counts: [1],
+          recordedSenderCount: 2,
+          rates: { unit: 'Hz', values: [0] },
+        },
+        parameters: { normalization: 'mean_rate_per_recorded_sender' },
+      },
+      skillId: 'neuro.population_rate',
+    });
+    expect(suppliedZero.map((error) => error.code)).toEqual([
+      'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+    ]);
+
+    for (const suppliedRate of invalidPositiveRates) {
+      const errors = rateVerifyNormalization({
+        request: {
+          data: {
+            binEdges: { unit: 's', edges: bins.edges },
+            counts: [1],
+            recordedSenderCount: 2,
+            rates: { unit: 'Hz', values: [suppliedRate] },
+          },
+          parameters: { normalization: 'mean_rate_per_recorded_sender' },
+        },
+        skillId: 'neuro.population_rate',
+      });
+      expect(
+        errors.map((error) => error.code),
+        `supplied ${suppliedRate} Hz`,
+      ).toEqual(['SCIENCE_NORMALIZATION_UNVERIFIABLE']);
+    }
+
+    expect(
+      rateVerifyNormalization({
+        request: {
+          data: {
+            binEdges: { unit: 's', edges: bins.edges },
+            counts: [1],
+            recordedSenderCount: 2,
+            rates: { unit: 'Hz', values: [adjacentSubnormal] },
+          },
+          parameters: { normalization: 'mean_rate_per_recorded_sender' },
+        },
+        skillId: 'neuro.population_rate',
+      }),
+    ).toEqual([]);
+
+    expect(
+      verifyRates([0], [Number.MIN_VALUE], [0, 1], 's', 1, 'total_event_rate'),
+    ).toEqual([0]);
+    expect(
+      rateVerifyNormalization({
+        request: {
+          data: {
+            binEdges: { unit: 's', edges: [0, 1] },
+            counts: [0],
+            recordedSenderCount: 1,
+            rates: { unit: 'Hz', values: [Number.MIN_VALUE] },
+          },
+          parameters: { normalization: 'total_event_rate' },
+        },
+        skillId: 'neuro.population_rate',
+      }).map((error) => error.code),
+    ).toEqual(['SCIENCE_NORMALIZATION_UNVERIFIABLE']);
+  });
+
+  it('fails closed when an exact endpoint separation cannot be represented', () => {
+    const edges = [-Number.MAX_VALUE, Number.MAX_VALUE];
+    expect(() =>
+      computePopulationRate(
+        [0],
+        { edges, finalEdgeInclusive: true },
+        's',
+        1,
+        'total_event_rate',
+      ),
+    ).toThrow(/difference overflowed binary64/);
+    expect(
+      verifyRates([1], [0], edges, 's', 1, 'total_event_rate'),
+    ).toEqual([0]);
+
+    const errors = rateVerifyNormalization({
+      request: {
+        data: {
+          binEdges: { unit: 's', edges },
+          counts: [1],
+          recordedSenderCount: 1,
+          rates: { unit: 'Hz', values: [0] },
+        },
+        parameters: { normalization: 'total_event_rate' },
+      },
+      skillId: 'neuro.population_rate',
+    });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.code).toBe('SCIENCE_NORMALIZATION_UNVERIFIABLE');
+  });
+
+  it('verifies supplied firing rates in their declared unit, including kHz', () => {
+    const correct = rateVerifyNormalization({
+      request: {
+        data: {
+          binEdges: { unit: 'ms', edges: [0, 5, 10] },
+          counts: [5, 1],
+          recordedSenderCount: 4,
+          rates: { unit: 'kHz', values: [0.25, 0.05] },
+        },
+        parameters: { normalization: 'mean_rate_per_recorded_sender' },
+      },
+      skillId: 'neuro.population_rate',
+    });
+    expect(correct).toEqual([]);
+
+    const wrong = rateVerifyNormalization({
+      request: {
+        data: {
+          binEdges: { unit: 'ms', edges: [0, 5] },
+          counts: [5],
+          recordedSenderCount: 4,
+          rates: { unit: 'kHz', values: [250] },
+        },
+        parameters: { normalization: 'mean_rate_per_recorded_sender' },
+      },
+      skillId: 'neuro.population_rate',
+    });
+    expect(wrong.map((error) => error.code)).toEqual([
+      'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+    ]);
+
+    const incompatibleUnit = rateVerifyNormalization({
+      request: {
+        data: {
+          binEdges: { unit: 'ms', edges: [0, 5] },
+          counts: [5],
+          recordedSenderCount: 4,
+          rates: { unit: 'mV', values: [250] },
+        },
+        parameters: { normalization: 'mean_rate_per_recorded_sender' },
+      },
+      skillId: 'neuro.population_rate',
+    });
+    expect(incompatibleUnit.map((error) => error.code)).toEqual([
+      'SCIENCE_NORMALIZATION_UNVERIFIABLE',
+    ]);
+  });
+
+  it('refuses population and bin counts that are not safe exact JSON integers', () => {
+    expect(() =>
+      computePopulationRate(
+        [0],
+        { edges: [0, 1], finalEdgeInclusive: true },
+        's',
+        1e21,
+        'mean_rate_per_recorded_sender',
+      ),
+    ).toThrow(/positive safe integer/);
+
+    expect(
+      rateDenominatorPositive({
+        request: { data: { recordedSenderCount: 1e21 } },
+        skillId: 'neuro.population_rate',
+      }).map((error) => error.code),
+    ).toEqual(['SCIENCE_DENOMINATOR_INVALID']);
+
+    expect(
+      rateVerifyNormalization({
+        request: {
+          data: {
+            binEdges: { unit: 's', edges: [0, 1] },
+            counts: [1e21],
+            recordedSenderCount: 1,
+            rates: { unit: 'Hz', values: [1e21] },
+          },
+          parameters: { normalization: 'total_event_rate' },
+        },
+        skillId: 'neuro.population_rate',
+      }).map((error) => error.code),
+    ).toEqual(['SCIENCE_COUNT_NOT_INTEGER']);
+  });
+
+  it('fails closed on invalid runtime denominator and normalization arguments', () => {
+    expect(
+      verifyRates([1], [1], [0, 1], 's', 0, 'total_event_rate'),
+    ).toEqual([0]);
+    expect(
+      verifyRates(
+        [1],
+        [1],
+        [0, 1],
+        's',
+        1,
+        'not_registered' as never,
+      ),
+    ).toEqual([0]);
   });
 });
 
@@ -164,6 +674,14 @@ describe('ISI — intervals only within a train', () => {
     expect(result.intervals).toEqual([0]);
     expect(result.zeroIntervals).toBe(1);
   });
+
+  it('refuses an interval outside the finite binary64 range', () => {
+    const events = makeEventTable(
+      [-Number.MAX_VALUE, Number.MAX_VALUE],
+      ['A', 'A'],
+    );
+    expect(() => computeIsi(events)).toThrow(/overflows/);
+  });
 });
 
 describe('correlogram — orientation and self-pairs', () => {
@@ -204,10 +722,10 @@ describe('topology — degree and multapse handling', () => {
     expect(result.degree).toEqual([0, 2, 0]);
   });
 
-  it('distinguishes count_edges from count_unique_neighbours on a multapse', () => {
+  it('distinguishes count_edges from count_unique_neighbors on a multapse', () => {
     // Two edges A->B (a multapse). In-degree of B: 2 by edges, 1 by unique neighbour.
     const byEdges = computeDegrees(['A', 'B'], ['A', 'A'], ['B', 'B'], 'in', 'count_edges');
-    const byNeighbour = computeDegrees(['A', 'B'], ['A', 'A'], ['B', 'B'], 'in', 'count_unique_neighbours');
+    const byNeighbour = computeDegrees(['A', 'B'], ['A', 'A'], ['B', 'B'], 'in', 'count_unique_neighbors');
     expect(byEdges.degree[1]).toBe(2);
     expect(byNeighbour.degree[1]).toBe(1);
   });

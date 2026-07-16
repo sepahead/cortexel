@@ -5,7 +5,7 @@
  * correct implementation from a plausible one:
  *
  *   Multapses are preserved. Two connections between the same pair are two connections.
- *   `count_edges` counts them both; `count_unique_neighbours` counts the pair once. The
+ *   `count_edges` counts them both; `count_unique_neighbors` counts the pair once. The
  *   difference is scientific, and the caller declares which they mean.
  *
  *   Absent is not zero. A matrix cell that was never observed is a distinct state from a
@@ -18,7 +18,7 @@ export interface DegreeResult {
   readonly degree: number[];
   readonly nodeIds: readonly string[];
   readonly direction: 'in' | 'out';
-  readonly countingPolicy: 'count_edges' | 'count_unique_neighbours';
+  readonly countingPolicy: 'count_edges' | 'count_unique_neighbors';
   readonly totalConnections: number;
 }
 
@@ -34,13 +34,13 @@ export function computeDegrees(
   sourceIds: readonly string[],
   targetIds: readonly string[],
   direction: 'in' | 'out',
-  countingPolicy: 'count_edges' | 'count_unique_neighbours',
+  countingPolicy: 'count_edges' | 'count_unique_neighbors',
 ): DegreeResult {
   const index = new Map<string, number>();
   nodeIds.forEach((id, i) => index.set(id, i));
 
   const degree = new Array<number>(nodeIds.length).fill(0);
-  const neighbours = countingPolicy === 'count_unique_neighbours'
+  const neighbours = countingPolicy === 'count_unique_neighbors'
     ? nodeIds.map(() => new Set<string>())
     : undefined;
 

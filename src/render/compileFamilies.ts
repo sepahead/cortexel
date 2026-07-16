@@ -495,16 +495,46 @@ export function compileBarFigure(
   xLabel: string,
   yLabel: string,
   skillId: string,
+  xScaleKind: 'linear' | 'log' = 'linear',
+  options: {
+    readonly tableMetadata?: readonly {
+      readonly key: string;
+      readonly header: string;
+      readonly value: string | number | null;
+    }[];
+    readonly summaryStatements?: readonly string[];
+  } = {},
 ): RenderPlanV1 {
   const box = panelBox(context);
+  const table = barTable(
+    edges,
+    values,
+    context.inlineTableRows,
+    yLabel,
+    options.tableMetadata ?? [],
+  );
+  const accessibility = {
+    summary: [context.summary, ...(options.summaryStatements ?? [])]
+      .filter((statement) => statement.length > 0)
+      .join(' '),
+    panelSummaries: [...(options.summaryStatements ?? [])],
+  };
   if (values.length === 0 || edges.length < 2) {
-    return { ...frame(context, skillId), panels: [emptyPanel(box, 'no bins to plot')], table: barTable(edges, values, context.inlineTableRows), legend: [] };
+    return {
+      ...frame(context, skillId),
+      panels: [emptyPanel(box, 'no bins to plot')],
+      table,
+      legend: [],
+      accessibility,
+    };
   }
 
   const xMin = edges[0];
   const xMax = edges[edges.length - 1];
   const yMax = Math.max(0, finiteExtent(values)?.max ?? 0);
-  const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
+  const xScale: NumericScale = xScaleKind === 'log'
+    ? logNumericScale(xMin, xMax, box.x, box.x + box.width)
+    : linearNumericScale(xMin, xMax, box.x, box.x + box.width);
   const yScale = linearScale(0, yMax, box.y + box.height, box.y);
   const baseline = yScale.map(0);
 
@@ -516,27 +546,177 @@ export function compileBarFigure(
   });
 
   const marks: Mark[] = [{ type: 'rect', rects }];
-  const axes: Axis[] = [xAxis(xLabel, xScale), yAxis(yLabel, yScale)];
+  const axes: Axis[] = [transformedXAxis(xLabel, xScale), yAxis(yLabel, yScale)];
 
-  return { ...frame(context, skillId), panels: [{ id: 'main', ...box, axes, marks }], table: barTable(edges, values, context.inlineTableRows), legend: [] };
+  return {
+    ...frame(context, skillId),
+    panels: [{ id: 'main', ...box, axes, marks }],
+    table,
+    legend: [],
+    accessibility,
+  };
+}
+
+/** Multiple declared histogram groups, normalized independently and drawn side by side. */
+export function compileGroupedBarFigure(
+  context: CompileContext,
+  edges: readonly number[],
+  groups: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly values: readonly number[];
+    readonly connectionCount: number;
+    readonly observationCount: number;
+    readonly binnedObservationCount: number;
+    readonly underRangeCount: number;
+    readonly overRangeCount: number;
+    readonly missingMeasurementCount: number;
+    readonly missingObservationCount?: number;
+  }[],
+  xLabel: string,
+  yLabel: string,
+  skillId: string,
+  xScaleKind: 'linear' | 'log' = 'linear',
+  options: {
+    readonly summaryStatements?: readonly string[];
+  } = {},
+): RenderPlanV1 {
+  const box = panelBox(context);
+  const accessibility = {
+    summary: [context.summary, ...(options.summaryStatements ?? [])]
+      .filter((statement) => statement.length > 0)
+      .join(' '),
+    panelSummaries: [...(options.summaryStatements ?? [])],
+  };
+  if (groups.length === 0 || edges.length < 2) {
+    return {
+      ...frame(context, skillId),
+      panels: [emptyPanel(box, 'no histogram groups to plot')],
+      table: emptyTable(),
+      legend: [],
+      accessibility,
+    };
+  }
+  const xScale: NumericScale = xScaleKind === 'log'
+    ? logNumericScale(edges[0], edges[edges.length - 1], box.x, box.x + box.width)
+    : linearNumericScale(edges[0], edges[edges.length - 1], box.x, box.x + box.width);
+  const yMax = Math.max(
+    0,
+    finiteExtent(groups.flatMap((group) => group.values))?.max ?? 0,
+  );
+  const yScale = linearScale(0, yMax, box.y + box.height, box.y);
+  const baseline = yScale.map(0);
+  const marks: Mark[] = groups.map((group, groupIndex) => {
+    const style = categoricalStyle(groupIndex);
+    const rects = group.values.map((value, binIndex) => {
+      const binX0 = xScale.map(edges[binIndex]);
+      const binX1 = xScale.map(edges[binIndex + 1]);
+      const slotWidth = Math.max(0, binX1 - binX0) / groups.length;
+      const x = binX0 + groupIndex * slotWidth;
+      const y = yScale.map(value);
+      return {
+        x,
+        y,
+        width: Math.max(0, slotWidth - 0.75),
+        height: Math.max(0, baseline - y),
+        fill: style.color,
+      };
+    });
+    return { type: 'rect' as const, rects };
+  });
+  const rowsTotal = groups.reduce((sum, group) => sum + group.values.length, 0);
+  const rows: (string | number | null)[][] = [];
+  outer: for (const group of groups) {
+    for (let index = 0; index < group.values.length; index++) {
+      if (rows.length >= context.inlineTableRows) break outer;
+      rows.push([
+        group.id,
+        group.connectionCount,
+        group.observationCount,
+        group.binnedObservationCount,
+        group.underRangeCount,
+        group.overRangeCount,
+        group.missingMeasurementCount,
+        group.missingObservationCount ?? null,
+        edges[index],
+        edges[index + 1],
+        group.values[index],
+      ]);
+    }
+  }
+  return {
+    ...frame(context, skillId),
+    panels: [{
+      id: 'main',
+      ...box,
+      axes: [transformedXAxis(xLabel, xScale), yAxis(yLabel, yScale)],
+      marks,
+    }],
+    table: {
+      policy: rowsTotal > context.inlineTableRows ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+      columns: [
+        { key: 'group', header: 'Group' },
+        { key: 'connectionCount', header: 'Connection rows' },
+        { key: 'observationCount', header: 'Formed observations' },
+        { key: 'binnedObservationCount', header: 'Binned observations' },
+        { key: 'underRangeCount', header: 'Under range' },
+        { key: 'overRangeCount', header: 'Over range' },
+        { key: 'missingMeasurementCount', header: 'Missing measurements' },
+        { key: 'missingObservationCount', header: 'Missing observations' },
+        { key: 'binStart', header: 'Bin start' },
+        { key: 'binEnd', header: 'Bin end' },
+        { key: 'value', header: yLabel },
+      ],
+      rows,
+      rowsInline: rows.length,
+      rowsTotal,
+    },
+    legend: groups.map((group, index) => ({
+      label: group.label,
+      color: categoricalStyle(index).color,
+      glyph: 'series' as const,
+    })),
+    accessibility,
+  };
+}
+
+function transformedXAxis(label: string, scale: NumericScale): Axis {
+  return {
+    orientation: 'bottom',
+    label,
+    transform: scale.transform,
+    ticks: scale.ticks().map((tick) => ({ position: scale.map(tick.value), label: tick.label })),
+  };
 }
 
 function barTable(
   edges: readonly number[],
   values: readonly number[],
   inlineLimit: number,
+  valueHeader = 'Value',
+  metadata: readonly {
+    readonly key: string;
+    readonly header: string;
+    readonly value: string | number | null;
+  }[] = [],
 ): RenderPlanV1['table'] {
   const inline = Math.min(values.length, inlineLimit);
   const rows = Array.from(
     { length: inline },
-    (_value, i) => [edges[i], edges[i + 1], values[i]] as (string | number | null)[],
+    (_value, i) => [
+      edges[i],
+      edges[i + 1],
+      values[i],
+      ...metadata.map((entry) => entry.value),
+    ] as (string | number | null)[],
   );
   return {
     policy: values.length > inlineLimit ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
     columns: [
       { key: 'binStart', header: 'Bin start' },
       { key: 'binEnd', header: 'Bin end' },
-      { key: 'value', header: 'Value' },
+      { key: 'value', header: valueHeader },
+      ...metadata.map(({ key, header }) => ({ key, header })),
     ],
     rows,
     rowsInline: inline,

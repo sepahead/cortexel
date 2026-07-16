@@ -191,6 +191,51 @@ export function compareExactUnitSumToValue(
   return compareExactRationals(sum, exactQuantityRational(target.value, target.unit));
 }
 
+/**
+ * Compare a large same-unit array sum with an exact cross-unit endpoint difference.
+ *
+ * Unlike the general small-term helper above, this keeps the common denominator once:
+ * every finite binary64 input is first accumulated as its integer coefficient of 2^-1074,
+ * then the registered unit scale is applied once. Complexity is linear in the number of
+ * values and intermediate integer size stays bounded by the exact sum, so a recorder-sized
+ * train cannot cause denominator multiplication on every term.
+ */
+export function compareExactUnitArraySumToDifference(
+  values: readonly number[],
+  valueUnit: string,
+  lower: { readonly value: number; readonly unit: string },
+  upper: { readonly value: number; readonly unit: string },
+): -1 | 0 | 1 {
+  const dimension = dimensionOf(valueUnit);
+  if (!dimension || dimension === 'simulator_defined') {
+    throw new Error('exact unit array comparison requires a registered physical value unit');
+  }
+  if (dimensionOf(lower.unit) !== dimension || dimensionOf(upper.unit) !== dimension) {
+    throw new Error('exact unit array comparison refuses cross-dimension endpoints');
+  }
+  const unit = UNITS[valueUnit];
+  if (!unit || unit.toCanonical === null) {
+    throw new Error('exact unit array comparison requires a physical unit scale');
+  }
+  let sumUnits = 0n;
+  for (const value of values) {
+    sumUnits += finiteBinary64ToMinSubnormalUnits(value);
+  }
+  const scale = exactUnitScale(unit);
+  const sum: ExactQuantityRational = {
+    numerator: sumUnits * scale.numerator,
+    denominator: scale.denominator,
+    binaryExponent: scale.binaryExponent - 1074,
+  };
+  const lowerRational = exactQuantityRational(lower.value, lower.unit);
+  const upperRational = exactQuantityRational(upper.value, upper.unit);
+  const duration = addExactRationals(upperRational, {
+    ...lowerRational,
+    numerator: -lowerRational.numerator,
+  });
+  return compareExactRationals(sum, duration);
+}
+
 /** Correctly round an exact sum of registered quantities into one target unit. */
 export function convertExactUnitSum(
   terms: readonly { readonly value: number; readonly unit: string }[],
@@ -352,6 +397,64 @@ export function convertDifference(
     }
     throw error;
   }
+}
+
+/**
+ * Correctly round
+ * `numerator / (integerFactor * exactConvert(upper - lower, from, to))`
+ * without materializing or rounding the converted difference first.
+ *
+ * This is the authoritative rate/density denominator path for exact integer
+ * observations over endpoint-defined intervals. Both endpoint subtraction and unit
+ * conversion remain rational until the final quotient is rounded once.
+ */
+export function divideExactIntegerByConvertedDifference(
+  numerator: number,
+  integerFactor: number,
+  lower: number,
+  upper: number,
+  from: string,
+  to: string,
+): number {
+  if (!Number.isSafeInteger(numerator) || numerator < 0) {
+    throw new Error('exact endpoint quotient requires a non-negative safe-integer numerator');
+  }
+  if (!Number.isSafeInteger(integerFactor) || integerFactor < 1) {
+    throw new Error('exact endpoint quotient requires a positive safe-integer factor');
+  }
+  if (!Number.isFinite(lower) || !Number.isFinite(upper) || !(upper > lower)) {
+    throw new Error('exact endpoint quotient requires finite strictly ordered endpoints');
+  }
+
+  const ratio = conversionScaleRatio(from, to);
+  const differenceUnits =
+    finiteBinary64ToMinSubnormalUnits(upper) - finiteBinary64ToMinSubnormalUnits(lower);
+  // If D is the exact endpoint difference in 2^-1074 units and the registered
+  // conversion scale is (P / Q) * 2^E, the requested quotient is exactly
+  //
+  //   numerator * Q
+  //   ---------------------- * 2^(1074 - E).
+  //   integerFactor * D * P
+  //
+  // Supplying that rational directly to the binary64 rounder is therefore one
+  // round-to-nearest-even operation from the declared endpoints to the rate.
+  let result: number;
+  try {
+    result = exactRationalToBinary64(
+      BigInt(numerator) * ratio.denominator,
+      BigInt(integerFactor) * differenceUnits * ratio.numerator,
+      1074 - ratio.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('exact endpoint quotient overflowed binary64');
+    }
+    throw error;
+  }
+  if (numerator !== 0 && result === 0) {
+    throw new Error('exact endpoint quotient underflowed binary64');
+  }
+  return result;
 }
 
 /** Convert a duration to seconds. Used wherever a rate denominator is formed. */

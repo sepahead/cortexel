@@ -764,7 +764,9 @@ export function prepareTraceSeries(
     assertStrictAffineOrdering(
       resolved.filter((sample) => sample.value !== null).map((sample) => sample.value as number),
       converted.filter((sample) => sample.value !== null).map((sample) => sample.value as number),
-      (lower, upper) => convertDifference(lower, upper, input.valueUnit, targetUnit),
+      (lower, upper) => input.valueUnit === targetUnit
+        ? exactBinary64Sum([upper, -lower])
+        : convertDifference(lower, upper, input.valueUnit, targetUnit),
     );
   }
   const normalizationResult = options.normalization

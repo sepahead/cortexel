@@ -1,5 +1,10 @@
 /** Shared, bounded width-bin materialization used by semantics and analysis. */
 
+import {
+  exactRationalToBinary64,
+  finiteBinary64ToMinSubnormalUnits,
+} from './exact-binary64.js';
+
 /** Matches the contract's maximum of 100001 explicit edges. */
 export const MAX_MATERIALIZED_BINS = 100_000;
 
@@ -32,11 +37,20 @@ export function materializeWidthBins(
   if (typeof start !== 'number' || typeof stop !== 'number' || typeof width !== 'number') {
     return { ok: false, reason: 'nonfinite' };
   }
-  const span = stop - start;
-  if (![start, stop, width, span].every(Number.isFinite)) return { ok: false, reason: 'nonfinite' };
-  if (!(width > 0) || !(span > 0)) return { ok: false, reason: 'invalid_range' };
+  if (![start, stop, width].every(Number.isFinite)) return { ok: false, reason: 'nonfinite' };
+  if (!(width > 0) || !(stop > start)) return { ok: false, reason: 'invalid_range' };
 
-  const ratio = span / width;
+  const startUnits = finiteBinary64ToMinSubnormalUnits(start);
+  const stopUnits = finiteBinary64ToMinSubnormalUnits(stop);
+  const widthUnits = finiteBinary64ToMinSubnormalUnits(width);
+  const spanUnits = stopUnits - startUnits;
+  let ratio: number;
+  try {
+    ratio = exactRationalToBinary64(spanUnits, widthUnits);
+  } catch {
+    // An overflowing quotient is necessarily far beyond the materialization budget.
+    return { ok: false, reason: 'too_many' };
+  }
   if (!Number.isFinite(ratio)) return { ok: false, reason: 'nonfinite' };
   const count = Math.round(ratio);
   // Decimal inputs such as 0.3 / 0.1 need a small binary64 allowance. Scale it by
@@ -54,15 +68,31 @@ export function materializeWidthBins(
   const edges = new Array<number>(count + 1);
   edges[0] = start;
   for (let index = 1; index < count; index++) {
-    const edge = start + index * width;
+    const exactEdgeUnits = startUnits + BigInt(index) * widthUnits;
+    let edge: number;
+    try {
+      edge = exactRationalToBinary64(exactEdgeUnits, 1n, -1074);
+    } catch {
+      return { ok: false, reason: 'unrepresentable' };
+    }
+    if (exactEdgeUnits !== 0n && edge === 0) return { ok: false, reason: 'unrepresentable' };
     if (!Number.isFinite(edge) || !(edge > edges[index - 1]) || !(edge < stop)) {
       return { ok: false, reason: 'unrepresentable' };
     }
     edges[index] = edge;
   }
-  const reconstructedStop = start + count * width;
+  let reconstructedStop: number;
+  try {
+    reconstructedStop = exactRationalToBinary64(
+      startUnits + BigInt(count) * widthUnits,
+      1n,
+      -1074,
+    );
+  } catch {
+    return { ok: false, reason: 'non_tiling' };
+  }
   const endpointTolerance =
-    8 * Number.EPSILON * Math.max(1, Math.abs(start), Math.abs(stop), Math.abs(count * width));
+    8 * Number.EPSILON * Math.max(1, Math.abs(start), Math.abs(stop), Math.abs(reconstructedStop));
   if (!Number.isFinite(reconstructedStop) || Math.abs(reconstructedStop - stop) > endpointTolerance) {
     return { ok: false, reason: 'non_tiling' };
   }

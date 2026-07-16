@@ -181,6 +181,41 @@ export function exactBinary64MultiplyByRational(
   );
 }
 
+/**
+ * Correctly round `numerator / (integerFactor * denominatorValue)` without ever
+ * materializing the product in binary64.
+ *
+ * This is the stable shape needed by rate derivations: a finite bin width and a
+ * positive integer population/trial count may have a product above MAX_VALUE even
+ * though the resulting rate remains representable. Conversely, a non-zero exact
+ * quotient that rounds to zero is refused rather than being reported as a measured
+ * zero.
+ */
+export function exactBinary64DivideByIntegerProduct(
+  numerator: number,
+  integerFactor: number,
+  denominatorValue: number,
+): number {
+  if (!Number.isFinite(numerator)) {
+    throw new Error('exact binary64 quotient requires a finite numerator');
+  }
+  if (!Number.isSafeInteger(integerFactor) || integerFactor < 1) {
+    throw new Error('exact binary64 quotient requires a positive safe-integer factor');
+  }
+  if (!Number.isFinite(denominatorValue) || !(denominatorValue > 0)) {
+    throw new Error('exact binary64 quotient requires a finite positive denominator value');
+  }
+
+  const numeratorUnits = finiteValueInMinSubnormalUnits(numerator);
+  const denominatorUnits =
+    BigInt(integerFactor) * finiteValueInMinSubnormalUnits(denominatorValue);
+  const result = exactRationalToBinary64(numeratorUnits, denominatorUnits);
+  if (numeratorUnits !== 0n && result === 0) {
+    throw new Error('exact binary64 quotient underflows to zero');
+  }
+  return result;
+}
+
 /** Exact relative-error predicate: |a-b|/max(|a|,|b|) <= N*2^-52. */
 export function binary64RelativeDifferenceWithinEpsilons(
   left: number,
@@ -201,6 +236,40 @@ export function binary64RelativeDifferenceWithinEpsilons(
   if (scale === 0n) return true;
   const difference = leftUnits >= rightUnits ? leftUnits - rightUnits : rightUnits - leftUnits;
   return (difference << 52n) <= BigInt(epsilonMultiples) * scale;
+}
+
+/**
+ * Exact relative-error predicate:
+ * `|left-right| / max(|left|,|right|) <= relativeTolerance`.
+ *
+ * All three binary64 inputs are decoded to exact integers. The comparison is then
+ * cross-multiplied in BigInt, so it remains meaningful for subnormals where ordinary
+ * subtraction or `relativeTolerance * scale` may underflow to zero.
+ */
+export function binary64RelativeDifferenceWithinTolerance(
+  left: number,
+  right: number,
+  relativeTolerance: number,
+): boolean {
+  if (
+    !Number.isFinite(left) ||
+    !Number.isFinite(right) ||
+    !Number.isFinite(relativeTolerance) ||
+    relativeTolerance < 0
+  ) return false;
+
+  const leftUnits = finiteValueInMinSubnormalUnits(left);
+  const rightUnits = finiteValueInMinSubnormalUnits(right);
+  const toleranceUnits = finiteValueInMinSubnormalUnits(relativeTolerance);
+  const absoluteLeft = leftUnits < 0n ? -leftUnits : leftUnits;
+  const absoluteRight = rightUnits < 0n ? -rightUnits : rightUnits;
+  const scale = absoluteLeft > absoluteRight ? absoluteLeft : absoluteRight;
+  if (scale === 0n) return true;
+  const difference = leftUnits >= rightUnits ? leftUnits - rightUnits : rightUnits - leftUnits;
+
+  // toleranceUnits represents `relativeTolerance * 2^1074`, hence the matching
+  // power of two on the left after cross multiplication.
+  return (difference << 1074n) <= scale * toleranceUnits;
 }
 
 /** Exact finite-binary64 sum encoded as an integer multiple of 2^-1074. */

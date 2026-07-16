@@ -20,7 +20,7 @@ def _freeze(value: Any) -> Any:
 PACKAGE_VERSION: str = "0.9.0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:a49097fff2676ff50e0b382576f8933e252c68b4813117c93e9a0c10678e8d56"
+CONTRACT_DIGEST: str = "sha256:502a591cf73ac3775727005a0c77d3a069aa7570900e5bd6760703d020c92ef1"
 CATALOG_DIGEST: str = "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691"
 
 STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([

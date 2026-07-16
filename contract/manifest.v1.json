@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:a49097fff2676ff50e0b382576f8933e252c68b4813117c93e9a0c10678e8d56",
+  "contractDigest": "sha256:502a591cf73ac3775727005a0c77d3a069aa7570900e5bd6760703d020c92ef1",
   "catalogDigest": "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691",
   "stableSkillCount": 19,
   "stableSkills": [
@@ -1528,7 +1528,7 @@
     },
     {
       "path": "contract/registries/disclosures.v1.json",
-      "digest": "sha256:88bf4114feca507a0c180a8b68ca8eb2fa1c78efea8cd2202834c80e61ca2430"
+      "digest": "sha256:6b64e764d3996b8a07f8458efc223825db312d77dd2abe91401e002b5f7e92d9"
     },
     {
       "path": "contract/registries/error-codes.v1.json",
@@ -1684,7 +1684,7 @@
     },
     {
       "path": "contract/skills/network.weight_distribution.v1.json",
-      "digest": "sha256:fa51dabfd8abfa7ce7f74f52b6f304e3f6d82babd9bb5132562c19e9482332f2"
+      "digest": "sha256:f048eee5035eadf61932316544af2f0a79f3711a51577c39e34ba54859393143"
     },
     {
       "path": "contract/skills/network.weight_matrix.v1.json",
