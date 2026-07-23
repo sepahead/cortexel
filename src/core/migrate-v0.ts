@@ -19,7 +19,10 @@
  */
 
 import { LEGACY_SKILL_MAP, type LegacyMapEntry } from '../generated/catalog.js';
+import { REQUEST_CONTRACT_IDENTITY } from './contract-identity.js';
 import { makeError, type CortexelError } from './errors.js';
+import { getBudgetLimits } from './limits.js';
+import { snapshotValue } from './safe-snapshot.js';
 
 export interface MigrationReport {
   readonly legacyId: string;
@@ -45,7 +48,8 @@ export interface MigrationResult {
  * Migrate a legacy request.
  *
  * The heavy per-skill field transforms are deliberately NOT implemented as generic
- * shape-guessing here. Each is a named transform whose absence is honest: for 0.9.0,
+ * shape-guessing here. Each is a named transform whose absence is honest: in the
+ * current pre-1.0 implementation,
  * migration recognizes every legacy id and returns a precise, correct REPORT of what
  * the target is and what the caller must supply — the deterministic outcome the
  * blueprint requires — while the per-field data rewrites land incrementally with
@@ -53,7 +57,32 @@ export interface MigrationResult {
  * silently half-converted request that looks complete.
  */
 export function migrateLegacyRequest(input: unknown): MigrationResult {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+  // This is a public materialized-value boundary just like validateRequestValue.
+  // Snapshot before even Array.isArray/property access: a revoked Proxy can throw from
+  // reflection, and a getter-backed legacy id is caller code rather than migration data.
+  // The current translator reads only a small projection, but silently ignoring hostile
+  // or non-JSON state would still let the report describe a different request from the
+  // one the caller supplied.
+  const snapshot = snapshotValue(input, getBudgetLimits('standard'));
+  if (!snapshot.ok) {
+    return {
+      report: {
+        legacyId: '(none)',
+        outcome: 'blocked',
+        targetId: null,
+        operations: [],
+        unresolved: [],
+        warnings: [],
+        errors: snapshot.errors,
+      },
+    };
+  }
+
+  if (
+    typeof snapshot.value !== 'object' ||
+    snapshot.value === null ||
+    Array.isArray(snapshot.value)
+  ) {
     return {
       report: {
         legacyId: '(none)',
@@ -73,7 +102,7 @@ export function migrateLegacyRequest(input: unknown): MigrationResult {
     };
   }
 
-  const request = input as Record<string, unknown>;
+  const request = snapshot.value as Record<string, unknown>;
   const skill = request.skill;
   const legacyId =
     typeof skill === 'object' && skill !== null && !Array.isArray(skill)
@@ -157,7 +186,9 @@ export function migrateLegacyRequest(input: unknown): MigrationResult {
             makeError({
               code: (entry.errorCode as CortexelError['code']) ?? 'CAPABILITY_EXPERIMENTAL',
               stage: 'migrate',
-              message: `${entry.notes} Target: ${entry.targetId ?? '(experimental)'}.`,
+              message: entry.targetId === null
+                ? `${entry.notes} No FigureRequestV1 target is emitted.`
+                : `${entry.notes} Target: ${entry.targetId}.`,
             }),
           ],
         },
@@ -201,7 +232,10 @@ export function migrateLegacyRequest(input: unknown): MigrationResult {
       }
 
       const migrated: Record<string, unknown> = {
-        contract: { name: 'cortexel-figure-request', version: '1.0' },
+        contract: {
+          name: REQUEST_CONTRACT_IDENTITY.name,
+          version: REQUEST_CONTRACT_IDENTITY.version,
+        },
         skill: { id: entry.targetId },
         ...(entry.materializedParameters
           ? { parameters: { ...entry.materializedParameters } }

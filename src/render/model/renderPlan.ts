@@ -44,7 +44,7 @@ export interface LegendItem {
   readonly label: string;
   readonly color: string;
   readonly outlineColor?: string;
-  readonly glyph?: 'series' | 'band' | 'whisker';
+  readonly glyph?: 'series' | 'band' | 'whisker' | 'rule';
   readonly dash?: string;
   readonly marker?: string;
 }
@@ -76,6 +76,7 @@ export interface Axis {
  */
 export type Mark =
   | LineMark
+  | ArrowMark
   | PointMark
   | RectMark
   | RuleMark
@@ -84,18 +85,74 @@ export type Mark =
   | TextMark
   | GroupMark;
 
+/**
+ * Source-bound identity for one atomic data carrier. The internal OutputAuthority gate
+ * reads these tags from the actual plan. Every atomic primitive is classified: a data
+ * carrier, a synthetic connector vertex, or a decorative mark. The field remains
+ * optional only while existing family compilers are migrated; the emission gate treats
+ * absence as an invariant violation, so extra untagged scientific geometry cannot hide.
+ *
+ * V1 intentionally binds identity/order only. It does not claim numeric coordinate
+ * correctness until a skill opts into an independent canonical-geometry evaluator.
+ */
+export interface OutputAuthorityCarrierV1 {
+  readonly tag: 'data_carrier';
+  readonly classId: string;
+  readonly provenance: import('../../core/parse-json.js').JsonValue;
+}
+
+export interface OutputAuthorityConnectorV1 {
+  /** Synthetic vertex needed to connect/close data geometry; never a carrier. */
+  readonly tag: 'connector';
+}
+
+export interface OutputAuthorityDecorativeMarkV1 {
+  /** Explicitly presentation-only atomic geometry; never a carrier. */
+  readonly tag: 'decorative_mark';
+}
+
+export type OutputAuthorityAtomicRoleV1 =
+  | OutputAuthorityCarrierV1
+  | OutputAuthorityConnectorV1
+  | OutputAuthorityDecorativeMarkV1;
+
 export interface LineMark {
   readonly type: 'line';
   /** Each subpath is a run of connected points; a gap in the data starts a NEW subpath. */
-  readonly subpaths: readonly (readonly { readonly x: number; readonly y: number }[])[];
+  readonly subpaths: readonly (readonly {
+    readonly x: number;
+    readonly y: number;
+    /** Transitional optionality only; the emission gate refuses every unclassified atom. */
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[])[];
   readonly stroke: string;
   readonly strokeWidth: number;
   readonly dash?: string;
 }
 
+/**
+ * A direction-bearing arrowhead whose orientation is fixed by two plan coordinates.
+ * Keeping this primitive in the closed plan grammar prevents a serializer from guessing
+ * direction from path order, marker defaults, animation, or colour.
+ */
+export interface ArrowMark {
+  readonly type: 'arrow';
+  readonly arrows: readonly {
+    readonly from: { readonly x: number; readonly y: number };
+    readonly to: { readonly x: number; readonly y: number };
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[];
+  readonly fill: string;
+  readonly size: number;
+}
+
 export interface PointMark {
   readonly type: 'point';
-  readonly points: readonly { readonly x: number; readonly y: number }[];
+  readonly points: readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[];
   readonly fill: string;
   readonly radius: number;
   readonly shape: 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'star' | 'plus' | 'hexagon';
@@ -109,6 +166,7 @@ export interface RectMark {
     readonly width: number;
     readonly height: number;
     readonly fill: string;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
   }[];
   readonly stroke?: string;
 }
@@ -116,7 +174,12 @@ export interface RectMark {
 export interface RuleMark {
   readonly type: 'rule';
   readonly orientation: 'horizontal' | 'vertical';
-  readonly lines: readonly { readonly position: number; readonly from: number; readonly to: number }[];
+  readonly lines: readonly {
+    readonly position: number;
+    readonly from: number;
+    readonly to: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[];
   readonly stroke: string;
   readonly strokeWidth: number;
   readonly dash?: string;
@@ -128,6 +191,7 @@ export interface AreaMark {
     readonly x: number;
     readonly y0: number;
     readonly y1: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
   }[])[];
   readonly fill: string;
   readonly opacity: number;
@@ -139,7 +203,11 @@ export interface AreaMark {
 export interface PathMark {
   readonly type: 'path';
   /** Step/stem paths built from explicit segments; never a smoothed curve. */
-  readonly subpaths: readonly (readonly { readonly x: number; readonly y: number }[])[];
+  readonly subpaths: readonly (readonly {
+    readonly x: number;
+    readonly y: number;
+    readonly authority?: OutputAuthorityAtomicRoleV1;
+  }[])[];
   readonly stroke: string;
   readonly strokeWidth: number;
 }
@@ -162,17 +230,21 @@ export interface GroupMark {
 }
 
 export interface TableModel {
-  readonly policy:
-    | 'complete_inline'
-    | 'excerpt_inline_with_complete_sidecar'
-    | 'summary_inline_with_complete_sidecar'
-    | 'reference_only';
+  /** Every accepted row is returned on FigureResult.table; no sidecar/reference mode exists in V1. */
+  readonly policy: 'complete_returned';
   readonly columns: readonly { readonly key: string; readonly header: string }[];
   readonly rows: readonly (readonly (string | number | null)[])[];
+  /** Kept as an artifact-facing count name; for complete_returned it must equal rows.length and rowsTotal. */
   readonly rowsInline: number;
   readonly rowsTotal: number;
-  /** Digest of the complete sidecar, when the inline table is an excerpt. */
-  readonly sidecarDigest?: string;
+  /**
+   * Figure-level facts that must accompany every representation of the table.
+   * Family compilers may omit this while assembling an internal plan; buildFigure
+   * always materializes it before exposing, freezing, or serializing the table.
+   */
+  readonly metadata?: {
+    readonly disclosures: readonly DisclosureBlock[];
+  };
 }
 
 export interface AccessibilityModel {

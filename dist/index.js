@@ -35,7 +35,7 @@ import {
   synapseCollectionToOutDegreeDistributionParams,
   synapseCollectionToWeightMatrixParams,
   weightRecorderToSceneData
-} from "./chunk-X7TXBP7X.js";
+} from "./chunk-OV7LM36R.js";
 import {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,
@@ -169,8 +169,8 @@ import {
   validateSkillParams,
   validateSpec,
   validateVizSpec
-} from "./chunk-6L2O67R4.js";
-import "./chunk-X23XMWZH.js";
+} from "./chunk-EAGSNBY3.js";
+import "./chunk-UEJPZXDX.js";
 export {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,

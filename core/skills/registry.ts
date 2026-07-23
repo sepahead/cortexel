@@ -757,9 +757,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'IF curve example',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/if_curve.html',
-        dataShape: 'stimulus amplitudes and rates_hz with a declared counting window',
+        dataShape: 'stimulus amplitudes and rates_hz with declared stimulus units',
         output: 'F-I response line and points with declared stimulus and rate units',
-        note: 'Always show bin width / counting window so rates stay auditable.',
+        note: 'Show the declared bin width and rate normalization; this legacy envelope carries no counting-window bounds.',
       },
     ],
   },
@@ -768,14 +768,14 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     version: CORTEXEL_SKILL_VERSION,
     title: 'NEST connectivity edge-list topology renderer',
     description:
-      'Render SynapseCollection endpoint pairs and optional weights as schematic node-link topology (legacy skill id; not a literal matrix heatmap).',
+      'Render SynapseCollection endpoint pairs and optional unit-bound weight and delay channels as schematic node-link topology (legacy skill id; not a literal matrix heatmap).',
     deviceFamily: 'get_connections',
     scene: 'network-topology',
-    // Connectivity evidence contains endpoints/weights, not measured spatial
+    // Connectivity evidence contains endpoints and optional measured channels, not spatial
     // coordinates. Any node placement in the topology scene is schematic.
     weak: true,
     weakDisclosure:
-      'Schematic topology layout — node positions and distances are derived for readability; only the declared edges and weights are evidence.',
+      'Schematic topology layout — node positions and distances are derived for readability; only the declared endpoint pairs and optional measurement channels are evidence.',
     deprecation: {
       since: '1.6.0',
       replacement: 'nest.connection_graph',
@@ -810,9 +810,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Plot weight matrices example / SynapseCollection',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html',
-        dataShape: 'parallel source/target endpoint arrays plus optional weights',
+        dataShape: 'parallel source/target endpoint arrays plus optional unit-bound weights and delays',
         output: 'Schematic node-edge topology from the checked edge list',
-        note: 'Keep absent connections distinct from zero-weight connections; topology positions/distances are schematic.',
+        note: 'Optional weights and delays remain edge measurements; topology positions and distances are schematic.',
       },
     ],
   },
@@ -1236,8 +1236,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
   'nest.spatial_2d': {
     id: 'nest.spatial_2d',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST 2D spatial renderer',
-    description: 'Render 2D layer positions, masks, kernels and sampled projections.',
+    title: 'NEST legacy 2D position host envelope',
+    description:
+      'Validate anonymous 2D position tuples and coordinate units for an explicitly selected host renderer; Cortexel supplies no scene.',
     deviceFamily: 'get_position',
     scene: null, // no honest 2D-spatial scene yet (would violate sphere/voxel law)
     deprecation: {
@@ -1263,9 +1264,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Circular mask, Gaussian kernel, grid/free spatial examples',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/connex.html',
-        dataShape: 'node x/y positions, masks, kernels, sampled edges',
-        output: 'No Cortexel scene yet — route to a 2D d3 map on the host.',
-        note: 'scene:null — render via host d3, not a Cortexel 3D scene.',
+        dataShape: 'anonymous x/y position tuples plus coordinate units',
+        output: 'Validated host envelope only; the selected host owns rendering and caption display.',
+        note: 'Extent, mask, and kernel are caller-declared metadata, not structured render data; use nest.spatial_map_2d for identified measured positions.',
       },
     ],
   },
@@ -1366,9 +1367,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: '3D spatial network with exponential/Gaussian probabilities',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/test_3d.html',
-        dataShape: 'node x/y/z positions, extent, sampled edges',
+        dataShape: 'x/y/z positioned objects plus coordinate units',
         output: 'Unit-labelled 3D positioned-node scene for host rendering',
-        note: 'Use 3D as inspection aid; do not imply biological geometry.',
+        note: 'Extent and projection-sample policy are caller declarations, not edge data; use 3D only as a positioned-node inspection aid.',
       },
     ],
   },
@@ -1527,9 +1528,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
   'nest.stimulus_response': {
     id: 'nest.stimulus_response',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST stimulus-response protocol renderer',
+    title: 'NEST stimulus-response host envelope',
     description:
-      'Render aligned stimulus waveforms, responses, spikes and protocol epochs.',
+      'Validate aligned time, stimulus, and response arrays for an explicitly selected host renderer; Cortexel supplies no scene.',
     deviceFamily: 'multimeter',
     scene: null, // composite multi-panel protocol; no single Cortexel scene
     requiredInputKeys: ['times_ms', 'stimulus', 'response'],
@@ -1549,22 +1550,22 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Sinusoidal generator / pulse packet / repeated stimulation',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/pulsepacket.html',
-        dataShape: 'stimulus waveform, analog response, spike events, epochs',
-        output: 'Composite protocol panels — host-composed, no single scene.',
-        note: 'scene:null — multi-panel protocol composed by the host.',
+        dataShape: 'aligned times_ms, stimulus, and response arrays',
+        output: 'Validated host envelope only; the selected host owns any composite panels.',
+        note: 'The envelope carries no spike-event or epoch structure; the host must not infer either.',
       },
     ],
   },
   'nest.astrocyte_dynamics': {
     id: 'nest.astrocyte_dynamics',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST astrocyte Ca²⁺/IP₃ dynamics renderer',
-    description: 'Render tripartite-synapse calcium/IP3 state-variable traces.',
+    title: 'NEST astrocyte concentration-trace renderer',
+    description: 'Render one declared non-negative glial concentration trace carried as ca_trace.',
     deviceFamily: 'multimeter',
     scene: 'voltage-trace',
     weak: true, // analog-trace reuse: Ca/IP3 are not membrane voltage
     weakDisclosure:
-      "Derived view — Ca²⁺/IP₃ shown through the analog-trace scene; these are glial signals, not membrane voltage.",
+      'Derived view — a declared glial concentration trace is shown through the analog-trace scene; it is not membrane voltage.',
     requiredInputKeys: ['times_ms', 'ca_trace', 'units'],
     paramsSchema: AstrocyteParamsSchema,
     requiredProvenanceKeys: [
@@ -1593,18 +1594,18 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Single astrocyte / tripartite interaction examples',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/astrocytes/astrocyte_single.html',
-        dataShape: 'Ca/IP3/state variables, linked neuron events',
-        output: 'Calcium/IP3 traces via the analog-trace scene (flagged derived)',
-        note: 'weak:true — keep glial and neuronal units explicitly separate.',
+        dataShape: 'times_ms, one ca_trace array, and its declared units',
+        output: 'One glial concentration trace via the analog-trace scene (flagged derived)',
+        note: 'The legacy envelope carries neither multiple state variables nor linked neuronal events.',
       },
     ],
   },
   'nest.compartmental_dynamics': {
     id: 'nest.compartmental_dynamics',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST compartmental morphology + dynamics renderer',
+    title: 'NEST compartment-tree trace host envelope',
     description:
-      'Render multi-compartment morphologies, receptor ports and soma/dendrite traces.',
+      'Validate an id/parent compartment topology and aligned per-compartment values for an explicitly selected host renderer.',
     deviceFamily: 'multimeter',
     scene: null, // morphology geometry has no honest Cortexel scene (no invented geometry)
     requiredInputKeys: ['times_ms', 'compartments'],
@@ -1630,9 +1631,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Receptors/current and two-compartment neuron examples',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/compartmental_model/receptors_and_current.html',
-        dataShape: 'compartments, receptor ports, soma/dendrite traces',
-        output: 'No Cortexel scene — host d3 morphology tree with linked traces.',
-        note: 'scene:null — do not invent morphology geometry from labels.',
+        dataShape: 'times_ms plus compartments with id, parent_id, optional label, and aligned values',
+        output: 'Validated host envelope for a schematic compartment tree and aligned traces.',
+        note: 'The envelope carries no receptor-port or morphology-geometry data; the host must not invent either.',
       },
     ],
   },

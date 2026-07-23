@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { canonicalize } from '../src/core/canonicalize.js';
 import { validateRequestValue } from '../src/core/request.js';
 import { buildFigure } from '../src/render/index.js';
 
@@ -141,7 +142,18 @@ describe('trace duplicate-time authority', () => {
 
 describe('trace render fail-closed laws', () => {
   it('executes the structured multi-signal aggregate policy and binds a receipt', () => {
-    const request = structuredClone(contract('neuro.multisignal_trace').examples.valid[0]) as any;
+    const sourceContract = contract('neuro.multisignal_trace') as any;
+    expect(sourceContract.accessibility.tableColumns.find((entry: any) => entry.key === 'value'))
+      .toMatchObject({ cellType: 'finite_number_or_string', nullable: true });
+
+    const scalar = buildFigure(structuredClone(sourceContract.examples.valid[0]));
+    expect(scalar.ok).toBe(true);
+    if (!scalar.ok) return;
+    const scalarValueColumn = column(scalar, 'value');
+    expect(scalar.plan.table.rows.every((row) =>
+      row[scalarValueColumn] === null || typeof row[scalarValueColumn] === 'number')).toBe(true);
+
+    const request = structuredClone(sourceContract.examples.valid[0]) as any;
     request.data.eventTimes.values[1] = request.data.eventTimes.values[0];
     request.parameters.duplicateTimePolicy = { policy: 'aggregate', aggregate: 'mean' };
 
@@ -150,6 +162,17 @@ describe('trace render fail-closed laws', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.plan.table.rowsTotal).toBe(16);
+    const valueColumn = column(result, 'value');
+    const replicateColumn = column(result, 'replicateCount');
+    const contributorArrays = result.plan.table.rows
+      .filter((row) => row[replicateColumn] === 2)
+      .map((row) => row[valueColumn]);
+    expect(contributorArrays).toHaveLength(4);
+    for (const cell of contributorArrays) {
+      expect(typeof cell).toBe('string');
+      expect(cell).toBe(canonicalize(JSON.parse(cell as string)));
+      expect(JSON.parse(cell as string)).toHaveLength(2);
+    }
     expect(result.disclosures.map((disclosure) => disclosure.id)).toContain('DUPLICATE_TIMES_AGGREGATED');
     const operations = (result.artifact.derivation as { operations: { receipt: Record<string, unknown> }[] }).operations;
     expect(operations).toHaveLength(4);
@@ -181,7 +204,10 @@ describe('trace render fail-closed laws', () => {
     if (!duplicateSeriesResult.ok) expect(duplicateSeriesResult.errors[0].code).toBe('SEMANTIC_DUPLICATE_ID');
 
     const duplicatePanels = structuredClone(base) as any;
-    duplicatePanels.parameters.panels[1].panelId = duplicatePanels.parameters.panels[0].panelId;
+    duplicatePanels.parameters.panels[1] = {
+      ...duplicatePanels.parameters.panels[0],
+      label: 'Duplicate chemistry panel',
+    };
     expect(validateRequestValue(duplicatePanels).ok).toBe(true);
     const duplicatePanelsResult = buildFigure(duplicatePanels);
     expect(duplicatePanelsResult.ok).toBe(false);
@@ -336,9 +362,13 @@ describe('trace uncertainty and accessibility', () => {
       'Cell 1 membrane potential: +/-1 SD (n = 8, over trials)',
     );
     expect(result.disclosures.map((disclosure) => disclosure.id)).not.toContain('UNCERTAINTY_NOT_PROVIDED');
-    expect(result.plan.accessibility.summary).toContain('Cell 1 membrane potential');
-    expect(result.plan.accessibility.summary).toContain('Value ranges from');
-    expect(result.plan.accessibility.summary).not.toContain('Replicates ranges');
+    expect(result.plan.accessibility.summary).toContain('Quantities: membrane_voltage (mV).');
+    expect(result.plan.accessibility.summary).toContain(
+      'Uncertainty declarations: standard_deviation.',
+    );
+    expect(result.plan.accessibility.summary).not.toContain(
+      'Uncertainty declarations: none',
+    );
   });
 
   it('breaks an interval band with the same paired-null mask as a missing centre', () => {

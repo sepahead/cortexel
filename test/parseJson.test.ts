@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
 import { parseJsonStrict } from '../src/core/parse-json.js';
+import { canonicalize } from '../src/core/canonicalize.js';
 import { getBudgetLimits } from '../src/core/limits.js';
 
 const limits = getBudgetLimits('standard');
@@ -80,15 +81,24 @@ describe('strict JSON parser — grammar', () => {
     expect(codes('1e400')).toContain('JSON_NON_FINITE_NUMBER');
   });
 
-  it('rejects non-portable bare integers but keeps finite exponent notation in the JCS domain', () => {
+  it('accepts canonical binary64 integer spellings but rejects lossy alternatives', () => {
     expect(codes('9007199254740991')).toEqual([]);
-    expect(codes('9007199254740992')).toContain('JSON_INTEGER_OUT_OF_RANGE');
-    expect(codes('-9007199254740992')).toContain('JSON_INTEGER_OUT_OF_RANGE');
+    expect(codes('9007199254740992')).toEqual([]);
+    expect(codes('-9007199254740992')).toEqual([]);
     expect(codes('9007199254740993')).toContain('JSON_INTEGER_OUT_OF_RANGE');
+    expect(codes('295147905179352830000')).toEqual([]);
+    expect(codes('295147905179352830001')).toContain('JSON_INTEGER_OUT_OF_RANGE');
 
     const scientific = parse('1e21');
     expect(scientific.ok).toBe(true);
     if (scientific.ok) expect(scientific.value).toBe(1e21);
+
+    for (const measurement of [2 ** 53, 2 ** 68, 1e20, -1e20]) {
+      const canonical = canonicalize(measurement);
+      const roundTrip = parse(canonical);
+      expect(roundTrip.ok, canonical).toBe(true);
+      if (roundTrip.ok) expect(roundTrip.value).toBe(measurement);
+    }
   });
 
   it('rejects a leading zero and other malformed numbers', () => {
@@ -172,7 +182,7 @@ describe('strict JSON parser — never throws, always returns a result', () => {
     return false;
   }
 
-  it('round-trips every accepted JSON value and rejects only named nonportable cases', () => {
+  it('round-trips every accepted JSON value through ordinary ECMAScript emission', () => {
     fc.assert(
       fc.property(fc.jsonValue(), (value) => {
         const text = JSON.stringify(value);
@@ -183,12 +193,7 @@ describe('strict JSON parser — never throws, always returns a result', () => {
           // Rejected on purpose — prototype pollution is not a value Cortexel accepts.
           return !result.ok;
         }
-        if (!result.ok) {
-          // JSON.stringify can emit an already-rounded JS number as a bare integer token
-          // outside I-JSON's safe range. The raw boundary intentionally refuses that
-          // spelling because an exact-integer reader would see a different value.
-          return result.errors.some((error) => error.code === 'JSON_INTEGER_OUT_OF_RANGE');
-        }
+        if (!result.ok) return false;
         return JSON.stringify(result.value) === text;
       }),
       { numRuns: 2000 },

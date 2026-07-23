@@ -55,6 +55,8 @@ Cortexel renders untrusted, agent-emitted `VizSpec` payloads. Relevant concerns:
   line-oriented prompt text. Public diagnostics are count-, path-, message-, and
   aggregate-size bounded to avoid validation-error amplification.
 
-Cortexel performs no network, filesystem, `eval`, Blob-worker, or implicit font
-CDN operations at runtime. The knowledge-graph label uses a local CanvasTexture;
-hosts remain in control of any assets their injected renderer chooses to load.
+Cortexel performs no implicit network, `eval`, Blob-worker, or font-CDN operations at
+runtime. FigureRequest validation reads only the module-relative packaged contract;
+the offline CLI performs only the bounded filesystem operations the caller explicitly
+requests. The knowledge-graph label uses a local CanvasTexture, and hosts remain in
+control of any assets their injected renderer chooses to load.

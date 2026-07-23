@@ -7,8 +7,9 @@
  *
  * Two properties matter most:
  *
- *   Determinism. No clock, no random id, no locale. Element ids derive from the artifact
- *   digest and a local counter, never from React's useId or a UUID. Attribute order is
+ *   Determinism. No clock, no random id, no locale. Element ids derive from the canonical
+ *   request digest plus deterministic local ids. Using the artifact digest would be cyclic
+ *   because the artifact binds these SVG bytes. They never derive from React's useId or a UUID. Attribute order is
  *   fixed. Coordinates use the fixed formatter. There is no generator timestamp — one
  *   would make two identical figures hash two ways.
  *
@@ -29,7 +30,76 @@ import type {
 } from './model/renderPlan.js';
 import { formatCoordinate } from './format.js';
 import { THEMES } from '../generated/catalog.js';
-import { LEGEND_ROW_HEIGHT, legendColumnCount, legendStartY } from './layout.js';
+import { ARTIFACT_CONTRACT } from '../generated/identity.js';
+import {
+  DISCLOSURE_BOTTOM_PADDING,
+  DISCLOSURE_FONT_SIZE,
+  DISCLOSURE_HORIZONTAL_INSET,
+  DISCLOSURE_LINE_HEIGHT,
+  LEGEND_ROW_HEIGHT,
+  disclosureLineCount,
+  disclosureRenderedTextLength,
+  legendColumnCount,
+  legendStartY,
+  wrapDisclosureText,
+} from './layout.js';
+
+/** A closed-plan geometry contradiction. Serialization never repairs or drops it. */
+export class RenderPlanGeometryError extends Error {
+  constructor(
+    readonly panelId: string,
+    readonly markPath: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RenderPlanGeometryError';
+  }
+}
+
+function assertArrowGeometry(
+  marks: readonly Mark[],
+  panelId: string,
+  prefix = 'marks',
+): void {
+  for (let markIndex = 0; markIndex < marks.length; markIndex++) {
+    const mark = marks[markIndex];
+    const markPath = `${prefix}/${markIndex}`;
+    if (mark.type === 'group') {
+      assertArrowGeometry(mark.marks, panelId, `${markPath}/marks`);
+      continue;
+    }
+    if (mark.type !== 'arrow') continue;
+    if (!Number.isFinite(mark.size) || !(mark.size > 0)) {
+      throw new RenderPlanGeometryError(
+        panelId,
+        `${markPath}/size`,
+        `arrow size must be finite and strictly positive; got ${String(mark.size)}`,
+      );
+    }
+    for (let arrowIndex = 0; arrowIndex < mark.arrows.length; arrowIndex++) {
+      const arrow = mark.arrows[arrowIndex];
+      if (![arrow.from.x, arrow.from.y, arrow.to.x, arrow.to.y].every(Number.isFinite)) {
+        throw new RenderPlanGeometryError(
+          panelId,
+          `${markPath}/arrows/${arrowIndex}`,
+          'arrow endpoints must contain four finite coordinates',
+        );
+      }
+      if (arrow.from.x === arrow.to.x && arrow.from.y === arrow.to.y) {
+        throw new RenderPlanGeometryError(
+          panelId,
+          `${markPath}/arrows/${arrowIndex}`,
+          'arrow endpoints are identical, so direction is undefined',
+        );
+      }
+    }
+  }
+}
+
+/** Validate direction-bearing geometry before resource accounting or byte emission. */
+export function assertRenderPlanGeometry(plan: RenderPlanV1): void {
+  for (const panel of plan.panels) assertArrowGeometry(panel.marks, panel.id);
+}
 
 /** Escape text content: the five XML text-significant characters. */
 function escapeText(value: string): string {
@@ -162,6 +232,39 @@ function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>)
       ];
       if (mark.dash && mark.dash !== 'none') attrs.push(['stroke-dasharray', mark.dash]);
       writer.leaf('path', attrs);
+      break;
+    }
+    case 'arrow': {
+      for (const arrow of mark.arrows) {
+        const dx = arrow.to.x - arrow.from.x;
+        const dy = arrow.to.y - arrow.from.y;
+        const length = Math.hypot(dx, dy);
+        if (!(length > 0) || !Number.isFinite(length)) {
+          throw new RenderPlanGeometryError(
+            'unknown',
+            'marks/arrow',
+            'arrow direction became non-finite or degenerate during serialization',
+          );
+        }
+        const ux = dx / length;
+        const uy = dy / length;
+        const bx = arrow.to.x - ux * mark.size;
+        const by = arrow.to.y - uy * mark.size;
+        const halfWidth = mark.size * 0.58;
+        const px = -uy * halfWidth;
+        const py = ux * halfWidth;
+        const d = [
+          `M${formatCoordinate(arrow.to.x)},${formatCoordinate(arrow.to.y)}`,
+          `L${formatCoordinate(bx + px)},${formatCoordinate(by + py)}`,
+          `L${formatCoordinate(bx - px)},${formatCoordinate(by - py)} Z`,
+        ].join(' ');
+        writer.leaf('path', [
+          ['d', d],
+          ['fill', mark.fill],
+          ['stroke', mark.fill],
+          ['stroke-width', 1],
+        ]);
+      }
       break;
     }
     case 'path': {
@@ -407,6 +510,9 @@ function countMarks(marks: readonly Mark[]): { marks: number; texts: number } {
           // renderer actually draws one path.
           if (mark.subpaths.some((subpath) => subpath.length > 0)) markCount++;
           break;
+        case 'arrow':
+          markCount += mark.arrows.length;
+          break;
         case 'point':
           markCount += mark.points.length;
           break;
@@ -435,9 +541,13 @@ export function countPlanResources(plan: RenderPlanV1): {
   readonly markCount: number;
   readonly textCount: number;
 } {
+  assertRenderPlanGeometry(plan);
   let markCount = 0;
   // The visible figure title is a `<text>` node; SVG `<title>` and `<desc>` are not.
-  let textCount = 1 + (plan.subtitle ? 1 : 0) + plan.disclosures.length;
+  let textCount =
+    1 +
+    (plan.subtitle ? 1 : 0) +
+    disclosureLineCount(plan.width, plan.disclosures);
 
   for (const panel of plan.panels) {
     if (panel.label) textCount++;
@@ -463,6 +573,7 @@ export function renderSvg(
   plan: RenderPlanV1,
   digestOf: (text: string) => string,
 ): SvgReport {
+  assertRenderPlanGeometry(plan);
   const colors = theme(plan.themeId);
   const writer = new SvgWriter();
 
@@ -483,7 +594,7 @@ export function renderSvg(
   // A compact, non-sensitive metadata block. Public identities only — no raw source
   // data, no local path, no token, no prompt.
   writer.open('metadata');
-  writer.text('cortexel:contract', 'cortexel-figure-artifact/1.0');
+  writer.text('cortexel:contract', ARTIFACT_CONTRACT);
   writer.text('cortexel:skill', plan.skillId);
   writer.text('cortexel:requestDigest', plan.sourceRequestDigest);
   writer.close('metadata');
@@ -628,21 +739,36 @@ export function renderSvg(
   }
 
   // Disclosures in normal flow at the foot of the figure, where they cannot be covered by
-  // data. The same text is in the artifact and the accessible description.
-  let disclosureY = plan.height - plan.disclosures.length * 14 - 6;
+  // data. Every line is an exact substring of the registry text, and the enclosing group
+  // carries that complete text for deterministic extraction. `textLength` makes the
+  // horizontal bound independent of host font metrics.
+  const footerLineCount = disclosureLineCount(plan.width, plan.disclosures);
+  let disclosureY =
+    plan.height - footerLineCount * DISCLOSURE_LINE_HEIGHT - DISCLOSURE_BOTTOM_PADDING;
   writer.open('g', [['data-disclosures', 'true']]);
   for (const disclosure of plan.disclosures) {
-    emitText(writer, {
-      type: 'text',
-      x: 24,
-      y: disclosureY,
-      text: disclosure.text,
-      anchor: 'start',
-      fontSize: 10,
-      fill: disclosure.severity === 'critical' ? colors.error : colors.mutedText,
-      decorative: true,
-    });
-    disclosureY += 14;
+    writer.open('g', [
+      ['data-disclosure-id', disclosure.id],
+      ['data-disclosure-text', disclosure.text],
+    ]);
+    const lines = wrapDisclosureText(disclosure.text, plan.width);
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      writer.text('text', line, [
+        ['x', DISCLOSURE_HORIZONTAL_INSET],
+        ['y', formatCoordinate(disclosureY)],
+        ['text-anchor', 'start'],
+        ['font-size', DISCLOSURE_FONT_SIZE],
+        ['fill', disclosure.severity === 'critical' ? colors.error : colors.mutedText],
+        ['font-family', 'sans-serif'],
+        ['textLength', formatCoordinate(disclosureRenderedTextLength(line, plan.width))],
+        ['lengthAdjust', 'spacingAndGlyphs'],
+        ['data-disclosure-line', index],
+        ['aria-hidden', 'true'],
+      ]);
+      disclosureY += DISCLOSURE_LINE_HEIGHT;
+    }
+    writer.close('g');
   }
   writer.close('g');
 

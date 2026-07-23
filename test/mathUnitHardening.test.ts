@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 
@@ -16,9 +19,21 @@ import {
   materializeCenteredLagBins,
   materializeWidthBins,
 } from '../src/core/binning.js';
+import {
+  exactRationalToBinary64,
+  finiteBinary64ToMinSubnormalUnits,
+} from '../src/core/exact-binary64.js';
 import { topologyScopeSupportsClaim } from '../src/core/semantics/topology.js';
-import { eventsWithinWindow } from '../src/core/semantics/events.js';
-import { unitCanonicalCode, unitDimensionMatch } from '../src/core/semantics/units.js';
+import {
+  eventsSourceClockDeclared,
+  eventsWithinWindow,
+  windowValid,
+} from '../src/core/semantics/events.js';
+import {
+  UNIT_CODE_PROPERTY_NAMES,
+  unitCanonicalCode,
+  unitDimensionMatch,
+} from '../src/core/semantics/units.js';
 import {
   axesAreCompatible,
   conversionFactor,
@@ -32,9 +47,72 @@ import {
   resolveAlias,
   unitLabel,
 } from '../src/core/units.js';
-import { UNIT_CODES, UNITS } from '../src/generated/registry.js';
+import {
+  NUMERIC_ALGORITHMS,
+  NUMERIC_POLICIES,
+  UNIT_CODES,
+  UNITS,
+} from '../src/generated/registry.js';
+
+const REPO = path.resolve(import.meta.dirname, '..');
+const UNIT_CODE_REFS = new Set([
+  '#/$defs/unitCode',
+  'https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode',
+]);
+
+function collectUnitCodePropertyNames(
+  node: unknown,
+  propertyName: string | undefined,
+  found: Set<string>,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) collectUnitCodePropertyNames(child, propertyName, found);
+    return;
+  }
+  if (node === null || typeof node !== 'object') return;
+  const record = node as Record<string, unknown>;
+  if (typeof record.$ref === 'string' && UNIT_CODE_REFS.has(record.$ref)) {
+    if (propertyName === undefined) {
+      throw new Error('a direct unitCode reference is not owned by a schema property');
+    }
+    found.add(propertyName);
+  }
+  for (const [keyword, child] of Object.entries(record)) {
+    if (keyword === 'properties' && child !== null && typeof child === 'object' && !Array.isArray(child)) {
+      for (const [name, propertySchema] of Object.entries(child as Record<string, unknown>)) {
+        collectUnitCodePropertyNames(propertySchema, name, found);
+      }
+    } else {
+      collectUnitCodePropertyNames(child, propertyName, found);
+    }
+  }
+}
 
 describe('unit conversion hardening', () => {
+  it('closes every direct unitCode schema property over the semantic walker vocabulary', () => {
+    const schemas: unknown[] = [
+      JSON.parse(readFileSync(path.join(REPO, 'contract/schemas/common.v1.schema.json'), 'utf8')),
+      ...readdirSync(path.join(REPO, 'contract/skills'))
+        .filter((filename) => filename.endsWith('.json'))
+        .sort()
+        .map((filename) => {
+          const source = JSON.parse(
+            readFileSync(path.join(REPO, 'contract/skills', filename), 'utf8'),
+          ) as { requestSchema: unknown };
+          return source.requestSchema;
+        }),
+    ];
+    const observed = new Set<string>();
+    for (const schema of schemas) collectUnitCodePropertyNames(schema, undefined, observed);
+
+    expect([...UNIT_CODE_PROPERTY_NAMES]).toEqual([
+      'alignmentUnit',
+      'unit',
+      'valueUnit',
+    ]);
+    expect([...observed].sort()).toEqual([...UNIT_CODE_PROPERTY_NAMES]);
+  });
+
   it('walks quantity and bare-unit claims at every accepted request depth', () => {
     let mismatched: unknown = { kind: 'time', unit: 'mV', values: [1] };
     let aliased: unknown = { unit: 'milliseconds' };
@@ -142,6 +220,170 @@ describe('unit conversion hardening', () => {
     );
   });
 
+  it('honors every declared event-window closure and deliberate exclusion', () => {
+    const validate = (
+      boundary: '[start,stop)' | '[start,stop]' | '(start,stop]',
+      values: number[],
+      outOfWindowPolicy: 'reject' | 'exclude_and_disclose' = 'reject',
+    ) =>
+      eventsWithinWindow({
+        request: {
+          data: {
+            window: { start: 0, stop: 1, unit: 'ms', boundary },
+            eventTimes: { values, unit: 'ms' },
+          },
+          parameters: { outOfWindowPolicy },
+        },
+        skillId: 'test.events',
+      });
+
+    expect(validate('[start,stop)', [0])).toEqual([]);
+    expect(validate('[start,stop)', [1])[0]?.code).toBe('SCIENCE_EVENT_OUT_OF_WINDOW');
+    expect(validate('[start,stop]', [0, 1])).toEqual([]);
+    expect(validate('(start,stop]', [0])[0]?.code).toBe('SCIENCE_EVENT_OUT_OF_WINDOW');
+    expect(validate('(start,stop]', [1])).toEqual([]);
+    expect(validate('[start,stop)', [-1, 2], 'exclude_and_disclose')).toEqual([]);
+  });
+
+  it('compares NEST origin-relative open-start and closed-stop bounds exactly', () => {
+    const validate = (values: number[]) =>
+      eventsWithinWindow({
+        request: {
+          data: {
+            window: {
+              kind: 'nest_recording_device_origin_relative',
+              origin: 100,
+              start: 10,
+              stop: 20,
+              unit: 'ms',
+              boundary: '(origin+start,origin+stop]',
+              recordingBackend: 'memory',
+              timeEncoding: 'native_binary64_ms',
+            },
+            eventTimes: { values, unit: 'ms' },
+          },
+          parameters: { outOfWindowPolicy: 'reject' },
+        },
+        skillId: 'neuro.spike_raster',
+      });
+
+    expect(validate([110])[0]?.code).toBe('SCIENCE_EVENT_OUT_OF_WINDOW');
+    expect(validate([110.00000000000001])).toEqual([]);
+    expect(validate([120])).toEqual([]);
+    expect(validate([120.00000000000001])[0]?.code).toBe('SCIENCE_EVENT_OUT_OF_WINDOW');
+  });
+
+  it('refuses a NEST window whose exact endpoint sums collapse for display', () => {
+    const errors = windowValid({
+      request: {
+        data: {
+          window: {
+            kind: 'nest_recording_device_origin_relative',
+            origin: 2 ** 53,
+            start: 0,
+            stop: 1,
+            unit: 'ms',
+          },
+        },
+      },
+      skillId: 'neuro.spike_raster',
+      parameters: { pointer: '/data/window', unitDimension: 'time' },
+    });
+    expect(errors.map((error) => error.code)).toEqual([
+      'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+    ]);
+    expect(
+      windowValid({
+        request: {
+          data: {
+            window: { start: 0, stop: Number.POSITIVE_INFINITY, unit: 'ms' },
+          },
+        },
+        skillId: 'test.events',
+        parameters: { pointer: '/data/window', unitDimension: 'time' },
+      }).map((error) => error.code),
+    ).toEqual(['SCIENCE_WINDOW_INVALID']);
+  });
+
+  it('binds NEST origin-relative clocks to the revision-2-admitted source declaration', () => {
+    const request = (systemVersion: string): Record<string, unknown> => ({
+      data: {
+        timeBase: 'absolute_clock',
+        window: {
+          kind: 'nest_recording_device_origin_relative',
+          origin: 100,
+          start: 0,
+          stop: 10,
+          unit: 'ms',
+          boundary: '(origin+start,origin+stop]',
+          recordingBackend: 'memory',
+          timeEncoding: 'native_binary64_ms',
+        },
+        eventTimes: { values: [101], unit: 'ms' },
+      },
+      source: {
+        kind: 'simulation',
+        system: 'NEST',
+        systemVersion,
+        sourceDigest: `sha256:${'0'.repeat(64)}`,
+      },
+    });
+
+    expect(
+      eventsSourceClockDeclared({
+        request: {
+          data: {
+            window: { start: 0, stop: 1, unit: 'ms', boundary: '[start,stop)' },
+            eventTimes: { values: [0], unit: 'ms' },
+          },
+          source: { kind: 'unknown' },
+        },
+        skillId: 'neuro.spike_raster',
+      }),
+    ).toEqual([]);
+
+    for (const version of ['3.9', '3.9.7', '3.10', '3.10.4']) {
+      expect(
+        eventsSourceClockDeclared({
+          request: request(version),
+          skillId: 'neuro.spike_raster',
+        }),
+      ).toEqual([]);
+    }
+    for (const version of ['3.8.9', '3.10.0.1', '3.10.0-rc1', '3.11']) {
+      expect(
+        eventsSourceClockDeclared({
+          request: request(version),
+          skillId: 'neuro.spike_raster',
+        }).map((error) => error.instancePath),
+      ).toContain('/source/systemVersion');
+    }
+
+    const inconsistent = request('3.10') as {
+      data: { window: Record<string, unknown>; eventTimes: Record<string, unknown> };
+      source: Record<string, unknown>;
+    };
+    inconsistent.source.kind = 'unknown';
+    inconsistent.source.system = 'nest';
+    inconsistent.source.sourceDigest = `sha256:${'A'.repeat(64)}`;
+    inconsistent.data.window.recordingBackend = 'ascii';
+    inconsistent.data.window.timeEncoding = 'steps_and_offsets';
+    inconsistent.data.eventTimes.unit = 's';
+    expect(
+      eventsSourceClockDeclared({
+        request: inconsistent,
+        skillId: 'neuro.spike_raster',
+      }).map((error) => error.instancePath),
+    ).toEqual([
+      '/source/kind',
+      '/source/system',
+      '/source/sourceDigest',
+      '/data/window/recordingBackend',
+      '/data/window/timeEncoding',
+      '/data/eventTimes/unit',
+    ]);
+  });
+
   it('rejects unknown and hostile runtime values without coercing them', () => {
     const traps = { count: 0 };
     const hostile = new Proxy(
@@ -197,7 +439,56 @@ describe('unit conversion hardening', () => {
   });
 });
 
-describe('bounded binary64 bin materialization', () => {
+describe('bounded binary64 nominal interval-candidate materialization', () => {
+  it('executes every normative nominal-candidate conformance vector', () => {
+    const policy = NUMERIC_POLICIES.cortexel_binary64_uniform_exposure_bins_v1;
+    expect(policy.algorithm).toBe('cortexel_binary64_nominal_interval_candidates_v1');
+    expect(NUMERIC_POLICIES.cortexel_binary64_nominal_steps_v1.algorithm).toBe(policy.algorithm);
+    expect(policy.intervalExposure).toBe(
+      'require_every_exact_physical_endpoint_difference_to_equal_original_typed_width',
+    );
+    expect(NUMERIC_POLICIES.cortexel_binary64_nominal_steps_v1.intervalExposure).toBe(
+      'emitted_coordinates_authoritative_no_equal_exposure_claim',
+    );
+    const algorithm = NUMERIC_ALGORITHMS[policy.algorithm];
+    expect(algorithm.constants).toEqual({
+      binary64MinSubnormalExponent: -1074,
+      binary64Epsilon: Number.EPSILON,
+      quotientToleranceEpsilonMultiplier: 8,
+      endpointToleranceEpsilonMultiplier: 8,
+      maximumMaterializedIntervals: MAX_MATERIALIZED_BINS,
+      maximumSafeInteger: Number.MAX_SAFE_INTEGER,
+      roundingMode: 'roundTiesToEven',
+    });
+
+    for (const vector of algorithm.conformanceVectors) {
+      const result = materializeWidthBins(
+        vector.input.start,
+        vector.input.stop,
+        vector.input.width,
+      );
+      if (vector.result.accepted) {
+        expect(result.ok, vector.name).toBe(true);
+        if (!result.ok) continue;
+        expect(result.edges.length - 1, vector.name).toBe(vector.result.intervalCount);
+        if ('edges' in vector.result) {
+          expect(result.edges, vector.name).toEqual(vector.result.edges);
+        } else {
+          for (const assertion of vector.result.edgeAssertions) {
+            expect(result.edges[assertion.index], `${vector.name} edge ${assertion.index}`).toBe(
+              assertion.value,
+            );
+          }
+        }
+      } else {
+        expect(result, vector.name).toEqual({
+          ok: false,
+          reason: vector.result.failureClass,
+        });
+      }
+    }
+  });
+
   it('materializes exact half-open tilings and accepts ordinary decimal roundoff', () => {
     expect(materializeWidthBins(0, 1, 0.25)).toEqual({
       ok: true,
@@ -207,6 +498,11 @@ describe('bounded binary64 bin materialization', () => {
       ok: true,
       edges: [0, 0.1, 0.2, 0.3],
     });
+    const negativeZeroOrigin = materializeWidthBins(-0, 0.3, 0.1);
+    expect(negativeZeroOrigin.ok).toBe(true);
+    if (!negativeZeroOrigin.ok) throw new Error('expected a canonicalized zero origin');
+    expect(Object.is(negativeZeroOrigin.edges[0], 0)).toBe(true);
+    expect(Object.is(negativeZeroOrigin.edges[0], -0)).toBe(false);
 
     const materialized = materializeWidthBins(0, 1, 0.25);
     expect(materialized.ok).toBe(true);
@@ -249,7 +545,16 @@ describe('bounded binary64 bin materialization', () => {
     });
 
     const hostile = new Proxy({}, { get: () => { throw new Error('must not coerce'); } });
-    for (const value of [undefined, null, '1', hostile, Number.NaN, Number.POSITIVE_INFINITY]) {
+    for (const value of [
+      undefined,
+      null,
+      '1',
+      1n,
+      hostile,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
       expect(() => materializeWidthBins(value as never, 1, 0.5)).not.toThrow();
       expect(materializeWidthBins(value as never, 1, 0.5)).toEqual({
         ok: false,
@@ -309,6 +614,38 @@ describe('bounded binary64 bin materialization', () => {
       ),
       { numRuns: 500 },
     );
+  }, 30_000);
+
+  it('checks the safe-integer representation theorem against the universal grid', () => {
+    // Algebraic proof: for each safe integer x, finiteBinary64ToMinSubnormalUnits(x)
+    // is x*2^1074, hence x*2^0 = (x*2^1074)*2^-1074. Multiplying start, stop,
+    // and width by that same factor leaves (stop-start)/width unchanged, and the
+    // exponent exactly cancels the factor for every reconstructed edge. The
+    // property below tests both implementation premises across the domain; it is
+    // corroboration of that identity, not a claim that random sampling is a proof.
+    fc.assert(
+      fc.property(
+        fc.integer({ min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }),
+        (value) => {
+          const universalCoefficient = finiteBinary64ToMinSubnormalUnits(value);
+          expect(universalCoefficient).toBe(BigInt(value) << 1074n);
+          expect(exactRationalToBinary64(BigInt(value), 1n)).toBe(
+            exactRationalToBinary64(universalCoefficient, 1n, -1074),
+          );
+        },
+      ),
+      {
+        examples: [
+          [Number.MIN_SAFE_INTEGER],
+          [-1],
+          [-0],
+          [0],
+          [1],
+          [Number.MAX_SAFE_INTEGER],
+        ],
+        numRuns: 1_000,
+      },
+    );
   });
 });
 
@@ -348,7 +685,7 @@ function bruteCorrelogram(
 describe('bounded optimized correlogram', () => {
   const comparisonBins: Bins = {
     edges: [-4, -2, -0.5, 0, 0.5, 2, 4],
-    finalEdgeInclusive: true,
+    finalEdgeInclusive: false,
   };
 
   it('agrees exactly with a quadratic oracle on randomized bounded trains', () => {
@@ -372,14 +709,18 @@ describe('bounded optimized correlogram', () => {
     );
   });
 
-  it('uses the documented internal and final-edge boundary convention exactly', () => {
+  it('uses left-closed/right-open bins and excludes the positive outer edge', () => {
     const inclusive: Bins = { edges: [-2, -1, 0, 1, 2], finalEdgeInclusive: true };
     const exclusive: Bins = { ...inclusive, finalEdgeInclusive: false };
     const target = [-2, -1, 0, 1, 2];
 
-    expect(computeCorrelogram([0], target, inclusive, 'cross').counts).toEqual([1, 1, 1, 2]);
+    expect(() => computeCorrelogram([0], target, inclusive, 'cross')).toThrow(
+      'finalEdgeInclusive must be false',
+    );
+    expect(() => countEligibleCorrelogramPairs([0], target, inclusive, 'cross')).toThrow(
+      'finalEdgeInclusive must be false',
+    );
     expect(computeCorrelogram([0], target, exclusive, 'cross').counts).toEqual([1, 1, 1, 1]);
-    expect(countEligibleCorrelogramPairs([0], target, inclusive, 'cross')).toBe(5);
     expect(countEligibleCorrelogramPairs([0], target, exclusive, 'cross')).toBe(4);
   });
 
@@ -398,7 +739,7 @@ describe('bounded optimized correlogram', () => {
       computeCorrelogram(
         threeCoincidentEvents,
         threeCoincidentEvents,
-        { edges: [-1, 1], finalEdgeInclusive: true },
+        { edges: [-1, 1], finalEdgeInclusive: false },
         'cross',
         3,
       ),
@@ -408,7 +749,7 @@ describe('bounded optimized correlogram', () => {
       computeCorrelogram(
         threeCoincidentEvents,
         threeCoincidentEvents,
-        { edges: [-1, 1], finalEdgeInclusive: true },
+        { edges: [-1, 1], finalEdgeInclusive: false },
         'cross',
         3,
       );
@@ -422,7 +763,7 @@ describe('bounded optimized correlogram', () => {
       countEligibleCorrelogramPairs(
         threeCoincidentEvents,
         threeCoincidentEvents,
-        { edges: [-1, 1], finalEdgeInclusive: true },
+        { edges: [-1, 1], finalEdgeInclusive: false },
         'cross',
         3,
       ),

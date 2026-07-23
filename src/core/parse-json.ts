@@ -476,17 +476,22 @@ class Scanner {
         'the number is outside the finite binary64 model; use null for a missing observation',
       );
     }
-    // A bare integer token is exact syntax. Above the I-JSON safe range, Python keeps
-    // that exact integer while JavaScript immediately rounds it to binary64, so the two
-    // readers can digest different values. Exponential/decimal notation denotes a
-    // binary64 measurement and remains in the RFC 8785 domain (for example 1e21).
+    // A bare integer token is ordinarily exact syntax. Above the I-JSON safe range,
+    // Python keeps that exact integer while JavaScript immediately rounds it to
+    // binary64, so a non-canonical spelling can make the two readers digest different
+    // values. There is one necessary exception: RFC 8785 itself emits some finite
+    // binary64 measurements as bare integers (for example 2**68). Accept that spelling
+    // only when it is exactly the ECMAScript canonical serialization of the parsed
+    // binary64 value. This makes parse -> JCS emit -> parse closed while still rejecting
+    // 9007199254740993, which rounds to a differently spelled 9007199254740992.
     if (!/[.eE]/u.test(token)) {
       const integer = BigInt(token);
       const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
-      if (integer < -maxSafe || integer > maxSafe) {
+      const isCanonicalBinary64Spelling = JSON.stringify(value) === token;
+      if ((integer < -maxSafe || integer > maxSafe) && !isCanonicalBinary64Spelling) {
         this.fail(
           'JSON_INTEGER_OUT_OF_RANGE',
-          'the bare integer token is outside the interoperable exact range -(2^53-1)..+(2^53-1); encode a non-arithmetic identifier as a string',
+          'the unsafe bare integer is not the canonical spelling of its parsed binary64 value; use an exact safe integer, the canonical binary64 measurement spelling, or a string identifier',
         );
       }
     }

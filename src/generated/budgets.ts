@@ -33,9 +33,8 @@ export const BUDGET_PROFILES = freezeGenerated({
     "svgTextNodes": 20000,
     "svgBytes": 20971520,
     "sidecarBytes": 104857600,
-    "inlineTableRows": 500,
-    "errorRecords": 32,
-    "bundlePanels": 8
+    "returnedTableRows": 500,
+    "errorRecords": 32
   },
   "agent": {
     "rawInputBytes": 4194304,
@@ -55,9 +54,8 @@ export const BUDGET_PROFILES = freezeGenerated({
     "svgTextNodes": 5000,
     "svgBytes": 5242880,
     "sidecarBytes": 20971520,
-    "inlineTableRows": 200,
-    "errorRecords": 32,
-    "bundlePanels": 8
+    "returnedTableRows": 200,
+    "errorRecords": 32
   }
 }) as Readonly<Record<BudgetProfileId, Readonly<Record<string, number>>>>;
 

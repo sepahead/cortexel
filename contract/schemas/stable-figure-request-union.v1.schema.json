@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/stable-figure-request-union.v1.schema.json",
+  "title": "Stable FigureRequestV1 per-skill union (generated)",
+  "description": "GENERATED from the stable skill catalog. A request matches exactly one complete closed per-skill schema; this is the structural authority embedded by FigureArtifactV1.",
+  "oneOf": [
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.adjacency_matrix.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.connection_graph.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.degree_distribution.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_distribution.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_matrix.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.spatial_map_2d.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.synaptic_weight_trace.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_distribution.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_matrix.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.analog_trace.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.compartment_trace.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.correlogram.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.isi_distribution.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.multisignal_trace.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.phase_plane.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.population_rate.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.psth.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.response_curve.request.v1.schema.json"
+    },
+    {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.spike_raster.request.v1.schema.json"
+    }
+  ]
+}

@@ -1,11 +1,8 @@
 /**
- * `cortexel` — the root entry.
+ * Internal convenience re-export for source development.
  *
- * The root re-exports ONLY the pure core. A server-side `import "cortexel"` therefore
- * never reaches React, Three, D3, or a browser API. The rendering and experimental
- * surfaces live behind their own explicit subpaths (`cortexel/render-svg`,
- * `cortexel/react`, `cortexel/experimental/*`), so choosing them is deliberate rather
- * than accidental.
+ * It is intentionally not the package root: `cortexel` remains the legacy VizSpec
+ * surface. FigureRequestV1 is installed at the additive `cortexel/figure` subpath.
  */
 
 export * from './core/index.js';

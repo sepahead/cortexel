@@ -20,28 +20,59 @@ function built(request: Record<string, unknown>) {
   return result;
 }
 
+function tableProjection(
+  result: ReturnType<typeof built>,
+  keys: readonly string[],
+): unknown[][] {
+  const indexes = keys.map((key) => {
+    const index = result.table.columns.findIndex((column) => column.key === key);
+    if (index < 0) throw new Error(`table has no column ${key}`);
+    return index;
+  });
+  return result.table.rows.map((row) => indexes.map((index) => row[index]));
+}
+
+function operationReceipt(result: ReturnType<typeof built>): Record<string, unknown> {
+  const operations = (result.artifact.derivation as {
+    operations: { receipt: Record<string, unknown> }[];
+  }).operations;
+  expect(operations).toHaveLength(1);
+  return operations[0].receipt;
+}
+
 describe('specialized compilers preserve scientific units and declared binning', () => {
   it('derives population rates from counts in Hz for both raw and prebinned inputs', () => {
     const examples = validExamples('neuro.population_rate');
-    expect(built(examples[0]).table.rows).toEqual([
+    const events = built(examples[0]);
+    expect(tableProjection(events, ['binStart', 'binEnd', 'rate'])).toEqual([
       [0, 5, 250],
       [5, 10, 50],
     ]);
+    expect(events.disclosures.map((disclosure) => disclosure.id)).toContain('UNIT_CONVERTED');
+    expect(operationReceipt(events)).toMatchObject({
+      binWidthConversion: { from: 'ms', to: 's' },
+    });
     const prebinned = built(examples[1]);
-    expect(prebinned.table.rows).toEqual([
+    expect(tableProjection(prebinned, ['binStart', 'binEnd', 'rate'])).toEqual([
       [0, 5, 250],
       [5, 10, 50],
     ]);
     expect(prebinned.disclosures.map((disclosure) => disclosure.id)).toContain(
       'PRE_BINNED_INPUT',
     );
-    expect(built(examples[0]).disclosures.map((disclosure) => disclosure.id)).not.toContain(
+    expect(prebinned.disclosures.map((disclosure) => disclosure.id)).toContain(
+      'UNIT_CONVERTED',
+    );
+    expect(operationReceipt(prebinned)).toMatchObject({
+      binWidthConversion: { from: 'ms', to: 's' },
+    });
+    expect(events.disclosures.map((disclosure) => disclosure.id)).not.toContain(
       'PRE_BINNED_INPUT',
     );
 
     const withoutSuppliedRates = structuredClone(examples[1]);
     delete withoutSuppliedRates.data.rates;
-    expect(built(withoutSuppliedRates).table.rows).toEqual([
+    expect(tableProjection(built(withoutSuppliedRates), ['binStart', 'binEnd', 'rate'])).toEqual([
       [0, 5, 250],
       [5, 10, 50],
     ]);
@@ -49,10 +80,18 @@ describe('specialized compilers preserve scientific units and declared binning',
     const oneRoundEndpointRate = structuredClone(examples[1]);
     oneRoundEndpointRate.data.binEdges.edges = [0, 0.3];
     oneRoundEndpointRate.data.counts = [3];
+    oneRoundEndpointRate.data.sourceEventCount = 3;
+    oneRoundEndpointRate.data.recordedSenderIds = Array.from(
+      { length: 10 },
+      (_value, index) => `sender-${index}`,
+    );
     oneRoundEndpointRate.data.recordedSenderCount = 10;
     oneRoundEndpointRate.data.rates.values = [1000];
     oneRoundEndpointRate.data.window.stop = 0.3;
-    expect(built(oneRoundEndpointRate).table.rows).toEqual([[0, 0.3, 1000]]);
+    expect(tableProjection(
+      built(oneRoundEndpointRate),
+      ['binStart', 'binEnd', 'rate'],
+    )).toEqual([[0, 0.3, 1000]]);
   });
 
   it('binds population bin outer edges exactly to the cross-unit observation window', () => {
@@ -71,8 +110,13 @@ describe('specialized compilers preserve scientific units and declared binning',
       width: 500,
       start: 0,
       stop: 1000,
+      boundary: '[lo,hi)',
+      finalEdgeInclusive: false,
     };
-    expect(built(eventCrossUnit).table.rows).toEqual([
+    expect(tableProjection(
+      built(eventCrossUnit),
+      ['binStart', 'binEnd', 'rate'],
+    )).toEqual([
       [0, 500, 3],
       [500, 1000, 0],
     ]);
@@ -80,6 +124,7 @@ describe('specialized compilers preserve scientific units and declared binning',
     const prebinnedCrossUnit = structuredClone(examples[1]);
     prebinnedCrossUnit.data.binEdges = { unit: 'ms', edges: [0, 1000] };
     prebinnedCrossUnit.data.counts = [5];
+    prebinnedCrossUnit.data.sourceEventCount = 5;
     prebinnedCrossUnit.data.window = {
       start: 0,
       stop: 1,
@@ -87,7 +132,10 @@ describe('specialized compilers preserve scientific units and declared binning',
       boundary: '[start,stop)',
     };
     delete prebinnedCrossUnit.data.rates;
-    expect(built(prebinnedCrossUnit).table.rows).toEqual([[0, 1000, 1.25]]);
+    expect(tableProjection(
+      built(prebinnedCrossUnit),
+      ['binStart', 'binEnd', 'rate'],
+    )).toEqual([[0, 1000, 1.25]]);
 
     // These decimal spellings round to the same binary64 after ordinary
     // conversion, but are not the same exact physical endpoint.
@@ -120,10 +168,13 @@ describe('specialized compilers preserve scientific units and declared binning',
             mode: 'edges',
             unit: 'ms',
             edges: [...boundaryCase.edges],
+            boundary: '[lo,hi)',
+            finalEdgeInclusive: false,
           };
         } else {
           mismatch.data.binEdges = { unit: 'ms', edges: [...boundaryCase.edges] };
           mismatch.data.counts = [1];
+          mismatch.data.sourceEventCount = 1;
           delete mismatch.data.rates;
         }
         const label = `${mode} ${boundaryCase.name} boundary mismatch`;
@@ -157,6 +208,8 @@ describe('specialized compilers preserve scientific units and declared binning',
       mode: 'edges',
       unit: 's',
       edges: [-Number.MAX_VALUE, Number.MAX_VALUE],
+      boundary: '[lo,hi)',
+      finalEdgeInclusive: false,
     };
     eventMode.parameters.normalization = 'total_event_rate';
 
@@ -166,6 +219,8 @@ describe('specialized compilers preserve scientific units and declared binning',
       edges: [-Number.MAX_VALUE, Number.MAX_VALUE],
     };
     prebinnedMode.data.counts = [1];
+    prebinnedMode.data.sourceEventCount = 1;
+    prebinnedMode.data.recordedSenderIds = ['1'];
     prebinnedMode.data.recordedSenderCount = 1;
     prebinnedMode.data.window = {
       start: -Number.MAX_VALUE,
@@ -205,6 +260,11 @@ describe('specialized compilers preserve scientific units and declared binning',
     expect(eventConverted.disclosures.map((disclosure) => disclosure.id)).toContain(
       'UNIT_CONVERTED',
     );
+    const eventConversionDisclosure = eventConverted.disclosures.find(
+      (disclosure) => disclosure.id === 'UNIT_CONVERTED',
+    )?.text;
+    expect(eventConversionDisclosure).toContain('population-rate event times: s -> ms');
+    expect(eventConversionDisclosure).toContain('population-rate bin widths: ms -> s');
     const derivation = eventConverted.artifact.derivation as {
       operations: { receipt: Record<string, unknown> }[];
     };
@@ -223,12 +283,17 @@ describe('specialized compilers preserve scientific units and declared binning',
     expect(convertedRates.disclosures.map((disclosure) => disclosure.id)).toContain(
       'UNIT_CONVERTED',
     );
+    const rateConversionDisclosure = convertedRates.disclosures.find(
+      (disclosure) => disclosure.id === 'UNIT_CONVERTED',
+    )?.text;
+    expect(rateConversionDisclosure).toContain('population-rate bin widths: ms -> s');
+    expect(rateConversionDisclosure).toContain('supplied population rates: kHz -> Hz');
   });
 
   it('honours every shipped ISI bin mode and normalization', () => {
     const examples = validExamples('neuro.isi_distribution');
     const eventMode = built(examples[0]);
-    expect(eventMode.table.rows).toEqual([
+    expect(tableProjection(eventMode, ['binStart', 'binEnd', 'count'])).toEqual([
       [0, 5, 0],
       [5, 10, 0],
       [10, 15, 1],
@@ -237,21 +302,32 @@ describe('specialized compilers preserve scientific units and declared binning',
     ]);
     expect((eventMode.artifact.derivation as any).operations[0].receipt).toMatchObject({
       trainCount: 6,
-      trainsWithoutInterval: 4,
+      trainsWithoutIntervalCount: 4,
     });
-    const density = built(examples[1]).table.rows;
+    const density = tableProjection(built(examples[1]), ['binStart', 'binEnd', 'density']);
     expect(density.map((row) => row.slice(0, 2))).toEqual([[2, 8], [8, 32]]);
-    expect(density[0][2]).toBeCloseTo(1 / 12, 15);
-    expect(density[1][2]).toBeCloseTo(1 / 48, 15);
+    expect(Number(density[0][2])).toBeCloseTo(1 / 12, 15);
+    expect(Number(density[1][2])).toBeCloseTo(1 / 48, 15);
     const excluded = built(examples[2]);
-    expect(excluded.table.rows).toEqual([
+    expect(tableProjection(excluded, [
+      'binStart',
+      'binEnd',
+      'probability',
+      'formedIntervalCount',
+      'binnedIntervalCount',
+      'underRangeCount',
+      'overRangeCount',
+    ])).toEqual([
       [0, 2, 0.5, 3, 2, 0, 1],
       [2, 4, 0.5, 3, 2, 0, 1],
     ]);
-    expect(excluded.plan.accessibility.summary).toContain(
-      '1 of 3 formed intervals were outside the declared histogram range',
+    expect(excluded.plan.accessibility.panelSummaries.join(' ')).toContain(
+      'Exact conservation: 3 formed intervals = 2 binned + 0 below range + 1 above range',
     );
-    expect(built(examples[3]).table.rows).toEqual([[0, 10, 0], [10, 20, 3], [20, 30, 0]]);
+    expect(tableProjection(
+      built(examples[3]),
+      ['binStart', 'binEnd', 'count'],
+    )).toEqual([[0, 10, 0], [10, 20, 3], [20, 30, 0]]);
   });
 
   it('keeps ISI results invariant under a physically equivalent event-clock unit', () => {
@@ -347,31 +423,40 @@ describe('specialized compilers preserve scientific units and declared binning',
 
   it('honours delay-distribution edges, aggregation, units, and normalization', () => {
     const examples = validExamples('network.delay_distribution');
-    expect(built(examples[0]).table.rows).toEqual([
+    expect(tableProjection(built(examples[0]), ['binStart', 'binEnd', 'count'])).toEqual([
       [0.5, 1, 0],
       [1, 1.5, 1],
       [1.5, 2, 2],
       [2, 2.5, 1],
       [2.5, 3, 0],
     ]);
-    expect(built(examples[1]).table.rows).toEqual([
-      ['static_synapse', 3, 2, 2, 0, 0, 0, 0, 0.5, 1, 0],
-      ['static_synapse', 3, 2, 2, 0, 0, 0, 0, 1, 1.5, 0.5],
-      ['static_synapse', 3, 2, 2, 0, 0, 0, 0, 1.5, 2, 0],
-      ['static_synapse', 3, 2, 2, 0, 0, 0, 0, 2, 2.5, 0.5],
-      ['stdp_synapse', 1, 1, 1, 0, 0, 0, 0, 0.5, 1, 0],
-      ['stdp_synapse', 1, 1, 1, 0, 0, 0, 0, 1, 1.5, 0],
-      ['stdp_synapse', 1, 1, 1, 0, 0, 0, 0, 1.5, 2, 1],
-      ['stdp_synapse', 1, 1, 1, 0, 0, 0, 0, 2, 2.5, 0],
+    expect(tableProjection(built(examples[1]), [
+      'groupId',
+      'consideredConnectionCount',
+      'groupObservationCount',
+      'excludedUnderRangeCount',
+      'excludedOverRangeCount',
+      'binStart',
+      'binEnd',
+      'probability',
+    ])).toEqual([
+      ['static_synapse', 3, 2, 0, 0, 0.5, 1, 0],
+      ['static_synapse', 3, 2, 0, 0, 1, 1.5, 0.5],
+      ['static_synapse', 3, 2, 0, 0, 1.5, 2, 0],
+      ['static_synapse', 3, 2, 0, 0, 2, 2.5, 0.5],
+      ['stdp_synapse', 1, 1, 0, 0, 0.5, 1, 0],
+      ['stdp_synapse', 1, 1, 0, 0, 1, 1.5, 0],
+      ['stdp_synapse', 1, 1, 0, 0, 1.5, 2, 1],
+      ['stdp_synapse', 1, 1, 0, 0, 2, 2.5, 0],
     ]);
-    expect(built(examples[2]).table.rows).toEqual([
+    expect(tableProjection(built(examples[2]), ['binStart', 'binEnd', 'density'])).toEqual([
       [0.5, 1, 0],
       [1, 1.5, 0.4],
       [1.5, 2, 1.2],
       [2, 2.5, 0.4],
       [2.5, 3, 0],
     ]);
-    expect(built(examples[3]).table.rows).toEqual([
+    expect(tableProjection(built(examples[3]), ['binStart', 'binEnd', 'count'])).toEqual([
       [0.5, 1, 0],
       [1, 1.5, 1],
       [1.5, 2, 2],
@@ -379,8 +464,8 @@ describe('specialized compilers preserve scientific units and declared binning',
     ]);
 
     const grouped = built(examples[1]);
-    expect(grouped.plan.accessibility.summary).toContain(
-      'Group static_synapse: 2 observations were formed from 3 connection rows',
+    expect(grouped.plan.accessibility.panelSummaries.join(' ')).toContain(
+      'Group static_synapse: exact conservation gives 2 non-missing observations from 3 connection rows',
     );
     const permuted = structuredClone(examples[1]);
     const order = [2, 0, 1, 3];
@@ -421,10 +506,10 @@ describe('specialized compilers preserve scientific units and declared binning',
   it('uses the contract spelling and semantics for unique-neighbor degree counts', () => {
     const request = validExamples('network.degree_distribution')[2];
     const result = built(request);
-    expect(result.table.rows).toEqual([
-      [-0.5, 0.5, 0],
-      [0.5, 1.5, 3],
-      [1.5, 2.5, 1],
+    expect(tableProjection(result, ['degreeLow', 'degreeHigh', 'nodeCount'])).toEqual([
+      [0, 0, 0],
+      [1, 1, 3],
+      [2, 2, 1],
     ]);
     expect(result.disclosures.map((disclosure) => disclosure.id)).toContain(
       'MULTAPSE_AGGREGATED',
@@ -433,17 +518,24 @@ describe('specialized compilers preserve scientific units and declared binning',
 
   it('honours weight-distribution explicit/prebinned edges and probability', () => {
     const examples = validExamples('network.weight_distribution');
-    expect(built(examples[0]).table.rows).toEqual([
+    expect(tableProjection(built(examples[0]), ['binLow', 'binHigh', 'count'])).toEqual([
       [-100, -50, 2],
       [-50, 0, 0],
       [0, 50, 4],
       [50, 100, 0],
     ]);
-    expect(built(examples[1]).table.rows).toEqual([
-      [-2, -1, 10, 102, 100, 100, 0, 0, 2, 2],
-      [-1, 0, 15, 102, 100, 100, 0, 0, 2, 2],
-      [0, 1, 40, 102, 100, 100, 0, 0, 2, 2],
-      [1, 2, 35, 102, 100, 100, 0, 0, 2, 2],
+    expect(tableProjection(built(examples[1]), [
+      'binLow',
+      'binHigh',
+      'count',
+      'sourceConnectionCount',
+      'inRangeObservationCount',
+      'missingObservationCount',
+    ])).toEqual([
+      [-2, -1, 10, 102, 100, 2],
+      [-1, 0, 15, 102, 100, 2],
+      [0, 1, 40, 102, 100, 2],
+      [1, 2, 35, 102, 100, 2],
     ]);
 
     const exactDensity = structuredClone(examples[0]);
@@ -458,12 +550,12 @@ describe('specialized compilers preserve scientific units and declared binning',
       finalEdgeInclusive: true,
     };
     exactDensity.parameters.normalization = 'density';
-    expect(built(exactDensity).table.rows[0].slice(0, 3)).toEqual([
+    expect(tableProjection(built(exactDensity), ['binLow', 'binHigh', 'value'])[0]).toEqual([
       lower,
       upper,
       8796093022208,
     ]);
-    expect(built(examples[2]).table.rows).toEqual([
+    expect(tableProjection(built(examples[2]), ['binLow', 'binHigh', 'value'])).toEqual([
       [-100, -50, 0.2],
       [-50, 0, 0.2],
       [0, 50, 0.2],
@@ -478,7 +570,7 @@ describe('specialized compilers preserve scientific units and declared binning',
     nodePairs.parameters.observationUnit = 'node_pair';
     nodePairs.parameters.aggregation = 'sum';
     const aggregated = built(nodePairs);
-    expect(aggregated.table.rows).toEqual([
+    expect(tableProjection(aggregated, ['binLow', 'binHigh', 'count'])).toEqual([
       [-100, -50, 2],
       [-50, 0, 0],
       [0, 50, 2],
@@ -497,7 +589,7 @@ describe('specialized compilers preserve scientific units and declared binning',
     const magnitudes = structuredClone(base);
     magnitudes.parameters.signTreatment = 'magnitude';
     magnitudes.parameters.bins.edges = [0, 25, 50, 75, 100];
-    expect(built(magnitudes).table.rows).toEqual([
+    expect(tableProjection(built(magnitudes), ['binLow', 'binHigh', 'count'])).toEqual([
       [0, 25, 1],
       [25, 50, 3],
       [50, 75, 1],
@@ -507,13 +599,20 @@ describe('specialized compilers preserve scientific units and declared binning',
     const missingPair = structuredClone(nodePairs);
     missingPair.data.connections.weights.values[1] = null;
     const missingBuilt = built(missingPair);
-    expect(missingBuilt.table.rows).toEqual([
-      [-100, -50, 2, 6, 4, 4, 0, 0, 1, 1],
-      [-50, 0, 0, 6, 4, 4, 0, 0, 1, 1],
-      [0, 50, 2, 6, 4, 4, 0, 0, 1, 1],
-      [50, 100, 0, 6, 4, 4, 0, 0, 1, 1],
+    expect(tableProjection(missingBuilt, [
+      'binLow',
+      'binHigh',
+      'count',
+      'sourceConnectionCount',
+      'inRangeObservationCount',
+      'missingObservationCount',
+    ])).toEqual([
+      [-100, -50, 2, 6, 4, 1],
+      [-50, 0, 0, 6, 4, 1],
+      [0, 50, 2, 6, 4, 1],
+      [50, 100, 0, 6, 4, 1],
     ]);
-    expect(missingBuilt.disclosures.map((disclosure) => disclosure.id)).not.toContain(
+    expect(missingBuilt.disclosures.map((disclosure) => disclosure.id)).toContain(
       'MULTAPSE_AGGREGATED',
     );
     expect((missingBuilt.artifact.derivation as any).operations[0].receipt).toMatchObject({
@@ -577,7 +676,7 @@ describe('specialized compilers preserve scientific units and declared binning',
     expect(undeclaredResult.ok).toBe(false);
     if (!undeclaredResult.ok) {
       expect(undeclaredResult.errors.map((error) => error.code)).toContain(
-        'SEMANTIC_LENGTH_MISMATCH',
+        'SCIENCE_NORMALIZATION_UNVERIFIABLE',
       );
     }
   });

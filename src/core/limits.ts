@@ -9,8 +9,9 @@
  * The distinction that matters:
  *
  *   A HARD LIMIT protects the process. Input above it FAILS.
- *   A DISPLAY BUDGET controls representation. Input above it may be compacted —
- *   but only by a named deterministic policy that is recorded and disclosed.
+ *   A DISPLAY BUDGET controls representation. Every current stable skill selects
+ *   only `none`, so input above it is refused. A future compiler may compact only
+ *   through a named deterministic policy introduced with complete bound output.
  *
  * Confusing the two is how a library ends up silently truncating a dataset and
  * calling the result a figure.
@@ -45,10 +46,9 @@ export interface BudgetLimits {
   readonly svgTextNodes: number;
   readonly svgBytes: number;
   readonly sidecarBytes: number;
-  readonly inlineTableRows: number;
+  readonly returnedTableRows: number;
 
   readonly errorRecords: number;
-  readonly bundlePanels: number;
 }
 
 export const DEFAULT_PROFILE: BudgetProfileId = 'standard';

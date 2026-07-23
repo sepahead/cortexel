@@ -32,14 +32,8 @@ export interface DisclosureFacts {
   readonly rank?: number;
   readonly worldSize?: number;
   readonly nodeUniverseComplete?: boolean;
-  readonly compacted: boolean;
-  readonly extremaPreserved?: boolean;
-  readonly compactionPolicyId?: string;
-  readonly countBefore?: number;
-  readonly countAfter?: number;
-  readonly tableRowsInline: number;
-  readonly tableRowsTotal: number;
   readonly excludedOutOfWindow?: number;
+  readonly nestSerializedClock?: boolean;
   readonly missingValueCount?: number;
   readonly unitConversions?: readonly string[];
   readonly duplicateTimeAggregateMethod?: string;
@@ -51,8 +45,12 @@ export interface DisclosureFacts {
   readonly missingAggregateReplicateCount?: number;
   readonly kernelSmoothed?: boolean;
   readonly preBinned?: boolean;
+  readonly rectangularSenderExposureAsserted?: boolean;
+  readonly aggregateEstimator?: string;
+  readonly aggregateSampleCount?: string;
+  readonly eventScopeMembershipCardinalityOnly?: boolean;
+  readonly eventScopeExternalAuthorityDeclared?: boolean;
   readonly callerNotePresent?: boolean;
-  readonly experimentalRenderer?: boolean;
   readonly nonStandardBudgetProfile?: boolean;
   readonly budgetProfileId?: string;
   readonly sampledRetained?: number;
@@ -93,11 +91,8 @@ const RULE_PREDICATES: Readonly<Record<string, (facts: DisclosureFacts) => boole
   SCHEMATIC_LAYOUT: (f) => f.schematicLayout === true,
   POSITIONS_MISSING: (f) => (f.positionsMissing ?? 0) > 0,
 
-  DOWNSAMPLED_FOR_RENDERING: (f) => f.compacted,
-  COMPACTION_MAY_HIDE_TRANSIENTS: (f) => f.compacted && f.extremaPreserved === false,
-  TABLE_EXCERPT_ONLY: (f) => f.tableRowsInline < f.tableRowsTotal,
-
   EVENTS_EXCLUDED_OUT_OF_WINDOW: (f) => (f.excludedOutOfWindow ?? 0) > 0,
+  NEST_SERIALIZED_CLOCK_BOUNDARY: (f) => f.nestSerializedClock === true,
   MISSING_VALUES_PRESENT: (f) => (f.missingValueCount ?? 0) > 0,
   UNIT_CONVERTED: (f) => (f.unitConversions?.length ?? 0) > 0,
   UNCERTAINTY_NOT_PROVIDED: (f) => f.uncertaintyKind === 'none',
@@ -105,16 +100,21 @@ const RULE_PREDICATES: Readonly<Record<string, (facts: DisclosureFacts) => boole
     (f.uncertaintySeriesDeclared ?? 0) > 0 &&
     (f.uncertaintySeriesShown ?? 0) < (f.uncertaintySeriesTotal ?? 0),
   AGGREGATE_WITHOUT_RAW_REPEATS: () => false, // response-curve compiler sets this
+  EVENT_SCOPE_MEMBERSHIP_CARDINALITY_ONLY: (f) =>
+    f.eventScopeMembershipCardinalityOnly === true,
+  EVENT_SCOPE_EXTERNAL_AUTHORITY_UNVERIFIED: (f) =>
+    f.eventScopeExternalAuthorityDeclared === true,
   KERNEL_SMOOTHED_RATE: (f) => f.kernelSmoothed === true,
   ZERO_LAG_SELF_PAIRS_EXCLUDED: () => false, // correlogram compiler sets this
   LAG_ORIENTATION: () => false, // correlogram compiler always emits this
   PRE_BINNED_INPUT: (f) => f.preBinned === true,
+  RECTANGULAR_SENDER_EXPOSURE_ASSERTED: (f) =>
+    f.rectangularSenderExposureAsserted === true,
   DUPLICATE_TIMES_AGGREGATED: (f) => f.duplicateTimeAggregateMethod !== undefined,
   MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE: (f) =>
     (f.missingAggregateReplicateCount ?? 0) > 0,
 
   CALLER_NOTE_UNVERIFIED: (f) => f.callerNotePresent === true,
-  EXPERIMENTAL_RENDERER: (f) => f.experimentalRenderer === true,
   NONSTANDARD_BUDGET_PROFILE: (f) =>
     f.budgetProfileId !== undefined
       ? f.budgetProfileId !== 'standard'
@@ -134,11 +134,6 @@ function fillTemplate(text: string, facts: DisclosureFacts): string {
     worldSize: facts.worldSize,
     retainedConnectionCount: facts.retainedConnectionCount ?? facts.sampledRetained,
     sourceConnectionCount: facts.sourceConnectionCount ?? facts.sampledSource,
-    countAfter: facts.countAfter,
-    countBefore: facts.countBefore,
-    policyId: facts.compactionPolicyId,
-    tableRowsInline: facts.tableRowsInline,
-    tableRowsTotal: facts.tableRowsTotal,
     excludedCount: facts.excludedOutOfWindow,
     missingCount: facts.missingValueCount ?? facts.positionsMissing,
     totalCount: facts.positionsTotal,
@@ -150,6 +145,8 @@ function fillTemplate(text: string, facts: DisclosureFacts): string {
     shownCount: facts.uncertaintySeriesShown,
     seriesCount: facts.uncertaintySeriesTotal,
     missingReplicateCount: facts.missingAggregateReplicateCount,
+    estimator: facts.aggregateEstimator,
+    sampleCount: facts.aggregateSampleCount,
     profileId:
       facts.budgetProfileId ?? (facts.nonStandardBudgetProfile ? 'custom' : 'standard'),
   };

@@ -16,13 +16,13 @@ remains `PASS`.
 
 | Area | State |
 |---|---|
-| Contract authority (`contract/`) | 19 stable skill contract files, shared schemas and registries; `figure.bundle` is a registered artifact kind, not a certified FigureBundleV1 implementation |
+| Contract authority (`contract/`) | 19 semantically stable, source-only skill contract files plus shared schemas and registries; no `FigureBundleV1` capability or implementation |
 | Contract kernel (`src/core/`) | strict parser, safe snapshot, canonicalization, SHA-256, validation pipeline, disclosure engine, and migration code; only the ledger-listed properties are release-certified |
 | Analysis (`src/analysis/`) | hand-computable tests for selected binning, rate, ISI, correlogram, and topology rules; not a golden corpus for every stable contract |
 | Render (`src/render/`) | RenderPlanV1 and deterministic SVG implementation; one first-valid-example smoke per stable family, not full semantic/compiler certification |
 | Adapters (`src/adapters/`) | NEST spike-recorder plain-object adapter fixtures; no real, version-pinned NEST output certification |
 | Cross-language (`python/`) | independent Python reader with limited digest/validation parity coverage; the full conformance corpus is not certified |
-| CLI (`src/cli/`) | identity, catalog, validate, render, inspect, and migrate commands are implemented; release packaging and compatibility gates are not certified |
+| CLI (`src/cli/`) | identity, catalog, validate, render, inspect, and migrate commands are implemented in source; package.json has no `bin`, and release packaging and compatibility gates are not certified |
 | Docs & governance | SCOPE, PROVENANCE, VERSIONING, SECURITY_MODEL, GOVERNANCE, SUPPORT, ROADMAP, MIGRATION, KNOWN_LIMITATIONS |
 
 ## Evidence
@@ -30,8 +30,8 @@ remains `PASS`.
 - **Historical aggregate test report:** 921 tests across 36 files plus the Python suite
   were reported for the preview. An aggregate green suite is not treated as evidence for
   a gate whose full requirement was not exercised.
-- **Evidence ledger:** 6 of 155 gates remain `PASS`; 149 are `NOT_RUN`. The retained
-  receipts directly support R009, R012, R013, R023, R025, and R027. See
+- **Evidence ledger:** 4 of 155 gates remain `PASS`; 151 are `NOT_RUN`. The retained
+  receipts directly support R009, R012, R013, and R023. See
   [`KNOWN_LIMITATIONS.md`](../../../KNOWN_LIMITATIONS.md). The ledger checker
   ([`scripts/check-evidence-ledger.ts`](../../../../scripts/check-evidence-ledger.ts))
   rejects a `PASS` without a structurally complete receipt; this audit additionally

@@ -14,10 +14,14 @@ import {
   finiteBinary64ToMinSubnormalUnits,
 } from '../exact-binary64.js';
 import {
+  axesAreCompatible,
   compareExactUnitSumToValue,
   convert,
-  convertDifference,
+  convertExactUnitSum,
+  dimensionOf,
   divideExactIntegerByConvertedDifference,
+  isKnownUnit,
+  kindAcceptsDimension,
   reciprocalUnit,
 } from '../units.js';
 import {
@@ -33,6 +37,7 @@ import {
   type SemanticValidator,
 } from './types.js';
 import { checkReferencesInUniverse } from './structure.js';
+import { legalKnownUnit } from './units.js';
 import { MAX_MATERIALIZED_BINS, materializeWidthBins } from '../binning.js';
 
 /** Resolve bin edges from either an explicit edge list or a width that tiles a range. */
@@ -266,8 +271,52 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
   const window = asRecord(readPointer(context.request, at));
   if (!window) return [];
 
+  const originRelative =
+    asString(window.kind) === 'nest_recording_device_origin_relative';
+  const origin = asNumber(window.origin);
   const start = asNumber(window.start);
   const stop = asNumber(window.stop);
+  const unit = asString(window.unit);
+  const unitDimension = asString(context.parameters?.unitDimension);
+  if (
+    unit !== undefined &&
+    isKnownUnit(unit) &&
+    unitDimension !== undefined &&
+    dimensionOf(unit) !== unitDimension
+  ) {
+    return [
+      makeError({
+        code: 'SCIENCE_UNIT_DIMENSION_MISMATCH',
+        stage: 'science',
+        instancePath: `${at}/unit`,
+        validatorId: 'window.valid',
+        message: `this interval requires unit dimension ${JSON.stringify(unitDimension)}; got ${JSON.stringify(unit)} with dimension ${JSON.stringify(dimensionOf(unit))}.`,
+      }),
+    ];
+  }
+
+  // Structural validation normally owns non-finite JSON numbers. Keep this
+  // semantic boundary total when called directly, however: a non-finite clock
+  // endpoint cannot define a scientific interval.
+  for (const [name, value] of [
+    ...(originRelative ? [['origin', window.origin] as const] : []),
+    ['start', window.start] as const,
+    ['stop', window.stop] as const,
+  ]) {
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      return [
+        makeError({
+          code: 'SCIENCE_WINDOW_INVALID',
+          stage: 'science',
+          instancePath: `${at}/${name}`,
+          validatorId: 'window.valid',
+          message: `the observation-window ${name} must be finite.`,
+        }),
+      ];
+    }
+  }
+
+  if (originRelative && origin === undefined) return [];
   if (start === undefined || stop === undefined) return [];
 
   if (!(stop > start)) {
@@ -282,19 +331,72 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
     ];
   }
 
+  if (originRelative && unit) {
+    try {
+      const displayedStart = convertExactUnitSum(
+        [
+          { value: origin!, unit },
+          { value: start, unit },
+        ],
+        unit,
+      );
+      const displayedStop = convertExactUnitSum(
+        [
+          { value: origin!, unit },
+          { value: stop, unit },
+        ],
+        unit,
+      );
+      if (
+        !Number.isFinite(displayedStart) ||
+        !Number.isFinite(displayedStop) ||
+        !(displayedStop > displayedStart)
+      ) {
+        return [
+          makeError({
+            code: 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+            stage: 'science',
+            instancePath: `${at}/stop`,
+            validatorId: 'window.valid',
+            message: `the exact NEST endpoints origin + start and origin + stop do not remain finite and strictly ordered when rounded once into ${unit} for display. Preserve a better-scaled clock segment; Cortexel will not draw a collapsed interval.`,
+          }),
+        ];
+      }
+    } catch (error) {
+      // Canonical-code and dimension validators own unknown or incompatible
+      // units. This validator owns representability of an otherwise valid time
+      // interval, including overflow of the exact endpoint sum.
+      if (dimensionOf(unit) !== 'time') return [];
+      const message = error instanceof Error
+        ? error.message
+        : 'exact endpoint conversion failed';
+      return [
+        makeError({
+          code: 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+          stage: 'science',
+          instancePath: `${at}/stop`,
+          validatorId: 'window.valid',
+          message: `the exact NEST endpoints origin + start and origin + stop cannot be represented as finite, strictly ordered ${unit} display values: ${message}`,
+        }),
+      ];
+    }
+  }
+
   return [];
 };
 
 /**
  * Events must lie within the declared observation window.
  *
- * The window is half-open [start, stop): an event exactly AT stop is outside it.
- * That is not pedantry. If two adjacent windows both claimed their shared boundary,
- * an event on it would be counted twice; if neither did, it would vanish. Half-open
- * is the only convention that tiles.
+ * General event windows explicitly select [start, stop), [start, stop], or
+ * (start, stop]. A NEST recording-device window retains the simulator's native
+ * (origin + start, origin + stop] convention. Exact endpoint sums are compared
+ * with each event without first rounding either endpoint.
  *
  * Out-of-window events are reported with a COUNT, never silently dropped — a
- * disclosure on the figure then says how many were excluded.
+ * disclosure on the figure then says how many were excluded. The semantic gate
+ * accepts deliberate `exclude_and_disclose`; the renderer remains responsible
+ * for retaining those observations in the table and omitting only their marks.
  */
 export const eventsWithinWindow: SemanticValidator = (
   context: SemanticContext,
@@ -303,18 +405,72 @@ export const eventsWithinWindow: SemanticValidator = (
   const window = asRecord(data.window);
   if (!window) return [];
 
+  const originRelative =
+    asString(window.kind) === 'nest_recording_device_origin_relative';
+  const origin = asNumber(window.origin);
   const start = asNumber(window.start);
   const stop = asNumber(window.stop);
-  if (start === undefined || stop === undefined) return [];
-
-  const inclusiveStop = asString(window.boundary) === '[start,stop]';
+  if (
+    start === undefined ||
+    stop === undefined ||
+    (originRelative && origin === undefined)
+  ) {
+    return [];
+  }
+  // `window.valid` owns this authoring error. Membership is undefined until a
+  // real interval (and, for NEST, a renderable interval) exists, so do not emit
+  // one misleading event error per invalid window.
+  if (!(stop > start)) return [];
 
   const eventTimes = asRecord(data.eventTimes);
   const times = asArray(eventTimes?.values);
   if (!times) return [];
-  const eventUnit = asString(eventTimes?.unit);
+  const eventUnit = legalKnownUnit(eventTimes);
   const windowUnit = asString(window.unit);
-  if (!eventUnit || !windowUnit) return [];
+  if (
+    !eventUnit ||
+    !windowUnit ||
+    !isKnownUnit(windowUnit) ||
+    dimensionOf(windowUnit) !== 'time'
+  ) return [];
+
+  const lowerTerms = originRelative
+    ? [
+        { value: origin!, unit: windowUnit },
+        { value: start, unit: windowUnit },
+      ]
+    : [{ value: start, unit: windowUnit }];
+  const upperTerms = originRelative
+    ? [
+        { value: origin!, unit: windowUnit },
+        { value: stop, unit: windowUnit },
+      ]
+    : [{ value: stop, unit: windowUnit }];
+  const boundary = originRelative
+    ? '(origin+start,origin+stop]'
+    : asString(window.boundary);
+  const openStart =
+    boundary === '(start,stop]' || boundary === '(origin+start,origin+stop]';
+  const closedStop =
+    boundary === '[start,stop]' ||
+    boundary === '(start,stop]' ||
+    boundary === '(origin+start,origin+stop]';
+
+  if (originRelative) {
+    try {
+      const displayedStart = convertExactUnitSum(lowerTerms, windowUnit);
+      const displayedStop = convertExactUnitSum(upperTerms, windowUnit);
+      if (
+        !Number.isFinite(displayedStart) ||
+        !Number.isFinite(displayedStop) ||
+        !(displayedStop > displayedStart)
+      ) {
+        return [];
+      }
+    } catch {
+      return [];
+    }
+  }
 
   let outside = 0;
   let firstIndex = -1;
@@ -325,14 +481,28 @@ export const eventsWithinWindow: SemanticValidator = (
     let beforeStart: boolean;
     let beyondStop: boolean;
     try {
-      if (eventUnit !== windowUnit) convert(time, eventUnit, windowUnit);
-      const terms = [{ value: time, unit: eventUnit }];
-      beforeStart = compareExactUnitSumToValue(terms, { value: start, unit: windowUnit }) < 0;
-      const stopComparison = compareExactUnitSumToValue(terms, { value: stop, unit: windowUnit });
-      beyondStop = inclusiveStop ? stopComparison > 0 : stopComparison >= 0;
+      // Compare endpoint sum to event and invert the relation. This avoids both
+      // origin + offset rounding and a rounded unit-converted event value.
+      const lowerComparedWithEvent = compareExactUnitSumToValue(
+        lowerTerms,
+        { value: time, unit: eventUnit },
+      );
+      const upperComparedWithEvent = compareExactUnitSumToValue(
+        upperTerms,
+        { value: time, unit: eventUnit },
+      );
+      beforeStart = openStart
+        ? lowerComparedWithEvent >= 0
+        : lowerComparedWithEvent > 0;
+      beyondStop = closedStop
+        ? upperComparedWithEvent < 0
+        : upperComparedWithEvent <= 0;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'event-time unit conversion failed';
-      const numericResolution = message.includes('overflowed') || message.includes('underflowed');
+      const message = error instanceof Error
+        ? error.message
+        : 'event-time unit conversion failed';
+      const numericResolution =
+        message.includes('overflowed') || message.includes('underflowed');
       return [
         makeError({
           code: numericResolution
@@ -354,6 +524,11 @@ export const eventsWithinWindow: SemanticValidator = (
   }
 
   if (outside === 0) return [];
+  if (asString(getParameters(context).outOfWindowPolicy) === 'exclude_and_disclose') return [];
+
+  const windowDescription = originRelative
+    ? `(origin ${origin} + start ${start}, origin ${origin} + stop ${stop}] ${windowUnit}`
+    : `${boundary ?? '[start,stop)'} with start ${start}, stop ${stop} ${windowUnit}`;
 
   return [
     makeError({
@@ -361,9 +536,85 @@ export const eventsWithinWindow: SemanticValidator = (
       stage: 'science',
       instancePath: pointer('data', 'eventTimes', 'values', firstIndex),
       validatorId: 'events.within_window',
-      message: `${outside} of ${times.length} events fall outside the declared window [${start}, ${stop}${inclusiveStop ? ']' : ')'} ${windowUnit} after converting the event clock from ${eventUnit}. Widen the window, or remove them deliberately — Cortexel will not quietly ignore an observation you told it about.`,
+      message: `${outside} of ${times.length} events fall outside the declared window ${windowDescription} under exact comparison with the event clock in ${eventUnit}. Widen the window or choose exclude_and_disclose; Cortexel will not quietly ignore an observation you supplied.`,
     }),
   ];
+};
+
+/**
+ * Bind the source-specific NEST clock declaration to the only serialized clock
+ * profile admitted by revision 2. This is an internal-consistency check, not an
+ * authenticity claim and not a reconstruction of NEST's hidden integer tics.
+ */
+export const eventsSourceClockDeclared: SemanticValidator = (
+  context: SemanticContext,
+): CortexelError[] => {
+  const data = getData(context);
+  const window = asRecord(data.window);
+  if (!window || asString(window.kind) !== 'nest_recording_device_origin_relative') return [];
+
+  const source = asRecord(context.request.source);
+  const eventTimes = asRecord(data.eventTimes);
+  const version = asString(source?.systemVersion);
+  const digest = asString(source?.sourceDigest);
+  const checks: readonly {
+    readonly valid: boolean;
+    readonly path: readonly (string | number)[];
+    readonly message: string;
+  }[] = [
+    {
+      valid: asString(source?.kind) === 'simulation',
+      path: ['source', 'kind'],
+      message: 'a NEST origin-relative event clock requires source.kind = simulation.',
+    },
+    {
+      valid: asString(source?.system) === 'NEST',
+      path: ['source', 'system'],
+      message: 'a NEST origin-relative event clock requires source.system = NEST exactly.',
+    },
+    {
+      valid: version !== undefined && /^3\.(?:9|10)(?:\.[0-9]+)?$/u.test(version),
+      path: ['source', 'systemVersion'],
+      message: 'the revision-2 serialized clock profile admits only NEST 3.9, 3.9.x, 3.10, or 3.10.x without a prerelease suffix.',
+    },
+    {
+      valid: digest !== undefined && /^sha256:[0-9a-f]{64}$/u.test(digest),
+      path: ['source', 'sourceDigest'],
+      message: 'the exported recorder object must be bound by a full lowercase sha256: sourceDigest.',
+    },
+    {
+      valid: asString(window.recordingBackend) === 'memory',
+      path: ['data', 'window', 'recordingBackend'],
+      message: 'revision 2 admits only the NEST memory recording backend.',
+    },
+    {
+      valid: asString(window.timeEncoding) === 'native_binary64_ms',
+      path: ['data', 'window', 'timeEncoding'],
+      message: 'revision 2 admits only native_binary64_ms (time_in_steps=false), not reconstructed step/offset clocks.',
+    },
+    {
+      valid: asString(eventTimes?.unit) === 'ms',
+      path: ['data', 'eventTimes', 'unit'],
+      message: 'a NEST native-binary64 memory clock must retain its serialized event unit ms.',
+    },
+    {
+      valid: asString(data.timeBase) === 'absolute_clock',
+      path: ['data', 'timeBase'],
+      message: 'a NEST origin-relative recorder clock is an absolute source clock and cannot be relabelled trial_relative.',
+    },
+  ];
+
+  return checks
+    .filter((check) => !check.valid)
+    .map((check) =>
+      makeError({
+        code: 'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
+        stage: 'provenance',
+        instancePath: pointer(...check.path),
+        validatorId: 'events.source_clock_declared',
+        message: check.message,
+      }),
+    );
 };
 
 /**
@@ -589,6 +840,29 @@ export const rateVerifyNormalization: SemanticValidator = (
   return errors;
 };
 
+function histogramBinUnitIsIndividuallyLegal(
+  context: SemanticContext,
+  binUnit: string | undefined,
+): binUnit is string {
+  if (binUnit === undefined || !isKnownUnit(binUnit)) return false;
+  if (
+    context.skillId === 'network.delay_distribution' ||
+    context.skillId === 'neuro.isi_distribution'
+  ) return dimensionOf(binUnit) === 'time';
+  if (context.skillId !== 'network.weight_distribution') return true;
+
+  const data = getData(context);
+  if (asString(data.mode) === 'prebinned') {
+    const dimension = dimensionOf(binUnit);
+    return dimension !== undefined && kindAcceptsDimension('synaptic_weight', dimension);
+  }
+  const connections = asRecord(data.connections);
+  const weightUnit = legalKnownUnit(asRecord(connections?.weights));
+  return weightUnit !== undefined && (
+    weightUnit === binUnit || axesAreCompatible(weightUnit, binUnit)
+  );
+}
+
 /**
  * Histogram normalization must be self-consistent.
  *
@@ -615,7 +889,11 @@ export const histogramNormalizationConsistent: SemanticValidator = (
     asArray(asRecord(data.binEdges)?.edges) ?? resolveBinEdges(asRecord(parameters.bins));
   const binUnit =
     asString(asRecord(data.binEdges)?.unit) ?? asString(asRecord(parameters.bins)?.unit);
+  const legalBinUnit = histogramBinUnitIsIndividuallyLegal(context, binUnit)
+    ? binUnit
+    : undefined;
   const histogramUnit = asString(asRecord(data.histogram)?.unit);
+  const legalHistogramUnit = legalKnownUnit(asRecord(data.histogram));
   const valuePath = valuesAtHistogram ? ['data', 'histogram', 'values'] as const : ['data', 'values'] as const;
 
   if (!values || !edges || values.length === 0) return [];
@@ -644,9 +922,11 @@ export const histogramNormalizationConsistent: SemanticValidator = (
 
   if (
     normalization === 'density' &&
-    binUnit !== undefined &&
+    legalBinUnit !== undefined &&
+    reciprocalUnit(legalBinUnit) !== undefined &&
     histogramUnit !== undefined &&
-    reciprocalUnit(binUnit) !== histogramUnit
+    legalHistogramUnit !== undefined &&
+    reciprocalUnit(legalBinUnit) !== legalHistogramUnit
   ) {
     errors.push(
       makeError({
@@ -654,7 +934,7 @@ export const histogramNormalizationConsistent: SemanticValidator = (
         stage: 'science',
         instancePath: pointer('data', 'histogram', 'unit'),
         validatorId: 'histogram.normalization_consistent',
-        message: `a density over bins in ${binUnit} must use the registered reciprocal unit ${String(reciprocalUnit(binUnit))}; got ${histogramUnit}.`,
+        message: `a density over bins in ${legalBinUnit} must use the registered reciprocal unit ${String(reciprocalUnit(legalBinUnit))}; got ${histogramUnit}.`,
       }),
     );
   }

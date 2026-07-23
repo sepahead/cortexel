@@ -57,6 +57,13 @@
     .status { color: var(--cyan); font-weight: 750; }
     .low { color: var(--amber); font-weight: 750; }
     .note { color: var(--dim); }
+    .superseded {
+      margin-bottom: 24px;
+      padding: 16px 18px;
+      border: 1px solid var(--amber);
+      border-radius: 10px;
+      background: #211806;
+    }
     a { color: #faccfa; text-underline-offset: 3px; }
     a:focus-visible { outline: 2px solid var(--amber); outline-offset: 4px; }
     footer { margin-top: 28px; color: var(--dim); font-size: 13px; }
@@ -70,6 +77,14 @@
 </head>
 <body>
   <main>
+    <aside class="superseded" aria-label="Historical snapshot warning">
+      <strong>Historical snapshot.</strong> This preserved report describes an automated
+      review completed on 10 July 2026 for the superseded v0.5 scope. Its
+      "release-ready" headline is not current release evidence. See
+      <a href="../README.md">README.md</a> and the
+      <a href="../docs/release/evidence-ledger.v1.json">evidence ledger</a> for current
+      package and release status.
+    </aside>
     <header>
       <div class="eyebrow">Repository-wide review · 10 July 2026</div>
       <h1>Cortexel is release-ready for its declared v0.5 scope.</h1>

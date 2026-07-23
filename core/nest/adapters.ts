@@ -21,7 +21,6 @@ import {
 import {
   SAFE_DISPLAY_STRING_PATTERN,
   intrinsicTypedArrayLength,
-  safeDiagnosticText,
 } from '../safeRuntime';
 import { parseNestInput } from './safeInput';
 

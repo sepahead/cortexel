@@ -89,27 +89,45 @@ export function groupByTrain(events: EventTable): Map<string, number[]> {
   return groups;
 }
 
-/** Count events inside [start, stop) (or [start, stop] when inclusive), plus those outside. */
+/** The only event-window closures admitted by the version-1 request contract. */
+export type EventWindowBoundary = '[start,stop)' | '[start,stop]' | '(start,stop]';
+
+/**
+ * Partition events under an explicit boundary convention.
+ *
+ * `inWindow` remains aligned with the source array. `inside` is an index list rather
+ * than a copied value list so duplicate events retain distinct identities. Values on
+ * an open boundary are counted with that side's exclusion count.
+ */
 export function partitionByWindow(
   times: readonly number[],
   start: number,
   stop: number,
-  inclusiveStop: boolean,
-): { inside: number[]; excludedBelow: number; excludedAbove: number } {
+  boundary: EventWindowBoundary,
+): {
+  inside: number[];
+  inWindow: boolean[];
+  excludedBelow: number;
+  excludedAbove: number;
+} {
   const inside: number[] = [];
+  const inWindow = new Array<boolean>(times.length).fill(false);
   let excludedBelow = 0;
   let excludedAbove = 0;
+  const openStart = boundary === '(start,stop]';
+  const closedStop = boundary !== '[start,stop)';
 
   for (let i = 0; i < times.length; i++) {
     const t = times[i];
-    if (t < start) {
+    if (openStart ? t <= start : t < start) {
       excludedBelow++;
-    } else if (inclusiveStop ? t > stop : t >= stop) {
+    } else if (closedStop ? t > stop : t >= stop) {
       excludedAbove++;
     } else {
       inside.push(i);
+      inWindow[i] = true;
     }
   }
 
-  return { inside, excludedBelow, excludedAbove };
+  return { inside, inWindow, excludedBelow, excludedAbove };
 }

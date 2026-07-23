@@ -11,10 +11,37 @@ pinned git dependency and may vendor generated contract artifacts for backend
 validation; it does not own a writable Cortexel source copy.
 
 - **Open Cortexel code PRs here.**
-- After a Cortexel release, downstream consumers update their commit pins and
-  generated contract snapshots in separate, reviewable changes.
+- During pre-1.0 development, downstream consumers adopt only reviewed Cortexel commits
+  by their full 40-character SHA and update generated contract snapshots in a separate,
+  reviewable change. A branch, tag, abbreviated SHA, or moving ref is not a dependency
+  identity.
+
+### Pre-1.0 downstream pin workflow
+
+1. Finish and push the reviewed Cortexel commit, then record the exact output of
+   `git rev-parse HEAD`; do not derive a pin from an uncommitted worktree.
+2. Put that full 40-character SHA in the downstream git dependency. Do not substitute
+   `main`, a release tag, or a short display prefix.
+3. Regenerate any downstream contract/OpenAPI snapshots from that checkout in the same
+   adoption change.
+4. Verify the downstream lock/resolution metadata names the same full SHA, then run its
+   complete integration gates. Record both the Cortexel SHA and the downstream commit in
+   the adoption receipt.
+
+The private `0.10.0-dev.0` metadata is a development safeguard, not a release. The
+read-only `release:verify` command intentionally fails until a final version, public
+package metadata, matching release records, an annotated tag on clean HEAD, and a real
+artifact source-stamping producer all exist. It is not a normal pull-request success
+criterion.
 
 ## Development
+
+The repository-level `bunfig.toml` disables Bun runtime `.env` loading, including in
+nested scripts. It is not a filesystem sandbox: Bun's package manager, Vite, or another
+dependency may still inspect files in the checkout. Keep credentials outside the
+repository and the build/test environment; `.gitignore` is only an accidental-commit
+control. A narrowly scoped first-party client may read its external credential store
+explicitly.
 
 ```bash
 bun install
@@ -22,6 +49,10 @@ bun run typecheck  # tsc --noEmit
 bun run test       # vitest
 bun run build      # tsup → dist/ (ESM + CJS + d.ts) + skills.manifest.json
 bun run check      # typecheck + test
+bun run check:ledger
+bun run test:python
+bun run check:python
+bun run test:python-package
 bun run audit
 bun run lint:package
 bun run test:package

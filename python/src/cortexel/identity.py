@@ -12,7 +12,7 @@ from .generated.catalog import (
 )
 
 
-def get_build_identity() -> dict:
+def get_build_identity() -> dict[str, object]:
     """Every identity axis, named. A local build never claims a release commit."""
     return {
         "packageVersion": PACKAGE_VERSION,

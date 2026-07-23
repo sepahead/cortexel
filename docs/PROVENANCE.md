@@ -1,8 +1,9 @@
 # Provenance and honesty model
 
-> **Applies to Cortexel `0.9.0` — a pre-1.0 development preview.** This document
-> describes a contract, not a certified result. `0.9.0` makes **no** stable-contract
-> claim, no package is published to npm or PyPI, and no DOI has been minted. No pinned
+> **Status: `0.9.0` is the last tagged pre-1.0 release; this document tracks the
+> private, unreleased `0.10.0-dev.0` source tree.** It describes a contract, not a
+> certified result. Neither identity makes a stable-contract claim, no package is
+> published to npm or PyPI, and no DOI has been minted. No pinned
 > reference environment (NEST, Elephant, Neo, PyNWB) has been executed, so **no figure
 > in this tree has been independently confirmed to be scientifically correct.** The
 > honesty machinery described here is the reason that limitation is stated on every
@@ -104,9 +105,12 @@ fixed `text` that Cortexel owns. A few representative examples:
 | `scope.kind == 'sampled'` | *"Edges sampled: N of M connections are shown. Degree and completeness cannot be read from this figure."* |
 | `scope.kind == 'mpi_target_rank_local'` | *"Rank-local snapshot … in-degree is complete for these local targets; out-degree and global completeness are not."* |
 | `nodeUniverse.complete == false` | *"Node set incomplete … a node missing here is not a node with degree zero."* |
-| `budgetDecision.outcome == 'accepted_compacted'` | *"Compacted for display: N of M observations are drawn … The complete data is in the attached table and sidecar."* |
 | `validation.referenceComparison.status == 'not_run'` | *"No independent reference comparison was run for this figure."* |
 | a matrix figure has sparse cells | *"An empty cell means no connection was observed. It is distinct from a connection whose weight is zero, which is drawn as a value."* |
+
+Artifact 1.0 contains no compacted/excerpt branch or corresponding disclosure. Design
+notes for a possible future digest-bound sidecar do not make that vocabulary valid; a
+later artifact revision adds it only with a producer and executable verifier.
 
 The consequences of "facts, not text or flags" are precise and worth stating plainly:
 
@@ -126,13 +130,15 @@ The consequences of "facts, not text or flags" are precise and worth stating pla
 - Disclosures are ordered **by severity** — `critical`, then `important`, then
   `informational` — and within a severity by rule id, so ordering is deterministic and
   never a function of caller input.
-- In stable mode **no disclosure can be suppressed, reordered below a caller note, or
+- In the semantically stable development renderer **no disclosure can be suppressed, reordered below a caller note, or
   visually dominated by one.**
-- A compact footer shows the highest-priority disclosures plus an overflow count; the
-  data sidecar and the accessible description always carry the **complete** list, so
-  nothing that overflowed the footer is actually lost.
+- The visible footer, in-memory table metadata, and accessible description carry the
+  same **complete** disclosure list. A
+  detached canonical data sidecar is not emitted in the current development tree. The artifact binds the
+  exact ordered table-column keys, but not the table row bytes, so no row-integrity claim is
+  made.
 
-> **Status note for `0.9.0`.** All 19 stable families render end to end, and their
+> **Current development status.** All 19 semantically stable families render end to end, and their
 > mandatory disclosures are wired and tested (`test/disclosureCompleteness.test.ts`): a
 > rank-local snapshot says so, a correlogram states its lag orientation, a matrix keeps an
 > absent cell distinct from a measured zero. The disclosure *engine* is contract-level and
@@ -150,11 +156,11 @@ generated from the registry, in **four** locations, and a test asserts all four 
 1. **The artifact JSON** — the machine-readable record other tools consume.
 2. **The visible SVG footer** — what a sighted reader sees on the figure.
 3. **The SVG accessible description** — what a screen-reader user hears.
-4. **The table metadata** — what travels with the exact-value data export.
+4. **The table metadata** — what travels with the complete in-memory table returned by
+   the development API.
 
-The footer may show a compact subset with an overflow count for space reasons, but the
-artifact JSON, the accessible description, and the table metadata always carry the full
-set. **Why four:** a figure is copied, embedded, screen-read, and re-parsed by
+All four carry the full set; no surface gets a lower-priority subset. **Why four:** a
+figure is copied, embedded, screen-read, and re-parsed by
 different audiences through different surfaces. Honesty that is present for a sighted
 reader but absent for a screen reader, or present in the pixels but absent in the
 machine record, is not honesty — it is honesty theater. Agreement across all four is a
@@ -203,7 +209,17 @@ to assume more than was checked.
 | **Parsed** | The input is well-formed, bounded, literal JSON: finite binary64 numbers, no duplicate object keys, no accessors/getters, no sparse or decorated arrays, no prototype-polluting keys. | That the values are meaningful. |
 | **Structurally valid** | The request matches the skill's **closed** schema — required fields present, correct types, enumerated values in range, no unknown properties. | That the numbers are self-consistent. |
 | **Semantically valid** | The cross-field rules JSON Schema cannot express hold: parallel arrays align, a rate denominator counts recorded (not merely spiking) neurons, a rank-local snapshot cannot claim a global out-degree, a multapse aggregation is declared rather than "last edge wins", a unit's dimension matches its quantity. | That the underlying measurement is correct, or that a real simulator produced these numbers. |
-| **Output-integrity verified** | The emitted artifact's digests, sidecar, and identity re-verify: the bytes are the bytes that were validated, and nothing drifted between emit and re-read. | That the figure is scientifically confirmed. Integrity verification **does not re-run NEST and does not establish scientific truth.** |
+| **Output-integrity verified (reserved; not implemented in the current development tree)** | A future detached verifier will re-check canonical artifact bytes, every bound payload digest, sidecar structure, and identity. The current writer binds the SVG in its artifact but has no artifact reader/verifier and no bound table sidecar, so it does not issue this assurance level. | Even when implemented, this will not mean the figure is scientifically confirmed: integrity verification will not re-run a simulator or establish scientific truth. |
+
+Artifact schema validity separates three claim classes. **Shape claims** (closed ids,
+required fields, exact producer constants, and legal cross-products) are decided by JSON
+Schema. **Content-binding claims** (request/SVG digests, byte length, and returned-table
+shape matching their actual payloads) require recomputation; their fields are
+well-formed in the schema but are not thereby proven true. **Process/provenance claims**
+(which parser, validators, renderer, or source actually ran) require trust in the current
+producer or a later independent attestation boundary. A forged artifact can therefore
+be schema-perfect. Structural validity is a fail-closed writer postcondition and a
+descriptive contract, not authentication or tamper verification.
 
 Two honest edges of these levels:
 
@@ -226,17 +242,18 @@ Two honest edges of these levels:
 
 ## 7. Source authenticity vs. source declaration
 
-Even a `semantically valid`, `output-integrity verified` artifact carries the
-disclosure *"Source authenticity not verified. Cortexel validated the structure and
-semantics of this request; it did not check that the underlying source bytes are what
-they claim to be."* unless a verifiable attestation says otherwise.
+Every Artifact 1.0 result carries the disclosure *"Source authenticity not verified.
+Cortexel validated the structure and semantics of this request; it did not check that
+the underlying source bytes are what they claim to be."*
 
 This is a deliberate second boundary. Cortexel checks that a request is *internally*
-honest and well-formed; it does not, by itself, prove that the bytes came from the run
-the caller names. A request may **never** assert that its own attestation is verified —
-an unverifiable attestation is rejected (`PROVENANCE_ATTESTATION_UNVERIFIED`), because a
-self-signed "trust me" is exactly the claim the authority boundary exists to prevent.
-Only an independently verifiable attestation clears the authenticity disclosure.
+honest and well-formed; it does not prove that the bytes came from the run the caller
+names. A request may **never** assert its own verification result. Artifact 1.0 has no
+attestation input, signature verifier, or code path that can clear this disclosure;
+its `attestations` member is required to be empty. A later contract revision may add
+such a boundary only together with an independently verifiable issuer/integrity model.
+The append-only `PROVENANCE_ATTESTATION_UNVERIFIED` code is not an invitation to supply
+an attestation to the current API.
 
 ---
 
@@ -258,7 +275,7 @@ a human remembering to add a caveat.
 requirement is **independent external review**: a pinned reference environment actually
 executed, cross-language validation by a second implementation, and scientific checks
 by someone other than the author. That review has **not** happened yet. Until it does,
-`0.9.0` is a development preview whose figures are honestly labeled as not
+the current pre-1.0 tree is a development preview whose figures are honestly labeled as not
 independently confirmed — which is the entire reason this provenance model errs, every
 time, toward disclosing a limitation rather than asserting a result.
 
@@ -270,7 +287,7 @@ time, toward disclosing a limitation rather than asserting a result.
 - [`contract/registries/capabilities.v1.json`](../contract/registries/capabilities.v1.json) — the stable / experimental / removed matrix
 - [`contract/registries/error-codes.v1.json`](../contract/registries/error-codes.v1.json) — stable error codes (`PROVENANCE_*`, `SCOPE_*`, `SCIENCE_*`, …)
 - [SECURITY.md](../SECURITY.md) — the honesty boundary as a security property
-- [docs/KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) — what `0.9.0` does not yet do
+- [docs/KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) — what the current development tree does not yet do
 - [docs/release/BASELINE-2026-07-14.md](./release/BASELINE-2026-07-14.md) and [`docs/release/evidence-ledger.v1.json`](./release/evidence-ledger.v1.json) — the frozen baseline and per-gate evidence state
 - [AGENTS.md](../AGENTS.md) — building figures *with* Cortexel; [CLAUDE.md](../CLAUDE.md) — working *on* Cortexel
 

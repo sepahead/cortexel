@@ -15,7 +15,6 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { buildFigure } from '../src/render/index.js';
-import { SKILL_CATALOG } from '../src/generated/catalog.js';
 
 const populationRate = JSON.parse(
   readFileSync(path.resolve(import.meta.dirname, '../contract/skills/neuro.population_rate.v1.json'), 'utf8'),
@@ -75,7 +74,7 @@ describe('accessibility summary is value-filled, not a template', () => {
     expect(summary).not.toMatch(/\{[^}]+\}/);
     // Real content from the figure's own data.
     expect(summary).toContain('Population firing rate');
-    expect(summary).toMatch(/\d+ rows of data/);
+    expect(summary).toMatch(/\d+ literal bins contain \d+ events/);
     expect(summary).toMatch(/ranges from .+ to .+/);
   });
 
@@ -87,8 +86,13 @@ describe('accessibility summary is value-filled, not a template', () => {
     const descMatch = result.svg.match(/<desc[^>]*>([^<]*)<\/desc>/);
     expect(descMatch).not.toBeNull();
     const artifactSummary = (result.artifact.accessibility as { summary?: string })?.summary;
-    // The plan, the SVG, and the artifact all carry the same accessible summary.
-    expect(descMatch?.[1]).toBe(result.plan.accessibility.summary);
+    // The SVG necessarily XML-escapes text nodes; decode those three text entities
+    // before comparing the semantic description with the plan and artifact strings.
+    const decodedDescription = descMatch?.[1]
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
+    expect(decodedDescription).toBe(result.plan.accessibility.summary);
     expect(artifactSummary).toBe(result.plan.accessibility.summary);
   });
 });

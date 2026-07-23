@@ -6,7 +6,8 @@
  * so the CLI and React cannot disagree about a value.
  *
  * The blueprint's target is one compiler file per stable skill for maximum
- * reviewability. This 0.9.0 uses a family-aware compiler instead: the 19 skills map to a
+ * reviewability. The current development renderer uses family-aware compilation instead:
+ * the 19 skills map to a
  * handful of geometric families (trace, step, distribution, raster, matrix, points), and
  * a single well-tested compiler per family is more trustworthy than fifteen near-
  * duplicates that could drift. Splitting into per-skill files is recorded as a known
@@ -14,12 +15,19 @@
  * layout, never the output.
  */
 
-import type { RenderPlanV1, Panel, Mark, Axis } from './model/renderPlan.js';
+import type {
+  RenderPlanV1,
+  Panel,
+  Mark,
+  Axis,
+  OutputAuthorityAtomicRoleV1,
+} from './model/renderPlan.js';
 import { linearScale, linearTicks } from './scale.js';
 import { SKILL_CATALOG, THEMES } from '../generated/catalog.js';
 import { unitLabel } from '../core/units.js';
 import type { Disclosure } from '../core/disclosures.js';
 import { finiteExtent } from '../core/numeric.js';
+import { disclosureFooterHeight } from './layout.js';
 
 export interface CompileContext {
   readonly sourceRequestDigest: string;
@@ -30,13 +38,13 @@ export interface CompileContext {
   readonly subtitle?: string;
   readonly disclosures: readonly Disclosure[];
   readonly summary: string;
-  readonly inlineTableRows: number;
+  readonly returnedTableRows: number;
 }
 
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
 
 function panelBox(context: CompileContext): { x: number; y: number; width: number; height: number } {
-  const disclosureSpace = context.disclosures.length * 14 + 10;
+  const disclosureSpace = disclosureFooterHeight(context.width, context.disclosures);
   return {
     x: MARGIN.left,
     y: MARGIN.top,
@@ -47,7 +55,7 @@ function panelBox(context: CompileContext): { x: number; y: number; width: numbe
 
 function seriesColor(themeId: string, index: number): string {
   // Okabe-Ito order lives in the palette registry; the first accent is enough for the
-  // single-series figures this 0.9.0 compiler draws, and multi-series figures fall back
+  // single-series figures this development compiler draws, and multi-series figures fall back
   // to the theme's focus colour deterministically.
   const focus = (THEMES as Record<string, Record<string, string>>)[themeId]?.focus ?? '#0072b2';
   return index === 0 ? focus : focus;
@@ -58,15 +66,13 @@ function buildTable(
   columns: readonly { key: string; header: string }[],
   rowsTotal: number,
   rowAt: (index: number) => readonly (string | number | null)[],
-  inlineLimit: number,
 ): RenderPlanV1['table'] {
-  const rowsInline = Math.min(rowsTotal, inlineLimit);
-  const inline = Array.from({ length: rowsInline }, (_value, index) => rowAt(index));
+  const rows = Array.from({ length: rowsTotal }, (_value, index) => rowAt(index));
   return {
-    policy: rowsTotal > inlineLimit ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+    policy: 'complete_returned',
     columns,
-    rows: inline,
-    rowsInline: inline.length,
+    rows,
+    rowsInline: rows.length,
     rowsTotal,
   };
 }
@@ -122,7 +128,6 @@ export function compileLineFigure(
       ],
       x.length,
       (i) => [Number.isFinite(x[i]) ? x[i] : null, y[i] === null ? null : (y[i] as number)],
-      context.inlineTableRows,
     ),
     accessibility: { summary: context.summary, panelSummaries: [] },
   };
@@ -205,6 +210,7 @@ export function compileStepFigure(
   xLabel: string,
   yLabel: string,
   skillId: string,
+  outputAuthorityClassId?: string,
 ): RenderPlanV1 {
   const box = panelBox(context);
   const noData = values.length === 0;
@@ -220,11 +226,37 @@ export function compileStepFigure(
     const yScale = linearScale(0, yMax, box.y + box.height, box.y);
 
     // Horizontal steps: each bin is a flat segment at its value across [start, end).
-    const stepPoints: { x: number; y: number }[] = [];
+    const stepPoints: {
+      x: number;
+      y: number;
+      authority?: OutputAuthorityAtomicRoleV1;
+    }[] = [];
     for (let i = 0; i < values.length; i++) {
       const yPixel = yScale.map(values[i]);
-      stepPoints.push({ x: xScale.map(binStart[i]), y: yPixel });
-      stepPoints.push({ x: xScale.map(binEnd[i]), y: yPixel });
+      stepPoints.push({
+        x: xScale.map(binStart[i]),
+        y: yPixel,
+        ...(outputAuthorityClassId
+          ? {
+            authority: {
+              tag: 'data_carrier' as const,
+              classId: outputAuthorityClassId,
+              provenance: {
+                binIndex: i,
+                binStart: binStart[i],
+                binEnd: binEnd[i],
+              },
+            },
+          }
+          : {}),
+      });
+      stepPoints.push({
+        x: xScale.map(binEnd[i]),
+        y: yPixel,
+        ...(outputAuthorityClassId
+          ? { authority: { tag: 'connector' as const } }
+          : {}),
+      });
     }
 
     const marks: Mark[] = [
@@ -259,7 +291,6 @@ export function compileStepFigure(
       ],
       values.length,
       (i) => [binStart[i], binEnd[i], values[i]],
-      context.inlineTableRows,
     ),
     accessibility: { summary: context.summary, panelSummaries: [] },
   };

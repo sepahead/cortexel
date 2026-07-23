@@ -252,15 +252,9 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Caller declarations, library-derived facts, external attestations, and unresolved claims are represented as distinct types.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "contract/schemas/figure-artifact.v1.schema.json — declaration/assurance/attestation kept distinct",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "Artifact 1.0 separates caller declarations from library assurances but has no external-attestation input or verifier; its attestations array is explicitly empty. This broader requirement is therefore not yet satisfied."
     },
     {
       "id": "R026",
@@ -276,15 +270,9 @@
       "section": "Canonicalization, artifacts, provenance, and disclosures",
       "requirement": "Scope values distinguish single-process, rank-local, merged-global, subset, sampled, and complete claims.",
       "releaseBlocking": true,
-      "status": "PASS",
-      "evidence": {
-        "receipt": "contract/schemas/common.v1.schema.json networkScope union: single_process/global_merged/mpi_target_rank_local/sampled",
-        "toolchain": "node v26.3.0 / bun 1.3.14 / typescript 5.9.3",
-        "sourceCommit": "1d2d8406b9ffbb4cfbca0899c1adcb09b8507378",
-        "reviewedAt": "2026-07-15T00:00:00Z",
-        "command": "bun run test"
-      },
-      "notes": ""
+      "status": "NOT_RUN",
+      "evidence": null,
+      "notes": "The prior receipt named only four schema variants and did not execute or otherwise prove all six exact scope claims: single-process, rank-local, merged-global, subset, sampled, and complete. The gate remains unproven until all six are re-evidenced."
     },
     {
       "id": "R028",
@@ -370,7 +358,7 @@
     {
       "id": "R037",
       "section": "Scientific semantics",
-      "requirement": "PSTH defines alignment event, trial universe including empty trials, window, bins, count/rate/probability normalization, and edge convention.",
+      "requirement": "PSTH defines the alignment event, trial universe including empty trials, relative window, authoritative bins, exact count, count-per-trial, selected-group-rate-per-trial and per-selected-sender-rate-per-trial normalizations, and a non-contradictory membership/placement edge convention. Probability normalization is out of scope because it answers a different scientific question.",
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
@@ -536,7 +524,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": ""
+      "notes": "No NCP adapter is present in the current product scope. This fixed release-blocking gate remains unmet until the adapter is implemented and certified or the 155-gate checklist is explicitly version-amended."
     },
     {
       "id": "R056",
@@ -671,7 +659,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": ""
+      "notes": "FigureBundleV1 is not present in the current contract. This fixed release-blocking gate remains unmet until that contract is implemented or the 155-gate checklist is explicitly version-amended."
     },
     {
       "id": "R071",
@@ -860,7 +848,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": ""
+      "notes": "No MCP surface is shipped in the current repository. This fixed release-blocking gate remains unmet until such a surface is implemented and tested or the 155-gate checklist is explicitly version-amended."
     },
     {
       "id": "R092",
@@ -923,7 +911,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": "The accessibility-summary receipt is unrelated; the cited commit predates the CI matrix, and the current matrix is Node 20/22/24 rather than the gate's required 22/24/26 policy."
+      "notes": "The package engine range and CI matrix definition now match the closed Node 22/24/26 policy. This gate remains NOT_RUN because no executed release receipt yet proves all three matrix jobs."
     },
     {
       "id": "R099",
@@ -977,7 +965,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": "Governance, support, issue-template, and citation files do not build or inspect a Python wheel/sdist or prove its metadata and contents."
+      "notes": "A development smoke now builds wheel and sdist twice, checks byte identity, exact packaged schemas, typed marker, license, metadata, archive safety, and clean installation. This remains NOT_RUN because no release-bound receipt proves the final artifacts or supported Python/OS matrix."
     },
     {
       "id": "R105",
@@ -986,7 +974,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": "GitHub repository metadata is unrelated to building exact Python artifacts or testing their clean installation across a Python/OS matrix."
+      "notes": "One local clean-install smoke exercises every packaged stable schema on the current host. It is not a release-bound Python/OS matrix receipt and no supported scientific adapter package exists yet."
     },
     {
       "id": "R106",
@@ -1274,7 +1262,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": ""
+      "notes": "The current prepublishOnly lifecycle runs `bun run build`, so it does rebuild before publication. This gate remains unproven; a stable release needs a protected pack-once, attest, and publish workflow for the exact tested bytes."
     },
     {
       "id": "R138",

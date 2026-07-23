@@ -1,10 +1,10 @@
 # Versioning and compatibility
 
-> **Status: 0.9.0 is a pre-1.0 development preview.** It makes **no** stable-contract
-> promise. Any release in the `0.x` line may change any axis described below without a
-> migration path. **The stable compatibility promise defined in this document begins at
-> `1.0.0`.** Until then, treat `main` as moving and do not cite HEAD as a released
-> contract.
+> **Status: 0.9.0 is the last tagged pre-1.0 development release; the working package
+> identity is the private, unreleased `0.10.0-dev.0`.** Neither makes a stable-contract
+> promise. Any `0.x` release may change any axis below without a migration path. **The
+> stable compatibility promise begins at `1.0.0`.** Treat the working tree as moving and
+> never cite HEAD or a development package identity as a release.
 
 This document defines how Cortexel is versioned: the several *named* identities it
 carries, what each one means, when each one moves, and the compatibility guarantees
@@ -21,9 +21,9 @@ The append-only error codes referenced here live in
 
 ## Why more than one version number
 
-A single version string cannot honestly describe Cortexel. The published package, the
+A single version string cannot honestly describe Cortexel. The software package, the
 shape a caller authors, the shape Cortexel emits, the exact bytes of the normative
-contract, and the git commit a build came from all change on *different* schedules and
+contract, and (once implemented) the stamped git commit all change on *different* schedules and
 for *different* reasons. Collapsing them into one number forces a lie in one direction
 or another: either a cosmetic package release pretends the contract moved, or a
 breaking contract change hides behind an unchanged package number.
@@ -38,20 +38,20 @@ rule, and an explicit source set, and by returning them **together** from one ca
 
 ## The named axes
 
-`getBuildIdentity()` (exported from `cortexel/core`) returns the build-level axes in one
+`getBuildIdentity()` (exported from `cortexel/figure`) returns the build-level axes in one
 frozen object; the per-skill and per-renderer revisions live on each catalog entry and
 are stamped into every artifact a build produces.
 
 | Axis | Where it lives | What it identifies |
 |------|----------------|--------------------|
-| **Package version** (`packageVersion`) | `package.json`, npm/PyPI | The SemVer of the installed software artifact. |
+| **Package version** (`packageVersion`) | `package.json`; Python runtime mirror | The npm SemVer identity of the installed software artifact. Python wheel metadata uses its normalized PEP 440 spelling. |
 | **Request contract** (`requestContract`) | `cortexel-figure-request/1.0` | The shape and acceptance rules of what a *caller authors*. |
 | **Artifact contract** (`artifactContract`) | `cortexel-figure-artifact/1.0` | The shape of what Cortexel *emits and archives*. |
 | **Contract digest** (`contractDigest`) | `sha256:…` | A cryptographic hash over the entire normative contract source set. |
 | **Catalog digest** (`catalogDigest`) | `sha256:…` | A hash over the **stable catalog only**. |
 | **Skill revision** (`skillRevision`) | per skill, on its catalog entry | A per-skill integer, bumped when that skill's accepted meaning or output changes. |
 | **Renderer revision** (`rendererRevision`) | per renderer, on the catalog entry | A per-renderer integer, bumped when that renderer's output changes. |
-| **Source revision** (`sourceRevision`) | git commit, or `unreleased-worktree` | The exact commit a release was built from. |
+| **Source revision** (`sourceRevision`) | currently `unreleased-worktree` | Exact commit provenance only after an executable release-stamping producer exists. |
 
 ### Package version — SemVer for the software
 
@@ -62,6 +62,14 @@ never change contract acceptance.** If a change alters which requests are accept
 what artifact they produce, that is a contract change and must move a contract axis and
 the package's minor or major accordingly; it can never arrive as a patch.
 
+Development versions use one closed cross-ecosystem mapping. npm
+`X.Y.Z-dev.N` maps to PEP 440 `X.Y.Z.devN`; a final `X.Y.Z` maps to itself. Generation
+reads both `package.json` and `python/pyproject.toml`, refuses any other prerelease form or
+mapping mismatch, emits npm SemVer as the cross-language runtime `packageVersion`, and
+also emits the wheel's `PYTHON_DISTRIBUTION_VERSION`. The current development package is
+`private: true` and has no `publishConfig`; those are safeguards, not evidence of a
+release.
+
 ### Request contract and artifact contract — the request/artifact split
 
 These are two independently versioned contracts, not one, because a caller and Cortexel
@@ -70,8 +78,12 @@ occupy opposite sides of the boundary:
 - **`cortexel-figure-request/1.0` — `FigureRequestV1`** is *what a caller authors*: the
   data, its units, its scope, its declared source, and its provenance about the data.
 - **`cortexel-figure-artifact/1.0` — `FigureArtifactV1`** is *what Cortexel emits*: the
-  validated figure, its disclosures, its digests, its accessibility table, its
-  calibration and validation status, and the identity of the build that produced it.
+  validated figure declaration, disclosures, SVG output digest, accessibility summary
+  and exact returned-table shape, validation status, and the identity of the build that
+  produced it. `tablePolicy: complete_returned` means every row accompanies the artifact
+  in the in-memory development API, not that rows are embedded in artifact JSON;
+  `tableBinding: shape_only` expressly denies cell/row-byte integrity. No detached
+  verification claim follows.
 
 The split is a load-bearing honesty boundary, not bookkeeping. **A caller may declare
 what its data *is*; it may never author what Cortexel *concluded* about it.** Validation
@@ -94,21 +106,23 @@ Compatibility rule for each contract line:
   reader.
 
 An unsupported declared contract version fails closed with
-`CONTRACT_UNSUPPORTED_VERSION`, pointing the caller at `cortexel migrate` and at
-`cortexel identity --json`.
+`CONTRACT_UNSUPPORTED_VERSION`, pointing the caller at the migration and identity
+operations. They are available through `cortexel/figure` and the packaged offline CLI
+(`cortexel migrate ...` and `cortexel identity --json`); a repository checkout may run
+the same implementation as `bun src/cli/main.ts ...`.
 
-### Contract digest — the identity that matters for reproducibility
+### Contract digest — normative contract identity, not implementation provenance
 
 `contractDigest` is a SHA-256 over the canonicalized **normative source set** under
-`contract/`. It is the axis that actually pins reproducibility, because it changes
+`contract/`. It pins the normative declarations, because it changes
 whenever *anything normative* changes — a schema, a semantic validator, a budget, a
 disclosure rule, a unit, a skill contract — even when no human-facing version number
 moved. A caller may pin it; a mismatch against the running build fails with
 `CONTRACT_DIGEST_MISMATCH`, which is the honest signal that "the contract you validated
 against is not the contract in use."
 
-The digest is computed deterministically so that two builds of the same source produce
-byte-identical digests:
+The digest is computed deterministically so that two copies of the same normative source
+produce byte-identical digests:
 
 1. Canonicalize each JSON file with **RFC 8785 (JSON Canonicalization Scheme)**.
 2. SHA-256 each canonical UTF-8 byte sequence.
@@ -122,6 +136,13 @@ prose such as `contract/README.md`. A volatile input — a timestamp, a build ho
 absolute path — is prohibited in any normative file, because it would make the digest
 unreproducible and therefore useless. A short prefix of the digest may be *displayed* to
 a human; it is never used as an API value.
+
+The source set also excludes the TypeScript and Python implementations, compiler,
+renderer, package files, tests, and git state. The stable-catalog digest below likewise
+excludes implementation. Consequently, neither digest identifies the executable bytes,
+the exact source commit, or enough material to recover a figure implementation. Exact
+implementation recovery requires a real producer that stamps a full source revision and
+ships verifiable build evidence; that producer does not exist in this tree.
 
 An additive, compatible change — for example bumping one skill's revision — will change
 the contract digest **while leaving the request/artifact contracts at `1.0`.** That is
@@ -145,13 +166,45 @@ with `CONTRACT_SKILL_REVISION_UNSUPPORTED` rather than silently rendering with t
 nearest available revision. Approximating a pinned revision would produce a figure that
 claims to be one thing and is another; refusal is the only honest outcome.
 
+The authored and accepted paths are deliberately different:
+
+- `/skill/revision` is optional in an authored `FigureRequestV1`. Omitting it means
+  “resolve this skill to the installed revision”; it does not mean that the accepted
+  request has no revision.
+- Identity resolution runs before structural/semantic validation and canonicalization.
+  An explicit prior or future pin therefore refuses before Cortexel can stamp or digest
+  an accepted request.
+- On success, `ValidatedRequest.skillRevision` and
+  `/canonicalRequest/skill/revision` are the same resolved installed revision. The
+  canonicalizer writes it into a detached copy and never mutates the authored input.
+- A `FigureArtifactV1` records the skill revision exactly once, at
+  `/canonicalRequest/skill/revision`. The renderer is a separate identity at
+  `/render/rendererId` plus `/render/rendererRevision`; there is no duplicate top-level
+  `skillIdentity` field.
+
+This makes an unpinned request and the same request explicitly pinned to the installed
+revision byte-identical after canonicalization. `/provenance/requestDigest` is the
+SHA-256 digest of those RFC 8785 canonical bytes and is also the deterministic SVG-id
+seed domain. Artifact schema validation re-checks shape only: the current development
+writer has no detached verifier, so integrity inspection must independently recompute the request and
+artifact digests rather than treating schema validity as authentication.
+
+The pre-1.0 repair that introduced this stamp intentionally changes the digest and SVG
+seed of a formerly unpinned request, because its accepted skill identity was previously
+missing from the digest domain. An explicit-current request already carried the same
+field, so this repair alone preserves its canonical bytes, request digest, and SVG seed.
+That statement does not promise stability across an actual skill/renderer revision or
+another contract change.
+
 ### Source revision — never lie about provenance
 
-`sourceRevision` is the git commit a release was built from, or the literal
-`unreleased-worktree`. A dirty or non-tagged build reports `unreleased-worktree` and
-`release: false`; it never guesses a release commit, because a build that lies about its
-own provenance is worse than one that admits it has none. The current `0.9.0` local
-build honestly reports `sourceRevision: "unreleased-worktree"` and `release: false`.
+The current writer emits only the literal `sourceRevision: "unreleased-worktree"` with
+`release: false`. This value does **not** identify a commit: clean, dirty, tagged, and
+untagged development builds all lack exact source provenance in their artifacts. A build
+that guesses would be worse than one that admits the limitation. FigureArtifactV1
+therefore constrains those values exactly and contains no dormant `release: true` branch.
+A release identity is added only with the executable stamping producer, a full-commit
+binding, and verification evidence in the same reviewed change.
 
 ## What a patch, minor, or major means
 
@@ -181,9 +234,12 @@ renderer revisions in effect at emission. **That artifact is never rewritten in 
 A later build that fixes or changes a figure produces a *new* artifact with a *new*
 identity; it does not reach back and reinterpret an archived one. A `1.x` reader is
 required to keep reading every `1.x` artifact revision precisely so that old artifacts
-remain interpretable without mutation. This is what makes a figure archive auditable:
-you can always recover exactly which contract, which revisions, and which commit
-produced a given figure.
+remain interpretable without mutation. This prevents silent archive rewriting, but
+current development artifacts do **not** identify the exact producing commit. They bind
+package/contract/catalog and skill/renderer identities while reporting
+`unreleased-worktree`. Exact commit recovery becomes a valid claim only after the
+release-stamping producer described above exists; until then, an archiver must separately
+retain and verify a full commit SHA.
 
 ## Scientific corrections are errata, and normally major
 
@@ -212,7 +268,7 @@ A scientific result is promoted to a **stable, certified** claim only after an
 independent external reference (for the supported analyses, NEST / Elephant and the
 hand-computable golden layer) has been *executed* and *matches*. This is a requirement
 the project holds itself to before `1.0`, not a statement that such review has already
-happened. As of `0.9.0`:
+happened. In the current development tree, as in the `0.9.0` tag:
 
 - Every skill contract's external-oracle status is honestly **`not_run`** — no pinned
   reference environment has been executed in this repository. The executed evidence is
@@ -227,51 +283,60 @@ happened. As of `0.9.0`:
 No document in this repository claims a scientific result was independently confirmed
 until that reference has actually been run and recorded with a reproducible receipt.
 
-## Experimental and removed capabilities
+## Capability maturity, availability, and removal
 
-The stable compatibility promise covers only capabilities marked `stable` in the
-capability matrix: the **19 stable figure contracts plus the `figure.bundle` artifact
-kind**. Everything else is versioned differently on purpose:
+The capability matrix deliberately separates three questions that must not be
+collapsed:
 
-- **Experimental** capabilities — 3D spatial (`experimental.network.spatial_3d`), the
-  evidence knowledge graph (`experimental.evidence.knowledge_graph`), animation replay
-  (`experimental.neuro.animation_replay`), and the NCP adapter
-  (`cortexel/adapters/ncp`) — are available, versioned independently, and **explicitly
-  outside** the stable contract, determinism, accessibility, and compatibility
-  guarantees. They are absent from stable counts, default discovery, root exports, and
-  the conformance badge, and must be imported through an explicit experimental subpath.
-  Requesting one through a stable entry point fails with `CAPABILITY_EXPERIMENTAL`. The
-  NCP adapter will remain experimental until an *immutable* NCP release is certified; it
-  is never certified against a moving upstream HEAD.
-- **Removed** capabilities are gone from the catalog but retain a **deterministic
-  migration outcome** — never a silent alias, because a silent alias would make a stored
-  artifact ambiguous about what was actually validated. Requesting one fails with
-  `CAPABILITY_REMOVED` or the appropriate `MIGRATION_*` code, and `cortexel migrate`
-  produces a request-plus-report that never invents a fact the legacy payload did not
-  carry. The removed pre-1.0 skills (`nest.connectivity_matrix`, `nest.spatial_2d`,
-  `nest.stimulus_response`, `nest.animation_replay`) each name their replacement in the
-  capability matrix and take effect at `removalVersion: 1.0.0`.
+- `status` is semantic contract maturity (`stable`, `experimental`, `deprecated`, or
+  `removed`);
+- `availability` is concrete delivery (`packaged`, `source_only`, or `unavailable`),
+  with no default;
+- `releaseReady` on a skill records whether its certification evidence is complete.
+
+The nineteen FigureRequestV1 skills are semantically `stable`, `packaged`, and
+`releaseReady: false`. Thus they form a usable development catalog without claiming
+that a 1.0 release gate passed. The packaged `cortexel`, `cortexel/core`, and React
+exports remain the legacy VizSpec surfaces alongside the additive FigureRequestV1
+entries; their registry limitations say so explicitly. The packaged
+`cortexel/react/knowledge-graph` export remains experimental legacy code, not a
+FigureRequestV1 skill.
+
+There is no current-contract `figure.bundle`, `cli.verify`, experimental 3D,
+experimental knowledge-graph, experimental animation, or NCP-adapter capability.
+Removed skill records are `unavailable` tombstones with deterministic migration-map
+outcomes. The misleadingly named `nest.connectivity_matrix` maps to a partial
+`network.connection_graph` request because its historical scene and schema defined
+edge-list topology, while its missing node universe, scope, identities, and policies
+remain unresolved; it is never guessed into a matrix. `nest.spatial_2d` can migrate
+conditionally; `nest.stimulus_response` yields only a manual multi-request recipe; and
+`nest.animation_replay` has no current target. Migration never invents a replacement or
+a fact the legacy payload did not carry.
 
 ## The 0.x line and the road to 1.0
 
 During `0.x`, **nothing above is a promise.** Any release may add, change, or remove any
 capability and may move any axis without a compatibility guarantee or a migration path.
-This is deliberate: `0.9.0` is a development preview whose purpose is to get the contract
-and its invariants right *before* they are frozen, and freezing them prematurely would
-be the dishonest move.
+This is deliberate: the `0.9.0` release and unreleased `0.10.0-dev.0` tree exist to get
+the contract and its invariants right *before* they are frozen; freezing prematurely
+would be dishonest.
 
-The stable compatibility promise begins at **`1.0.0`**. A stable (`1.x+`) release tag is
-gated on the evidence ledger: it is blocked while any release-blocking gate is unproven,
-and a `PASS` that carries no reproducible receipt is rejected. Pre-1.0 tags assert **no**
-stable contract and are gated on ledger integrity alone. Until a `1.0.0` tag exists with
-its gates satisfied, Cortexel has no released contract, and the axes in this document
-describe how identity is *tracked*, not a stability guarantee that is yet in force.
+The stable compatibility promise begins at **`1.0.0`**. The structural ledger gate
+strict-parses its JSON, requires a final release argument equal to `currentRelease`, and
+blocks a stable (`1.x+`) tag while any release-blocking gate is unproven. The standalone,
+read-only `release:verify` additionally requires all final package surfaces to agree, an
+explicit public package, a clean HEAD, and an exact annotated `vX.Y.Z` tag resolving to
+that HEAD. It deliberately makes no signing, remote, or branch claim. Today it also
+refuses independently because FigureArtifactV1 permits development identities only; a
+real release remains impossible until source stamping and built-artifact verification
+are implemented. Until a gated `1.0.0` exists, these axes track identity rather than
+promise compatibility.
 
 ## See also
 
 - [`contract/registries/identity.v1.json`](../contract/registries/identity.v1.json) — the normative axis definitions.
 - [`contract/registries/capabilities.v1.json`](../contract/registries/capabilities.v1.json) — the stable / experimental / removed matrix.
 - [`contract/registries/error-codes.v1.json`](../contract/registries/error-codes.v1.json) — the append-only public error codes.
-- [`docs/KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md) — what `0.9.0` does not yet do.
+- [`docs/KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md) — what the current development tree does not yet do.
 - [`docs/release/BASELINE-2026-07-14.md`](./release/BASELINE-2026-07-14.md) and [`docs/release/evidence-ledger.v1.json`](./release/evidence-ledger.v1.json) — the frozen baseline and gate ledger.
 - [`SECURITY.md`](../SECURITY.md) — the fail-closed honesty and input boundaries this identity model protects.

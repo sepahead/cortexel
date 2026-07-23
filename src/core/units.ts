@@ -53,6 +53,15 @@ export function dimensionOf(code: string): string | undefined {
   return typeof code === 'string' && isKnownUnit(code) ? UNITS[code].dimension : undefined;
 }
 
+/** Registry-owned SI/canonical code for a convertible unit's dimension. */
+export function canonicalUnitFor(code: string): string | undefined {
+  if (!isKnownUnit(code)) return undefined;
+  const dimension = UNITS[code].dimension;
+  if (dimension === 'simulator_defined') return undefined;
+  return Object.keys(UNITS).find((candidate) =>
+    UNITS[candidate].dimension === dimension && UNITS[candidate].toCanonical === 1);
+}
+
 /** True when the unit has no safe SI mapping and must never be converted. */
 export function isSimulatorDefined(code: string): boolean {
   return dimensionOf(code) === 'simulator_defined';
@@ -455,6 +464,451 @@ export function divideExactIntegerByConvertedDifference(
     throw new Error('exact endpoint quotient underflowed binary64');
   }
   return result;
+}
+
+/**
+ * Correctly round an exact count rate directly into a declared frequency unit.
+ *
+ * Unlike deriving Hz and then converting, this combines the endpoint difference, time-unit
+ * scale, sender/trial denominator, and output-frequency scale into one rational and rounds
+ * once. It is the authoritative predicate for a caller-supplied rate audit.
+ */
+export function deriveExactCountRateInUnit(
+  count: number,
+  integerFactor: number,
+  lower: number,
+  upper: number,
+  timeUnit: string,
+  rateUnit: string,
+): number {
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error('exact count rate requires a non-negative safe-integer count');
+  }
+  if (!Number.isSafeInteger(integerFactor) || integerFactor < 1) {
+    throw new Error('exact count rate requires a positive safe-integer denominator');
+  }
+  if (!Number.isFinite(lower) || !Number.isFinite(upper) || !(upper > lower)) {
+    throw new Error('exact count rate requires finite strictly ordered endpoints');
+  }
+  const timeToSeconds = conversionScaleRatio(timeUnit, 's');
+  const rateToHz = conversionScaleRatio(rateUnit, 'Hz');
+  const differenceUnits =
+    finiteBinary64ToMinSubnormalUnits(upper) - finiteBinary64ToMinSubnormalUnits(lower);
+  let result: number;
+  try {
+    result = exactRationalToBinary64(
+      BigInt(count) * timeToSeconds.denominator * rateToHz.denominator,
+      BigInt(integerFactor) * differenceUnits * timeToSeconds.numerator * rateToHz.numerator,
+      1074 - timeToSeconds.binaryExponent - rateToHz.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('exact count rate overflowed binary64');
+    }
+    throw error;
+  }
+  if (count !== 0 && result === 0) {
+    throw new Error('exact count rate underflowed binary64');
+  }
+  return result;
+}
+
+/**
+ * Correctly round an exact count rate with more than one integer denominator.
+ *
+ * A PSTH rate may divide by both the number of covering trials and the number of
+ * selected senders.  Multiplying those denominators as a JavaScript number first
+ * would make the result depend on whether their product still happens to be a safe
+ * integer.  Keep the product in BigInt and combine it with the endpoint difference,
+ * time conversion, and output-rate conversion before the single binary64 rounding.
+ */
+export function deriveExactCountRateWithIntegerFactorsInUnit(
+  count: number,
+  integerFactors: readonly number[],
+  lower: number,
+  upper: number,
+  timeUnit: string,
+  rateUnit: string,
+): number {
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error('exact count rate requires a non-negative safe-integer count');
+  }
+  if (
+    integerFactors.length < 1 ||
+    integerFactors.some((factor) => !Number.isSafeInteger(factor) || factor < 1)
+  ) {
+    throw new Error('exact count rate requires positive safe-integer factors');
+  }
+  if (!Number.isFinite(lower) || !Number.isFinite(upper) || !(upper > lower)) {
+    throw new Error('exact count rate requires finite strictly ordered endpoints');
+  }
+
+  const timeToSeconds = conversionScaleRatio(timeUnit, 's');
+  const rateToHz = conversionScaleRatio(rateUnit, 'Hz');
+  const differenceUnits =
+    finiteBinary64ToMinSubnormalUnits(upper) - finiteBinary64ToMinSubnormalUnits(lower);
+  const integerFactor = integerFactors.reduce(
+    (product, factor) => product * BigInt(factor),
+    1n,
+  );
+  let result: number;
+  try {
+    result = exactRationalToBinary64(
+      BigInt(count) * timeToSeconds.denominator * rateToHz.denominator,
+      integerFactor * differenceUnits * timeToSeconds.numerator * rateToHz.numerator,
+      1074 - timeToSeconds.binaryExponent - rateToHz.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('exact count rate overflowed binary64');
+    }
+    throw error;
+  }
+  if (count !== 0 && result === 0) {
+    throw new Error('exact count rate underflowed binary64');
+  }
+  return result;
+}
+
+/**
+ * Correctly round one aggregate count over a sum of exact, integer-weighted
+ * endpoint exposures.
+ *
+ * This is the PSTH baseline authority.  The denominator is
+ *
+ *   sum_i(coveringTrials_i * (upper_i - lower_i)) * other integer factors
+ *
+ * in a registered time unit.  No bin width, exposure, unit factor, or partial sum
+ * is rounded before the final rate is rounded into `rateUnit`.
+ */
+export function deriveExactAggregateCountRateOverIntervalsInUnit(
+  countTotal: bigint,
+  integerFactors: readonly number[],
+  intervals: readonly {
+    readonly lower: number;
+    readonly upper: number;
+    readonly integerWeight: number;
+  }[],
+  timeUnit: string,
+  rateUnit: string,
+): number {
+  if (countTotal < 0n) {
+    throw new Error('exact aggregate count rate requires a non-negative count total');
+  }
+  if (
+    integerFactors.some((factor) => !Number.isSafeInteger(factor) || factor < 1)
+  ) {
+    throw new Error('exact aggregate count rate requires positive safe-integer factors');
+  }
+  if (intervals.length < 1) {
+    throw new Error('exact aggregate count rate requires positive observed exposure');
+  }
+
+  let weightedDifferenceUnits = 0n;
+  for (const interval of intervals) {
+    if (
+      !Number.isFinite(interval.lower) ||
+      !Number.isFinite(interval.upper) ||
+      !(interval.upper > interval.lower) ||
+      !Number.isSafeInteger(interval.integerWeight) ||
+      interval.integerWeight < 1
+    ) {
+      throw new Error(
+        'exact aggregate count rate requires ordered finite intervals with positive safe-integer weights',
+      );
+    }
+    const differenceUnits =
+      finiteBinary64ToMinSubnormalUnits(interval.upper) -
+      finiteBinary64ToMinSubnormalUnits(interval.lower);
+    weightedDifferenceUnits += BigInt(interval.integerWeight) * differenceUnits;
+  }
+  if (weightedDifferenceUnits <= 0n) {
+    throw new Error('exact aggregate count rate requires positive observed exposure');
+  }
+
+  const timeToSeconds = conversionScaleRatio(timeUnit, 's');
+  const rateToHz = conversionScaleRatio(rateUnit, 'Hz');
+  const integerFactor = integerFactors.reduce(
+    (product, factor) => product * BigInt(factor),
+    1n,
+  );
+  let result: number;
+  try {
+    result = exactRationalToBinary64(
+      countTotal * timeToSeconds.denominator * rateToHz.denominator,
+      integerFactor * weightedDifferenceUnits * timeToSeconds.numerator * rateToHz.numerator,
+      1074 - timeToSeconds.binaryExponent - rateToHz.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('exact aggregate count rate overflowed binary64');
+    }
+    throw error;
+  }
+  if (countTotal !== 0n && result === 0) {
+    throw new Error('exact aggregate count rate underflowed binary64');
+  }
+  return result;
+}
+
+/**
+ * Correctly round the signed difference between one exact count rate and one
+ * aggregate exact count rate.
+ *
+ * Both rates share the same typed time and output-frequency scales, but their
+ * count and exposure fractions generally have different denominators.  Rounding
+ * each rate before subtraction can turn a one-event difference into a different
+ * displayed value at large counts.  Cross-multiply the two exact fractions and
+ * round only the signed result.
+ */
+export function deriveExactCountRateMinusAggregateRateOverIntervalsInUnit(
+  count: number,
+  integerFactors: readonly number[],
+  lower: number,
+  upper: number,
+  aggregateCount: bigint,
+  aggregateIntegerFactors: readonly number[],
+  intervals: readonly {
+    readonly lower: number;
+    readonly upper: number;
+    readonly integerWeight: number;
+  }[],
+  timeUnit: string,
+  rateUnit: string,
+): number {
+  if (!Number.isSafeInteger(count) || count < 0 || aggregateCount < 0n) {
+    throw new Error('exact rate difference requires non-negative exact counts');
+  }
+  if (
+    integerFactors.length < 1 ||
+    integerFactors.some((factor) => !Number.isSafeInteger(factor) || factor < 1) ||
+    aggregateIntegerFactors.some((factor) => !Number.isSafeInteger(factor) || factor < 1)
+  ) {
+    throw new Error('exact rate difference requires positive safe-integer factors');
+  }
+  if (!Number.isFinite(lower) || !Number.isFinite(upper) || !(upper > lower)) {
+    throw new Error('exact rate difference requires finite strictly ordered endpoints');
+  }
+
+  const binDifferenceUnits =
+    finiteBinary64ToMinSubnormalUnits(upper) - finiteBinary64ToMinSubnormalUnits(lower);
+  const binIntegerFactor = integerFactors.reduce(
+    (product, factor) => product * BigInt(factor),
+    1n,
+  );
+  let aggregateDifferenceUnits = 0n;
+  for (const interval of intervals) {
+    if (
+      !Number.isFinite(interval.lower) ||
+      !Number.isFinite(interval.upper) ||
+      !(interval.upper > interval.lower) ||
+      !Number.isSafeInteger(interval.integerWeight) ||
+      interval.integerWeight < 1
+    ) {
+      throw new Error(
+        'exact rate difference requires ordered finite aggregate intervals with positive safe-integer weights',
+      );
+    }
+    aggregateDifferenceUnits += BigInt(interval.integerWeight) *
+      (finiteBinary64ToMinSubnormalUnits(interval.upper) -
+        finiteBinary64ToMinSubnormalUnits(interval.lower));
+  }
+  if (aggregateDifferenceUnits <= 0n) {
+    throw new Error('exact rate difference requires positive aggregate exposure');
+  }
+  const aggregateIntegerFactor = aggregateIntegerFactors.reduce(
+    (product, factor) => product * BigInt(factor),
+    1n,
+  );
+
+  const signedFractionNumerator =
+    BigInt(count) * aggregateIntegerFactor * aggregateDifferenceUnits -
+    aggregateCount * binIntegerFactor * binDifferenceUnits;
+  const fractionDenominator =
+    binIntegerFactor * binDifferenceUnits *
+    aggregateIntegerFactor * aggregateDifferenceUnits;
+  const timeToSeconds = conversionScaleRatio(timeUnit, 's');
+  const rateToHz = conversionScaleRatio(rateUnit, 'Hz');
+  let result: number;
+  try {
+    result = exactRationalToBinary64(
+      signedFractionNumerator * timeToSeconds.denominator * rateToHz.denominator,
+      fractionDenominator * timeToSeconds.numerator * rateToHz.numerator,
+      1074 - timeToSeconds.binaryExponent - rateToHz.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('exact rate difference overflowed binary64');
+    }
+    throw error;
+  }
+  if (signedFractionNumerator !== 0n && result === 0) {
+    throw new Error('exact rate difference underflowed binary64');
+  }
+  return result;
+}
+
+function floorNonnegativeRationalWithBinaryExponent(
+  numerator: bigint,
+  denominator: bigint,
+  binaryExponent: number,
+): bigint {
+  if (numerator < 0n || denominator <= 0n) {
+    throw new Error('exact rational floor requires a non-negative numerator and positive denominator');
+  }
+  return binaryExponent >= 0
+    ? (numerator << BigInt(binaryExponent)) / denominator
+    : numerator / (denominator << BigInt(-binaryExponent));
+}
+
+/**
+ * Correctly round an exact aggregate of integer counts through one duration denominator.
+ *
+ * `countTotal / estimatorDenominator` is the count-level mean, trimmed mean, or
+ * even-median midpoint. The division by the rate-normalization factor, typed duration,
+ * and declared frequency-unit scale is combined with that estimator denominator into a
+ * single rational and rounded exactly once. The integer total may exceed MAX_SAFE_INTEGER
+ * but cannot exceed the sum of `estimatorDenominator` safe-integer observations.
+ */
+export function deriveExactAggregateCountRateInUnit(
+  countTotal: bigint,
+  integerFactor: number,
+  estimatorDenominator: number,
+  durationValue: number,
+  durationUnit: string,
+  rateUnit: string,
+): number {
+  if (
+    countTotal < 0n ||
+    !Number.isSafeInteger(integerFactor) ||
+    integerFactor < 1 ||
+    !Number.isSafeInteger(estimatorDenominator) ||
+    estimatorDenominator < 1 ||
+    countTotal >
+      BigInt(estimatorDenominator) * BigInt(Number.MAX_SAFE_INTEGER) ||
+    !Number.isFinite(durationValue) ||
+    !(durationValue > 0) ||
+    dimensionOf(durationUnit) !== 'time' ||
+    dimensionOf(rateUnit) !== 'frequency'
+  ) {
+    throw new Error(
+      'exact aggregate count rate requires a bounded non-negative integer total, positive exact denominators, a positive typed duration, and a registered frequency unit',
+    );
+  }
+
+  const durationUnits = finiteBinary64ToMinSubnormalUnits(durationValue);
+  const timeToSeconds = conversionScaleRatio(durationUnit, 's');
+  const rateToHz = conversionScaleRatio(rateUnit, 'Hz');
+  let result: number;
+  try {
+    result = exactRationalToBinary64(
+      countTotal * timeToSeconds.denominator * rateToHz.denominator,
+      BigInt(integerFactor) *
+        BigInt(estimatorDenominator) *
+        durationUnits *
+        timeToSeconds.numerator *
+        rateToHz.numerator,
+      1074 - timeToSeconds.binaryExponent - rateToHz.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('exact aggregate count rate overflowed binary64');
+    }
+    throw error;
+  }
+  if (countTotal !== 0n && result === 0) {
+    throw new Error('exact aggregate count rate underflowed binary64');
+  }
+  return result;
+}
+
+/**
+ * Whether a supplied rate can be the correctly rounded aggregate of exact integer counts.
+ *
+ * Each underlying observation has the form `count / (integerFactor * duration)`.
+ * `estimatorDenominator` is 1 for a raw observation or odd-sample median, 2 for an
+ * even-sample median, and the retained sample count for a mean or trimmed mean. The
+ * unknown integer total is bounded by `estimatorDenominator * MAX_SAFE_INTEGER`.
+ *
+ * The submitted binary64 rate, duration, and registered unit scales are inverted as one
+ * exact rational. Only the floor and ceiling integer totals can lie in that value's
+ * contiguous round-to-nearest interval. The nearest integers on either side of the
+ * inverse point are tested, together with the finite observation-domain boundary: the
+ * rounded value of the maximum allowed total may have an inverse center just above that
+ * boundary. Every candidate is forward-rounded through the same one-round count-rate
+ * formula. No duration, denominator product, or unit conversion is first materialized
+ * in binary64.
+ */
+export function isRoundedAggregateCountRateInUnit(
+  value: number,
+  integerFactor: number,
+  estimatorDenominator: number,
+  durationValue: number,
+  durationUnit: string,
+  rateUnit: string,
+): boolean {
+  if (
+    !Number.isFinite(value) ||
+    value < 0 ||
+    !Number.isSafeInteger(integerFactor) ||
+    integerFactor < 1 ||
+    !Number.isSafeInteger(estimatorDenominator) ||
+    estimatorDenominator < 1 ||
+    !Number.isFinite(durationValue) ||
+    !(durationValue > 0) ||
+    dimensionOf(durationUnit) !== 'time' ||
+    dimensionOf(rateUnit) !== 'frequency'
+  ) return false;
+
+  const canonicalValue = value === 0 ? 0 : value;
+  const valueUnits = finiteBinary64ToMinSubnormalUnits(canonicalValue);
+  const durationUnits = finiteBinary64ToMinSubnormalUnits(durationValue);
+  const timeToSeconds = conversionScaleRatio(durationUnit, 's');
+  const rateToHz = conversionScaleRatio(rateUnit, 'Hz');
+  const combinedIntegerFactor = BigInt(integerFactor) * BigInt(estimatorDenominator);
+
+  // Invert the exact forward formula used below:
+  //
+  //   rate = total * timeDen * rateDen
+  //          ------------------------- * 2^(1074 - timeExp - rateExp)
+  //          F * durationUnits * timeNum * rateNum
+  //
+  // while the submitted binary64 rate is `valueUnits * 2^-1074`.
+  const inverseNumerator =
+    valueUnits *
+    combinedIntegerFactor *
+    durationUnits *
+    timeToSeconds.numerator *
+    rateToHz.numerator;
+  const inverseDenominator = timeToSeconds.denominator * rateToHz.denominator;
+  const inverseBinaryExponent =
+    -2148 + timeToSeconds.binaryExponent + rateToHz.binaryExponent;
+  const floorTotal = floorNonnegativeRationalWithBinaryExponent(
+    inverseNumerator,
+    inverseDenominator,
+    inverseBinaryExponent,
+  );
+  const maximumTotal =
+    BigInt(estimatorDenominator) * BigInt(Number.MAX_SAFE_INTEGER);
+
+  for (const total of new Set([floorTotal, floorTotal + 1n, maximumTotal])) {
+    if (total < 0n || total > maximumTotal) continue;
+    let rounded: number;
+    try {
+      rounded = deriveExactAggregateCountRateInUnit(
+        total,
+        integerFactor,
+        estimatorDenominator,
+        durationValue,
+        durationUnit,
+        rateUnit,
+      );
+    } catch {
+      continue;
+    }
+    if (rounded === canonicalValue) return true;
+  }
+  return false;
 }
 
 /** Convert a duration to seconds. Used wherever a rate denominator is formed. */

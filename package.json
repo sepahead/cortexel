@@ -1,6 +1,7 @@
 {
   "name": "cortexel",
-  "version": "0.9.0",
+  "version": "0.10.0-dev.0",
+  "private": true,
   "description": "Versioned, provenance-first scientific figure contracts and deterministic SVG rendering for neural-simulation data and AI agents.",
   "license": "MIT",
   "author": "Sepehr Mahmoudian",
@@ -58,6 +59,36 @@
         "default": "./dist/core/index.cjs"
       }
     },
+    "./figure": {
+      "import": {
+        "types": "./dist/figure/index.d.ts",
+        "default": "./dist/figure/index.js"
+      },
+      "require": {
+        "types": "./dist/figure/index.d.cts",
+        "default": "./dist/figure/index.cjs"
+      }
+    },
+    "./render-svg": {
+      "import": {
+        "types": "./dist/render-svg/index.d.ts",
+        "default": "./dist/render-svg/index.js"
+      },
+      "require": {
+        "types": "./dist/render-svg/index.d.cts",
+        "default": "./dist/render-svg/index.cjs"
+      }
+    },
+    "./adapters/nest": {
+      "import": {
+        "types": "./dist/adapters/nest/index.d.ts",
+        "default": "./dist/adapters/nest/index.js"
+      },
+      "require": {
+        "types": "./dist/adapters/nest/index.d.cts",
+        "default": "./dist/adapters/nest/index.cjs"
+      }
+    },
     "./react": {
       "import": {
         "types": "./dist/react/index.d.ts",
@@ -88,33 +119,47 @@
         "default": "./dist/react/knowledge-graph.cjs"
       }
     },
-    "./skills.manifest.json": "./dist/skills.manifest.json"
+    "./skills.manifest.json": "./dist/skills.manifest.json",
+    "./contract/manifest.json": "./dist/contract/manifest.v1.json",
+    "./contract/*": "./dist/contract/*",
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "#cortexel-request-capability": "./dist/internal/request-capability.cjs"
+  },
+  "bin": {
+    "cortexel": "./dist/cli/main.js"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsup && tsx scripts/emit-manifest.ts",
+    "build": "bun run check:generated && tsup && tsx scripts/prepare-package.ts && tsx scripts/emit-manifest.ts && tsx scripts/finalize-package.ts",
     "manifest": "tsx scripts/emit-manifest.ts",
     "generate": "tsx scripts/generate-contract.ts",
     "check:generated": "tsx scripts/check-generated.ts",
+    "check:formal": "lean formal/WeightRowSaturation.lean",
     "typecheck": "tsc --noEmit",
     "check:ledger": "tsx scripts/check-evidence-ledger.ts",
-    "test": "vitest run",
+    "release:verify": "tsx scripts/verify-release.ts",
+    "test": "vitest run --no-file-parallelism --testTimeout=30000",
     "test:watch": "vitest",
-    "check": "tsc --noEmit && vitest run",
+    "check": "bun run check:generated && tsc --noEmit && bun run test",
     "audit": "bun audit",
     "lint:package": "publint",
     "test:package": "bun scripts/smoke-package.ts",
-    "prepublishOnly": "bun run build && bun run check && bun run audit && bun run lint:package && bun run test:package",
-    "test:python": "PYTHONPATH=python/src python3 -m unittest discover -s python/tests"
+    "test:python": "python -m unittest discover -s python/tests",
+    "check:python": "mypy --config-file python/pyproject.toml python/src/cortexel && ruff check python/src python/tests scripts/smoke-python-package.py && python -m compileall -q python/src python/tests scripts/smoke-python-package.py",
+    "test:python-package": "python scripts/smoke-python-package.py",
+    "prepublishOnly": "bun run release:verify && bun run check:ledger && bun run build && bun run check && bun run test:python && bun run check:python && bun run test:python-package && bun run audit && bun run lint:package && bun run test:package && bun run release:verify"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "zod": "^4"
   },
   "overrides": {
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "fast-uri": "3.1.4"
   },
   "peerDependencies": {
     "@types/react": "^19",
@@ -148,7 +193,7 @@
       "optional": true
     }
   },
-  "_peerNote": "zod is a normal dependency — the `cortexel/core` VizSpec contract needs it at runtime, so it is installed automatically. react is the only runtime peer used by `cortexel/react/charts`; react/react-dom/three/@react-three/fiber are optional runtime peers needed by `cortexel/react`; @types/react/@types/three are optional declaration peers for TypeScript consumers; d3-force-3d is needed only by `cortexel/react/knowledge-graph`.",
+  "_peerNote": "ajv and zod are normal dependencies: `cortexel/figure` compiles the packaged JSON Schemas with Ajv, while the legacy `cortexel/core` VizSpec contract uses zod. `cortexel/figure`, `cortexel/render-svg`, and `cortexel/adapters/nest` load no React/Three/R3F/D3 peer. react is the only runtime peer used by `cortexel/react/charts`; react/react-dom/three/@react-three/fiber are optional runtime peers needed by `cortexel/react`; @types/react/@types/three are optional declaration peers for TypeScript consumers; d3-force-3d is needed only by `cortexel/react/knowledge-graph`.",
   "devDependencies": {
     "@react-three/fiber": "^9.6.1",
     "@types/node": "^26.1.1",
@@ -169,9 +214,6 @@
     "vitest": "^4.1.10"
   },
   "engines": {
-    "node": ">=20"
-  },
-  "publishConfig": {
-    "access": "public"
+    "node": "^22.0.0 || ^24.0.0 || ^26.0.0"
   }
 }

@@ -13,6 +13,8 @@
  *   erase that distinction — so a cell is present only if a connection put it there.
  */
 
+import { exactBinary64Mean, exactBinary64Sum } from '../core/exact-binary64.js';
+
 export interface DegreeResult {
   /** Degree per node, in the node-universe order. Includes zero-degree nodes. */
   readonly degree: number[];
@@ -76,6 +78,74 @@ export interface SparseMatrix {
   readonly aggregation: string;
 }
 
+export type TopologyScalarAggregation =
+  | 'sum'
+  | 'mean'
+  | 'min'
+  | 'max'
+  | 'no_aggregation';
+
+/**
+ * One deterministic scalar for a topology paint group.
+ *
+ * Topology rows can be permuted without changing the scientific snapshot, so an
+ * ordinary left-to-right `reduce` is not an admissible aggregation authority.  Sum and
+ * mean decode every finite binary64 input exactly, accumulate in integer arithmetic,
+ * and round once.  Min/max canonicalize signed zero so their result is permutation
+ * invariant too.  An unrepresentable finite result is refused rather than entering a
+ * colour/width scale as infinity.
+ */
+export function aggregateTopologyScalar(
+  values: readonly number[],
+  method: TopologyScalarAggregation | undefined,
+): number | null {
+  if (values.length === 0) return null;
+  for (const value of values) {
+    if (!Number.isFinite(value)) {
+      throw new Error('topology scalar aggregation requires finite binary64 values');
+    }
+  }
+
+  let result: number;
+  switch (method) {
+    case 'sum':
+      result = exactBinary64Sum(values);
+      break;
+    case 'mean':
+      result = exactBinary64Mean(values);
+      break;
+    case 'min': {
+      result = values[0];
+      for (let index = 1; index < values.length; index++) {
+        if (values[index] < result) result = values[index];
+      }
+      break;
+    }
+    case 'max': {
+      result = values[0];
+      for (let index = 1; index < values.length; index++) {
+        if (values[index] > result) result = values[index];
+      }
+      break;
+    }
+    case 'no_aggregation':
+      if (values.length !== 1) {
+        throw new Error(
+          `no_aggregation asserts exactly one topology value; got ${values.length}`,
+        );
+      }
+      result = values[0];
+      break;
+    default:
+      throw new Error('topology scalar aggregation requires a declared supported method');
+  }
+
+  if (!Number.isFinite(result)) {
+    throw new Error('topology scalar aggregate is outside the finite binary64 range');
+  }
+  return result === 0 ? 0 : result;
+}
+
 /**
  * Build a sparse target-row / source-column matrix.
  *
@@ -92,20 +162,36 @@ export function computeMatrix(
   values: readonly (number | null)[] | undefined,
   aggregation: 'sum' | 'mean' | 'min' | 'max' | 'no_aggregation' | 'count',
 ): SparseMatrix {
+  if (sourceIds.length !== targetIds.length) {
+    throw new Error('matrix sourceIds and targetIds must have exactly equal length');
+  }
+  if (values !== undefined && values.length !== sourceIds.length) {
+    throw new Error('matrix values must be index-aligned with every connection row');
+  }
   const rowIndex = new Map<string, number>();
-  rowIds.forEach((id, i) => rowIndex.set(id, i));
+  rowIds.forEach((id, i) => {
+    if (rowIndex.has(id)) throw new Error(`duplicate matrix row id ${JSON.stringify(id)}`);
+    rowIndex.set(id, i);
+  });
   const colIndex = new Map<string, number>();
-  colIds.forEach((id, i) => colIndex.set(id, i));
+  colIds.forEach((id, i) => {
+    if (colIndex.has(id)) throw new Error(`duplicate matrix column id ${JSON.stringify(id)}`);
+    colIndex.set(id, i);
+  });
 
   // Accumulate contributions per cell before aggregating, so `mean` and `count` are
   // correct and `no_aggregation` can detect a genuine multapse.
   const accumulator = new Map<string, number[]>();
 
-  const n = Math.min(sourceIds.length, targetIds.length);
+  const n = sourceIds.length;
   for (let e = 0; e < n; e++) {
     const row = rowIndex.get(targetIds[e]);
     const col = colIndex.get(sourceIds[e]);
-    if (row === undefined || col === undefined) continue;
+    if (row === undefined || col === undefined) {
+      throw new Error(
+        `matrix connection ${e} has an endpoint outside the declared row/column universe`,
+      );
+    }
 
     // The value array is INDEX-ALIGNED with the edge arrays. A null/missing value is
     // skipped for THIS cell only — it never shifts a later edge onto another cell's value,
@@ -115,7 +201,12 @@ export function computeMatrix(
       value = 1;
     } else if (values) {
       const raw = values[e];
-      if (raw === null || !Number.isFinite(raw)) continue;
+      if (raw === null) {
+        throw new Error(
+          'computeMatrix cannot erase a present connection with a missing value; use deriveWeightMatrix for explicit missing-state evidence',
+        );
+      }
+      if (!Number.isFinite(raw)) throw new Error('matrix values must be finite binary64 or null');
       value = raw;
     } else {
       value = 1;
@@ -148,22 +239,6 @@ function aggregate(
   values: readonly number[],
   method: 'sum' | 'mean' | 'min' | 'max' | 'no_aggregation' | 'count',
 ): number {
-  switch (method) {
-    case 'count':
-      return values.length;
-    case 'sum':
-      return values.reduce((a, b) => a + b, 0);
-    case 'mean':
-      return values.reduce((a, b) => a + b, 0) / values.length;
-    case 'min':
-      return values.reduce((minimum, value) => (value < minimum ? value : minimum), Infinity);
-    case 'max':
-      return values.reduce((maximum, value) => (value > maximum ? value : maximum), -Infinity);
-    case 'no_aggregation':
-      // The upstream validator guarantees a single contributor here, but if somehow more
-      // arrive we sum rather than silently pick one — the honest failure being visible.
-      return values.length === 1 ? values[0] : values.reduce((a, b) => a + b, 0);
-    default:
-      return values[0];
-  }
+  if (method === 'count') return values.length;
+  return aggregateTopologyScalar(values, method)!;
 }

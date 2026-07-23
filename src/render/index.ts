@@ -3,7 +3,15 @@
  *
  * This entry renders without React, without a browser, without WebGL, and without
  * network access. A server, a CI job, or an agent can turn a validated request into a
- * normative SVG plus a table and an artifact, and get the same bytes every time.
+ * normative SVG plus a table and an artifact. Byte determinism is scoped to the
+ * documented build/runtime tuple; cross-platform identity remains a separate release
+ * evidence gate.
+ * The package installs this implementation at the additive `cortexel/render-svg`
+ * subpath; it does not replace any legacy React renderer.
+ *
+ * Only end-to-end builders are public. The raw RenderPlan model, resource accounting,
+ * formatting/scaling primitives, and SVG serializer remain compiler-internal so a
+ * caller cannot bypass validation or the final OutputAuthority translation gate.
  */
 
 export {
@@ -13,18 +21,3 @@ export {
   type FigureResult,
   type FigureFailure,
 } from './buildFigure.js';
-
-export { countPlanResources, renderSvg, type SvgReport } from './svg.js';
-
-export type {
-  RenderPlanV1,
-  Panel,
-  Mark,
-  Axis,
-  TableModel,
-  AccessibilityModel,
-  DisclosureBlock,
-} from './model/renderPlan.js';
-
-export { formatNumber, formatCoordinate, formatWithUnit } from './format.js';
-export { linearScale, linearTicks, type LinearScale, type Tick } from './scale.js';

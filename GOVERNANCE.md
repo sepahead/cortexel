@@ -1,7 +1,8 @@
 # Cortexel governance
 
-> **Status: 0.9.0 — a pre-1.0 development preview.** This document describes how
-> decisions are made about Cortexel *today*, honestly reflecting that the project
+> **Status: `0.9.0` is the last tagged pre-1.0 release; the working source is the
+> private, unreleased `0.10.0-dev.0`.** This document describes how decisions are made
+> about Cortexel *today*, honestly reflecting that the project
 > currently has **one maintainer**. It does not describe a board, a committee, or a
 > staffed organization, because none exists. Where a rule anticipates 1.0, it is
 > written as a **desired requirement** and labelled as such, not as an accomplished
@@ -65,11 +66,15 @@ durable, machine-readable records, not to a person's recollection:
    `scripts/check-generated.ts` fails if generation is stale or nondeterministic.
 3. **The evidence ledger**
    ([`docs/release/evidence-ledger.v1.json`](./docs/release/evidence-ledger.v1.json)).
-   Every one of the 155 release gates carries an explicit
+   Every release gate carries an explicit
    `PASS` / `FAIL` / `NOT_RUN` / `NOT_APPLICABLE` / `BLOCKED` state. A gate is `PASS`
    **only** when it links a reproducible receipt (a test file, a generated artifact, a
    schema). `scripts/check-evidence-ledger.ts` rejects a `PASS` with no receipt and
-   requires a rationale for `NOT_APPLICABLE`.
+   requires a rationale for `NOT_APPLICABLE`. For a stable tag, `NOT_APPLICABLE` is an
+   honest classification but **not a passing waiver**: every fixed release-blocking gate
+   must be `PASS`. A retained gate that names a capability outside the current scope
+   therefore records unresolved checklist/scope debt until the capability is evidenced
+   or the requirement itself is formally amended.
 
 The controlling principle is: **the maintainer may decide anything, but may not mark a
 gate green that has no evidence.** The ledger is what makes "not done yet" (`NOT_RUN`)
@@ -95,11 +100,11 @@ table below states what each class requires *in addition*.
 | Class | What it is | Additional evidence required | May the sole maintainer self-merge? |
 |-------|-----------|------------------------------|-------------------------------------|
 | **documentation-only** | Prose in `*.md`, comments, examples that are not executed as fixtures. | A read-through for accuracy against the code it describes. No claim may be upgraded (e.g. calling an experimental capability "stable"). | Yes. |
-| **implementation-preserving-contract** | Refactor, rename, or performance change that provably does not alter any accepted request, emitted artifact, or canonical bytes. | Full test suite green; `contractDigest` and `catalogDigest` **unchanged** (proof that nothing normative moved). If a digest changes, it is not this class. | Yes. |
+| **implementation-preserving-contract** | Refactor, rename, or performance change intended not to alter any accepted request, emitted artifact, or canonical bytes. | Full test suite green; `contractDigest` and `catalogDigest` **unchanged** (cryptographic evidence that the files covered by the declared digest inventories did not move, not a proof of behavioral equivalence). If a digest changes, it is not this class. | Yes. |
 | **renderer / presentation** | Layout, color, tick, glyph, or scene-primitive changes that alter pixels/SVG bytes but not the underlying scientific values. | Determinism receipts for the affected renderer; the exact-value table and disclosures must be unchanged in meaning; `rendererRevision` bumped when output bytes change. WebGL/experimental scenes must still visibly declare experimental status. No scientific distinction may become color-only. | Yes. |
 | **scientific-algorithm** | Any change to how a measured quantity is computed, binned, normalized, aggregated, or scoped — the analysis layer under `src/analysis/` and the semantic validators. | Hand-computable golden vectors updated and passing (`test/analysis.test.ts`); the change stated in a versioned convention page; **and the external-review gate of Section 4.** The independent oracle layer (`reference/`) remains honestly `not_run` until executed — a change here may **never** be described as "confirmed against NEST/Elephant" while that layer is unrun. | **No** — see Section 4. |
 | **semantic-contract / catalog** | Adding, removing, or redefining a figure contract, an error code, a unit, a scope, a disclosure rule, or a budget; anything under `contract/`. | Regenerated sources via `scripts/generate-contract.ts` with `scripts/check-generated.ts` green; living valid/invalid examples; error codes remain **append-only within contract 1.x** (a code's meaning never changes, a code is never reused); a removal carries a deterministic migration outcome (never a silent alias). A change to accepted *meaning* also triggers the compatibility rules of Section 5. | Mechanical parts yes; a change to accepted scientific meaning is also a scientific-algorithm change and inherits Section 4. |
-| **security-boundary** | The parser, the value snapshot, the honesty/disclosure engine, provenance authority, resource budgets, or anything in scope of [SECURITY.md](./SECURITY.md). | A regression test that fails before the fix and passes after; a `CHANGELOG` `Security` entry; proof that no gate protecting a boundary was weakened. A change that lets synthetic/advisory data render without its disclosure, or that lets a caller author a library-generated assurance, is a defect, not a feature. | Yes for hardening; a boundary *relaxation* requires the emergency/deliberate review of Section 6 and must never be silent. |
+| **security-boundary** | The parser, the value snapshot, the honesty/disclosure engine, provenance authority, resource budgets, or anything in scope of [SECURITY.md](./SECURITY.md). | A regression test that fails before the fix and passes after; a `CHANGELOG` `Security` entry; and an explicit review argument, backed by negative tests, that no gate protecting a boundary was weakened. This is evidence, not a formal proof over all executions. A change that lets synthetic/advisory data render without its disclosure, or that lets a caller author a library-generated assurance, is a defect, not a feature. | Yes for hardening; a boundary *relaxation* requires the emergency/deliberate review of Section 6 and must never be silent. |
 | **dependency / build** | `package.json`, lockfile, `tsup`/build config, generated `dist/`, or the toolchain. | `bun run audit` clean; `bun run lint:package` and `bun run test:package` green; while `dist/` remains committed, it is rebuilt in the same change and byte-stable (a two-build determinism check). New runtime dependencies are added conservatively and justified in the change description. | Yes. |
 | **release** | Cutting a tagged version and its GitHub release. | The full release procedure of Section 5, gated by `check-evidence-ledger.ts`. At 0.9.0 this excludes npm, PyPI, and DOI publication, which have not occurred. | Only the maintainer, as the sole release authority. |
 
@@ -131,13 +136,13 @@ The two evidence layers Cortexel currently ships — hand-computable golden vect
 (`reference/`, honestly `not_run`) — are the *floor* of scientific evidence, not the
 whole of it. External domain review is the missing ceiling.
 
-**Why it is currently BLOCKED, not self-certified.** No second qualified reviewer
-exists for this project today. Under those conditions the honest state of the
-scientific-review gates (R132, R147, and by extension the 1.0 authorization gates
-R150 and R153) is **`BLOCKED`** in the evidence ledger — a capability that cannot be
-satisfied under present conditions — **not `NOT_RUN`** (as if merely pending) and
-emphatically **not `PASS`**. The maintainer will **not** mark these gates green by
-reviewing their own work. Consequently:
+**Why it cannot be self-certified.** No second qualified reviewer exists for this
+project today. The evidence ledger currently records the scientific-review and 1.0
+authorization gates (R132, R147, R150, and R153) as **`NOT_RUN`**, not `PASS`.
+In practical terms they cannot pass under present conditions: the maintainer will
+**not** manufacture an independent-review receipt by reviewing their own work. The
+ledger also supports `BLOCKED` when a gate is formally classified that way, but this
+prose does not relabel the machine-readable state. Consequently:
 
 - 0.9.0 and any other pre-1.0 tag make **no stable-contract claim** and are gated on
   ledger *integrity* alone (every gate honestly stated), not on the science gates
@@ -189,14 +194,18 @@ than rhetorical:
 2. **Remove.** A removed capability is `removed` with a **deterministic migration
    outcome** — never a silent alias, because a silent alias makes a stored artifact
    ambiguous about what was actually validated. A pre-1.0 id used in normal validation
-   fails with a migration error and is handled by the `cortexel migrate` CLI, which
-   emits a draft request plus a report and never invents a fact the legacy payload did
+   fails with a migration error and is handled by the migration API or the packaged
+   offline CLI (`cortexel migrate ...`; the source-checkout equivalent is
+   `bun src/cli/main.ts migrate ...`), which emits a request plus a report and
+   never invents a fact the legacy payload did
    not carry (for example, the ambiguous `nest.connectivity_matrix` refuses to guess
    between adjacency, weight, and delay).
 
-The distinction between `status` (the promise) and `releaseReady` (whether the
-evidence for that promise exists) is intentional and is preserved: a label that can be
-set without evidence is a marketing label, and Cortexel does not ship those.
+The distinction among `status`, `availability`, and `releaseReady` is intentional.
+`status` is semantic contract maturity; mandatory `availability` records whether the
+exact surface is packaged, source-only, or unavailable; `releaseReady` records whether
+the skill's certification evidence exists. No one axis may be used as evidence for
+another.
 
 **Release procedure (all tiers).**
 
@@ -205,8 +214,10 @@ set without evidence is a marketing label, and Cortexel does not ship those.
 2. Rebuild committed `dist/` and confirm it is byte-stable and staged.
 3. Reconcile the evidence ledger to the truth: every gate in its real state, `PASS`
    only with a receipt. Run `scripts/check-evidence-ledger.ts`. For a **stable** tag
-   it must find no unproven release-blocking gate; for a **pre-1.0** tag it asserts
-   only ledger integrity and that no stable-contract claim is made.
+   it must find every fixed release-blocking gate at `PASS`; `NOT_APPLICABLE`, even with
+   its required rationale, still blocks rather than silently deleting a promised
+   requirement. For a **pre-1.0** tag it asserts only ledger integrity and that no
+   stable-contract claim is made.
 4. Update `CHANGELOG.md` and `CITATION.cff` (`version`, `date-released`).
 5. Tag and cut the GitHub release. **A DOI is minted only after a real archived
    release exists; a placeholder DOI is never inserted.** At 0.9.0 nothing is
@@ -261,15 +272,17 @@ change description:
 
 - **Adding a maintainer or reviewer.** When a second qualified person takes on merge,
   release, or scientific-review authority, this file is updated to name them and their
-  scope, and the relevant `BLOCKED` ledger gates (Section 4) may move toward `NOT_RUN`
-  or `PASS` **only** on the strength of that real person's recorded work.
+  scope. The relevant gates, currently `NOT_RUN` (or any gate later recorded as
+  `BLOCKED`), may move to `PASS` **only** on the strength of that real person's
+  recorded work.
 - **Relaxing any evidence requirement.** Weakening what a change class in Section 3
   demands is a governance change of record and must state, in the amendment itself, why
   the weaker bar still protects the artifact-honesty property.
 
-Until such an amendment lands, the single-maintainer reality and the blocked
-external-science-review gate stand as written — honestly, and without a checkmark that
-has not been earned.
+Until such an amendment lands, the single-maintainer reality and the unmet
+external-science-review precondition stand as written — honestly, and without a
+checkmark that has not been earned. The evidence ledger remains the authority for each
+gate's current state.
 
 ---
 

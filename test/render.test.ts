@@ -14,7 +14,6 @@ import {
   buildFigure,
   buildFigureFromJson,
   buildFigureFromValidated,
-  renderSvg,
 } from '../src/render/index.js';
 import { formatNumber, formatCoordinate } from '../src/render/format.js';
 import { linearTicks } from '../src/render/scale.js';
@@ -57,7 +56,7 @@ describe('end-to-end render — population rate', () => {
     expect(result.svg).toContain('<svg');
     expect(result.svg).toContain('</svg>');
     expect(result.svg).toContain('cortexel-figure-artifact/1.0');
-    expect(result.table.columns.map((c) => c.key)).toContain('value');
+    expect(result.table.columns.map((c) => c.key)).toContain('rate');
     expect(result.artifact.artifactDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
@@ -263,7 +262,8 @@ describe('a pre-binned PSTH draws its counts, not an all-zero figure', () => {
     // One bar per bin (edges.length - 1), and at least one is non-zero — the prebinned
     // counts are drawn rather than ignored.
     const edges = prebinned.data.binEdges?.edges ?? prebinned.parameters.bins?.edges ?? [];
-    const barValues = result.table.rows.map((row) => Number(row[row.length - 1]));
+    const valueColumn = result.table.columns.findIndex((column) => column.key === 'value');
+    const barValues = result.table.rows.map((row) => Number(row[valueColumn]));
     expect(barValues.length).toBe(edges.length - 1);
     expect(barValues.some((v) => v > 0)).toBe(true);
   });

@@ -24,9 +24,9 @@ import { parseJsonStrict } from '../src/core/parse-json.js';
 import {
   buildFigure,
   buildFigureFromJson,
-  countPlanResources,
-  type RenderPlanV1,
 } from '../src/render/index.js';
+import type { RenderPlanV1 } from '../src/render/model/renderPlan.js';
+import { countPlanResources } from '../src/render/svg.js';
 
 function example(skill: string): Record<string, unknown> {
   return JSON.parse(
@@ -100,7 +100,7 @@ describe('closed and monotone budget authority', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.artifact.budgetDecision).toMatchObject({ profileId: 'agent' });
+    expect(result.artifact.budgetDecision).toEqual({ outcome: 'accepted_full' });
     expect(result.artifact.inputAssurance).toMatchObject({ budgetProfile: 'agent' });
   });
 
@@ -129,7 +129,7 @@ describe('closed and monotone budget authority', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    expect(result.artifact.budgetDecision).toMatchObject({ profileId: 'agent' });
+    expect(result.artifact.budgetDecision).toEqual({ outcome: 'accepted_full' });
     expect(result.artifact.inputAssurance).toMatchObject({ budgetProfile: 'agent' });
   });
 
@@ -232,6 +232,34 @@ describe('diagnostic totality and bounded display text', () => {
       omittedCount: 9,
     });
   });
+
+  it('orders diagnostic paths by the registry-defined Unicode code-point order', () => {
+    const errors = ['\u{10000}', '\ue000'].map((suffix) =>
+      makeError({
+        code: 'SCHEMA_UNKNOWN_PROPERTY',
+        stage: 'structural',
+        instancePath: `/parameters/${suffix}`,
+        message: 'unknown property',
+      }));
+
+    expect(finalizeErrors(errors).map((error) => error.instancePath)).toEqual([
+      '/parameters/\ue000',
+      '/parameters/\u{10000}',
+    ]);
+
+    const validatorTies = ['\u{10000}', '\ue000'].map((validatorId) =>
+      makeError({
+        code: 'SCHEMA_UNKNOWN_PROPERTY',
+        stage: 'structural',
+        instancePath: '/same',
+        validatorId,
+        message: 'unknown property',
+      }));
+    expect(finalizeErrors(validatorTies).map((error) => error.validatorId)).toEqual([
+      '\ue000',
+      '\u{10000}',
+    ]);
+  });
 });
 
 describe('render resource accounting', () => {
@@ -265,7 +293,7 @@ describe('render resource accounting', () => {
           ],
         },
       ],
-      table: { policy: 'complete_inline', columns: [], rows: [], rowsInline: 0, rowsTotal: 0 },
+      table: { policy: 'complete_returned', columns: [], rows: [], rowsInline: 0, rowsTotal: 0 },
       accessibility: { summary: 'Test.', panelSummaries: [] },
     } satisfies RenderPlanV1;
 

@@ -210,15 +210,30 @@ export function makeError(init: ErrorInit): CortexelError {
  * Two runs on the same input must produce the same diagnostics in the same order,
  * or a conformance corpus cannot compare TypeScript against Python.
  */
+function compareUnicodeCodePoints(left: string, right: string): number {
+  let leftIndex = 0;
+  let rightIndex = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftPoint = left.codePointAt(leftIndex)!;
+    const rightPoint = right.codePointAt(rightIndex)!;
+    if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1;
+    leftIndex += leftPoint > 0xffff ? 2 : 1;
+    rightIndex += rightPoint > 0xffff ? 2 : 1;
+  }
+  if (leftIndex === left.length && rightIndex === right.length) return 0;
+  return leftIndex === left.length ? -1 : 1;
+}
+
 export function compareErrors(a: CortexelError, b: CortexelError): number {
   const stageDelta = STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage);
   if (stageDelta !== 0) return stageDelta;
-  if (a.instancePath !== b.instancePath) return a.instancePath < b.instancePath ? -1 : 1;
-  if (a.code !== b.code) return a.code < b.code ? -1 : 1;
+  const pathDelta = compareUnicodeCodePoints(a.instancePath, b.instancePath);
+  if (pathDelta !== 0) return pathDelta;
+  const codeDelta = compareUnicodeCodePoints(a.code, b.code);
+  if (codeDelta !== 0) return codeDelta;
   const av = a.validatorId ?? '';
   const bv = b.validatorId ?? '';
-  if (av !== bv) return av < bv ? -1 : 1;
-  return 0;
+  return compareUnicodeCodePoints(av, bv);
 }
 
 /**

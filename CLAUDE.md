@@ -17,13 +17,20 @@ bun install
 bun run typecheck   # tsc --noEmit
 bun run test        # vitest run
 bun run check       # typecheck + test (run before finishing)
-bun run build       # tsup → dist/ (ESM + CJS + d.ts) + dist/skills.manifest.json
+bun run build       # tsup + verified dist/contract copy + legacy skills manifest
 bun run audit       # dependency advisory gate
 bun run lint:package # publint export/package metadata gate
 bun run test:package # clean-install ESM/CJS runtime + consumer type smoke
 ```
 
-Use `bun`. Node ≥ 20. There is no lint step; TypeScript strict mode is the gate.
+Use `bun`. Supported Node runtimes are exactly the maintained majors 22, 24, and
+26 (`^22.0.0 || ^24.0.0 || ^26.0.0`); the package and CI enforce that policy.
+There is no separate linter; TypeScript strict mode is the gate.
+`bunfig.toml` deliberately sets `env = false` and a regression test checks nested Bun
+scripts. That is not a filesystem sandbox: package managers and dependencies may still
+read checkout files. Keep credentials outside the repository and outside the invoking
+environment; a narrowly scoped first-party client may read its external credential store
+explicitly.
 
 ## Repo shape
 
@@ -32,16 +39,21 @@ Use `bun`. Node ≥ 20. There is no lint step; TypeScript strict mode is the gat
 | `core/` | zero-dep (beyond `zod`) contract: `vizSpec`, `provenance`, `designLaws`, `colormaps`, `skills/*`, `nest/*` |
 | `core/skills/` | the skill axis: ids/registry/router, strict params/provenance, Cortexel + host invocation gates, authoring, examples, verification |
 | `react/` | render layer: strict `VizSpecRenderer`, React-only canonical SVG charts, `Expandable*`, `neuronShaders`, and (subpath-only) `KnowledgeGraph3DScene` + `knowledgeGraph` |
+| `src/` | FigureRequestV1 kernel, headless SVG renderer, NEST adapter, offline CLI, and generated contract projections |
+| `contract/` | Normative FigureRequestV1 registries/schemas/skills; copied exactly once to `dist/contract` after tsup cleans |
 | `types/` | ambient shims for deps that ship none (`d3-force-3d`) |
 | `scripts/emit-manifest.ts` | generates `dist/skills.manifest.json` from the registry |
 | `test/` | vitest; several tests are *executable guards* for the invariants below |
 | `dist/` | **committed build output** (see below) |
 
-Entrypoints ascend in dependency weight: `cortexel/core` (zod only) →
+The legacy entrypoints ascend in dependency weight: `cortexel/core` (zod only) →
 `cortexel/react/charts` (+ React only) → `cortexel/react`
 (+ react/react-dom/three/r3f) → `cortexel/react/knowledge-graph` (+ d3-force-3d).
 The root `cortexel` re-exports **only** `core`, so a server import never pulls in
-React or Three.
+React or Three. Additive FigureRequestV1 capabilities live at `cortexel/figure`,
+`cortexel/render-svg`, and `cortexel/adapters/nest`; none loads React/Three/R3F/D3.
+Normative JSON is exported under `cortexel/contract/*`, and the `cortexel` bin is
+offline. Do not replace or silently redirect a legacy path during the migration.
 
 ## Non-negotiables
 
@@ -51,7 +63,7 @@ These are the things a change most easily breaks. Treat them as hard constraints
 
 Git-dependency consumers install without a build step, so `dist/` is checked in and
 **CI fails if it drifts from source** (`git diff --exit-code -- dist`). After any
-change under `core/`, `react/`, `index.ts`, `scripts/`, or `tsup.config.ts`, run
+change under `core/`, `react/`, `src/`, `index.ts`, `scripts/`, or `tsup.config.ts`, run
 `bun run build` and stage the regenerated `dist/`. The build is deterministic —
 building twice yields byte-identical output.
 
@@ -125,7 +137,7 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   exact extrema, but nonadjacent retained bins must start new subpaths and the DOM
   must disclose source/rendered counts—never interpolate, smooth, bridge, mirror,
   or invent a lag-zero bin.
-- **Topology figures preserve structural absence.** Connection matrices use NEST's
+- **Topology figures preserve structural absence.** Connection matrices use Cortexel's
   target-row/source-column convention and sparse present-cell geometry; a missing
   cell is never painted as a measured zero, while a present zero-valued weight sum
   remains visible. Value quantization may group paint paths but must retain every
@@ -158,7 +170,8 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
 - **three caches bounding spheres once.** Any object whose geometry/instance matrices
   stream every frame must set `frustumCulled={false}` (and invalidate
   `mesh.boundingSphere` after matrix writes if it needs raycasting), or drifted
-  content becomes unhittable / blinks out. This is proven against the installed three.
+  content becomes unhittable / blinks out. Source-level regression tests guard this
+  behavior for the pinned Three.js version; that is not a proof for future versions.
 - **Reduced motion is a shared prop contract** (`reducedMotion`) across the animated
   scenes — honor it in new scenes (pre-settle / hold animation / snap transitions).
 - **No implicit network loaders.** The graph label intentionally uses a local

@@ -71,6 +71,21 @@ describe('safe snapshot — never runs caller code', () => {
     );
     expect(codes(hostile)).toContain('SNAPSHOT_HOSTILE_REFLECTION');
   });
+
+  it('does not invoke an Array Proxy get trap to obtain length', () => {
+    let getCalls = 0;
+    const hostile = new Proxy([1, 2], {
+      get() {
+        getCalls += 1;
+        throw new Error('ordinary property reads are caller code');
+      },
+    });
+
+    const result = snap(hostile);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value).toEqual([1, 2]);
+    expect(getCalls).toBe(0);
+  });
 });
 
 describe('safe snapshot — rejects non-JSON shapes', () => {
@@ -103,6 +118,15 @@ describe('safe snapshot — rejects non-JSON shapes', () => {
     array.note = 'hi';
     expect(codes(array)).toContain('SNAPSHOT_DECORATED_ARRAY');
   });
+
+  it.each(['01', '00', '-0', '1e0', '0.0', ' 0']) (
+    'rejects numeric-looking non-index array member %j instead of silently dropping it',
+    (key) => {
+      const array = [1, 2] as unknown[] & Record<string, unknown>;
+      array[key] = 'not an array element';
+      expect(codes(array)).toContain('SNAPSHOT_DECORATED_ARRAY');
+    },
+  );
 
   it('rejects functions, symbols, bigint, and undefined', () => {
     expect(codes(() => 1)).toContain('SNAPSHOT_UNSUPPORTED_TYPE');

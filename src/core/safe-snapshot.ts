@@ -206,7 +206,21 @@ function snapshotArray(
   depth: number,
   state: SnapshotState,
 ): JsonValue[] {
-  const length = reflect(() => array.length, path);
+  // Do not perform an ordinary property read here. An Array Proxy can answer
+  // `array.length` through its caller-controlled `get` trap even though a real
+  // array's length is always an own data property. Descriptor inspection keeps
+  // accessor policy uniform with every element below and never calls a `get` trap.
+  const lengthDescriptor = reflect(
+    () => Object.getOwnPropertyDescriptor(array, 'length'),
+    path,
+  );
+  if (
+    lengthDescriptor === undefined ||
+    !Object.prototype.hasOwnProperty.call(lengthDescriptor, 'value')
+  ) {
+    fail('SNAPSHOT_NON_PLAIN_OBJECT', path, 'the array has no intrinsic data length');
+  }
+  const length = lengthDescriptor.value;
 
   if (!Number.isSafeInteger(length) || length < 0) {
     fail('SNAPSHOT_NON_PLAIN_OBJECT', path, 'the array reports an implausible length');
@@ -250,8 +264,14 @@ function snapshotArray(
       fail('SNAPSHOT_SYMBOL_KEY', path, 'the array carries a symbol-keyed property');
     }
     if (key === 'length') continue;
-    const asIndex = Number(key);
-    if (Number.isInteger(asIndex) && asIndex >= 0 && asIndex < length) continue;
+    // Number("01"), Number("1e0"), Number(" 1"), and Number("-0") all
+    // produce plausible indices, but none of those strings is an ArrayIndex property
+    // name. Accepting them would silently drop a decorated-array member from the JSON
+    // snapshot. Require the one canonical decimal spelling used by real array indices.
+    const canonicalIndex = /^(?:0|[1-9][0-9]*)$/u.test(key) ? Number(key) : -1;
+    if (Number.isSafeInteger(canonicalIndex) && canonicalIndex >= 0 && canonicalIndex < length) {
+      continue;
+    }
     fail(
       'SNAPSHOT_DECORATED_ARRAY',
       path,

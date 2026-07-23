@@ -10,7 +10,7 @@
  *   3. IDENTITY    — is this request written against a contract we implement?
  *   4. STRUCTURAL  — JSON Schema. Does it have the right shape?
  *   5. SEMANTIC    — the named rules. Does it MEAN anything?
- *   6. CANONICAL   — materialize documented defaults, record every conversion.
+ *   6. CANONICAL   — materialize documented defaults and the resolved skill revision.
  *
  * A failure at any stage stops the pipeline. There is no partial success and no
  * "valid enough": the output of this function is either a canonical request that
@@ -42,6 +42,7 @@ import { checkCallerAuthority, runSemanticValidators } from './semantics/index.j
 import { validateStructure } from './structural-validator.js';
 import { SKILL_CATALOG, LEGACY_SKILL_MAP } from '../generated/catalog.js';
 import { CONTRACT_DIGEST, REQUEST_CONTRACT } from '../generated/identity.js';
+import { REQUEST_CONTRACT_IDENTITY } from './contract-identity.js';
 
 /** How the request entered, and what that boundary could certify. */
 export interface InputAssurance {
@@ -177,17 +178,21 @@ function checkIdentity(request: Record<string, unknown>): CortexelError[] {
 
   const contract = request.contract;
   if (typeof contract !== 'object' || contract === null || Array.isArray(contract)) {
+    const expectedContract = {
+      name: REQUEST_CONTRACT_IDENTITY.name,
+      version: REQUEST_CONTRACT_IDENTITY.version,
+    };
     errors.push(
       makeError({
         code: 'CONTRACT_MISSING',
         stage: 'identity',
         instancePath: '/contract',
         message:
-          'the request does not declare its contract. Add {"contract":{"name":"cortexel-figure-request","version":"1.0"}} — an undeclared contract is not a 1.0 request.',
+          `the request does not declare its contract. Add ${JSON.stringify({ contract: expectedContract })} — an undeclared contract is not a ${REQUEST_CONTRACT_IDENTITY.version} request.`,
         repair: {
           operation: 'add',
           path: '/contract',
-          value: { name: 'cortexel-figure-request', version: '1.0' },
+          value: expectedContract,
           reasonCode: 'CONTRACT_MISSING',
         },
       }),
@@ -196,13 +201,16 @@ function checkIdentity(request: Record<string, unknown>): CortexelError[] {
   }
 
   const record = contract as Record<string, unknown>;
-  if (record.name !== 'cortexel-figure-request' || record.version !== '1.0') {
+  if (
+    record.name !== REQUEST_CONTRACT_IDENTITY.name ||
+    record.version !== REQUEST_CONTRACT_IDENTITY.version
+  ) {
     errors.push(
       makeError({
         code: 'CONTRACT_UNSUPPORTED_VERSION',
         stage: 'identity',
         instancePath: '/contract',
-        message: `this build implements ${REQUEST_CONTRACT}. Run \`cortexel identity --json\` to compare, or \`cortexel migrate\` to convert.`,
+        message: `this build implements ${REQUEST_CONTRACT}. Compare with getBuildIdentity(), then use migrateLegacyRequest() for a supported pre-1.0 request. The packaged CLI equivalents are \`cortexel identity --json\` and \`cortexel migrate ...\`; a repository checkout may run the same implementation through \`bun src/cli/main.ts ...\`.`,
       }),
     );
   }
@@ -250,7 +258,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
         code: 'MIGRATION_LEGACY_ID_NOT_ACCEPTED',
         stage: 'structural',
         instancePath: '/skill/id',
-        message: `"${skillId}" is a pre-1.0 id. ${legacy.targetId ? `It maps to "${legacy.targetId}".` : ''} Run \`cortexel migrate\`. Legacy ids are never silently aliased: a silent alias would make the stored artifact ambiguous about which contract actually validated it.`,
+        message: `"${skillId}" is a pre-1.0 id. ${legacy.targetId ? `It maps to "${legacy.targetId}".` : ''} Use migrateLegacyRequest() or \`cortexel migrate\`. Legacy ids are never silently aliased: a silent alias would make the stored artifact ambiguous about which contract actually validated it.`,
         ...(legacy.targetId
           ? {
               repair: {
@@ -271,7 +279,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
         code: 'CAPABILITY_EXPERIMENTAL',
         stage: 'structural',
         instancePath: '/skill/id',
-        message: `"${skillId}" is experimental and cannot be selected through the stable entry point. Import its explicit experimental subpath; it carries no contract, determinism, or accessibility guarantee.`,
+        message: `"${skillId}" is experimental and cannot be selected through the stable entry point. Consult CAPABILITY_CATALOG and its availability field; no experimental FigureRequestV1 skill is currently callable, and a legacy experimental package export is not a replacement.`,
       }),
     ];
   }
@@ -281,7 +289,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
       code: 'SCHEMA_UNKNOWN_SKILL',
       stage: 'structural',
       instancePath: '/skill/id',
-      message: `"${skillId}" is not in the stable catalog. Run \`cortexel catalog\`.`,
+      message: `"${skillId}" is not in the stable catalog. Read STABLE_SKILL_IDS or run \`cortexel catalog\`.`,
     }),
   ];
 }
@@ -295,8 +303,21 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
  * it does not recognize. Canonicalization makes a request comparable; it must not
  * make it different.
  */
-function canonicalizeRequest(request: Record<string, unknown>): Record<string, unknown> {
+function canonicalizeRequest(
+  request: Record<string, unknown>,
+  resolvedSkillRevision: number,
+): Record<string, unknown> {
   const out: Record<string, unknown> = { ...request };
+
+  // Resolution has already failed closed above. Stamp that installed identity into a
+  // fresh skill object even when the caller omitted the optional pin. Consequently an
+  // unpinned request and an explicit-current request have one canonical identity, while
+  // the detached authored snapshot remains an authored request rather than an output
+  // object we mutate in place.
+  out.skill = {
+    ...(request.skill as Record<string, unknown>),
+    revision: resolvedSkillRevision,
+  };
 
   const presentation = (out.presentation ?? {}) as Record<string, unknown>;
   out.presentation = {
@@ -371,7 +392,7 @@ function validateSnapshot(
   if (blocking.length > 0) return fail(semanticErrors, assurance);
 
   // STAGE 6 — canonicalize.
-  const canonicalRequest = canonicalizeRequest(request);
+  const canonicalRequest = canonicalizeRequest(request, catalog.revision);
 
   const validated = deepFreeze<ValidatedRequest>({
     [VALIDATED]: true,
@@ -381,7 +402,14 @@ function validateSnapshot(
     inputAssurance: assurance,
     requestDigest: canonicalDigest(canonicalRequest),
     warnings: semanticErrors.filter((error) => error.severity === 'warning'),
-    checkedValidatorIds: catalog.semanticValidators.map((validator) => validator.id),
+    // This artifact field is the ordered set of registry rule identifiers, not an
+    // invocation log. A contract may invoke one rule more than once with different
+    // parameters (for example, validating both x and y domains). The validator still
+    // executes every catalog entry above; summarize repeated rule kinds once so the
+    // public `checkedRuleIds` set remains truthful and schema-valid.
+    checkedValidatorIds: [
+      ...new Set(catalog.semanticValidators.map((validator) => validator.id)),
+    ],
   });
   VALIDATED_REQUESTS.add(validated);
 

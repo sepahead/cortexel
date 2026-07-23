@@ -1,7 +1,8 @@
 # Cortexel — Normative scope
 
-> **Status: 0.9.0, a pre-1.0 development preview.** This document describes the
-> boundary Cortexel is being built toward. 0.9.0 makes **no stable-contract claim**,
+> **Status: `0.9.0` is the last tagged pre-1.0 release; this document tracks the
+> private, unreleased `0.10.0-dev.0` source tree.** It describes the boundary Cortexel
+> is being built toward. Neither identity makes a stable-contract claim,
 > no package is published to npm or PyPI, and no DOI has been minted. Where a claim
 > below depends on evidence that has not yet been executed, this document says so and
 > links the gate. The machine-readable state of every gate is in
@@ -29,12 +30,13 @@ was computed, what scope the claim has, and the disclosures that fact set requir
 
 Four properties define the product, and everything else is subordinate to them:
 
-1. **A closed catalog, not a grammar.** There are exactly nineteen stable figure
-   contracts plus one composition artifact kind (`figure.bundle`). Each has a purpose,
-   a closed request schema, named semantic validators, budgets, and disclosures. A
-   caller selects a contract; it cannot compose an arbitrary new chart. This is the
-   whole point: a closed catalog can carry per-figure scientific guarantees that a
-   general grammar structurally cannot.
+1. **A closed catalog, not a grammar.** There are exactly nineteen semantically stable
+   single-figure contracts in the packaged FigureRequestV1 catalog. Each has a purpose, a closed
+   request schema, named semantic validators, budgets, and disclosures. A caller selects
+   a contract; it cannot compose an arbitrary new chart. No `FigureBundleV1` schema,
+   compiler, or capability exists in this revision. This is the whole point: a closed
+   catalog can carry per-figure scientific guarantees that a general grammar
+   structurally cannot.
 
 2. **Strict, fail-closed validation.** Schemas are closed — an unknown field is an
    error (`SCHEMA_UNKNOWN_PROPERTY`), never a silently ignored typo in a scientific
@@ -49,9 +51,13 @@ Four properties define the product, and everything else is subordinate to them:
 
 4. **Deterministic, accessible output.** The stable render path is designed to be
    free of clocks, random state, and locale: no `<script>`, no `foreignObject`, no
-   event handlers, no external references, no remote fonts. Every stable figure is
-   paired with an exact-value table and a data sidecar so the figure is never the only
-   route to its numbers.
+   event handlers, no external references, no remote fonts. Every accepted stable
+   figure is paired with an exact-value table so the figure is never the only route to
+   its numbers. A compiler may emit an excerpt only with a digest-bound complete
+   sidecar; otherwise it fails closed. The current development build deliberately
+   advertises only `svg+table` for every stable figure and refuses before a sidecar or
+   compaction would be required; `+sidecar` will be claimed only when the library owns
+   deterministic sidecar bytes and binds them into the artifact outputs.
 
 The unit of value is the **contract and its invariants**, not chart code.
 
@@ -66,15 +72,17 @@ the four properties above.
   can make specific scientific promises; an open grammar cannot.
 
 - **Not a notebook, dashboard, or application.** Cortexel produces one validated
-  figure (or one bounded bundle) at a time. It owns no layout engine, no interactivity
+  figure at a time. It owns no multi-figure composition engine, no interactivity
   framework, no state store, and no page. The host owns the page and its WCAG
   conformance (a stable figure carries its own accessibility surface, but the package
   does not claim whole-page compliance).
 
 - **Not a storage or interchange format.** Cortexel is not NWB, Neo, HDF5, or a
   database. It reads adapter input and emits a figure artifact; it is not a place to
-  persist recordings. (Adapters for NEST/Neo/NWB/NCP are *specified* in the contracts;
-  most are not yet implemented — see [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).)
+  persist recordings. Skill contracts record intended, partial, or rejected
+  interoperability mappings for NEST/Neo/NWB/NCP; those records are not adapter
+  implementations or capability declarations. Only the narrow packaged NEST path exists
+  today — see [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).)
 
 - **Not a simulator.** Cortexel runs no neural model, integrates no equations, and
   generates no data. It draws what a simulator or recorder already produced.
@@ -101,18 +109,22 @@ the four properties above.
   host policy and verified by digest *before* it reaches stable core
   (`DATA_REFERENCE_UNRESOLVED`, `DATA_DIGEST_MISMATCH`).
 
-- **Promises no deterministic WebGL, animation, or video.** The stable determinism
-  promise covers the SVG path only. WebGL pixels depend on GPU and driver; there is no
-  byte-stable 3D, no reproducible force layout, and no MP4/video export. Everything
-  motion- or GPU-dependent is quarantined as experimental (§7).
+- **Promises no deterministic WebGL, animation, or video.** The FigureRequestV1
+  determinism design covers the SVG path only. WebGL pixels depend on GPU and driver;
+  there is no byte-stable 3D, no reproducible force layout, and no MP4/video export.
+  The packaged pre-1.0 React/WebGL surfaces are legacy APIs, not FigureRequestV1
+  skills or evidence for the new deterministic contract (§7).
 
-## 3. The stable catalog (19 figure contracts + `figure.bundle`)
+## 3. The development catalog (19 single-figure contracts)
 
-Every stable capability has `determinismClass: deterministic_svg`,
-`exportClass: svg+table+sidecar`, and no required peer dependency. Ids use the `neuro.*`
-and `network.*` namespaces of the 1.0 contract kernel; pre-1.0 `nest.*` ids from the
-0.5-era runtime are migrated deterministically by `cortexel migrate`, never silently
-aliased.
+Every stable capability has `determinismClass: deterministic_svg` and no required peer
+dependency. The current development build declares `exportClass: svg+table` for all of
+them and refuses any request that would require a complete sidecar. The registry will
+move a capability to `svg+table+sidecar` only atomically with a library-owned,
+digest-bound deterministic sidecar implementation and conformance evidence.
+Ids use the `neuro.*` and `network.*` namespaces of the 1.0 contract kernel; pre-1.0
+`nest.*` ids from the 0.5-era runtime are migrated deterministically by `cortexel
+migrate`, never silently aliased.
 
 | Capability class | Stable contracts | Renderer |
 |---|---|---|
@@ -121,10 +133,11 @@ aliased.
 | **Excitability & dynamical structure** | `neuro.response_curve`, `neuro.phase_plane` | `figure.response_curve` / `figure.phase_plane` |
 | **Connectivity & network topology** | `network.connection_graph`, `network.adjacency_matrix`, `network.weight_matrix`, `network.delay_matrix`, `network.degree_distribution`, `network.delay_distribution`, `network.weight_distribution` | `figure.connection_graph` / `figure.matrix` / `figure.distribution` |
 | **Spatial layout** | `network.spatial_map_2d` | `figure.spatial_map_2d` |
-| **Composition** | `figure.bundle` (artifact kind) | `figure.bundle` |
-
-That is **19 figure contracts and one artifact kind**. Anything not in this table is
-outside stable scope.
+That is **19 single-figure contracts**. Anything not in this table is outside the
+FigureRequestV1 catalog. All nineteen are `availability: packaged` and
+`releaseReady: false`; `status: stable` records semantic contract maturity, packaged
+means only that the repository build/tarball contains the callable path, and neither
+means the artifact has been published or scientifically release-certified.
 
 ## 4. Per-class scope
 
@@ -153,8 +166,8 @@ is the part callers most often assume they are getting and are not.
 
 ### 4.2 Spike-event timing & rate — `neuro.spike_raster`, `neuro.population_rate`, `neuro.psth`, `neuro.isi_distribution`, `neuro.correlogram`
 
-- **Validates:** event bounds and observation windows (`SCIENCE_WINDOW_INVALID`,
-  `SCIENCE_EVENT_OUT_OF_WINDOW`), sender/trial/population identity, a declared
+- **Validates:** event bounds and explicit observation-window closure
+  (`SCIENCE_WINDOW_INVALID`, `SCIENCE_EVENT_OUT_OF_WINDOW`), sender/trial/population identity, a declared
   recorded-sender universe for per-neuron rates (`SCIENCE_POPULATION_UNIVERSE_REQUIRED`),
   a declared trial universe including empty trials (`SCIENCE_TRIAL_UNIVERSE_REQUIRED`),
   strictly increasing finite histogram edges (`SCIENCE_BIN_EDGES_INVALID`), and
@@ -168,8 +181,13 @@ is the part callers most often assume they are getting and are not.
 - **Renders:** literal bins and events — raster ticks, horizontal-step population-rate
   traces, independent correlogram stems. It never interpolates, smooths, bridges,
   mirrors, or invents a lag-zero bin.
-- **Records:** the denominator, bin convention (half-open `[start, stop)`), displayed
-  vs. total counts, zero-lag policy, and normalization kind.
+- **Records:** the denominator, each analysis's declared bin/event boundary, displayed
+  vs. total counts, zero-lag policy, and normalization kind. Generic raster windows admit
+  `[start, stop)`, `[start, stop]`, or `(start, stop]`. A NEST 3.9/3.10 memory export in
+  the revision-2-admitted profile, with `time_in_steps: false`, retains
+  `(origin + start, origin + stop]`; Cortexel
+  checks exact relations among the serialized binary64 values and discloses that it did
+  not inspect hidden integer tics or establish source authenticity.
 - **Does not establish:** population size from the neurons that happened to spike (a
   silent neuron is still a recorded neuron; `SCIENCE_DENOMINATOR_INVALID`), that a
   correlation coefficient exists where only a scaled pair count was supplied
@@ -178,19 +196,42 @@ is the part callers most often assume they are getting and are not.
 
 ### 4.3 Excitability & dynamical structure — `neuro.response_curve`, `neuro.phase_plane`
 
-- **Validates:** the condition and response variables, repeat structure, and — where
-  uncertainty is shown — its method, level/meaning, and sample basis
-  (`SCIENCE_UNCERTAINTY_*`). Phase-plane modes distinguish an *observed* trajectory
-  from a *supplied or computed* vector field and check variable/derivative unit
-  dimensions and grid orientation.
-- **Re-derives:** nothing about the underlying dynamics. It will not convert a range or
-  a standard deviation into a confidence or credible interval.
-- **Renders:** the response curve with declared uncertainty geometry, or the phase-plane
+- **Validates:** the condition and response variables and repeat structure. Response-curve
+  revision 2 supports mean firing rate, peak firing rate, first-spike latency, and event
+  count; it refuses pre-reduced voltage and generic state-variable methods until a complete
+  sampling and reduction basis exists. First-spike latency is bound only to
+  `measurement_window_start`, where zero is the included start and its exact typed upper
+  bound can be checked; null alone denotes no first event. Stimulus-onset latency is
+  unrepresentable until the request carries that onset's typed coordinate relative to the
+  window. Raw binned peak rates require a parallel exact max-bin count for every
+  repeat; aggregate binned peaks must lie on the corresponding exact count-estimator lattice.
+  It also refuses every uncertainty variant except an explicit reason-bearing `none`; no
+  uncertainty geometry is implied. Every event-derived response declares one `eventScope`
+  shared across every condition and repeat. Cortexel validates the scope variant, fixed
+  event/pooling literals, explicit identifier-set uniqueness and cardinality, canonical
+  digest syntax/id, and rate-normalization compatibility; incoherent scope fails with
+  `SCIENCE_EVENT_SCOPE_UNVERIFIABLE`. Phase-plane modes
+  distinguish an *observed* trajectory from a *supplied or computed* vector field and check
+  variable/derivative unit dimensions and grid orientation.
+- **Re-derives:** audited mean rates from exact event counts and typed denominators; raw
+  binned-peak repeat rates and condition estimators from exact max-bin counts, with one final
+  declared-unit rounding. It derives nothing about the underlying dynamics and will not
+  convert a range or standard deviation into a confidence or credible interval.
+- **Renders:** the response curve with explicit gaps and no uncertainty geometry in revision 2, or the phase-plane
   field/trajectory as supplied.
-- **Records:** estimand, repeats, uncertainty semantics, derivation method, model
-  context, and fixed parameters.
+- **Records:** estimand, repeats, exact-count audit and estimator algorithm where applicable,
+  uncertainty semantics, the normalized caller-declared event scope and its semantic
+  digest, membership canonicalization, the exact arithmetic divisor, granular structural
+  checks, every externally unevaluated event-scope claim, derivation method, model context,
+  and fixed parameters.
 - **Does not establish:** that the curve is monotone, that a fixed point is stable, that
   the vector field is the true system, or that the response is causal in the stimulus.
+  For an event-derived curve it also cannot establish from unavailable source records that
+  `selectionId` or member identifiers refer to the claimed records, a recorded-sender count
+  or completeness claim is true, pooling was actually performed, a digest has the claimed
+  preimage/cardinality, or a supplied count, latency, or peak came from that selection.
+  Explicit ids bind a lexical identifier set, not global entity identity across fresh runs;
+  a single selected train may itself be pre-pooled and makes no source-cardinality claim.
 
 ### 4.4 Connectivity & network topology — `network.connection_graph`, `network.adjacency_matrix`, `network.weight_matrix`, `network.delay_matrix`, `network.degree_distribution`, `network.delay_distribution`, `network.weight_distribution`
 
@@ -202,7 +243,7 @@ is the part callers most often assume they are getting and are not.
 - **Re-derives:** degree counts over the declared universe so zero-degree nodes survive,
   and the multapse aggregate exactly as declared.
 - **Renders:** directed edges with autapses, multapses, and isolates preserved;
-  matrices in NEST's fixed target-row/source-column convention; distributions as literal
+  matrices in Cortexel's fixed target-row/source-column convention; distributions as literal
   bins. A graph layout is explicitly **schematic** — node position carries no meaning.
 - **Records:** scope, snapshot time, node ordering, aggregation, and the distinction
   between an **absent** cell (no connection observed) and a **present zero-valued**
@@ -228,16 +269,14 @@ is the part callers most often assume they are getting and are not.
   projections, or any physical node radius. Those are separate future contracts, not
   free-text geometry inferred from position data.
 
-### 4.6 Composition — `figure.bundle`
+### 4.6 Composition is not implemented
 
-- **Validates:** at most eight panels, one level of composition (a bundle may not
-  contain a bundle), and compatible shared scales.
-- **Computes:** nothing. **Composition performs no analysis.** A panel that needs a new
-  derivation must first be produced as its own validated artifact and then placed.
-- **Records:** the constituent artifact identities and their digests.
-- **Does not establish:** any relationship between panels beyond adjacency. Laying two
-  figures side by side asserts no correlation, no shared axis semantics, and no causal
-  story.
+There is no `figure.bundle` capability, `FigureBundleV1` schema, composition compiler,
+or bundle verifier in the current tree. A host may place independently validated figures
+next to one another, but Cortexel does not validate shared axes, bind the set into one
+artifact, or infer any relationship between panels. Any future composition contract must
+be introduced together with those executable boundaries; metadata and budget fields
+alone do not constitute an implementation.
 
 ## 5. The honesty boundary
 
@@ -281,8 +320,9 @@ rejected by a named gate or is impossible to express in the request schema.
   single MPI rank's local snapshot. Rejected by `SCOPE_OUT_DEGREE_FROM_RANK_LOCAL` /
   `SCOPE_LOCAL_CANNOT_CLAIM_GLOBAL`.
 - **"These two models are the same,"** from a knowledge-graph `same_as` edge. Identity
-  edges are advisory structural similarity, never certified sameness — and knowledge
-  graphs are experimental (§7), outside stable scope entirely.
+  edges are advisory structural similarity, never certified sameness. The packaged
+  knowledge-graph view is a legacy experimental surface, not a FigureRequestV1 skill
+  (§7).
 - **A blank coordinate system presented as a measured result.** An empty figure is an
   explicit empty state with a reason (`RENDER_NO_DATA`), never an axis grid that
   resembles measured zero.
@@ -293,27 +333,25 @@ rejected by a named gate or is impossible to express in the request schema.
   (`SCIENCE_CORRELATION_DENOMINATOR_INVALID`), or a confidence interval synthesized from
   an arbitrary range (`SCIENCE_UNCERTAINTY_LEVEL_INVALID`).
 
-## 7. Experimental surface (out of stable scope)
+## 7. Legacy and experimental package surfaces (outside FigureRequestV1)
 
-The following capabilities exist, are versioned independently, and are **explicitly not
-covered** by the contract, determinism, accessibility, or compatibility promises. They
-are absent from stable counts, from default discovery (`cortexel catalog` requires
-`--include-experimental`), from the root exports, and from any conformance badge.
-Requesting one through a stable entry point fails with `CAPABILITY_EXPERIMENTAL`.
+The package export map preserves the pre-1.0 root, `core/`, and `react/` implementation
+while adding FigureRequestV1 at `cortexel/figure`, `cortexel/render-svg`, and
+`cortexel/adapters/nest`. It packages `cortexel/react/knowledge-graph` as an
+experimental legacy export and also
+contains legacy WebGL scenes through `cortexel/react`. Those surfaces use `VizSpec`; they
+are not new-contract skill ids, do not participate in the nineteen-skill catalog, and do
+not inherit the FigureRequestV1 deterministic-SVG or artifact guarantees.
 
-| Experimental capability | Why it is not stable | The stable alternative |
-|---|---|---|
-| `experimental.network.spatial_3d` (WebGL 3D) | WebGL pixels depend on GPU/driver; no deterministic output, no byte-stable export | `network.spatial_map_2d` plus its exact-value table |
-| `experimental.evidence.knowledge_graph` (force layout) | Iterative force-directed layout is not reproducible; geometry is schematic and position carries no meaning | The stable evidence table / JSON export is the authoritative view |
-| `experimental.neuro.animation_replay` | No deterministic renderer and no safe deterministic export | A static key-frame alternative is always offered |
-| `cortexel/adapters/ncp` | No immutable NCP release has been certified; it is never certified against a moving HEAD | — |
+The packaged FigureRequestV1 catalog currently declares **no** experimental 3D,
+knowledge-graph, animation, NCP-adapter, or bundle skill/compiler. The old ids
+`nest.spatial_3d`, `corpus.knowledge_graph`, and `nest.animation_replay` therefore have
+legacy-only migration outcomes with no target id. Stable validation fails closed rather
+than inventing `experimental.*` replacements. A future experimental capability must
+arrive with real code and an explicit availability value; a roadmap entry or legacy
+implementation is not current-contract availability.
 
-A 3D or animated view is **never the only route to the data**: a complete static
-alternative and an exact-value table always exist. Every experimental surface must
-visibly state that it is experimental, never autoplay, and honor
-`prefers-reduced-motion`.
-
-## 8. What "validated" does and does not mean at 0.9.0
+## 8. What "validated" does and does not mean in the current development tree
 
 Because the strongest failure mode of a validation library is a green checkmark that
 was never earned, the evidence boundary is stated plainly:
@@ -329,10 +367,18 @@ was never earned, the evidence boundary is stated plainly:
   Passing tests prove internal self-consistency; they do not prove agreement with an
   external tool.
 - **Byte-level render determinism across every supported platform is a gate, not yet an
-  executed receipt** at 0.9.0 (the SVG serializer is designed to be deterministic; the
+  executed receipt** in the current development tree (the SVG serializer is designed to be deterministic; the
   cross-platform certification is pending). See [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).
-- **The independent second reader is not built.** The Python package is generated in
-  lockstep with the TypeScript source but is not yet a fully independent validator.
+- **The independent second reader is implemented but scientifically partial.** The
+  standard-library Python package parses, canonicalizes, hashes, structurally validates,
+  and independently evaluates the caller-authority, registered quantity-unit,
+  numeric-policy, and response-curve rules covered by its parity suite. Response curves
+  include their contextual time-window dimension/order check; this does not imply that
+  every other skill's `window.valid` binding has a Python implementation. Generated
+  registries keep its closed vocabulary aligned with TypeScript; the evaluator itself is
+  separately implemented. Deeper validators outside that implemented subset remain
+  TypeScript-only, so this is cross-language evidence for named decisions rather than a
+  claim that every scientific validator has two implementations.
 
 ## 9. Governance reality and the standard for stable science
 
@@ -347,10 +393,10 @@ release. The **desired** standard — recorded as a release-blocking gate that i
 currently `NOT_RUN` — is that before any `1.x` tag, at least one **independent scientific
 reviewer** and at least one **external package consumer** review the release candidate,
 and that the pinned reference environments actually run. Until those receipts exist,
-0.9.0 remains a development preview and this document promises the contract's *shape*,
+the current source tree remains a development preview and this document promises the contract's *shape*,
 not a certified scientific instrument.
 
 ---
 
-**Maintainer:** Sepehr Mahmoudian · **License:** MIT · **Version:** 0.9.0 (pre-1.0
-development preview)
+**Maintainer:** Sepehr Mahmoudian · **License:** MIT · **Source identity:** private
+`0.10.0-dev.0` development tree (`0.9.0` is the last tag)

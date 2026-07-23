@@ -16,7 +16,6 @@ import fc from 'fast-check';
 import {
   binCounts,
   binIndex,
-  edgesFromWidth,
   computeIsi,
   computePopulationRate,
   verifyRates,
@@ -34,6 +33,7 @@ import {
 import { exactBinary64DivideByIntegerProduct } from '../src/core/exact-binary64.js';
 import {
   convertDifference,
+  deriveExactCountRateInUnit,
   divideExactIntegerByConvertedDifference,
 } from '../src/core/units.js';
 
@@ -216,6 +216,19 @@ describe('population rate — the formula and its denominator', () => {
     );
     expect(result.count).toEqual([3]);
     expect(result.rateHz).toEqual([1000]);
+  });
+
+  it('rounds an audited count rate once directly into the declared frequency unit', () => {
+    expect(deriveExactCountRateInUnit(1, 1, 0, 3, 's', 'Hz')).toBe(1 / 3);
+    expect(deriveExactCountRateInUnit(1, 1, 0, 3, 's', 'kHz')).toBe(
+      0.0003333333333333333,
+    );
+    expect(deriveExactCountRateInUnit(1_000_000_000_000, 1, 0, 1, 's', 'Hz')).toBe(
+      1_000_000_000_000,
+    );
+    expect(() => deriveExactCountRateInUnit(1, 1, 0, 1, 's', 'mV')).toThrow(
+      /across dimensions/,
+    );
   });
 
   it('matches a Python Fraction oracle from endpoints through the final rounding', () => {
@@ -687,9 +700,9 @@ describe('ISI — intervals only within a train', () => {
 describe('correlogram — orientation and self-pairs', () => {
   it('uses lag = target - reference (positive means target follows)', () => {
     // ref at 0; target at 2 -> lag +2. ref at 0; target at -1 -> lag -1.
-    const bins = { edges: [-3, -1, 1, 3], finalEdgeInclusive: true } as Bins;
+    const bins = { edges: [-3, -1, 1, 3], finalEdgeInclusive: false } as Bins;
     const result = computeCorrelogram([0], [-1, 2], bins, 'cross');
-    // Bins are half-open: [-3,-1), [-1,1), [1,3]. So lag -1 lands in [-1,1) (index 1),
+    // Every bin is half-open: [-3,-1), [-1,1), [1,3). So lag -1 lands in [-1,1) (index 1),
     // NOT in [-3,-1) which excludes its upper edge. Lag +2 lands in [1,3] (index 2).
     expect(result.counts).toEqual([0, 1, 1]);
     expect(result.receipt.lagConvention).toBe('target_time - reference_time');
@@ -698,16 +711,16 @@ describe('correlogram — orientation and self-pairs', () => {
   it('excludes identical-event self-pairs in an autocorrelogram but keeps distinct coincidences', () => {
     // Two distinct events at 0 and 1 in one train.
     // Auto pairs (excluding i===j): (0->1) lag +1, (1->0) lag -1. No zero-lag self-pair.
-    const bins = { edges: [-2, 0, 2], finalEdgeInclusive: true } as Bins;
+    const bins = { edges: [-2, 0, 2], finalEdgeInclusive: false } as Bins;
     const result = computeCorrelogram([0, 1], [0, 1], bins, 'auto');
     expect(result.selfPairsExcluded).toBe(2); // one per event
-    // lag -1 in bin [-2,0) -> index 0 ; lag +1 in bin [0,2] -> index 1.
+    // lag -1 in bin [-2,0) -> index 0 ; lag +1 in bin [0,2) -> index 1.
     expect(result.counts).toEqual([1, 1]);
   });
 
   it('retains a genuine zero-lag coincidence between two distinct events', () => {
     // Two DISTINCT events at the same time 0 in one autocorrelated train.
-    const bins = { edges: [-1, 1], finalEdgeInclusive: true } as Bins;
+    const bins = { edges: [-1, 1], finalEdgeInclusive: false } as Bins;
     const result = computeCorrelogram([0, 0], [0, 0], bins, 'auto');
     // Distinct pairs (i!=j): (0,1) lag 0 and (1,0) lag 0 -> two retained zero-lag pairs.
     expect(result.zeroLagRetainedDistinctPairs).toBe(2);
@@ -751,37 +764,38 @@ describe('topology — degree and multapse handling', () => {
     expect(meaned.cells[0]).toMatchObject({ value: 2, contributingCount: 2 });
   });
 
-  it('keeps the value array index-aligned when a value is null (missing)', () => {
-    // Three edges: A->B (null weight), A->C (weight 5), B->C (weight 7). If the null were
-    // filtered up front, edge A->C would be drawn with 7 and B->C with nothing — a silent
-    // corruption. With per-cell skipping, cell (C,A) is 5 and cell (C,B) is 7, and cell
-    // (B,A) has no finite contribution so it is absent.
-    const matrix = computeMatrix(
+  it('refuses to erase a present connection whose matrix value is missing', () => {
+    // The generic sparse helper has no missing-state channel. Treating this row as absent
+    // would conflate a present synapse with structural absence, so callers must use the
+    // matrix-evidence derivation that returns present_without_value explicitly.
+    expect(() => computeMatrix(
       ['A', 'B', 'C'], ['A', 'B', 'C'],
       ['A', 'A', 'B'], ['B', 'C', 'C'],
       [null, 5, 7], 'sum',
-    );
-    const cellValue = (rowId: string, colId: string) => {
-      const r = ['A', 'B', 'C'].indexOf(rowId);
-      const c = ['A', 'B', 'C'].indexOf(colId);
-      return matrix.cells.find((cell) => cell.row === r && cell.col === c)?.value;
-    };
-    expect(cellValue('C', 'A')).toBe(5); // target C, source A -> weight 5, NOT 7
-    expect(cellValue('C', 'B')).toBe(7); // target C, source B -> weight 7
-    expect(cellValue('B', 'A')).toBeUndefined(); // null weight -> no finite value, absent
+    )).toThrow(/cannot erase a present connection/);
   });
 });
 
-describe('window partitioning — half-open by default', () => {
+describe('window partitioning — explicit closure', () => {
   it('excludes an event exactly at stop under the half-open convention', () => {
-    const result = partitionByWindow([0, 5, 10], 0, 10, false);
+    const result = partitionByWindow([0, 5, 10], 0, 10, '[start,stop)');
     expect(result.inside).toEqual([0, 1]); // indices of 0 and 5; 10 is excluded
+    expect(result.inWindow).toEqual([true, true, false]);
     expect(result.excludedAbove).toBe(1);
   });
 
   it('includes an event at stop when the window is explicitly closed', () => {
-    const result = partitionByWindow([0, 5, 10], 0, 10, true);
+    const result = partitionByWindow([0, 5, 10], 0, 10, '[start,stop]');
     expect(result.inside).toEqual([0, 1, 2]);
+    expect(result.inWindow).toEqual([true, true, true]);
     expect(result.excludedAbove).toBe(0);
+  });
+
+  it('implements NEST-style open-start, closed-stop membership exactly', () => {
+    const result = partitionByWindow([0, 5, 10, 11], 0, 10, '(start,stop]');
+    expect(result.inside).toEqual([1, 2]);
+    expect(result.inWindow).toEqual([false, true, true, false]);
+    expect(result.excludedBelow).toBe(1);
+    expect(result.excludedAbove).toBe(1);
   });
 });
