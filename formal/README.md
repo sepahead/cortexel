@@ -8,8 +8,14 @@ The repository pins Lean in [`../lean-toolchain`](../lean-toolchain). With `elan
 installed, run:
 
 ```sh
-lean formal/WeightRowSaturation.lean
+lake build --wfail
 ```
+
+The root [`lakefile.toml`](../lakefile.toml) names every formal module and the
+committed [`lake-manifest.json`](../lake-manifest.json) fixes the dependency
+closure (currently empty). CI's pinned Lean setup action requires that manifest
+even though the workflow also invokes `lean formal/WeightRowSaturation.lean`
+directly as an explicit proof gate.
 
 `WeightRowSaturation.lean` proves that folding non-negative carrier counts with
 the returned-table sentinel `limit + 1` is extensionally equal to summing exact
