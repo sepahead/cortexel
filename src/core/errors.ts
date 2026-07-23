@@ -44,7 +44,7 @@ export interface CortexelError {
 }
 
 /** Stage order. Errors are reported in the order the pipeline would hit them. */
-export const STAGE_ORDER: readonly ErrorStage[] = [
+export const STAGE_ORDER: readonly ErrorStage[] = Object.freeze([
   'parse',
   'snapshot',
   'identity',
@@ -60,7 +60,7 @@ export const STAGE_ORDER: readonly ErrorStage[] = [
   'migrate',
   'adapter',
   'internal',
-] as const;
+] as const);
 
 export const MAX_ERROR_RECORDS = 32;
 const MAX_MESSAGE_LENGTH = 500;
@@ -77,28 +77,38 @@ const MAX_SUMMARY_LENGTH = 120;
  * source file itself stays pure ASCII and cannot carry the very bytes it bans.
  */
 const UNSAFE_DISPLAY_CLASS =
-  '[\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]';
+  '[\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff\\ufffe-\\uffff]';
 
-/** Matches a single unsafe display character. */
-export const UNSAFE_DISPLAY_PATTERN = new RegExp(UNSAFE_DISPLAY_CLASS, 'gu');
+/** Immutable regex source for consumers that need to construct their own matcher. */
+export const UNSAFE_DISPLAY_PATTERN_SOURCE = UNSAFE_DISPLAY_CLASS;
 
 /** True when the text is free of unsafe display characters. */
 export function isSafeDisplayString(value: string): boolean {
-  return !new RegExp(UNSAFE_DISPLAY_CLASS, 'u').test(value);
-}
-
-function clip(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
+  return typeof value === 'string' && !new RegExp(UNSAFE_DISPLAY_CLASS, 'u').test(value);
 }
 
 /** Make text safe to place in a log, a DOM node, or an agent's context window. */
 export function safeText(value: string, max: number): string {
-  const bounded = clip(value, max);
-  const escaped = bounded.replace(
-    new RegExp(UNSAFE_DISPLAY_CLASS, 'gu'),
-    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,
-  );
-  return clip(escaped, max);
+  if (typeof value !== 'string' || !Number.isSafeInteger(max) || max <= 0) return '';
+
+  let out = '';
+  for (let index = 0; index < value.length; ) {
+    const codePoint = value.codePointAt(index)!;
+    const character = String.fromCodePoint(codePoint);
+    const next = index + character.length;
+    const loneSurrogate = codePoint >= 0xd800 && codePoint <= 0xdfff;
+    const token = !loneSurrogate && isSafeDisplayString(character)
+      ? character
+      : `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`;
+    const capacity = next < value.length ? max - 1 : max;
+
+    // Append a code point or a generated \\uXXXX escape atomically. Neither a surrogate
+    // pair nor an escape sequence can be split at the diagnostic boundary.
+    if (out.length + token.length > capacity) return `${out}…`;
+    out += token;
+    index = next;
+  }
+  return out;
 }
 
 /**
@@ -126,7 +136,13 @@ export function summarizeValue(value: unknown): string {
       return '<function>';
     case 'object': {
       if (value === null) return 'null';
-      if (Array.isArray(value)) return `array(length=${value.length})`;
+      try {
+        if (Array.isArray(value)) return '<array>';
+      } catch {
+        // Array.isArray is normally side-effect free, but a revoked Proxy throws.
+        // Diagnostics must remain total even for a value that cannot be inspected.
+        return '<uninspectable-object>';
+      }
       return '<object>';
     }
     default:
@@ -194,15 +210,30 @@ export function makeError(init: ErrorInit): CortexelError {
  * Two runs on the same input must produce the same diagnostics in the same order,
  * or a conformance corpus cannot compare TypeScript against Python.
  */
+function compareUnicodeCodePoints(left: string, right: string): number {
+  let leftIndex = 0;
+  let rightIndex = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftPoint = left.codePointAt(leftIndex)!;
+    const rightPoint = right.codePointAt(rightIndex)!;
+    if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1;
+    leftIndex += leftPoint > 0xffff ? 2 : 1;
+    rightIndex += rightPoint > 0xffff ? 2 : 1;
+  }
+  if (leftIndex === left.length && rightIndex === right.length) return 0;
+  return leftIndex === left.length ? -1 : 1;
+}
+
 export function compareErrors(a: CortexelError, b: CortexelError): number {
   const stageDelta = STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage);
   if (stageDelta !== 0) return stageDelta;
-  if (a.instancePath !== b.instancePath) return a.instancePath < b.instancePath ? -1 : 1;
-  if (a.code !== b.code) return a.code < b.code ? -1 : 1;
+  const pathDelta = compareUnicodeCodePoints(a.instancePath, b.instancePath);
+  if (pathDelta !== 0) return pathDelta;
+  const codeDelta = compareUnicodeCodePoints(a.code, b.code);
+  if (codeDelta !== 0) return codeDelta;
   const av = a.validatorId ?? '';
   const bv = b.validatorId ?? '';
-  if (av !== bv) return av < bv ? -1 : 1;
-  return 0;
+  return compareUnicodeCodePoints(av, bv);
 }
 
 /**
@@ -213,7 +244,7 @@ export function finalizeErrors(errors: readonly CortexelError[]): CortexelError[
   const sorted = [...errors].sort(compareErrors);
   if (sorted.length <= MAX_ERROR_RECORDS) return sorted;
 
-  const kept = sorted.slice(0, MAX_ERROR_RECORDS);
+  const kept = sorted.slice(0, MAX_ERROR_RECORDS - 1);
   const omitted = sorted.length - kept.length;
   const limitRecord = makeError({
     code: 'ERROR_LIMIT_REACHED',

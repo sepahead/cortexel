@@ -26,6 +26,8 @@ import hashlib
 import math
 from typing import Any
 
+_MAX_SAFE_INTEGER = (1 << 53) - 1
+
 
 class CanonicalizationError(ValueError):
     """A value outside the JCS domain has no canonical form."""
@@ -92,8 +94,15 @@ def _shortest_digits(magnitude: float) -> tuple[str, int]:
     return stripped, point
 
 
-def _utf16_key(key: str) -> list[int]:
+def _utf16_key(key: Any) -> list[int]:
     """A UTF-16 code-unit sort key, matching JavaScript's string comparison."""
+    if not isinstance(key, str):
+        raise CanonicalizationError("object keys must be strings")
+    # Validate before encoding so an ill-formed object key follows the same public,
+    # fail-closed error path as an ill-formed string value. Otherwise Python's codec
+    # leaks a raw UnicodeEncodeError while keys are being sorted, before _escape_string
+    # has a chance to apply the canonicalization boundary.
+    _assert_well_formed(key)
     return list(key.encode("utf-16-be"))
 
 
@@ -146,6 +155,11 @@ def canonicalize(value: Any, _depth: int = 0) -> str:
     if isinstance(value, bool):  # pragma: no cover - covered by the two lines above
         return "true" if value else "false"
     if isinstance(value, int):
+        # Python integers are arbitrary precision, while the JCS data model is IEEE-754.
+        # Values outside the I-JSON safe range must be represented as strings or as an
+        # explicitly approximate float; silently rounding them would create digest aliases.
+        if abs(value) > _MAX_SAFE_INTEGER:
+            raise CanonicalizationError("integer is outside the interoperable exact range")
         return str(value)
     if isinstance(value, float):
         return _js_number(value)
@@ -174,7 +188,36 @@ def canonical_digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical).hexdigest()
 
 
-def canonical_digest_excluding(value: dict, exclude_key: str) -> str:
+IDENTIFIER_SET_CANONICALIZATION_ID = (
+    "cortexel_utf16_sorted_unique_identifier_array_rfc8785_v1"
+)
+
+
+def canonical_identifier_set_digest(identifiers: Any) -> str:
+    """Digest a mathematical identifier set under Cortexel's versioned algorithm.
+
+    The array order is presentation only. Members are exact Unicode strings: Cortexel
+    performs no NFC/NFD or locale normalization. The JCS encoder independently rejects
+    lone surrogates before UTF-8 encoding.
+    """
+    if type(identifiers) is not list or len(identifiers) == 0:
+        raise CanonicalizationError("identifier set must be a non-empty array")
+    seen = set()
+    for index, identifier in enumerate(identifiers):
+        if type(identifier) is not str or identifier == "":
+            raise CanonicalizationError(
+                f"identifier-set member {index} must be a non-empty string"
+            )
+        _assert_well_formed(identifier)
+        if identifier in seen:
+            raise CanonicalizationError(
+                f"identifier-set member {identifier!r} is duplicated"
+            )
+        seen.add(identifier)
+    return canonical_digest(sorted(seen, key=_utf16_key))
+
+
+def canonical_digest_excluding(value: dict[str, Any], exclude_key: str) -> str:
     """Digest an object with one top-level member removed (for a self-referential digest)."""
     copy = {k: v for k, v in value.items() if k != exclude_key}
     return canonical_digest(copy)

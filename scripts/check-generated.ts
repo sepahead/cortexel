@@ -1,98 +1,186 @@
 /**
  * Generated-file freshness gate.
  *
- * Regenerates the contract and fails if anything changed. This is what actually
- * enforces "one authority": a hand-edit to a generated file — a tweaked schema, a
- * fudged digest, a skill quietly added to the catalog without a contract — cannot
- * survive CI, because the generator would produce something different.
+ * Generation happens only inside an isolated temporary copy. A check must never
+ * rewrite the caller's worktree before announcing that it was stale: doing so destroys
+ * the very evidence a developer needs to review and races every concurrent editor.
  *
- * It also runs generation TWICE and compares, because a generator that is not
- * deterministic produces a digest that means nothing.
- *
- *   bun run check:generated
+ * Two independent temporary copies deliberately omit all existing generated outputs.
+ * Comparing their generated snapshots tests determinism without letting pass one seed
+ * the other; comparing the first against the untouched worktree proves freshness and
+ * detects obsolete extra generated files as well as missing/changed ones.
  */
+
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import {
+  cpSync,
+  lstatSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  generatedSnapshotDifferences,
+  isTransientGeneratedPath,
+  snapshotGeneratedPaths,
+} from './lib/generated-snapshot.js';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Everything the generator owns. Drift in any of these is a failure. */
+/** Every path the generator owns. Drift in either direction is a failure. */
 const GENERATED_PATHS = [
   'src/generated',
   'contract/manifest.v1.json',
   'contract/schemas/generated',
   'contract/schemas/skills',
+  'contract/schemas/stable-figure-request-union.v1.schema.json',
   'python/src/cortexel/generated',
-];
+  'python/src/cortexel/contract',
+] as const;
 
-function git(args: string[]): string {
-  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+const COPY_EXCLUDED_ROOTS = new Set([
+  '.git',
+  '.superstack',
+  '.venv',
+  'coverage',
+  'dist',
+  'node_modules',
+]);
+
+function isGeneratedPath(relative: string): boolean {
+  return GENERATED_PATHS.some((owned) =>
+    relative === owned || relative.startsWith(`${owned}${path.sep}`));
 }
 
-function snapshotGeneratedTree(): Map<string, string> {
-  const out = new Map<string, string>();
-  const walk = (relative: string): void => {
-    const absolute = path.join(ROOT, relative);
-    if (!existsSync(absolute)) return;
-    const listing = execFileSync('find', [absolute, '-type', 'f'], { encoding: 'utf8' })
-      .split('\n')
-      .filter(Boolean)
-      .sort();
-    for (const file of listing) {
-      out.set(path.relative(ROOT, file), readFileSync(file, 'utf8'));
+function copyAllowed(source: string): boolean {
+  const relative = path.relative(ROOT, source);
+  if (relative === '') return true;
+  const first = relative.split(path.sep)[0];
+  if (COPY_EXCLUDED_ROOTS.has(first)) return false;
+  if (isGeneratedPath(relative)) return false;
+
+  const basename = path.basename(relative);
+  // No check needs credentials. Never copy a local environment file into /tmp.
+  if (basename === '.env' || (basename.startsWith('.env.') && basename !== '.env.example')) {
+    return false;
+  }
+  if (isTransientGeneratedPath(relative)) return false;
+  return true;
+}
+
+function snapshotGeneratedTree(root: string): Map<string, Buffer> {
+  return snapshotGeneratedPaths(root, GENERATED_PATHS);
+}
+
+function assertGeneratedPathsAbsent(root: string): void {
+  const present: string[] = [];
+  for (const owned of GENERATED_PATHS) {
+    try {
+      lstatSync(path.join(root, owned));
+      present.push(owned);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-  };
-  for (const target of GENERATED_PATHS) walk(target);
-  return out;
+  }
+  if (present.length > 0) {
+    throw new Error(
+      `isolated generation did not start from zero generated state: ${present.join(', ')}`,
+    );
+  }
+}
+
+function prepareIsolatedTree(destination: string): void {
+  cpSync(ROOT, destination, {
+    recursive: true,
+    dereference: false,
+    filter: (source) => copyAllowed(source),
+  });
+
+  // Reuse installed tooling without copying hundreds of megabytes. The generated
+  // tree itself never follows or snapshots this link.
+  symlinkSync(
+    path.join(ROOT, 'node_modules'),
+    path.join(destination, 'node_modules'),
+    process.platform === 'win32' ? 'junction' : 'dir',
+  );
+
+  // This is an asserted precondition, not an inference from the copy filter. A
+  // generator that accidentally reads stale output must be unable to start here.
+  assertGeneratedPathsAbsent(destination);
+}
+
+function runGenerator(root: string, stdio: 'inherit' | 'pipe'): void {
+  const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+  execFileSync(process.execPath, [tsxCli, 'scripts/generate-contract.ts'], {
+    cwd: root,
+    stdio,
+    env: {
+      // Contract identity must not depend on credentials, user configuration, locale,
+      // or arbitrary parent-process state. Keep only the executable search path and
+      // pin the environmental inputs that can legitimately affect text generation.
+      PATH: process.env.PATH ?? '',
+      LANG: 'C.UTF-8',
+      LC_ALL: 'C.UTF-8',
+      TZ: 'UTC',
+      NO_COLOR: '1',
+    },
+  });
 }
 
 function main(): number {
-  process.stdout.write('Regenerating the contract...\n');
-  execFileSync('bunx', ['tsx', 'scripts/generate-contract.ts'], {
-    cwd: ROOT,
-    stdio: 'inherit',
-  });
+  const original = snapshotGeneratedTree(ROOT);
+  const temporaryParent = mkdtempSync(path.join(tmpdir(), 'cortexel-generated-check-'));
+  const firstRoot = path.join(temporaryParent, 'first');
+  const secondRoot = path.join(temporaryParent, 'second');
 
-  const first = snapshotGeneratedTree();
+  try {
+    process.stdout.write('Regenerating the contract in two independent zero-state trees...\n');
+    prepareIsolatedTree(firstRoot);
+    runGenerator(firstRoot, 'inherit');
+    const first = snapshotGeneratedTree(firstRoot);
 
-  // Determinism: generate again into the same place and require byte equality.
-  // A generator that depends on filesystem order, a clock, or a hash-map iteration
-  // order would pass once and fail on someone else's machine.
-  execFileSync('bunx', ['tsx', 'scripts/generate-contract.ts'], {
-    cwd: ROOT,
-    stdio: 'pipe',
-  });
-  const second = snapshotGeneratedTree();
+    // A second pass over the first output could conceal a generator that only writes
+    // missing files or copies its own stale bytes. Start from an independent source
+    // copy with the complete generated namespace absent instead.
+    prepareIsolatedTree(secondRoot);
+    runGenerator(secondRoot, 'pipe');
+    const second = snapshotGeneratedTree(secondRoot);
 
-  const nondeterministic: string[] = [];
-  for (const [file, content] of first) {
-    if (second.get(file) !== content) nondeterministic.push(file);
-  }
-  if (nondeterministic.length > 0) {
-    process.stderr.write('\nGeneration is NOT deterministic. These files differed between runs:\n');
-    for (const file of nondeterministic) process.stderr.write(`  - ${file}\n`);
-    process.stderr.write(
-      '\nA digest computed from nondeterministic input is not an identity. Fix the generator.\n',
+    const nondeterministic = generatedSnapshotDifferences(first, second);
+    if (nondeterministic.length > 0) {
+      process.stderr.write('\nGeneration is NOT deterministic:\n');
+      for (const difference of nondeterministic) {
+        process.stderr.write(`  - ${difference.kind}: ${difference.path}\n`);
+      }
+      process.stderr.write(
+        '\nA digest computed from nondeterministic input is not an identity. Fix the generator.\n',
+      );
+      return 1;
+    }
+
+    const drift = generatedSnapshotDifferences(first, original);
+    if (drift.length > 0) {
+      process.stderr.write('\nGenerated files are out of date with their source:\n');
+      for (const difference of drift) {
+        process.stderr.write(`  - ${difference.kind}: ${difference.path}\n`);
+      }
+      process.stderr.write(
+        '\nRun `bun run generate` and review the result. The check left the worktree untouched.\n',
+      );
+      return 1;
+    }
+
+    process.stdout.write(
+      '\nGenerated files are fresh, deterministic, and the worktree was not rewritten.\n',
     );
-    return 1;
+    return 0;
+  } finally {
+    rmSync(temporaryParent, { recursive: true, force: true });
   }
-
-  // Drift: does the committed tree match what the generator just produced?
-  const status = git(['status', '--porcelain=v1', '--', ...GENERATED_PATHS]).trim();
-  if (status.length > 0) {
-    process.stderr.write('\nGenerated files are out of date with their source:\n\n');
-    process.stderr.write(`${status}\n\n`);
-    process.stderr.write(git(['diff', '--stat', '--', ...GENERATED_PATHS]));
-    process.stderr.write(
-      '\nRun `bun run generate` and commit the result. Never hand-edit a generated file.\n',
-    );
-    return 1;
-  }
-
-  process.stdout.write('\nGenerated files are fresh and generation is deterministic.\n');
-  return 0;
 }
 
-process.exit(main());
+process.exitCode = main();

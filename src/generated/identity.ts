@@ -6,11 +6,11 @@
  * `bun run check:generated` fails if this file drifts from its source.
  */
 
-export const PACKAGE_VERSION = "0.9.0";
-export const REQUEST_CONTRACT = 'cortexel-figure-request/1.0';
-export const ARTIFACT_CONTRACT = 'cortexel-figure-artifact/1.0';
-export const CONTRACT_DIGEST = "sha256:2f9f27f342c052cd495a5982439def61237fbd9061c610fd0e3ec6294c3c9a62";
-export const CATALOG_DIGEST = "sha256:889787eb7b4efb492217e0256fab6ad3e7ed61d31522b00e91e2d16917456691";
+export const PACKAGE_VERSION = "0.10.0-dev.0";
+export const REQUEST_CONTRACT = "cortexel-figure-request/1.0";
+export const ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
+export const CONTRACT_DIGEST = "sha256:02c8581a22d6417560cf8c6a890f25416243287b29ad7a9d5a8714915bae216e";
+export const CATALOG_DIGEST = "sha256:801aa157a57212ca58b092319d57edd8ab8649a80202a8a577510ca9f7162c09";
 export const STABLE_SKILL_COUNT = 19;
 
 export interface BuildIdentity {

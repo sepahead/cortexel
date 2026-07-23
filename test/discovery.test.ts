@@ -4,6 +4,7 @@ import {
   describeSkills,
   listSkills,
   SKILL_EXAMPLE_PAYLOADS,
+  validateSkillParams,
   validateSkillInvocation,
   validateSpec,
   detectEmptyScene,
@@ -155,6 +156,61 @@ describe('skill discovery', () => {
       outputSkill: 'nest.connection_graph',
     });
     expect(graph.routerEligibility.dataShapeKind).toBe('connection_graph');
+  });
+
+  it('does not advertise data that legacy descriptor schemas do not carry', () => {
+    const spatial2d = describeSkill('nest.spatial_2d')!;
+    const spatial2dExample = spatial2d.examples[0]!;
+    expect(spatial2d.title).toBe('NEST legacy 2D position host envelope');
+    expect(spatial2d.description).toBe(
+      'Validate anonymous 2D position tuples and coordinate units for an explicitly selected host renderer; Cortexel supplies no scene.',
+    );
+    expect(spatial2dExample.dataShape).toBe(
+      'anonymous x/y position tuples plus coordinate units',
+    );
+    expect(
+      Object.keys(
+        (spatial2d.paramsJsonSchema?.properties ?? {}) as Record<string, unknown>,
+      ).sort(),
+    ).toEqual(['coordinate_units', 'positions']);
+    expect(validateSkillParams('nest.spatial_2d', {
+      positions: [[0, 0]],
+      coordinate_units: 'mm',
+      mask: 'none',
+    }).ok).toBe(false);
+
+    const legacyConnections = describeSkill('nest.connectivity_matrix')!;
+    expect(legacyConnections.description).toContain('weight and delay channels');
+    expect(legacyConnections.examples[0]!.dataShape).toContain('weights and delays');
+    expect(validateSkillParams('nest.connectivity_matrix', {
+      sources: [1],
+      targets: [2],
+      delays: [1],
+      delay_units: 'ms',
+    }).ok).toBe(true);
+
+    const rate = describeSkill('nest.rate_response')!.examples[0]!;
+    expect(rate.dataShape).toBe(
+      'stimulus amplitudes and rates_hz with declared stimulus units',
+    );
+
+    const spatial3d = describeSkill('nest.spatial_3d')!.examples[0]!;
+    expect(spatial3d.dataShape).toBe('x/y/z positioned objects plus coordinate units');
+
+    const stimulus = describeSkill('nest.stimulus_response')!;
+    expect(`${stimulus.description} ${stimulus.examples[0]!.dataShape}`).not.toMatch(
+      /\b(?:spikes?|epochs?)\b/iu,
+    );
+
+    const glial = describeSkill('nest.astrocyte_dynamics')!;
+    expect(`${glial.description} ${glial.examples[0]!.dataShape}`).not.toMatch(
+      /\b(?:IP3|events?|variables)\b/iu,
+    );
+
+    const compartments = describeSkill('nest.compartmental_dynamics')!;
+    expect(`${compartments.description} ${compartments.examples[0]!.dataShape}`).not.toMatch(
+      /\b(?:receptor|geometry|morpholog\w*)\b/iu,
+    );
   });
 
   it('describeSkill exposes scene + required keys + example for an agent', () => {

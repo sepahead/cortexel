@@ -9,8 +9,9 @@
 // Run AFTER tsup (tsup's clean:true would otherwise wipe dist/).
 
 import { writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { SCENE_NAMES } from '../core/designLaws';
 import { PROVENANCE_KEYS } from '../core/skills/provenanceKeys';
 import {
@@ -391,8 +392,18 @@ async function emit(): Promise<void> {
   console.log(`[cortexel] wrote ${out}`);
 }
 
-// Run when invoked directly (tsx scripts/emit-manifest.ts), not when imported.
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+/** Resolve npm/worktree/path aliases without letting an imported look-alike execute. */
+export function isDirectManifestExecution(entry = process.argv[1]): boolean {
+  if (!entry) return false;
+  try {
+    return realpathSync(resolve(entry)) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+// Run when invoked directly (including through an aliased repository path), not on import.
+if (isDirectManifestExecution()) {
   emit().catch((err) => {
     // eslint-disable-next-line no-console
     console.error(err);

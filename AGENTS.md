@@ -7,13 +7,15 @@
 > **0.9.0 direction note.** The sections below document the pre-1.0 `VizSpec` API that
 > ships in the current `core/` build. The 0.9.0 line introduces the versioned
 > **`FigureRequestV1` / `FigureArtifactV1`** contract under `contract/` and `src/`,
-> with a strict validation pipeline, a deterministic SVG renderer, and the `cortexel`
-> CLI (`identity`, `catalog`, `validate`, `render`, `migrate`). The defining rule of
+> with a strict validation pipeline, a deterministic SVG renderer, additive packaged
+> subpaths (`cortexel/figure`, `cortexel/render-svg`, `cortexel/adapters/nest`,
+> `cortexel/contract/*`), and the offline `cortexel` bin.
+> The defining rule of
 > the new contract: **a caller declares what its data *is*, never what Cortexel
 > concluded about it** — see [`docs/PROVENANCE.md`](./docs/PROVENANCE.md) and
 > [`docs/SCOPE.md`](./docs/SCOPE.md). The two surfaces coexist during the migration;
-> [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) tracks what is not yet
-> wired into the packaged build.
+> [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) tracks scientific and
+> release evidence that packaging alone does not establish.
 
 You hold the output of a neural simulation — a NEST device dump, arrays of spike
 times, a cross-paper corpus graph — and you want an **honest, render-ready figure**
@@ -351,7 +353,7 @@ feed a graph, three matrix skills, two degree skills, a weight histogram, or a
 delay distribution. Route with an explicit GetConnections `dataShape.kind`;
 field presence never chooses the scientific question. The canonical graph keeps
 isolates, autapses and every multapse, but its circle layout is schematic. Matrix
-cells use NEST's fixed `target_rows_source_columns` convention and carry positive
+cells use Cortexel's fixed `target_rows_source_columns` convention and carry positive
 `connection_count`; a missing sparse cell means no connection, while a present
 zero-weight aggregate remains present. Weight/delay aggregation is mandatory and
 never guessed.

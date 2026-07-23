@@ -1,0 +1,8 @@
+name = "cortexel-formal"
+version = "0.1.0"
+defaultTargets = ["CortexelFormal"]
+
+[[lean_lib]]
+name = "CortexelFormal"
+srcDir = "formal"
+roots = ["WeightRowSaturation"]

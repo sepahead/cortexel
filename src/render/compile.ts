@@ -6,7 +6,8 @@
  * so the CLI and React cannot disagree about a value.
  *
  * The blueprint's target is one compiler file per stable skill for maximum
- * reviewability. This 0.9.0 uses a family-aware compiler instead: the 19 skills map to a
+ * reviewability. The current development renderer uses family-aware compilation instead:
+ * the 19 skills map to a
  * handful of geometric families (trace, step, distribution, raster, matrix, points), and
  * a single well-tested compiler per family is more trustworthy than fifteen near-
  * duplicates that could drift. Splitting into per-skill files is recorded as a known
@@ -14,15 +15,22 @@
  * layout, never the output.
  */
 
-import type { RenderPlanV1, Panel, Mark, Axis } from './model/renderPlan.js';
+import type {
+  RenderPlanV1,
+  Panel,
+  Mark,
+  Axis,
+  OutputAuthorityAtomicRoleV1,
+} from './model/renderPlan.js';
 import { linearScale, linearTicks } from './scale.js';
-import { formatNumber } from './format.js';
 import { SKILL_CATALOG, THEMES } from '../generated/catalog.js';
 import { unitLabel } from '../core/units.js';
 import type { Disclosure } from '../core/disclosures.js';
+import { finiteExtent } from '../core/numeric.js';
+import { disclosureFooterHeight } from './layout.js';
 
 export interface CompileContext {
-  readonly artifactDigest: string;
+  readonly sourceRequestDigest: string;
   readonly width: number;
   readonly height: number;
   readonly themeId: string;
@@ -30,12 +38,13 @@ export interface CompileContext {
   readonly subtitle?: string;
   readonly disclosures: readonly Disclosure[];
   readonly summary: string;
+  readonly returnedTableRows: number;
 }
 
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
 
 function panelBox(context: CompileContext): { x: number; y: number; width: number; height: number } {
-  const disclosureSpace = context.disclosures.length * 14 + 10;
+  const disclosureSpace = disclosureFooterHeight(context.width, context.disclosures);
   return {
     x: MARGIN.left,
     y: MARGIN.top,
@@ -46,7 +55,7 @@ function panelBox(context: CompileContext): { x: number; y: number; width: numbe
 
 function seriesColor(themeId: string, index: number): string {
   // Okabe-Ito order lives in the palette registry; the first accent is enough for the
-  // single-series figures this 0.9.0 compiler draws, and multi-series figures fall back
+  // single-series figures this development compiler draws, and multi-series figures fall back
   // to the theme's focus colour deterministically.
   const focus = (THEMES as Record<string, Record<string, string>>)[themeId]?.focus ?? '#0072b2';
   return index === 0 ? focus : focus;
@@ -55,34 +64,33 @@ function seriesColor(themeId: string, index: number): string {
 /** A row-shaped table from parallel columns. */
 function buildTable(
   columns: readonly { key: string; header: string }[],
-  rowData: readonly (readonly (string | number | null)[])[],
-  inlineLimit: number,
+  rowsTotal: number,
+  rowAt: (index: number) => readonly (string | number | null)[],
 ): RenderPlanV1['table'] {
-  const total = rowData.length;
-  const inline = rowData.slice(0, inlineLimit);
+  const rows = Array.from({ length: rowsTotal }, (_value, index) => rowAt(index));
   return {
-    policy: total > inlineLimit ? 'excerpt_inline_with_complete_sidecar' : 'complete_inline',
+    policy: 'complete_returned',
     columns,
-    rows: inline,
-    rowsInline: inline.length,
-    rowsTotal: total,
+    rows,
+    rowsInline: rows.length,
+    rowsTotal,
   };
 }
 
 function frame(context: CompileContext, disclosures: readonly Disclosure[]): Pick<
   RenderPlanV1,
-  'version' | 'figureId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceArtifactDigest'
+  'version' | 'figureId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceRequestDigest'
 > & { subtitle?: string } {
   return {
     version: 1,
-    figureId: `fig-${context.artifactDigest.slice(7, 19)}`,
+    figureId: `fig-${context.sourceRequestDigest.slice(7, 19)}`,
     width: context.width,
     height: context.height,
     title: context.title,
     ...(context.subtitle ? { subtitle: context.subtitle } : {}),
     themeId: context.themeId,
     disclosures: disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
-    sourceArtifactDigest: context.artifactDigest,
+    sourceRequestDigest: context.sourceRequestDigest,
   };
 }
 
@@ -118,8 +126,8 @@ export function compileLineFigure(
         { key: 'x', header: xLabel },
         { key: 'y', header: yLabel },
       ],
-      x.map((xv, i) => [Number.isFinite(xv) ? formatNumber(xv) : null, y[i] === null ? null : formatNumber(y[i] as number)]),
-      500,
+      x.length,
+      (i) => [Number.isFinite(x[i]) ? x[i] : null, y[i] === null ? null : (y[i] as number)],
     ),
     accessibility: { summary: context.summary, panelSummaries: [] },
   };
@@ -135,10 +143,12 @@ function buildLinePanel(
 ): Panel {
   const finiteX = x.filter((v) => Number.isFinite(v));
   const finiteY = y.filter((v): v is number => v !== null && Number.isFinite(v));
-  const xMin = Math.min(...finiteX);
-  const xMax = Math.max(...finiteX);
-  const yMin = Math.min(0, ...finiteY);
-  const yMax = Math.max(...finiteY);
+  const xExtent = finiteExtent(finiteX)!;
+  const yExtent = finiteExtent(finiteY)!;
+  const xMin = xExtent.min;
+  const xMax = xExtent.max;
+  const yMin = Math.min(0, yExtent.min);
+  const yMax = yExtent.max;
 
   const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
   const yScale = linearScale(yMin, yMax, box.y + box.height, box.y);
@@ -200,6 +210,7 @@ export function compileStepFigure(
   xLabel: string,
   yLabel: string,
   skillId: string,
+  outputAuthorityClassId?: string,
 ): RenderPlanV1 {
   const box = panelBox(context);
   const noData = values.length === 0;
@@ -210,16 +221,42 @@ export function compileStepFigure(
   } else {
     const xMin = binStart[0];
     const xMax = binEnd[binEnd.length - 1];
-    const yMax = Math.max(0, ...values);
+    const yMax = Math.max(0, finiteExtent(values)?.max ?? 0);
     const xScale = linearScale(xMin, xMax, box.x, box.x + box.width);
     const yScale = linearScale(0, yMax, box.y + box.height, box.y);
 
     // Horizontal steps: each bin is a flat segment at its value across [start, end).
-    const stepPoints: { x: number; y: number }[] = [];
+    const stepPoints: {
+      x: number;
+      y: number;
+      authority?: OutputAuthorityAtomicRoleV1;
+    }[] = [];
     for (let i = 0; i < values.length; i++) {
       const yPixel = yScale.map(values[i]);
-      stepPoints.push({ x: xScale.map(binStart[i]), y: yPixel });
-      stepPoints.push({ x: xScale.map(binEnd[i]), y: yPixel });
+      stepPoints.push({
+        x: xScale.map(binStart[i]),
+        y: yPixel,
+        ...(outputAuthorityClassId
+          ? {
+            authority: {
+              tag: 'data_carrier' as const,
+              classId: outputAuthorityClassId,
+              provenance: {
+                binIndex: i,
+                binStart: binStart[i],
+                binEnd: binEnd[i],
+              },
+            },
+          }
+          : {}),
+      });
+      stepPoints.push({
+        x: xScale.map(binEnd[i]),
+        y: yPixel,
+        ...(outputAuthorityClassId
+          ? { authority: { tag: 'connector' as const } }
+          : {}),
+      });
     }
 
     const marks: Mark[] = [
@@ -252,8 +289,8 @@ export function compileStepFigure(
         { key: 'binEnd', header: 'Bin end' },
         { key: 'value', header: yLabel },
       ],
-      values.map((v, i) => [formatNumber(binStart[i]), formatNumber(binEnd[i]), formatNumber(v)]),
-      500,
+      values.length,
+      (i) => [binStart[i], binEnd[i], values[i]],
     ),
     accessibility: { summary: context.summary, panelSummaries: [] },
   };

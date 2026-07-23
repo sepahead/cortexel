@@ -5,6 +5,8 @@
  * requests. Their output is never exempt from the validation gate: an adapter produces a
  * request, and the same pipeline that validates a hand-authored request validates it.
  *
+ * The package installs this implementation at `cortexel/adapters/nest`.
+ *
  * Direct PyNEST integration (running a live simulator) lives in the Python package; this
  * entry handles data that has already crossed the Python/JavaScript boundary as plain JSON.
  */

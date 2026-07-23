@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cortexel.dev/schema/meta/canonicalization-registry.v1.json",
+  "title": "Cortexel canonicalization registry source",
+  "type": "object",
+  "properties": {
+    "registry": { "const": "cortexel-canonicalizations" },
+    "version": { "const": "1.0" },
+    "description": { "type": "string", "minLength": 1 },
+    "algorithms": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/algorithm" }
+    },
+    "compatibility": {
+      "type": "object",
+      "properties": {
+        "entryPolicy": { "const": "append_only_immutable_after_release" },
+        "semanticChange": { "const": "new_algorithm_id_or_revision" },
+        "unknownAlgorithm": { "const": "fail_closed" },
+        "fallback": { "const": "forbidden" },
+        "manifestBinding": { "const": "exact_id_revision_and_entry_digest" }
+      },
+      "required": ["entryPolicy", "semanticChange", "unknownAlgorithm", "fallback", "manifestBinding"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["registry", "version", "description", "algorithms", "compatibility"],
+  "additionalProperties": false,
+  "$defs": {
+    "nonemptyString": { "type": "string", "minLength": 1 },
+    "algorithm": {
+      "type": "object",
+      "properties": {
+        "id": { "const": "cortexel_utf16_sorted_unique_identifier_array_rfc8785_v1" },
+        "revision": { "const": 1 },
+        "status": { "enum": ["stable", "deprecated"] },
+        "input": {
+          "type": "object",
+          "properties": {
+            "container": { "const": "nonempty_array" },
+            "itemType": { "const": "string" },
+            "rejectEmptyItems": { "const": true },
+            "rejectDuplicates": { "const": true },
+            "unicodeDomain": { "const": "well_formed_unicode" }
+          },
+          "required": ["container", "itemType", "rejectEmptyItems", "rejectDuplicates", "unicodeDomain"],
+          "additionalProperties": false
+        },
+        "equality": {
+          "type": "object",
+          "properties": {
+            "stringEquality": { "const": "exact_unicode_sequence" },
+            "unicodeNormalization": { "const": "none" }
+          },
+          "required": ["stringEquality", "unicodeNormalization"],
+          "additionalProperties": false
+        },
+        "sort": {
+          "type": "object",
+          "properties": {
+            "order": { "const": "utf16_code_unit_lexicographic_ascending" },
+            "locale": { "const": "none" }
+          },
+          "required": ["order", "locale"],
+          "additionalProperties": false
+        },
+        "serialization": {
+          "type": "object",
+          "properties": {
+            "scheme": { "const": "rfc8785" },
+            "value": { "const": "sorted_identifier_array" }
+          },
+          "required": ["scheme", "value"],
+          "additionalProperties": false
+        },
+        "encoding": { "const": "utf-8" },
+        "digest": { "const": "sha256" },
+        "output": { "const": "sha256_colon_64_lowercase_hex" },
+        "operations": {
+          "const": [
+            "validate_nonempty_array",
+            "validate_nonempty_unique_well_formed_strings",
+            "sort_utf16_code_units_ascending",
+            "serialize_rfc8785",
+            "encode_utf8",
+            "digest_sha256",
+            "prefix_sha256_colon_lowercase_hex"
+          ]
+        },
+        "conformanceVectors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/vector" }
+        },
+        "failureClasses": {
+          "const": [
+            "not_array",
+            "empty_set",
+            "non_string_identifier",
+            "empty_identifier",
+            "duplicate_identifier",
+            "ill_formed_unicode"
+          ]
+        }
+      },
+      "required": [
+        "id", "revision", "status", "input", "equality", "sort", "serialization",
+        "encoding", "digest", "output", "operations", "conformanceVectors", "failureClasses"
+      ],
+      "additionalProperties": false
+    },
+    "stringArray": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "type": "string", "maxLength": 65536 }
+    },
+    "vector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "name": { "$ref": "#/$defs/nonemptyString" },
+            "outcome": { "const": "accept" },
+            "inputEncoding": { "const": "unicode_strings" },
+            "input": { "$ref": "#/$defs/stringArray" },
+            "normalizedInput": { "$ref": "#/$defs/stringArray" },
+            "canonicalJson": { "type": "string" },
+            "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+          },
+          "required": ["name", "outcome", "inputEncoding", "input", "normalizedInput", "canonicalJson", "digest"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "$ref": "#/$defs/nonemptyString" },
+            "outcome": { "const": "reject" },
+            "inputEncoding": { "const": "unicode_strings" },
+            "input": { "type": "array", "maxItems": 4096 },
+            "failureClass": {
+              "enum": ["empty_set", "empty_identifier", "duplicate_identifier"]
+            }
+          },
+          "required": ["name", "outcome", "inputEncoding", "input", "failureClass"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "$ref": "#/$defs/nonemptyString" },
+            "outcome": { "const": "reject" },
+            "inputEncoding": { "const": "json_value" },
+            "input": {
+              "anyOf": [
+                { "type": "array", "maxItems": 4096 },
+                { "type": "string", "maxLength": 65536 },
+                { "type": "number" },
+                { "type": "boolean" },
+                { "type": "object" },
+                { "type": "null" }
+              ]
+            },
+            "failureClass": { "enum": ["not_array", "non_string_identifier"] }
+          },
+          "required": ["name", "outcome", "inputEncoding", "input", "failureClass"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "$ref": "#/$defs/nonemptyString" },
+            "outcome": { "const": "reject" },
+            "inputEncoding": { "const": "utf16_code_units" },
+            "inputCodeUnits": {
+              "type": "array",
+              "maxItems": 4096,
+              "items": {
+                "type": "array",
+                "maxItems": 65536,
+                "items": { "type": "integer", "minimum": 0, "maximum": 65535 }
+              }
+            },
+            "failureClass": { "const": "ill_formed_unicode" }
+          },
+          "required": ["name", "outcome", "inputEncoding", "inputCodeUnits", "failureClass"],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

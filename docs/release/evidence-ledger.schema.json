@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cortexel evidence ledger v1",
+  "description": "Closed structural schema for docs/release/evidence-ledger.v1.json. Cross-field release ordering, gate contiguity, Gregorian/RFC 3339 calendar validity, and receipt semantics are enforced by scripts/check-evidence-ledger.ts.",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "./evidence-ledger.schema.json" },
+    "ledgerVersion": { "const": 1 },
+    "project": { "const": "cortexel" },
+    "targetRelease": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
+    },
+    "currentRelease": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
+    },
+    "statement": { "$ref": "#/$defs/nonblankTrimmed2000" },
+    "baselineCommit": { "$ref": "#/$defs/fullCommit" },
+    "gates": {
+      "type": "array",
+      "minItems": 155,
+      "maxItems": 155,
+      "items": { "$ref": "#/$defs/gate" }
+    }
+  },
+  "required": [
+    "$schema",
+    "ledgerVersion",
+    "project",
+    "targetRelease",
+    "currentRelease",
+    "statement",
+    "baselineCommit",
+    "gates"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "currentRelease": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$"
+          }
+        },
+        "required": ["currentRelease"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "gates": {
+            "type": "array",
+            "items": {
+              "if": {
+                "type": "object",
+                "properties": { "status": { "const": "PASS" } },
+                "required": ["status"]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "evidence": {
+                    "type": "object",
+                    "properties": {
+                      "exitCode": { "const": 0 },
+                      "artifactDigest": { "$ref": "#/$defs/sha256" }
+                    },
+                    "required": ["exitCode", "artifactDigest"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "nonblankTrimmed2000": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+    },
+    "nonblankTrimmed4096": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+    },
+    "optionalTrimmed8192": {
+      "type": "string",
+      "maxLength": 8192,
+      "pattern": "^(?:|\\S|\\S[\\s\\S]*\\S)$"
+    },
+    "fullCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "command": { "$ref": "#/$defs/nonblankTrimmed4096" },
+        "exitCode": { "type": "integer" },
+        "toolchain": { "$ref": "#/$defs/nonblankTrimmed4096" },
+        "sourceCommit": { "$ref": "#/$defs/fullCommit" },
+        "reviewedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,9})?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "receipt": {
+          "$ref": "#/$defs/nonblankTrimmed4096",
+          "description": "For a stable PASS this is a safe repository path beneath docs/release/evidence/<release>/; pre-1.0 historical receipts may be descriptive."
+        },
+        "artifactDigest": {
+          "$ref": "#/$defs/sha256",
+          "description": "For a stable PASS this is SHA-256 over the exact committed receipt-file bytes, despite the legacy field name."
+        },
+        "reviewer": { "$ref": "#/$defs/nonblankTrimmed4096" }
+      },
+      "additionalProperties": false
+    },
+    "passEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/evidence" },
+        {
+          "type": "object",
+          "properties": {
+            "receipt": true,
+            "toolchain": true,
+            "sourceCommit": true,
+            "reviewedAt": true,
+            "exitCode": { "const": 0 }
+          },
+          "required": ["receipt", "toolchain", "sourceCommit", "reviewedAt"]
+        }
+      ]
+    },
+    "gate": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "pattern": "^R[0-9]{3}$" },
+        "section": { "$ref": "#/$defs/nonblankTrimmed4096" },
+        "requirement": { "$ref": "#/$defs/nonblankTrimmed4096" },
+        "releaseBlocking": { "const": true },
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "FAIL", "NOT_RUN", "NOT_APPLICABLE", "BLOCKED"]
+        },
+        "evidence": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/evidence" }
+          ]
+        },
+        "notes": { "$ref": "#/$defs/optionalTrimmed8192" }
+      },
+      "required": [
+        "id",
+        "section",
+        "requirement",
+        "releaseBlocking",
+        "status",
+        "evidence",
+        "notes"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": { "status": { "const": "PASS" } },
+            "required": ["status"]
+          },
+          "then": {
+            "type": "object",
+            "properties": { "evidence": { "$ref": "#/$defs/passEvidence" } }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": { "status": { "const": "NOT_APPLICABLE" } },
+            "required": ["status"]
+          },
+          "then": {
+            "type": "object",
+            "properties": { "notes": { "$ref": "#/$defs/nonblankTrimmed4096" } }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

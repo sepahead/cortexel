@@ -7,8 +7,9 @@
  *
  * Two properties matter most:
  *
- *   Determinism. No clock, no random id, no locale. Element ids derive from the artifact
- *   digest and a local counter, never from React's useId or a UUID. Attribute order is
+ *   Determinism. No clock, no random id, no locale. Element ids derive from the canonical
+ *   request digest plus deterministic local ids. Using the artifact digest would be cyclic
+ *   because the artifact binds these SVG bytes. They never derive from React's useId or a UUID. Attribute order is
  *   fixed. Coordinates use the fixed formatter. There is no generator timestamp — one
  *   would make two identical figures hash two ways.
  *
@@ -29,6 +30,76 @@ import type {
 } from './model/renderPlan.js';
 import { formatCoordinate } from './format.js';
 import { THEMES } from '../generated/catalog.js';
+import { ARTIFACT_CONTRACT } from '../generated/identity.js';
+import {
+  DISCLOSURE_BOTTOM_PADDING,
+  DISCLOSURE_FONT_SIZE,
+  DISCLOSURE_HORIZONTAL_INSET,
+  DISCLOSURE_LINE_HEIGHT,
+  LEGEND_ROW_HEIGHT,
+  disclosureLineCount,
+  disclosureRenderedTextLength,
+  legendColumnCount,
+  legendStartY,
+  wrapDisclosureText,
+} from './layout.js';
+
+/** A closed-plan geometry contradiction. Serialization never repairs or drops it. */
+export class RenderPlanGeometryError extends Error {
+  constructor(
+    readonly panelId: string,
+    readonly markPath: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'RenderPlanGeometryError';
+  }
+}
+
+function assertArrowGeometry(
+  marks: readonly Mark[],
+  panelId: string,
+  prefix = 'marks',
+): void {
+  for (let markIndex = 0; markIndex < marks.length; markIndex++) {
+    const mark = marks[markIndex];
+    const markPath = `${prefix}/${markIndex}`;
+    if (mark.type === 'group') {
+      assertArrowGeometry(mark.marks, panelId, `${markPath}/marks`);
+      continue;
+    }
+    if (mark.type !== 'arrow') continue;
+    if (!Number.isFinite(mark.size) || !(mark.size > 0)) {
+      throw new RenderPlanGeometryError(
+        panelId,
+        `${markPath}/size`,
+        `arrow size must be finite and strictly positive; got ${String(mark.size)}`,
+      );
+    }
+    for (let arrowIndex = 0; arrowIndex < mark.arrows.length; arrowIndex++) {
+      const arrow = mark.arrows[arrowIndex];
+      if (![arrow.from.x, arrow.from.y, arrow.to.x, arrow.to.y].every(Number.isFinite)) {
+        throw new RenderPlanGeometryError(
+          panelId,
+          `${markPath}/arrows/${arrowIndex}`,
+          'arrow endpoints must contain four finite coordinates',
+        );
+      }
+      if (arrow.from.x === arrow.to.x && arrow.from.y === arrow.to.y) {
+        throw new RenderPlanGeometryError(
+          panelId,
+          `${markPath}/arrows/${arrowIndex}`,
+          'arrow endpoints are identical, so direction is undefined',
+        );
+      }
+    }
+  }
+}
+
+/** Validate direction-bearing geometry before resource accounting or byte emission. */
+export function assertRenderPlanGeometry(plan: RenderPlanV1): void {
+  for (const panel of plan.panels) assertArrowGeometry(panel.marks, panel.id);
+}
 
 /** Escape text content: the five XML text-significant characters. */
 function escapeText(value: string): string {
@@ -125,6 +196,24 @@ const MARKER_PATHS: Record<string, (x: number, y: number, r: number) => string> 
   square: (x, y, r) => `M${formatCoordinate(x - r)},${formatCoordinate(y - r)}h${2 * r}v${2 * r}h${-2 * r}z`,
   triangle: (x, y, r) => `M${formatCoordinate(x)},${formatCoordinate(y - r)}L${formatCoordinate(x + r)},${formatCoordinate(y + r)}L${formatCoordinate(x - r)},${formatCoordinate(y + r)}z`,
   diamond: (x, y, r) => `M${formatCoordinate(x)},${formatCoordinate(y - r)}L${formatCoordinate(x + r)},${formatCoordinate(y)}L${formatCoordinate(x)},${formatCoordinate(y + r)}L${formatCoordinate(x - r)},${formatCoordinate(y)}z`,
+  cross: (x, y, r) => `M${formatCoordinate(x - r)},${formatCoordinate(y - r)}L${formatCoordinate(x + r)},${formatCoordinate(y + r)}M${formatCoordinate(x + r)},${formatCoordinate(y - r)}L${formatCoordinate(x - r)},${formatCoordinate(y + r)}`,
+  plus: (x, y, r) => `M${formatCoordinate(x - r)},${formatCoordinate(y)}L${formatCoordinate(x + r)},${formatCoordinate(y)}M${formatCoordinate(x)},${formatCoordinate(y - r)}L${formatCoordinate(x)},${formatCoordinate(y + r)}`,
+  star: (x, y, r) => {
+    const points: { x: number; y: number }[] = [];
+    for (let index = 0; index < 10; index++) {
+      const radius = index % 2 === 0 ? r : r * 0.42;
+      const angle = -Math.PI / 2 + index * Math.PI / 5;
+      points.push({ x: x + radius * Math.cos(angle), y: y + radius * Math.sin(angle) });
+    }
+    return `${pointsToPath(points)} Z`;
+  },
+  hexagon: (x, y, r) => {
+    const points = Array.from({ length: 6 }, (_value, index) => {
+      const angle = Math.PI / 6 + index * Math.PI / 3;
+      return { x: x + r * Math.cos(angle), y: y + r * Math.sin(angle) };
+    });
+    return `${pointsToPath(points)} Z`;
+  },
 };
 
 function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>): void {
@@ -143,6 +232,39 @@ function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>)
       ];
       if (mark.dash && mark.dash !== 'none') attrs.push(['stroke-dasharray', mark.dash]);
       writer.leaf('path', attrs);
+      break;
+    }
+    case 'arrow': {
+      for (const arrow of mark.arrows) {
+        const dx = arrow.to.x - arrow.from.x;
+        const dy = arrow.to.y - arrow.from.y;
+        const length = Math.hypot(dx, dy);
+        if (!(length > 0) || !Number.isFinite(length)) {
+          throw new RenderPlanGeometryError(
+            'unknown',
+            'marks/arrow',
+            'arrow direction became non-finite or degenerate during serialization',
+          );
+        }
+        const ux = dx / length;
+        const uy = dy / length;
+        const bx = arrow.to.x - ux * mark.size;
+        const by = arrow.to.y - uy * mark.size;
+        const halfWidth = mark.size * 0.58;
+        const px = -uy * halfWidth;
+        const py = ux * halfWidth;
+        const d = [
+          `M${formatCoordinate(arrow.to.x)},${formatCoordinate(arrow.to.y)}`,
+          `L${formatCoordinate(bx + px)},${formatCoordinate(by + py)}`,
+          `L${formatCoordinate(bx - px)},${formatCoordinate(by - py)} Z`,
+        ].join(' ');
+        writer.leaf('path', [
+          ['d', d],
+          ['fill', mark.fill],
+          ['stroke', mark.fill],
+          ['stroke-width', 1],
+        ]);
+      }
       break;
     }
     case 'path': {
@@ -165,6 +287,8 @@ function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>)
         writer.leaf('path', [
           ['d', build(point.x, point.y, mark.radius)],
           ['fill', mark.fill],
+          ['stroke', mark.fill],
+          ['stroke-width', 1],
         ]);
       }
       break;
@@ -211,12 +335,14 @@ function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>)
         const top = subpath.map((p) => ({ x: p.x, y: p.y1 }));
         const bottom = subpath.map((p) => ({ x: p.x, y: p.y0 })).reverse();
         const d = `${pointsToPath(top)} ${pointsToPath(bottom).replace(/^M/, 'L')} Z`;
-        writer.leaf('path', [
+        const attrs: [string, string | number][] = [
           ['d', d],
           ['fill', mark.fill],
           ['fill-opacity', mark.opacity],
-          ['stroke', 'none'],
-        ]);
+          ['stroke', mark.stroke ?? 'none'],
+        ];
+        if (mark.stroke) attrs.push(['stroke-width', mark.strokeWidth ?? 1]);
+        writer.leaf('path', attrs);
       }
       break;
     }
@@ -251,6 +377,7 @@ function emitAxis(writer: SvgWriter, axis: Axis, panel: Panel, colors: Record<st
 
   const isBottom = axis.orientation === 'bottom';
   const isLeft = axis.orientation === 'left';
+  const isTop = axis.orientation === 'top';
 
   for (const tick of axis.ticks) {
     if (isBottom) {
@@ -291,13 +418,61 @@ function emitAxis(writer: SvgWriter, axis: Axis, panel: Panel, colors: Record<st
         fill: colors.mutedText,
         decorative: true,
       });
+    } else if (isTop) {
+      writer.leaf('line', [
+        ['x1', formatCoordinate(tick.position)],
+        ['y1', formatCoordinate(panel.y - 5)],
+        ['x2', formatCoordinate(tick.position)],
+        ['y2', formatCoordinate(panel.y)],
+        ['stroke', colors.axis],
+        ['stroke-width', 1],
+      ]);
+      emitText(writer, {
+        type: 'text',
+        x: tick.position,
+        y: panel.y - 8,
+        text: tick.label,
+        anchor: 'middle',
+        fontSize: 11,
+        fill: colors.mutedText,
+        decorative: true,
+      });
+    } else {
+      writer.leaf('line', [
+        ['x1', formatCoordinate(panel.x + panel.width)],
+        ['y1', formatCoordinate(tick.position)],
+        ['x2', formatCoordinate(panel.x + panel.width + 5)],
+        ['y2', formatCoordinate(tick.position)],
+        ['stroke', colors.axis],
+        ['stroke-width', 1],
+      ]);
+      emitText(writer, {
+        type: 'text',
+        x: panel.x + panel.width + 8,
+        y: tick.position + 4,
+        text: tick.label,
+        anchor: 'start',
+        fontSize: 11,
+        fill: colors.mutedText,
+        decorative: true,
+      });
     }
   }
 
   emitText(writer, {
     type: 'text',
-    x: isBottom ? panel.x + panel.width / 2 : panel.x - 44,
-    y: isBottom ? panel.y + panel.height + 38 : panel.y + panel.height / 2,
+    x:
+      isBottom || isTop
+        ? panel.x + panel.width / 2
+        : isLeft
+          ? panel.x - 44
+          : panel.x + panel.width + 44,
+    y:
+      isBottom
+        ? panel.y + panel.height + 38
+        : isTop
+          ? panel.y - 28
+          : panel.y + panel.height / 2,
     text: axis.label,
     anchor: 'middle',
     fontSize: 12,
@@ -322,16 +497,72 @@ function countMarks(marks: readonly Mark[]): { marks: number; texts: number } {
   let textCount = 0;
   const walk = (list: readonly Mark[]): void => {
     for (const mark of list) {
-      if (mark.type === 'group') {
-        walk(mark.marks);
-      } else {
-        markCount++;
-        if (mark.type === 'text') textCount++;
+      switch (mark.type) {
+        case 'group':
+          walk(mark.marks);
+          break;
+        case 'line':
+        case 'path':
+          // The artifact's markCount and the `visibleMarks` budget name DRAWN marks, so
+          // count the single SVG path this mark emits when it has any geometry. Vertex
+          // work is bounded separately by observations and output bytes; calling every
+          // vertex a visible mark would make a 10-bin step plot claim 20 marks while the
+          // renderer actually draws one path.
+          if (mark.subpaths.some((subpath) => subpath.length > 0)) markCount++;
+          break;
+        case 'arrow':
+          markCount += mark.arrows.length;
+          break;
+        case 'point':
+          markCount += mark.points.length;
+          break;
+        case 'rect':
+          markCount += mark.rects.length;
+          break;
+        case 'rule':
+          markCount += mark.lines.length;
+          break;
+        case 'area':
+          markCount += mark.subpaths.filter((subpath) => subpath.length > 0).length;
+          break;
+        case 'text':
+          markCount++;
+          textCount++;
+          break;
       }
     }
   };
   walk(marks);
   return { marks: markCount, texts: textCount };
+}
+
+/** Exact data-mark and SVG `<text>` counts implied by a render plan. */
+export function countPlanResources(plan: RenderPlanV1): {
+  readonly markCount: number;
+  readonly textCount: number;
+} {
+  assertRenderPlanGeometry(plan);
+  let markCount = 0;
+  // The visible figure title is a `<text>` node; SVG `<title>` and `<desc>` are not.
+  let textCount =
+    1 +
+    (plan.subtitle ? 1 : 0) +
+    disclosureLineCount(plan.width, plan.disclosures);
+
+  for (const panel of plan.panels) {
+    if (panel.label) textCount++;
+    if (panel.noData) {
+      textCount++;
+      continue;
+    }
+    for (const axis of panel.axes) textCount += axis.ticks.length + 1;
+    const counts = countMarks(panel.marks);
+    markCount += counts.marks;
+    textCount += counts.texts;
+  }
+  textCount += plan.legend?.length ?? 0;
+
+  return { markCount, textCount };
 }
 
 /**
@@ -342,11 +573,13 @@ export function renderSvg(
   plan: RenderPlanV1,
   digestOf: (text: string) => string,
 ): SvgReport {
+  assertRenderPlanGeometry(plan);
   const colors = theme(plan.themeId);
   const writer = new SvgWriter();
 
   writer.open('svg', [
     ['xmlns', 'http://www.w3.org/2000/svg'],
+    ['xmlns:cortexel', 'urn:cortexel:metadata:1'],
     ['viewBox', `0 0 ${plan.width} ${plan.height}`],
     ['width', plan.width],
     ['height', plan.height],
@@ -361,9 +594,9 @@ export function renderSvg(
   // A compact, non-sensitive metadata block. Public identities only — no raw source
   // data, no local path, no token, no prompt.
   writer.open('metadata');
-  writer.text('cortexel:contract', 'cortexel-figure-artifact/1.0');
+  writer.text('cortexel:contract', ARTIFACT_CONTRACT);
   writer.text('cortexel:skill', plan.skillId);
-  writer.text('cortexel:artifactDigest', plan.sourceArtifactDigest);
+  writer.text('cortexel:requestDigest', plan.sourceRequestDigest);
   writer.close('metadata');
 
   writer.leaf('rect', [
@@ -398,9 +631,91 @@ export function renderSvg(
     });
   }
 
-  let allMarks: Mark[] = [];
+  if (plan.legend && plan.legend.length > 0) {
+    const startY = legendStartY(plan.subtitle !== undefined);
+    const columns = legendColumnCount(plan.width, plan.legend.length);
+    const itemWidth = (plan.width - 48) / columns;
+    writer.open('g', [['data-legend', 'true'], ['aria-hidden', 'true']]);
+    for (let index = 0; index < plan.legend.length; index++) {
+      const item = plan.legend[index];
+      const outlineColor = item.outlineColor ?? item.color;
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = 24 + column * itemWidth;
+      const y = startY + row * LEGEND_ROW_HEIGHT;
+      const glyph = item.glyph ?? 'series';
+      if (glyph === 'band') {
+        writer.leaf('rect', [
+          ['x', x],
+          ['y', y - 9],
+          ['width', 24],
+          ['height', 10],
+          ['fill', item.color],
+          ['fill-opacity', 0.18],
+          ['stroke', outlineColor],
+          ['stroke-width', 1.5],
+        ]);
+      } else if (glyph === 'whisker') {
+        writer.leaf('line', [
+          ['x1', x + 12], ['y1', y - 10], ['x2', x + 12], ['y2', y + 2],
+          ['stroke', outlineColor], ['stroke-width', 1.5],
+        ]);
+        for (const capY of [y - 10, y + 2]) {
+          writer.leaf('line', [
+            ['x1', x + 7], ['y1', capY], ['x2', x + 17], ['y2', capY],
+            ['stroke', outlineColor], ['stroke-width', 1.5],
+          ]);
+        }
+      } else {
+        const attrs: [string, string | number][] = [
+          ['x1', x],
+          ['y1', y - 4],
+          ['x2', x + 24],
+          ['y2', y - 4],
+          ['stroke', item.color],
+          ['stroke-width', 1.5],
+        ];
+        if (item.dash && item.dash !== 'none') attrs.push(['stroke-dasharray', item.dash]);
+        writer.leaf('line', attrs);
+        if (item.marker) {
+          const marker = MARKER_PATHS[item.marker] ?? MARKER_PATHS.circle;
+          writer.leaf('path', [
+            ['d', marker(x + 12, y - 4, 2.5)],
+            ['fill', item.color],
+            ['stroke', item.color],
+            ['stroke-width', 1],
+          ]);
+        }
+      }
+      emitText(writer, {
+        type: 'text',
+        x: x + 32,
+        y,
+        text: item.label,
+        anchor: 'start',
+        fontSize: 10,
+        fill: colors.text,
+        decorative: true,
+      });
+    }
+    writer.close('g');
+  }
+
   for (const panel of plan.panels) {
     writer.open('g', [['data-panel', panel.id]]);
+
+    if (panel.label) {
+      emitText(writer, {
+        type: 'text',
+        x: panel.x,
+        y: panel.y - 8,
+        text: panel.label,
+        anchor: 'start',
+        fontSize: 11,
+        fill: colors.text,
+        decorative: true,
+      });
+    }
 
     if (panel.noData) {
       emitText(writer, {
@@ -417,7 +732,6 @@ export function renderSvg(
       for (const axis of panel.axes) emitAxis(writer, axis, panel, colors);
       for (const mark of panel.marks) {
         emitMark(writer, mark, colors);
-        allMarks.push(mark);
       }
     }
 
@@ -425,34 +739,49 @@ export function renderSvg(
   }
 
   // Disclosures in normal flow at the foot of the figure, where they cannot be covered by
-  // data. The same text is in the artifact and the accessible description.
-  let disclosureY = plan.height - plan.disclosures.length * 14 - 6;
+  // data. Every line is an exact substring of the registry text, and the enclosing group
+  // carries that complete text for deterministic extraction. `textLength` makes the
+  // horizontal bound independent of host font metrics.
+  const footerLineCount = disclosureLineCount(plan.width, plan.disclosures);
+  let disclosureY =
+    plan.height - footerLineCount * DISCLOSURE_LINE_HEIGHT - DISCLOSURE_BOTTOM_PADDING;
   writer.open('g', [['data-disclosures', 'true']]);
   for (const disclosure of plan.disclosures) {
-    emitText(writer, {
-      type: 'text',
-      x: 24,
-      y: disclosureY,
-      text: disclosure.text,
-      anchor: 'start',
-      fontSize: 10,
-      fill: disclosure.severity === 'critical' ? colors.error : colors.mutedText,
-      decorative: true,
-    });
-    disclosureY += 14;
+    writer.open('g', [
+      ['data-disclosure-id', disclosure.id],
+      ['data-disclosure-text', disclosure.text],
+    ]);
+    const lines = wrapDisclosureText(disclosure.text, plan.width);
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      writer.text('text', line, [
+        ['x', DISCLOSURE_HORIZONTAL_INSET],
+        ['y', formatCoordinate(disclosureY)],
+        ['text-anchor', 'start'],
+        ['font-size', DISCLOSURE_FONT_SIZE],
+        ['fill', disclosure.severity === 'critical' ? colors.error : colors.mutedText],
+        ['font-family', 'sans-serif'],
+        ['textLength', formatCoordinate(disclosureRenderedTextLength(line, plan.width))],
+        ['lengthAdjust', 'spacingAndGlyphs'],
+        ['data-disclosure-line', index],
+        ['aria-hidden', 'true'],
+      ]);
+      disclosureY += DISCLOSURE_LINE_HEIGHT;
+    }
+    writer.close('g');
   }
   writer.close('g');
 
   writer.close('svg');
 
   const svg = writer.toString();
-  const counts = countMarks(allMarks);
+  const counts = countPlanResources(plan);
 
   return {
     svg,
     digest: digestOf(svg),
-    markCount: counts.marks,
-    textCount: counts.texts,
+    markCount: counts.markCount,
+    textCount: counts.textCount,
     width: plan.width,
     height: plan.height,
   };

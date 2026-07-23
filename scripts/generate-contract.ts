@@ -15,12 +15,54 @@
  *
  *   bun run generate
  */
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import Ajv2020 from 'ajv/dist/2020.js';
 
 import { canonicalize } from '../src/core/canonicalize.js';
 import { sha256Hex } from '../src/core/sha256.js';
+import tsupConfig from '../tsup.config.js';
+import { buildManifest as buildLegacySkillsManifest } from './emit-manifest.js';
+import {
+  canonicalizationEntryDigest,
+  canonicalizationReferences,
+  canonicalizationSourceProblems,
+} from './lib/canonicalization-source.js';
+import {
+  buildEntryOutputBases,
+  buildEntryIds,
+  capabilitySourceProblems,
+  implementedCliIds,
+  packageExportIds,
+  packageBinTargetProblems,
+  packageHasCortexelBin,
+  packageIncludesDist,
+  packageExportTargetProblems,
+  packagedSkillIds,
+  sourceEntryId,
+} from './lib/capability-source.js';
+import { numericPolicySourceProblems } from './lib/numeric-policy-source.js';
+import { outputAuthoritySourceProblems } from './lib/output-authority-source.js';
+import {
+  contractIdentitySourceProblems,
+  resolveContractIdentitySource,
+} from './lib/identity-source.js';
+import {
+  packageDistributionIdentityProblems,
+  parsePythonProjectMetadata,
+} from './lib/release-identity.js';
+import {
+  OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1,
+  outputAuthorityImplementationInventoryProblemsV1,
+} from '../src/authority/evaluators/implementation-ids.js';
+import { parseJsonSourceStrict } from './lib/strict-json-source.js';
+import { CLI_COMMANDS } from '../src/cli/commands.js';
+import { buildContractManifest } from './lib/contract-manifest.js';
+import {
+  enumerateNormativeContractFiles,
+  NORMATIVE_CONTRACT_INCLUDE_PATTERNS,
+} from './lib/normative-source-files.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACT = path.join(ROOT, 'contract');
@@ -28,6 +70,7 @@ const GENERATED_TS = path.join(ROOT, 'src', 'generated');
 const GENERATED_SCHEMAS = path.join(CONTRACT, 'schemas', 'generated');
 const GENERATED_SKILL_SCHEMAS = path.join(CONTRACT, 'schemas', 'skills');
 const GENERATED_PY = path.join(ROOT, 'python', 'src', 'cortexel', 'generated');
+const GENERATED_PY_CONTRACT = path.join(ROOT, 'python', 'src', 'cortexel', 'contract');
 
 const BANNER = (source: string): string =>
   `/**\n * GENERATED FILE — DO NOT EDIT.\n *\n * Produced by scripts/generate-contract.ts from ${source}.\n * Edit the normative source and run \`bun run generate\`.\n * \`bun run check:generated\` fails if this file drifts from its source.\n */\n`;
@@ -36,19 +79,19 @@ const PY_BANNER = (source: string): string =>
   `"""GENERATED FILE - DO NOT EDIT.\n\nProduced by scripts/generate-contract.ts from ${source}.\nEdit the normative source and run \`bun run generate\`.\n"""\n`;
 
 function readJson<T = any>(file: string): T {
-  return JSON.parse(readFileSync(file, 'utf8')) as T;
-}
-
-/** Deterministic file listing: sorted, so the digest cannot depend on the filesystem. */
-function listJson(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((name) => name.endsWith('.json'))
-    .sort();
+  return parseJsonSourceStrict<T>(readFileSync(file), path.relative(ROOT, file));
 }
 
 function ensureDir(dir: string): void {
   mkdirSync(dir, { recursive: true });
+}
+
+function decimalPowerExponent(value: unknown): number | null {
+  if (typeof value !== 'number' || !(value > 0) || !Number.isFinite(value)) return null;
+  for (let exponent = -24; exponent <= 24; exponent++) {
+    if (value === Number(`1e${exponent}`)) return exponent;
+  }
+  return null;
 }
 
 function writeIfChanged(file: string, content: string): boolean {
@@ -63,6 +106,12 @@ function writeIfChanged(file: string, content: string): boolean {
 // Load the normative source
 // ---------------------------------------------------------------------------
 
+// Preflight and de-symlink the complete source namespace before reading even one
+// normative byte. This makes a direct generator run fail before it can clear stale
+// generated output when an undeclared or indirect path is already present. As with all
+// pathname checks, the workspace remains a trusted boundary against concurrent rename.
+const existingNormativeFiles = enumerateNormativeContractFiles(CONTRACT);
+
 const units = readJson(path.join(CONTRACT, 'registries', 'units.v1.json'));
 const errorCodes = readJson(path.join(CONTRACT, 'registries', 'error-codes.v1.json'));
 const capabilities = readJson(path.join(CONTRACT, 'registries', 'capabilities.v1.json'));
@@ -74,9 +123,28 @@ const budgets = readJson(path.join(CONTRACT, 'registries', 'budget-profiles.v1.j
 const legacyMap = readJson(path.join(CONTRACT, 'registries', 'legacy-skill-map.v1.json'));
 const renderers = readJson(path.join(CONTRACT, 'registries', 'renderers.v1.json'));
 const palettes = readJson(path.join(CONTRACT, 'registries', 'palettes.v1.json'));
+const numericPolicies = readJson(path.join(CONTRACT, 'registries', 'numeric-policies.v1.json'));
+const canonicalizations = readJson(path.join(CONTRACT, 'registries', 'canonicalizations.v1.json'));
+const identity = readJson(path.join(CONTRACT, 'registries', 'identity.v1.json'));
+const commonSchema = readJson(path.join(CONTRACT, 'schemas', 'common.v1.schema.json'));
+const figureRequestSchema = readJson(
+  path.join(CONTRACT, 'schemas', 'figure-request.v1.schema.json'),
+);
+const figureArtifactSchema = readJson(
+  path.join(CONTRACT, 'schemas', 'figure-artifact.v1.schema.json'),
+);
+const contractSourceSchema = readJson(path.join(CONTRACT, 'meta', 'contract-source.schema.json'));
+const canonicalizationRegistrySchema = readJson(
+  path.join(CONTRACT, 'meta', 'canonicalization-registry.schema.json'),
+);
+const packageJson = readJson(path.join(ROOT, 'package.json'));
+const pythonProject = parsePythonProjectMetadata(
+  readFileSync(path.join(ROOT, 'python', 'pyproject.toml'), 'utf8'),
+);
+const legacySkillsManifest = buildLegacySkillsManifest();
 
-const skillFiles = listJson(path.join(CONTRACT, 'skills'));
-const skills = skillFiles.map((file) => readJson(path.join(CONTRACT, 'skills', file)));
+const skillFiles = existingNormativeFiles.filter((file) => file.startsWith('skills/'));
+const skills = skillFiles.map((file) => readJson(path.join(CONTRACT, file)));
 skills.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
 const stableSkills = skills.filter((s) => s.status === 'stable');
@@ -87,6 +155,172 @@ const stableSkills = skills.filter((s) => s.status === 'stable');
 // ---------------------------------------------------------------------------
 
 const problems: string[] = [];
+
+problems.push(...packageDistributionIdentityProblems({
+  packageName: packageJson.name,
+  packageVersion: packageJson.version,
+  packagePrivate: packageJson.private,
+  publishConfigPresent: Object.hasOwn(packageJson, 'publishConfig'),
+  packageNodeEngine: packageJson.engines?.node,
+  pythonProjectName: pythonProject.name,
+  pythonProjectVersion: pythonProject.version,
+}));
+
+const DANGEROUS_GENERATED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Object.fromEntries and emitted object literals are map construction boundaries.
+ * Duplicate ids would silently let the last record win, while `__proto__` has special
+ * object-literal semantics and could disappear before freezeGenerated sees it. Refuse
+ * both at generation time instead of emitting an authority different from its source.
+ */
+function assertUniqueMapKeys(
+  records: readonly any[],
+  field: string,
+  where: string,
+): void {
+  const seen = new Set<string>();
+  records.forEach((record, index) => {
+    const key = record?.[field];
+    if (typeof key !== 'string' || key.length === 0) {
+      problems.push(`${where}[${index}].${field}: expected a non-empty string map key`);
+      return;
+    }
+    if (DANGEROUS_GENERATED_KEYS.has(key)) {
+      problems.push(`${where}[${index}].${field}: dangerous generated map key "${key}" is forbidden`);
+    }
+    if (seen.has(key)) {
+      problems.push(`${where}[${index}].${field}: duplicate generated map key "${key}"`);
+    }
+    seen.add(key);
+  });
+}
+
+function assertUniqueStrings(values: readonly unknown[], where: string): void {
+  const seen = new Set<string>();
+  values.forEach((value, index) => {
+    if (typeof value !== 'string' || value.length === 0) {
+      problems.push(`${where}[${index}]: expected a non-empty string`);
+      return;
+    }
+    if (seen.has(value)) problems.push(`${where}[${index}]: duplicate value "${value}"`);
+    seen.add(value);
+  });
+}
+
+function assertSameStringSet(actual: readonly string[], expected: readonly string[], where: string): void {
+  const actualSet = new Set(actual);
+  const expectedSet = new Set(expected);
+  const missing = [...expectedSet].filter((value) => !actualSet.has(value)).sort();
+  const extra = [...actualSet].filter((value) => !expectedSet.has(value)).sort();
+  if (missing.length > 0 || extra.length > 0) {
+    problems.push(`${where}: set mismatch; missing [${missing.join(', ')}], extra [${extra.join(', ')}]`);
+  }
+}
+
+const uncertaintyKinds = (commonSchema.$defs.uncertainty.oneOf as any[]).flatMap((branch: any) => {
+  const kind = branch?.properties?.kind;
+  return typeof kind?.const === 'string'
+    ? [kind.const]
+    : Array.isArray(kind?.enum)
+      ? kind.enum
+      : [];
+});
+const metaUncertaintyKinds = contractSourceSchema.properties.science.properties
+  .uncertaintySupport.items.enum as string[];
+const paletteUncertaintyKinds = palettes.uncertaintyStyles.map((style: any) => style.kind) as string[];
+
+function assertNoDangerousObjectKeys(value: unknown, where: string): void {
+  if (value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertNoDangerousObjectKeys(child, `${where}[${index}]`));
+    return;
+  }
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (DANGEROUS_GENERATED_KEYS.has(key)) {
+      problems.push(`${where}: dangerous object member "${key}" cannot be emitted safely`);
+    }
+    assertNoDangerousObjectKeys((value as Record<string, unknown>)[key], `${where}.${key}`);
+  }
+}
+
+assertUniqueMapKeys(errorCodes.codes, 'code', 'error-codes.codes');
+assertUniqueStrings(errorCodes.stages, 'error-codes.stages');
+assertUniqueMapKeys(units.units, 'code', 'units.units');
+assertUniqueMapKeys(units.quantityKinds, 'kind', 'units.quantityKinds');
+assertUniqueMapKeys(semanticValidators.validators, 'id', 'semantic-validators.validators');
+assertUniqueMapKeys(disclosures.rules, 'id', 'disclosures.rules');
+assertUniqueMapKeys(budgets.profiles, 'id', 'budget-profiles.profiles');
+assertUniqueMapKeys(budgets.compactionPolicies, 'id', 'budget-profiles.compactionPolicies');
+assertUniqueMapKeys(capabilities.capabilities, 'id', 'capabilities.capabilities');
+assertUniqueMapKeys(legacyMap.entries, 'legacyId', 'legacy-skill-map.entries');
+assertUniqueMapKeys(renderers.renderers, 'id', 'renderers.renderers');
+assertUniqueMapKeys(palettes.themes, 'id', 'palettes.themes');
+assertUniqueMapKeys(palettes.uncertaintyStyles, 'kind', 'palettes.uncertaintyStyles');
+assertUniqueMapKeys(numericPolicies.algorithms, 'id', 'numeric-policies.algorithms');
+assertUniqueMapKeys(numericPolicies.policies, 'id', 'numeric-policies.policies');
+assertUniqueMapKeys(canonicalizations.algorithms, 'id', 'canonicalizations.algorithms');
+assertUniqueMapKeys(skills, 'id', 'contract/skills');
+assertUniqueStrings(uncertaintyKinds, 'common.$defs.uncertainty kinds');
+assertUniqueStrings(metaUncertaintyKinds, 'contract-source uncertainty kinds');
+assertSameStringSet(metaUncertaintyKinds, uncertaintyKinds, 'contract-source uncertainty kinds');
+assertSameStringSet(paletteUncertaintyKinds, uncertaintyKinds, 'palette uncertainty kinds');
+for (const [index, style] of palettes.uncertaintyStyles.entries()) {
+  if (!['band', 'whisker', 'none'].includes(style.mark)) {
+    problems.push(`palettes.uncertaintyStyles[${index}].mark: expected band, whisker, or none`);
+  }
+  if (typeof style.label !== 'string' || style.label.trim().length === 0) {
+    problems.push(`palettes.uncertaintyStyles[${index}].label: expected a non-empty string`);
+  }
+  if ((style.kind === 'none') !== (style.mark === 'none')) {
+    problems.push(`palettes.uncertaintyStyles[${index}]: only uncertainty kind none may use mark none`);
+  }
+}
+for (const [index, skill] of skills.entries()) {
+  const support = skill.science?.uncertaintySupport ?? [];
+  assertUniqueStrings(support, `contract/skills[${index}].science.uncertaintySupport`);
+  const unsupported = support.filter((kind: string) => !uncertaintyKinds.includes(kind));
+  if (unsupported.length > 0) {
+    problems.push(`contract/skills[${index}].science.uncertaintySupport: unknown kinds [${unsupported.join(', ')}]`);
+  }
+}
+
+for (const [where, value] of [
+  ['units', units],
+  ['error-codes', errorCodes],
+  ['capabilities', capabilities],
+  ['semantic-validators', semanticValidators],
+  ['disclosures', disclosures],
+  ['budget-profiles', budgets],
+  ['legacy-skill-map', legacyMap],
+  ['renderers', renderers],
+  ['palettes', palettes],
+  ['numeric-policies', numericPolicies],
+  ['canonicalizations', canonicalizations],
+] as const) {
+  assertNoDangerousObjectKeys(value, where);
+}
+skills.forEach((skill, index) => assertNoDangerousObjectKeys(skill, `contract/skills[${index}]`));
+
+const aliasOwners = new Map<string, string>();
+const canonicalUnitCodes = new Set<string>(units.units.map((unit: any) => unit.code));
+for (const unit of units.units) {
+  for (const alias of unit.aliases ?? []) {
+    if (typeof alias !== 'string' || alias.length === 0) continue;
+    if (DANGEROUS_GENERATED_KEYS.has(alias)) {
+      problems.push(`unit ${unit.code}: dangerous generated alias key "${alias}" is forbidden`);
+    }
+    if (canonicalUnitCodes.has(alias)) {
+      problems.push(`unit ${unit.code}: alias "${alias}" collides with a canonical unit code`);
+    }
+    const prior = aliasOwners.get(alias);
+    if (prior !== undefined) {
+      problems.push(`unit ${unit.code}: alias "${alias}" duplicates the alias owned by unit ${prior}`);
+    } else {
+      aliasOwners.set(alias, unit.code);
+    }
+  }
+}
 
 // `if` / `then` / `else` / `not` are PREDICATES over an instance, not declarations of
 // one. Closing an `if` with additionalProperties:false would make it match only objects
@@ -126,12 +360,154 @@ const quantityKinds = new Set<string>(units.quantityKinds.map((q: any) => q.kind
 const validatorIds = new Set<string>(semanticValidators.validators.map((v: any) => v.id));
 const disclosureIds = new Set<string>(disclosures.rules.map((r: any) => r.id));
 const errorCodeIds = new Set<string>(errorCodes.codes.map((c: any) => c.code));
-const rendererIds = new Set<string>(renderers.renderers.map((r: any) => r.id));
+const rendererById = new Map<string, any>(
+  renderers.renderers.map((renderer: any) => [renderer.id, renderer]),
+);
+const rendererIds = new Set<string>(rendererById.keys());
+const numericPolicyIds = new Set<string>(numericPolicies.policies.map((r: any) => r.id));
+const canonicalizationIds = new Set<string>(
+  canonicalizations.algorithms.map((algorithm: any) => algorithm.id),
+);
 const compactionIds = new Set<string>(budgets.compactionPolicies.map((p: any) => p.id));
 const capabilityIds = new Map<string, any>(capabilities.capabilities.map((c: any) => [c.id, c]));
 
+const sourceEntryFiles = [
+  path.join(ROOT, 'src', 'index.ts'),
+  path.join(ROOT, 'src', 'core', 'index.ts'),
+  path.join(ROOT, 'src', 'figure', 'index.ts'),
+  path.join(ROOT, 'src', 'render', 'index.ts'),
+  path.join(ROOT, 'src', 'adapters', 'nest', 'index.ts'),
+];
+const sourceExportIds = new Set(
+  sourceEntryFiles.flatMap((file) => {
+    if (!existsSync(file)) return [];
+    const id = sourceEntryId(readFileSync(file, 'utf8'));
+    return id === null ? [] : [id];
+  }),
+);
+const tsupOptions = Array.isArray(tsupConfig) ? tsupConfig[0] : tsupConfig;
+const tsupEntry = typeof tsupOptions === 'object' && tsupOptions !== null &&
+  !Array.isArray(tsupOptions)
+  ? (tsupOptions as { entry?: unknown }).entry
+  : undefined;
+const configuredPackageExports = packageExportIds(packageJson);
+const configuredBuildEntries = buildEntryIds(tsupEntry);
+const figureRuntimeIsPackaged = [
+  'cortexel/figure',
+  'cortexel/render-svg',
+  'cortexel/contract',
+].every((id) => configuredPackageExports.has(id)) && [
+  'cortexel/figure',
+  'cortexel/render-svg',
+].every((id) => configuredBuildEntries.has(id));
+
+problems.push(...packageExportTargetProblems(packageJson, buildEntryOutputBases(tsupEntry)));
+problems.push(...packageBinTargetProblems(packageJson, tsupEntry));
+problems.push(...capabilitySourceProblems(capabilities, {
+  packageExportIds: configuredPackageExports,
+  buildEntryIds: configuredBuildEntries,
+  packagedSkillIds: configuredPackageExports.has('cortexel/skills.manifest.json')
+    ? packagedSkillIds(legacySkillsManifest)
+    : new Set(),
+  packagedFigureSkillIds: figureRuntimeIsPackaged
+    ? new Set(skills.map((skill) => skill.id))
+    : new Set(),
+  cliIsPackaged: packageHasCortexelBin(packageJson),
+  implementedCliIds: implementedCliIds(CLI_COMMANDS),
+  sourceExportIds,
+  contractSourceIds: existsSync(path.join(CONTRACT, 'meta', 'contract-source.schema.json'))
+    ? new Set(['cortexel/contract'])
+    : new Set(),
+  skillContractIds: new Set(skills.map((skill) => skill.id)),
+  rendererIds,
+  legacyMapIds: new Set(legacyMap.entries.map((entry: any) => entry.legacyId)),
+  tarballIncludesDist: packageIncludesDist(packageJson),
+}));
+
+problems.push(...numericPolicySourceProblems(numericPolicies));
+problems.push(...canonicalizationSourceProblems(canonicalizations));
+problems.push(...contractIdentitySourceProblems(identity, {
+  figureRequestSchema,
+  figureArtifactSchema,
+  skills,
+  errorCodes,
+  normativeSourceIncludes: NORMATIVE_CONTRACT_INCLUDE_PATTERNS,
+}));
+const canonicalizationAjv = new Ajv2020({ allErrors: true, strict: true });
+const validateCanonicalizationRegistry = canonicalizationAjv.compile(canonicalizationRegistrySchema);
+if (!validateCanonicalizationRegistry(canonicalizations)) {
+  for (const error of validateCanonicalizationRegistry.errors ?? []) {
+    problems.push(
+      `canonicalizations meta-schema ${error.instancePath || '/'} ${error.message ?? 'validation failed'}`,
+    );
+  }
+}
+
+// The skill meta-schema is an executable source boundary, not documentation. Every
+// normative skill file must satisfy it before any digest or generated output is
+// produced. Previously the schema claimed this invariant but generation never ran it,
+// allowing fourteen of nineteen sources to drift beyond their declared bounds.
+const contractSourceAjv = new Ajv2020({ allErrors: true, strict: true });
+const validateContractSource = contractSourceAjv.compile(contractSourceSchema);
+for (const skill of skills) {
+  if (validateContractSource(skill)) continue;
+  for (const error of validateContractSource.errors ?? []) {
+    problems.push(
+      `skill ${String(skill.id)} meta-schema ${error.instancePath || '/'} ` +
+      `${error.message ?? 'validation failed'}`,
+    );
+  }
+}
+
+function collectPropertyConstValues(
+  value: unknown,
+  propertyName: string,
+  out: Set<string>,
+): void {
+  if (value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach((child) => collectPropertyConstValues(child, propertyName, out));
+    return;
+  }
+  const node = value as Record<string, unknown>;
+  const properties = node.properties;
+  if (properties !== null && typeof properties === 'object' && !Array.isArray(properties)) {
+    const property = (properties as Record<string, unknown>)[propertyName];
+    if (property !== null && typeof property === 'object' && !Array.isArray(property)) {
+      const constant = (property as Record<string, unknown>).const;
+      if (typeof constant === 'string') out.add(constant);
+    }
+  }
+  Object.values(node).forEach((child) => collectPropertyConstValues(child, propertyName, out));
+}
+
+function assertKnownCanonicalizationReferences(value: unknown, where: string): void {
+  for (const id of canonicalizationReferences(value)) {
+    if (!canonicalizationIds.has(id)) {
+      problems.push(`${where}: unknown canonicalization algorithm "${id}"`);
+    }
+  }
+}
+
+// Shared definitions are the actual declaration site for schema fragments reached
+// through `$ref`. Scanning only each skill's inline request fragment would make this
+// registry-integrity check vacuous for every shared canonicalization declaration.
+assertKnownCanonicalizationReferences(commonSchema, 'contract/schemas/common.v1.schema.json');
+
 for (const skill of skills) {
   const where = `skill ${skill.id}`;
+
+  problems.push(...outputAuthoritySourceProblems(skill));
+
+  const declaredNumericPolicies = new Set<string>();
+  collectPropertyConstValues(skill.requestSchema, 'tilingPolicy', declaredNumericPolicies);
+  for (const id of declaredNumericPolicies) {
+    if (!numericPolicyIds.has(id)) {
+      problems.push(`${where}: unknown numeric tiling policy "${id}"`);
+    }
+  }
+
+  assertKnownCanonicalizationReferences(skill.requestSchema, where);
 
   for (const validator of skill.semanticValidators ?? []) {
     if (!validatorIds.has(validator.id)) {
@@ -146,6 +522,14 @@ for (const skill of skills) {
   }
   if (!rendererIds.has(skill.renderer?.id)) {
     problems.push(`${where}: unknown renderer "${skill.renderer?.id}"`);
+  } else {
+    const registeredRenderer = rendererById.get(skill.renderer.id);
+    if (skill.renderer?.revision !== registeredRenderer?.revision) {
+      problems.push(
+        `${where}: renderer revision ${String(skill.renderer?.revision)} disagrees with ` +
+          `renderers.v1.json ${String(registeredRenderer?.revision)} for "${skill.renderer.id}"`,
+      );
+    }
   }
   for (const example of skill.examples?.invalid ?? []) {
     if (!errorCodeIds.has(example.expectedCode)) {
@@ -174,7 +558,7 @@ for (const skill of skills) {
   // A stable skill pointing at an experimental renderer would be a stable promise
   // backed by a nondeterministic implementation. Fail generation, not the release.
   if (skill.status === 'stable') {
-    const renderer = renderers.renderers.find((r: any) => r.id === skill.renderer?.id);
+    const renderer = rendererById.get(skill.renderer?.id);
     if (renderer && renderer.status !== 'stable') {
       problems.push(`${where}: a stable skill may not use the experimental renderer "${renderer.id}"`);
     }
@@ -200,6 +584,29 @@ for (const skill of skills) {
     }
     assertClosed(schema, `${where} requestSchema.${key}`, problems);
   }
+}
+
+const declaredAuthorityEvaluatorIds = stableSkills
+  .map((skill) => skill.outputAuthority?.evaluator?.id)
+  .filter((id): id is string => typeof id === 'string')
+  .sort();
+for (const problem of outputAuthorityImplementationInventoryProblemsV1(
+  OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1,
+)) {
+  problems.push(`OutputAuthority implementation inventory: ${problem}`);
+}
+for (const problem of outputAuthorityImplementationInventoryProblemsV1(
+  declaredAuthorityEvaluatorIds,
+)) {
+  problems.push(`stable OutputAuthority source declarations: ${problem}`);
+}
+if (canonicalize(declaredAuthorityEvaluatorIds as never) !==
+    canonicalize(OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 as never)) {
+  problems.push(
+    'OutputAuthority evaluator registry must exactly cover every stable source declaration; ' +
+    `declared=${JSON.stringify(declaredAuthorityEvaluatorIds)}, ` +
+    `implemented=${JSON.stringify(OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1)}`,
+  );
 }
 
 /**
@@ -328,8 +735,14 @@ function assertTypedKeywords(node: any, where: string, out: string[], at: string
 }
 
 for (const entry of legacyMap.entries) {
-  if (entry.targetId && entry.outcome === 'migrate' && !capabilityIds.has(entry.targetId)) {
+  if (entry.targetId && !capabilityIds.has(entry.targetId)) {
     problems.push(`legacy map: "${entry.legacyId}" targets unknown capability "${entry.targetId}"`);
+  }
+  if (
+    (entry.outcome === 'migrate' || entry.outcome === 'migrate_conditional') &&
+    typeof entry.targetId !== 'string'
+  ) {
+    problems.push(`legacy map: "${entry.legacyId}" outcome ${entry.outcome} requires a targetId`);
   }
 }
 
@@ -339,19 +752,32 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+const contractIdentity = resolveContractIdentitySource(identity);
+
+// Digest only a registry that passed both the bounded executable reader and its
+// closed meta-schema. Invalid oversized vectors must fail before canonicalization
+// can amplify them into generated output or entry-digest work.
+const canonicalizationAlgorithmsWithDigests = Object.fromEntries(
+  canonicalizations.algorithms.map((algorithm: any) => [
+    algorithm.id,
+    { ...algorithm, entryDigest: canonicalizationEntryDigest(algorithm) },
+  ]),
+);
+
 // ---------------------------------------------------------------------------
 // contract/schemas/generated/registry-enums.v1.schema.json
 //
-// The enums that other schemas $ref. They exist ONLY here so that a unit code, an
-// error code, or a skill id has exactly one definition in the whole system.
+// Registry-derived structural definitions that other schemas $ref. Closed ids remain
+// enums here. Unit-code SHAPE also lives here, while canonical membership deliberately
+// remains semantic so a registered alias can receive its specific repair diagnostic.
 // ---------------------------------------------------------------------------
 
 const enumSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json',
-  title: 'Cortexel registry enumerations (generated)',
+  title: 'Cortexel registry schema definitions (generated)',
   description:
-    'GENERATED from contract/registries/. Do not edit. These enums exist in exactly one place so that a unit code, an error code, or a skill id cannot drift between the schema, the validator, the manifest, and the docs.',
+    'GENERATED from contract/registries/. Do not edit. Closed identifier enums and the structural unit-code shape live in exactly one place; canonical unit membership is enforced by the semantic unit validators so aliases receive an actionable repair.',
   $defs: {
     unitCode: {
       type: 'string',
@@ -382,6 +808,41 @@ const enumSchema = {
     disclosureId: {
       type: 'string',
       enum: [...disclosureIds].sort(),
+    },
+    disclosureRecord: {
+      description: 'An exact disclosure id/severity pair from disclosures.v1.json plus its bounded library-rendered text. Template substitution depends on artifact facts and is an executable postcondition, not a JSON Schema claim.',
+      oneOf: disclosures.rules.map((rule: any) => ({
+        type: 'object',
+        properties: {
+          id: { const: rule.id },
+          severity: { const: rule.severity },
+          text: { type: 'string', minLength: 1, maxLength: 400 },
+        },
+        required: ['id', 'severity', 'text'],
+        additionalProperties: false,
+      })),
+    },
+    semanticValidatorId: {
+      type: 'string',
+      description: 'A semantic-validator id from semantic-validators.v1.json.',
+      enum: [...validatorIds].sort(),
+    },
+    rendererId: {
+      type: 'string',
+      description: 'A renderer id from renderers.v1.json.',
+      enum: [...rendererIds].sort(),
+    },
+    rendererIdentity: {
+      type: 'object',
+      description: 'An exact renderer id/revision pair from renderers.v1.json.',
+      oneOf: renderers.renderers.map((renderer: any) => ({
+        type: 'object',
+        properties: {
+          rendererId: { const: renderer.id },
+          rendererRevision: { const: renderer.revision },
+        },
+        required: ['rendererId', 'rendererRevision'],
+      })),
     },
     // Themes and budget profiles are $ref'd by the presentation schema so their sets have
     // ONE authority (palettes.v1.json / budget-profiles.v1.json), not a hand-copied enum.
@@ -420,8 +881,8 @@ function composeRequestSchema(skill: any): object {
       contract: {
         type: 'object',
         properties: {
-          name: { const: 'cortexel-figure-request' },
-          version: { type: 'string', enum: ['1.0'] },
+          name: { const: contractIdentity.request.name },
+          version: { type: 'string', enum: [contractIdentity.request.version] },
         },
         required: ['name', 'version'],
         additionalProperties: false,
@@ -431,7 +892,12 @@ function composeRequestSchema(skill: any): object {
         type: 'object',
         properties: {
           id: { const: skill.id },
-          revision: { type: 'integer', minimum: 1 },
+          revision: {
+            type: 'integer',
+            minimum: 1,
+            description:
+              'Optional in an authored request. A mismatched pin is refused before canonicalization. Every accepted canonical request materializes the resolved installed revision here, making an omitted pin and an explicit-current pin canonically identical.',
+          },
         },
         required: ['id'],
         additionalProperties: false,
@@ -443,6 +909,9 @@ function composeRequestSchema(skill: any): object {
     },
     required: ['contract', 'skill', 'data', 'parameters', 'source'],
     additionalProperties: false,
+    ...(skill.requestSchema.envelopeConstraints
+      ? { allOf: [skill.requestSchema.envelopeConstraints] }
+      : {}),
   };
 }
 
@@ -451,13 +920,15 @@ function composeRequestSchema(skill: any): object {
 // ---------------------------------------------------------------------------
 
 const registryTs = `${BANNER('contract/registries/')}
-export const ERROR_CODES = ${JSON.stringify([...errorCodeIds].sort(), null, 2)} as const;
+import { freezeGenerated } from '../core/deep-freeze.js';
+
+export const ERROR_CODES = freezeGenerated(${JSON.stringify([...errorCodeIds].sort(), null, 2)} as const);
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
-export const ERROR_STAGES = ${JSON.stringify(errorCodes.stages, null, 2)} as const;
+export const ERROR_STAGES = freezeGenerated(${JSON.stringify(errorCodes.stages, null, 2)} as const);
 export type ErrorStage = (typeof ERROR_STAGES)[number];
 
-export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: ErrorStage; readonly severity: 'error' | 'warning'; readonly summary: string; readonly correctiveAction: string }>> = Object.freeze(${JSON.stringify(
+export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: ErrorStage; readonly severity: 'error' | 'warning'; readonly summary: string; readonly correctiveAction: string }>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     errorCodes.codes.map((c: any) => [
       c.code,
@@ -473,21 +944,26 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
   2,
 )});
 
-export const UNIT_CODES = ${JSON.stringify([...unitCodes].sort(), null, 2)} as const;
+export const UNIT_CODES = freezeGenerated(${JSON.stringify([...unitCodes].sort(), null, 2)} as const);
 export type UnitCode = (typeof UNIT_CODES)[number];
 
-export const QUANTITY_KINDS = ${JSON.stringify([...quantityKinds].sort(), null, 2)} as const;
+export const QUANTITY_KINDS = freezeGenerated(${JSON.stringify([...quantityKinds].sort(), null, 2)} as const);
 export type QuantityKind = (typeof QUANTITY_KINDS)[number];
+
+export const UNCERTAINTY_KINDS = freezeGenerated(${JSON.stringify([...uncertaintyKinds].sort(), null, 2)} as const);
+export type UncertaintyKind = (typeof UNCERTAINTY_KINDS)[number];
 
 export interface UnitRecord {
   readonly code: string;
   readonly dimension: string;
   readonly toCanonical: number | null;
+  /** Exact decimal exponent when the registry scale is a power of ten. */
+  readonly toCanonicalDecimalExponent: number | null;
   readonly label: string;
   readonly aliases: readonly string[];
 }
 
-export const UNITS: Readonly<Record<string, UnitRecord>> = Object.freeze(${JSON.stringify(
+export const UNITS: Readonly<Record<string, UnitRecord>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     units.units.map((u: any) => [
       u.code,
@@ -495,6 +971,7 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = Object.freeze(${JSON.
         code: u.code,
         dimension: u.dimension,
         toCanonical: u.toCanonical,
+        toCanonicalDecimalExponent: decimalPowerExponent(u.toCanonical),
         label: u.label,
         aliases: u.aliases ?? [],
       },
@@ -504,9 +981,9 @@ export const UNITS: Readonly<Record<string, UnitRecord>> = Object.freeze(${JSON.
   2,
 )});
 
-/** Alias -> canonical code. Used ONLY by adapters and \`cortexel migrate\`; normal
+/** Alias -> canonical code. Used ONLY by adapters and explicit migration operations; normal
  *  validation rejects an alias with a repair rather than converting it silently. */
-export const UNIT_ALIASES: Readonly<Record<string, string>> = Object.freeze(${JSON.stringify(
+export const UNIT_ALIASES: Readonly<Record<string, string>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     units.units.flatMap((u: any) =>
       (u.aliases ?? [])
@@ -518,13 +995,13 @@ export const UNIT_ALIASES: Readonly<Record<string, string>> = Object.freeze(${JS
   2,
 )});
 
-export const QUANTITY_KIND_DIMENSIONS: Readonly<Record<string, readonly string[]>> = Object.freeze(${JSON.stringify(
+export const QUANTITY_KIND_DIMENSIONS: Readonly<Record<string, readonly string[]>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(units.quantityKinds.map((q: any) => [q.kind, q.dimensions])),
   null,
   2,
 )});
 
-export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity: 'critical' | 'important' | 'informational'; readonly text: string }[] = Object.freeze(${JSON.stringify(
+export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity: 'critical' | 'important' | 'informational'; readonly text: string }[] = freezeGenerated(${JSON.stringify(
   disclosures.rules.map((r: any) => ({ id: r.id, severity: r.severity, text: r.text })),
   null,
   2,
@@ -532,15 +1009,41 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
 
 export type DisclosureId = (typeof DISCLOSURE_RULES)[number]['id'];
 
-export const SEMANTIC_VALIDATOR_IDS = ${JSON.stringify([...validatorIds].sort(), null, 2)} as const;
+export const SEMANTIC_VALIDATOR_IDS = freezeGenerated(${JSON.stringify([...validatorIds].sort(), null, 2)} as const);
 export type SemanticValidatorId = (typeof SEMANTIC_VALIDATOR_IDS)[number];
+
+/** Language-neutral numeric algorithms whose ids are stable request-level acceptance boundaries. */
+export const NUMERIC_ALGORITHMS = freezeGenerated(${JSON.stringify(
+  Object.fromEntries(numericPolicies.algorithms.map((algorithm: any) => [algorithm.id, algorithm])),
+  null,
+  2,
+)} as const);
+
+export const NUMERIC_POLICIES = freezeGenerated(${JSON.stringify(
+  Object.fromEntries(numericPolicies.policies.map((policy: any) => [policy.id, policy])),
+  null,
+  2,
+)} as const);
+export const NUMERIC_POLICY_IDS = freezeGenerated(${JSON.stringify([...numericPolicyIds].sort(), null, 2)} as const);
+export type NumericPolicyId = (typeof NUMERIC_POLICY_IDS)[number];
+
+/** Immutable identity algorithms, each bound to the digest of its normative registry entry. */
+export const CANONICALIZATION_ALGORITHMS = freezeGenerated(${JSON.stringify(
+  canonicalizationAlgorithmsWithDigests,
+  null,
+  2,
+)} as const);
+export const CANONICALIZATION_IDS = freezeGenerated(${JSON.stringify([...canonicalizationIds].sort(), null, 2)} as const);
+export type CanonicalizationId = (typeof CANONICALIZATION_IDS)[number];
 `;
 
 const budgetsTs = `${BANNER('contract/registries/budget-profiles.v1.json')}
-export const BUDGET_PROFILE_IDS = ${JSON.stringify(budgets.profiles.map((p: any) => p.id), null, 2)} as const;
+import { freezeGenerated } from '../core/deep-freeze.js';
+
+export const BUDGET_PROFILE_IDS = freezeGenerated(${JSON.stringify(budgets.profiles.map((p: any) => p.id), null, 2)} as const);
 export type BudgetProfileId = (typeof BUDGET_PROFILE_IDS)[number];
 
-export const BUDGET_PROFILES = Object.freeze(${JSON.stringify(
+export const BUDGET_PROFILES = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     budgets.profiles.map((profile: any) => [
       profile.id,
@@ -551,9 +1054,9 @@ export const BUDGET_PROFILES = Object.freeze(${JSON.stringify(
   ),
   null,
   2,
-)}) as Readonly<Record<BudgetProfileId, Readonly<Record<string, number>>>> as any;
+)}) as Readonly<Record<BudgetProfileId, Readonly<Record<string, number>>>>;
 
-export const COMPACTION_POLICIES = Object.freeze(${JSON.stringify(
+export const COMPACTION_POLICIES = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     budgets.compactionPolicies.map((p: any) => [
       p.id,
@@ -576,13 +1079,23 @@ export type CompactionPolicyId = keyof typeof COMPACTION_POLICIES;
 `;
 
 /** The runtime catalog. Discovery, routing, budgets, and disclosures all read this. */
-const catalogTs = `${BANNER('contract/skills/ and contract/registries/capabilities.v1.json')}
-import type { SemanticValidatorId, DisclosureId } from './registry.js';
+const catalogTs = `${BANNER('contract/skills/, contract/registries/capabilities.v1.json, and contract/registries/palettes.v1.json')}
+import { freezeGenerated } from '../core/deep-freeze.js';
+import type { OutputAuthorityV1 } from '../core/output-authority.js';
+import type { SemanticValidatorId, DisclosureId, UncertaintyKind } from './registry.js';
+
+export const CAPABILITY_AVAILABILITIES = freezeGenerated(${JSON.stringify(
+  Object.keys(capabilities.availabilities).sort(),
+  null,
+  2,
+)} as const);
+export type CapabilityAvailability = (typeof CAPABILITY_AVAILABILITIES)[number];
 
 export interface SkillCatalogEntry {
   readonly id: string;
   readonly revision: number;
   readonly status: 'stable' | 'experimental' | 'deprecated' | 'removed';
+  readonly availability: CapabilityAvailability;
   readonly releaseReady: boolean;
   readonly title: string;
   readonly canonicalQuestion: string;
@@ -593,22 +1106,30 @@ export interface SkillCatalogEntry {
   readonly budgets: {
     readonly maxObservations: number;
     readonly maxVisibleMarks: number;
-    readonly maxInlineTableRows: number;
+    readonly maxReturnedTableRows: number;
     readonly compactionPolicies: readonly string[];
     readonly tablePolicy: string;
   };
-  readonly uncertaintySupport: readonly string[];
+  readonly uncertaintySupport: readonly UncertaintyKind[];
   readonly accessibility: {
     readonly summaryTemplate: string;
-    readonly tableColumns: readonly { readonly key: string; readonly header: string; readonly description?: string }[];
+    readonly tableColumns: readonly {
+      readonly key: string;
+      readonly header: string;
+      readonly cellType: 'finite_number' | 'string' | 'finite_number_or_string';
+      readonly nullable: boolean;
+      readonly keyPart: boolean;
+      readonly description?: string;
+    }[];
   };
+  readonly outputAuthority: OutputAuthorityV1;
   readonly evidence: { readonly handVectors: boolean; readonly externalOracle: unknown };
   readonly legacyIds: readonly string[];
   readonly owner: string;
   readonly knownLimitations: readonly string[];
 }
 
-export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object.freeze(${JSON.stringify(
+export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
     skills.map((s) => [
       s.id,
@@ -616,6 +1137,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         id: s.id,
         revision: s.revision,
         status: s.status,
+        availability: capabilityIds.get(s.id).availability,
         releaseReady: s.releaseReady,
         title: s.title,
         canonicalQuestion: s.purpose.canonicalQuestion,
@@ -626,6 +1148,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         budgets: s.budgets,
         uncertaintySupport: s.science.uncertaintySupport,
         accessibility: s.accessibility,
+        outputAuthority: s.outputAuthority,
         evidence: s.evidence,
         legacyIds: s.migration.legacyIds,
         owner: s.owner,
@@ -637,27 +1160,45 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   2,
 )});
 
+export interface CapabilityCatalogEntry {
+  readonly id: string;
+  readonly kind: 'skill' | 'export' | 'data_export' | 'contract_source' | 'cli';
+  readonly status: 'stable' | 'experimental' | 'deprecated' | 'removed';
+  readonly availability: CapabilityAvailability;
+  readonly renderer?: string;
+  readonly requiredPeers?: readonly string[];
+  readonly replacement?: string | null;
+  readonly limitations?: readonly string[];
+}
+
+/** Contract maturity and concrete delivery are separate, mandatory axes. */
+export const CAPABILITY_CATALOG: Readonly<Record<string, CapabilityCatalogEntry>> = freezeGenerated(${JSON.stringify(
+  Object.fromEntries(capabilities.capabilities.map((capability: any) => [capability.id, capability])),
+  null,
+  2,
+)});
+
 /** The stable catalog, in a deliberate discovery order: traces, events, distributions, topology, spatial. */
-export const STABLE_SKILL_IDS = ${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 2)} as const;
+export const STABLE_SKILL_IDS = freezeGenerated(${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 2)} as const);
 export type StableSkillId = (typeof STABLE_SKILL_IDS)[number];
 
-export const EXPERIMENTAL_CAPABILITY_IDS = ${JSON.stringify(
+export const EXPERIMENTAL_CAPABILITY_IDS = freezeGenerated(${JSON.stringify(
   capabilities.capabilities
     .filter((c: any) => c.status === 'experimental' && c.kind === 'skill')
     .map((c: any) => c.id)
     .sort(),
   null,
   2,
-)} as const;
+)} as const);
 
-export const REMOVED_CAPABILITY_IDS = ${JSON.stringify(
+export const REMOVED_CAPABILITY_IDS = freezeGenerated(${JSON.stringify(
   capabilities.capabilities
     .filter((c: any) => c.status === 'removed')
     .map((c: any) => c.id)
     .sort(),
   null,
   2,
-)} as const;
+)} as const);
 
 export interface LegacyMapEntry {
   readonly legacyId: string;
@@ -672,26 +1213,40 @@ export interface LegacyMapEntry {
 }
 
 /** Every pre-1.0 id has a deterministic outcome here. There is no fall-through. */
-export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object.freeze(${JSON.stringify(
+export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(legacyMap.entries.map((e: any) => [e.legacyId, e])),
   null,
   2,
 )});
 
-export const RENDERERS = Object.freeze(${JSON.stringify(
+export const RENDERERS = freezeGenerated(${JSON.stringify(
   Object.fromEntries(renderers.renderers.map((r: any) => [r.id, r])),
   null,
   2,
 )});
 
-export const THEMES = Object.freeze(${JSON.stringify(
+export const THEMES = freezeGenerated(${JSON.stringify(
   Object.fromEntries(palettes.themes.map((t: any) => [t.id, t])),
   null,
   2,
 )});
 
-export const CATEGORICAL_SERIES_STYLES = Object.freeze(${JSON.stringify(
+export const CATEGORICAL_SERIES_STYLES = freezeGenerated(${JSON.stringify(
   palettes.categoricalSeries.styles,
+  null,
+  2,
+)});
+
+/** Normative uncertainty mark and label templates, keyed by the closed uncertainty kind. */
+export interface UncertaintyStyleRecord {
+  readonly kind: UncertaintyKind;
+  readonly mark: 'band' | 'whisker' | 'none';
+  readonly label: string;
+  readonly note?: string;
+}
+
+export const UNCERTAINTY_STYLES_BY_KIND: Readonly<Record<UncertaintyKind, UncertaintyStyleRecord>> = freezeGenerated(${JSON.stringify(
+  Object.fromEntries(palettes.uncertaintyStyles.map((style: any) => [style.kind, style])),
   null,
   2,
 )});
@@ -715,25 +1270,12 @@ function collectNormativeFiles(): { path: string; digest: string }[] {
     entries.push({ path: relative, digest: `sha256:${sha256Hex(canonicalize(value))}` });
   };
 
-  addFile(path.join(CONTRACT, 'meta', 'contract-source.schema.json'));
-
-  for (const file of listJson(path.join(CONTRACT, 'registries'))) {
-    addFile(path.join(CONTRACT, 'registries', file));
-  }
-  for (const file of listJson(path.join(CONTRACT, 'schemas'))) {
-    addFile(path.join(CONTRACT, 'schemas', file));
-  }
-  for (const file of listJson(GENERATED_SCHEMAS)) {
-    addFile(path.join(GENERATED_SCHEMAS, file));
-  }
-  for (const file of listJson(GENERATED_SKILL_SCHEMAS)) {
-    addFile(path.join(GENERATED_SKILL_SCHEMAS, file));
-  }
-  for (const file of skillFiles) {
-    addFile(path.join(CONTRACT, 'skills', file));
+  for (const file of enumerateNormativeContractFiles(CONTRACT)) {
+    addFile(path.join(CONTRACT, file));
   }
 
-  entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  // enumerateNormativeContractFiles already returns the registry-declared UTF-8
+  // path order. Do not silently re-sort it with JavaScript's UTF-16 comparator.
   return entries;
 }
 
@@ -761,67 +1303,49 @@ for (const skill of skills) {
   );
 }
 
+writeIfChanged(
+  path.join(CONTRACT, 'schemas', 'stable-figure-request-union.v1.schema.json'),
+  `${JSON.stringify({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'https://sepahead.github.io/cortexel/schemas/v1/stable-figure-request-union.v1.schema.json',
+    title: 'Stable FigureRequestV1 per-skill union (generated)',
+    description:
+      'GENERATED from the stable skill catalog. A request matches exactly one complete closed per-skill schema; this is the structural authority embedded by FigureArtifactV1.',
+    oneOf: stableSkills.map((skill) => ({
+      $ref: `https://sepahead.github.io/cortexel/schemas/v1/skills/${skill.id}.request.v1.schema.json`,
+    })),
+  }, null, 2)}\n`,
+);
+
 const sources = collectNormativeFiles();
-const contractDigest = `sha256:${sha256Hex(canonicalize(sources))}`;
-
-const stableCatalogView = stableSkills.map((s) => ({
-  id: s.id,
-  revision: s.revision,
-  renderer: s.renderer,
-}));
-const catalogDigest = `sha256:${sha256Hex(canonicalize(stableCatalogView))}`;
-
-const packageJson = readJson(path.join(ROOT, 'package.json'));
-
-const manifest = {
-  manifest: 'cortexel-contract-manifest',
-  manifestVersion: 1,
-  requestContract: 'cortexel-figure-request/1.0',
-  artifactContract: 'cortexel-figure-artifact/1.0',
-  contractDigest,
-  catalogDigest,
-  stableSkillCount: stableSkills.length,
-  stableSkills: stableSkills.map((s) => ({
-    id: s.id,
-    revision: s.revision,
-    title: s.title,
-    renderer: s.renderer,
-    releaseReady: s.releaseReady,
-    canonicalQuestion: s.purpose.canonicalQuestion,
-    requestSchema: `contract/schemas/skills/${s.id}.request.v1.schema.json`,
-    uncertaintySupport: s.science.uncertaintySupport,
-    budgets: s.budgets,
-    disclosures: s.disclosures,
-    semanticValidators: s.semanticValidators.map((v: any) => v.id),
-    evidence: s.evidence,
-    legacyIds: s.migration.legacyIds,
-  })),
-  experimentalCapabilities: capabilities.capabilities
-    .filter((c: any) => c.status === 'experimental')
-    .map((c: any) => ({ id: c.id, kind: c.kind, requiredPeers: c.requiredPeers ?? [] })),
-  removedCapabilities: capabilities.capabilities
-    .filter((c: any) => c.status === 'removed')
-    .map((c: any) => ({ id: c.id, replacement: c.replacement ?? null })),
-  budgetProfiles: budgets.profiles.map((p: any) => p.id),
-  errorCodeCount: errorCodeIds.size,
-  semanticValidatorCount: validatorIds.size,
-  disclosureRuleCount: disclosureIds.size,
+const manifest = buildContractManifest({
+  skills,
+  capabilities,
+  budgets,
+  errorCodes,
+  semanticValidators,
+  numericPolicies,
+  canonicalizations,
+  disclosures,
+  identity,
   normativeSources: sources,
-  notes: [
-    'GENERATED. Never edit by hand.',
-    'contractDigest covers the canonicalized normative source set, excluding this file (it cannot contain its own hash) and excluding the conformance corpus (vectors test the contract; they are not the contract).',
-    'catalogDigest covers the STABLE catalog only, so editing an experimental capability cannot change the stable identity.',
-    'releaseReady is false for every skill: the pinned scientific reference environment has not been executed, so no external-oracle evidence exists yet.',
-  ],
-};
+});
+const { contractDigest, catalogDigest, stableSkillCount } = manifest;
+if (
+  typeof contractDigest !== 'string' ||
+  typeof catalogDigest !== 'string' ||
+  stableSkillCount !== stableSkills.length
+) {
+  throw new Error('contract manifest projection returned an incoherent build identity');
+}
 
 const identityTs = `${BANNER('contract/ (digest) and package.json (version)')}
 export const PACKAGE_VERSION = ${JSON.stringify(packageJson.version)};
-export const REQUEST_CONTRACT = 'cortexel-figure-request/1.0';
-export const ARTIFACT_CONTRACT = 'cortexel-figure-artifact/1.0';
+export const REQUEST_CONTRACT = ${JSON.stringify(contractIdentity.request.value)};
+export const ARTIFACT_CONTRACT = ${JSON.stringify(contractIdentity.artifact.value)};
 export const CONTRACT_DIGEST = ${JSON.stringify(contractDigest)};
 export const CATALOG_DIGEST = ${JSON.stringify(catalogDigest)};
-export const STABLE_SKILL_COUNT = ${stableSkills.length};
+export const STABLE_SKILL_COUNT = ${stableSkillCount};
 
 export interface BuildIdentity {
   readonly packageVersion: string;
@@ -855,33 +1379,71 @@ export function getBuildIdentity(): BuildIdentity {
 }
 `;
 
-const pyCatalog = `${PY_BANNER('contract/')}
-from typing import Any, Dict, List
+const pyCatalog = `${PY_BANNER('contract/, package.json, and python/pyproject.toml')}
+from collections.abc import Mapping
+from types import MappingProxyType
+from typing import Any, Final
+
+
+def _freeze(value: Any) -> Any:
+    """Recursively detach and freeze generated JSON authority."""
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
+    return value
 
 PACKAGE_VERSION: str = ${JSON.stringify(packageJson.version)}
-REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
-ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
+PYTHON_DISTRIBUTION_VERSION: str = ${JSON.stringify(pythonProject.version)}
+REQUEST_CONTRACT: str = ${JSON.stringify(contractIdentity.request.value)}
+ARTIFACT_CONTRACT: str = ${JSON.stringify(contractIdentity.artifact.value)}
 CONTRACT_DIGEST: str = ${JSON.stringify(contractDigest)}
 CATALOG_DIGEST: str = ${JSON.stringify(catalogDigest)}
 
-STABLE_SKILL_IDS: List[str] = ${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 4)}
+STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze(${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 4)})
 
-ERROR_CODES: List[str] = ${JSON.stringify([...errorCodeIds].sort(), null, 4)}
+SKILL_REVISIONS: Final[Mapping[str, int]] = _freeze(${JSON.stringify(
+  Object.fromEntries(stableSkills.map((skill) => [skill.id, skill.revision])),
+  null,
+  4,
+)})
 
-ERROR_STAGES: List[str] = ${JSON.stringify(errorCodes.stages, null, 4)}
+CAPABILITY_AVAILABILITY: Final[Mapping[str, str]] = _freeze(${JSON.stringify(
+  Object.fromEntries(
+    capabilities.capabilities.map((capability: any) => [capability.id, capability.availability]),
+  ),
+  null,
+  4,
+)})
 
-UNITS: Dict[str, Any] = ${JSON.stringify(
+CAPABILITY_AVAILABILITIES: Final[tuple[str, ...]] = _freeze(${JSON.stringify(
+  Object.keys(capabilities.availabilities).sort(),
+  null,
+  4,
+)})
+
+ERROR_CODES: Final[tuple[str, ...]] = _freeze(${JSON.stringify([...errorCodeIds].sort(), null, 4)})
+
+ERROR_STAGES: Final[tuple[str, ...]] = _freeze(${JSON.stringify(errorCodes.stages, null, 4)})
+
+UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
   Object.fromEntries(
     units.units.map((u: any) => [
       u.code,
-      { dimension: u.dimension, to_canonical: u.toCanonical, label: u.label, aliases: u.aliases ?? [] },
+      {
+        dimension: u.dimension,
+        to_canonical: u.toCanonical,
+        to_canonical_decimal_exponent: decimalPowerExponent(u.toCanonical),
+        label: u.label,
+        aliases: u.aliases ?? [],
+      },
     ]),
   ),
   null,
   4,
-)}
+)})
 
-UNIT_ALIASES: Dict[str, str] = ${JSON.stringify(
+UNIT_ALIASES: Final[Mapping[str, str]] = _freeze(${JSON.stringify(
   Object.fromEntries(
     units.units.flatMap((u: any) =>
       (u.aliases ?? [])
@@ -891,15 +1453,33 @@ UNIT_ALIASES: Dict[str, str] = ${JSON.stringify(
   ),
   null,
   4,
-)}
+)})
 
-QUANTITY_KIND_DIMENSIONS: Dict[str, List[str]] = ${JSON.stringify(
+QUANTITY_KIND_DIMENSIONS: Final[Mapping[str, tuple[str, ...]]] = _freeze(${JSON.stringify(
   Object.fromEntries(units.quantityKinds.map((q: any) => [q.kind, q.dimensions])),
   null,
   4,
-)}
+)})
 
-BUDGET_PROFILES: Dict[str, Dict[str, int]] = ${JSON.stringify(
+NUMERIC_ALGORITHMS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
+  Object.fromEntries(numericPolicies.algorithms.map((algorithm: any) => [algorithm.id, algorithm])),
+  null,
+  4,
+)})
+
+NUMERIC_POLICIES: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
+  Object.fromEntries(numericPolicies.policies.map((policy: any) => [policy.id, policy])),
+  null,
+  4,
+)})
+
+CANONICALIZATION_ALGORITHMS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
+  canonicalizationAlgorithmsWithDigests,
+  null,
+  4,
+)})
+
+BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze(${JSON.stringify(
   Object.fromEntries(
     budgets.profiles.map((profile: any) => [
       profile.id,
@@ -910,13 +1490,30 @@ BUDGET_PROFILES: Dict[str, Dict[str, int]] = ${JSON.stringify(
   ),
   null,
   4,
-)}
+)})
 `.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
 
 const written: string[] = [];
 const record = (file: string, content: string): void => {
   if (writeIfChanged(file, content)) written.push(path.relative(ROOT, file));
 };
+
+// The wheel is a standalone reader, not a repository-relative development shim.
+// Project only the schema resources it executes into the Python package, preserving
+// their exact normative bytes. The entire destination is generator-owned so a renamed
+// skill cannot leave a stale schema in a future wheel.
+rmSync(GENERATED_PY_CONTRACT, { recursive: true, force: true });
+const pythonSchemaResources = [
+  'schemas/common.v1.schema.json',
+  'schemas/generated/registry-enums.v1.schema.json',
+  ...stableSkills.map((skill) => `schemas/skills/${skill.id}.request.v1.schema.json`),
+] as const;
+for (const relative of pythonSchemaResources) {
+  record(
+    path.join(GENERATED_PY_CONTRACT, relative),
+    readFileSync(path.join(CONTRACT, relative), 'utf8'),
+  );
+}
 
 record(path.join(GENERATED_TS, 'registry.ts'), registryTs);
 record(path.join(GENERATED_TS, 'budgets.ts'), budgetsTs);
@@ -930,34 +1527,48 @@ export * from './identity.js';
 `);
 record(path.join(CONTRACT, 'manifest.v1.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 record(path.join(GENERATED_PY, 'catalog.py'), pyCatalog);
-record(path.join(GENERATED_PY, '__init__.py'), `${PY_BANNER('contract/')}
+record(path.join(GENERATED_PY, '__init__.py'), `${PY_BANNER('contract/, package.json, and python/pyproject.toml')}
 from .catalog import (
     PACKAGE_VERSION,
+    PYTHON_DISTRIBUTION_VERSION,
     REQUEST_CONTRACT,
     ARTIFACT_CONTRACT,
     CONTRACT_DIGEST,
     CATALOG_DIGEST,
     STABLE_SKILL_IDS,
+    SKILL_REVISIONS,
+    CAPABILITY_AVAILABILITY,
+    CAPABILITY_AVAILABILITIES,
     ERROR_CODES,
     ERROR_STAGES,
     UNITS,
     UNIT_ALIASES,
     QUANTITY_KIND_DIMENSIONS,
+    NUMERIC_ALGORITHMS,
+    NUMERIC_POLICIES,
+    CANONICALIZATION_ALGORITHMS,
     BUDGET_PROFILES,
 )
 
 __all__ = [
     "PACKAGE_VERSION",
+    "PYTHON_DISTRIBUTION_VERSION",
     "REQUEST_CONTRACT",
     "ARTIFACT_CONTRACT",
     "CONTRACT_DIGEST",
     "CATALOG_DIGEST",
     "STABLE_SKILL_IDS",
+    "SKILL_REVISIONS",
+    "CAPABILITY_AVAILABILITY",
+    "CAPABILITY_AVAILABILITIES",
     "ERROR_CODES",
     "ERROR_STAGES",
     "UNITS",
     "UNIT_ALIASES",
     "QUANTITY_KIND_DIMENSIONS",
+    "NUMERIC_ALGORITHMS",
+    "NUMERIC_POLICIES",
+    "CANONICALIZATION_ALGORITHMS",
     "BUDGET_PROFILES",
 ]
 `);

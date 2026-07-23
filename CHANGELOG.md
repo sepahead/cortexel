@@ -6,6 +6,523 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — synaptic-weight cross-field authority
+
+- The revision-2 synaptic-weight validator now owns the complete raw and
+  pre-aggregated boundary: unique/resolvable membership, positive ordered
+  non-overlapping intervals, positive recorded-window overlap, every dynamic
+  parallel-array length, exact evaluation grids, coherent member/contributor/null
+  identities, nested uncertainty, and observation/evaluation compatibility. These
+  laws fail before rendering instead of relying on `Map` overwrite behavior or a
+  fixed three-series pointer list.
+- Synapse-model comparability is now an exact duplicate-free set claim for physical
+  and simulator-defined weight units alike, including pre-aggregated input. Optional
+  event causes remain exactly row-aligned, and a contradictory lower/upper reference
+  bound is refused after exact unit conversion without clamping any observation.
+- Decision-critical observation, window, recording, membership, and evaluation times
+  now form a checked finite-set order embedding under unit conversion; unequal physical
+  times may not collide at one displayed binary64 value, and interval widths may not
+  collapse. Hold grids include every denominator/availability transition, sparse declared
+  grids are refused, mixed left/right-continuity aggregates fail closed, and closed
+  individual/pre-aggregated endpoints are retained instead of silently dropped.
+- Weight duplicate aggregation now reads the contract's `{policy, method}` shape;
+  event updates cannot be averaged and unidentified shared-grid replicates cannot be
+  paired by ordinal. Derived Type-7 quantiles and sample standard deviation use exact
+  BigInt rational algorithms, one-contributor dispersion has a null sample count, and
+  pre-aggregated uncertainty is denominator-bound. Caller-declared aggregate/interval
+  methods and the absence of unique pre-aggregate cardinality are disclosed explicitly.
+
+### Fixed — exact aggregate and phase-normalization arithmetic
+
+- Declared compartment means and sums now keep binary64 values, weights, products,
+  cancellation, and the mean denominator exact until one final ties-to-even rounding.
+  Equal minimum-subnormal weights therefore preserve their ratio, extreme products may
+  cancel before range checking, input permutation cannot change the answer, and a truly
+  unrepresentable nonzero result is refused.
+- Axis-normalized phase-plane components now divide by the exact difference of the finite
+  drawn endpoints. Opposite-sign extreme domains no longer overflow their native span to
+  infinity and erase nonzero vectors; the same components feed the table, arrow geometry,
+  magnitude legend, derivation receipt, and independent OutputAuthority evaluator.
+
+### Fixed — development and release identity
+
+- The unreleased package now uses paired development identities:
+  npm SemVer `0.10.0-dev.0` and PEP 440 `0.10.0.dev0`. Generation checks the
+  normalized mapping before emitting the Python runtime package identity.
+- Development metadata is explicitly private and carries no `publishConfig`.
+  A read-only `release:verify` gate requires coherent final-release metadata, the
+  structural evidence ledger, a clean HEAD, and an exact annotated tag; the current
+  artifact schema independently blocks release because no release-stamping producer
+  exists yet.
+- Project `bunfig.toml` disables Bun runtime dotenv loading, including through nested
+  package scripts, and an executable sentinel guards that behavior. Because package
+  managers, Vite, or a dependency can still read files in the checkout, research
+  credentials are kept outside the repository rather than relying on `.gitignore` or
+  `env = false` as a filesystem sandbox; any narrowly scoped first-party research client
+  must opt in and read its external credential store explicitly.
+- The evidence-ledger checker now rejects duplicate JSON members, malformed or stale
+  release arguments, and invalid project/release/statement metadata. Publication
+  lifecycle checks include the ledger, Python suite, build, full test suite, audit,
+  package lint, and clean-install package smoke behind the release verifier.
+- The lockfile now overrides Ajv's compatible `fast-uri` range to patched `3.1.4`,
+  excluding the high-severity literal-backslash authority-confusion vulnerability in
+  `3.0.0` through `3.1.3` without adding a second, incompatible major version.
+- CI now exercises every declared Python minor (3.11–3.14) and the closed supported
+  Node-major set 22/24/26; `engines.node` names that same set rather than an
+  open-ended range that would silently claim untested future majors or EOL Node 20.
+  CI also pins current checkout/setup actions by immutable SHA, drops persisted checkout
+  credentials, compiles the Python reader before testing, and bounds every job by an
+  explicit timeout.
+- The Python reader is strict-mypy clean and CI runs pinned mypy and Ruff versions.
+  Its generator now projects the exact common, enum, and 19 stable skill schemas into
+  the wheel instead of resolving repository-relative files. A reproducible-build smoke
+  compares repository-context artifacts with artifacts from an exact VCS-free source
+  copy byte-for-byte, requires a closed full-sdist and schema inventory, checks the PEP
+  561 marker, MIT license, dependency-free metadata and archive safety, and clean-installs
+  from an unrelated directory. Unregistered skill ids are rejected before resource-path
+  construction, closing the former development-tree traversal oracle.
+
+### Added — additive packaged FigureRequestV1 surface
+
+- The legacy `cortexel`, `cortexel/core`, `cortexel/react`, chart,
+  knowledge-graph, and `cortexel/skills.manifest.json` entry points remain in place.
+  FigureRequestV1 is added alongside them at `cortexel/figure`, with deterministic
+  headless rendering at `cortexel/render-svg`, the plain-data NEST adapter at
+  `cortexel/adapters/nest`, and normative JSON through `cortexel/contract/*`.
+- All new code subpaths ship explicit ESM, CommonJS, and declaration conditions. The
+  offline CLI is installed as the `cortexel` bin with a Node shebang while preserving
+  its strict argument grammar, granular exit codes, import guard, and fail-closed
+  output publication rules.
+- A post-build gate independently enumerates and strict-parses every normative JSON
+  source, reproduces its JCS digest plus the aggregate contract and stable-catalog
+  digests, and copies exact bytes once under `dist/contract`. Runtime validation locates
+  that module-relative copy and never resolves schemas from the working directory or
+  network.
+- Package smoke tests install the actual tarball in an isolated consumer and exercise
+  old and new ESM/CommonJS imports, declarations, peer isolation, validation from an
+  unrelated working directory, shipped digest reproduction, CLI identity and exit
+  behavior, and tarball source/secret exclusions. `availability: packaged` remains
+  independent of publication and `releaseReady`; every stable skill is still
+  `releaseReady: false` pending the recorded scientific release evidence.
+
+### Fixed — correlogram product and role authority
+
+- `neuro.correlogram` and `figure.correlogram` are now revision 2. Revision 1
+  accepted a materially different pooled-event/pre-binned request and did not bind
+  the role-local authority, exact pair-accounting table, summary, and geometry now
+  required; a revision-1 pin is refused rather than reinterpreted.
+- The source `neuro.correlogram` contract now has closed raw-event and pre-binned
+  auto/cross products. Raw products carry explicit role-local train containers,
+  complete recorded-sender universes (including silent senders), parallel event
+  identities, fixed `target_time_minus_reference_time` orientation, and an explicit
+  self-pair policy; the compiler must derive event counts and duration instead of
+  accepting redundant caller authority or inferring roles from active senders.
+- Cross products require disjoint reference/target train identities and sender
+  universes. Revision 2 admits only `raw_pair_count` and
+  `target_rate_per_reference_event`; coefficient-like branches, overlap correction,
+  and binned-value switches are absent rather than structurally accepted without a
+  renderer. A separate future Pearson design record is explicitly not release ready.
+- Pre-binned products carry exact role event counts so the compiler derives one exact
+  candidate = counted + out-of-range + excluded-self-pair receipt. Zero eligible
+  denominators are represented by a null rate with an explicit status, never by a
+  fabricated zero or a validation exception. Caller-supplied rates and weighted pair
+  sums remain refused. The pre-1.0 packaged `VizSpec`/NEST adapter remains unchanged.
+- Correlogram uncertainty is narrowed to explicit `none` in revision 2. Dispersion
+  and interval arrays stay refused until one branch carries them through units,
+  missingness, table, summary, legend, and geometry without dropping a field.
+- Every correlogram bin is now explicitly left-closed/right-open, including the final
+  bin: the negative outer edge is included and the positive outer edge is excluded,
+  matching NEST's `correlation_detector` convention.
+
+### Fixed — neuro skill and renderer revision identity
+
+- All ten stable `neuro.*` skill sources now publish revision 2, name the matching
+  `.output_authority.v2` evaluator, and reference a revision-2 renderer. The analog,
+  multisignal, compartment, population-rate, PSTH, correlogram, distribution, and
+  phase-plane renderer entries now expose the corresponding revision; phase-plane
+  also declares its emitted arrow mark. Current pins resolve exactly and prior
+  revision-1 pins fail closed. This corrects unreleased identity drift after the
+  accepted meaning, table, summary, or rendered output changed; it does not declare
+  revisions 1 and 2 interchangeable.
+- Successful validation now always materializes the resolved installed skill revision
+  at `canonicalRequest.skill.revision` in a detached copy. An omitted authored pin and
+  an explicit-current pin therefore produce identical canonical bytes, request digest,
+  SVG seed, and artifact; prior/future pins still refuse during identity resolution.
+  FigureArtifactV1 uses that canonical path as its sole skill-revision stamp and keeps
+  renderer identity under `render`, without a duplicate top-level identity. This
+  intentionally changes request digests, deterministic SVG ids/metadata, SVG bytes, and
+  artifact digests for formerly unpinned requests; explicit-current canonical identity
+  is unchanged by this repair alone.
+
+### Fixed — canonical contract identity boundaries
+
+- Normative-source parsing now rejects unsafe bare-integer spellings that round onto a
+  different binary64 value while retaining canonical binary64 integer spellings. Every
+  JSON meta-schema under `contract/meta/` is deterministically included in the contract
+  digest, and canonicalization references in the shared common schema are checked against
+  the closed algorithm registry instead of being missed behind `$ref`.
+- The identifier-set registry now carries and executes a rejection vector for every
+  declared failure class, including non-array input and non-string members. TypeScript
+  normalization rejects ill-formed Unicode directly; the independent Python boundary
+  rejects lone surrogates in both values and member names with `JSON_INVALID_UNICODE` and
+  accepts only exact JSON lists containing exact strings for identifier-set identity.
+
+### Fixed — NEST spike-recorder clock authority
+
+- `neuro.spike_raster` and `figure.spike_raster` are now revision 2. Revision 1
+  represented every recorder window as `[start, stop)`, but NEST recording devices use
+  `(origin + start, origin + stop]`; archived revision-1 results must not be silently
+  reinterpreted. The new request preserves the origin-relative terms and exact closure,
+  compares received binary64 quantities without first rounding their sum, and refuses a
+  display interval whose one permitted endpoint conversion collapses or overflows.
+- The plain-data NEST adapter now admits only explicit NEST 3.9/3.10 memory exports
+  with `time_in_steps: false`. This is a fail-closed revision-2 source-declaration
+  profile, not upstream certification; the real-environment gate remains `NOT_RUN`.
+  It rejects missing encoding status, step/offset clocks,
+  ASCII, screen, MPI, and SIONlib boundaries; preserves nonchronological order,
+  multiplicity, and fractional milliseconds; requires the complete recorded-sender
+  universe; requires the authoritative top-level device-status `n_events` count and
+  reconciles it exactly with both event arrays; and binds its detached export snapshot
+  with a canonical SHA-256 digest. Missing, unsafe, fractional, or mismatched event-count
+  authority fails at `/n_events` instead of being inferred from an apparently complete
+  pair of arrays.
+- Origin-relative requests are bound to `source.kind: simulation`, `system: NEST`, the
+  revision-2-admitted version range, native millisecond events,
+  `timeBase: absolute_clock`, and a
+  full source digest. A mandatory disclosure states that validation covers the serialized
+  binary64 declaration, not NEST's hidden integer-tic state or source authenticity.
+- Raster compilation now honors all three generic event closures plus the NEST closure,
+  converts window endpoints into the event display clock exactly once, excludes only
+  marks under `exclude_and_disclose`, retains every source event with an `inWindow`
+  audit cell, preserves duplicate identities, allocates silent sender/trial rows, and
+  records accepted/excluded counts and deterministic row/sort policy. The complete
+  sender-by-trial row product is preflighted with saturating arithmetic before allocation;
+  population grouping is linear in the declared sender universe; and declaring a trial
+  universe without the positionally parallel event-trial identities is structurally
+  refused rather than silently compiling a sender-only raster.
+- The revision-2 spike contract no longer advertises the unimplemented
+  `raster_density_bins` path. Over-mark and over-returned-table requests fail closed until
+  count-conserving geometry and a digest-bound complete table are both implemented.
+
+### Fixed — exact numeric and unit authority
+
+- Unit conversions now compose registered decimal powers as exact integer ratios and round
+  only the final binary64 result. Conversion receipts preserve that exact ratio, and
+  window membership, converted differences, clock offsets, duplicate means, baseline
+  normalization, and min/max normalization use exact-integer intermediates so cancellation,
+  subnormals, or a large coordinate origin cannot silently change the scientific result.
+- Linear scales now preserve both endpoints over the complete finite binary64 range.
+  Logarithmic and symmetric-logarithmic scales use vendored fdlibm-derived `log`, `log1p`,
+  and `exp` kernels with pinned low-bit vectors, monotonicity/property tests, explicit
+  inner-resolution refusal, and bounded full-range round-trip error.
+- Simulator-defined synaptic weights remain non-convertible, but the weight-trace contract's
+  explicit model-comparability declaration is now checked against every series before an
+  identical opaque unit code may share an axis.
+- Width-bin materialization, bin centres, and bin widths now avoid overflowing finite endpoint
+  arithmetic. Population-rate denominators use exact quotient arithmetic, and supplied rates
+  are verified in their declared unit without a near-zero absolute-tolerance loophole.
+- The binary64 full-bin/full-step acceptance rule is now a normative, generated numeric-policy
+  registry rather than an implementation-only convention. It publishes exact 2^-1074 decoding,
+  round-to-nearest-even steps, quotient and endpoint tolerances, the materialization cap,
+  edge-collapse refusal, failure classes, and cross-language conformance vectors. The
+  algorithm and each policy carry a closed, versioned structured semantic identity plus
+  typed parameters; source checks reject missing or unknown semantic ids, version or
+  parameter drift, incompatible prose, and prose-only mutation. Adversarial vectors cover
+  repeated-addition drift, late coordinate collapse at the 2^53 spacing boundary, and an
+  endpoint immediately outside the eight-epsilon acceptance bound.
+
+### Fixed — capability/export honesty
+
+- ESM and CommonJS `cortexel/figure` validators now hand their live
+  `ValidatedRequest` capabilities to either `cortexel/render-svg` format through one
+  package-private module-cache registry. Previously the CommonJS subpaths bundled
+  separate `WeakSet` registries and rejected an honestly validated cross-subpath
+  request. The shared registry is not global or symbol-forgeable; packed smoke tests
+  cover all four format pairings plus copied/proxied-token and private-path refusal.
+- `cortexel/render-svg` now exports only the three end-to-end figure builders and their
+  result/failure types. The raw RenderPlan construction grammar, resource counter,
+  caller-selected digest callback, formatting/scaling primitives, and SVG serializer
+  remain internal, closing a public path that could previously label a caller-constructed,
+  ungated plan as Cortexel output. Package ESM, CJS, declaration, and deep-import smoke
+  tests pin this authority boundary.
+- Stable figure capabilities now advertise only `svg+table`. Although the
+  renderer can expose a checked in-memory table, the artifact output inventory currently
+  binds only the SVG; CLI-authored CSV bytes are therefore not a contract-owned sidecar.
+  The render boundary continues to refuse incomplete excerpts, and a new capability
+  conformance test renders every stable skill's first valid example and prevents any
+  `svg+table+sidecar` claim from returning without canonical sidecar bytes, a matching
+  table digest, complete-row semantics, and a bound artifact output.
+- Capability maturity and concrete delivery are now separate mandatory axes: all
+  nineteen FigureRequestV1 skills are semantically `stable` and the additive runtime
+  makes them `packaged`; legacy package exports are also `packaged`, while removed
+  tombstones are `unavailable`. Generator/source tests derive package, build-entry, CLI-dispatch,
+  skill, renderer, and migration evidence bidirectionally. Metadata-only
+  `figure.bundle`, nonexistent `cli.verify`, invented experimental skill/renderer ids,
+  and the nonexistent NCP export were deleted instead of being documented as code.
+- FigureArtifactV1 now requires render and accessibility evidence, a nonempty output
+  inventory containing exactly one normative `image/svg+xml` record, a catalog digest,
+  and one canonical request digest. It rejects the impossible artifact-JSON self-output
+  cycle and removes every unreachable rejection, compaction, sidecar, PNG, provenance,
+  attestation, and reference-oracle branch instead of reserving false capabilities in a
+  successful-output schema. `complete_returned` means every table row accompanies the
+  artifact in memory; `tableBinding: shape_only`, exact ordered column keys, and one row
+  count explicitly bind shape while denying integrity for unbound cell/row bytes.
+- Artifact 1.0 no longer implies that a caller can clear source-authenticity or
+  credible-interval refusals by supplying an attestation: the current contract has no
+  attestation input or verifier, requires the artifact slot to remain empty, always emits
+  the authenticity disclosure, and treats `credible_interval` only as diagnostic
+  vocabulary that every stable skill refuses.
+- The artifact schema now rejects impossible parser-assurance cross-products, phantom
+  release stamps, unknown budget/theme/accessibility profiles, and mismatched renderer
+  revisions. It embeds the closed stable per-skill request union as a structural
+  emission postcondition, while explicitly denying that schema validation recomputes a
+  digest. The duplicate `budgetDecision.profileId` was removed; the applied profile has
+  one authority in `inputAssurance.budgetProfile`.
+- Contract generation now executes the skill-source meta-schema before producing any
+  digest or output. The prose ceilings were raised only to reviewed finite bounds that
+  contain the living scientific specifications; previously the unexecuted meta-schema
+  silently rejected fourteen of nineteen sources it purported to govern.
+- The CLI implementation no longer writes an ad hoc lossy CSV and no longer describes its two
+  files as a transaction. A non-dry render now requires `--output`; every command uses a
+  closed argument grammar; unknown, duplicate, missing-value and extra arguments fail as
+  usage errors; and `--url` is not a render option. Final entries are inspected with
+  `lstat` so dangling symlinks cannot evade overwrite refusal. Complete SVG and canonical
+  artifact JSON bytes are fsynced where supported in short, unpredictable,
+  exclusively-created temporary siblings. Non-force publication uses an atomic hard-link
+  no-replace operation and refuses rather than falling back to a clobber-prone rename on
+  filesystems that cannot provide it. Force mode removes the stale artifact marker before
+  replacing the SVG; the new artifact is installed last, and parent-directory changes are
+  fsynced where supported. The pair remains non-transactional, and a caller-selected
+  directory is not elevated into trusted output authority. Diagnostics do not echo raw
+  filesystem paths, imports cannot trigger CLI execution by basename, and direct execution
+  sets `process.exitCode` so successful stdout can drain. The budget registry
+  removed the metadata-only bundle-panel limit and labels non-`none` compaction algorithms
+  and sidecar byte ceilings as inactive future specifications; all current stable skills
+  are complete-returned-or-refuse.
+
+### Fixed — binned scientific compilers
+
+- Population-rate rendering now converts event clocks into the declared bin frame, re-derives
+  prebinned rates from exact counts and denominators, emits Hz consistently, and records the
+  conversion and denominator receipt. Unsupported kernel modes fail closed instead of being
+  substituted with a binned step plot.
+- ISI rendering now supports both event and supplied-interval modes, exact within-train
+  differences, explicit edge and width bins, count/probability/density normalization, log
+  axes, exact window-duration checks, bin-range policy, and derivation receipts. Event mode
+  counts the complete sender-by-trial train universe, supplied mode reconciles every train
+  and its total interval span, and a rounded derived interval that would change exact
+  half-open bin ownership is refused.
+- Delay and weight distributions now honor declared/prebinned edges, measurement-unit
+  conversion, per-connection versus per-ordered-pair counting, multapse aggregation,
+  count/probability/density normalization, and log axes. Synapse-model groups are partitioned
+  before aggregation and normalized independently; missing weights remain row-aligned and
+  invalidate a node-pair observation rather than shrinking its sum. Prebinned histograms are
+  no longer replaced by invented empty ten-bin plots, and reject-range policy is enforced in
+  both modes.
+- Histogram validation now rejects negative probability/density values, requires reciprocal
+  density units, uses exact binary64 accumulation for probability totals and density
+  integrals, requires safe-integer counts, and reports an explicit no-data refusal instead of
+  fabricating an all-zero probability or density when the denominator is zero.
+- Unit-bearing derivations now surface their conversion receipts through the mandatory
+  `UNIT_CONVERTED` disclosure, and identical simulator-defined trace units no longer attempt
+  an impossible physical conversion during affine-integrity checks.
+- Histogram exclusions and missing-measurement accounting now reach the accessible summary
+  and render-plan audit columns as well as the derivation receipt. Pre-binned and missing-value
+  disclosures use observation-neutral wording, and `MULTAPSE_AGGREGATED` fires only when
+  connection rows were actually collapsed into a rendered aggregate.
+- Unique-neighbor degree rendering now uses the contract spelling
+  `count_unique_neighbors`; the former internal British spelling silently selected edge
+  counting for a valid contract request and is removed.
+
+### Fixed — response-curve semantics
+
+- `neuro.response_curve` is now skill revision 2 and `figure.response_curve` is renderer
+  revision 2. Revision 1 did not bind the selected event-train estimand: identical scalar
+  counts, rates, or latencies could describe one train or a pooled sender population without
+  an artifact-level distinction. Revision 2 requires a caller-declared event scope and
+  surfaces its selection, pooling, completeness, and membership authority throughout the
+  checked artifact. This is a documented pre-1.0 scientific erratum, not a patch-level
+  reinterpretation of archived revision-1 output.
+- Response curves now derive condition estimates through a dedicated scientific layer:
+  numeric conditions require unique inputs and sort ascending, while ordinal and nominal
+  conditions retain declared order, observations sort by condition and repeat identity,
+  duplicate condition/repeat pairs and undeclared condition references fail closed, and
+  missing responses remain counted gaps rather than sliding parallel arrays or becoming zero.
+- Raw repeats implement a correctly rounded exact-binary64 mean, even-sample median, and
+  per-tail trimmed mean over retained observations. The mean accumulates exact 2^-1074
+  integer units and rounds once, so it is permutation-invariant and does not overflow merely
+  because a finite mean has an unrepresentable sum; a non-zero exact result that would
+  underflow to binary64 zero is refused rather than flattened. The same refusal applies to
+  the exact midpoint of an even-sample median. Aggregate-only input preserves nullable sample
+  counts, emits a mandatory estimator-and-sample-count disclosure, and never implies that
+  raw repeats or pairing were inspected.
+- The parameter-level response method is now bound to the method that types the response
+  object with a dedicated science error; a mean rate, peak rate, latency, or event count can
+  no longer be relabelled as another quantity. Revision 2 no longer advertises pre-reduced
+  membrane-voltage or generic state-variable responses: those methods lacked the recorded
+  variable, sender/compartment scope, sampling grid, reduction interval, missing-sample
+  policy, and temporal-versus-cross-sender reduction order needed to make their values
+  auditable. Sampled analog evidence remains representable as an analog or multisignal
+  trace until a complete reduction-basis contract ships. Every mean or peak rate distinguishes a single
+  train, a pooled total over a disclosed sender universe, and a mean per recorded sender;
+  the normalization and sender count are visible in the y axis, table, accessible summary,
+  derivation output, digest, and receipt. Optional exact mean-rate event-count audits use the
+  divisor selected by that normalization, require exact safe-integer counts and the same null
+  mask as the responses, and derive the declared frequency unit through one exact rational
+  and one final binary64 rounding. Exact equality replaces a relative tolerance that could
+  admit large count errors at large magnitudes. Numeric conditions must have unique inputs,
+  and duplicate categorical display labels are disambiguated by condition id on every
+  displayed tick. The audited sender denominator is bound into the derivation digest and
+  receipt. Aggregate missingness now sums declared excluded attempts exactly; a null
+  no-attempt condition remains a visible gap but is not fabricated into a missing
+  observation. Totals that cannot remain exact safe integers fail closed at validation
+  and rendering.
+- Peak-rate requests now carry complete mathematical authority. Binned peaks bind width,
+  count, half-open origin/boundary, the named bounded-binary64 full-bin materializer, and a
+  no-partial-bin policy to the typed measurement window. Kernel peaks bind shape, form,
+  bandwidth convention, support/cutoff and tail normalization, direct-sum operator, edge
+  correction, and either a continuous supremum or an exact sampled grid. Incoherent kernel
+  identities, causal edge renormalization, grid counts, boundaries, and tilings fail closed;
+  the full basis is surfaced rather than reduced to a vague bandwidth label.
+- Binned peak rates now obey one exact safe-integer count law in both request modes.
+  Raw binned peaks require parallel `audit.peakBinCounts`; Cortexel re-derives every defined
+  repeat rate, orders and trims defined rows by the exact counts, forms every defined
+  mean/median/trimmed-mean condition estimate at count level, and rounds only the final
+  declared-unit rate. Aggregate-only binned peaks prove existence
+  on the corresponding integer-total lattice. This removes the prior raw-versus-aggregate
+  one-ulp ambiguity from averaging already-rounded repeat rates.
+- Raw mode now declares attempted counts per condition and verifies every submitted row.
+  Trimmed means retain separate retained, symmetrically trimmed, and undefined-excluded
+  counts; raw table rows identify retained, trimmed-low, trimmed-high, and undefined roles,
+  while aggregate mode verifies `trimmedCount = 2 * floor_exact((retained + trimmed) * f)`.
+- Response-method domains are enforced before derivation: rates and aggregate count estimates
+  are non-negative, raw counts are exact non-negative safe integers, and a defined first-spike
+  latency is non-negative. Revision 2 binds latency only to the measurement-window start:
+  zero means the first event occurred exactly at the included start, while null alone means
+  no event. The exact typed duration is checked against the window; stimulus-onset latency is
+  refused until a typed onset coordinate relative to the window exists. Raw paired designs
+  must carry the identical repeat-id set at every condition; missing pairs are refused rather
+  than imputed.
+- Numeric log axes reject non-positive declared conditions; nominal conditions receive no
+  connecting line; ordered guide lines stop at missing conditions and are labelled as guides,
+  not fits or interpolation. Undefined conditions receive an explicit vertical x-position
+  marker, and an all-undefined curve retains its declared x-axis instead of collapsing to an
+  axis-free empty panel. All living valid examples now render populated figures.
+- Response y domains now include the meaningful zero baseline, preventing a narrow high-valued
+  range from occupying the full panel. An all-zero curve keeps a single exact zero tick at the
+  bottom rather than midpointing zero or inventing a positive observed extent. All-null raw
+  peak-count audits verify their null mask but report rate/estimator derivation and defined-peak
+  facts as not applicable, with accessibility prose that does not claim nonexistent work.
+  Mixed-null audits name the derivation algorithm only on defined rows and estimates; aggregate
+  all-null binned peaks record zero checked lattice values while leaving verification and
+  algorithm facts null/not applicable. Raw trim-boundary ordering is likewise null when no
+  defined audited row exists, and aggregate-only input never claims a raw tie-order rule.
+- The exact alternative table now carries the contract's response columns for every raw
+  repeat and every condition estimate, including explicit rate-normalization, sender-universe,
+  estimator-role, and trimmed-count fields. Derivation receipts bind canonical condition
+  order, attempted/retained/trimmed/excluded accounting, stable source ordinals and their
+  digest, while the accessible plotted range uses complete binary64 spellings and excludes
+  raw-repeat extrema that are not themselves plotted.
+
+### Fixed — analog and multi-signal trace semantics
+
+- Replaced the first-series-only trace shortcut for `neuro.analog_trace` and
+  `neuro.multisignal_trace` with a shared deterministic derivation that renders every
+  declared series and panel. It stably sorts samples, enforces half-open windows, preserves
+  missing values as path breaks, applies declared duplicate-time resolution, converts units
+  once, applies declared clock offsets, and implements sample-standard-deviation z-scores.
+- Shared-axis overlays now use the registered categorical colour/dash/marker tuples and emit
+  a visible, accessible-table-backed legend; small multiples retain declared panel order and
+  shared-time-axis geometry. Every retained sample from every series reaches the table rather
+  than silently disappearing after `series[0]`.
+- Duplicate-time validation now understands both the string and structured policy shapes,
+  checks shared clocks as well as per-series clocks, and rejects an explicit `reject` policy
+  when duplicate timestamps are actually present.
+- Trace uncertainty now has contract-generated mark semantics: standard deviation/error use
+  capped whiskers, intervals use outlined bands, and missingness masks must agree with the
+  central observations and sample counts. The renderer refuses uncertainty transforms whose
+  widths collapse or materially distort at binary64 resolution.
+- Trace layouts fail closed when mandatory panels, axes, legends, tables, accessibility text,
+  and disclosures cannot leave a positive plotting region. Isolated retained observations
+  receive visible markers instead of disappearing when they cannot form a path segment.
+
+### Fixed — validation and artifact integrity
+
+- Made validated-request authority identity-based and deeply immutable: the renderer now
+  accepts only the exact token minted by this module, so look-alike objects, copied symbol
+  brands, hostile proxies, and post-validation nested mutation cannot bypass or invalidate
+  the checked request digest.
+- Artifacts are assembled and frozen only after their accessibility and render fields are
+  final. Their self-digest now recomputes exactly, SVG byte lengths count UTF-8 bytes, and a
+  missing stable compiler fails closed instead of returning a schema-invalid partial artifact.
+- SVG metadata now names the bound request digest truthfully and declares its XML namespace;
+  rendered strings reject XML-forbidden U+FFFE/U+FFFF, and the accessible description carries
+  every mandatory disclosure verbatim.
+
+### Fixed — boundary, numeric, and resource authority
+
+- Budget profiles are now a closed, deeply immutable registry. Unknown, inherited,
+  accessor-backed, boxed, and proxy-trapped profile selections fail closed; host and request
+  profiles compose only by selecting the component-wise tighter published envelope. A
+  request-selected tighter profile is re-parsed or re-snapshotted before validation, and the
+  effective profile is recorded in the artifact and its mandatory disclosure.
+- Raw and materialized boundaries now enforce the same bounded string authority, reject
+  non-canonical unsafe bare integer tokens that would diverge between binary64 and
+  exact-integer JSON readers, accept only the RFC 8785 spelling needed to re-read an
+  emitted binary64 measurement, count UTF-8 without allocating a second input-sized buffer, and remain total for
+  hostile API arguments. Canonicalization rejects accessors, symbols, sparse/decorated arrays,
+  and uninspectable proxies without invoking ordinary getters, with escaped RFC 6901 paths.
+- The independent Python preview no longer treats an empty result from its documented
+  semantic subset as a full validity certificate. `validate_request` now fails closed with
+  `SEMANTIC_VALIDATOR_UNAVAILABLE` until every registered validator for the selected skill
+  is ported; `validate_request_partial` names the development-only subset explicitly.
+- The Python materialized-value boundary now snapshots only exact built-in JSON types into
+  a detached tree before authority or schema checks. It rejects cycles, subclass overrides,
+  dangerous keys, malformed Unicode, non-finite or non-interoperable numbers, and standard
+  depth/node/string/container budget violations without invoking caller code. Python and
+  TypeScript also share the registry's Unicode-code-point diagnostic ordering, preserve all
+  failed union-branch diagnostics until the sole global cap, mirror selected conditional
+  branch parent records, and emit the same 32nd `ERROR_LIMIT_REACHED` receipt with its
+  exact omitted count.
+- Python schema resolution now roots fragment-only references in the schema resource that
+  owns them, including skill-local definitions and nested fragments reached through the
+  shared common schema. Matrix source schemas no longer make the registered incomplete-node-
+  universe semantic refusal structurally unreachable; all three matrix contracts exercise
+  the intended `SCOPE_NODE_UNIVERSE_REQUIRED` boundary, and PSTH negative vectors carry the
+  complete revision-2 alignment and bin-boundary baseline before testing their one defect.
+  PSTH alias refusal also has one diagnostic owner in both runtimes instead of cascading
+  into a second, misleading dimension error for an otherwise recognized alias.
+- Generated TypeScript and Python registries are recursively immutable; generated object maps
+  use null prototypes. Contract generation now rejects duplicate/dangerous map keys and parses
+  every normative JSON source with duplicate-member detection, including escaped-equivalent
+  names, before emitting any authority.
+- Width-mode bins now require an exact, bounded binary64 tiling; correlogram lag bins use the
+  contract's centred `2m+1` geometry. Correlogram preflight and filling use monotone windows with
+  a hard pair-operation bound and agree with a quadratic oracle over randomized inputs.
+- Render preflight now enforces per-series/request observations, graph nodes/edges, exact matrix
+  cell products, pairwise operations, drawn marks, text nodes, returned-table completeness, SVG
+  bytes, and positive layout geometry. Large extrema no longer use spread calls that overflow
+  the JavaScript argument stack, and artifact mark counts equal the SVG data marks actually
+  emitted rather than packed path vertices.
+- Added adversarial/property suites covering every registered unit pair, 1,500 randomized
+  bin/correlogram cases, million-rank topology declarations, hostile boundary objects, immutable
+  generated authority, and exact resource receipts. The independent Python mirror carries the
+  same integer-domain and immutability checks.
+
+### Fixed — repository hygiene
+
+- Removed tracked Python bytecode caches and one-off scratch repro scripts with stale
+  machine-local paths; Python cache artifacts are now ignored so source archives and
+  audits contain only reproducible inputs.
+- Kept the clean-consumer package smoke bounded and truly core-only at its first stage:
+  npm no longer traverses optional React Native/Expo peer metadata before the core probe,
+  while every documented peer set is still installed explicitly and exercised.
+- Added a complete third-party notice bundle for shipped colour-map data/approximations and
+  the fdlibm-derived deterministic kernels. The npm package allowlist and clean-consumer smoke
+  now require the notice and every referenced license file to be present in the tarball.
+
+## [0.9.0] — 2026-07-15
+
 ### Fixed — adversarial review reconciliation (12 findings)
 
 An adversarial multi-lens review (science, security, honesty, coherence) with independent
@@ -75,8 +592,9 @@ verification surfaced 12 confirmed defects; all are resolved. Full record in
   x/y scale, positions never jittered), correlogram stems (independent per lag, no
   invented lag-zero), response-curve points with an ordered-only guide line, phase-plane
   trajectories, and a schematic circular connection graph (every node placed, so isolates
-  and autapses stay visible). Each derives through the certified `src/analysis` layer, so
-  the drawn figure and the hand-checked arithmetic cannot diverge.
+  and autapses stay visible). Each calls the same tested `src/analysis` primitives used
+  by its hand-computable fixtures; this is internal implementation evidence, not
+  external scientific certification.
 - `test/renderAllFamilies.test.ts` asserts all 19 families render a byte-deterministic,
   injection-safe SVG with a well-formed artifact digest, and that none falls back to the
   honest `renderPending` state.
@@ -341,7 +859,7 @@ regenerate cached descriptors/manifests before adopting this release.
   `nest.delay_matrix`, `nest.in_degree_distribution`,
   `nest.out_degree_distribution`, and `nest.delay_distribution` contracts.
   Ordered node universes retain isolates, every multapse remains countable,
-  matrices use NEST's target-row/source-column convention, absent cells remain
+  matrices use Cortexel's fixed target-row/source-column display policy, absent cells remain
   distinct from present zero-valued aggregates, and typed snapshot scope prevents
   MPI-local evidence from masquerading as a complete global network. The legacy
   edge-list skill `nest.connectivity_matrix` remains valid but is deprecated and

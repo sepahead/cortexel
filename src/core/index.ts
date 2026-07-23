@@ -1,11 +1,9 @@
 /**
- * `cortexel/core` — the pure contract.
+ * Internal implementation of the pure FigureRequestV1 contract.
  *
- * This entry loads no React, no Three, no D3, no filesystem, and no network module.
- * A server can import it and get validation, canonicalization, identity, provenance,
- * and migration without pulling a rendering stack behind it. (Structural validation
- * reads the shipped schema files, which is a read of packaged data, not of the host
- * filesystem — the CONTRACT travels with the package.)
+ * The public capability-named entry is `cortexel/figure`. The package root and
+ * `cortexel/core` deliberately remain the legacy VizSpec surfaces during the additive
+ * migration. This kernel loads no React, Three, R3F, D3, browser, or network module.
  */
 
 // Identity
@@ -40,11 +38,14 @@ export {
   QUANTITY_KINDS,
   UNITS,
   DISCLOSURE_RULES,
+  CANONICALIZATION_ALGORITHMS,
+  CANONICALIZATION_IDS,
   type ErrorCode,
   type ErrorStage,
   type UnitCode,
   type QuantityKind,
   type DisclosureId,
+  type CanonicalizationId,
 } from '../generated/registry.js';
 
 // Validation
@@ -72,8 +73,14 @@ export {
 } from './errors.js';
 
 // Identity primitives
-export { sha256Digest, sha256Hex } from './sha256.js';
+export { sha256Digest, sha256Hex, utf8ByteLength } from './sha256.js';
 export { canonicalize, canonicalDigest, canonicalDigestExcluding, CanonicalizationError } from './canonicalize.js';
+export {
+  RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
+  compareUtf16CodeUnits,
+  normalizeResponseEventMemberIds,
+  responseEventMembershipDigest,
+} from './response-curve-basis.js';
 
 // Boundaries
 export { parseJsonStrict, type JsonValue } from './parse-json.js';
@@ -82,10 +89,13 @@ export { snapshotValue } from './safe-snapshot.js';
 // Budgets
 export {
   getBudgetLimits,
+  tryGetBudgetLimits,
+  trySelectTighterBudgetProfile,
   restrictLimits,
   DEFAULT_PROFILE,
   type BudgetLimits,
   type BudgetProfileId,
+  type ResolvedBudgetProfile,
 } from './limits.js';
 
 // Units

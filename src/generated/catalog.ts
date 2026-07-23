@@ -1,17 +1,27 @@
 /**
  * GENERATED FILE — DO NOT EDIT.
  *
- * Produced by scripts/generate-contract.ts from contract/skills/ and contract/registries/capabilities.v1.json.
+ * Produced by scripts/generate-contract.ts from contract/skills/, contract/registries/capabilities.v1.json, and contract/registries/palettes.v1.json.
  * Edit the normative source and run `bun run generate`.
  * `bun run check:generated` fails if this file drifts from its source.
  */
 
-import type { SemanticValidatorId, DisclosureId } from './registry.js';
+import { freezeGenerated } from '../core/deep-freeze.js';
+import type { OutputAuthorityV1 } from '../core/output-authority.js';
+import type { SemanticValidatorId, DisclosureId, UncertaintyKind } from './registry.js';
+
+export const CAPABILITY_AVAILABILITIES = freezeGenerated([
+  "packaged",
+  "source_only",
+  "unavailable"
+] as const);
+export type CapabilityAvailability = (typeof CAPABILITY_AVAILABILITIES)[number];
 
 export interface SkillCatalogEntry {
   readonly id: string;
   readonly revision: number;
   readonly status: 'stable' | 'experimental' | 'deprecated' | 'removed';
+  readonly availability: CapabilityAvailability;
   readonly releaseReady: boolean;
   readonly title: string;
   readonly canonicalQuestion: string;
@@ -22,32 +32,41 @@ export interface SkillCatalogEntry {
   readonly budgets: {
     readonly maxObservations: number;
     readonly maxVisibleMarks: number;
-    readonly maxInlineTableRows: number;
+    readonly maxReturnedTableRows: number;
     readonly compactionPolicies: readonly string[];
     readonly tablePolicy: string;
   };
-  readonly uncertaintySupport: readonly string[];
+  readonly uncertaintySupport: readonly UncertaintyKind[];
   readonly accessibility: {
     readonly summaryTemplate: string;
-    readonly tableColumns: readonly { readonly key: string; readonly header: string; readonly description?: string }[];
+    readonly tableColumns: readonly {
+      readonly key: string;
+      readonly header: string;
+      readonly cellType: 'finite_number' | 'string' | 'finite_number_or_string';
+      readonly nullable: boolean;
+      readonly keyPart: boolean;
+      readonly description?: string;
+    }[];
   };
+  readonly outputAuthority: OutputAuthorityV1;
   readonly evidence: { readonly handVectors: boolean; readonly externalOracle: unknown };
   readonly legacyIds: readonly string[];
   readonly owner: string;
   readonly knownLimitations: readonly string[];
 }
 
-export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object.freeze({
+export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freezeGenerated({
   "network.adjacency_matrix": {
     "id": "network.adjacency_matrix",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Connection adjacency matrix (target rows, source columns)",
     "canonicalQuestion": "Over one declared complete, ordered node universe, which cells of the target-row by source-column matrix contain at least one connection — or exactly how many connection entries — and which cells were actually observed, under a declared network scope and snapshot time?",
     "cannotEstablish": [
       "That an empty row means the target has in-degree zero in the wider network. The matrix is complete only over the DECLARED node universe: a target receiving 40 connections from unselected nodes still shows an empty row here.",
-      "That an unobserved cell contains no connection. Under a rank-local or sampled scope most cells are unobserved, and unobserved is not absence — it is the snapshot declining to speak.",
+      "That a not_observed cell contains no connection. Under a rank-local or sampled scope many cells are not_observed, and not_observed is not absence — it is the snapshot declining to speak.",
       "Connection strength. A cell is present because a connection EXISTS, not because it is strong: a zero-weight synapse is present here and appears as the value 0 in network.weight_matrix. The two figures can disagree and both be right.",
       "Functional or effective connectivity. This is a structural snapshot: a present cell does not mean one neuron influenced another, and an absent cell does not mean the two were independent.",
       "That a visible block or cluster is a property of the network rather than of the declared node ORDER. Reordering can create or destroy every apparent block; Cortexel draws only the declared order and never sorts by connectivity.",
@@ -57,7 +76,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 1
+      "revision": 2,
+      "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
       {
@@ -107,6 +127,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         "id": "topology.edge_endpoints_in_universe"
       },
       {
+        "id": "topology.matrix_contract"
+      },
+      {
         "id": "topology.scope_supports_claim"
       },
       {
@@ -131,88 +154,286 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "MULTAPSE_AGGREGATED",
       "MISSING_VALUES_PRESENT",
       "UNIT_CONVERTED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "matrix_value_quantize"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Adjacency matrix for {selectionLabel}: {nodeCount} nodes as target rows by source columns, in target-row by source-column orientation over one declared node universe. Cell mode {cellMode}. {presentCellCount} cells contain at least one connection, derived from {connectionCount} connection rows; multiplicity ranges from {multiplicityMin} to {multiplicityMax}. {observedRowCount} of {nodeCount} rows are fully observed; {unobservedCellCount} cells are unobserved and are not claimed absent. {autapseCellCount} cells are self-connections. Scope: {scopeStatement}. Snapshot time {snapshotTime} {snapshotTimeUnit}. {multapseStatement} {compactionStatement}",
+      "summaryTemplate": "Adjacency matrix for {selectionLabel}: {nodeCount} nodes as target rows by source columns, in Cortexel's fixed target-row/source-column orientation over one declared node universe. Cell mode {cellMode}. {presentCellCount} cells contain at least one retained connection row, from {connectionCount} retained rows. Exact multiplicity is reported only where connectionSetComplete is true. {observedRowCount} of {nodeCount} rows are fully observed; {absentCellCount} cells are observed absence and {notObservedCellCount} are not_observed. {autapseCellCount} cells are self-connections. Scope: {scopeStatement}. Snapshot time {snapshotTime} {snapshotTimeUnit}. {multapseStatement} {compactionStatement}",
       "tableColumns": [
         {
           "key": "rowIndex",
           "header": "Row (target index)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Zero-based position in the declared node universe. The order is the declared order and is never derived from the connections."
         },
         {
           "key": "targetId",
           "header": "Target (row)",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The connection's TARGET. The orientation is fixed by the contract and is not caller-configurable."
         },
         {
           "key": "columnIndex",
           "header": "Column (source index)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Zero-based position in the declared node universe."
         },
         {
           "key": "sourceId",
           "header": "Source (column)",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The connection's SOURCE."
         },
         {
           "key": "cellStatus",
           "header": "Status",
-          "description": "present, absent_observed, or unobserved. absent_observed is a measured absence. unobserved means this snapshot cannot speak to the cell, and it is never reported as absent."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "present, absent, or not_observed. Absent is measured absence inside an observed target row. not_observed means this scope cannot speak to the cell."
         },
         {
           "key": "cellValue",
           "header": "Cell value",
-          "description": "1 or 0 in binary_presence mode; the exact multiplicity in multiplicity mode. Empty when the cell is unobserved, because there is no value to report."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "1 or 0 in binary_presence mode; the exact multiplicity in multiplicity mode. Null when not_observed; zero is reserved for observed absence."
         },
         {
           "key": "multiplicity",
-          "header": "Connections",
-          "description": "The exact count of connection rows in the cell, multapses and autapses included. Present in BOTH cell modes: binary presence stops drawing multiplicity, it never destroys it."
+          "header": "Complete-cell connections",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The exact full-cell multiplicity, multapses and autapses included, only when connectionSetComplete is true. Null for sampled evidence: retained rows prove presence but cannot prove that no additional cell rows were omitted."
+        },
+        {
+          "key": "retainedConnectionRows",
+          "header": "Retained rows",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exact count of request rows retained in this cell. Under sampled scope this is a sample-row count, not the network cell multiplicity."
+        },
+        {
+          "key": "connectionSetComplete",
+          "header": "Complete cell set",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "True only when the declared scope completely observes this target row, so zero means absence and multiplicity is exact. False for every sampled cell and every non-owned rank-local row."
         },
         {
           "key": "isAutapse",
           "header": "Self-connection",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "True when the row target id equals the column source id. Autapses are always counted and the diagonal cell is never blanked."
         },
         {
           "key": "edgeIds",
           "header": "Contributing connections",
-          "description": "The stable ids of every connection row in the cell, or the deterministic ordinal identities assigned after the canonical sort when the caller supplied none."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Canonical array of caller-supplied ids contributing to the cell. It is null when the snapshot supplied no edge-id channel; revision 2 never synthesizes ordinal identities. A dense observed-absent cell has an empty array when the id channel exists."
         },
         {
           "key": "synapseModels",
           "header": "Synapse models",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The declared models of the contributing connections. Adjacency pools models by design; they are listed so a reader can see exactly what was pooled."
         },
         {
           "key": "carriedAttributes",
           "header": "Carried weight / delay",
-          "description": "Per-connection weight and delay when the snapshot supplied them, with their units. Shown, never used: a cell is present because a connection exists. A zero-weight connection is present."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Per-connection weight and delay when supplied, with units and that same record's caller edgeId and synapseModel when those channels exist. The separately canonical edgeIds and synapseModels columns are contributor summaries, not positional joins. No ordinal identity is synthesized when edgeId is absent. Shown, never used: a zero-weight connection remains present."
         },
         {
-          "key": "scope",
-          "header": "Scope",
-          "description": "The scope under which this cell was, or was not, observed."
+          "key": "scopeSummary",
+          "header": "Scope summary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "A bounded canonical projection of the scope under which this cell was, or was not, observed. For global_merged, validator-proven complete coverage is represented as all_ranks_0_through_worldSize_minus_1 rather than repeating the redundant mergedRanks array in every row. The canonical request retains the exact raw scope once and the live in-process requestDigest covers that request. Artifact 1.0 binds table shape only: it does not bind these table-cell bytes and provides no detached verification or persisted assurance receipt."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.adjacency_matrix.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "selectionLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "rowIndex",
+          "targetId",
+          "columnIndex",
+          "sourceId",
+          "cellStatus",
+          "cellValue",
+          "multiplicity",
+          "retainedConnectionRows",
+          "connectionSetComplete",
+          "isAutapse",
+          "edgeIds",
+          "synapseModels",
+          "carriedAttributes",
+          "scopeSummary"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "cells",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority selection A",
+            "rightValue": "Authority selection B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "selectionLabel",
+          "nodeCount",
+          "cellMode",
+          "presentCellCount",
+          "connectionCount",
+          "observedRowCount",
+          "absentCellCount",
+          "notObservedCellCount",
+          "autapseCellCount",
+          "scopeStatement",
+          "snapshotTime",
+          "snapshotTimeUnit",
+          "multapseStatement",
+          "compactionStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -230,8 +451,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "knownLimitations": [
       "Rows and columns share one ordered node universe, so 1.0 draws SQUARE self-connectivity matrices only. A bipartite source-set by target-set matrix (e.g. thalamic sources by cortical targets) is a genuinely different figure and is not expressible here.",
       "There is no way to make a model-restricted absence claim. A caller who supplies only one synapse model's rows must declare a `sampled` / `declared_subset` scope, under which no cell may be called absent — so 'no AMPA connection here' is not expressible in 1.0.",
-      "The scope x cellMode restrictions in scopeRules — `sampled` admitting only `binary_presence`, and `mpi_target_rank_local` requiring `localTargetUniverseComplete: true` — are normative but are not machine-checked by a semantic validator for this skill in 1.0; the caller owns them.",
-      "The disclosure registry has no rule for 'paint paths merged, every cell retained'. Under `matrix_value_quantize` DOWNSAMPLED_FOR_RENDERING is emitted even though no cell is dropped; the budget receipt records countAfter == countBefore, which is how a reader can tell.",
+      "topology.matrix_contract checks the scope x cellMode x aggregation restrictions: sampled admits only binary_presence with sum over retained rows; rank-local requires complete local targets, one unique observedTargetIds subset, and every returned connection target in that owned set.",
+      "No matrix paint-path quantizer is implemented in revision 2. The contract advertises only compaction policy `none`; any request that exceeds the visible-mark or complete-returned-table budget is refused rather than grouped, sampled, or excerpted.",
       "No uncertainty variant is supported. A connection-PROBABILITY matrix over an ensemble of network instantiations is a genuinely different figure, and 1.0 does not have it: this contract draws one exact snapshot, not an estimate.",
       "Cortexel verifies internal consistency, not truth. It can check that the scope, the universe, and the connections agree with each other; it cannot check that the snapshot enumerated the network correctly in the first place.",
       "No data-dependent reordering is offered. A caller who wants a seriated or clustered matrix must compute the order themselves, declare it as the universe order, and own the claim that the block structure is real."
@@ -239,8 +460,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "network.connection_graph": {
     "id": "network.connection_graph",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Directed connection graph of a declared network snapshot",
     "canonicalQuestion": "Which connections existed between a COMPLETE declared set of nodes at one snapshot, under one declared scope, with every isolate, autapse, multapse, direction, and edge attribute preserved?",
@@ -255,7 +477,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -351,21 +573,17 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "MISSING_VALUES_PRESENT",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 20000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "graph_declared_subset"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none"
@@ -376,105 +594,333 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         {
           "key": "rowKind",
           "header": "Row",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
           "description": "`node` or `connection`. A cell that does not apply to the row kind is empty; an empty cell is never a zero."
         },
         {
           "key": "id",
           "header": "Id",
-          "description": "The node id, or the connection's edge id (assigned by ordinal after the canonical sort when the source supplied none)."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true,
+          "description": "The declared node id on a node row or caller-supplied edge id on a connection row. A connection without a supplied edge id has a null cell; revision 2 never assigns a replacement ordinal."
         },
         {
           "key": "group",
           "header": "Group",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The declared group, or empty. A node belongs to at most one group."
         },
         {
           "key": "sourceId",
           "header": "Source",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true,
           "description": "Connection rows only."
         },
         {
           "key": "targetId",
           "header": "Target",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true,
           "description": "Connection rows only. The arrowhead is drawn at this end."
         },
         {
           "key": "isAutapse",
           "header": "Self-connection",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "True when source equals target."
         },
         {
           "key": "parallelIndex",
           "header": "Parallel index",
-          "description": "Which of the pair's parallel connections this row is, in canonical order (1-based)."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": true,
+          "description": "Which connection row this is within the unordered endpoint pair, in declared connection-row order (1-based)."
         },
         {
           "key": "parallelCount",
           "header": "Parallel count",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "How many connections exist between this unordered pair. Greater than 1 means a multapse; every one of them has its own row."
         },
         {
           "key": "weight",
           "header": "Weight",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Exact declared value, or empty when the source did not supply one. Empty is missing, not zero."
         },
         {
           "key": "weightUnit",
           "header": "Weight unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "`nest:weight` is simulator-defined and has no SI meaning; it is never converted or compared across models."
         },
         {
           "key": "delay",
-          "header": "Delay"
+          "header": "Delay",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "delayUnit",
-          "header": "Delay unit"
+          "header": "Delay unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "synapseModel",
           "header": "Synapse model",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The declared model. Weights of different models are not pooled."
         },
         {
           "key": "inDegree",
           "header": "In-degree",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Node rows only, and only when a degree annotation is declared and the scope supports it."
         },
         {
           "key": "outDegree",
           "header": "Out-degree",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Node rows only. Empty under a target-rank-local scope, where it is not computable."
         },
         {
           "key": "degreeCountingPolicy",
           "header": "Degree policy",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Whether each connection entry or each unique neighbour was counted, and how an autapse contributed."
         },
         {
           "key": "x",
           "header": "x",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Measured coordinate, or empty under a schematic layout. A schematic screen position is not a coordinate and is never reported as one."
         },
         {
           "key": "y",
-          "header": "y"
+          "header": "y",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "positionUnit",
-          "header": "Position unit"
+          "header": "Position unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "layoutStatus",
           "header": "Layout",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "`measured` or `schematic (non-spatial)`."
         },
         {
-          "key": "scope",
-          "header": "Scope",
-          "description": "The declared network scope, repeated on every row so an extracted subset cannot lose it."
+          "key": "scopeSummary",
+          "header": "Scope summary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "A bounded canonical projection of the declared network scope. `global_merged` records complete-rank coverage and world size without repeating `mergedRanks`; the exact raw scope remains once in the canonical request and is covered by the live in-process request digest. Artifact 1.0 binds this table's shape only, not table-cell bytes, and supplies no detached verification or persisted assurance receipt."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.connection_graph.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "graphLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "rowKind",
+          "id",
+          "group",
+          "sourceId",
+          "targetId",
+          "isAutapse",
+          "parallelIndex",
+          "parallelCount",
+          "weight",
+          "weightUnit",
+          "delay",
+          "delayUnit",
+          "synapseModel",
+          "inDegree",
+          "outDegree",
+          "degreeCountingPolicy",
+          "x",
+          "y",
+          "positionUnit",
+          "layoutStatus",
+          "scopeSummary"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "nodes",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "edges",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority graph A",
+            "rightValue": "Authority graph B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "graphLabel",
+          "nodeCount",
+          "isolateCount",
+          "edgeCount",
+          "multapseRowCount",
+          "autapseCount",
+          "scopeStatement",
+          "layoutMode",
+          "layoutSpatialStatement",
+          "nodeOrder",
+          "edgeValueStatement",
+          "degreeStatement",
+          "missingValueStatement",
+          "compactionStatement",
+          "tableStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -486,7 +932,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       }
     },
     "legacyIds": [
-      "nest.connection_graph"
+      "nest.connection_graph",
+      "nest.connectivity_matrix"
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
@@ -501,18 +948,19 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "The CROSS-RUN merge conflict is NOT enforced. `global_merged` carries one snapshot time and no per-rank run id, so ranks merged across runs or times are indistinguishable from a legitimate merge; that check is an adapter obligation. The enforced SCOPE_MERGE_CONFLICT triggers are a duplicated merged rank and a sample that retains more connections than its source had; the rank cover is SCOPE_MERGE_INCOMPLETE.",
       "Node marker radius and arrowhead size are fixed screen-space decoration and encode nothing, unless `degreeAnnotation.encodeAsNodeArea` is explicitly enabled.",
       "The `POSITIONS_MISSING` disclosure exists for spatial maps that omit an unpositioned node and disclose it. This figure instead fails closed with SCOPE_POSITION_COVERAGE_INCOMPLETE: omitting a node from a graph deletes an isolate and changes the topology, which a footnote cannot repair.",
-      "`ids.unique` enforces per-pointer uniqueness on the node ids, edge ids, and position node ids. The cross-group membership partition (a node in at most one group) is NOT enforced by a semantic validator here: the shared implementation reads only its flat `pointers` list, so group-partition uniqueness is an adapter obligation.",
+      "`ids.unique` enforces per-pointer uniqueness on the node ids, edge ids, and position node ids. The shared semantic validator has no cross-group membership primitive, so the render boundary independently refuses a node present in more than one group with SEMANTIC_DUPLICATE_ID before assigning color, shape, or layout sector.",
       "`degree.counting_policy_declared` is deliberately NOT declared for this figure. That validator requires a top-level `parameters.countingPolicy` unconditionally, but here a degree is an OPTIONAL annotation whose counting policy is structurally required inside `degreeAnnotation`; the nested requirement is what enforces it.",
-      "The scope/degree compatibility refusals (rank-local out-degree, sampled degree) are enforced by the semantic validator only for `network.degree_distribution`. This figure documents the constraints and structurally requires a well-formed `degreeAnnotation`, but does not itself reject a rank-local out-degree annotation at the semantic boundary.",
+      "The shared semantic scope/degree validators are specialized for `network.degree_distribution`. This figure therefore re-checks its optional annotation at the render boundary: sampled degree is refused, and target-rank-local scope permits only in-degree.",
       "The <=8 distinguishable-group limit is a render-stage concern (RENDER_SERIES_LIMIT_EXCEEDED) with no semantic validator, so it is not checked during request validation; the shared `nodeUniverse` type caps groups at 64. The diverging-scale center requirement, by contrast, IS enforced structurally (an absent center fails with SCHEMA_REQUIRED_PROPERTY_MISSING).",
       "The multapse-aggregation rule fires for ANY unordered pair carrying more than one connection, independent of `parallelEdges.display`. A `separate_lanes` figure with parallel edges must therefore still declare `parameters.multapseAggregation`; the aggregation governs any per-pair derived value while every row is still drawn and tabled.",
-      "Bundled parallel edges are drawn as one stroke with a count label. The bundle is a paint decision and every row remains in the table, but a reader who looks only at the drawing sees one stroke where several synapses exist."
+      "Bundled parallel edges in one ordered direction are drawn as one stroke with a count label. Reciprocal directions remain distinct strokes. Bundling is a paint decision and every row remains in the table, but a reader who looks only at the drawing sees one directional stroke where several synapses exist."
     ]
   },
   "network.degree_distribution": {
     "id": "network.degree_distribution",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "In- and out-degree distribution over a declared node universe",
     "canonicalQuestion": "What is the exact in- or out-degree distribution of a complete, declared node universe, under an explicitly stated connection-counting policy and autapse policy, within a network scope that can actually support the claim?",
@@ -529,7 +977,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -611,77 +1059,231 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "MISSING_VALUES_PRESENT",
       "PRE_BINNED_INPUT",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 20000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "histogram_merge_adjacent"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "{direction}-degree distribution for {selectionLabel}. Counting policy {countingPolicy}; autapses {autapsePolicy}{excludedAutapseStatement}. Node universe: {universeNodeCount} nodes, declared complete. Scope: {scopeStatement}. {countedConnectionCount} connections counted. Degrees run from {minDegree} to {maxDegree}; {zeroDegreeNodeCount} nodes have degree 0. {binCount} bins, {binningStatement}. Values are the {normalization} of nodes per degree bin. {uncertaintyStatement} {compactionStatement}",
+      "summaryTemplate": "{direction}-degree distribution for {selectionLabel}. Counting policy {countingPolicy}; autapses {autapsePolicy}{excludedAutapseStatement}. Node universe: {universeNodeCount} nodes, declared complete. Scope: {scopeStatement}. {countedConnectionCount} raw connections produce {countedIncidenceCount} counted incidences. Degrees run from {minDegree} to {maxDegree}; {zeroDegreeNodeCount} nodes have degree 0. One exact bin is retained per integer degree. Values are the {normalization} of nodes per degree bin. No sampling uncertainty was supplied or rendered.",
       "tableColumns": [
         {
           "key": "degreeLow",
           "header": "Degree (lower)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive lower degree of the bin. Under per_integer_degree binning it equals the upper."
         },
         {
           "key": "degreeHigh",
           "header": "Degree (upper)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive upper degree. Degree bins are inclusive integer ranges, never half-open real intervals."
         },
         {
           "key": "nodeCount",
           "header": "Nodes",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exact integer number of NODES whose degree falls in this bin. This is the raw observation, and it is a count of nodes — not of connections."
         },
         {
           "key": "probability",
           "header": "Probability",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "nodeCount divided by the complete declared node universe, zero-degree nodes included. Present only when normalization is probability."
         },
         {
           "key": "universeNodeCount",
           "header": "Universe nodes",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The denominator. Includes every node of degree zero."
+        },
+        {
+          "key": "countedConnectionCount",
+          "header": "Raw connections",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Rows remaining after the autapse policy. Constant across rows."
+        },
+        {
+          "key": "countedIncidenceCount",
+          "header": "Counted incidences",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exact sum(degree × nodeCount). Equal to raw connections for count_edges and no greater for count_unique_neighbors."
         },
         {
           "key": "valueUnit",
           "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "Dimensionless (1). A degree has no unit and is never converted."
-        },
-        {
-          "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
-        },
-        {
-          "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
-        },
-        {
-          "key": "uncertaintyBasis",
-          "header": "Uncertainty basis",
-          "description": "Realizations only: ensemble_members, bootstrap_draws or replicates. Within one realization a bin count is exact and carries no sampling uncertainty."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.degree_distribution.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "selectionLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "degreeLow",
+          "degreeHigh",
+          "nodeCount",
+          "probability",
+          "universeNodeCount",
+          "countedConnectionCount",
+          "countedIncidenceCount",
+          "valueUnit"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "bins",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority degree A",
+            "rightValue": "Authority degree B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "direction",
+          "selectionLabel",
+          "countingPolicy",
+          "autapsePolicy",
+          "excludedAutapseStatement",
+          "universeNodeCount",
+          "scopeStatement",
+          "countedConnectionCount",
+          "countedIncidenceCount",
+          "minDegree",
+          "maxDegree",
+          "zeroDegreeNodeCount",
+          "normalization"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -699,10 +1301,10 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
       "This figure computes the degree over a SINGLE declared node universe: every counted connection has both endpoints in it, and the counterpart set is the universe itself. A rectangular selection whose counterpart set differs from the degree universe is not expressible in v1, because the v1 topology validators bind both endpoints to one `nodeUniverse`.",
-      "Registry v1 has no `degree.conservation` validator, and this figure's request carries no precomputed histogram values or continuous bin edges, so `bins.strictly_increasing` and `histogram.normalization_consistent` have nothing to check at request time and are not declared. The count_edges conservation identity and the count_unique_neighbors bounds are asserted during derivation (INTERNAL_INVARIANT_VIOLATED), not verified against the request.",
+      "Revision 2 executes degree conservation inside the historical `degree.counting_policy_declared` semantic validator id: exact universe coverage, exact raw/incidence identities, policy bounds and the zero-degree universe are checked before rendering.",
       "Registry v1 has no disclosure id for excluded autapses. Under `autapsePolicy: exclude` the excluded count reaches the accessible summary and the table metadata, but no footer disclosure states it.",
       "MULTAPSE_AGGREGATED is emitted when `count_unique_neighbors` collapses parallel connections. Its registry text is worded for matrix cells, so on this figure {contributingCount} must be read as connections per unordered endpoint pair.",
-      "Cortexel v1 does not machine-verify that `observedTargetIds` really is the rank's target set, nor that the node universe stays inside it. It is recorded as a caller ownership declaration; a caller that declares a rank owns targets it does not own has misdeclared its evidence.",
+      "Revision 2 verifies exact set equality between `observedTargetIds` and the rank-local node universe, but cannot authenticate the caller's assertion that this is the simulator rank's complete owned-target set.",
       "Because the schema makes `countingPolicy` and `autapsePolicy` required, a missing policy fails structurally. `degree.counting_policy_declared` therefore acts as defence in depth on the normalized request, and its SCIENCE_AGGREGATION_REQUIRED code is reached mainly through migration.",
       "A sampled snapshot is refused with SCOPE_INCOMPATIBLE_WITH_SKILL rather than a sampling-specific code; registry v1 has no code that names the sampling itself.",
       "Cortexel does not filter rows by synapse model, weight sign, or receptor. A selection is expressed by supplying exactly its rows; a filter applied silently would change every degree in the figure.",
@@ -712,8 +1314,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "network.delay_distribution": {
     "id": "network.delay_distribution",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Synaptic delay distribution over a declared edge population",
     "canonicalQuestion": "What is the distribution of synaptic transmission delays over an explicitly declared population of connections, counted either once per synapse row or once per ordered node pair, within a network scope that states exactly which connections were observed?",
@@ -731,7 +1334,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -766,7 +1369,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         "parameters": {
           "pointers": [
             "/data/nodeUniverse/ids",
-            "/data/connections/edgeIds"
+            "/data/connections/edgeIds",
+            "/data/observedTargetIds"
           ]
         }
       },
@@ -784,9 +1388,6 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       },
       {
         "id": "topology.delay_positive"
-      },
-      {
-        "id": "topology.multapse_aggregation_declared"
       },
       {
         "id": "histogram.normalization_consistent"
@@ -815,126 +1416,311 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "UNIT_CONVERTED",
       "PRE_BINNED_INPUT",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 20000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "histogram_merge_adjacent"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Synaptic delay distribution for {selectionLabel}. {consideredConnectionCount} connection rows considered; counting policy {countingPolicy}{pairAggregationStatement}, giving {observationCount} {observationKind} observations in {groupCount} group(s) ({groupByStatement}). Scope: {scopeStatement}. Delays run from {delayMin} to {delayMax} {delayUnit}; declared source resolution {sourceResolution}. {binCount} bins span {binMin} to {binMax} {binUnit} on a {xScale} axis; {underRangeCount} observations fell below and {overRangeCount} above that range. Values are the {normalization} per bin, in {valueUnit}, normalized within each group. {uncertaintyStatement} {compactionStatement}",
+      "summaryTemplate": "Synaptic delay distribution for {selectionLabel}. {consideredConnectionCount} connection rows considered; counting policy {countingPolicy}{pairAggregationStatement}, giving {observationCount} {observationKind} observations in {groupCount} group(s) ({groupByStatement}). Scope: {scopeStatement}. Delays run from {delayMin} to {delayMax} {delayUnit}; declared source resolution {sourceResolution}. {binCount} bins span {binMin} to {binMax} {binUnit} on a {xScale} axis; {underRangeCount} observations fell below and {overRangeCount} above that range. Values are the {normalization} per bin, in {valueUnit}, normalized within each group. No sampling uncertainty was supplied or rendered.",
       "tableColumns": [
         {
           "key": "groupId",
           "header": "Group",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
           "description": "The series: the synapse model when grouping is on, otherwise the selection itself. Each group is normalized within itself."
         },
         {
           "key": "binStart",
           "header": "Bin start",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive lower edge, in the declared bin unit."
         },
         {
           "key": "binEnd",
           "header": "Bin end",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exclusive upper edge, except for the final bin, whose upper edge is inclusive."
         },
         {
           "key": "binWidth",
           "header": "Bin width",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The LINEAR width. It is the width used by the density denominator even when the axis is logarithmic."
         },
         {
           "key": "binUnit",
-          "header": "Bin unit"
+          "header": "Bin unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "count",
           "header": "Observations",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exact integer count in this bin. This is the raw observation everything else is derived from; an empty bin is a measured zero, not missing data."
         },
         {
           "key": "observationKind",
           "header": "Observation kind",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "connection under per_connection, ordered_pair under per_ordered_pair. A count of synapses and a count of pairs are different numbers and both get called `count`."
         },
         {
           "key": "normalization",
           "header": "Normalization",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "Which quantity the value carries: count, probability, or density. Stated per row so a reader of the table alone never has to infer it from the magnitudes."
         },
         {
-          "key": "samplingScope",
-          "header": "Scope (sampling)",
-          "description": "The declared scope of the rows behind this group: complete, local targets only, or the retained edges of a sample with its sampling method. A partial population is stated in the table, not only in the footer."
+          "key": "scopeSummary",
+          "header": "Scope summary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "A bounded canonical projection of the declared network scope. `global_merged` records complete-rank coverage and world size without repeating `mergedRanks`; the exact raw scope remains once in the canonical request and is covered by the live in-process request digest. Artifact 1.0 binds this table's shape only, not table-cell bytes, and supplies no detached verification or persisted assurance receipt."
         },
         {
           "key": "probability",
           "header": "Probability",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "count / binned observations of this group. Present only when normalization is probability."
         },
         {
           "key": "density",
           "header": "Density",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "count / (binned observations of this group x linear bin width). Present only when normalization is density."
         },
         {
           "key": "densityUnit",
           "header": "Density unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The reciprocal of the bin unit, e.g. /ms for millisecond bins."
         },
         {
           "key": "groupObservationCount",
           "header": "Group observations",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The normalization denominator for this group: the observations that fell inside the bin range."
         },
         {
           "key": "consideredConnectionCount",
           "header": "Connections considered",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Connection rows considered for this group before the counting policy was applied. Under per_ordered_pair it exceeds the observation count whenever the group contains a multapse."
         },
         {
           "key": "excludedUnderRangeCount",
           "header": "Excluded (below range)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Observations below the first bin edge. Always reported; never silently absorbed."
         },
         {
           "key": "excludedOverRangeCount",
           "header": "Excluded (above range)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Observations above the last bin edge."
-        },
-        {
-          "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
-        },
-        {
-          "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
-        },
-        {
-          "key": "uncertaintyBasis",
-          "header": "Uncertainty basis",
-          "description": "Realizations only: ensemble_members, bootstrap_draws or replicates. Within one realization a bin count is exact and carries no sampling uncertainty."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.delay_distribution.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "selectionLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "groupId",
+          "binStart",
+          "binEnd",
+          "binWidth",
+          "binUnit",
+          "count",
+          "observationKind",
+          "normalization",
+          "scopeSummary",
+          "probability",
+          "density",
+          "densityUnit",
+          "groupObservationCount",
+          "consideredConnectionCount",
+          "excludedUnderRangeCount",
+          "excludedOverRangeCount"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "bins",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority delay A",
+            "rightValue": "Authority delay B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "selectionLabel",
+          "consideredConnectionCount",
+          "countingPolicy",
+          "pairAggregationStatement",
+          "observationCount",
+          "observationKind",
+          "groupCount",
+          "groupByStatement",
+          "scopeStatement",
+          "delayMin",
+          "delayMax",
+          "delayUnit",
+          "sourceResolution",
+          "binCount",
+          "binMin",
+          "binMax",
+          "binUnit",
+          "xScale",
+          "underRangeCount",
+          "overRangeCount",
+          "normalization",
+          "valueUnit"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -953,9 +1739,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "Registry gap: there is no `bins.grid_aligned` validator id. `sourceResolution` is a DECLARED fact that reaches the artifact, the table and the summary, but registry v1 cannot check that a delay is a multiple of it or that a bin width is. The comb artifact is disclosed in prose, not refused.",
       "Registry gap: there is no disclosure id for out-of-range exclusions. Under `exclude_and_report` the under- and over-range counts reach the summary and the table, but no footer disclosure states them. EVENTS_EXCLUDED_OUT_OF_WINDOW is about a time window and is deliberately not reused.",
       "Registry gap: there is no dedicated error code for a delay falling outside the declared bin range under `reject`. SCIENCE_BIN_EDGES_INVALID is used, matching neuro.isi_distribution; a future SCIENCE_BIN_RANGE_INCOMPLETE would be more precise.",
-      "Registry gap: there is no conservation validator. `histogram.normalization_consistent` re-derives the probability sum or density integral of the supplied per-bin values (surfacing SCIENCE_NORMALIZATION_UNVERIFIABLE or SCIENCE_DENSITY_DOES_NOT_INTEGRATE), but it does NOT reconcile sum(counts) + under + over against consideredConnectionCount; that identity stays declared context in registry v1.",
-      "Registry gap: `series.equal_length` compares only parallel-array lengths, and `histogram.normalization_consistent` silently skips a histogram whose value count does not match the derived bin count, so a miscounted prebinned length is not refused today. A length mismatch among connection rows IS caught and surfaces as SEMANTIC_LENGTH_MISMATCH.",
-      "Registry gap: `topology.multapse_aggregation_declared` ignores the counting policy and demands an aggregation for any repeated ordered pair, so a per_connection selection that literally contains a multapse is currently refused with SCIENCE_AGGREGATION_REQUIRED. The connections examples keep one row per pair; multapse handling is exercised under per_ordered_pair.",
+      "Revision 2 executes conservation, exact prebinned length, normalized-value re-derivation, endpoint binding, group partition and counting-policy-specific multapse semantics inside topology.delay_positive. In particular, per_connection preserves every multapse row and forbids pair aggregation.",
       "MULTAPSE_AGGREGATED's registry text is worded for matrix cells. On this figure {contributingCount} must be read as connections per ordered endpoint pair.",
       "MISSING_VALUES_PRESENT can fire only from a ride-along weight series. A null DELAY is refused outright, so it can never be the cause here.",
       "Cortexel does not choose bin edges, and for a grid-quantized delay the choice is unusually consequential: with a 0.1 ms resolution, a 0.15 ms bin width makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth.",
@@ -967,25 +1751,27 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "network.delay_matrix": {
     "id": "network.delay_matrix",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Transmission-delay matrix over a declared target-row / source-column node universe",
     "canonicalQuestion": "For each ordered (source, target) pair in a declared node universe, what is the explicitly named aggregate of the positive transmission delays of the connections observed between them, under a declared network scope?",
     "cannotEstablish": [
       "That an empty cell is a connection with zero delay. An empty cell means no connection was observed under the declared scope; a zero delay is rejected outright, so no cell in this figure is ever drawn at zero.",
       "The delay of any single synapse in a cell that aggregates multapses. A mean over parallel synapses of 1 ms and 9 ms reports 5 ms — a latency no spike in this network ever experiences.",
-      "That a source does not connect to a target, when the scope is rank-local or sampled. Those scopes cannot see the whole cross-product, so an empty cell there means 'not observed', not 'not connected'.",
+      "That a source does not connect to a target outside the owned rows of a rank-local snapshot. Those rows are not observed; sampled snapshots are refused because they cannot establish complete cell aggregates.",
       "The total source-to-target latency when the synapse model splits axonal and dendritic delays and the source reported only the dendritic component. The two are numerically indistinguishable; only the declared delaySemantics tells them apart.",
       "The sign, amplitude, or receptor of any connection. Two cells with identical delay may drive their targets in opposite directions; a delay matrix carries no weight information at all.",
       "Any degree. Row and column marginals of delays are not quantities, are never computed, and are never rendered; a row with three painted cells is not a target with in-degree three, because multapses share a cell.",
       "That the delays hold at any time other than the declared snapshot time. A network with plastic or rewired delays has a different matrix at every snapshot.",
       "Any claim about when a target actually fired. A delay is the latency a synapse imposes on transmission, not evidence about spikes, and this figure contains no spike data.",
-      "Any uncertainty or spread within a cell. A cell is one colour; the contributing count, minimum, and maximum are recoverable only from the table and the sidecar."
+      "Any uncertainty distribution within a cell. A cell is one colour. The complete returned table preserves contributing count, observed minimum and maximum, caller-supplied ids, and models, but that empirical range is not a confidence or uncertainty interval and is not drawn in the heatmap."
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 1
+      "revision": 2,
+      "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
       {
@@ -1037,6 +1823,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         "id": "topology.edge_endpoints_in_universe"
       },
       {
+        "id": "topology.matrix_contract"
+      },
+      {
         "id": "topology.multapse_aggregation_declared"
       },
       {
@@ -1053,25 +1842,21 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "REFERENCE_COMPARISON_NOT_RUN",
       "PARTIAL_NETWORK_SCOPE",
       "RANK_LOCAL_SCOPE",
-      "SAMPLED_EDGES",
       "NODE_UNIVERSE_INCOMPLETE",
       "MULTAPSE_AGGREGATED",
       "ABSENT_IS_NOT_ZERO",
       "UNIT_CONVERTED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "matrix_value_quantize"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none"
@@ -1082,88 +1867,284 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         {
           "key": "rowIndex",
           "header": "Row",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Zero-based index into the declared target (row) universe."
         },
         {
           "key": "targetId",
           "header": "Target",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The postsynaptic node. Rows are targets."
         },
         {
           "key": "columnIndex",
           "header": "Column",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Zero-based index into the declared source (column) universe."
         },
         {
           "key": "sourceId",
           "header": "Source",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The presynaptic node. Columns are sources."
         },
         {
           "key": "cellStatus",
           "header": "Cell status",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "present, absent (no connection observed under a scope that could have seen one), or not_observed (the scope could not see this cell)."
         },
         {
           "key": "delayAggregate",
           "header": "Delay",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The declared aggregate. Empty when the cell is absent or not_observed — never zero."
         },
         {
           "key": "displayUnit",
-          "header": "Unit"
+          "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "multapseAggregation",
           "header": "Aggregation",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The declared policy that produced the cell value."
         },
         {
           "key": "delaySemantics",
           "header": "Delay meaning",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "total_transmission, or dendritic_component_only when the model splits axonal and dendritic delays."
         },
         {
           "key": "contributingConnectionCount",
           "header": "Connections",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "How many connection rows contribute to this cell. Greater than one means a multapse was aggregated."
         },
         {
           "key": "delayMin",
           "header": "Delay min",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Minimum over the contributing connections. Equal to the aggregate only under min."
         },
         {
           "key": "delayMax",
           "header": "Delay max",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Maximum over the contributing connections. The spread a single colour cannot show."
         },
         {
           "key": "contributingEdgeIds",
           "header": "Connection ids",
-          "description": "The exact contributing connections, declared or deterministically assigned. The complete list is in the sidecar when the cell exceeds the inline bound."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Canonical array of caller-supplied ids contributing to the cell, or null when the snapshot supplied no edge-id channel. Revision 2 never assigns a replacement ordinal."
         },
         {
           "key": "synapseModels",
           "header": "Synapse models",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The distinct models contributing to this cell."
         },
         {
           "key": "isAutapse",
           "header": "Autapse",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "True when source == target. Autapses are retained on the diagonal."
         },
         {
-          "key": "scope",
-          "header": "Scope",
-          "description": "The scope under which this cell was observed, carried per row so an excerpt cannot lose it."
-        },
-        {
-          "key": "snapshotTime",
-          "header": "Snapshot time",
-          "description": "The declared moment the connection snapshot was taken, with its unit. Carried per row so an excerpt cannot lose the moment the delays belong to."
+          "key": "scopeSummary",
+          "header": "Scope summary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "A bounded canonical projection of the observation scope, including snapshotTime verbatim. For global_merged, validator-proven complete coverage is represented as all_ranks_0_through_worldSize_minus_1 rather than repeating the redundant mergedRanks array in every row. The canonical request retains the exact raw scope once and the live in-process requestDigest covers that request. Artifact 1.0 binds table shape only: it does not bind these table-cell bytes and provides no detached verification or persisted assurance receipt. A separate snapshotTime column would duplicate this closed summary and is deliberately omitted in revision 2."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.delay_matrix.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "matrixLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "rowIndex",
+          "targetId",
+          "columnIndex",
+          "sourceId",
+          "cellStatus",
+          "delayAggregate",
+          "displayUnit",
+          "multapseAggregation",
+          "delaySemantics",
+          "contributingConnectionCount",
+          "delayMin",
+          "delayMax",
+          "contributingEdgeIds",
+          "synapseModels",
+          "isAutapse",
+          "scopeSummary"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "cells",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority matrix A",
+            "rightValue": "Authority matrix B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "matrixLabel",
+          "rowCount",
+          "columnCount",
+          "presentCellCount",
+          "absentCellCount",
+          "notObservedCellCount",
+          "multapseAggregation",
+          "delaySemantics",
+          "connectionCount",
+          "displayUnit",
+          "delayMin",
+          "delayMax",
+          "scopeKind",
+          "snapshotTime",
+          "snapshotTimeUnit",
+          "compactionStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -1181,11 +2162,11 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "knownLimitations": [
       "No disclosure id exists for delay semantics. `delaySemantics` is machine-checkable, but disclosures.v1.json has no rule for it, so it is carried in the legend, the accessible summary, and the table rather than the disclosure footer. A DELAY_COMPONENT_SEMANTICS rule is proposed for the registry.",
       "ABSENT_IS_NOT_ZERO's published text names a zero weight. For this figure that clause is vacuous — a zero delay is rejected — and the real hazard it must cover is an empty cell being read as instantaneous transmission at the fast end of the ramp.",
-      "DOWNSAMPLED_FOR_RENDERING speaks of observations drawn. Under matrix_value_quantize every cell is retained and individually addressable; only paint paths are grouped, so countAfter equals countBefore and the disclosure reports a reduction in paths, not in data.",
+      "The registered `matrix_value_quantize` policy is not advertised or executed by revision 2. Every accepted cell is painted directly and an over-budget request is refused, so no quantization receipt, downsampling fact, or downsampling disclosure is produced. A future paint-only implementation would have to retain every cell and bind a complete evidence table before this skill could advertise it.",
       "`simulationResolution` is recorded but NOT enforced. No registered validator checks that each delay is an integer multiple of the declared resolution, so a delay off the simulator's grid is accepted and displayed.",
       "There is no declared or shared colour domain, so two delay matrices are NOT comparable by colour — compare the legends or the tables. A shared domain needs a clipping disclosure that does not exist in disclosures.v1.json.",
       "Cortexel cannot detect a transposed adapter: if the source and target arrays are swapped, every validator passes and the figure is a plausible lie about direction. The defences are the adapter's own vectors and restating orientation on the axes, legend, caption, and table.",
-      "No uncertainty variant is renderable in a cell, so the spread across aggregated multapses is invisible in the colour. It is exact in the table (contributing count, min, max) and never merely summarized.",
+      "No uncertainty variant is renderable in a cell, so the spread across aggregated multapses is invisible in the colour. The complete returned table preserves contributor count and observed minimum/maximum, but those values are an empirical range rather than an uncertainty estimate.",
       "Delays of different synapse models share one matrix because they share one dimension. That is dimensionally correct, but a matrix mixing a split-delay model with a total-delay model mixes two meanings. The models are carried per cell; no validator refuses the mix.",
       "The matrix is square over one declared node universe: rows (targets) and columns (sources) index the same node set. A rectangular/bipartite matrix over two distinct universes is not offered, because topology.edge_endpoints_in_universe binds both endpoints to the single data.nodeUniverse.",
       "The node universe must be declared complete: topology.node_universe_declared rejects complete == false, so a delay matrix over an explicitly partial node set is not available. Edge-snapshot partiality is expressed through the declared scope instead."
@@ -1193,8 +2174,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "network.spatial_map_2d": {
     "id": "network.spatial_map_2d",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Two-dimensional spatial map of declared node positions",
     "canonicalQuestion": "Where, in a declared two-dimensional coordinate frame, were the nodes of a declared universe positioned at one snapshot — drawn at one equal scale on both axes, with every coordinate preserved exactly, every missing position reported rather than placed at the origin, and periodic-boundary metadata used to choose an edge chord rather than to invent duplicate nodes?",
@@ -1213,7 +2195,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -1315,134 +2297,370 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "MISSING_VALUES_PRESENT",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 50000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "graph_declared_subset"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Spatial map {mapLabel}. {drawnNodeCount} of {declaredNodeCount} nodes drawn at {positionStatus} positions in frame {frameId}; {missingPositionCount} have no declared position and are omitted, never placed at the origin. Axes {xAxisLabel} and {yAxisLabel}, both {positionUnit}, one equal scale. Domain: {domainStatement}. Boundary: {boundaryStatement}. {coincidentNodeCount} nodes exactly overlap another node; positions are never jittered. {outsideDomainCount} lie outside the declared domain. Marker radius is fixed screen-space decoration and encodes nothing. Color: {nodeEncodingStatement}. Connections: {connectionStatement}. Node universe: {nodeUniverseStatement}. Scope: {scopeStatement} {uncertaintyStatement} {compactionStatement} {tableStatement}",
+      "summaryTemplate": "Spatial map {mapLabel}. {drawnNodeCount} of {declaredNodeCount} nodes drawn at {positionStatus} positions in frame {frameId}; {missingPositionCount} have no declared position and are omitted, never placed at the origin. Axes {xAxisLabel} and {yAxisLabel}, both {positionUnit}, one equal scale. Domain: {domainStatement}. Boundary: {boundaryStatement}. {minimumImageTieChordCount} unordered physical chords contain {minimumImageTieAxisCount} exact half-period axis ties; every tie uses the positive axis direction. {coincidentNodeCount} nodes exactly overlap another node; positions are never jittered. {outsideDomainCount} lie outside the declared domain. Marker radius is fixed screen-space decoration and encodes nothing. Color: {nodeEncodingStatement}. Connections: {connectionStatement}. Node universe: {nodeUniverseStatement}. Scope: {scopeStatement} {uncertaintyStatement} {compactionStatement} {tableStatement}",
       "tableColumns": [
         {
           "key": "rowKind",
           "header": "Row",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
           "description": "`node` or `connection`. A cell that does not apply to the row kind is empty; an empty cell is never a zero."
         },
         {
           "key": "id",
           "header": "Id",
-          "description": "The node id, or the connection's edge id (assigned by ordinal after the canonical sort when the source supplied none)."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
+          "description": "The caller-supplied node id on a node row. On a connection row this is the caller-supplied edge id when present; otherwise `connection-row-N` is a deterministic renderer-local row address derived from the source ordinal. That fallback binds the row and DOM mark but is NOT a claim that the source identified a synapse."
         },
         {
           "key": "group",
           "header": "Group",
-          "description": "The declared group, or `ungrouped`. A node belongs to at most one group."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Node rows: the declared group, or `ungrouped`; a node belongs to at most one group. Connection rows use `not_applicable`."
         },
         {
           "key": "x",
           "header": "x",
-          "description": "The declared coordinate, exactly as given. Never jittered, clamped, or wrapped."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The coordinate after the two axes are canonicalized to the finest compatible supplied unit. Never jittered, clamped, or wrapped; any conversion has a derivation receipt."
         },
         {
           "key": "y",
-          "header": "y"
+          "header": "y",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The coordinate in the same canonical unit as x. Connection rows are empty."
         },
         {
           "key": "positionUnit",
           "header": "Position unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The same unit on both axes after canonicalization. A conversion, if any, is recorded in the derivation and disclosed."
         },
         {
           "key": "positionStatus",
           "header": "Position status",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "`measured`, `model_generated`, or `supplied`. A NEST layer's coordinates are model_generated, not measured."
         },
         {
           "key": "positionMissing",
           "header": "Position missing",
-          "description": "True for a selected node with no declared position. Such a node is omitted from the map and is never drawn at the origin."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Node rows: true for a selected node with no declared position; such a node is omitted and never drawn at the origin. Connection rows use `not_applicable`."
         },
         {
           "key": "insideDomain",
           "header": "Inside domain",
-          "description": "Closed-interval membership of the declared domain. Empty when no domain was declared."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Closed-interval membership under `cortexel_binary64_spatial_domain_membership_v1`: 8 epsilon times declared extent plus the exact one-round endpoint error, itself capped at 32 epsilon times extent. Empty when no domain was declared."
         },
         {
           "key": "coincidentWith",
           "header": "Coincident with",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Other node ids sharing this exact coordinate. Two coincident nodes are one marker on the page and two rows here."
         },
         {
           "key": "value",
           "header": "Value",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The declared per-node value, or empty when the source supplied a null. Empty is missing, not zero."
         },
         {
           "key": "valueUnit",
-          "header": "Value unit"
+          "header": "Value unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "sourceId",
           "header": "Source",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true,
           "description": "Connection rows only."
         },
         {
           "key": "targetId",
           "header": "Target",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true,
           "description": "Connection rows only. The arrowhead is drawn at this end."
         },
         {
           "key": "chordRule",
           "header": "Chord",
-          "description": "`straight`, or `wrapped (minimum image)` when the chord crosses a periodic boundary. A wrapped chord's drawn length is not the modelled separation."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The exact physical path kind shared by this row's unordered endpoint pair: `autapse_loop`, `straight_chord`, `minimum_image_direct`, or `minimum_image_wrapped`, with `_half_period_tie_x`, `_half_period_tie_y`, or `_half_period_tie_xy` appended when applicable. Reciprocal rows report the same path kind because they reverse one physical route. A wrapped chord's on-page segment length is not a measured axonal path."
         },
         {
           "key": "parallelCount",
           "header": "Parallel count",
-          "description": "How many connections share this unordered endpoint pair. Greater than 1 means one drawn chord and this many rows."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "How many connections share this unordered measured endpoint chord. Greater than 1 means one chord and this many source rows; reciprocal directions retain separate arrowheads and per-direction count labels."
         },
         {
           "key": "weight",
           "header": "Weight",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Exact declared value, or empty when none was supplied."
         },
         {
           "key": "weightUnit",
           "header": "Weight unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "`nest:weight` is simulator-defined: never converted, never compared across synapse models."
         },
         {
           "key": "delay",
-          "header": "Delay"
+          "header": "Delay",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "delayUnit",
-          "header": "Delay unit"
+          "header": "Delay unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "synapseModel",
-          "header": "Synapse model"
+          "header": "Synapse model",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
-          "key": "scope",
-          "header": "Scope",
-          "description": "The declared scope, repeated on every row so an extracted subset cannot lose it."
+          "key": "scopeSummary",
+          "header": "Scope summary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "A bounded canonical projection of the declared network scope. `global_merged` records complete-rank coverage and world size without repeating `mergedRanks`; the exact raw scope remains once in the canonical request and is covered by the live in-process request digest. Artifact 1.0 binds this table's shape only, not table-cell bytes, and supplies no detached verification or persisted assurance receipt."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.spatial_map_2d.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "mapLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "rowKind",
+          "id",
+          "group",
+          "x",
+          "y",
+          "positionUnit",
+          "positionStatus",
+          "positionMissing",
+          "insideDomain",
+          "coincidentWith",
+          "value",
+          "valueUnit",
+          "sourceId",
+          "targetId",
+          "chordRule",
+          "parallelCount",
+          "weight",
+          "weightUnit",
+          "delay",
+          "delayUnit",
+          "synapseModel",
+          "scopeSummary"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "nodes",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "connections",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority map A",
+            "rightValue": "Authority map B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "mapLabel",
+          "drawnNodeCount",
+          "declaredNodeCount",
+          "positionStatus",
+          "frameId",
+          "missingPositionCount",
+          "xAxisLabel",
+          "yAxisLabel",
+          "positionUnit",
+          "domainStatement",
+          "boundaryStatement",
+          "minimumImageTieChordCount",
+          "minimumImageTieAxisCount",
+          "coincidentNodeCount",
+          "outsideDomainCount",
+          "nodeEncodingStatement",
+          "connectionStatement",
+          "nodeUniverseStatement",
+          "scopeStatement",
+          "uncertaintyStatement",
+          "compactionStatement",
+          "tableStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -1464,12 +2682,11 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "UncertaintyV1 is a 1-D per-point channel, so a 2-D localization error cannot be expressed. Rendering a single array as an isotropic disc would assert an isotropy nobody declared, so only `none` is supported.",
       "units.v1 has no area code and no per-area quantity kind, so an areal density cannot be emitted as a typed quantity. The summary reports the node count and the declared extent; the figure makes no density claim of its own.",
       "One scope governs the whole snapshot: `data.scope` is read by both topology.scope_declared and topology.scope_supports_claim. There is no separate connection scope field, so the position and connection layers cannot declare conflicting snapshot times; a single declared scope binds them together.",
-      "`topology.edge_endpoints_in_universe` checks that every CONNECTION endpoint (`connections.sourceIds`, `connections.targetIds`) resolves into the declared `nodeUniverse`. A `positions.nodeIds` entry outside the universe is not caught by this rule — coverage is checked in the other direction — so an extra positioned id that is not a universe member is a known gap in this revision.",
       "`spatial.position_coverage_complete` runs on every request, independent of `missingPositionPolicy`, so this revision requires a position for every selected node even under `omit_and_disclose`. A map with a hole is refused (SCOPE_POSITION_COVERAGE_INCOMPLETE), never drawn as a partial map.",
       "`topology.node_universe_declared` refuses a `nodeUniverse.complete = false`, so a declared-incomplete universe is rejected (SCOPE_NODE_UNIVERSE_REQUIRED) rather than disclosed in this revision. NODE_UNIVERSE_INCOMPLETE remains reserved for a future revision that can ground a partial-universe reading.",
       "Marker radius is fixed screen-space decoration. Two neurons 1 um apart in a 400 um map are drawn as overlapping dots, and a dot's area is not a soma.",
       "No node compaction policy exists: extrema sampling and averaging both destroy the spatial distribution the figure exists to show, and none in the registry fits a point cloud. Above the visible-mark budget a request is refused (RESOURCE_COMPACTION_UNAVAILABLE), never thinned.",
-      "`graph_declared_subset` is the only compaction this figure permits, and it thins the optional edge layer alone. It never removes a node, and its retained/source counts are disclosed (SAMPLED_EDGES).",
+      "The registered `graph_declared_subset` policy is not advertised or executed by this skill. A caller may supply an already sampled optional edge layer only by declaring its sampled source scope and retained/source counts; that is an input-scope claim disclosed by SAMPLED_EDGES, not renderer compaction. Cortexel never chooses edges to drop and never removes a node.",
       "The shared nodeUniverse type admits 100000 nodes, but this contract draws at most 50000 markers and cannot compact them, so a larger layer is refused rather than shown as a thinned map that would understate its own density.",
       "Coincident nodes overlap exactly and are never separated: a grid layer with an excitatory and an inhibitory population on the same points draws N markers for 2N neurons. The coincident count is reported, but the drawing cannot pull them apart.",
       "Chords between measured positions are straight or wrapped lines, not axonal paths. common.v1 carries no measured axon geometry, and none is invented here.",
@@ -1478,8 +2695,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "network.synaptic_weight_trace": {
     "id": "network.synaptic_weight_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Synaptic weight over time, for identified synapses or a declared group",
     "canonicalQuestion": "How did the weight of a set of individually identified synapses — or the explicitly named aggregate of a declared group of synapses whose membership may change — evolve over a declared time window, under one declared observation semantics that says exactly what was observed and when?",
@@ -1491,14 +2709,14 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "That the plasticity rule named in `synapseModel` CAUSED the change. Spike-timing-dependent plasticity, homeostatic scaling, structural rewiring and a caller's own `SetStatus` write all produce a weight trajectory, and a weight trajectory alone does not distinguish them.",
       "The physical strength of the synapse. A `nest:weight` is simulator-defined: the same value 10.0 may act as a postsynaptic current amplitude under one neuron model and as a conductance under another. It has no SI mapping, is never converted, and is never compared across simulators.",
       "That the plotted synapses are representative of a projection, a population, or a network. The aggregate is over EXACTLY the declared members, its denominator is the number of members that actually had a value at that time, and both counts are printed.",
-      "That the declared initial weight or the declared bounds are true. They are caller or model declarations. They are drawn as reference lines and are never used to clamp, correct, or validate an observed value — a weight above a declared `Wmax` stays drawn where it was observed.",
+      "That the declared initial weight or the declared bounds are true. They are caller or model declarations. An initial weight may seed an explicitly attributed leading hold or derived aggregate, and either declaration may be shown as an optional reference line, but Cortexel does not verify the declaration against the simulator. Bounds never clamp, correct, or suppress an observed value: when that member series is displayed, a weight above a declared `Wmax` remains at its observed value; when member geometry is hidden by aggregate-only display, its exact observed row remains in the complete table.",
       "That a poll captured every update. Polling `GetConnections(...).get('weight')` at declared times reveals only the stored value at those times: an update and a counter-update falling between two polls cancel and leave no trace at all.",
       "Anything about synapses held on another MPI rank. A rank holds the connections whose TARGET it owns, so a rank-local weight recorder never saw the rest of them.",
       "That two parallel synapses (a multapse) between the same pair are the same synapse. They are distinct edges with distinct ids and are never merged — and a source that cannot tell them apart cannot be used to plot either of them individually."
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -1516,7 +2734,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "series.equal_length",
         "parameters": {
-          "note": "The reference evaluator resolves each pointer by RFC 6901 and has no index wildcard, so the groups enumerate concrete series indices. A group is compared only within itself: one synapse's time array is checked against that SAME synapse's weight array and never against another synapse's, because two synapses legitimately carry different numbers of updates — one may be potentiated four times while another three. The final group holds the pre-aggregated arrays, which must all share one length. Registry gap: an index wildcard would let every declared series be checked; today only the enumerated indices are.",
+          "note": "This generic pointer evaluator remains a compatibility backstop for the three living edge examples and the pre-aggregated carrier. A group is compared only within itself: one synapse's time array is checked against that SAME synapse's weight array and never against another synapse's, because two synapses legitimately carry different numbers of updates. The dedicated `weight_trace.observation_kind_declared` evaluator dynamically checks every declared series and all pre-aggregated arrays, so correctness does not depend on this registry's lack of an index wildcard.",
           "groups": [
             [
               "/data/series/0/time/values",
@@ -1542,7 +2760,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
       },
       {
@@ -1550,6 +2769,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       },
       {
         "id": "trace.axis_dimension_compatible"
+      },
+      {
+        "id": "weight_trace.observation_kind_declared"
       },
       {
         "id": "topology.scope_declared"
@@ -1575,150 +2797,455 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
+      "UNCERTAINTY_COVERAGE_INCOMPLETE",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "line_envelope_minmax"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none",
       "standard_deviation",
-      "standard_error",
-      "confidence_interval",
       "quantile_interval",
       "ensemble_range"
     ],
     "accessibility": {
-      "summaryTemplate": "Synaptic weight trace. {edgeCount} synapses, model {synapseModels}, weight in {weightUnit} ({weightDimensionStatement}), over {windowStart} to {windowStop} {timeUnit}. Observation: {observationStatement}. {observationCount} observations, {missingCount} missing (drawn as gaps; a missing update breaks the hold and is never held across), {excludedCount} outside the window. Display: {displayMode}. {aggregateStatement} {membershipStatement} {referenceStatement} Scope: {scopeStatement}. {uncertaintyStatement} {compactionStatement}",
+      "summaryTemplate": "Synaptic weight trace. Cardinality: {synapseCardinalityStatement} Model {synapseModels}, weight in {weightUnit} ({weightDimensionStatement}), over {windowStart} to {windowStop} {timeUnit}. Observation semantics: {observationStatement}. {duplicateTimeStatement} Source evidence: {sourceReadingCount} raw readings in {retainedSourceRowCount} retained source rows; {missingCount} raw readings are missing and {excludedCount} are outside the window. Reconstruction evidence: {reconstructionPointCount} raw vertices in {retainedReconstructionRowCount} retained reconstruction rows; {missingReconstructionPointCount} retained vertices are missing and {excludedReconstructionPointCount} are outside the window. {carrierStatement} Display: {displayMode}. {aggregateStatement} {membershipStatement} {referenceStatement} Scope: {scopeStatement}. {uncertaintyStatement} {compactionStatement}",
       "tableColumns": [
         {
           "key": "seriesId",
           "header": "Synapse / group",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
           "description": "The edge id, or the group id on an aggregate row. Two parallel synapses between one pair are two ids and are never merged."
         },
         {
           "key": "seriesLabel",
-          "header": "Label"
+          "header": "Label",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "sourceId",
           "header": "Source",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Presynaptic node. Descriptive: this figure declares no node universe and makes no connectivity claim. Empty on an aggregate row."
         },
         {
           "key": "targetId",
           "header": "Target",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Postsynaptic node. Empty on an aggregate row."
         },
         {
           "key": "synapseModel",
           "header": "Synapse model",
-          "description": "The plasticity rule, verbatim from the source, and the comparability mode under which weights of different models were pooled."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Every row carries canonical structured text containing its exact actual model set, the complete caller-declared model set, and the `weightComparability` mode. A raw row therefore remains auditable after detachment from its request, while a derived aggregate preserves the ordered model set; physical dimension compatibility alone is never presented as a model-level comparability proof."
         },
         {
           "key": "time",
           "header": "Time",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "In the window's declared unit, after any recorded conversion."
         },
         {
           "key": "timeUnit",
-          "header": "Time unit"
+          "header": "Time unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "value",
           "header": "Weight",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The observed weight, or the aggregate on an aggregate row. Empty when the observation is missing. A missing observation is not zero."
         },
         {
           "key": "valueUnit",
           "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "A `nest:weight` is simulator-defined: no SI mapping, never converted, never compared across systems."
         },
         {
           "key": "observationKind",
           "header": "Observation",
-          "description": "event_updated (held, drawn as steps), point_sample (joined by straight segments), or interpolated_trajectory (a caller reconstruction, not an observation)."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "event_updated (held, emitted as steps), point_sample (consecutive finite samples joined by straight segments only within one valid render run), or interpolated_trajectory (supplied linear reconstruction vertices, not observations). Missingness and membership/recording availability transitions break applicable runs."
         },
         {
           "key": "updateSemantics",
           "header": "Held",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "value_after_update: this value holds forward from its time. value_before_update: it describes the interval ending at its time. The two differ by one inter-update interval on every step edge."
         },
         {
-          "key": "heldUntil",
-          "header": "Held until",
-          "description": "The end of the interval this value is drawn across: the next observed time, the end of the recorded interval, or the window edge — whichever comes first. Never extended past the recorded interval."
+          "key": "paintedInterval",
+          "header": "Painted interval",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Canonical structured {from,until,unit} only when this carrier owns an emitted positive-duration event hold in the exact frozen RenderPlan runs. `from` and `until` are the endpoints of that horizontal RenderPlan span, not a separate claim about mathematical endpoint closure or pixel visibility. The span is clipped by the analysis window, recorded interval and any membership lifetime. Null for table-only carriers, missing values, point/reconstruction vertices and closed-stop singleton points."
+        },
+        {
+          "key": "renderRunOrdinal",
+          "header": "Render run",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Zero-based ordinal of the exact explicit primary trace run owned by this carrier within the frozen RenderPlan. A run may be a line/path carrier sequence or a contract-mandated singleton marker. Within line/path geometry, equal ordinals identify the same explicit RenderPlan run and different ordinals require distinct RenderPlan subpaths. Null means the carrier owns no primary run. Optional observation/reconstruction markers do not create a run, while a mandatory closed-stop singleton is itself an explicit singleton run with an ordinal but no line segment or paintedInterval. The ordinal is bound into primary line/path provenance where such a subpath exists. This is a RenderPlan topology check, not assurance of serialized SVG paths, clipping, or pixel visibility."
         },
         {
           "key": "eventKind",
           "header": "Source event",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "What produced the observation: a presynaptic spike, a structural update, a poll of the stored value, or a parameter write."
         },
         {
           "key": "missing",
           "header": "Missing",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "true when the weight was null in the source. A missing update breaks the hold; the following interval is undefined, not unchanged."
         },
         {
           "key": "replicateCount",
-          "header": "Replicates",
-          "description": "How many observations at this timestamp produced this row. 1 for a single observation; greater than 1 means the row is a duplicate-time aggregate, which is never legal for an event-updated weight."
+          "header": "Source multiplicity",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "For a retained source-observation or reconstruction row, how many raw caller rows produced this carrier. Greater than one identifies a named duplicate-time aggregate. Null on derived evaluations, initial states, and context witnesses."
         },
         {
           "key": "memberCount",
           "header": "Members",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Aggregate rows: how many synapses belonged to the group at this time. A mean that rises while this falls is a different fact from a mean that rises while it holds."
         },
         {
           "key": "contributingCount",
           "header": "Aggregate n",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Aggregate rows: how many members actually had a value at this time. THIS is the denominator of the mean. Where it is 0 the aggregate is empty, never zero."
         },
         {
           "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
+          "header": "Uncertainty lower",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
+          "header": "Uncertainty upper",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "uncertaintyMethod",
           "header": "Uncertainty method",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The variant, level and basis. A dispersion across synapses is never relabelled as a confidence interval."
         },
         {
           "key": "initialWeight",
           "header": "Initial weight",
-          "description": "The declared value and its origin (a model parameter or a caller assertion). Drawn as a reference line; never used to clamp a value."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The declared value and its origin (a model parameter or a caller assertion). It may seed an explicitly attributed leading hold or derived aggregate, and is drawn as an additional reference line only when requested. It never clamps or corrects an observed value."
         },
         {
           "key": "bounds",
           "header": "Bounds",
-          "description": "The declared lower/upper bound, whether it is hard or soft, and its origin. A weight observed beyond a hard bound is reported here and is still drawn where it was observed."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The declared lower/upper bound, whether it is hard or soft, and its origin. A weight observed beyond a hard bound is reported here and, when that member series is displayed, remains at its observed value; aggregate-only display may hide member geometry but retains the exact row."
+        },
+        {
+          "key": "carrierKind",
+          "header": "Carrier kind",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
+          "description": "One of source_observation, source_state_witness, caller_reconstruction_point, derived_aggregate_evaluation, declared_aggregate_point, or declared_initial_state. This discriminator prevents a source row, context state witness, reconstruction vertex, initial state, and aggregate evaluation at one time from being conflated; a context witness may itself be directly painted."
+        },
+        {
+          "key": "carrierOrdinal",
+          "header": "Carrier ordinal",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
+          "description": "Zero-based ordinal within this series and carrier kind after exact preparation. Together with series, time, and carrierKind it gives every returned carrier a unique row identity."
+        },
+        {
+          "key": "carrierMetadata",
+          "header": "Carrier metadata",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Canonical structured metadata owned by the carrier kind. Reconstruction rows bind method/interpolant/author; every duplicate-collapsed source/reconstruction carrier binds the named aggregate policy and method; context witnesses bind carry-in/look-ahead, directly-painted and derived-consultation status; initial-state rows bind declaration time separately from direct paint and derived consumption. Null where no extra carrier metadata is required."
         },
         {
           "key": "sourceOrdinal",
-          "header": "Source row",
-          "description": "The observation's index in the caller's original array, before the within-edge stable sort. Every drawn point traces back to the row it came from."
+          "header": "Source lineage",
+          "cellType": "finite_number_or_string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Canonical scalar/array lineage into caller rows before within-edge stable sorting and named duplicate collapse. Present for retained source observations, reconstruction vertices, and source-state witnesses; null for derived evaluations and declared initial states."
         },
         {
-          "key": "scope",
-          "header": "Scope",
-          "description": "The scope this synapse was observed under. A rank-local snapshot never licenses a claim about another rank's synapses."
+          "key": "scopeSummary",
+          "header": "Scope summary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "A bounded canonical projection of the scope this synapse was observed under. `global_merged` records complete-rank coverage and world size without repeating `mergedRanks`; the exact raw scope remains once in the canonical request and is covered by the live in-process request digest. Artifact 1.0 binds this table's shape only, not table-cell bytes, and supplies no detached verification or persisted assurance receipt. A rank-local snapshot never licenses a claim about another rank's synapses."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.synaptic_weight_trace.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "showObservationMarkers"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "seriesId",
+          "seriesLabel",
+          "sourceId",
+          "targetId",
+          "synapseModel",
+          "time",
+          "timeUnit",
+          "value",
+          "valueUnit",
+          "observationKind",
+          "updateSemantics",
+          "paintedInterval",
+          "renderRunOrdinal",
+          "eventKind",
+          "missing",
+          "replicateCount",
+          "memberCount",
+          "contributingCount",
+          "uncertaintyLower",
+          "uncertaintyUpper",
+          "uncertaintyMethod",
+          "initialWeight",
+          "bounds",
+          "carrierKind",
+          "carrierOrdinal",
+          "carrierMetadata",
+          "sourceOrdinal",
+          "scopeSummary"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "observations",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "reconstruction",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "series_paths",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "uncertainty",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "references",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": true,
+            "rightValue": false,
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "geometry.sequence"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "synapseCardinalityStatement",
+          "synapseModels",
+          "weightUnit",
+          "weightDimensionStatement",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "observationStatement",
+          "duplicateTimeStatement",
+          "sourceReadingCount",
+          "retainedSourceRowCount",
+          "missingCount",
+          "excludedCount",
+          "reconstructionPointCount",
+          "retainedReconstructionRowCount",
+          "missingReconstructionPointCount",
+          "excludedReconstructionPointCount",
+          "carrierStatement",
+          "displayMode",
+          "aggregateStatement",
+          "membershipStatement",
+          "referenceStatement",
+          "scopeStatement",
+          "uncertaintyStatement",
+          "compactionStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -1737,24 +3264,21 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "Cortexel cannot verify the update convention. It records the caller's `updateSemantics` and draws it. A wrong declaration produces a fully plausible figure whose every step edge is displaced by one inter-update interval, and no validator can detect it from the numbers.",
       "NEST's weight recorder exposes no per-synapse identity, so parallel synapses between one pair cannot be separated from recorder output alone. This is a limit of the source, not of the contract, and the adapter refuses rather than inventing an edge id.",
       "Cross-dimension pooling on the value axis IS enforced: `trace.axis_dimension_compatible` reads `data.series[].values.unit` and refuses two synapses of different dimensions (for example `nest:weight` and `nS`) on one axis, because this figure declares no small-multiples layout.",
-      "Duplicate observation times within one synapse are caught by `trace.duplicate_time_policy`, which reads `data.series[].time.values`. That validator suppresses only on a STRING policy; this figure declares `duplicateTimePolicy` as an object, so it never suppresses the check and a clean recording is required.",
-      "Observation kind is declared once in the schema-required `data.observation`, not in `parameters.observationKind`. The registered `weight_trace.observation_kind_declared` reads only that parameters field, so it is not declared here; the required `data.observation` carries the obligation instead.",
-      "Edge-id uniqueness and the rule that a declared member names a declared edge have no registered validator here: `ids.unique` reads a flat id list and `topology.edge_endpoints_in_universe` reads `data.connections`/`data.nodeUniverse`, neither of which this figure carries. Structural closure enforces shape; registry gap.",
-      "Weight comparability across synapse models is declared in `parameters.weightComparability` and shown in the table, but the registered `topology.weight_group_compatible` reads `data.connections.synapseModels`, a shape this figure does not use, so the model-comparability claim is not semantically enforced. Registry gap.",
-      "The aggregate-denominator rules (contributingCount is the mean's denominator; a zero contributing count yields null, never 0; contributingCount <= memberCount) are drawn faithfully but not validator-enforced: `rate.denominator_positive` reads `data.recordedSenderCount`, not the aggregate's counts. Registry gap.",
-      "Per-edge and per-aggregate uncertainty is validated structurally by the shared UncertaintyV1 union, but `uncertainty.valid` and `uncertainty.supported_variant` read a single top-level `data.uncertainty`/`parameters.uncertainty` this figure does not carry, so the supported-variant list is not semantically enforced. Registry gap.",
-      "`series.equal_length` has no index wildcard in the reference evaluator, so its pointer groups enumerate concrete series indices rather than every synapse. The registry should adopt an index wildcard so an off-by-one in any synapse's arrays fails, not only in the enumerated ones.",
-      "UncertaintyV1's `basis` enum has no `synapses` or `edges` member. An across-synapse dispersion must declare the closest existing value, `replicates`, which is not a precise statement about what was varied. Registry gap.",
-      "There is no error code for a weight observed beyond a declared HARD bound. Cortexel draws the value where it was observed, draws the bound as declared, never clamps, and reports the violation in the table; it does not fail closed on it. The value is the measurement; the bound is the caller's claim.",
+      "Duplicate carrier times are checked across every edge by the generic policy validator and the weight-specific coherence boundary. Revision 2 refuses every actual `keep_replicates` duplicate: event rows lack same-time side/event identity, repeated point samples would become an invented vertical trajectory, and two reconstruction values at one time are not a function. Point-sample and linear-reconstruction duplicates may instead use a named aggregate because raw edge uncertainty is fixed to none; shared-grid pairing of unresolved replicates remains refused because cross-member replicate identity is absent.",
+      "Cortexel-derived hold aggregates support only `value_after_update` and half-open recorded intervals in revision 2. Side-qualified denominator transitions and a terminal value-before carrier are not present in Artifact 1.0. Individual and caller-declared preaggregated traces still honor both update conventions and their registered recorded/window closure directly.",
+      "Weight comparability across synapse models is declared in `parameters.weightComparability`, checked as an exact duplicate-free set against every raw series or the declared pre-aggregate model, and shown in the table. This establishes only that the caller made a complete claim matching the models present; Cortexel still cannot establish that distinct models' weights are physically comparable.",
+      "Every identified raw edge is limited to `uncertainty:none`: one synapse from one run supplies no aligned repeat universe or repeat-level evidence for a per-time SD, SE, interval, or reconstructed band. Caller-declared preaggregates and Cortexel-derived aggregates may name descriptive across-synapse SD (around a mean), empirical quantiles, or observed range with `basis: ensemble_members`; that states only that the values are concurrent members of the exact declared ensemble. Standard error and confidence intervals are unavailable because no sampling design, estimand, exchangeability claim, repeat universe, or coverage procedure exists.",
+      "There is no error code for a weight observed beyond a declared HARD bound. Cortexel never clamps and reports the violation in the table; when that member series and its requested reference are displayed, the observed value and declared bound retain their values. Aggregate-only display may omit raw-member geometry and references, but the exact row remains in the complete table. The value is the measurement; the bound is the caller's claim.",
       "`sum` is not offered. Over a membership that changes size it conflates a change in the number of synapses with a change in their weights, and no registered disclosure can carry that.",
-      "Line-envelope compaction on a step trace retains the extremes of each horizontal pixel bucket, so a single-update transient always survives. The marks drawn are still not the updates recorded.",
+      "Revision 2 executes no line-envelope compaction: accepted step traces are drawn in full and an over-budget request is refused. A future line-envelope policy would have to retain every bucket extremum, bind a complete exact table, and disclose that drawn marks are not recorded updates before this skill could advertise it.",
       "Cortexel can verify that a weight's unit dimension matches its kind. It cannot verify that two models' weights are truly comparable, that a `nest:weight` means what the caller believes, or that a declared bound is the model's."
     ]
   },
   "network.weight_distribution": {
     "id": "network.weight_distribution",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Synaptic weight distribution over a declared edge population",
     "canonicalQuestion": "What is the distribution of synaptic weights over an explicitly declared edge population — a declared source universe, a declared target universe, and a network scope that says how completely those connections were observed — without hiding the sign, the synapse model, the multapse structure, or any sampling?",
@@ -1772,7 +3296,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -1812,7 +3336,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
           "pointers": [
             "/data/sourceUniverse/ids",
             "/data/targetUniverse/ids",
-            "/data/connections/edgeIds"
+            "/data/connections/edgeIds",
+            "/data/observedTargetIds"
           ]
         }
       },
@@ -1854,87 +3379,269 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "PRE_BINNED_INPUT",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 20000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "histogram_merge_adjacent"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Synaptic weight distribution for {selectionLabel}. {inRangeObservationCount} observations ({observationUnit}) from {sourceConnectionCount} connections over {sourceNodeCount} declared sources x {targetNodeCount} declared targets. Scope: {scopeStatement}. Models: {synapseModels}; comparability: {weightComparability}. Weights {signTreatment}, unit {weightUnit}. {missingWeightCount} connections have no weight and are excluded, never counted as zero; {zeroWeightCount} have a measured weight of exactly 0. {binCount} bins span {binMin} to {binMax} {binUnit} on a {xScale} axis. {zeroEdgeStatement} {underRangeCount} observations fell below and {overRangeCount} above that range. Normalization: {normalization}, values in {valueUnit}. {uncertaintyStatement} {compactionStatement}",
+      "summaryTemplate": "Synaptic weight distribution for {selectionLabel}. {inRangeObservationCount} observations ({observationUnit}) from {sourceConnectionCount} connections over {sourceNodeCount} declared sources x {targetNodeCount} declared targets. Scope: {scopeStatement}. Models: {synapseModels}; comparability: {weightComparability}. Weights {signTreatment}, unit {weightUnit}. {missingWeightCount} rows produce {missingObservationCount} missing observations and are excluded, never counted as zero; {zeroWeightCount} observations have a measured weight of exactly 0. {binCount} bins span {binMin} to {binMax} {binUnit} on a {xScale} axis. {zeroEdgeStatement} {underRangeCount} observations fell below and {overRangeCount} above that range. Normalization: {normalization}, values in {valueUnit}. No sampling uncertainty was supplied or rendered.",
       "tableColumns": [
+        {
+          "key": "groupId",
+          "header": "Group",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
+          "description": "The histogram group id. `all` when grouping is none; otherwise the declared synapse model. Required to keep independently normalized grouped rows distinguishable."
+        },
         {
           "key": "binLow",
           "header": "Weight (lower)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive lower edge of the bin."
         },
         {
           "key": "binHigh",
           "header": "Weight (upper)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exclusive upper edge, except for the final bin, whose upper edge is inclusive so the strongest synapse is never dropped."
         },
         {
           "key": "binWidth",
           "header": "Bin width",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The LINEAR width, in the bin unit. It is the density denominator even when the axis is logarithmic."
         },
         {
           "key": "signRegion",
           "header": "Sign",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "negative, or non_negative. Every bin lies wholly on one side: whenever the range spans zero an exact edge at 0 is required, and no bin may straddle it. This is the non-colour encoding of sign; the non_negative bin that starts at 0 also contains the measured zeros."
         },
         {
           "key": "count",
           "header": "Observations",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exact integer count of observations in the bin. This is the raw number from which probability and density are derived."
         },
         {
           "key": "value",
           "header": "Value",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The normalized value under the declared normalization. Equal to count when normalization is count."
         },
         {
           "key": "valueUnit",
           "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "Dimensionless (1) for count and probability; the reciprocal of the bin unit for density."
         },
         {
           "key": "inRangeObservationCount",
           "header": "Binned observations",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The probability and density denominator. It excludes missing weights and out-of-range observations, so it can be smaller than the connection count."
         },
         {
-          "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
+          "key": "missingObservationCount",
+          "header": "Missing observations",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Missing after the declared observation-unit rule. Distinct from measured zero."
         },
         {
-          "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
-        },
-        {
-          "key": "uncertaintyBasis",
-          "header": "Uncertainty basis",
-          "description": "Realizations only: ensemble_members, bootstrap_draws, or replicates. Within one realization a bin count is exact and carries no sampling uncertainty."
+          "key": "sourceConnectionCount",
+          "header": "Source connections",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Raw rows before aggregation and missing exclusion. Constant across rows."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.weight_distribution.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "selectionLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "groupId",
+          "binLow",
+          "binHigh",
+          "binWidth",
+          "signRegion",
+          "count",
+          "value",
+          "valueUnit",
+          "inRangeObservationCount",
+          "missingObservationCount",
+          "sourceConnectionCount"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "bins",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority weight A",
+            "rightValue": "Authority weight B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "selectionLabel",
+          "inRangeObservationCount",
+          "observationUnit",
+          "sourceConnectionCount",
+          "sourceNodeCount",
+          "targetNodeCount",
+          "scopeStatement",
+          "synapseModels",
+          "weightComparability",
+          "signTreatment",
+          "weightUnit",
+          "missingWeightCount",
+          "missingObservationCount",
+          "zeroWeightCount",
+          "binCount",
+          "binMin",
+          "binMax",
+          "binUnit",
+          "xScale",
+          "zeroEdgeStatement",
+          "underRangeCount",
+          "overRangeCount",
+          "normalization",
+          "valueUnit"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -1951,15 +3658,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
       "Registry gap: the error registry has no dedicated code for observations outside the declared bin range, nor for a bin that straddles zero. SCIENCE_BIN_EDGES_INVALID is the closest registered code for both.",
-      "The shared `bins.strictly_increasing` validator checks only that edges are finite and strictly increasing. The exact-zero-edge requirement, the no-straddle rule, and out-of-range coverage under `reject` are normative here and are not mechanically enforced.",
-      "The shared node-universe validators read one `data.nodeUniverse`; this figure has a two-sided `sourceUniverse` x `targetUniverse` rectangle, so they are not applied. Universes are required complete and their ids checked by `ids.unique`, but per-side endpoint membership is not mechanically enforced.",
-      "`topology.multapse_aggregation_declared` has no `observationUnit` awareness and would reject a legitimate per-synapse multapse, so it is not applied. The `node_pair` aggregation requirement and the `no_aggregation` assertion are normative here and not mechanically enforced.",
-      "`topology.scope_supports_claim` enforces global-merge rank coverage and the sampling bound only. The scope/observation-unit legality table — `sampled` forbidding `node_pair`, `mpi_target_rank_local` requiring `localTargetUniverseComplete` — is normative here and not mechanically enforced.",
-      "`topology.weight_group_compatible` enforces the single-model pooling guard: two or more distinct synapse models may not share one axis undeclared. It does not verify a `declared_comparable_models` set; that comparability claim stays the caller's and is surfaced rather than checked.",
-      "Prebinned conservation: `histogram.normalization_consistent` re-derives supplied probability/density values from the counts, but it does not check the conservation identities (sum of counts against the observation totals, or synapse closure). Those are normative here and not mechanically enforced.",
-      "`xScale: log` over a non-positive domain is refused at render time; no semantic-stage validator enforces it, so validation accepts such a request and the refusal happens later in the pipeline.",
+      "Revision 2 executes exact-zero/no-straddle rules, endpoint rectangle membership, counting-specific multapse aggregation, scope legality, exact comparability-set equality, prebinned conservation and log-domain refusal inside topology.weight_group_compatible before geometry is built.",
       "Registry gap: no disclosure id covers `signTreatment: magnitude`, and none covers observations excluded by `outOfRangeWeights`. Both facts reach the derivation receipt, the accessible summary, and the table metadata, but no footer disclosure states them.",
-      "PRE_BINNED_INPUT's registry text says the raw EVENTS were not observed. Here it means the raw connection rows. The fact it discloses is correct; only the noun is borrowed.",
       "MULTAPSE_AGGREGATED's registry text is worded for matrix cells. Under `observationUnit: node_pair` its {contributingCount} must be read as connections per ordered endpoint pair.",
       "Registry gap: `connectionRows` has no receptor or port field, so receptor grouping is not offered. Two weights on different receptor ports of one neuron are pooled today, and only the synapse-model set can distinguish them.",
       "Registry gap: the unit registry has no reciprocal code for `pS` or `uV`, so `density` is unavailable for weights expressed in those units even though the dimension exists. `count` or `probability` must be used, or the weights converted to `nS` or `mV` first.",
@@ -1970,8 +3670,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "network.weight_matrix": {
     "id": "network.weight_matrix",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Synaptic weight matrix (target rows, source columns)",
     "canonicalQuestion": "For a declared node universe drawn as target rows and source columns, and a declared snapshot time, what is the explicitly named aggregate of the synaptic weights of every observed connection in each cell?",
@@ -1986,7 +3687,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 1
+      "revision": 2,
+      "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
       {
@@ -2021,7 +3723,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         "parameters": {
           "pointers": [
             "/data/nodeUniverse/ids",
-            "/data/connections/edgeIds"
+            "/data/connections/edgeIds",
+            "/data/observedTargetIds"
           ]
         }
       },
@@ -2036,6 +3739,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       },
       {
         "id": "topology.edge_endpoints_in_universe"
+      },
+      {
+        "id": "topology.matrix_contract"
       },
       {
         "id": "topology.multapse_aggregation_declared"
@@ -2069,93 +3775,307 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "MISSING_VALUES_PRESENT",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 200000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "matrix_value_quantize"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Synaptic weight matrix over a declared node universe of {nodeCount} nodes; rows are targets (postsynaptic), columns are sources (presynaptic). {valuedCellCount} cells carry a weight aggregate, {presentWithoutValueCellCount} hold connections whose weight is missing, {absentCellCount} have no observed connection, {unobservedCellCount} were not observed under this scope. Aggregate: {aggregation} over {connectionCount} connections in {weightUnit}, from {aggregateMin} to {aggregateMax}. Comparability: {synapseModelGroupStatement}. Colour scale: {colorScaleStatement}. Scope: {scopeStatement} at {snapshotTime}. {multapseStatement} {compactionStatement}",
+      "summaryTemplate": "Synaptic weight matrix over a declared node universe of {nodeCount} nodes; rows are targets (postsynaptic), columns are sources (presynaptic). {valuedCellCount} cells carry a complete aggregate, {presentWithMissingValueCellCount} contain both measured and missing weights and therefore no aggregate, {presentWithoutValueCellCount} contain only missing weights, {absentCellCount} are observed absence, and {notObservedCellCount} are not_observed. Aggregate: {aggregation} over {connectionCount} connections in {weightUnit}, from {aggregateMin} to {aggregateMax}. Comparability: {synapseModelGroupStatement}. Colour scale: {colorScaleStatement}. Scope: {scopeStatement} at {snapshotTime}. {multapseStatement} {compactionStatement}",
       "tableColumns": [
+        {
+          "key": "rowIndex",
+          "header": "Row index",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
+          "description": "Zero-based position in the exact caller-declared target-row universe."
+        },
         {
           "key": "targetId",
           "header": "Target (row)",
-          "description": "The postsynaptic node. Rows are targets; this is fixed by the contract and is not caller-configurable."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The postsynaptic node. Rows are targets; this is fixed by Cortexel and is not caller-configurable."
+        },
+        {
+          "key": "columnIndex",
+          "header": "Column index",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
+          "description": "Zero-based position in the same exact caller-declared source-column universe."
         },
         {
           "key": "sourceId",
           "header": "Source (column)",
-          "description": "The presynaptic node. Null on an unobserved-row record, where the record stands for the entire row."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The presynaptic node. Dense not_observed cells retain their exact source column; no row-level wildcard is used."
         },
         {
           "key": "cellState",
           "header": "Cell state",
-          "description": "valued | present_without_value | absent | unobserved. Absent means no connection was observed under a scope that can support an absence claim. Unobserved means the scope cannot support one. Neither is a zero."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "valued | present_with_missing_value | present_without_value | absent | not_observed. Missing contributors invalidate the complete aggregate but never turn a present connection into absence or zero."
         },
         {
           "key": "aggregate",
           "header": "Weight aggregate",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The named aggregate of the contributing weights, to full binary64 precision. Empty when the cell is not valued."
         },
         {
           "key": "aggregation",
           "header": "Aggregation",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The declared formula. There is no default and no 'last edge wins'."
         },
         {
           "key": "weightUnit",
           "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "A `nest:weight` unit is simulator-defined: it has no SI mapping and is never converted or compared across systems."
         },
         {
           "key": "contributingConnectionCount",
           "header": "Connections",
-          "description": "How many connection rows map to this cell. Greater than 1 means the colour is an aggregate over multapses, not a synapse."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Exact returned connection-row count for present or observed-absent cells. Null for not_observed, where zero returned rows is not a claim of zero real connections."
         },
         {
           "key": "contributingWeightCount",
-          "header": "Weights used",
-          "description": "How many of those connections had a finite weight. This is the denominator of `mean`; it differs from the connection count when any weight is missing."
+          "header": "Measured weights",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "How many contributing rows had a finite measured weight. Null for not_observed. A mean is emitted only when this equals the connection count."
+        },
+        {
+          "key": "missingWeightCount",
+          "header": "Missing weights",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Exact connection count minus measured-weight count for present/observed cells; null for not_observed. Any positive value makes the complete aggregate null."
         },
         {
           "key": "weightMin",
           "header": "Min weight",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The smallest contributing weight. With the max and the count, this is the only route to the spread the single cell colour conceals."
         },
         {
           "key": "weightMax",
           "header": "Max weight",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The largest contributing weight. A cell whose min is negative and whose max is positive contains cancelling synapses."
         },
         {
           "key": "synapseModels",
           "header": "Synapse model(s)",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The distinct declared models contributing to the cell, and the caller-declared comparability group (synapseModelGroup) under which they were pooled, if any."
         },
         {
           "key": "contributingEdgeIds",
           "header": "Contributing edge ids",
-          "description": "The stable ids of every contributing connection, or a digest-bound sidecar reference to them. Declared edge ids are preserved; absent ones become deterministic ordinals assigned after the canonical sort."
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Canonical array of caller-supplied ids contributing to the cell, or null when the snapshot supplied no edge-id channel. Revision 2 never synthesizes replacement ordinals."
         },
         {
-          "key": "scope",
-          "header": "Scope",
-          "description": "The snapshot scope and time this cell was observed under."
+          "key": "scopeSummary",
+          "header": "Scope summary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "A bounded canonical projection of the snapshot scope and time. For global_merged, validator-proven complete coverage is represented as all_ranks_0_through_worldSize_minus_1 rather than repeating the redundant mergedRanks array in every row. The canonical request retains the exact raw scope once and the live in-process requestDigest covers that request. Artifact 1.0 binds table shape only: it does not bind these table-cell bytes and provides no detached verification or persisted assurance receipt."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "network.weight_matrix.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "multapseAggregation"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "rowIndex",
+          "targetId",
+          "columnIndex",
+          "sourceId",
+          "cellState",
+          "aggregate",
+          "aggregation",
+          "weightUnit",
+          "contributingConnectionCount",
+          "contributingWeightCount",
+          "missingWeightCount",
+          "weightMin",
+          "weightMax",
+          "synapseModels",
+          "contributingEdgeIds",
+          "scopeSummary"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "cells",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "sum",
+            "rightValue": "mean",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "geometry.sequence"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "nodeCount",
+          "valuedCellCount",
+          "presentWithMissingValueCellCount",
+          "presentWithoutValueCellCount",
+          "absentCellCount",
+          "notObservedCellCount",
+          "aggregation",
+          "connectionCount",
+          "weightUnit",
+          "aggregateMin",
+          "aggregateMax",
+          "synapseModelGroupStatement",
+          "colorScaleStatement",
+          "scopeStatement",
+          "snapshotTime",
+          "multapseStatement",
+          "compactionStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -2172,21 +4092,21 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
       "This figure models the weight matrix over a SINGLE declared node universe: rows are targets and columns are sources, both indexed by that universe (a recurrent population's square matrix; a disjoint source/target set is expressed by listing the union). A bipartite projection with two separately declared, differently ordered universes is not offered, because the topology validators read one `data.nodeUniverse`, and a two-universe shape would leave endpoint-in-universe and universe-completeness unenforced. Registry gap.",
-      "The diverging colour-domain straddle rule — a diverging scale requires contributing weights on both sides of the centre — is enforced only at the RENDER stage (RENDER_DIVERGING_SCALE_NO_CENTER). The request-validation pipeline has no semantic validator for it, so no living request-level invalid fixture asserts it. Registry gap.",
       "`count_weighted_mean` is named conditionally in the blueprint but is not defined in the multapse-aggregation registry, so it is not offered. Registry gap: it needs a precise definition before any implementation may accept it.",
       "`synapseModelGroup` records a caller-declared comparability claim. Cortexel verifies only that the group was DECLARED when two or more distinct synapse models are present (topology.weight_group_compatible checks presence, not content). It cannot verify that the declared group's model set exactly matches the models in the snapshot, nor that two synapse models' weights are actually comparable — both stay attributed to the caller. No registered disclosure id carries the claim, so it is surfaced through the accessible summary and the synapse-model table column. Registry gap.",
       "A `nest:weight` value has no SI meaning. Cortexel never converts, compares, or pools it across simulators, and it cannot check that the number means what the caller believes.",
-      "Under `mpi_target_rank_local` Cortexel cannot enumerate the rank's local target set, so an entirely empty row is reported as unobserved. This is conservative: it never asserts an absence it cannot support, and it therefore never confirms one either.",
+      "For mpi_target_rank_local the caller declares the exact rank-owned target set. Cortexel can check internal agreement with returned targets, but cannot independently prove that the caller omitted no owned zero-input target; truthfulness of that source declaration remains caller-owned.",
       "No colour-domain clamping parameter is offered, because no registered disclosure could carry a saturated-cell fact. The domain is always the extent of the finite aggregates.",
       "Within-cell dispersion is not drawn. A cell is one colour; the spread of its contributing weights is reachable only through the count and min/max table columns.",
-      "Axis tick labels are thinned above a bounded row/column count. Thinning a LABEL never removes a cell: every row and column stays individually addressable in the table and the sidecar.",
+      "Axis tick labels are thinned above a bounded row/column count. Thinning a LABEL never removes a painted cell or a row from the artifact-bound canonical request. Revision 2 returns every present-cell evidence row, including state, aggregation, contributor counts, observed min/max, models, caller-supplied ids, and bounded scopeSummary; it emits no detached sidecar and refuses requests above the complete-returned-table budget.",
       "The matrix is materialized sparsely. A dense export of a node universe beyond the profile's matrix-cell limit is refused rather than streamed."
     ]
   },
   "neuro.analog_trace": {
     "id": "neuro.analog_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Analog quantities over a declared time axis",
     "canonicalQuestion": "How did one or more declared analog quantities — each with its own kind and unit — evolve over a declared time window, without pretending that every signal is a membrane potential and without inventing values between the samples that were actually taken?",
@@ -2202,7 +4122,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -2303,7 +4223,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
       },
       {
@@ -2332,20 +4253,19 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "TABLE_EXCERPT_ONLY",
+      "UNCERTAINTY_COVERAGE_INCOMPLETE",
+      "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "line_envelope_minmax"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none",
@@ -2361,75 +4281,285 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         {
           "key": "seriesId",
           "header": "Series",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
           "description": "The caller's stable id from the seriesIds vector. Unique across the request."
         },
         {
           "key": "seriesLabel",
-          "header": "Label"
+          "header": "Label",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "quantityKind",
           "header": "Quantity",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The declared kind. `membrane_voltage` is a claim the caller made, not one Cortexel verified."
         },
         {
           "key": "observationKind",
           "header": "Observation",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "point_sample (joined by segments) or piecewise_constant (held, drawn as steps)."
         },
         {
           "key": "origin",
           "header": "Origin",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "recorded, or derived with the method that produced it. A derived value is never presented as a recorded one."
         },
         {
           "key": "time",
           "header": "Time",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "In the window's declared unit, after any recorded conversion."
         },
         {
           "key": "timeUnit",
-          "header": "Time unit"
+          "header": "Time unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "value",
           "header": "Value",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Empty when the observation is missing. A missing observation is not zero."
         },
         {
           "key": "valueUnit",
           "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The unit actually drawn, after any conversion. The original unit is preserved in the artifact."
         },
         {
           "key": "missing",
           "header": "Missing",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "true when this observation was null in the source."
         },
         {
           "key": "replicateCount",
           "header": "Replicates",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "How many samples at this timestamp produced this row. 1 for a single observation; greater than 1 means the row is an aggregate."
         },
         {
           "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
+          "header": "Uncertainty lower",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
+          "header": "Uncertainty upper",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "uncertaintyMethod",
-          "header": "Uncertainty method",
-          "description": "The variant, level, and basis. A dispersion is never relabelled as an interval."
+          "header": "Uncertainty declaration",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The exact variant metadata for this row: basis and sample count for dispersions/ranges; method, level and coverage for confidence intervals; method and both quantiles for quantile intervals. A dispersion is never relabelled as an interval."
         },
         {
           "key": "sourceOrdinal",
           "header": "Source row",
+          "cellType": "finite_number_or_string",
+          "nullable": false,
+          "keyPart": true,
           "description": "The sample's index in the caller's original array, before stable sorting. Every drawn point can be traced back to the row it came from."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.analog_trace.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "showSamplePoints"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "seriesId",
+          "seriesLabel",
+          "quantityKind",
+          "observationKind",
+          "origin",
+          "time",
+          "timeUnit",
+          "value",
+          "valueUnit",
+          "missing",
+          "replicateCount",
+          "uncertaintyLower",
+          "uncertaintyUpper",
+          "uncertaintyMethod",
+          "sourceOrdinal"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "samples",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "series_paths",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "uncertainty",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": true,
+            "rightValue": false,
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "geometry.sequence"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "seriesCount",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "layoutMode",
+          "quantitySummary",
+          "sampleCount",
+          "missingCount",
+          "excludedCount",
+          "duplicateTimePolicy",
+          "unitConversionStatement",
+          "uncertaintyStatement",
+          "compactionStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -2448,17 +4578,18 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "Registry 1.0 has no disclosure for a `derived` series, for the segment drawn between point samples, or for partial window coverage, though the blueprint asks for all three. Those facts reach the artifact, table and summary but raise no footer disclosure. The rules belong in the registry.",
       "Per-sample out-of-window exclusion has NO semantic validator in registry 1.0: events.within_window reads data.eventTimes, an events shape an analog trace does not carry, so it is not declared here. The exclusion count, its attribution, and the empty-panel refusal live in the render plan. A trace-shaped within-window validator would close this.",
       "series.equal_length has no index-wildcard pointer in registry 1.0, so the per-series time/value length checks are declared as an explicit enumeration of concrete indices (0..15), capping the figure at 16 series. ids.unique reads one flat id array, so series identity is declared in a single data.seriesIds vector rather than inside each series object.",
-      "Uncertainty is declared once at parameters.uncertainty (figure-level): uncertainty.valid and uncertainty.supported_variant read a single top-level object, so per-series uncertainty bands are outside the registry-1.0 validator surface and would need a per-series uncertainty validator.",
+      "Uncertainty is declared once at parameters.uncertainty (figure-level). The strict request validators check the object, and the render boundary checks bounds, lengths and unit conversion, but a non-`none` declaration can qualify only a one-series figure. Per-series uncertainty for multi-series analog figures would require a new request shape and validator.",
       "Registry 1.0 binds `derivative` to the per_time dimension, so a dimensioned derivative such as dV/dt (mV/ms) cannot be expressed. Calling it dimensionless or inventing a unit would be a false statement about the dimension, so the trace is refused. A `voltage_per_time` dimension would close this.",
-      "Only extrema-preserving compaction is accepted (`none`, `line_envelope_minmax`), so a one-sample transient always survives and COMPACTION_MAY_HIDE_TRANSIENTS can never fire here. The envelope is still not a resampled signal: marks drawn are not samples taken, and exact values come from the table.",
+      "Revision 2 advertises and executes only compaction policy `none`; `line_envelope_minmax` is registered but unimplemented for this skill. Accepted traces are drawn in full and a request above the visible-mark or complete-returned-table budget is refused. A future envelope implementation must preserve one-sample extrema and bind an exact complete table before it can be advertised.",
       "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that the channel was what the caller says it was, that a gain or reference was applied correctly upstream, or that a `derived` series was produced by the method it names.",
       "Nothing in this figure can recover a feature shorter than the sampling interval. Cortexel discloses the samples it was given; it cannot disclose what the sampler never saw."
     ]
   },
   "neuro.compartment_trace": {
     "id": "neuro.compartment_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Signal traces across the identified compartments of one cell",
     "canonicalQuestion": "How does a declared signal evolve over time in each identified compartment of ONE declared cell, with a compartment axis whose ordering basis is declared, disclosed, and never invented by Cortexel?",
@@ -2474,7 +4605,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -2519,9 +4650,13 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         }
       },
       {
+        "id": "compartment_trace.series_identity_declared"
+      },
+      {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
       },
       {
@@ -2552,21 +4687,17 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "DUPLICATE_TIMES_AGGREGATED",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "line_envelope_minmax",
-        "matrix_value_quantize"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none",
@@ -2581,72 +4712,307 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "tableColumns": [
         {
           "key": "cellId",
-          "header": "Cell"
+          "header": "Cell",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "rowIndex",
           "header": "Row",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Position on the compartment axis, in the declared order. It is not an anatomical coordinate."
         },
         {
           "key": "compartmentId",
-          "header": "Compartment"
+          "header": "Compartment",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "compartmentLabel",
-          "header": "Compartment label"
+          "header": "Compartment label",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "parentCompartmentId",
           "header": "Parent",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Empty for a root. Declared by the caller; Cortexel does not reconstruct the tree."
         },
         {
           "key": "pathDistance",
           "header": "Path distance",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "As declared. Empty is empty — it is never 0, because 0 is the soma."
         },
         {
           "key": "pathDistanceUnit",
-          "header": "Distance unit"
+          "header": "Distance unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "recorded",
           "header": "Recorded",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "`no` means the compartment was declared but never recorded. That is not the same fact as a missing sample."
         },
         {
           "key": "signalId",
-          "header": "Signal"
+          "header": "Signal",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true
         },
         {
           "key": "time",
-          "header": "Time"
+          "header": "Time",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": true
         },
         {
           "key": "timeUnit",
-          "header": "Time unit"
+          "header": "Time unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "value",
           "header": "Value",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The sample as supplied. Empty means missing; it is never drawn or tabulated as zero."
         },
         {
           "key": "unit",
-          "header": "Unit"
+          "header": "Unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "missing",
           "header": "Missing",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "true when this observation was null in the source. Distinct from `recorded: no`, which means the compartment has no series at all."
         },
         {
           "key": "sourceOrdinal",
           "header": "Source row",
+          "cellType": "finite_number_or_string",
+          "nullable": true,
+          "keyPart": true,
           "description": "The sample's index in the caller's original array, before the within-series stable sort."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.compartment_trace.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "data"
+            },
+            {
+              "tag": "field",
+              "name": "cellLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "cellId",
+          "rowIndex",
+          "compartmentId",
+          "compartmentLabel",
+          "parentCompartmentId",
+          "pathDistance",
+          "pathDistanceUnit",
+          "recorded",
+          "signalId",
+          "time",
+          "timeUnit",
+          "value",
+          "unit",
+          "missing",
+          "sourceOrdinal"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "samples",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "series_paths",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "heatmap_cells",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "aggregate",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "uncertainty",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority cell A",
+            "rightValue": "Authority cell B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "cellLabel",
+          "signalLabel",
+          "quantityKind",
+          "unit",
+          "compartmentCount",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "layoutMode",
+          "scaleStatement",
+          "compartmentOrderBasis",
+          "recordedCompartmentCount",
+          "notRecordedCount",
+          "sampleCount",
+          "missingSampleCount",
+          "valueMin",
+          "valueMax",
+          "duplicateTimeStatement",
+          "aggregateStatement",
+          "uncertaintyStatement",
+          "universeStatement",
+          "compactionStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -2673,8 +5039,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "neuro.correlogram": {
     "id": "neuro.correlogram",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Oriented lag correlogram between two event trains",
     "canonicalQuestion": "How many ordered (reference, target) event pairs fall at each lag, or what normalized lag statistic follows from those pairs, under a fixed lag orientation, an explicit zero-lag bin, a declared self-pair treatment, and a denominator that is stated rather than assumed?",
@@ -2686,11 +5053,12 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "Single-neuron refractoriness or bursting from a pooled multi-unit train. A pooled autocorrelogram counts cross-neuron coincidences as pairs, so its central region is not a refractory trough.",
       "That no coupling exists because no peak is visible. The bin width sets the temporal resolution: coupling jittered on a finer scale than the bin is smeared away, and weak coupling can sit inside the sampling noise of the counts.",
       "How self-pairs were treated, from the height of the centre bin. The treatment is recorded from what the algorithm actually did; it is never inferred from a zero-valued or a tall centre bin.",
-      "That the two trains were really observed over the declared window. Cortexel sees events, never recording extent. A window that overstates the recording inflates every eligible-reference denominator and depresses the rate."
+      "That the two trains were really observed over the declared window. Cortexel sees events, never recording extent. A window that overstates the recording inflates every eligible-reference denominator and depresses the rate.",
+      "That a declared recordedSenderIds array is externally complete. Cortexel proves that every supplied event belongs to exactly one explicit role universe and that cross universes are disjoint; only a bound source export can establish that silent recorded senders were not omitted."
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -2706,54 +5074,26 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         "id": "unit.dimension_match"
       },
       {
-        "id": "series.equal_length",
-        "parameters": {
-          "groups": [
-            [
-              "/data/eventTimes/values",
-              "/data/eventSenderIds"
-            ],
-            [
-              "/data/counts",
-              "/data/rates/values"
-            ]
-          ]
-        }
-      },
-      {
-        "id": "ids.unique",
-        "parameters": {
-          "pointers": [
-            "/data/recordedSenderIds"
-          ]
-        }
-      },
-      {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
       },
       {
-        "id": "bins.strictly_increasing"
+        "id": "correlogram.event_trains_valid"
       },
       {
-        "id": "events.within_window"
-      },
-      {
-        "id": "events.sender_universe_declared"
+        "id": "correlogram.roles_disjoint"
       },
       {
         "id": "correlogram.lag_range_valid"
       },
       {
+        "id": "correlogram.prebinned_axis_consistent"
+      },
+      {
         "id": "correlogram.statistic_denominator"
-      },
-      {
-        "id": "rate.denominator_positive"
-      },
-      {
-        "id": "rate.verify_normalization"
       },
       {
         "id": "uncertainty.valid"
@@ -2773,87 +5113,281 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "LAG_ORIENTATION",
       "ZERO_LAG_SELF_PAIRS_EXCLUDED",
       "PRE_BINNED_INPUT",
-      "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "MISSING_VALUES_PRESENT",
       "UNCERTAINTY_NOT_PROVIDED",
       "UNIT_CONVERTED",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 500000,
       "maxVisibleMarks": 20001,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
         "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Correlogram ({correlationKind}) of target {targetLabel} relative to reference {referenceLabel}. Positive lag means the target follows the reference. Lag axis {lagMin} to {lagMax} {lagUnit} in {binCount} bins of {binWidth} {lagUnit}; the zero-lag bin is centred on zero and spans {zeroBinStart} to {zeroBinEnd} {lagUnit}. Statistic: {statistic} in {valueUnit}. Denominator: {denominatorStatement}. {referenceEventCount} reference events and {targetEventCount} target events over {observationDuration} {timeUnit}. {pairsCounted} pairs counted; {pairsOutsideLagRange} pairs fell outside the lag range and are not counted. Self-pair treatment: {selfPairStatement}. Edge correction: {edgeCorrection}. Values range from {valueMin} to {valueMax}. {uncertaintyStatement}",
+      "summaryTemplate": "Correlogram ({correlationKind}): target {targetLabel} relative to reference {referenceLabel}. Positive lag means target follows reference. Declared senders, including silent: {referenceRecordedSenderCount} reference, {targetRecordedSenderCount} target. {binCount} left-closed/right-open bins of {binWidth} {lagUnit}, centred from {lagMin} to {lagMax}; positive outer edge excluded. {statistic} ({valueUnit}); denominator {denominatorStatement}. Events: {referenceEventCount} reference, {targetEventCount} target, over {observationDuration} {timeUnit}; {sourceAuthorityStatement}. Exact pairs: {candidatePairCount} candidate = {countedPairCount} in-range + {outOfRangePairCount} out-of-range + {sameEventSelfPairCountExcluded} same-event self-pairs excluded. {undefinedRateBinCount} rate bins are null because their eligible-reference count is zero. {uncertaintyStatement}",
       "tableColumns": [
         {
           "key": "lagBinStart",
           "header": "Lag bin start",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive lower edge: centre minus half a bin width."
         },
         {
           "key": "lagBinCenter",
           "header": "Lag centre",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The lag this bin is centred on. Positive means the target follows the reference."
         },
         {
           "key": "lagBinEnd",
           "header": "Lag bin end",
-          "description": "Exclusive upper edge, except for the final bin."
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exclusive upper edge for every bin, including the positive outer edge."
         },
         {
           "key": "pairCount",
           "header": "Pairs",
-          "description": "Exact integer count of ordered (reference, target) pairs whose lag falls in this bin. This is the raw observation everything else is derived from."
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exact integer count of ordered (reference, target) event pairs whose lag falls in this bin. It is the value for raw_pair_count and the numerator for target_rate_per_reference_event."
         },
         {
           "key": "eligibleReferenceEvents",
           "header": "Eligible reference events",
-          "description": "Reference events whose lag-shifted bin lies inside the observation window. Equal to the reference event count when the edge correction is none."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Reference events whose lag-shifted bin lies inside the observation window. Null for raw_pair_count, which has no denominator; for target_rate_per_reference_event it equals the reference event count when edge correction is none."
         },
         {
           "key": "denominator",
           "header": "Denominator",
-          "description": "The exact denominator used for this bin under the declared statistic. Empty for raw_pair_count and weighted_pair_sum, which have none."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Reference-event exposure in seconds: eligibleReferenceEvents multiplied by the typed bin width converted to seconds. It is 0 when the rate is undefined for zero exposure, and null for raw_pair_count, which has no denominator."
         },
         {
           "key": "value",
           "header": "Value",
-          "description": "Re-derived and verified from the pair count and the denominator. Empty where the denominator is zero and the statistic is undefined."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Re-derived from the exact pair count and branch denominator. Raw counts are always defined. A target-rate bin with zero eligible reference events is null, never fabricated as zero or NaN; valueStatus states that reason."
         },
         {
           "key": "valueUnit",
-          "header": "Unit"
+          "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
-          "key": "sampleCount",
-          "header": "Overlap bins (n)",
-          "description": "The number of overlapping bin pairs used for a Pearson coefficient at this lag. Empty for the other statistics."
+          "key": "valueStatus",
+          "header": "Value status",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exactly `defined` or `undefined_zero_eligible_reference_events`. The latter requires value null, denominator zero, eligibleReferenceEvents zero, and pairCount zero."
         },
         {
           "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
+          "header": "Uncertainty lower",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
+          "header": "Uncertainty upper",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.correlogram.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "data"
+            },
+            {
+              "tag": "field",
+              "name": "train"
+            },
+            {
+              "tag": "field",
+              "name": "label"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "lagBinStart",
+          "lagBinCenter",
+          "lagBinEnd",
+          "pairCount",
+          "eligibleReferenceEvents",
+          "denominator",
+          "value",
+          "valueUnit",
+          "valueStatus",
+          "uncertaintyLower",
+          "uncertaintyUpper"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "bins",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "uncertainty",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority train A",
+            "rightValue": "Authority train B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "correlationKind",
+          "targetLabel",
+          "referenceLabel",
+          "referenceRecordedSenderCount",
+          "targetRecordedSenderCount",
+          "binCount",
+          "binWidth",
+          "lagUnit",
+          "lagMin",
+          "lagMax",
+          "statistic",
+          "valueUnit",
+          "denominatorStatement",
+          "referenceEventCount",
+          "targetEventCount",
+          "observationDuration",
+          "timeUnit",
+          "sourceAuthorityStatement",
+          "candidatePairCount",
+          "countedPairCount",
+          "outOfRangePairCount",
+          "sameEventSelfPairCountExcluded",
+          "undefinedRateBinCount",
+          "uncertaintyStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -2870,20 +5404,22 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
       "The pairwise budget is the binding limit, not the observation limit: two trains of about 7,000 events each already reach the standard profile's 50,000,000-pair preflight bound, and larger trains are refused rather than attempted.",
-      "The unit registry has no code for the product of two simulator-defined weights. A weighted_pair_sum is carried under `nest:weight`, whose simulator_defined dimension forbids conversion and pooling, but that code understates it: the quantity is a weight SQUARED in the simulator's terms.",
+      "The unit registry has no code for a product of two simulator-defined incoming connection weights, and raw spike times do not retain those weights. weighted_pair_sum is therefore absent from the accepted statistic enum; supporting it later requires an explicit upstream weight authority, product quantity, unit semantics and verified summation rule.",
       "No disclosure id exists for a pooled multi-unit train. The pooled sender universe is stated in the summary and the table, but no mandatory footer line announces that an autocorrelogram is multi-unit; the registry gap is recorded rather than papered over with a caller note.",
       "No disclosure id exists for a pre-binned histogram whose source kept its self-pairs, so such input is refused outright instead of being drawn with a caveat that the registry cannot express.",
       "The figure refuses to compact. Merging adjacent lag bins would widen the bin width, which IS the scientific parameter of a correlogram: a 1 ms coincidence peak merged into 5 ms bins becomes a broad hump indistinguishable from slow rate co-modulation. Oversized lag axes are refused, not summarized.",
       "Pre-binned input cannot be re-binned or re-oriented. Cortexel checks the arithmetic that connects the counts to the values; it cannot check that the source binned or oriented them the way the request declares.",
       "A correlogram is a co-occurrence statistic. Connectivity, causality, and significance are outside it, and Cortexel adds no significance band that would suggest otherwise.",
-      "The pre-binned rate check reuses the shared rate vocabulary: recordedSenderCount carries the per-reference-event denominator and normalization its form, so rate.verify_normalization re-derives target_rate_per_reference_event from the integer pair counts.",
-      "Raw events are supplied as one pooled, window-shared stream (eventTimes, eventSenderIds, recordedSenderIds) with the reference and target event counts declared separately; the auto/cross distinction is a data-shape fact, not a caller-selected mode."
+      "Revision 2 accepts uncertainty kind none only. Dispersion or interval input needs a future branch whose units, missingness mask, table cells, summary, legend and geometry are all executable; accepting those arrays before that path exists would silently discard caller data.",
+      "A pre-binned target rate retains exact pair counts, exact role event counts, and either the referenceEventCount under edgeCorrection none or parallel eligibleReferenceEventCounts. Zero denominators are admitted only with zero numerator and compile to an explicit null-with-reason value. Cortexel derives every defined rate and the exact in-range/out-of-range/self-pair partition; it accepts no caller-supplied rate or accounting remainder. It still cannot verify that the upstream source counted or oriented events as declared.",
+      "Raw auto and cross inputs are separate products. events_auto has one train in both roles; events_cross has explicit referenceTrain and targetTrain containers with disjoint complete sender universes. Event counts and duration are derived from those role-local arrays and the shared typed window, never supplied twice."
     ]
   },
   "neuro.isi_distribution": {
     "id": "neuro.isi_distribution",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Inter-spike interval distribution",
     "canonicalQuestion": "How are within-train inter-spike intervals distributed across an explicitly declared selection of senders and trials, using intervals formed only between successive spikes of the same train?",
@@ -2898,7 +5434,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -2942,7 +5478,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
       },
       {
@@ -2959,9 +5496,6 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       },
       {
         "id": "isi.within_train_only"
-      },
-      {
-        "id": "isi.zero_interval_policy"
       },
       {
         "id": "histogram.normalization_consistent"
@@ -2985,116 +5519,302 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "UNCERTAINTY_NOT_PROVIDED",
       "MISSING_VALUES_PRESENT",
       "UNIT_CONVERTED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "histogram_merge_adjacent"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Inter-spike interval distribution for {selectionLabel}. {intervalCount} intervals formed within {trainCount} trains ({senderCount} senders x {trialCount} trials) from {spikeCount} spikes in the window {windowStart} to {windowStop} {timeUnit}. Intervals are formed only between successive spikes of the same train. {trainsWithoutIntervalCount} trains produced no interval. {excludedOutOfWindowCount} spikes fell outside the window. {binCount} bins span {binMin} to {binMax} {intervalUnit} on a {xScale} axis; {underRangeCount} intervals fell below and {overRangeCount} above that range. Normalization: {normalization}, values in {valueUnit}. No interval longer than {windowDuration} {timeUnit} can be observed. {zeroIntervalStatement} {uncertaintyStatement} {compactionStatement}",
+      "summaryTemplate": "Inter-spike interval distribution for {selectionLabel}. {intervalCount} intervals formed within {trainCount} trains ({senderCount} senders x {trialCount} trials) from {spikeCount} spikes in the exact half-open window {windowStart} to {windowStop} {timeUnit}. Intervals are formed only between successive spikes of the same train. {trainsWithoutIntervalCount} trains produced no interval. {excludedOutOfWindowCount} spikes fell outside the window. {binCount} bins span {binMin} to {binMax} {intervalUnit} on a {xScale} axis; {underRangeCount} intervals fell below and {overRangeCount} above that range. Normalization: {normalization}, values in {valueUnit}. No interval longer than {windowDuration} {timeUnit} can be observed. {zeroIntervalStatement} No sampling uncertainty was supplied or rendered.",
       "tableColumns": [
         {
           "key": "binStart",
           "header": "Bin start",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive lower edge, in the declared bin unit."
         },
         {
           "key": "binEnd",
           "header": "Bin end",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exclusive upper edge, except for the final bin, whose upper edge is inclusive."
         },
         {
           "key": "binWidth",
           "header": "Bin width",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The LINEAR width. It is the width used by the density denominator even when the axis is logarithmic."
         },
         {
           "key": "binUnit",
-          "header": "Bin unit"
+          "header": "Bin unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "count",
           "header": "Intervals",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exact integer count of intervals in this bin. This is the raw observation everything else is derived from; an empty bin is a measured zero, not missing data."
         },
         {
           "key": "probability",
           "header": "Probability",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "count / binned-interval total. Present only when normalization is probability."
         },
         {
           "key": "density",
           "header": "Density",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "count / (binned-interval total x linear bin width). Present only when normalization is density."
         },
         {
           "key": "densityUnit",
           "header": "Density unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The reciprocal of the bin unit, e.g. /ms for millisecond bins."
         },
         {
           "key": "binnedIntervalCount",
           "header": "Binned intervals",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The denominator. N_binned: the formed intervals that fell inside the bin range. Constant across rows. Without it, probability and density cannot be checked against count from the table alone."
         },
         {
           "key": "formedIntervalCount",
           "header": "Formed intervals",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Every interval formed within a train, including any the bin range excluded. It equals the denominator ONLY when no interval fell out of range; when it does not, the plotted probabilities describe a subset."
         },
         {
           "key": "underRangeCount",
           "header": "Below bin range",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Formed intervals below the first edge, excluded under outOfRangeIntervals: exclude_and_report. Never binned, never clipped into the first bin."
         },
         {
           "key": "overRangeCount",
           "header": "Above bin range",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Formed intervals above the last edge, excluded under outOfRangeIntervals: exclude_and_report. Never binned, never clipped into the final bin."
         },
         {
           "key": "trainCount",
           "header": "Trains",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Every train in the (selected senders x declared trials) universe, INCLUDING trains that produced no interval. An ISI histogram assembled from 3 of 200 trains is a figure about 3 neurons."
         },
         {
           "key": "spikeCount",
           "header": "In-window spikes",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The in-window spikes the intervals were formed from. A train with k in-window spikes yields exactly max(k - 1, 0) intervals — never k."
         },
         {
           "key": "excludedOutOfWindowCount",
           "header": "Spikes excluded (window)",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Spikes outside the declared window. They form no interval and are never clipped to the boundary; the right tail is censored by the window, not by the neuron."
-        },
-        {
-          "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
-        },
-        {
-          "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.isi_distribution.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "selectionLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "binStart",
+          "binEnd",
+          "binWidth",
+          "binUnit",
+          "count",
+          "probability",
+          "density",
+          "densityUnit",
+          "binnedIntervalCount",
+          "formedIntervalCount",
+          "underRangeCount",
+          "overRangeCount",
+          "trainCount",
+          "spikeCount",
+          "excludedOutOfWindowCount"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "bins",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority ISI A",
+            "rightValue": "Authority ISI B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "selectionLabel",
+          "intervalCount",
+          "trainCount",
+          "senderCount",
+          "trialCount",
+          "spikeCount",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "trainsWithoutIntervalCount",
+          "excludedOutOfWindowCount",
+          "binCount",
+          "binMin",
+          "binMax",
+          "intervalUnit",
+          "xScale",
+          "underRangeCount",
+          "overRangeCount",
+          "normalization",
+          "valueUnit",
+          "windowDuration",
+          "zeroIntervalStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -3114,20 +5834,19 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "The figure is a pooled mixture. Rate heterogeneity across senders inflates the apparent irregularity of the pooled distribution, so a CV or a heavy tail read off this figure is a property of the mixture, not of any neuron in it.",
       "Cortexel does not select bin edges. It records the choice and verifies the normalization; the choice remains the caller's, and it can change what the figure appears to show.",
       "A logarithmic COUNT axis is not offered. An empty bin is a measured zero and has no representable position on a log axis, and the disclosure registry has no rule covering its omission — so the figure declines rather than draw a bar that silently disappears.",
-      "Stage boundary: request-stage validation checks bin-edge monotonicity, window validity, id uniqueness, sender and trial-universe membership, unit dimension, undeclared zero-interval policy, and parallel-array length. The invalid examples exercise exactly these.",
-      "Value-level checks over SUPPLIED intervals — sign, magnitude against the window, and reconciliation against per-train spike counts — run in the DERIVATION stage after a request is structurally and semantically valid, so they carry no request-stage invalid vector here. The within-train stable sort also makes SCIENCE_NEGATIVE_INTERVAL unreachable for well-formed numeric event input.",
+      "Request validation now executes value-level checks over supplied intervals, including sign, magnitude against the exact window, per-train counts, composite train uniqueness and complete sender-by-trial train coverage. The within-train stable sort makes SCIENCE_NEGATIVE_INTERVAL unreachable for well-formed numeric event input but supplied interval mode can still reach it.",
       "Registry gap: the error registry has no dedicated code for formed intervals falling outside the declared bin range. At derivation, SCIENCE_BIN_EDGES_INVALID is reused as the closest registered code; a future SCIENCE_BIN_RANGE_INCOMPLETE would be more precise. At request stage the same code is produced directly by non-increasing bin edges.",
       "Registry gap: the error registry has no dedicated code for an interval count that contradicts its train's spike count. At derivation, SEMANTIC_LENGTH_MISMATCH is reused, which is accurate about the count disagreement but does not name the science. At request stage the same code is produced directly by a sender-linkage array of the wrong length.",
       "Registry gap: the disclosure registry has no rule for `mode: intervals` (raw spike times not observed) or for intervals excluded by outOfRangeIntervals. PRE_BINNED_INPUT is deliberately NOT reused: its text would state something false. Those facts ride in the receipt, table, and summary instead.",
-      "Registry gap: ids.unique takes array pointers only, so the composite (senderId, trialId) uniqueness of `trains` is specified normatively in scopeRules and needs a validator-parameter extension before it is mechanically enforced.",
-      "Trial-universe completeness is asserted by the caller declaring the full trialIds list; no structural flag or validator mechanically confirms completeness, so an incomplete list would understate the train count without being caught at the request stage.",
+      "A declared sender or trial universe can still be false at the source. Revision 2 verifies complete Cartesian train coverage against the declared lists, but cannot authenticate that the lists describe every sender or trial actually recorded.",
       "The log-scale nonpositive-domain refusal (RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN) is a render-stage check and never a request-stage semantic error, so it has no request-stage invalid vector."
     ]
   },
   "neuro.multisignal_trace": {
     "id": "neuro.multisignal_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Multiple biologically distinct signals on one declared clock",
     "canonicalQuestion": "How do several biologically distinct time-varying signals — each carrying its own entity, variable identity, quantity kind, and unit — evolve together on one declared clock, without any signal being relabelled, unit-coerced, or forced onto an axis whose dimension it does not share?",
@@ -3142,7 +5861,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -3263,13 +5982,15 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
       },
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/parameters/normalization/statisticsWindow"
+          "pointer": "/parameters/normalization/statisticsWindow",
+          "unitDimension": "time"
         }
       },
       {
@@ -3294,20 +6015,19 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "DUPLICATE_TIMES_AGGREGATED",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "TABLE_EXCERPT_ONLY",
+      "UNCERTAINTY_COVERAGE_INCOMPLETE",
+      "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "line_envelope_minmax"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none",
@@ -3322,125 +6042,412 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "tableColumns": [
         {
           "key": "seriesId",
-          "header": "Series"
+          "header": "Series",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true
         },
         {
           "key": "seriesLabel",
-          "header": "Label"
+          "header": "Label",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "entityId",
           "header": "Entity",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The entity the signal was recorded from."
         },
         {
           "key": "entityKind",
-          "header": "Entity kind"
+          "header": "Entity kind",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "compartmentId",
-          "header": "Compartment"
+          "header": "Compartment",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "pathwayId",
           "header": "Pathway",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The declared signalling pathway or projection. Recorded verbatim; never inferred from a variable name."
         },
         {
           "key": "variableId",
           "header": "Variable",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The source model's own name for the variable. A quantity kind alone cannot distinguish calcium from IP3: both are concentrations."
         },
         {
           "key": "panelId",
-          "header": "Panel"
+          "header": "Panel",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true
         },
         {
           "key": "observationKind",
           "header": "Observation kind",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "point_sample (joined by a straight segment) or piecewise_constant (held to the next sample and drawn as a step)."
         },
         {
           "key": "origin",
           "header": "Origin",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "recorded or derived. A derived series is never presented as a recorded one."
         },
         {
           "key": "originMethod",
           "header": "Derivation method",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The caller-declared algorithm behind a derived series. Cortexel records and displays it; it never re-derives or verifies it."
         },
         {
           "key": "recordedTime",
           "header": "Recorded time",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "AS SUPPLIED, before any declared offset. The raw time the source reported."
+        },
+        {
+          "key": "recordedTimeUnit",
+          "header": "Recorded time unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The source clock unit AS SUPPLIED. It may differ from the display-clock unit."
         },
         {
           "key": "timeOffset",
           "header": "Declared offset",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The offset added to the recorded time to place this series on the display clock. Zero under `same_clock`, where no offset may be declared at all."
+        },
+        {
+          "key": "timeOffsetUnit",
+          "header": "Declared offset unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The offset unit AS SUPPLIED. The derivation receipt records its one-step conversion into the display-clock unit."
         },
         {
           "key": "time",
           "header": "Time",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "On the display clock, after any declared offset. recordedTime + timeOffset."
         },
         {
           "key": "timeUnit",
-          "header": "Time unit"
+          "header": "Time unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "value",
           "header": "Value",
-          "description": "AS SUPPLIED, before any panel unit conversion or overlay normalization. This is the raw observation everything drawn is derived from."
+          "cellType": "finite_number_or_string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "AS SUPPLIED, before any panel unit conversion or overlay normalization. A duplicate-time aggregate carries the contributing raw values as a canonical JSON array; otherwise this is the scalar source observation."
         },
         {
           "key": "unit",
           "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "The unit as supplied."
         },
         {
           "key": "displayValue",
           "header": "Drawn value",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The value as drawn: converted into the panel unit, or mapped to a dimensionless ratio under normalized_overlay."
         },
         {
           "key": "displayUnit",
-          "header": "Drawn unit"
+          "header": "Drawn unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "missing",
           "header": "Missing",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "true when the observation is absent. It is never drawn as zero and never interpolated across."
         },
         {
           "key": "replicateCount",
           "header": "Replicates",
-          "description": "How many supplied samples share this timestamp. 1 unless duplicates were kept or aggregated; an aggregate row states how many replicates it combines."
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "How many supplied samples produced this table row. Kept replicates remain separate rows with 1 each; an aggregate row states how many replicates it combines."
         },
         {
           "key": "uncertaintyKind",
-          "header": "Uncertainty kind"
+          "header": "Uncertainty kind",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
+          "header": "Uncertainty lower",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
+          "header": "Uncertainty upper",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "uncertaintyMethod",
-          "header": "Uncertainty method",
-          "description": "The declared method and level of an interval variant. An interval with no method is never drawn as one."
+          "header": "Uncertainty declaration",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The exact row-level declaration: basis and sample count for dispersions/ranges; method, level and coverage for confidence intervals; method and both quantiles for quantile intervals. An interval with no method is never drawn as one."
+        },
+        {
+          "key": "normalizationParameters",
+          "header": "Normalization parameters",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Null outside normalized_overlay. Otherwise the exact per-series statistics window, sample count, and constants used for the affine map, serialized deterministically so every displayed value can be re-derived from the raw value."
         },
         {
           "key": "sourceRowIndex",
           "header": "Source row",
-          "description": "The original ordinal in the caller's array, retained through stable sorting so any drawn point can be traced back to the row it came from."
+          "cellType": "finite_number_or_string",
+          "nullable": false,
+          "keyPart": true,
+          "description": "The original ordinal in the caller's array, retained through stable sorting. A duplicate-time aggregate carries the contributing ordinals as a canonical JSON array."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.multisignal_trace.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "showSamplePoints"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "seriesId",
+          "seriesLabel",
+          "entityId",
+          "entityKind",
+          "compartmentId",
+          "pathwayId",
+          "variableId",
+          "panelId",
+          "observationKind",
+          "origin",
+          "originMethod",
+          "recordedTime",
+          "recordedTimeUnit",
+          "timeOffset",
+          "timeOffsetUnit",
+          "time",
+          "timeUnit",
+          "value",
+          "unit",
+          "displayValue",
+          "displayUnit",
+          "missing",
+          "replicateCount",
+          "uncertaintyKind",
+          "uncertaintyLower",
+          "uncertaintyUpper",
+          "uncertaintyMethod",
+          "normalizationParameters",
+          "sourceRowIndex"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "samples",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "series_paths",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "uncertainty",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": false,
+            "rightValue": true,
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "geometry.sequence"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "seriesCount",
+          "panelCount",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "windowBoundary",
+          "layout",
+          "timeAlignment",
+          "panelSummary",
+          "seriesSummary",
+          "observationKindStatement",
+          "originStatement",
+          "sampleCount",
+          "missingCount",
+          "duplicateTimePolicy",
+          "normalizationStatement",
+          "uncertaintyStatement",
+          "unitConversionStatement",
+          "compactionStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -3456,24 +6463,24 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "Panel membership (a series' panelId names a declared panel; a declared panel holds at least one series) has no semantic validator in this build, so an undeclared panelId or an empty declared panel is not refused during request validation. A `trace.panel_membership_declared` validator should own it.",
-      "`ids.unique` reads one flat identifier array, but this figure's series ids and panel ids live inside arrays of objects (data.series[].seriesId, parameters.panels[].panelId). No resolvable pointer exists, so the validator was removed; series-id and panel-id uniqueness are unenforced until the registry gains object-array pointer support.",
-      "`series.equal_length` resolves concrete JSON Pointers, not index wildcards, so its groups are enumerated per series index (0..3). A length mismatch in a later series index would not be caught until the registry adopts index-wildcard pointers.",
-      "`uncertainty.valid` and `uncertainty.supported_variant` read a single top-level parameters/data uncertainty; this figure carries uncertainty PER SERIES, which those validators do not traverse. Both were removed and per-series uncertainty is validated only structurally, pending a per-series uncertainty validator.",
-      "Because `unit.dimension_match` treats any {kind,unit} object as a physical quantity, a series uncertainty that carries a unit and a non-quantity kind (standard_deviation, confidence_interval, ...) is rejected as a dimension mismatch. Only kind:none series uncertainties validate until the walker excludes uncertainty nodes.",
-      "A non-positive `divide_by_baseline_mean` denominator is described by the science but has no semantic validator in this build, so a sign-flipping baseline is not refused at validation time. A normalization validator should own SCIENCE_DENOMINATOR_INVALID for this figure.",
-      "Log/symlog domain checks and the empty-panel RENDER_NO_DATA check belong to the render stage, which request validation does not reach; a non-positive log domain is not refused during validation.",
+      "Panel membership still has no request-stage semantic validator. The render boundary independently refuses undeclared membership, empty panels and duplicate panel or series identities before it builds geometry, so no series can be silently dropped or duplicated; a future `trace.panel_membership_declared` validator should move the same refusal earlier.",
+      "`ids.unique` reads one flat identifier array, but this figure's series ids and panel ids live inside arrays of objects (data.series[].seriesId, parameters.panels[].panelId). The request-stage validator cannot express those paths; the render boundary independently refuses duplicate ids before legend, table or geometry construction.",
+      "`series.equal_length` resolves concrete JSON Pointers, not index wildcards, so request-stage groups are enumerated per series index (0..3). The render boundary checks every later series and every uncertainty array before transformation; a future wildcard validator should move the same refusal earlier.",
+      "`uncertainty.valid` and `uncertainty.supported_variant` read a single top-level parameters/data uncertainty, while this figure carries uncertainty per series. The render boundary independently validates every series' variant, basis, levels, bounds, lengths, registered unit and dimensional compatibility, and transforms supported bounds through the same conversion/normalization map. A per-series semantic validator would move those checks before rendering.",
+      "A non-positive `divide_by_baseline_mean` denominator has no request-stage semantic validator. The render derivation computes the declared statistics window and refuses a non-finite or non-positive denominator with SCIENCE_NORMALIZATION_UNVERIFIABLE before geometry is emitted; a normalization validator should move that refusal earlier and own SCIENCE_DENOMINATOR_INVALID.",
+      "Log/symlog domain checks and the empty-panel RENDER_NO_DATA check belong to the render stage rather than request validation. The renderer applies the contract-owned transforms and refuses a non-positive log domain before geometry is emitted.",
       "Cortexel can verify that a unit's dimension matches its declared kind. It cannot verify that a channel was what the caller says it was, or that a `derived` series was produced by the method it names.",
       "Cortexel cannot verify that two recorders shared a clock. `same_clock` is a caller declaration; all Cortexel can do is refuse to draw signals on one time axis unless the caller states which clock they are on.",
       "Series may be sampled at different intervals. Cortexel never resamples onto a common grid, so a vertical alignment must not be read finer than the coarser series' sampling interval.",
-      "`line_envelope_minmax` compacts each series independently. Each series' drawn shape survives, but the drawn samples of two series are no longer paired; read paired values from the table.",
+      "The registered `line_envelope_minmax` policy is not advertised or executed by revision 2. Every accepted series is drawn in full; a request above the visible-mark or complete-returned-table budget is refused. A future independent per-series envelope would also need to state that its drawn marks are no longer paired and bind the complete exact table before it could be enabled.",
       "Two signals of the same dimension but different species (calcium and IP3 are both concentrations) may legally share an axis. Cortexel cannot know they are different molecules, which is why every series must declare a variableId, so the legend and the table can."
     ]
   },
   "neuro.phase_plane": {
     "id": "neuro.phase_plane",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
     "canonicalQuestion": "In a state space spanned by two declared state variables, where did the system's trajectory go, and what does a caller-computed vector field say about the flow at the points where it was actually evaluated?",
@@ -3492,7 +6499,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -3598,18 +6605,17 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "MISSING_VALUES_PRESENT",
       "UNIT_CONVERTED",
       "UNCERTAINTY_NOT_PROVIDED",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 250000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
         "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none"
@@ -3620,63 +6626,295 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         {
           "key": "rowKind",
           "header": "Row",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
           "description": "trajectory_point, field_sample, nullcline_point, or fixed_point. The four are never merged into one anonymous list of coordinates."
         },
         {
           "key": "elementId",
           "header": "Element",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true,
           "description": "Trajectory id, nullcline curve id, or fixed-point id."
+        },
+        {
+          "key": "sourceOrdinal",
+          "header": "Source ordinal",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": true,
+          "description": "Zero-based index within the owning trajectory-point, vector-field, nullcline-point, or fixed-point parallel-array carrier. Null only for a declared trajectory-universe member with no recorded point. It preserves duplicate field samples without inventing an external identity."
         },
         {
           "key": "time",
           "header": "Time",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Trajectory points only, in the declared time unit. This is the only column that distinguishes a fast excursion from a slow one."
         },
         {
           "key": "x",
           "header": "x",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The x state coordinate, in the x axis unit. Empty means MISSING, which breaks the path; it never means zero."
         },
         {
           "key": "y",
           "header": "y",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The y state coordinate, in the y axis unit."
         },
         {
           "key": "dxdt",
           "header": "dx/dt",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Caller-supplied. Cortexel never differentiates a trajectory numerically."
         },
         {
           "key": "dydt",
-          "header": "dy/dt"
+          "header": "dy/dt",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "derivativeUnit",
           "header": "Derivative unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "A reciprocal-time code. The FULL unit is the axis unit per this code: `/ms` on an axis in mV means mV per ms, not ms to the minus one."
         },
         {
           "key": "speed",
           "header": "Speed",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The magnitude on the declared basis. Axis-normalized speed is a display quantity that depends on the drawn extent; a physical magnitude is present only when both axes share a dimension."
         },
         {
           "key": "method",
           "header": "Method",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The named method for a nullcline or fixed point. Blank for measured points."
         },
         {
           "key": "residual",
           "header": "Residual",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "|dx/dt| and |dy/dt| at a fixed point, or the residual tolerance bounding the derivative along a nullcline."
         },
         {
           "key": "converged",
           "header": "Converged",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Re-derived by Cortexel from the residual and the tolerance, not copied from the caller's flag. `no` marks an unconverged candidate, not an equilibrium."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.phase_plane.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "data"
+            },
+            {
+              "tag": "field",
+              "name": "axes"
+            },
+            {
+              "tag": "field",
+              "name": "x"
+            },
+            {
+              "tag": "field",
+              "name": "label"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "rowKind",
+          "elementId",
+          "sourceOrdinal",
+          "time",
+          "x",
+          "y",
+          "dxdt",
+          "dydt",
+          "derivativeUnit",
+          "speed",
+          "method",
+          "residual",
+          "converged"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "field_vectors",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "trajectories",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "nullclines",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "fixed_points",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority x A",
+            "rightValue": "Authority x B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "yLabel",
+          "yUnit",
+          "xLabel",
+          "xUnit",
+          "trajectoryCount",
+          "trajectoryPointCount",
+          "timeStart",
+          "timeStop",
+          "timeUnit",
+          "timeDirection",
+          "fieldSampleCount",
+          "latticeKind",
+          "xDomainStart",
+          "xDomainStop",
+          "yDomainStart",
+          "yDomainStop",
+          "arrowScalingMode",
+          "magnitudeBasis",
+          "nullclineCount",
+          "fixedPointCount",
+          "missingStatement",
+          "uncertaintyStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -3708,8 +6946,9 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
   },
   "neuro.population_rate": {
     "id": "neuro.population_rate",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Population firing rate over time",
     "canonicalQuestion": "How does the event rate of a declared population change over time, using auditable raw counts and an explicitly declared denominator?",
@@ -3717,11 +6956,11 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "That the recorded senders are representative of any larger population.",
       "That a rate change was caused by any particular input, manipulation, or mechanism.",
       "The rate of neurons that were not recorded. A rate is computed over the DECLARED recorded universe and says nothing about anything outside it.",
-      "That a kernel-smoothed estimate reflects a real instantaneous rate rather than the bandwidth that was chosen."
+      "An instantaneous or kernel-smoothed rate. Revision 2 accepts literal event-count bins only; a kernel branch remains structurally absent until its executable kernel, edge policy, table, summary, legend and geometry exist together."
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -3762,7 +7001,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
       },
       {
@@ -3793,12 +7033,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "SOURCE_KIND_UNKNOWN",
       "SOURCE_AUTHENTICITY_UNVERIFIED",
       "REFERENCE_COMPARISON_NOT_RUN",
-      "EVENTS_EXCLUDED_OUT_OF_WINDOW",
-      "KERNEL_SMOOTHED_RATE",
       "UNCERTAINTY_NOT_PROVIDED",
       "PRE_BINNED_INPUT",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "TABLE_EXCERPT_ONLY",
       "UNIT_CONVERTED",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
@@ -3806,66 +7042,211 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "line_envelope_minmax"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Population firing rate for {populationLabel} over {windowStart} to {windowStop} {timeUnit}. {binCount} bins of {binWidth} {timeUnit}. {eventCount} events from {recordedSenderCount} recorded senders. Normalization: {normalization}. Rate ranges from {rateMin} to {rateMax} Hz. {uncertaintyStatement} {compactionStatement}",
+      "summaryTemplate": "Population firing rate for {populationLabel} over the exact half-open window {windowStart} to {windowStop} {timeUnit}. {binCount} literal bins contain {eventCount} events from {recordedSenderCount} recorded senders, including silent senders. Normalization: {normalization}. Rate ranges from {rateMin} to {rateMax} Hz. No sampling uncertainty was supplied or rendered.",
       "tableColumns": [
         {
           "key": "binStart",
           "header": "Bin start",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive lower edge."
         },
         {
           "key": "binEnd",
           "header": "Bin end",
-          "description": "Exclusive upper edge, except for the final bin."
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exclusive upper edge, including the final bin."
         },
         {
           "key": "binWidth",
-          "header": "Bin width"
+          "header": "Bin width",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "count",
           "header": "Events",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exact integer count. This is the raw observation everything else is derived from."
         },
         {
           "key": "recordedSenderCount",
           "header": "Recorded senders",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "The denominator. Includes senders that never fired."
         },
         {
           "key": "rate",
           "header": "Rate",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Derived and verified from the count and the denominator."
         },
         {
           "key": "rateUnit",
-          "header": "Unit"
-        },
-        {
-          "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
-        },
-        {
-          "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
+          "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.population_rate.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "populationLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "binStart",
+          "binEnd",
+          "binWidth",
+          "count",
+          "recordedSenderCount",
+          "rate",
+          "rateUnit"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "bins",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority population A",
+            "rightValue": "Authority population B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "populationLabel",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "binCount",
+          "eventCount",
+          "recordedSenderCount",
+          "normalization",
+          "rateMin",
+          "rateMax"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -3881,29 +7262,30 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "Kernel-smoothed rates are estimates whose shape depends on the chosen bandwidth. Cortexel renders what was asked for and discloses the parameters; it does not select a bandwidth for you.",
+      "Kernel-smoothed rates are intentionally unsupported in revision 2. Cortexel does not accept a bandwidth it cannot execute and surface completely.",
       "A rate is only as meaningful as the declared recorded universe. Cortexel can verify that the denominator is positive and that events belong to it; it cannot verify that the universe was recorded correctly."
     ]
   },
   "neuro.psth": {
     "id": "neuro.psth",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Peri-event time histogram (trial-aligned event counts)",
-    "canonicalQuestion": "How does the event count of a declared set of selected senders vary with time relative to a declared per-trial alignment event, using exact integer counts and an explicitly declared trial and sender denominator?",
+    "canonicalQuestion": "How does the event count of a declared selected-sender analysis vary with time relative to a declared per-trial alignment event, using exact integer counts and explicit trial and sender cardinality denominators? Events mode retains the selected-sender identities; prebinned mode retains only aggregate cardinality.",
     "cannotEstablish": [
       "That the declared alignment times mark the event they are labelled with. Cortexel aligns to the times it is given; it cannot verify that they are stimulus onsets rather than trial starts, or that they were corrected for display latency.",
       "That a modulation around the alignment instant was CAUSED by the aligning event. A PSTH shows temporal coincidence with a declared reference; a stimulus-locked artifact, a periodic background, or a slow drift across the session produce the same shape.",
       "That a response is time-locked rather than latency-jittered. Averaging over trials attenuates a response whose latency varies from trial to trial, so a flat PSTH is not evidence that no response occurred.",
-      "That any bin differs significantly from baseline. This contract renders counts, derived values, and declared uncertainty. It performs no test, applies no multiple-comparison correction across bins, and reports no p-value.",
+      "That any bin differs significantly from baseline. This revision renders counts and exact derived values but accepts no uncertainty marks. It performs no test, applies no multiple-comparison correction across bins, and reports no p-value.",
       "The instantaneous rate. A PSTH is an exact count in a finite bin: the height of a peak depends on the bin width that was chosen, and this contract offers no kernel estimate of an underlying intensity function.",
-      "The response of senders that were not selected, or of trials that were excluded. Every value is computed over the DECLARED included trials and selected senders and says nothing about anything outside them.",
+      "The response of senders that were not selected, or of trials that were excluded. Every value is computed over the caller-declared included-trial and selected-sender scope and says nothing about anything outside it. In prebinned mode Cortexel retains only exact scope cardinalities, not selected-sender identities or the included/excluded trial membership partition.",
       "That a bin no included trial covered has a rate of zero. That bin was not observed. It is reported as null, drawn as a gap, and never painted as a measured zero."
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -3951,7 +7333,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/relativeWindow"
+          "pointer": "/data/relativeWindow",
+          "unitDimension": "time"
         }
       },
       {
@@ -3988,101 +7371,438 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "MISSING_VALUES_PRESENT",
       "UNCERTAINTY_NOT_PROVIDED",
       "PRE_BINNED_INPUT",
+      "RECTANGULAR_SENDER_EXPOSURE_ASSERTED",
       "UNIT_CONVERTED",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "histogram_merge_adjacent"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Peri-event time histogram for {seriesLabel}, aligned to {alignmentLabel} at relative time 0. Relative window {windowStart} to {windowStop} {timeUnit}, {binCount} bins of {binWidth} {timeUnit}. {eventCount} events from {selectedSenderCount} selected senders over {includedTrialCount} included trials, {excludedTrialCount} excluded. Denominator policy: {denominatorPolicy}. Normalization: {normalization}. Values range from {valueMin} to {valueMax} {valueUnit}. {baselineStatement} {missingBinStatement} {excludedEventStatement} {uncertaintyStatement} {compactionStatement}",
+      "summaryTemplate": "Peri-event time histogram for {seriesLabel}, whose relative coordinates are aligned to {alignmentLabel} at time 0. Relative window {windowStart} to {windowStop} {timeUnit} with boundary {windowBoundary}; {zeroVisibilityStatement} {binCount} explicit bins whose individual widths and unit are retained in the complete table. {eventCount} events; selected-sender cardinality {selectedSenderCount}; included-trial cardinality {includedTrialCount}; excluded-trial cardinality {excludedTrialCount}. Denominator policy: {denominatorPolicy}. Normalization: {normalization}. Values range from {valueMin} to {valueMax} {valueUnit}. {baselineStatement} {missingBinStatement} {excludedEventStatement} {uncertaintyStatement}",
       "tableColumns": [
+        {
+          "key": "seriesId",
+          "header": "Series id",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
+          "description": "Stable caller-declared series identity, repeated so a detached CSV does not rely on a mutable or colliding label."
+        },
+        {
+          "key": "seriesLabel",
+          "header": "Series",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The caller-declared series label, or the stable series id when no display label was supplied; repeated so a detached CSV remains interpretable."
+        },
+        {
+          "key": "alignmentLabel",
+          "header": "Alignment",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The caller-declared meaning of relative time zero; unverified as an experimental fact."
+        },
         {
           "key": "binStart",
           "header": "Bin start (relative)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": true,
           "description": "Inclusive lower edge, measured from the alignment instant."
         },
         {
           "key": "binEnd",
           "header": "Bin end (relative)",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
           "description": "Exclusive upper edge; inclusive only for the final bin of a closed window."
         },
         {
           "key": "binWidth",
-          "header": "Bin width"
+          "header": "Bin width",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false
+        },
+        {
+          "key": "binUnit",
+          "header": "Bin unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Registered unit shared by binStart, binEnd, and binWidth."
+        },
+        {
+          "key": "relativeWindowStart",
+          "header": "Relative-window start",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false
+        },
+        {
+          "key": "relativeWindowStop",
+          "header": "Relative-window stop",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false
+        },
+        {
+          "key": "relativeWindowUnit",
+          "header": "Relative-window unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
+        },
+        {
+          "key": "relativeWindowBoundary",
+          "header": "Relative-window boundary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The membership convention, retained independently of the bin-placement convention."
+        },
+        {
+          "key": "binBoundary",
+          "header": "Bin boundary",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The placement convention. PSTH requires it to agree with the relative-window membership boundary."
+        },
+        {
+          "key": "finalEdgeInclusive",
+          "header": "Final edge inclusive",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Whether the last authoritative bin accepts its final edge. A closed relative window requires true."
         },
         {
           "key": "count",
           "header": "Events",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Exact integer count. Null means no included trial covered this bin — it is not a measured zero. This is the raw observation everything else is derived from."
         },
         {
           "key": "trialDenominator",
           "header": "Covering trials",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "Included trials that fully cover this bin. The denominator for this bin."
         },
         {
           "key": "includedTrialCount",
           "header": "Included trials",
-          "description": "Every trial in the analysis. Constant across bins. Under `per_bin_covering_trials` it is the ceiling the covering-trial count is read against, so a bin estimated from fewer trials is visible in the table alone."
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exact included cardinality, constant across bins. Under `per_bin_covering_trials` it is the ceiling the covering-trial count is read against. Prebinned mode does not retain which trial ids are included."
         },
         {
           "key": "excludedTrialCount",
           "header": "Excluded trials",
-          "description": "Trials recorded, declared, and deliberately excluded. Constant across bins. They enter no numerator and no denominator; the table states them so the denominator basis is readable without the summary."
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exact excluded cardinality, constant across bins. Excluded trials enter no numerator or denominator. Prebinned mode does not retain which trial ids are excluded."
         },
         {
           "key": "excludedOutOfWindowCount",
           "header": "Events excluded (out of window)",
-          "description": "Events whose relative time fell outside the relative window — including one at exactly relStop under the half-open convention — and so entered no bin. Constant across bins. Counted and reported, never silently dropped."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "In events mode, events whose relative time fell outside the relative window — including one at exactly relStop under the half-open convention — and so entered no bin. Constant across bins, counted, and reported. Null in prebinned mode because no source event list exists to audit."
         },
         {
           "key": "selectedSenderCount",
           "header": "Selected senders",
-          "description": "Includes senders that never fired. Used only by the per-sender normalization."
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Exact selected cardinality, including silent selected senders. Used only by the per-sender normalization. Prebinned mode does not retain sender identities."
+        },
+        {
+          "key": "normalization",
+          "header": "Normalization",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The closed normalization id, repeated so `Value` cannot be detached from its denominator semantics."
+        },
+        {
+          "key": "denominatorPolicy",
+          "header": "Denominator policy",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
+        },
+        {
+          "key": "senderExposurePolicy",
+          "header": "Sender-exposure policy",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Null unless the per-selected-sender rate is requested; otherwise the explicit nonverifiable rectangular-exposure assertion."
         },
         {
           "key": "value",
           "header": "Value",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The normalized value, re-derived and verified from the count, the denominator, and the bin width."
         },
         {
           "key": "valueUnit",
-          "header": "Unit"
+          "header": "Unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "baselineCorrectedValue",
           "header": "Value minus baseline",
-          "description": "Signed difference from the baseline rate; may be negative. Absent when no baseline was requested. It never replaces the count."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "One-round exact signed difference from the aggregate baseline rate; may be negative. Null when no baseline was requested. It never replaces the count."
         },
         {
-          "key": "uncertaintyLower",
-          "header": "Uncertainty lower"
+          "key": "baselineMode",
+          "header": "Baseline mode",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The closed correction id; null when no baseline was requested."
         },
         {
-          "key": "uncertaintyUpper",
-          "header": "Uncertainty upper"
+          "key": "baselineRate",
+          "header": "Baseline rate",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Aggregate raw-count-over-exposure baseline in valueUnit; null when absent."
+        },
+        {
+          "key": "baselineStart",
+          "header": "Baseline start",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
+        },
+        {
+          "key": "baselineStop",
+          "header": "Baseline stop",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false
+        },
+        {
+          "key": "baselineUnit",
+          "header": "Baseline unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.psth.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "normalization"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "seriesId",
+          "seriesLabel",
+          "alignmentLabel",
+          "binStart",
+          "binEnd",
+          "binWidth",
+          "binUnit",
+          "relativeWindowStart",
+          "relativeWindowStop",
+          "relativeWindowUnit",
+          "relativeWindowBoundary",
+          "binBoundary",
+          "finalEdgeInclusive",
+          "count",
+          "trialDenominator",
+          "includedTrialCount",
+          "excludedTrialCount",
+          "excludedOutOfWindowCount",
+          "selectedSenderCount",
+          "normalization",
+          "denominatorPolicy",
+          "senderExposurePolicy",
+          "value",
+          "valueUnit",
+          "baselineCorrectedValue",
+          "baselineMode",
+          "baselineRate",
+          "baselineStart",
+          "baselineStop",
+          "baselineUnit"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "bins",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "uncertainty",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "count",
+            "rightValue": "count_per_trial",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "geometry.sequence"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "seriesLabel",
+          "alignmentLabel",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "windowBoundary",
+          "zeroVisibilityStatement",
+          "binCount",
+          "eventCount",
+          "selectedSenderCount",
+          "includedTrialCount",
+          "excludedTrialCount",
+          "denominatorPolicy",
+          "normalization",
+          "valueMin",
+          "valueMax",
+          "valueUnit",
+          "baselineStatement",
+          "missingBinStatement",
+          "excludedEventStatement",
+          "uncertaintyStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -4099,39 +7819,43 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
       "No BASELINE_CORRECTED disclosure id exists in disclosures.v1.json 1.0, so the baseline window, method, and derived baseline value are surfaced through the deterministic summary and the table rather than through a disclosure rule. A future registry revision should register one.",
-      "The unit registry has no `rate_change` quantity kind. A baseline-subtracted value is a signed difference of rates, carried as `firing_rate` in Hz: dimensionally correct, but the kind does not encode that it may be negative. The column is headed \"Value minus baseline\" so it is not read as a rate.",
+      "The unit registry has no `rate_change` quantity kind. A baseline-subtracted value is a signed difference of rates, carried as `firing_rate` in the declared frequency unit (Hz in the events-mode default): dimensionally correct, but the kind does not encode that it may be negative. The column is headed \"Value minus baseline\" so it is not read as a rate.",
       "Baseline ratio and z-score modes are not offered. A ratio to baseline is undefined whenever the baseline count is zero — the common case for a sparse neuron — and a z-score needs a dispersion denominator the 1.0 validator registry has no entry for. Cortexel refuses rather than emit an infinity.",
-      "`histogram_merge_adjacent` is registered with `appliesTo: [\"distribution\"]`. A PSTH is a binned count over time, but the policy's semantics — merge adjacent bins only, sum raw counts — are what it needs; the tag should be widened. Extrema sampling would drop whole bins and is refused.",
-      "Merging is refused when the merged bins do not share a trial denominator: a summed count over a changing exposure has no single rate, and re-deriving one would silently average two different experiments.",
-      "Relative times are a binary64 difference of absolute times. At an absolute clock of 1e9 ms the resolution of that difference is about 2.4e-7 ms — far below any realistic bin width — but microsecond bins on a multi-day clock approach that limit, and Cortexel does not currently refuse it.",
+      "Revision 2 ships no PSTH compaction and no digest-bound complete table sidecar. A request above the active complete-returned-table limit is refused before derivation; bins are never merged, sampled, excerpted, or silently dropped.",
+      "Relative times are formed by one exact typed subtraction and one final rounding to binary64. Cortexel rejects overflow, underflow to an unusable exposure, and converted endpoint collapse, but finite binary64 inputs carry no metadata about the source instrument's precision; it therefore cannot establish that an otherwise representable relative time has scientifically adequate resolution for the chosen bins.",
       "A per-bin trial denominator means the bins of one figure are not all estimated from the same trials. Each bin's denominator is in the table, but two bins with different denominators are not directly comparable as samples of one thing.",
       "Cortexel validates that a per-bin denominator does not exceed the included-trial count; in prebinned mode it cannot verify that the denominator corresponds to trials that actually covered the bin.",
+      "Prebinned revision 2 retains exact sender and trial cardinalities but not selected-sender identities or the included/excluded membership partition of `trialIds`. Aggregate counts cannot prove those identities; PRE_BINNED_INPUT states that they are unrecoverable.",
+      "Neither raw spike rows nor prebinned counts prove that every selected sender was observable throughout every counted trial/bin. The per-selected-sender normalization therefore requires an explicit rectangular-exposure assertion and emits RECTANGULAR_SENDER_EXPOSURE_ASSERTED; heterogeneous sender exposure requires a future count-and-exposure contract.",
+      "A positive scientific bin can be narrower than the deterministic SVG coordinate grid at a requested output width. Cortexel refuses such a render with RENDER_DEGENERATE_DOMAIN rather than invisibly collapse the bin, widen it to a pixel, or overlap its neighbours; the complete numeric request remains valid for a wider output or a scientifically justified wider binning.",
       "The trial universe is declared columnar: a flat `trialIds` array with a positionally parallel `alignmentTimes`. That is what lets ids.unique read a real array, events.trial_universe_declared read a real universe, and psth.alignment_declared read a real alignment, rather than a `/data/trials/rows/*/id` pointer the pipeline cannot resolve.",
-      "Per-trial `included`, `exclusionReason`, and `coverage` metadata are derivation-stage inputs, not fields of this request schema; the semantic layer validates the declared universe, its ids, the alignment, and the denominator, while coverage consistency under `per_bin_covering_trials` is checked when the bins are formed.",
+      "Revision 2 has no per-trial inclusion or coverage records in events mode. Consequently every declared events-mode trial is included, `excludedTrialCount` is zero, and the root request schema permits only `uniform_trial_count`. Partial coverage must use prebinned counts plus explicit per-bin denominators.",
       "`events.within_window` is not declared for this figure: it compares absolute event times against a single absolute `/data/window`, but a PSTH's membership window is RELATIVE and resolved per trial against each alignment time. Relative-window membership and the excluded-event count are enforced at the derivation stage, which owns the alignment.",
       "`rate.verify_normalization` is not declared for this figure: it re-derives count / (recordedSenderCount x binWidth) from a `/data/binEdges` vector — the population-rate denominator — whereas a PSTH divides by a per-bin trial denominator and keeps one authoritative bin vector at `/parameters/bins`. Supplied `rates` are re-derived at the derivation stage instead."
     ]
   },
   "neuro.response_curve": {
     "id": "neuro.response_curve",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Input-response curve across declared conditions",
     "canonicalQuestion": "How does a declared response statistic vary with a declared controlled input across an explicitly declared set of conditions, with every repeat, its sample count, and every exclusion accounted for?",
     "cannotEstablish": [
       "That the input CAUSED the response. Conditions are compared, not randomized; a monotone curve is equally consistent with an uncontrolled covariate that co-varied with condition order (a seed schedule, a warm-up, a parameter changed alongside the input).",
       "The response at any input level that was not run. There is no interpolation between conditions and no extrapolation beyond them; the guide line has no value between two points and is not a prediction.",
-      "A threshold, a slope, a gain, a rheobase, or an EC50. Revision 1 renders no fitted model, and a threshold read off a guide line is an artifact of the condition spacing, not a measurement.",
+      "A threshold, a slope, a gain, a rheobase, or an EC50. Revision 2 renders no fitted model, and a threshold read off a guide line is an artifact of the condition spacing, not a measurement.",
       "That the curve is smooth or monotone between conditions. A response that is strongly non-monotone at an unsampled input would produce exactly this figure.",
       "That the repeats are independent. Repeats sharing a seed, a network realization, or a cell are not n independent samples, and a standard error computed as if they were is too small by an unknown factor. Cortexel records the declared design; it cannot check it.",
-      "That a peak response is a property of the system rather than of the bin width or bandwidth used to estimate it. Halving the bin width can roughly double a reported peak rate.",
+      "That a peak firing rate is a property of the system rather than of the bin width or bandwidth used to estimate it. Halving the bin width can roughly double a reported peak rate.",
+      "That the caller-declared event selection matches an unavailable simulator, recorder, or paper. Cortexel checks the eventScope variant, literals, identifier syntax/set cardinality, normalization compatibility, and portable arithmetic; it cannot establish the external referents of selectionId or member identifiers, the truth of recordedSenderCount or completeness, that pooling was actually performed, a digest preimage, or that a supplied count, latency, or peak was computed from that selection.",
       "That the response values are raw. Cortexel cannot detect a baseline subtraction, a normalization, or any other transform the caller applied before sending.",
       "That the conditions are comparable. They are usually separate simulation runs, and nothing in this contract can verify that they shared a model, a network realization, or a seed policy."
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -4154,9 +7878,11 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
               "/data/conditions/ids",
               "/data/conditions/labels",
               "/data/conditions/input/values",
+              "/data/observations/attemptedCounts",
               "/data/aggregates/response/values",
               "/data/aggregates/sampleCounts",
               "/data/aggregates/excludedCounts",
+              "/data/aggregates/trimmedCounts",
               "/parameters/uncertainty/values",
               "/parameters/uncertainty/lower",
               "/parameters/uncertainty/upper",
@@ -4166,7 +7892,8 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
               "/data/observations/conditionIds",
               "/data/observations/repeatIds",
               "/data/observations/response/values",
-              "/data/observations/response/audit/eventCounts"
+              "/data/observations/response/audit/eventCounts",
+              "/data/observations/response/audit/peakBinCounts"
             ]
           ]
         }
@@ -4182,14 +7909,12 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/measurementWindow"
+          "pointer": "/data/measurementWindow",
+          "unitDimension": "time"
         }
       },
       {
         "id": "response_curve.estimator_declared"
-      },
-      {
-        "id": "rate.denominator_positive"
       },
       {
         "id": "uncertainty.valid"
@@ -4207,118 +7932,443 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "SOURCE_AUTHENTICITY_UNVERIFIED",
       "REFERENCE_COMPARISON_NOT_RUN",
       "AGGREGATE_WITHOUT_RAW_REPEATS",
+      "EVENT_SCOPE_EXTERNAL_AUTHORITY_UNVERIFIED",
+      "EVENT_SCOPE_MEMBERSHIP_CARDINALITY_ONLY",
       "UNCERTAINTY_NOT_PROVIDED",
       "MISSING_VALUES_PRESENT",
       "UNIT_CONVERTED",
-      "TABLE_EXCERPT_ONLY",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
     ],
     "budgets": {
       "maxObservations": 20000,
       "maxVisibleMarks": 50000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
         "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
-      "none",
-      "standard_deviation",
-      "standard_error",
-      "confidence_interval",
-      "quantile_interval",
-      "ensemble_range"
+      "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Response curve {curveLabel}: {responseMethod} in {responseUnit} against {inputLabel} in {inputUnit} on a {inputScale} scale, across {conditionCount} {axisKind} conditions. Estimator {estimator} over {retainedCount} of {attemptedCount} repeats; {excludedCount} repeats had an undefined response and were excluded. Repeat design: {repeatDesign}. Response basis: {responseBasis}. Measurement window {windowStart} to {windowStop} {timeUnit}. Response ranges from {responseMin} to {responseMax} {responseUnit}. {uncertaintyStatement} {aggregationStatement} {lineStatement}",
+      "summaryTemplate": "Response curve {curveLabel}: {responseMethod} in {responseUnit} against {inputLabel} in {inputUnit} on a {inputScale} scale, across {conditionCount} {axisKind} conditions. Caller-declared event scope {eventScopeKind}, selection {eventSelectionId}, membership {eventMembershipBinding}, selected event trains {selectedEventTrainCount}, recorded senders {recordedSenderCount}; rate normalization {rateNormalization}. Estimator {estimator} retained {retainedCount} of {attemptedCount} repeats; {trimmedCount} defined responses were removed symmetrically by trimming and {excludedCount} attempted repeats had an undefined response. Declared repeat design: {repeatDesign}. Response basis: {responseBasis}. Measurement window {windowStart} to {windowStop} {timeUnit}. Response ranges from {responseMin} to {responseMax} {responseUnit}. {uncertaintyStatement} {aggregationStatement} {lineStatement}",
       "tableColumns": [
         {
           "key": "conditionId",
-          "header": "Condition"
+          "header": "Condition",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true
         },
         {
           "key": "conditionLabel",
-          "header": "Condition label"
+          "header": "Condition label",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "input",
           "header": "Input",
+          "cellType": "finite_number_or_string",
+          "nullable": true,
+          "keyPart": false,
           "description": "The controlled input level. Empty on an ordinal or nominal axis, which has no numeric input and must not be given one."
         },
         {
           "key": "inputUnit",
-          "header": "Input unit"
+          "header": "Input unit",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "repeatId",
           "header": "Repeat",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": true,
           "description": "Present on a raw repeat row. Empty on an aggregate row."
         },
         {
           "key": "response",
           "header": "Response",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The measured response of this repeat, or the estimate on an aggregate row."
         },
         {
           "key": "responseUnit",
-          "header": "Response unit"
+          "header": "Response unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "responseMethod",
           "header": "Method",
-          "description": "What the number is: a mean rate, a peak rate, a first-spike latency, a count, a voltage, or a declared state variable."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "What the number is: a mean firing rate, a peak firing rate, a first-spike latency, or an event count."
+        },
+        {
+          "key": "rateNormalization",
+          "header": "Rate normalization",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "For a rate: single_train_rate, pooled total_event_rate, or mean_rate_per_recorded_sender. Empty for non-rate responses. A frequency unit alone does not identify this denominator."
+        },
+        {
+          "key": "recordedSenderCount",
+          "header": "Recorded senders",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "The selected recorded-sender cardinality, including silent senders, for pooled_recorded_senders. Empty for single_train because one event train does not prove one underlying recorded sender. Only mean_rate_per_recorded_sender uses this value as an arithmetic divisor."
         },
         {
           "key": "missing",
           "header": "Undefined",
-          "description": "True when the repeat was attempted and its response is undefined. It is never rendered as zero and never removed from the attempted count."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "True when a raw repeat response or aggregate condition estimate is undefined. An attempted undefined repeat is never rendered as zero and never removed from the attempted count."
         },
         {
           "key": "estimator",
-          "header": "Estimator"
+          "header": "Estimator",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false
         },
         {
           "key": "sampleCount",
           "header": "n retained",
-          "description": "Repeats entering the estimator. Never the attempted count."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Repeats entering the estimator on a condition-estimate row; null on a raw-repeat row. Never the attempted count."
         },
         {
           "key": "excludedCount",
           "header": "n excluded",
-          "description": "Repeats attempted whose response was undefined."
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Repeats attempted whose response was undefined on a condition-estimate row; null on a raw-repeat row."
         },
         {
           "key": "responseBasis",
           "header": "Basis",
-          "description": "The bin width or kernel that produced a peak response, and the measurement window otherwise. A peak rate has no value independent of it."
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The event-selection scope and pooling order, full rate normalization and sender denominator where applicable, measurement window, and—when the response is a peak—the bin or mathematically identified kernel support/evaluation policy. A response has no scope-independent meaning."
         },
         {
           "key": "uncertaintyKind",
-          "header": "Uncertainty"
+          "header": "Uncertainty",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Condition-estimate uncertainty kind; null on a raw-repeat row."
         },
         {
           "key": "uncertaintyValue",
           "header": "Uncertainty value",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The DISPERSION (standard deviation or standard error) for this condition. A dispersion is not an interval: it is reported here and never in the bound columns, because +/- one SD is not a coverage statement."
         },
         {
           "key": "uncertaintyLower",
           "header": "Uncertainty lower",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The lower BOUND of an interval variant. Empty for a dispersion."
         },
         {
           "key": "uncertaintyUpper",
           "header": "Uncertainty upper",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
           "description": "The upper BOUND of an interval variant. Empty for a dispersion."
         },
         {
           "key": "uncertaintyBasis",
           "header": "Uncertainty basis",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "What the uncertainty was computed over (trials, neurons, ensemble members, bootstrap draws, replicates), plus the level or quantiles and the method where the variant carries them."
+        },
+        {
+          "key": "estimatorRole",
+          "header": "Estimator role",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
+          "description": "Raw rows are retained, trimmed_low, trimmed_high, or undefined; aggregate rows are aggregate_estimate. This makes every raw observation's treatment explicit."
+        },
+        {
+          "key": "trimmedCount",
+          "header": "n trimmed",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "On an aggregate row, the total number of finite responses removed symmetrically from the two tails. Zero for mean and median. Empty on raw rows, whose estimatorRole identifies each trimmed observation."
+        },
+        {
+          "key": "peakBinCount",
+          "header": "Peak-bin count audit",
+          "cellType": "finite_number",
+          "nullable": true,
+          "keyPart": false,
+          "description": "For a raw binned-count peak, the exact caller-supplied max-bin event count bound to this repeat. Empty for aggregate rows, kernel peaks, and non-peak responses."
+        },
+        {
+          "key": "peakCountDerivationAlgorithm",
+          "header": "Peak-count derivation",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
+          "description": "Names the exact count-level one-round algorithm used to re-derive this defined raw binned repeat rate or defined condition estimate. Empty on undefined rows/estimates, when no raw peak-bin count audit applies, or when that audit is entirely null and no derivation was applicable."
+        },
+        {
+          "key": "eventScopeKind",
+          "header": "Declared event scope",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "single_train means one selected spike train with no recorded-sender-cardinality claim. pooled_recorded_senders means the declared sender trains were superposed before the temporal response operation."
+        },
+        {
+          "key": "eventSelectionId",
+          "header": "Declared event selection",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The stable caller-declared identity of the selection shared by every condition and repeat. Cortexel binds and surfaces it but cannot verify it against an unavailable external recorder."
+        },
+        {
+          "key": "eventMembershipBinding",
+          "header": "Membership binding",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "How sender membership is identified: the single-train identity, explicit unique sender ids (shown through a canonical membership digest), an externally retained canonical sender-id digest, or cardinality-only with a mandatory limitation disclosure."
+        },
+        {
+          "key": "selectedEventTrainCount",
+          "header": "Selected event trains",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The number of event trains entering the declared pooling operator: one for single_train and recordedSenderCount for pooled_recorded_senders. This is structural authority, not verification against an external recorder."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.response_curve.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "parameters"
+            },
+            {
+              "tag": "field",
+              "name": "curveLabel"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "conditionId",
+          "conditionLabel",
+          "input",
+          "inputUnit",
+          "repeatId",
+          "response",
+          "responseUnit",
+          "responseMethod",
+          "rateNormalization",
+          "recordedSenderCount",
+          "missing",
+          "estimator",
+          "sampleCount",
+          "excludedCount",
+          "responseBasis",
+          "uncertaintyKind",
+          "uncertaintyValue",
+          "uncertaintyLower",
+          "uncertaintyUpper",
+          "uncertaintyBasis",
+          "estimatorRole",
+          "trimmedCount",
+          "peakBinCount",
+          "peakCountDerivationAlgorithm",
+          "eventScopeKind",
+          "eventSelectionId",
+          "eventMembershipBinding",
+          "selectedEventTrainCount"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "conditions",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "series_paths",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          },
+          {
+            "tag": "geometry_class",
+            "id": "uncertainty",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": "Authority response A",
+            "rightValue": "Authority response B",
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "curveLabel",
+          "responseMethod",
+          "responseUnit",
+          "inputLabel",
+          "inputUnit",
+          "inputScale",
+          "conditionCount",
+          "axisKind",
+          "eventScopeKind",
+          "eventSelectionId",
+          "eventMembershipBinding",
+          "selectedEventTrainCount",
+          "recordedSenderCount",
+          "rateNormalization",
+          "estimator",
+          "retainedCount",
+          "attemptedCount",
+          "trimmedCount",
+          "excludedCount",
+          "repeatDesign",
+          "responseBasis",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "responseMin",
+          "responseMax",
+          "uncertaintyStatement",
+          "aggregationStatement",
+          "lineStatement"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -4326,7 +8376,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         "name": "elephant.statistics.mean_firing_rate",
         "version": "1.2.1",
         "status": "not_run",
-        "notes": "Elephant divides the event count of ONE SpikeTrain by (t_stop - t_start); Cortexel additionally divides by the recorded-sender count, so the comparison is only parameter-for-parameter meaningful with recordedSenderCount = 1 and an identical half-open window. scipy.stats.trim_mean is the intended oracle for the trimming convention, where the fraction is removed from EACH tail. The pinned reference environment has NOT been executed here, so the status is not_run rather than assumed."
+        "notes": "Elephant 1.2 mean_firing_rate over one SpikeTrain counts the documented [t_start,t_stop] interval inclusively, so it is an oracle for Cortexel single_train_rate only when endpoint membership is made identical—for example a closed Cortexel window, or a half-open window with no event exactly at the excluded stop. Equal numeric endpoints alone are insufficient. A pooled or per-sender Cortexel rate is comparable only after also making Elephant's train axis/pooling behavior and sender universe parameter-for-parameter identical. Elephant instantaneous_rate exposes sampling period, kernel, cutoff/trim, centering, border correction, and train pooling as distinct choices; Cortexel therefore binds the corresponding mathematical kernel form, support, grid, edge policy, and rate normalization rather than inferring them. scipy.stats.trim_mean is an oracle only for the per-tail interpretation away from exact-product floor boundaries: SciPy computes int(binary64(proportiontocut * n)), whereas Cortexel floors the exact rational product of the declared binary64 value and n. The pinned reference environment has NOT been executed here, so the status is not_run rather than assumed."
       }
     },
     "legacyIds": [
@@ -4334,23 +8384,27 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "Revision 1 renders no fitted model. Cortexel has no optimizer with which to re-derive a fit, and the disclosure registry has no rule that would mark a caller-supplied fit as unverified — an unmarked fitted line is indistinguishable from measured data, so the figure refuses it.",
-      "Revision 1 accepts no baseline subtraction or response normalization. A baseline-corrected response is a different quantity and there is no registered disclosure to mark it; a caller who pre-transforms must say so in source.declaredLimitations, where it is rendered as an unverified caller statement.",
-      "The 1.0 registry has no reference-in-universe rule aimable at an arbitrary field; `events.sender_universe_declared` is hard-wired to recordedSenderIds/eventSenderIds, not a condition axis, so it is NOT declared here. A conditionId absent from conditions.ids is therefore not machine-checked in 1.0; `reference.in_universe` is proposed for 1.1.",
-      "The registry has no composite-key uniqueness rule, and `ids.unique` enforces only flat whole-array uniqueness. A repeatId legitimately recurs across conditions under a paired design, so `ids.unique` is applied to conditions.ids only; within-condition repeat uniqueness is NOT machine-checked in 1.0 (ids.unique_composite proposed for 1.1).",
-      "Per-repeat rate re-derivation is not machine-checked in 1.0: the registry's `rate.verify_normalization` re-derives from bin edges (the population_rate shape) and does not fit a per-repeat window audit, so it is not declared here. `rate.denominator_positive` still checks the recorded-sender denominator is a positive integer; a window-based audit rule is proposed for 1.1.",
-      "Unit-bearing uncertainty variants (SD, SE, confidence/quantile interval, ensemble range) are declared supported, but in the 1.0 build `unit.dimension_match` walks the uncertainty object and rejects its variant `kind` as a quantity kind. The living valid examples therefore use `{kind: none}`; excluding that subtree is proposed for 1.1.",
-      "The registry has no cross-array value-equality rule. Where the supplied uncertainty carries its own sampleCount it must be elementwise identical to aggregates.sampleCounts — they describe the same repeats — but only the lengths are machine-checked in 1.0.",
-      "Cortexel does not re-derive a supplied dispersion from the raw repeats: `uncertainty.valid` checks bounds, ordering, units, lengths, and positive sample counts, not that a supplied standard error equals that of the repeats in the same request. `uncertainty.verify_from_repeats` is proposed for 1.1.",
+      "Revision 2 renders no fitted model. Cortexel has no optimizer with which to re-derive a fit, and the disclosure registry has no rule that would mark a caller-supplied fit as unverified — an unmarked fitted line is indistinguishable from measured data, so the figure refuses it.",
+      "Revision 2 accepts no baseline subtraction or response normalization. A baseline-corrected response is a different quantity and there is no registered disclosure to mark it; a caller who pre-transforms must say so in source.declaredLimitations, where it is rendered as an unverified caller statement.",
+      "Revision 2 supports only mean firing rate, peak firing rate, first-spike latency, and event count. Mean/peak membrane voltage and mean state-variable responses are intentionally unrepresentable until a future revision binds the exact recorded variable, sender/compartment scope, sampling grid and completeness, reduction interval and boundary, missing-sample policy, and temporal-versus-cross-sender reduction order. A bare pre-reduced analog number cannot establish those choices; preserve the sampled signal with neuro.analog_trace or neuro.multisignal_trace instead.",
+      "Portable validation establishes only internal structure and arithmetic. For every response method—not only audited mean rates—Cortexel cannot establish against unavailable source records that selectionId or member identifiers refer to the claimed records, recordedSenderCount is true, eventCompleteness is true, the declared pooling was actually performed, a membership digest has the claimed preimage/cardinality, or a supplied count, latency, or peak was computed from that selection. The mandatory external-authority disclosure and granular receipt preserve that boundary.",
+      "eventScope is one scalar shared by every condition and repeat. A curve whose event selection, selected sender universe, pooling rule, or completeness changes by condition OR repeat is intentionally unrepresentable in revision 2 and must be split into honest curves. explicit ids and canonical digests bind lexical identifier sets, not global entity identity across fresh simulator runs; cardinality_only does not bind even an identifier set. Equal local ids or equal counts therefore never establish the same physical population.",
+      "A pooled total-event response whose selected recorded-sender cardinality, completeness, or membership-binding kind is unknown is intentionally unrepresentable in revision 2, even though neuro.population_rate can represent some unknown-universe total rates. Migration and Engram projection must block or withhold such a response rather than relabelling a pre-pooled population train as single_train or inventing a sender universe.",
+      "Revision 2 cannot represent latency from stimulus onset because it carries no typed onset coordinate relative to the measurement window. Such a latency could not be proven to name an event inside the window. Use measurement_window_start, or wait for a revision that binds onset kind, value, unit, coordinate frame, and boundary semantics.",
+      "Raw mode verifies that submitted rows match the caller-declared attempted count for every condition, and paired mode verifies equality of the submitted repeat-id sets. Cortexel cannot prove that the caller omitted no repeat from every condition or understated every attempted count; external simulator truth remains provenance responsibility, so the receipt names only the declared consistency actually checked.",
+      "Revision 2 supports only `{kind: none}` uncertainty. Dispersion and interval variants remain in the common structural union for forward compatibility but are rejected semantically for this skill until the response compiler has truthful marks and repeat-level verification.",
       "No disclosure rule surfaces a peak response's dependence on the smoothing that produced it. KERNEL_SMOOTHED_RATE cannot be reused: its text asserts a continuous line rather than steps, which is false of a curve. `PEAK_DEPENDS_ON_SMOOTHING` is proposed for 1.1.",
       "Because no such disclosure exists, the peak basis is instead required structurally and surfaced in the deterministic summary and the `responseBasis` table column rather than in the footer.",
-      "This figure declares no compaction policy. Above the visible-mark budget it fails rather than thinning repeats: extrema sampling would fabricate an inflated spread, and merging repeats would fabricate measurements that were never run. Supply aggregates instead, and accept the aggregation disclosure."
+      "Raw event trains remain unavailable, so Cortexel cannot prove that a declared peak-bin count was actually the maximum count in the source events. Raw binned mode nevertheless requires those exact identified counts, re-derives every defined repeat rate, and computes each defined condition estimator at count level before one final rounding. Aggregate binned mode cannot identify omitted repeat counts and therefore proves only existence on the exact safe-integer estimator lattice. Kernel peaks have no corresponding discrete audit or lattice and remain caller-supplied after complete basis validation. When at least one defined peak exists, the receipt keeps callerSuppliedPeakValue=true and peakValueRecomputed=false because no peak is recomputed from event trains, while separate fields state exactly which count-to-rate and condition-estimator arithmetic was re-derived. For an all-null peak response both flags are null/not applicable.",
+      "This figure declares no compaction policy. Above the visible-mark budget it fails rather than thinning repeats: extrema sampling would fabricate an inflated spread, and merging repeats would fabricate measurements that were never run. Supply aggregates instead, and accept the aggregation disclosure.",
+      "Revision 2 accepts only a complete returned alternative table. A response curve whose raw-repeat plus condition-estimate table exceeds the active returned-row limit is refused with RESOURCE_COMPACTION_UNAVAILABLE before sorting or aggregation; it is never silently excerpted and no unavailable sidecar is advertised."
     ]
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
+    "availability": "packaged",
     "releaseReady": false,
     "title": "Spike raster: event times by identified sender and trial",
     "canonicalQuestion": "At what times, and from which identified senders and trials, were events recorded inside a declared window — with every event preserved, and with every recorded sender and every declared trial keeping its row even when nothing happened on it?",
@@ -4366,7 +8420,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 1
+      "revision": 2
     },
     "semanticValidators": [
       {
@@ -4411,8 +8465,12 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       {
         "id": "window.valid",
         "parameters": {
-          "pointer": "/data/window"
+          "pointer": "/data/window",
+          "unitDimension": "time"
         }
+      },
+      {
+        "id": "events.source_clock_declared"
       },
       {
         "id": "events.within_window"
@@ -4433,9 +8491,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "SOURCE_AUTHENTICITY_UNVERIFIED",
       "REFERENCE_COMPARISON_NOT_RUN",
       "EVENTS_EXCLUDED_OUT_OF_WINDOW",
-      "DOWNSAMPLED_FOR_RENDERING",
-      "COMPACTION_MAY_HIDE_TRANSIENTS",
-      "TABLE_EXCERPT_ONLY",
+      "NEST_SERIALIZED_CLOCK_BOUNDARY",
       "UNIT_CONVERTED",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
@@ -4443,63 +8499,251 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
     "budgets": {
       "maxObservations": 2000000,
       "maxVisibleMarks": 100000,
-      "maxInlineTableRows": 500,
+      "maxReturnedTableRows": 500,
       "compactionPolicies": [
-        "none",
-        "raster_density_bins"
+        "none"
       ],
-      "tablePolicy": "excerpt_inline_with_complete_sidecar"
+      "tablePolicy": "complete_returned"
     },
     "uncertaintySupport": [
       "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Spike raster. {eventCount} events, {excludedCount} outside the window, from {activeSenderCount} of {recordedSenderCount} recorded senders across {trialCount} trials, over {windowStart} to {windowStop} {timeUnit}, boundary {windowBoundary}, time base {timeBase}. {rowCount} rows ordered by {rowOrder}; the order is declared and is never sorted by an observed statistic. Sender universe complete: {senderUniverseComplete}. Marks drawn: {markCount}. {compactionStatement} Tick density is not a firing rate, and overlapping ticks are not separately visible; exact event times are in the table.",
+      "summaryTemplate": "Spike raster. {eventCount} events, {excludedCount} outside the window, from {activeSenderCount} of {recordedSenderCount} recorded senders across {trialCount} trials, over {windowStart} to {windowStop} {timeUnit}, boundary {windowBoundary}, time base {timeBase}. {rowCount} rows ordered by {rowOrder}; the order is declared and is never sorted by an observed statistic. Sender universe complete: {senderUniverseComplete}. Marks drawn: {markCount}. Tick density is not a firing rate, and overlapping ticks are not separately visible; exact event times are in the table.",
       "tableColumns": [
         {
-          "key": "sourceRowIndex",
-          "header": "Source row",
-          "description": "The event's original index in the caller's arrays. This is the audit anchor: sorting for display never changes it."
+          "key": "sourceOrdinal",
+          "header": "Source ordinal",
+          "cellType": "finite_number_or_string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The event's original zero-based index in the caller's parallel arrays. This is the audit anchor: sorting for display never changes it."
         },
         {
           "key": "eventId",
           "header": "Event id",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": true,
           "description": "Declared id, or the deterministic ordinal identity assigned when none was declared."
         },
         {
           "key": "time",
-          "header": "Time",
-          "description": "The event time as supplied, after canonical unit conversion."
+          "header": "Event time",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The event time exactly as supplied; only the window endpoints are converted into this declared event clock for display."
         },
         {
           "key": "timeUnit",
-          "header": "Unit"
+          "header": "Time unit",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "senderId",
-          "header": "Sender"
+          "header": "Sender",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false
         },
         {
           "key": "trialId",
           "header": "Trial",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Empty when no trials were declared."
         },
         {
           "key": "populationId",
           "header": "Population",
+          "cellType": "string",
+          "nullable": true,
+          "keyPart": false,
           "description": "Empty when no populations were declared."
         },
         {
+          "key": "rowKey",
+          "header": "Row key",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Collision-free JSON tuple identity [senderId, trialId-or-null]; labels are never used as identities."
+        },
+        {
           "key": "rowIndex",
-          "header": "Row",
-          "description": "The row this event was drawn on, in the final row order. Rows with no events appear in the row legend, not here."
+          "header": "Row index",
+          "cellType": "finite_number",
+          "nullable": false,
+          "keyPart": false,
+          "description": "The zero-based row this event was assigned in the final row order. Rows with no events still appear on the axis."
+        },
+        {
+          "key": "rowLabel",
+          "header": "Row label",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
+          "description": "Human display label, separate from the collision-free row key."
         },
         {
           "key": "inWindow",
           "header": "In window",
+          "cellType": "string",
+          "nullable": false,
+          "keyPart": false,
           "description": "False for an event excluded by the window. Excluded events remain listed: an event removed from the table is an event nobody can find again."
         }
       ]
+    },
+    "outputAuthority": {
+      "version": 1,
+      "evaluator": {
+        "tag": "registered_evaluator",
+        "id": "neuro.spike_raster.output_authority.v2"
+      },
+      "requestPaths": [
+        {
+          "id": "influence.input",
+          "segments": [
+            {
+              "tag": "field",
+              "name": "data"
+            },
+            {
+              "tag": "field",
+              "name": "senderUniverseComplete"
+            }
+          ]
+        }
+      ],
+      "derivationFields": [
+        {
+          "id": "table.rows",
+          "valueKind": "row_sequence"
+        },
+        {
+          "id": "geometry.sequence",
+          "valueKind": "geometry_sequence"
+        },
+        {
+          "id": "summary.facts",
+          "valueKind": "summary_fact_map"
+        },
+        {
+          "id": "disclosure.facts",
+          "valueKind": "disclosure_fact_map"
+        }
+      ],
+      "table": {
+        "tag": "row_sequence",
+        "expectedRows": {
+          "tag": "derivation_field",
+          "field": "table.rows"
+        },
+        "carriedValueColumns": [
+          "sourceOrdinal",
+          "eventId",
+          "time",
+          "timeUnit",
+          "senderId",
+          "trialId",
+          "populationId",
+          "rowKey",
+          "rowIndex",
+          "rowLabel",
+          "inWindow"
+        ],
+        "comparison": "canonical_json_sequence_exact",
+        "rowsTotal": "from_verified_expected_rows"
+      },
+      "geometry": {
+        "tag": "classified_geometry",
+        "traversal": "nested_groups_depth_first_preorder",
+        "excludedRoles": [
+          "axis",
+          "text",
+          "disclosure",
+          "decorative_mark"
+        ],
+        "expectedSequence": {
+          "tag": "derivation_field",
+          "field": "geometry.sequence"
+        },
+        "classes": [
+          {
+            "tag": "geometry_class",
+            "id": "events",
+            "cardinality": "exact",
+            "order": "exact",
+            "provenance": "exact",
+            "payloadAssurance": "carrier_only"
+          }
+        ]
+      },
+      "influence": {
+        "tag": "finite_paired_witnesses",
+        "witnesses": [
+          {
+            "tag": "paired_input",
+            "id": "declared_field_changes_owned_output",
+            "exampleIndex": 0,
+            "input": {
+              "tag": "request_path",
+              "pathId": "influence.input"
+            },
+            "leftValue": true,
+            "rightValue": false,
+            "affected": [
+              {
+                "tag": "derivation_field",
+                "field": "summary.facts"
+              }
+            ],
+            "protected": [
+              {
+                "tag": "derivation_field",
+                "field": "table.rows"
+              }
+            ]
+          }
+        ]
+      },
+      "summary": {
+        "tag": "fact_template",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "summary.facts"
+        },
+        "requiredPlaceholders": [
+          "eventCount",
+          "excludedCount",
+          "activeSenderCount",
+          "recordedSenderCount",
+          "trialCount",
+          "windowStart",
+          "windowStop",
+          "timeUnit",
+          "windowBoundary",
+          "timeBase",
+          "rowCount",
+          "rowOrder",
+          "senderUniverseComplete",
+          "markCount"
+        ],
+        "missingFactPolicy": "refuse",
+        "unknownFactPolicy": "refuse"
+      },
+      "disclosures": {
+        "tag": "derived_disclosures",
+        "expectedFacts": {
+          "tag": "derivation_field",
+          "field": "disclosure.facts"
+        }
+      }
     },
     "evidence": {
       "handVectors": true,
@@ -4507,7 +8751,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
         "name": "nest-simulator spike_recorder",
         "version": "3.10.0",
         "status": "not_run",
-        "notes": "The intended differential oracle is NEST's own spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: whether an event at exactly `stop` is recorded, whether recorder output is chronological across threads and ranks, and whether a duplicate event row can occur. A secondary parity check imports the same trains through Neo SpikeTrain (t_start/t_stop) and asserts an identical accepted event set. Neither has been executed here: the pinned reference environment has not been run in this environment, so the status is not_run rather than assumed. No claim of oracle agreement may be made until it is."
+        "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, and duplicate rows. NEST 3.9 and 3.10 source were inspected for this repair, but the pinned executable reference environment has not been run here; status therefore remains not_run and no oracle-agreement claim is made."
       }
     },
     "legacyIds": [
@@ -4519,15 +8763,480 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = Object
       "NODE_UNIVERSE_INCOMPLETE is the nearest existing rule to that gap, but its text is about edges and degree and would be false on a raster, so it is deliberately not emitted. A wrong disclosure is worse than a missing one.",
       "There is likewise no disclosure id for a caller-sampled event set. Rather than emit a rule that does not fit, the contract refuses the sampled value outright.",
       "Cortexel verifies that every event's sender is in the declared universe. It cannot verify that the recorder observed every spike of those senders, so an empty row is evidence of no RECORDED event; reading it as silence rests on the recorder, not on Cortexel.",
+      "For a NEST origin-relative window, exact comparisons are exact over the exported finite binary64 millisecond values. Cortexel does not inspect NEST's hidden integer-tic state, prove that the serialized status came from NEST, or recover pre-serialization timing; the mandatory NEST clock-boundary disclosure states this on every such figure.",
+      "NEST `time_in_steps:true` is deliberately unsupported in revision 2. A step index plus offset is a different canonical clock representation, not a millisecond array; support requires preserving the raw pair and NEST grid authority rather than reconstructing and discarding it.",
       "Below the mark budget every event is drawn, but two events closer than one device pixel overlap. The table count is authoritative; the visible tick count is not, and no figure caption can make it so.",
-      "raster_density_bins preserves every event's count but not its individual identity in the drawn image, and does not preserve extrema: a single spike inside a busy tile is not distinguishable. That is exactly why COMPACTION_MAY_HIDE_TRANSIENTS is emitted alongside it.",
+      "No raster compaction or complete-table sidecar is implemented in revision 2. Requests over the exact-mark or complete-returned-table budget fail closed; the registered future raster_density_bins policy is not advertised by this skill until both surfaces exist.",
       "No uncertainty variant is renderable. An event is an observation, not an estimate, and a band drawn around one would be a fabrication."
     ]
   }
 });
 
+export interface CapabilityCatalogEntry {
+  readonly id: string;
+  readonly kind: 'skill' | 'export' | 'data_export' | 'contract_source' | 'cli';
+  readonly status: 'stable' | 'experimental' | 'deprecated' | 'removed';
+  readonly availability: CapabilityAvailability;
+  readonly renderer?: string;
+  readonly requiredPeers?: readonly string[];
+  readonly replacement?: string | null;
+  readonly limitations?: readonly string[];
+}
+
+/** Contract maturity and concrete delivery are separate, mandatory axes. */
+export const CAPABILITY_CATALOG: Readonly<Record<string, CapabilityCatalogEntry>> = freezeGenerated({
+  "neuro.analog_trace": {
+    "id": "neuro.analog_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.analog_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.spike_raster": {
+    "id": "neuro.spike_raster",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.spike_raster",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Revision 2 returns only a complete in-memory table alongside the artifact. It refuses any request that would require an excerpt, sidecar, or raster compaction."
+    ]
+  },
+  "neuro.population_rate": {
+    "id": "neuro.population_rate",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.population_rate",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.response_curve": {
+    "id": "neuro.response_curve",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.response_curve",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.isi_distribution": {
+    "id": "neuro.isi_distribution",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.psth": {
+    "id": "neuro.psth",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.psth",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.correlogram": {
+    "id": "neuro.correlogram",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.correlogram",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.phase_plane": {
+    "id": "neuro.phase_plane",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.phase_plane",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.multisignal_trace": {
+    "id": "neuro.multisignal_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.multisignal_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.compartment_trace": {
+    "id": "neuro.compartment_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.compartment_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.connection_graph": {
+    "id": "network.connection_graph",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.connection_graph",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.adjacency_matrix": {
+    "id": "network.adjacency_matrix",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.matrix",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.weight_matrix": {
+    "id": "network.weight_matrix",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.matrix",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.delay_matrix": {
+    "id": "network.delay_matrix",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.matrix",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.degree_distribution": {
+    "id": "network.degree_distribution",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.delay_distribution": {
+    "id": "network.delay_distribution",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.weight_distribution": {
+    "id": "network.weight_distribution",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.spatial_map_2d": {
+    "id": "network.spatial_map_2d",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.spatial_map_2d",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.synaptic_weight_trace": {
+    "id": "network.synaptic_weight_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.synaptic_weight_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "nest.connectivity_matrix": {
+    "id": "nest.connectivity_matrix",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
+    "owner": "Sepehr Mahmoudian",
+    "replacement": "network.connection_graph",
+    "removalVersion": "1.0.0",
+    "limitations": [
+      "The pre-1.0 id named a schematic edge-list topology despite its misleading name. Migration targets network.connection_graph but remains partial until the caller supplies the node universe, identities, snapshot scope, and multapse/autapse policies; it is never reinterpreted as a matrix from whichever optional channel happens to be present."
+    ]
+  },
+  "nest.spatial_2d": {
+    "id": "nest.spatial_2d",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
+    "owner": "Sepehr Mahmoudian",
+    "replacement": "network.spatial_map_2d",
+    "removalVersion": "1.0.0",
+    "limitations": [
+      "A host-only (`scene: null`) duplicate. Cortexel could validate the request but could not enforce the caption or own the output, so it was never a stable guarantee."
+    ]
+  },
+  "nest.stimulus_response": {
+    "id": "nest.stimulus_response",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
+    "owner": "Sepehr Mahmoudian",
+    "replacement": null,
+    "removalVersion": "1.0.0",
+    "limitations": [
+      "There is no one-to-one replacement and no FigureBundleV1 implementation. Migration returns a manual recipe for separately validated trace, rate, and response-curve requests; it does not emit or name a bundle capability."
+    ]
+  },
+  "nest.animation_replay": {
+    "id": "nest.animation_replay",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
+    "owner": "Sepehr Mahmoudian",
+    "replacement": null,
+    "removalVersion": "1.0.0",
+    "limitations": [
+      "No FigureRequestV1 skill schema or compiler exists. A pre-1.0 package may still recognize the legacy id, but that does not make it a current contract capability."
+    ]
+  },
+  "cortexel": {
+    "id": "cortexel",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "The package root intentionally remains the legacy 0.9 pure-core export. FigureRequestV1 is additive at cortexel/figure."
+    ]
+  },
+  "cortexel/core": {
+    "id": "cortexel/core",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "This subpath intentionally remains the legacy 0.9 core surface. FigureRequestV1 is additive at cortexel/figure."
+    ]
+  },
+  "cortexel/figure": {
+    "id": "cortexel/figure",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Pure FigureRequestV1 validation and identity surface. Packaged availability is not publication or release certification."
+    ]
+  },
+  "cortexel/render-svg": {
+    "id": "cortexel/render-svg",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Headless deterministic FigureRequestV1 builders only: each public rendering entrypoint validates its input or requires Cortexel's live validated-request capability. Raw RenderPlan construction, resource accounting, formatting/scaling primitives, and SVG serialization are internal and not exported. No React, browser, WebGL, or network dependency."
+    ]
+  },
+  "cortexel/react": {
+    "id": "cortexel/react",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [
+      "three",
+      "@react-three/fiber",
+      "react",
+      "react-dom"
+    ],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "This remains the packaged legacy React/WebGL surface; the new FigureRequest renderer is the separate headless cortexel/render-svg export."
+    ]
+  },
+  "cortexel/react/charts": {
+    "id": "cortexel/react/charts",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [
+      "react"
+    ],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "The packaged reference-chart surface consumes the legacy VizSpec contract."
+    ]
+  },
+  "cortexel/react/knowledge-graph": {
+    "id": "cortexel/react/knowledge-graph",
+    "kind": "export",
+    "status": "experimental",
+    "availability": "packaged",
+    "requiredPeers": [
+      "three",
+      "@react-three/fiber",
+      "d3-force-3d",
+      "react",
+      "react-dom"
+    ],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "The packaged force-directed legacy knowledge-graph view is nondeterministic and is not a FigureRequestV1 skill/compiler."
+    ]
+  },
+  "cortexel/skills.manifest.json": {
+    "id": "cortexel/skills.manifest.json",
+    "kind": "data_export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "This packaged data export continues to describe the legacy VizSpec skill axis. FigureRequestV1 contract data is separately exported under cortexel/contract/*."
+    ]
+  },
+  "cortexel/adapters/nest": {
+    "id": "cortexel/adapters/nest",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "The packaged plain-data bridge currently implements only the revision-2-admitted spike-recorder mapping; unsupported NEST shapes fail closed. This availability record is not upstream-execution or certification evidence."
+    ]
+  },
+  "cortexel/contract": {
+    "id": "cortexel/contract",
+    "kind": "data_export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Normative JSON is copied once under dist/contract and exported as cortexel/contract/manifest.json plus exact registry, schema, and skill paths. Packaged does not mean published or release-ready."
+    ]
+  },
+  "cortexel/package.json": {
+    "id": "cortexel/package.json",
+    "kind": "data_export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Explicit metadata export makes package metadata addressable without weakening exports-map encapsulation."
+    ]
+  },
+  "cli.identity": {
+    "id": "cli.identity",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian"
+  },
+  "cli.catalog": {
+    "id": "cli.catalog",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Lists FigureRequest skill capabilities only. No experimental FigureRequest skill currently exists; `--include-experimental` is a forward-compatible explicit opt-in and does not list packaged legacy experimental exports."
+    ]
+  },
+  "cli.validate": {
+    "id": "cli.validate",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Bounds raw file/stdin bytes before fatal UTF-8 decoding and uses the strict raw-text parser, so malformed encoding, a BOM, and duplicate JSON members remain rejectable rather than being normalized away."
+    ]
+  },
+  "cli.render": {
+    "id": "cli.render",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Offline. One fixed O_EXCL lock serializes cooperative publication in the resolved physical output directory, including case/Unicode filename aliases; an existing lock is never guessed stale. Non-force publication uses same-directory O_EXCL temporaries plus atomic hard-link no-replace publication (or refuses when unavailable); force installs the artifact last. The two output files are still not one transaction, and a trusted output-directory owner remains required."
+    ]
+  },
+  "cli.inspect": {
+    "id": "cli.inspect",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian"
+  },
+  "cli.migrate": {
+    "id": "cli.migrate",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Machine output is always JSON; it uses the same bounded fatal-UTF-8 and strict raw-JSON input boundary as validation."
+    ]
+  }
+});
+
 /** The stable catalog, in a deliberate discovery order: traces, events, distributions, topology, spatial. */
-export const STABLE_SKILL_IDS = [
+export const STABLE_SKILL_IDS = freezeGenerated([
   "network.adjacency_matrix",
   "network.connection_graph",
   "network.degree_distribution",
@@ -4547,21 +9256,17 @@ export const STABLE_SKILL_IDS = [
   "neuro.psth",
   "neuro.response_curve",
   "neuro.spike_raster"
-] as const;
+] as const);
 export type StableSkillId = (typeof STABLE_SKILL_IDS)[number];
 
-export const EXPERIMENTAL_CAPABILITY_IDS = [
-  "experimental.evidence.knowledge_graph",
-  "experimental.network.spatial_3d",
-  "experimental.neuro.animation_replay"
-] as const;
+export const EXPERIMENTAL_CAPABILITY_IDS = freezeGenerated([] as const);
 
-export const REMOVED_CAPABILITY_IDS = [
+export const REMOVED_CAPABILITY_IDS = freezeGenerated([
   "nest.animation_replay",
   "nest.connectivity_matrix",
   "nest.spatial_2d",
   "nest.stimulus_response"
-] as const;
+] as const);
 
 export interface LegacyMapEntry {
   readonly legacyId: string;
@@ -4576,7 +9281,7 @@ export interface LegacyMapEntry {
 }
 
 /** Every pre-1.0 id has a deterministic outcome here. There is no fall-through. */
-export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object.freeze({
+export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = freezeGenerated({
   "nest.voltage_trace": {
     "legacyId": "nest.voltage_trace",
     "outcome": "migrate",
@@ -4614,10 +9319,11 @@ export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object
     "outcome": "migrate",
     "targetId": "neuro.response_curve",
     "transform": "rateResponseToResponseCurve",
-    "notes": "The current-only F-I assumption is NOT hard-coded into the neutral contract: the input quantity and the response method must both be declared.",
+    "notes": "The current-only F-I assumption is NOT hard-coded into the neutral contract: the input quantity, response method, and event-selection scope must all be declared. Migration cannot infer one train versus a pooled sender population, membership, completeness, or pooling order from the legacy scalar curve.",
     "requires": [
       "an input quantity with a unit",
-      "a response method"
+      "a response method",
+      "a caller-declared event scope"
     ]
   },
   "nest.isi_distribution": {
@@ -4701,7 +9407,7 @@ export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object
     "outcome": "migrate",
     "targetId": "network.adjacency_matrix",
     "transform": "adjacencyToAdjacencyMatrix",
-    "notes": "NEST's target-row / source-column convention is frozen and stated on the axes, in the table, and in the caption.",
+    "notes": "Cortexel's target-row / source-column display convention is frozen and stated on the axes, in the table, and in the caption. A NEST SynapseCollection is an edge list rather than a matrix-axis authority; the official NEST plotting example uses source rows and target columns, so Cortexel does not attribute its transposed display convention to NEST (https://nest-simulator.readthedocs.io/en/v3.0/auto_examples/synapsecollection.html).",
     "requires": [
       "complete row (target) and column (source) universes",
       "a cell mode",
@@ -4805,38 +9511,38 @@ export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object
   "nest.spatial_3d": {
     "legacyId": "nest.spatial_3d",
     "outcome": "experimental",
-    "targetId": "experimental.network.spatial_3d",
+    "targetId": null,
     "transform": null,
-    "notes": "Moved out of the stable catalog. Import the explicit experimental subpath. There is NO stable alias, because a stable alias would let an agent select a nondeterministic WebGL scene while believing it selected a conformant figure.",
-    "errorCode": "CAPABILITY_EXPERIMENTAL"
+    "notes": "There is no FigureRequestV1 skill schema, compiler, or experimental target id. The pre-1.0 package may still render the legacy WebGL scene through its legacy React surface, but migration fails closed instead of inventing a current-contract capability.",
+    "errorCode": "MIGRATION_NO_STABLE_REPLACEMENT"
   },
   "corpus.knowledge_graph": {
     "legacyId": "corpus.knowledge_graph",
     "outcome": "experimental",
-    "targetId": "experimental.evidence.knowledge_graph",
+    "targetId": null,
     "transform": null,
-    "notes": "Moved out of the stable catalog. The evidence table/JSON export remains available and is the authoritative view; the force-directed 3D geometry is explicitly schematic.",
-    "errorCode": "CAPABILITY_EXPERIMENTAL"
+    "notes": "There is no FigureRequestV1 skill schema or compiler. The pre-1.0 force-directed view remains available only through the packaged legacy `cortexel/react/knowledge-graph` export; migration fails closed and does not alias that legacy surface into the new contract.",
+    "errorCode": "MIGRATION_NO_STABLE_REPLACEMENT"
   },
   "nest.animation_replay": {
     "legacyId": "nest.animation_replay",
     "outcome": "experimental",
-    "targetId": "experimental.neuro.animation_replay",
+    "targetId": null,
     "transform": null,
-    "notes": "No stable renderer and no safe deterministic export exist for it. Its former unbounded payload is replaced by a strict event union.",
+    "notes": "No FigureRequestV1 skill schema, compiler, deterministic renderer, or safe deterministic export exists. A legacy package may still recognize the pre-1.0 host route, but migration has no current-contract target.",
     "errorCode": "MIGRATION_NO_STABLE_REPLACEMENT"
   },
   "nest.connectivity_matrix": {
     "legacyId": "nest.connectivity_matrix",
-    "outcome": "blocked",
-    "targetId": null,
-    "transform": null,
-    "errorCode": "MIGRATION_AMBIGUOUS_CONNECTIVITY_MATRIX",
-    "notes": "The caller must choose network.adjacency_matrix, network.weight_matrix, or network.delay_matrix. Cortexel will NOT guess from which fields happen to be present: the three differ in how they treat an absent cell, a zero value, and a repeated connection, so guessing wrong would silently change what the figure claims.",
-    "alternatives": [
-      "network.adjacency_matrix",
-      "network.weight_matrix",
-      "network.delay_matrix"
+    "outcome": "migrate",
+    "targetId": "network.connection_graph",
+    "transform": "connectivityEdgeListToConnectionGraph",
+    "notes": "Despite its historical name, the pre-1.0 registry bound this id to the network-topology scene and accepted endpoint pairs with optional unit-bound weight and delay channels; it was not a literal matrix. Migration therefore targets network.connection_graph and reports every graph fact the edge list could not carry. It never infers isolates from endpoints, promotes an unknown scope to global, or invents edge identity and multapse/autapse semantics. A caller who wants a matrix must separately author the matching adjacency, weight, or delay request.",
+    "requires": [
+      "a complete node universe including isolates",
+      "stable node and edge identities",
+      "a network scope with snapshot time",
+      "explicit multapse and autapse policies"
     ]
   },
   "nest.spatial_2d": {
@@ -4855,20 +9561,22 @@ export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = Object
   "nest.stimulus_response": {
     "legacyId": "nest.stimulus_response",
     "outcome": "recipe",
-    "targetId": "figure.bundle",
-    "transform": "stimulusResponseToBundleDraft",
+    "targetId": null,
+    "transform": null,
     "errorCode": "MIGRATION_NO_STABLE_REPLACEMENT",
-    "notes": "There is no one-to-one replacement, because this was never one figure. `cortexel migrate` emits a DRAFT bundle — a stimulus trace panel, a response trace panel, and a response-curve panel — and lists every input it could not resolve. The caller completes it.",
+    "notes": "There is no one-to-one replacement and no FigureBundleV1 implementation. Migration returns this manual recipe only: author and validate separate `neuro.analog_trace`, `neuro.population_rate`, and `neuro.response_curve` requests as scientifically appropriate. It emits no draft request.",
     "alternatives": [
-      "figure.bundle containing neuro.analog_trace + neuro.population_rate + neuro.response_curve"
+      "neuro.analog_trace",
+      "neuro.population_rate",
+      "neuro.response_curve"
     ]
   }
 });
 
-export const RENDERERS = Object.freeze({
+export const RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "line",
@@ -4880,7 +9588,7 @@ export const RENDERERS = Object.freeze({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "line",
@@ -4892,7 +9600,7 @@ export const RENDERERS = Object.freeze({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "line",
@@ -4903,19 +9611,18 @@ export const RENDERERS = Object.freeze({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "rule",
       "point",
-      "rect",
       "text"
     ],
-    "notes": "Exact ticks below the mark cap; a count-preserving density grid above it. Y order is explicit and NEVER silently sorted by observed rate."
+    "notes": "Exact ticks or points below the mark cap; over-budget input fails closed because no raster compaction plus complete-sidecar implementation ships in revision 2. Event-window closure is rendered from the request, NEST origin-relative windows are converted exactly once at the presentation edge, and Y order is explicit and NEVER silently sorted by observed rate."
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "path",
@@ -4927,7 +9634,7 @@ export const RENDERERS = Object.freeze({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "rect",
@@ -4939,7 +9646,7 @@ export const RENDERERS = Object.freeze({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "rule",
@@ -4951,7 +9658,7 @@ export const RENDERERS = Object.freeze({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "rect",
@@ -4963,67 +9670,69 @@ export const RENDERERS = Object.freeze({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "point",
       "line",
-      "area",
       "rule",
       "text"
     ],
-    "notes": "Points are primary. A connecting line appears only for ORDERED conditions and is labelled a guide unless a fitted model is present."
+    "notes": "Points are primary. A straight guide appears only for ordered conditions, breaks across gaps, and is never a fit or interpolation. Revision 2 renders no uncertainty area and accepts no fitted model."
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "line",
       "point",
       "path",
+      "arrow",
       "text"
     ],
     "notes": "Trajectories with direction markers plus a bounded vector field. Arrow length may be normalized for display, but the magnitude is retained and the normalization is recorded."
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "line",
       "path",
       "point",
+      "arrow",
       "text"
     ],
     "notes": "Preserves isolates, autapses (as visible loops), and every multapse on its own deterministic lane. Direction survives without colour or motion. Schematic layout is labelled as such."
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "rect",
       "rule",
       "text"
     ],
-    "notes": "Shared by adjacency, weight, and delay matrices. Target rows, source columns. A cell that was never observed is drawn as ABSENT and is visually distinct from a measured zero."
+    "notes": "Shared by adjacency, weight, and delay matrices. Target rows, source columns. not_observed is distinct from observed absence and is never drawn as absent; both remain visually distinct from a measured numeric zero."
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "point",
       "line",
       "rule",
+      "arrow",
       "text"
     ],
     "notes": "One equal x/y scale. Measured positions are never jittered. Marker radius is fixed screen-space decoration and is disclosed as such."
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 1,
+    "revision": 2,
     "status": "stable",
     "marks": [
       "path",
@@ -5033,40 +9742,10 @@ export const RENDERERS = Object.freeze({
       "text"
     ],
     "notes": "STEPS for event-updated piecewise-constant weights; a line for sampled continuous values. Never connects across a missing observation without a declared hold or interpolation policy."
-  },
-  "figure.bundle": {
-    "id": "figure.bundle",
-    "revision": 1,
-    "status": "stable",
-    "marks": [
-      "group"
-    ],
-    "notes": "Composes validated child artifacts. Performs NO analysis of its own."
-  },
-  "experimental.spatial_3d": {
-    "id": "experimental.spatial_3d",
-    "revision": 1,
-    "status": "experimental",
-    "marks": [],
-    "notes": "WebGL. No deterministic output and no byte-stable export."
-  },
-  "experimental.knowledge_graph": {
-    "id": "experimental.knowledge_graph",
-    "revision": 1,
-    "status": "experimental",
-    "marks": [],
-    "notes": "Iterative force layout. Geometry is schematic."
-  },
-  "experimental.animation_replay": {
-    "id": "experimental.animation_replay",
-    "revision": 1,
-    "status": "experimental",
-    "marks": [],
-    "notes": "Animated. Never autoplays; always offers a static key-frame alternative."
   }
 });
 
-export const THEMES = Object.freeze({
+export const THEMES = freezeGenerated({
   "light": {
     "id": "light",
     "background": "#ffffff",
@@ -5117,7 +9796,7 @@ export const THEMES = Object.freeze({
   }
 });
 
-export const CATEGORICAL_SERIES_STYLES = Object.freeze([
+export const CATEGORICAL_SERIES_STYLES = freezeGenerated([
   {
     "index": 0,
     "color": "#0072b2",
@@ -5175,5 +9854,56 @@ export const CATEGORICAL_SERIES_STYLES = Object.freeze([
     "label": "series 8"
   }
 ]);
+
+/** Normative uncertainty mark and label templates, keyed by the closed uncertainty kind. */
+export interface UncertaintyStyleRecord {
+  readonly kind: UncertaintyKind;
+  readonly mark: 'band' | 'whisker' | 'none';
+  readonly label: string;
+  readonly note?: string;
+}
+
+export const UNCERTAINTY_STYLES_BY_KIND: Readonly<Record<UncertaintyKind, UncertaintyStyleRecord>> = freezeGenerated({
+  "confidence_interval": {
+    "kind": "confidence_interval",
+    "mark": "band",
+    "label": "{level}% {coverage} {method} confidence interval (over {basis}, n = {sampleCount})",
+    "note": "The legend states exactly what is drawn. It never says merely 'error'."
+  },
+  "credible_interval": {
+    "kind": "credible_interval",
+    "mark": "band",
+    "label": "{level}% {coverage} {method} credible interval (over {basis}, n = {sampleCount})",
+    "note": "Diagnostic vocabulary only in contract 1.0. Every stable skill refuses this kind; no attestation-verification boundary exists."
+  },
+  "quantile_interval": {
+    "kind": "quantile_interval",
+    "mark": "band",
+    "label": "{lowerQuantile}-{upperQuantile} quantile interval ({method}, over {basis}, n = {sampleCount})"
+  },
+  "standard_deviation": {
+    "kind": "standard_deviation",
+    "mark": "whisker",
+    "label": "+/-1 SD (n = {sampleCount}, over {basis})",
+    "note": "A dispersion, drawn as a whisker. It is NOT an interval and is never relabelled as one."
+  },
+  "standard_error": {
+    "kind": "standard_error",
+    "mark": "whisker",
+    "label": "+/-1 SEM (n = {sampleCount}, over {basis})"
+  },
+  "ensemble_range": {
+    "kind": "ensemble_range",
+    "mark": "band",
+    "label": "observed min-max across {basis} (n = {sampleCount})",
+    "note": "Carries NO coverage probability. Never drawn or captioned as a confidence interval."
+  },
+  "none": {
+    "kind": "none",
+    "mark": "none",
+    "label": "no uncertainty shown ({reason})",
+    "note": "Rendered as an explicit statement. The renderer never invents a ribbon to fill the space."
+  }
+});
 
 export const MAX_STABLE_SERIES = 8;

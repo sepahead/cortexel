@@ -109,7 +109,8 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
     expect(html).toContain('This is not membrane voltage');
     expect(html).toContain('glial analog trace, not voltage');
     expect(html).toContain('Derived view');
-    expect(html).toContain('Ca²⁺/IP₃');
+    expect(html).toContain('declared glial concentration trace');
+    expect(html).not.toContain('IP₃');
   });
 
   it('preserves every exact raster event without inventing a population-rate strip', () => {
