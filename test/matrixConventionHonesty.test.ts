@@ -40,6 +40,15 @@ describe('matrix-axis attribution', () => {
     );
   });
 
+  it('keeps the packaged weight-matrix guide executable under canonical id provenance', () => {
+    const guide = readText('AGENTS.md');
+    expect(guide).toContain('source_ids: JSON.stringify(excitatoryIds)');
+    expect(guide).toContain('target_ids: JSON.stringify(inhibitoryIds)');
+    expect(guide).not.toMatch(
+      /(?:source_ids|target_ids):\s*['"]\[[^\]\r\n]*…[^\]\r\n]*\]['"]/u,
+    );
+  });
+
   it('does not manufacture stable connection identity when edgeIds are absent', () => {
     const common = readJson('contract/schemas/common.v1.schema.json');
     const description = common.$defs.connectionRows.properties.edgeIds.description as string;

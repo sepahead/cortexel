@@ -744,6 +744,74 @@ for (const entry of legacyMap.entries) {
   ) {
     problems.push(`legacy map: "${entry.legacyId}" outcome ${entry.outcome} requires a targetId`);
   }
+  if (entry.transform === null) {
+    if (entry.transformExecution !== undefined) {
+      problems.push(`legacy map: "${entry.legacyId}" has transformExecution without a transform`);
+    }
+  } else if (typeof entry.transform === 'string') {
+    if (entry.transformExecution !== 'report_only') {
+      problems.push(
+        `legacy map: "${entry.legacyId}" transform "${entry.transform}" is not implemented; ` +
+        'transformExecution must be report_only until it exists in a closed implementation inventory',
+      );
+    }
+  } else {
+    problems.push(`legacy map: "${entry.legacyId}" transform must be a string or null`);
+  }
+  if (entry.requires !== undefined) {
+    if (
+      !Array.isArray(entry.requires) ||
+      entry.requires.length === 0 ||
+      entry.requires.some((fact: unknown) =>
+        typeof fact !== 'string' || fact.trim().length === 0)
+    ) {
+      problems.push(`legacy map: "${entry.legacyId}" requires must be a non-empty string array`);
+    } else if (new Set(entry.requires).size !== entry.requires.length) {
+      problems.push(`legacy map: "${entry.legacyId}" requires contains duplicate facts`);
+    }
+  }
+}
+
+const legacyEntryById = new Map<string, any>(
+  legacyMap.entries.map((entry: any) => [entry.legacyId, entry]),
+);
+const stableSkillById = new Map<string, any>(
+  stableSkills.map((skill: any) => [skill.id, skill]),
+);
+for (const skill of stableSkills) {
+  for (const legacyId of skill.migration.legacyIds) {
+    const entry = legacyEntryById.get(legacyId);
+    if (!entry) {
+      problems.push(`skill "${skill.id}" migration names missing legacy-map id "${legacyId}"`);
+      continue;
+    }
+    if (entry.targetId !== skill.id) {
+      problems.push(
+        `skill "${skill.id}" owns legacy id "${legacyId}", but the legacy map targets ` +
+        `${JSON.stringify(entry.targetId)}`,
+      );
+    }
+    if (entry.outcome !== 'migrate' && entry.outcome !== 'migrate_conditional') {
+      problems.push(
+        `skill "${skill.id}" owns legacy id "${legacyId}" with non-migratable outcome ` +
+        `${JSON.stringify(entry.outcome)}`,
+      );
+    }
+  }
+}
+for (const entry of legacyMap.entries) {
+  if (entry.outcome !== 'migrate' && entry.outcome !== 'migrate_conditional') continue;
+  const target = stableSkillById.get(entry.targetId);
+  if (!target) {
+    problems.push(
+      `legacy map: "${entry.legacyId}" migrates to non-stable or missing skill ` +
+      `${JSON.stringify(entry.targetId)}`,
+    );
+  } else if (!target.migration.legacyIds.includes(entry.legacyId)) {
+    problems.push(
+      `legacy map: "${entry.legacyId}" targets "${entry.targetId}", but that skill does not own the legacy id`,
+    );
+  }
 }
 
 if (problems.length > 0) {
@@ -1205,6 +1273,7 @@ export interface LegacyMapEntry {
   readonly outcome: 'migrate' | 'migrate_conditional' | 'experimental' | 'removed' | 'blocked' | 'recipe';
   readonly targetId: string | null;
   readonly transform: string | null;
+  readonly transformExecution?: 'report_only' | 'implemented';
   readonly errorCode?: string;
   readonly notes: string;
   readonly requires?: readonly string[];

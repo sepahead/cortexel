@@ -1,28 +1,30 @@
 #!/usr/bin/env node
 import {
   migrateLegacyRequest
-} from "../chunk-IS3CK3R3.js";
+} from "../chunk-SYGM7AA6.js";
 import {
   buildFigureFromJson
-} from "../chunk-PFDVYVHI.js";
-import "../chunk-GCZJRQIF.js";
+} from "../chunk-MP32BKLZ.js";
+import "../chunk-B6TNJZR5.js";
 import {
   parseJsonStrict
-} from "../chunk-L2BRNVUB.js";
-import "../chunk-TEVJHERV.js";
+} from "../chunk-RK555DMJ.js";
+import "../chunk-45B2O2EE.js";
 import {
   ERROR_STAGES,
   EXPERIMENTAL_CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS
-} from "../chunk-6TQKFRP5.js";
-import "../chunk-WOZECEVX.js";
+} from "../chunk-UF4PAGNO.js";
+import "../chunk-LWMLQZWM.js";
 import {
-  canonicalize,
   getBudgetLimits,
   getBuildIdentity,
   makeError
-} from "../chunk-22OHKNZ5.js";
+} from "../chunk-D2XLGVGS.js";
+import {
+  canonicalize
+} from "../chunk-ZYBCCIMH.js";
 
 // src/cli/main.ts
 import { randomBytes } from "crypto";

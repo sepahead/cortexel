@@ -45,9 +45,11 @@ your data → routeToScene → Cortexel scene → buildVizSpec → validated Viz
 - The strict gates (`validateSkillInvocation` and
   `validateHostRendererInvocation`) are the source of truth: they return checked
   data plus a bound caption, or structured errors that say exactly what to fix.
-- The mandatory disclosure prefix is derived only from provenance flags. Strict
-  gates may prepend a contract-owned weak-skill disclosure and append a sanitized,
-  explicitly unverified caller note; neither can suppress or reorder the prefix.
+- The mandatory disclosure segment is derived only from provenance flags. Strict
+  gates compose captions in one fixed order: contract-owned weak-skill disclosure,
+  contract-owned external-provenance disclosure, flag-derived mandatory disclosure,
+  then a sanitized explicitly unverified caller note. Caller text cannot suppress
+  or reorder any contract-owned segment.
 
 ## The loop
 
@@ -160,7 +162,8 @@ skill id — a `didYouMean` nearest match, so the cycle converges in one retry.
 ### 4. Emit / render
 
 The validated `result.spec` is **self-describing** (`skill` + `specVersion`), so you
-can serialize it, store it, and re-validate it later with no side channel:
+can serialize it, store it, and re-validate it later with a runtime that supports
+that exact version and no skill-id side channel:
 
 ```ts
 import { validateSpec, validateHostRendererSpec } from 'cortexel/core';
@@ -235,7 +238,12 @@ Cortexel will not let you render dishonest provenance. Design your agent to work
   `requiredProvenanceKeys` into `provenance.declared_inputs`. Cortexel checks they're
   present, rejects unknown claim keys, validates every present known value, and
   checks declared units/normalization against params where portable. Truthfulness
-  remains your responsibility.
+  remains your responsibility. Identifier universes use canonical unique
+  non-negative-integer JSON arrays, an exact `sha256:` digest where the contract
+  can bind equality, or a disclosed `sha256:…;count:n` form for external
+  cardinality checks. Spatial extents are canonical positive numeric arrays with
+  the skill's 2D/3D length; structural acceptance does not verify an external
+  extent against the source.
 - **Weak skills carry a derived-view disclosure.** Connectivity-only topology has
   schematic positions/distances; astrocyte Ca²⁺/IP₃ is not membrane voltage; and
   every corpus-entity assertion is derived/advisory while identity edges and
@@ -268,7 +276,7 @@ JSON Schema per skill); the table is a quick reference.
 | `nest.in_degree_distribution` | get_connections | degree-distribution | `degrees, node_counts, values, node_count, connection_count, direction, normalization, value_units, edge_counting, zero_degree_policy, sample_policy, snapshot_time_ms, snapshot_scope` | source_ids, target_ids, synapse_model, connection_sample_policy, snapshot_time_ms, snapshot_scope, parallel_edge_policy, degree_direction, degree_counting, zero_degree_policy, histogram_normalization |
 | `nest.out_degree_distribution` | get_connections | degree-distribution | same as in-degree | same as in-degree |
 | `nest.delay_distribution` | get_connections | delay-distribution | `bin_centers_ms, delay_counts, values, bin_width_ms, window_start_ms, window_stop_ms, normalization, value_units, delay_units, aggregation, binning, sample_policy, connection_count, snapshot_time_ms, snapshot_scope` | source_ids, target_ids, synapse_model, delay_units, connection_sample_policy, snapshot_time_ms, snapshot_scope, parallel_edge_policy, bin_ms, histogram_normalization, binning_policy |
-| `nest.weight_histogram` | get_connections | weight-histogram | `bin_centers, values, bin_width, weight_units, normalization, value_units, snapshot_time_ms` | source_ids, target_ids, synapse_model, weight_units, connection_sample_policy, histogram_normalization |
+| `nest.weight_histogram` | get_connections | weight-histogram | `bin_centers, weight_counts, values, bin_width, window_start, window_stop, weight_units, normalization, value_units, aggregation, binning, sample_policy, connection_count, snapshot_time_ms, snapshot_scope` | source_ids, target_ids, synapse_model, weight_units, connection_sample_policy, histogram_normalization, snapshot_time_ms, snapshot_scope, parallel_edge_policy |
 | `nest.spatial_map_2d` | get_position | spatial-map-2d | `nodes, coordinate_units, extent, center, edge_wrap, position_scope, marker_size` | node_ids, spatial_units, extent, position_scope |
 | `nest.spatial_3d` | get_position | network-topology | `objects, coordinate_units` | extent, spatial_units, projection_sample_policy |
 | `nest.plasticity_dynamics` | weight_recorder | stdp | `times_ms, weights, weight_units` | synapse_model, weight_units |
@@ -336,8 +344,9 @@ a non-negative safe-integer event total within the published absolute tolerance.
 `nest.rate_response`. Every series preserves its raw non-negative integer
 `spike_counts`, exact `recorded_sender_count`, and derived `rates_hz`; the strict
 gate checks `rate = count × 1000 / (sender_count × bin_width_ms)` for every bin.
-Bins exactly cover `[window_start_ms, window_stop_ms)` and use the declared
-left-closed/right-open policy. Route with `dataShape.kind: 'population_rate'`;
+Bins cover `[window_start_ms, window_stop_ms)` within Cortexel's published bounded
+binary64 geometry tolerance and use the declared left-closed/right-open policy.
+Route with `dataShape.kind: 'population_rate'`;
 use `fi_response` for the stimulus-amplitude curve. The legacy ambiguous value
 `rates` is rejected.
 
@@ -365,6 +374,10 @@ rejects it because outgoing edges can terminate on other ranks. Use
 `mpi_all_ranks_merged` only after actually merging every rank. Degree distributions
 include the declared node universe, so degree-zero nodes cannot disappear, and
 the gate checks both the node-count sum and degree-weighted connection total.
+Weight histograms likewise preserve one raw integer `weight_counts` value per
+bin, the exact selected `connection_count`, complete-snapshot scope, and
+one-entry/one-observation semantics; displayed counts or probabilities are
+recovered from those integers rather than accepted as free-floating values.
 
 `nest.spatial_map_2d` is only measured GetPosition data: identified x/y positions,
 units, center, extent, edge-wrap flag and completeness scope. It does not contain
@@ -447,8 +460,8 @@ if (matrix.ok) {
     params: matrix.params,
     source: 'nest_simulation:run-42',
     declaredInputs: {
-      source_ids: '[1,…,100]',
-      target_ids: '[101,…,125]',
+      source_ids: JSON.stringify(excitatoryIds),
+      target_ids: JSON.stringify(inhibitoryIds),
       synapse_model: 'static_synapse',
       weight_units: 'pA',
       connection_sample_policy: 'complete',
@@ -475,7 +488,7 @@ tuple id; indistinguishable legacy duplicates fail instead of collapsing.
 the whole skill axis (ids, scenes, required params + provenance keys, renderer
 routes, worked examples) that carries a JSON Schema (`paramsJsonSchema`) for all
 **26 skills** plus portable `paramConstraints` for cross-field rules JSON Schema
-cannot express. Manifest v8 also publishes each skill's `deprecation`,
+cannot express. Manifest v10 also publishes each skill's `deprecation`,
 `routerEligibility` and raw-output `transform` metadata, plus the authoritative
 top-level `routingDiscriminators` family/shape map. It also contains the versioned constraint language, envelope
 schemas/default order, exact-JSON budgets and duplicate-member precondition,

@@ -1,9 +1,11 @@
 import {
   err,
   makeError,
-  ok,
+  ok
+} from "./chunk-D2XLGVGS.js";
+import {
   utf8ByteLength
-} from "./chunk-22OHKNZ5.js";
+} from "./chunk-ZYBCCIMH.js";
 
 // src/core/parse-json.ts
 var DANGEROUS_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
@@ -485,4 +487,4 @@ function parseJsonStrict(text, options) {
 export {
   parseJsonStrict
 };
-//# sourceMappingURL=chunk-L2BRNVUB.js.map
+//# sourceMappingURL=chunk-RK555DMJ.js.map

@@ -184,7 +184,7 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
       rates_hz: [0, 100, 200],
     });
     spec.provenance.declared_inputs!.sender_ids = '[1,2,3,4,5,6]';
-    spec.provenance.declared_inputs!.population_labels = 'E,I';
+    spec.provenance.declared_inputs!.population_labels = '["E","I"]';
     const html = renderToStaticMarkup(<ReferenceVizSpecFigure spec={spec} />);
     expect(html.match(/data-mark="population-rate-steps"/g)).toHaveLength(2);
     expect(html).toContain('Excitatory population (E)');
@@ -254,7 +254,35 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
     expect(html).toContain('Connection-weight distribution');
     expect(html).toContain('Connection weight (pA)');
     expect(html).toContain('snapshot 1000 ms');
+    expect(html).toContain('17 connections');
+    expect(html).toContain('single_process_complete');
+    expect(html).toContain('Raw connection count is 17');
+    expect(html).toContain(
+      'Weight bin [-2.5, -1.5) pA: 3 connections',
+    );
     expect(html).toContain('data-bar-count="5"');
+    expect(html).toContain('data-source-connection-count="17"');
+    expect(html).toContain('data-snapshot-scope="single_process_complete"');
+  });
+
+  it('keeps distinct checked weight-bin edges and narrow-domain ticks distinguishable', () => {
+    const spec = structuredClone(getExamplePayload('nest.weight_histogram')!);
+    Object.assign(spec.params, {
+      bin_centers: [100.125, 100.375],
+      weight_counts: [1, 1],
+      values: [1, 1],
+      bin_width: 0.25,
+      window_start: 100,
+      window_stop: 100.5,
+      connection_count: 2,
+    });
+    const html = renderToStaticMarkup(<ReferenceVizSpecFigure spec={spec} />);
+    expect(html).not.toContain('Invalid skill invocation');
+    expect(html).toContain('Weight bin [100, 100.25) pA');
+    expect(html).toContain('Weight bin [100.25, 100.5) pA');
+    expect(html).not.toContain('Weight bin [100, 100) pA');
+    expect(html).toContain('>100.125<');
+    expect(html).toContain('>100.375<');
   });
 
   it('renders only measured plasticity weights and states what is absent', () => {
@@ -787,6 +815,15 @@ describe('reference chart geometry remains finite and literal-data preserving', 
     expect(numericDomain([0, 0], { includeZero: true })).toEqual({ min: 0, max: 1 });
   });
 
+  it('deduplicates large-origin ticks while preserving both domain endpoints', () => {
+    const origin = 2 ** 52;
+    const ticks = tickValues({ min: origin - 1, max: origin + 1 }, 5);
+    expect(ticks[0]).toBe(origin - 1);
+    expect(ticks.at(-1)).toBe(origin + 1);
+    expect(new Set(ticks).size).toBe(ticks.length);
+    expect(ticks.length).toBeLessThan(5);
+  });
+
   it('uses exact horizontal/vertical steps and starts a new subpath across compacted gaps', () => {
     const centers = [0.5, 1.5, 2.5, 3.5];
     const values = [1, 4, 2, 8];
@@ -1039,6 +1076,41 @@ describe('reference chart routing fails closed', () => {
     expect(html).toContain('Invalid skill invocation');
     expect(html).toContain('does not match skill');
     expect(html).not.toContain('<svg');
+  });
+
+  it('never renders SVG after a scientific provenance contradiction', () => {
+    for (const [skill, mutate] of [
+      [
+        'nest.voltage_trace',
+        (spec: NonNullable<ReturnType<typeof getExamplePayload>>) => {
+          spec.provenance.declared_inputs!.sampling_interval = 0.1;
+        },
+      ],
+      [
+        'nest.weight_matrix',
+        (spec: NonNullable<ReturnType<typeof getExamplePayload>>) => {
+          spec.provenance.declared_inputs!.source_ids = '[999]';
+        },
+      ],
+      [
+        'nest.spatial_map_2d',
+        (spec: NonNullable<ReturnType<typeof getExamplePayload>>) => {
+          spec.provenance.declared_inputs!.extent = '[999,999]';
+        },
+      ],
+      [
+        'nest.phase_plane',
+        (spec: NonNullable<ReturnType<typeof getExamplePayload>>) => {
+          spec.provenance.declared_inputs!.state_variables = '["Ca","IP3"]';
+        },
+      ],
+    ] as const) {
+      const spec = structuredClone(getExamplePayload(skill)!);
+      mutate(spec);
+      const html = renderToStaticMarkup(<ReferenceVizSpecFigure spec={spec} />);
+      expect(html, skill).toContain('Invalid skill invocation');
+      expect(html, skill).not.toContain('<svg');
+    }
   });
 
   it('returns explicit unsupported states for native 3D topology and KG skills', () => {

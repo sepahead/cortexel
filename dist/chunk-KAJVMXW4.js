@@ -5,7 +5,7 @@ import {
   validateSkillInvocation,
   validateSpec,
   validateVizSpec
-} from "./chunk-EAGSNBY3.js";
+} from "./chunk-RT5WPA3I.js";
 import {
   readOwnEnumerableDataProperty
 } from "./chunk-UEJPZXDX.js";
@@ -214,4 +214,4 @@ function SceneFrame({
 export {
   VizSpecRenderer
 };
-//# sourceMappingURL=chunk-75CM52FL.js.map
+//# sourceMappingURL=chunk-KAJVMXW4.js.map

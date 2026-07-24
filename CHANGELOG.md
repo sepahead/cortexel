@@ -6,6 +6,28 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — legacy VizSpec provenance closure
+
+- The exact-match pre-1.0 `VizSpec` version is now `1.4.0`, so stored `1.3.0`
+  payloads are refused instead of being silently reinterpreted under materially
+  tighter skill and provenance rules. The skill axis is `1.7.0`, the portable
+  skills manifest is version 10, and its parameter, provenance-parameter, and
+  strict-invocation languages are versions 10, 4, and 3 respectively.
+- Required provenance claims now have a total machine-readable classification.
+  Checked bindings reject contradictory units, variables, sampling intervals,
+  typed identifier universes, snapshot times, population denominators, and
+  projected values; irreducibly external claims carry a mandatory disclosure
+  rather than being presented as validation conclusions.
+- Every external identifier-universe declaration now has a canonical typed
+  representation, and positive aggregate connection evidence rejects a provably
+  empty opposite endpoint universe without pretending to recover endpoint
+  identities. External spatial extents are canonical positive numeric arrays
+  with a skill-specific 2D/3D shape check; their truth remains caller-declared.
+- Legacy FigureRequest migration entries are explicitly report-only until an
+  executable transform exists, and the generator checks bidirectional map/catalog
+  ownership. It no longer advertises membrane-voltage inference or emits a
+  warning-severity blocking migration error.
+
 ### Fixed — synaptic-weight cross-field authority
 
 - The revision-2 synaptic-weight validator now owns the complete raw and
@@ -62,8 +84,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   must opt in and read its external credential store explicitly.
 - The evidence-ledger checker now rejects duplicate JSON members, malformed or stale
   release arguments, and invalid project/release/statement metadata. Publication
-  lifecycle checks include the ledger, Python suite, build, full test suite, audit,
-  package lint, and clean-install package smoke behind the release verifier.
+  lifecycle checks include the ledger, Python suite, build, full test suite, Lean
+  proof compilation, audit, package lint, and clean-install package smoke behind
+  the release verifier.
 - The lockfile now overrides Ajv's compatible `fast-uri` range to patched `3.1.4`,
   excluding the high-severity literal-backslash authority-confusion vulnerability in
   `3.0.0` through `3.1.3` without adding a second, incompatible major version.

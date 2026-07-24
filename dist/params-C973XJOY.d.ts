@@ -401,8 +401,11 @@ declare const SpatialMap2DParamsSchema: z.ZodObject<{
 type SpatialMap2DParams = z.infer<typeof SpatialMap2DParamsSchema>;
 declare const WeightHistogramParamsSchema: z.ZodObject<{
     bin_centers: z.ZodArray<z.ZodNumber>;
+    weight_counts: z.ZodArray<z.ZodNumber>;
     values: z.ZodArray<z.ZodNumber>;
     bin_width: z.ZodNumber;
+    window_start: z.ZodNumber;
+    window_stop: z.ZodNumber;
     weight_units: z.ZodString;
     normalization: z.ZodEnum<{
         count: "count";
@@ -412,7 +415,21 @@ declare const WeightHistogramParamsSchema: z.ZodObject<{
         count: "count";
         probability: "probability";
     }>;
+    aggregation: z.ZodLiteral<"each_connection">;
+    binning: z.ZodLiteral<"left_closed_right_open">;
+    sample_policy: z.ZodLiteral<"complete">;
+    connection_count: z.ZodNumber;
     snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
 }, z.core.$strict>;
 type WeightHistogramParams = z.infer<typeof WeightHistogramParamsSchema>;
 declare const Spatial3DParamsSchema: z.ZodObject<{
@@ -442,7 +459,11 @@ type PhasePlaneParams = z.infer<typeof PhasePlaneParamsSchema>;
 declare const AstrocyteParamsSchema: z.ZodObject<{
     times_ms: z.ZodArray<z.ZodNumber>;
     ca_trace: z.ZodArray<z.ZodNumber>;
-    units: z.ZodString;
+    units: z.ZodEnum<{
+        uM: "uM";
+        µM: "µM";
+        μM: "μM";
+    }>;
 }, z.core.$strict>;
 type AstrocyteParams = z.infer<typeof AstrocyteParamsSchema>;
 declare const CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS: readonly ["paper", "model", "family"];

@@ -1,14 +1,14 @@
 import {
   LEGACY_SKILL_MAP
-} from "./chunk-6TQKFRP5.js";
+} from "./chunk-UF4PAGNO.js";
 import {
   snapshotValue
-} from "./chunk-WOZECEVX.js";
+} from "./chunk-LWMLQZWM.js";
 import {
   REQUEST_CONTRACT_IDENTITY,
   getBudgetLimits,
   makeError
-} from "./chunk-22OHKNZ5.js";
+} from "./chunk-D2XLGVGS.js";
 
 // src/core/migrate-v0.ts
 function migrateLegacyRequest(input) {
@@ -90,7 +90,8 @@ function migrateLegacyRequest(input) {
   const base = {
     legacyId,
     outcome: entry.outcome,
-    targetId: entry.targetId
+    targetId: entry.targetId,
+    ...entry.transformExecution ? { transformExecution: entry.transformExecution } : {}
   };
   switch (entry.outcome) {
     case "blocked":
@@ -182,8 +183,7 @@ function migrateLegacyRequest(input) {
             makeError({
               code: "MIGRATION_INFORMATION_MISSING",
               stage: "migrate",
-              severity: "warning",
-              message: `the 1.0 ${entry.targetId} contract requires information the legacy payload did not carry: ${unresolved.join(", ")}. Supply it and revalidate. Migration will not guess it.`
+              message: `this migration path to ${entry.targetId} requires information the legacy payload did not carry or cannot safely establish: ${unresolved.join(", ")}. Supply it and revalidate. Migration will not guess it.`
             })
           ] : []
         }
@@ -211,4 +211,4 @@ function migrateLegacyRequest(input) {
 export {
   migrateLegacyRequest
 };
-//# sourceMappingURL=chunk-IS3CK3R3.js.map
+//# sourceMappingURL=chunk-SYGM7AA6.js.map

@@ -52,8 +52,25 @@ describe('honesty model fails closed', () => {
   });
 
   it('labels synthetic data as schematic', () => {
-    const text = defaultHonestyCaption({ ...CONSERVATIVE_PROVENANCE, source: 'synthetic_test' });
+    const text = defaultHonestyCaption({
+      ...CONSERVATIVE_PROVENANCE,
+      source: 'synthetic_test',
+      synthetic: true,
+    });
     expect(text.toLowerCase()).toContain('schematic');
+  });
+
+  it('does not let caller-controlled source text choose the disclosure template', () => {
+    const ordinary = mandatoryDisclosure({
+      ...CONSERVATIVE_PROVENANCE,
+      source: 'nest_simulation:run-123',
+    });
+    const syntheticLooking = mandatoryDisclosure({
+      ...CONSERVATIVE_PROVENANCE,
+      source: 'synthetic_test',
+    });
+    expect(syntheticLooking).toBe(ordinary);
+    expect(syntheticLooking).not.toContain('Schematic');
   });
 
   it('appends an agent caption but never lets it REPLACE the mandatory disclosure', () => {
@@ -96,7 +113,11 @@ describe('honesty model fails closed', () => {
 
   it('mandatoryDisclosure is derived only from flags, never from the caption', () => {
     // Same flags → same disclosure regardless of any (agent-controlled) caption.
-    const base = mandatoryDisclosure({ ...CONSERVATIVE_PROVENANCE, source: 'synthetic_test', synthetic: true });
+    const base = mandatoryDisclosure({
+      ...CONSERVATIVE_PROVENANCE,
+      source: 'synthetic_test',
+      synthetic: true,
+    });
     const withCaption = mandatoryDisclosure({
       ...CONSERVATIVE_PROVENANCE,
       source: 'synthetic_test',

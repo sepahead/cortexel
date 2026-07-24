@@ -514,6 +514,24 @@ describe('degree and delay distributions', () => {
       snapshot_time_ms: 0,
       snapshot_scope: completeScope,
     }).success).toBe(false);
+    const representabilityOrigin = 2 ** 52;
+    expect(DelayDistributionParamsSchema.safeParse({
+      bin_centers_ms: [representabilityOrigin, representabilityOrigin + 1],
+      delay_counts: [1, 1],
+      values: [1, 1],
+      bin_width_ms: 1,
+      window_start_ms: representabilityOrigin - 0.5,
+      window_stop_ms: representabilityOrigin + 2,
+      normalization: 'count',
+      value_units: 'count',
+      delay_units: 'ms',
+      aggregation: 'each_connection',
+      binning: 'left_closed_right_open',
+      sample_policy: 'complete',
+      connection_count: 2,
+      snapshot_time_ms: 0,
+      snapshot_scope: completeScope,
+    }).success).toBe(false);
 
     const highIndex = paramsOf(synapseCollectionToDelayDistributionParams(
       { source: [1], target: [2], delay: [49_998.99999] },

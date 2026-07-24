@@ -8,13 +8,15 @@ import {
   exactBinary64Mean,
   exactBinary64Sum,
   exactRationalToBinary64
-} from "./chunk-6TQKFRP5.js";
+} from "./chunk-UF4PAGNO.js";
 import {
-  canonicalDigest,
-  canonicalDigestExcluding,
   finalizeErrors,
   makeError
-} from "./chunk-22OHKNZ5.js";
+} from "./chunk-D2XLGVGS.js";
+import {
+  canonicalDigest,
+  canonicalDigestExcluding
+} from "./chunk-ZYBCCIMH.js";
 
 // src/core/structural-validator.ts
 import { readFileSync, existsSync, readdirSync } from "fs";
@@ -2867,4 +2869,4 @@ export {
   deriveWeightDistribution,
   verifyHistogramValues
 };
-//# sourceMappingURL=chunk-TEVJHERV.js.map
+//# sourceMappingURL=chunk-45B2O2EE.js.map

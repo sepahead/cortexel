@@ -535,7 +535,7 @@ try {
           throw new Error('CJS core exports are incomplete');
         }
         if (!Array.isArray(manifest.skills) || manifest.skills.length !== ${NEST_SKILL_IDS.length} ||
-            manifest.manifestVersion !== '8' ||
+            manifest.manifestVersion !== '10' ||
             manifest.paramConstraintLanguage?.version !== ${JSON.stringify(PARAM_CONSTRAINT_LANGUAGE.version)} ||
             manifest.skillAxisVersion !== ${JSON.stringify(CORTEXEL_SKILL_VERSION)} ||
             manifest.specVersion !== ${JSON.stringify(CORTEXEL_SPEC_VERSION)} ||

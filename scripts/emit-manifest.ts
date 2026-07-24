@@ -25,9 +25,12 @@ import {
   NEST_SKILL_REGISTRY,
   PARAM_CONSTRAINT_LANGUAGE,
   STRICT_INVOCATION_POLICY,
+  externalProvenanceDisclosure,
+  provenanceVerificationForContract,
   skillParamsJsonSchema,
   toPortableJsonSchema,
   type ParamValidationConstraint,
+  type ProvenanceVerification,
 } from '../core/skills/registry';
 import { ROUTING_DISCRIMINATORS } from '../core/skills/router';
 import {
@@ -86,7 +89,10 @@ export interface SkillManifestEntry {
   };
   requiredInputKeys: string[];
   requiredProvenanceKeys: string[];
+  optionalProvenanceKeys: string[];
   requiredProvenanceFlags: Record<string, boolean>;
+  provenanceVerification: Record<string, ProvenanceVerification>;
+  externalProvenanceDisclosure: string | null;
   provenanceParamConstraints: ProvenanceParamConstraint[];
   /** JSON Schema (draft 2020-12) for `params`, so non-TS hosts validate/generate
    *  params structurally. Cross-field parity comes from paramConstraints. */
@@ -237,9 +243,19 @@ export function buildManifest(): SkillsManifest {
         : {}),
       requiredInputKeys: [...c.requiredInputKeys],
       requiredProvenanceKeys: [...c.requiredProvenanceKeys],
+      optionalProvenanceKeys: [...(c.optionalProvenanceKeys ?? [])],
       requiredProvenanceFlags: { ...(c.requiredProvenanceFlags ?? {}) },
+      provenanceVerification: {
+        ...provenanceVerificationForContract(c),
+      },
+      externalProvenanceDisclosure: externalProvenanceDisclosure(c),
       provenanceParamConstraints: (c.provenanceParamConstraints ?? []).map(
-        (constraint) => ({ ...constraint }),
+        (constraint) => ({
+          ...constraint,
+          ...(constraint.kind === 'one_of_literals'
+            ? { values: [...constraint.values] }
+            : {}),
+        }),
       ),
       ...(paramsJsonSchema ? { paramsJsonSchema } : {}),
       paramConstraints: (c.paramConstraints ?? []).map((constraint) => ({
@@ -338,9 +354,9 @@ export function buildManifest(): SkillsManifest {
     64,
   );
   return {
-    // v8: agent-discoverable topology transforms, deprecation/routing metadata,
-    // MPI-scoped snapshots, and portable matrix/degree/delay/spatial constraints.
-    manifestVersion: '8',
+    // v10: the v8 topology/routing surface plus strict provenance closure,
+    // exact-match VizSpec 1.4, and raw-count weight-histogram semantics.
+    manifestVersion: '10',
     skillAxisVersion: CORTEXEL_SKILL_VERSION,
     specVersion: CORTEXEL_SPEC_VERSION,
     vizRouterId: VIZ_ROUTER_ID,

@@ -5,4 +5,4 @@ defaultTargets = ["CortexelFormal"]
 [[lean_lib]]
 name = "CortexelFormal"
 srcDir = "formal"
-roots = ["WeightRowSaturation"]
+roots = ["WeightRowSaturation", "ProvenanceIdentifiability"]

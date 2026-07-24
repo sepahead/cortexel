@@ -401,6 +401,7 @@ describe('release identity — committed development metadata', () => {
       'bun run check:ledger',
       'bun run build',
       'bun run check',
+      'bun run check:formal',
       'bun run test:python',
       'bun run check:python',
       'bun run test:python-package',

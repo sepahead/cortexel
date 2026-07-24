@@ -1,12 +1,12 @@
 import {
   migrateLegacyRequest
-} from "../chunk-IS3CK3R3.js";
+} from "../chunk-SYGM7AA6.js";
 import {
   deriveDisclosures
-} from "../chunk-GCZJRQIF.js";
+} from "../chunk-B6TNJZR5.js";
 import {
   parseJsonStrict
-} from "../chunk-L2BRNVUB.js";
+} from "../chunk-RK555DMJ.js";
 import {
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
@@ -32,22 +32,18 @@ import {
   responseEventMembershipDigest,
   toSeconds,
   unitLabel
-} from "../chunk-6TQKFRP5.js";
+} from "../chunk-UF4PAGNO.js";
 import {
   snapshotValue
-} from "../chunk-WOZECEVX.js";
+} from "../chunk-LWMLQZWM.js";
 import {
   ARTIFACT_CONTRACT,
   CATALOG_DIGEST,
   CONTRACT_DIGEST,
-  CanonicalizationError,
   DEFAULT_PROFILE,
   PACKAGE_VERSION,
   REQUEST_CONTRACT,
   STABLE_SKILL_COUNT,
-  canonicalDigest,
-  canonicalDigestExcluding,
-  canonicalize,
   finalizeErrors,
   getBudgetLimits,
   getBuildIdentity,
@@ -56,12 +52,18 @@ import {
   pointer,
   restrictLimits,
   safeText,
+  tryGetBudgetLimits,
+  trySelectTighterBudgetProfile
+} from "../chunk-D2XLGVGS.js";
+import {
+  CanonicalizationError,
+  canonicalDigest,
+  canonicalDigestExcluding,
+  canonicalize,
   sha256Digest,
   sha256Hex,
-  tryGetBudgetLimits,
-  trySelectTighterBudgetProfile,
   utf8ByteLength
-} from "../chunk-22OHKNZ5.js";
+} from "../chunk-ZYBCCIMH.js";
 
 // src/core/index.ts
 import {

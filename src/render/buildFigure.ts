@@ -5518,7 +5518,10 @@ function compile(
       const uncertaintyTargetUnit = entry.series.normalization
         ? entry.series.sourceValueUnit
         : entry.series.valueUnit;
-      return traceOperation({ series: rawSeries[sourceIndex], uncertainty: analogUncertainty }, entry.series, window, parameters, {
+      return traceOperation({
+        series: rawSeries[sourceIndex],
+        ...(analogUncertainty ? { uncertainty: analogUncertainty } : {}),
+      }, entry.series, window, parameters, {
         lower: entry.uncertaintyLower,
         upper: entry.uncertaintyUpper,
         ...(analogUncertainty?.kind &&

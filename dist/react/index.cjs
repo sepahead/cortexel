@@ -760,7 +760,7 @@ var CONSERVATIVE_PROVENANCE = Object.freeze({
   synthetic: false
 });
 var HONESTY_POLICY = Object.freeze({
-  version: "2",
+  version: "3",
   calibratedPosteriorAccepted: false,
   captionRequiredWhenAny: Object.freeze([
     "synthetic=true",
@@ -768,11 +768,6 @@ var HONESTY_POLICY = Object.freeze({
     "advisory_only=true",
     "is_paper_local_evidence=false"
   ]),
-  syntheticSourceMatch: Object.freeze({
-    caseInsensitive: true,
-    equals: Object.freeze(["synthetic_test"]),
-    prefixes: Object.freeze(["synthetic"])
-  }),
   precedence: Object.freeze([
     "synthetic",
     "advisory_only",
@@ -789,13 +784,21 @@ var HONESTY_POLICY = Object.freeze({
   callerCaptionLabel: "Caller note (unverified):",
   callerCaptionControls: "escape C0/C1, bidi, zero-width, and BOM controls",
   bidiIsolationRequired: true,
-  weakSkillDisclosure: "prepend"
+  contractDisclosureOrder: Object.freeze([
+    "weak_skill",
+    "external_provenance",
+    "flag_derived_mandatory",
+    "caller_note"
+  ]),
+  weakSkillDisclosure: "contract_owned_first",
+  externalProvenanceDisclosure: "contract_owned_after_weak_before_flag_derived_mandatory",
+  flagDerivedMandatoryDisclosure: "derived_only_from_provenance_flags_and_always_before_caller_note"
 });
 function requiresHonestyCaption(p) {
   return !!p.synthetic || !p.calibrated_posterior || p.advisory_only || !p.is_paper_local_evidence;
 }
 function mandatoryDisclosure(p) {
-  if (p.synthetic || p.source.toLowerCase() === "synthetic_test" || p.source.toLowerCase().startsWith("synthetic")) {
+  if (p.synthetic) {
     return HONESTY_POLICY.templates.synthetic;
   }
   if (p.advisory_only) {
@@ -807,9 +810,24 @@ function mandatoryDisclosure(p) {
   return HONESTY_POLICY.templates.not_calibrated;
 }
 function defaultHonestyCaption(p) {
-  const disclosure = mandatoryDisclosure(p);
+  return composeHonestyCaption(p) ?? mandatoryDisclosure(p);
+}
+function composeHonestyCaption(p, contractDisclosures = {}) {
+  const parts = [];
+  if (contractDisclosures.weakSkill) {
+    parts.push(contractDisclosures.weakSkill);
+  }
+  if (contractDisclosures.externalProvenance) {
+    parts.push(contractDisclosures.externalProvenance);
+  }
+  if (requiresHonestyCaption(p)) {
+    parts.push(mandatoryDisclosure(p));
+  }
   const note = p.caption?.trim();
-  return note ? `${disclosure} Caller note (unverified): ${safeDiagnosticText(note, 500)}` : disclosure;
+  if (note) {
+    parts.push(`Caller note (unverified): ${safeDiagnosticText(note, 500)}`);
+  }
+  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 // core/vizSpec.ts
@@ -839,7 +857,7 @@ var SCENE_NAMES = Object.freeze([
 ]);
 
 // core/vizSpec.ts
-var CORTEXEL_SPEC_VERSION = "1.3.0";
+var CORTEXEL_SPEC_VERSION = "1.4.0";
 var CORTEXEL_JSON_LIMITS = Object.freeze({
   maxDepth: 32,
   maxNodes: 5e5,
@@ -1222,7 +1240,7 @@ function validateVizSpec(input) {
 }
 
 // core/skills/registry.ts
-var import_zod3 = require("zod");
+var import_zod4 = require("zod");
 
 // core/skills/skillIds.ts
 var NEST_SKILL_IDS = Object.freeze([
@@ -1283,8 +1301,1020 @@ var VALID_RENDERER_ROUTES = Object.freeze([
   "manim"
 ]);
 
-// core/skills/params.ts
+// core/skills/provenanceKeys.ts
 var import_zod2 = require("zod");
+
+// src/core/sha256.ts
+var K = new Uint32Array([
+  1116352408,
+  1899447441,
+  3049323471,
+  3921009573,
+  961987163,
+  1508970993,
+  2453635748,
+  2870763221,
+  3624381080,
+  310598401,
+  607225278,
+  1426881987,
+  1925078388,
+  2162078206,
+  2614888103,
+  3248222580,
+  3835390401,
+  4022224774,
+  264347078,
+  604807628,
+  770255983,
+  1249150122,
+  1555081692,
+  1996064986,
+  2554220882,
+  2821834349,
+  2952996808,
+  3210313671,
+  3336571891,
+  3584528711,
+  113926993,
+  338241895,
+  666307205,
+  773529912,
+  1294757372,
+  1396182291,
+  1695183700,
+  1986661051,
+  2177026350,
+  2456956037,
+  2730485921,
+  2820302411,
+  3259730800,
+  3345764771,
+  3516065817,
+  3600352804,
+  4094571909,
+  275423344,
+  430227734,
+  506948616,
+  659060556,
+  883997877,
+  958139571,
+  1322822218,
+  1537002063,
+  1747873779,
+  1955562222,
+  2024104815,
+  2227730452,
+  2361852424,
+  2428436474,
+  2756734187,
+  3204031479,
+  3329325298
+]);
+var rotr = (x, n) => x >>> n | x << 32 - n;
+function sha256Bytes(message) {
+  const h = new Uint32Array([
+    1779033703,
+    3144134277,
+    1013904242,
+    2773480762,
+    1359893119,
+    2600822924,
+    528734635,
+    1541459225
+  ]);
+  const bitLength = message.length * 8;
+  const paddedLength = (message.length + 8 >> 6) + 1 << 6;
+  const block = new Uint8Array(paddedLength);
+  block.set(message);
+  block[message.length] = 128;
+  const hi = Math.floor(bitLength / 4294967296);
+  const lo = bitLength >>> 0;
+  const lengthOffset = paddedLength - 8;
+  block[lengthOffset] = hi >>> 24 & 255;
+  block[lengthOffset + 1] = hi >>> 16 & 255;
+  block[lengthOffset + 2] = hi >>> 8 & 255;
+  block[lengthOffset + 3] = hi & 255;
+  block[lengthOffset + 4] = lo >>> 24 & 255;
+  block[lengthOffset + 5] = lo >>> 16 & 255;
+  block[lengthOffset + 6] = lo >>> 8 & 255;
+  block[lengthOffset + 7] = lo & 255;
+  const w = new Uint32Array(64);
+  for (let offset = 0; offset < paddedLength; offset += 64) {
+    for (let i = 0; i < 16; i++) {
+      const j = offset + i * 4;
+      w[i] = (block[j] << 24 | block[j + 1] << 16 | block[j + 2] << 8 | block[j + 3]) >>> 0;
+    }
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ w[i - 15] >>> 3;
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ w[i - 2] >>> 10;
+      w[i] = w[i - 16] + s0 + w[i - 7] + s1 >>> 0;
+    }
+    let a = h[0];
+    let b = h[1];
+    let c = h[2];
+    let d = h[3];
+    let e = h[4];
+    let f = h[5];
+    let g = h[6];
+    let hh = h[7];
+    for (let i = 0; i < 64; i++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = e & f ^ ~e & g;
+      const temp1 = hh + S1 + ch + K[i] + w[i] >>> 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = a & b ^ a & c ^ b & c;
+      const temp2 = S0 + maj >>> 0;
+      hh = g;
+      g = f;
+      f = e;
+      e = d + temp1 >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = temp1 + temp2 >>> 0;
+    }
+    h[0] = h[0] + a >>> 0;
+    h[1] = h[1] + b >>> 0;
+    h[2] = h[2] + c >>> 0;
+    h[3] = h[3] + d >>> 0;
+    h[4] = h[4] + e >>> 0;
+    h[5] = h[5] + f >>> 0;
+    h[6] = h[6] + g >>> 0;
+    h[7] = h[7] + hh >>> 0;
+  }
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 8; i++) {
+    out[i * 4] = h[i] >>> 24 & 255;
+    out[i * 4 + 1] = h[i] >>> 16 & 255;
+    out[i * 4 + 2] = h[i] >>> 8 & 255;
+    out[i * 4 + 3] = h[i] & 255;
+  }
+  return out;
+}
+var HEX = "0123456789abcdef";
+function toHex(bytes) {
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) {
+    out += HEX[bytes[i] >>> 4 & 15] + HEX[bytes[i] & 15];
+  }
+  return out;
+}
+var UTF8 = new TextEncoder();
+function sha256Hex(text) {
+  return toHex(sha256Bytes(UTF8.encode(text)));
+}
+function sha256Digest(text) {
+  return `sha256:${sha256Hex(text)}`;
+}
+
+// src/core/canonicalize.ts
+var CanonicalizationError = class extends Error {
+  path;
+  constructor(message, path) {
+    super(message);
+    this.name = "CanonicalizationError";
+    this.path = path;
+  }
+};
+function assertWellFormed(text, path) {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code >= 55296 && code <= 56319) {
+      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
+      if (!(next >= 56320 && next <= 57343)) {
+        throw new CanonicalizationError("unpaired high surrogate", path);
+      }
+      i++;
+    } else if (code >= 56320 && code <= 57343) {
+      throw new CanonicalizationError("unpaired low surrogate", path);
+    }
+  }
+}
+function serializeNumber(value, path) {
+  if (!Number.isFinite(value)) {
+    throw new CanonicalizationError(
+      "non-finite numbers are outside the JCS domain and have no canonical form",
+      path
+    );
+  }
+  return JSON.stringify(value);
+}
+function safeOwnKeys(value, path) {
+  try {
+    return Reflect.ownKeys(value);
+  } catch {
+    throw new CanonicalizationError("object keys could not be inspected without executing a hostile trap", path);
+  }
+}
+function safeDescriptor(value, key, path) {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) return descriptor;
+  } catch {
+  }
+  throw new CanonicalizationError("an object member could not be inspected safely", path);
+}
+function childPath(path, key) {
+  return `${path}/${key.replace(/~/gu, "~0").replace(/\//gu, "~1")}`;
+}
+function serialize(value, path, depth) {
+  if (depth > 128) {
+    throw new CanonicalizationError("value nests deeper than the canonicalizer permits", path);
+  }
+  if (value === null) return "null";
+  switch (typeof value) {
+    case "boolean":
+      return value ? "true" : "false";
+    case "number":
+      return serializeNumber(value, path);
+    case "string":
+      assertWellFormed(value, path);
+      return JSON.stringify(value);
+    case "object":
+      break;
+    default:
+      throw new CanonicalizationError(
+        `values of type ${typeof value} are outside the JCS domain`,
+        path
+      );
+  }
+  let array = false;
+  try {
+    array = Array.isArray(value);
+  } catch {
+    throw new CanonicalizationError("the value could not be inspected safely", path);
+  }
+  if (array) {
+    const keys2 = safeOwnKeys(value, path);
+    const lengthDescriptor = safeDescriptor(value, "length", path);
+    const length = lengthDescriptor.value;
+    if (!Number.isSafeInteger(length) || length < 0) {
+      throw new CanonicalizationError("array length is outside the canonical JSON domain", path);
+    }
+    const indexKeys = [];
+    for (const key of keys2) {
+      if (typeof key === "symbol") {
+        throw new CanonicalizationError("symbol-keyed array members are outside the JSON domain", path);
+      }
+      if (key === "length") continue;
+      const index = Number(key);
+      if (!/^(0|[1-9][0-9]*)$/u.test(key) || !Number.isSafeInteger(index) || index >= length) {
+        throw new CanonicalizationError("named array members are outside the JSON domain", path);
+      }
+      const descriptor = safeDescriptor(value, key, childPath(path, key));
+      if (!descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
+        throw new CanonicalizationError("array accessors and hidden members are outside the JSON domain", path);
+      }
+      indexKeys.push(key);
+    }
+    if (indexKeys.length !== length) {
+      throw new CanonicalizationError("sparse arrays are outside the canonical JSON domain", path);
+    }
+    indexKeys.sort((left, right) => Number(left) - Number(right));
+    const parts2 = [];
+    for (const key of indexKeys) {
+      const at = childPath(path, key);
+      const descriptor = safeDescriptor(value, key, at);
+      parts2.push(serialize(descriptor.value, at, depth + 1));
+    }
+    return `[${parts2.join(",")}]`;
+  }
+  const record2 = value;
+  let prototype;
+  try {
+    prototype = Object.getPrototypeOf(record2);
+  } catch {
+    throw new CanonicalizationError("the object prototype could not be inspected safely", path);
+  }
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new CanonicalizationError(
+      "only plain objects can be canonicalized; a class instance has no canonical JSON form",
+      path
+    );
+  }
+  const ownKeys = safeOwnKeys(record2, path);
+  const keys = [];
+  for (const key of ownKeys) {
+    if (typeof key === "symbol") {
+      throw new CanonicalizationError("symbol-keyed members are outside the JSON domain", path);
+    }
+    const descriptor = safeDescriptor(record2, key, childPath(path, key));
+    if (!descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
+      throw new CanonicalizationError("accessors and hidden members are outside the JSON domain", path);
+    }
+    keys.push(key);
+  }
+  keys.sort();
+  const parts = [];
+  for (const key of keys) {
+    assertWellFormed(key, path);
+    const at = childPath(path, key);
+    const child = safeDescriptor(record2, key, at).value;
+    if (child === void 0) {
+      throw new CanonicalizationError(
+        `member ${JSON.stringify(key)} is undefined; undefined is not a JSON value`,
+        at
+      );
+    }
+    parts.push(`${JSON.stringify(key)}:${serialize(child, at, depth + 1)}`);
+  }
+  return `{${parts.join(",")}}`;
+}
+function canonicalize(value) {
+  return serialize(value, "", 0);
+}
+var UTF82 = new TextEncoder();
+function canonicalDigest(value) {
+  return sha256Digest(canonicalize(value));
+}
+
+// core/skills/provenanceKeys.ts
+var PROVENANCE_KEYS = Object.freeze([
+  "device_id",
+  "recorded_variable",
+  "units",
+  "sampling_interval",
+  "recorder_id",
+  "sender_ids",
+  "population_labels",
+  "time_units",
+  "source_ids",
+  "target_ids",
+  "synapse_model",
+  "weight_units",
+  "extent",
+  "spatial_units",
+  "mask",
+  "kernel",
+  "projection_sample_policy",
+  "morphology_disclaimer",
+  "frame_rate",
+  "state_variables",
+  "derivation_method",
+  "model_context",
+  "fixed_parameters",
+  "bin_ms",
+  "histogram_normalization",
+  "interval_scope",
+  "event_alignment",
+  "psth_aggregation",
+  "connection_sample_policy",
+  "snapshot_time_ms",
+  "snapshot_scope",
+  "parallel_edge_policy",
+  "matrix_axis_order",
+  "matrix_aggregation",
+  "delay_units",
+  "degree_direction",
+  "degree_counting",
+  "zero_degree_policy",
+  "node_ids",
+  "position_scope",
+  "detector_id",
+  "reference_population",
+  "target_population",
+  "correlation_normalization",
+  "correlation_units",
+  "lag_convention",
+  "binning_policy",
+  "stim_units",
+  "rate_normalization",
+  "graph_source",
+  "graph_snapshot_id",
+  "graph_scope",
+  "identity_advisory"
+]);
+var ProvenanceKeyEnum = import_zod2.z.enum(PROVENANCE_KEYS);
+var STRICT_PROVENANCE_POLICY = Object.freeze({
+  unknownDeclaredInputKeys: "reject",
+  globallyKnownButSkillUnclassifiedKeys: "reject",
+  allowedDeclaredInputKeys: PROVENANCE_KEYS,
+  perSkillAllowedKeys: "skill.requiredProvenanceKeys union skill.optionalProvenanceKeys",
+  requiredKeysSource: "skill.requiredProvenanceKeys",
+  presentKnownValues: "validate every present per-skill allowed key with provenanceValueConstraints",
+  requiredKeysControl: "required keys control presence; optional keys are allowed only when classified by the selected skill",
+  normalizeBeforeValidation: true
+});
+var PROVENANCE_KEY_LABELS = Object.freeze({
+  device_id: "device id",
+  recorded_variable: "recorded variable",
+  units: "units",
+  sampling_interval: "sampling interval",
+  recorder_id: "spike_recorder id",
+  sender_ids: "sender ids",
+  population_labels: "population labels",
+  time_units: "time units",
+  source_ids: "source ids",
+  target_ids: "target ids",
+  synapse_model: "synapse model",
+  weight_units: "weight units",
+  extent: "extent",
+  spatial_units: "spatial coordinate units",
+  mask: "mask",
+  kernel: "kernel",
+  projection_sample_policy: "projection sample policy",
+  morphology_disclaimer: "morphology geometry disclaimer",
+  frame_rate: "frame rate",
+  state_variables: "state variables",
+  derivation_method: "phase-plane derivative derivation method",
+  model_context: "phase-plane model context",
+  fixed_parameters: "phase-plane fixed parameters",
+  bin_ms: "bin width",
+  histogram_normalization: "histogram normalization",
+  interval_scope: "inter-spike interval scope",
+  event_alignment: "event alignment",
+  psth_aggregation: "PSTH sender/trial aggregation",
+  connection_sample_policy: "connection sample policy",
+  snapshot_time_ms: "connection snapshot time in ms",
+  snapshot_scope: "connection snapshot completeness / MPI scope",
+  parallel_edge_policy: "parallel-edge handling policy",
+  matrix_axis_order: "matrix source/target axis order",
+  matrix_aggregation: "parallel-connection matrix aggregation",
+  delay_units: "synaptic delay units",
+  degree_direction: "directed degree orientation",
+  degree_counting: "degree edge-counting policy",
+  zero_degree_policy: "zero-degree node inclusion policy",
+  node_ids: "spatial node ids",
+  position_scope: "spatial position completeness / MPI scope",
+  detector_id: "correlation_detector id",
+  reference_population: "correlogram reference population",
+  target_population: "correlogram target population",
+  correlation_normalization: "correlogram normalization",
+  correlation_units: "correlogram value units",
+  lag_convention: "correlogram lag convention",
+  binning_policy: "bin interval policy",
+  stim_units: "stimulus units",
+  rate_normalization: "rate normalization",
+  graph_source: "graph source",
+  graph_snapshot_id: "immutable graph snapshot id",
+  graph_scope: "graph scope",
+  identity_advisory: "model-identity advisory (structural similarity, not certified sameness)"
+});
+function isProvenanceKey(value) {
+  return typeof value === "string" && PROVENANCE_KEYS.includes(value);
+}
+var PROVENANCE_PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
+  version: "4",
+  evaluationOrder: Object.freeze([
+    "apply provenanceValueConstraints normalization",
+    "validate every present known provenance value",
+    "check required provenance-key presence",
+    "evaluate provenanceParamConstraints in listed order"
+  ]),
+  kinds: Object.freeze([
+    "equals_param",
+    "equals_param_path",
+    "equals_literal",
+    "one_of_literals",
+    "matches_regular_time_axis",
+    "each_label_matches_variable",
+    "matches_canonical_json_param",
+    "matches_projected_id_collection",
+    "all_projected_values_equal",
+    "canonical_json_array_length_matches_param",
+    "canonical_json_array_length_equals",
+    "canonical_json_array_length_at_least_projected_sum"
+  ]),
+  semantics: Object.freeze({
+    equals_param: "declared value must equal one checked top-level params property under Object.is",
+    equals_param_path: "declared value must equal the checked scalar reached through a dot-separated sequence of safe own data-property names under Object.is",
+    equals_literal: "declared value must equal the contract literal under Object.is",
+    one_of_literals: "declared value must equal one contract literal under Object.is",
+    matches_regular_time_axis: Object.freeze({
+      timeArray: "the checked array contains at least two finite, strictly increasing binary64 timestamps",
+      declaredInterval: "a positive finite binary64 number",
+      binary64Epsilon: Number.EPSILON,
+      relativeScale: "max(abs(right-left), abs(declaredInterval))",
+      candidateRoundoff: "roundoffUlps * binary64Epsilon * max(abs(left), abs(right), abs(declaredInterval))",
+      roundoffCap: "maxRoundoffFraction * abs(declaredInterval)",
+      boundedRoundoff: "candidateRoundoff when candidateRoundoff <= roundoffCap, otherwise 0",
+      tolerance: "absoluteTolerance + relativeTolerance * relativeScale + boundedRoundoff",
+      acceptance: "for every adjacent pair, abs((right-left)-declaredInterval) <= tolerance"
+    }),
+    each_label_matches_variable: "every checked series label must either exactly equal the declared recorded variable or consist of a nonblank series identity, the exact published separator, and the exact declared variable as its terminal segment",
+    matches_canonical_json_param: "the declared string must be either the RFC 8785 canonical JSON serialization of the checked array/tuple or, when allowDigest=true, its sha256:<64 lowercase hex> RFC 8785 digest",
+    matches_projected_id_collection: "project an optional own id field from every item of the checked array; direct id arrays contain unique members in the published idDomain (non-negative safe integers or nonblank strings); ordered equality preserves order, set equality compares unique members, and contains requires every projected member to occur in the declared canonical JSON array; an exact equality digest is sha256 over RFC 8785 canonical JSON of the projected sequence (for set comparison, remove later duplicates while preserving first encounter order); when allowOpaqueDigestCount=true on a supplemental external contains check, sha256:<64 lowercase hex>;count:<n> cannot prove membership or preimage type but must declare at least the number of distinct observed ids",
+    all_projected_values_equal: "when projected values exist, every present projected scalar must equal the declared value under Object.is; an empty or all-absent projection remains externally unverifiable and follows emptyPolicy",
+    canonical_json_array_length_matches_param: "the declared collection is either a canonical JSON array of unique ids in the published idDomain or, when allowed, sha256:<64 lowercase hex>;count:<non-negative safe integer>; relation=equals requires its item count to equal the checked non-negative safe-integer param, relation=at_least requires at least that count, and relation=nonempty_if_positive requires at least one declared id exactly when the checked param is positive (zero permits an empty collection); the last relation rejects a provably empty endpoint universe without claiming to identify its members",
+    canonical_json_array_length_equals: "the declared value must be an RFC 8785 canonical JSON array with exactly expectedLength elements; this per-skill shape check does not establish that an external declaration is true",
+    canonical_json_array_length_at_least_projected_sum: "the declared collection is a unique id array or allowed opaque digest+count, and its item count must be at least the safe-integer sum of the non-negative safe-integer field projected from the checked object array; this checks the disjoint selected-population denominator lower bound without claiming to recover member identity"
+  })
+});
+var PROVENANCE_VALUE_CONSTRAINTS = (() => {
+  const constraints = /* @__PURE__ */ Object.create(null);
+  for (const key of PROVENANCE_KEYS) {
+    constraints[key] = { kind: "nonblank_string", normalize: "trim" };
+  }
+  for (const key of ["sampling_interval", "bin_ms", "frame_rate"]) {
+    constraints[key] = { kind: "positive_finite_number" };
+  }
+  constraints.snapshot_time_ms = { kind: "nonnegative_finite_number" };
+  for (const key of ["device_id", "recorder_id", "detector_id"]) {
+    constraints[key] = {
+      kind: "nonnegative_safe_integer_or_nonblank_string",
+      normalize: "trim"
+    };
+  }
+  for (const key of ["sender_ids", "source_ids", "target_ids", "node_ids"]) {
+    constraints[key] = {
+      kind: "canonical_id_collection",
+      normalize: "trim",
+      canonicalization: "RFC8785",
+      idDomain: "nonnegative_safe_integer",
+      unique: true,
+      allowDigest: true,
+      allowOpaqueDigestCount: true
+    };
+  }
+  constraints.extent = {
+    kind: "canonical_positive_finite_number_array",
+    normalize: "trim",
+    canonicalization: "RFC8785",
+    allowedLengths: Object.freeze([2, 3])
+  };
+  constraints.identity_advisory = { kind: "literal_true" };
+  for (const constraint of Object.values(constraints)) Object.freeze(constraint);
+  return Object.freeze(constraints);
+})();
+function declaredProvenanceValueError(key, value) {
+  const constraint = PROVENANCE_VALUE_CONSTRAINTS[key];
+  switch (constraint.kind) {
+    case "positive_finite_number":
+      return typeof value === "number" && Number.isFinite(value) && value > 0 ? null : `${key} must be a positive finite number`;
+    case "nonnegative_finite_number":
+      return typeof value === "number" && Number.isFinite(value) && value >= 0 && !Object.is(value, -0) ? null : `${key} must be a non-negative finite number`;
+    case "literal_true":
+      return value === true ? null : "identity_advisory must be literal true (model identity is advisory)";
+    case "nonnegative_safe_integer_or_nonblank_string":
+      if (typeof value === "number") {
+        return Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0) ? null : `${key} numeric ids must be non-negative safe integers`;
+      }
+      return typeof value === "string" && value.trim().length > 0 ? null : `${key} must be a non-empty string or numeric id`;
+    case "canonical_id_collection": {
+      if (typeof value !== "string") {
+        return `${key} must be a canonical id-array or digest string`;
+      }
+      if (constraint.allowDigest && isCanonicalDigest(value)) return null;
+      if (constraint.allowOpaqueDigestCount && opaqueDigestCollectionCount(value) !== void 0) {
+        return null;
+      }
+      const parsed = parseCanonicalIdArray(value, key, constraint.idDomain);
+      return parsed.ok ? null : parsed.message;
+    }
+    case "canonical_positive_finite_number_array": {
+      const parsed = parseCanonicalScalarArray(value, key);
+      if (!parsed.ok) return parsed.message;
+      if (!constraint.allowedLengths.includes(parsed.values.length)) {
+        return `${key} must contain ${constraint.allowedLengths.join(" or ")} elements`;
+      }
+      return parsed.values.every((element) => typeof element === "number" && Number.isFinite(element) && element > 0 && !Object.is(element, -0)) ? null : `${key} must contain only strictly positive finite numbers`;
+    }
+    case "string":
+      return typeof value === "string" ? null : `${key} must be a string`;
+    case "nonblank_string":
+      return typeof value === "string" && value.trim().length > 0 ? null : `${key} must be a non-empty string`;
+  }
+}
+function normalizeDeclaredProvenanceValue(key, value) {
+  const constraint = PROVENANCE_VALUE_CONSTRAINTS[key];
+  return "normalize" in constraint && constraint.normalize === "trim" && typeof value === "string" ? value.trim() : value;
+}
+function normalizeDeclaredProvenanceInputs(inputs) {
+  const normalized = {};
+  for (const key of Object.keys(inputs)) {
+    const value = inputs[key];
+    Object.defineProperty(normalized, key, {
+      value: isProvenanceKey(key) ? normalizeDeclaredProvenanceValue(key, value) : value,
+      enumerable: true,
+      writable: true,
+      configurable: true
+    });
+  }
+  return normalized;
+}
+function resolveSafeParamPath(params, paramPath) {
+  const segments = paramPath.split(".");
+  if (segments.length === 0 || segments.some((segment) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(segment) || segment === "__proto__" || segment === "prototype" || segment === "constructor")) {
+    return {
+      ok: false,
+      message: `params.${paramPath} is not a safe parameter path`
+    };
+  }
+  let value = params;
+  for (const segment of segments) {
+    if (value === null || typeof value !== "object" || Array.isArray(value) || !Object.hasOwn(value, segment)) {
+      return {
+        ok: false,
+        message: `params.${paramPath} is absent`
+      };
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, segment);
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      return {
+        ok: false,
+        message: `params.${paramPath} is not an enumerable data property`
+      };
+    }
+    value = descriptor.value;
+  }
+  return { ok: true, value };
+}
+function regularTimeAxisError(constraint, actual, params) {
+  if (typeof actual !== "number" || !Number.isFinite(actual) || actual <= 0) {
+    return `${constraint.provenanceKey} must be a positive finite number`;
+  }
+  const resolved = resolveSafeParamPath(params, constraint.paramPath);
+  if (!resolved.ok) {
+    return `cannot verify ${constraint.provenanceKey}: ${resolved.message}`;
+  }
+  if (!Array.isArray(resolved.value) || !resolved.value.every((value) => typeof value === "number" && Number.isFinite(value))) {
+    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath} is not a finite numeric array`;
+  }
+  if (!Number.isFinite(constraint.absoluteTolerance) || constraint.absoluteTolerance < 0 || !Number.isFinite(constraint.relativeTolerance) || constraint.relativeTolerance < 0 || !Number.isFinite(constraint.roundoffUlps) || constraint.roundoffUlps < 0 || !Number.isFinite(constraint.maxRoundoffFraction) || constraint.maxRoundoffFraction < 0) {
+    return `cannot verify ${constraint.provenanceKey}: the contract has invalid sampling tolerances`;
+  }
+  const times = resolved.value;
+  if (times.length < 2) {
+    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath} must contain at least two timestamps`;
+  }
+  for (let index = 1; index < times.length; index++) {
+    const left = times[index - 1];
+    const right = times[index];
+    const delta = right - left;
+    if (!(delta > 0) || !Number.isFinite(delta)) {
+      return `${constraint.provenanceKey} cannot match params.${constraint.paramPath}: timestamps must be strictly increasing at index ${index}`;
+    }
+    const relativeScale = Math.max(Math.abs(delta), Math.abs(actual));
+    const candidateRoundoff = constraint.roundoffUlps * Number.EPSILON * Math.max(Math.abs(left), Math.abs(right), Math.abs(actual));
+    const roundoffCap = constraint.maxRoundoffFraction * Math.abs(actual);
+    const boundedRoundoff = candidateRoundoff <= roundoffCap ? candidateRoundoff : 0;
+    const tolerance = constraint.absoluteTolerance + constraint.relativeTolerance * relativeScale + boundedRoundoff;
+    if (Math.abs(delta - actual) > tolerance) {
+      return `${constraint.provenanceKey} (${JSON.stringify(actual)}) must match every adjacent delta in params.${constraint.paramPath}; index ${index} has delta ${JSON.stringify(delta)}`;
+    }
+  }
+  return null;
+}
+function seriesLabelBindingError(constraint, actual, params) {
+  if (typeof actual !== "string" || actual.length === 0) {
+    return `${constraint.provenanceKey} must be a nonblank string`;
+  }
+  if (constraint.separator.length === 0) {
+    return `cannot verify ${constraint.provenanceKey}: the contract label separator is empty`;
+  }
+  const resolved = resolveSafeParamPath(params, constraint.paramPath);
+  if (!resolved.ok) {
+    return `cannot verify ${constraint.provenanceKey}: ${resolved.message}`;
+  }
+  if (!Array.isArray(resolved.value) || !resolved.value.every((value) => typeof value === "string")) {
+    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath} is not a string array`;
+  }
+  const suffix = `${constraint.separator}${actual}`;
+  for (let index = 0; index < resolved.value.length; index++) {
+    const label = resolved.value[index];
+    if (label === actual) continue;
+    if (label.endsWith(suffix) && label.slice(0, -suffix.length).trim().length > 0) {
+      continue;
+    }
+    return `params.${constraint.paramPath}[${index}] must equal ${JSON.stringify(actual)} or end with ${JSON.stringify(suffix)} after a nonblank series identity`;
+  }
+  return null;
+}
+function parseCanonicalScalarArray(actual, provenanceKey) {
+  if (typeof actual !== "string") {
+    return {
+      ok: false,
+      message: `${provenanceKey} must be a canonical JSON array string`
+    };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(actual);
+  } catch {
+    return {
+      ok: false,
+      message: `${provenanceKey} must be valid canonical JSON`
+    };
+  }
+  if (!Array.isArray(parsed) || !parsed.every((value) => value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0))) {
+    return {
+      ok: false,
+      message: `${provenanceKey} must be a canonical JSON array of finite scalar values`
+    };
+  }
+  let canonical;
+  try {
+    canonical = canonicalize(parsed);
+  } catch {
+    return {
+      ok: false,
+      message: `${provenanceKey} is outside the RFC 8785 canonical JSON domain`
+    };
+  }
+  if (canonical !== actual) {
+    return {
+      ok: false,
+      message: `${provenanceKey} must use exact RFC 8785 canonical JSON with no insignificant whitespace`
+    };
+  }
+  return { ok: true, values: parsed };
+}
+function isCanonicalDigest(value) {
+  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
+}
+function opaqueDigestCollectionCount(value) {
+  if (typeof value !== "string") return void 0;
+  const match = /^sha256:[0-9a-f]{64};count:(0|[1-9][0-9]*)$/.exec(value);
+  if (!match) return void 0;
+  const count = Number(match[1]);
+  return Number.isSafeInteger(count) && count >= 0 ? count : void 0;
+}
+function declaredCollectionCount(actual, provenanceKey, idDomain, allowOpaqueDigestCount) {
+  if (allowOpaqueDigestCount) {
+    const count = opaqueDigestCollectionCount(actual);
+    if (count !== void 0) return { ok: true, count };
+  }
+  const parsed = parseCanonicalIdArray(actual, provenanceKey, idDomain);
+  return parsed.ok ? { ok: true, count: parsed.values.length } : parsed;
+}
+function jsonScalarKey(value) {
+  if (value !== null && typeof value !== "string" && typeof value !== "boolean" && !(typeof value === "number" && Number.isFinite(value) && !Object.is(value, -0))) {
+    return null;
+  }
+  try {
+    return canonicalize(value);
+  } catch {
+    return null;
+  }
+}
+function matchesIdDomain(value, idDomain) {
+  return idDomain === "nonblank_string" ? typeof value === "string" && value.trim().length > 0 : typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
+}
+function parseCanonicalIdArray(actual, provenanceKey, idDomain) {
+  const parsed = parseCanonicalScalarArray(actual, provenanceKey);
+  if (!parsed.ok) return parsed;
+  if (!parsed.values.every((value) => matchesIdDomain(value, idDomain))) {
+    return {
+      ok: false,
+      message: `${provenanceKey} must contain only ${idDomain === "nonblank_string" ? "nonblank-string" : "non-negative safe-integer"} ids`
+    };
+  }
+  const keys = parsed.values.map(jsonScalarKey);
+  if (new Set(keys).size !== keys.length) {
+    return {
+      ok: false,
+      message: `${provenanceKey} id arrays must not contain duplicates`
+    };
+  }
+  return parsed;
+}
+function canonicalCollection(values, comparison) {
+  const keyed = [];
+  for (const value of values) {
+    const key = jsonScalarKey(value);
+    if (key === null) return null;
+    keyed.push({ key, value });
+  }
+  if (comparison === "ordered") return keyed.map(({ value }) => value);
+  const unique = /* @__PURE__ */ new Map();
+  for (const { key, value } of keyed) unique.set(key, value);
+  return [...unique.entries()].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([, value]) => value);
+}
+function projectedDigestCollection(values, comparison) {
+  const result = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const value of values) {
+    const key = jsonScalarKey(value);
+    if (key === null) return null;
+    if (comparison === "set" && seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+function projectedValues(params, paramPath, field) {
+  const resolved = resolveSafeParamPath(params, paramPath);
+  if (!resolved.ok) return resolved;
+  if (!Array.isArray(resolved.value)) {
+    return {
+      ok: false,
+      message: `params.${paramPath} is not an array`
+    };
+  }
+  if (field === void 0) return { ok: true, values: [...resolved.value] };
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(field) || field === "__proto__" || field === "prototype" || field === "constructor") {
+    return { ok: false, message: `field ${field} is not a safe own-property name` };
+  }
+  const values = [];
+  for (let index = 0; index < resolved.value.length; index++) {
+    const item = resolved.value[index];
+    if (item === null || typeof item !== "object" || Array.isArray(item) || !Object.hasOwn(item, field)) {
+      return {
+        ok: false,
+        message: `params.${paramPath}[${index}].${field} is absent`
+      };
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(item, field);
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      return {
+        ok: false,
+        message: `params.${paramPath}[${index}].${field} is not an enumerable data property`
+      };
+    }
+    values.push(descriptor.value);
+  }
+  return { ok: true, values };
+}
+function canonicalJsonParamError(constraint, actual, params) {
+  const resolved = resolveSafeParamPath(params, constraint.paramPath);
+  if (!resolved.ok) {
+    return `cannot verify ${constraint.provenanceKey}: ${resolved.message}`;
+  }
+  if (!Array.isArray(resolved.value)) {
+    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath} is not an array`;
+  }
+  try {
+    if (constraint.allowDigest && isCanonicalDigest(actual) && actual === canonicalDigest(resolved.value)) {
+      return null;
+    }
+    const parsed = parseCanonicalScalarArray(actual, constraint.provenanceKey);
+    if (!parsed.ok) return parsed.message;
+    return canonicalize(parsed.values) === canonicalize(resolved.value) ? null : `${constraint.provenanceKey} must match params.${constraint.paramPath}`;
+  } catch {
+    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath} is outside the RFC 8785 canonical JSON domain`;
+  }
+}
+function projectedCollectionError(constraint, actual, params) {
+  const projected = projectedValues(
+    params,
+    constraint.paramPath,
+    constraint.field
+  );
+  if (!projected.ok) {
+    return `cannot verify ${constraint.provenanceKey}: ${projected.message}`;
+  }
+  const expected = canonicalCollection(projected.values, constraint.comparison);
+  if (!expected || !expected.every((value) => matchesIdDomain(value, constraint.idDomain))) {
+    return `cannot verify ${constraint.provenanceKey}: the projected collection is not a valid id collection`;
+  }
+  const digestCollection = projectedDigestCollection(
+    projected.values,
+    constraint.comparison
+  );
+  if (!digestCollection) {
+    return `cannot verify ${constraint.provenanceKey}: the projected collection is outside the RFC 8785 canonical JSON domain`;
+  }
+  if (constraint.relation === "equals" && constraint.allowDigest && isCanonicalDigest(actual)) {
+    return actual === canonicalDigest(digestCollection) ? null : `${constraint.provenanceKey} digest must match the projected params collection in checked encounter order`;
+  }
+  if (constraint.relation === "contains" && constraint.establishesBinding === false && constraint.allowOpaqueDigestCount) {
+    const opaqueCount = opaqueDigestCollectionCount(actual);
+    if (opaqueCount !== void 0) {
+      return opaqueCount >= expected.length ? null : `${constraint.provenanceKey} opaque collection count (${opaqueCount}) must be at least the number of distinct observed ids (${expected.length})`;
+    }
+  }
+  const parsed = parseCanonicalIdArray(
+    actual,
+    constraint.provenanceKey,
+    constraint.idDomain
+  );
+  if (!parsed.ok) return parsed.message;
+  const declaredCollection = canonicalCollection(parsed.values, constraint.comparison);
+  if (!declaredCollection) return `${constraint.provenanceKey} contains invalid values`;
+  if (constraint.relation === "equals") {
+    return canonicalize(declaredCollection) === canonicalize(expected) ? null : `${constraint.provenanceKey} must equal the projected params collection`;
+  }
+  const declaredKeys = new Set(
+    declaredCollection.map((value) => jsonScalarKey(value))
+  );
+  return expected.every((value) => declaredKeys.has(jsonScalarKey(value))) ? null : `${constraint.provenanceKey} must contain every observed value projected from params.${constraint.paramPath}`;
+}
+function allProjectedValuesEqualError(constraint, actual, params) {
+  const resolved = resolveSafeParamPath(params, constraint.paramPath);
+  if (!resolved.ok) {
+    return `cannot verify ${constraint.provenanceKey}: ${resolved.message}`;
+  }
+  if (!Array.isArray(resolved.value)) {
+    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath} is not an array`;
+  }
+  const present = [];
+  for (let index = 0; index < resolved.value.length; index++) {
+    const item = resolved.value[index];
+    if (item === null || typeof item !== "object" || Array.isArray(item)) {
+      return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath}[${index}] is not an object`;
+    }
+    if (!Object.hasOwn(item, constraint.field)) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(item, constraint.field);
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath}[${index}].${constraint.field} is not an enumerable data property`;
+    }
+    present.push(descriptor.value);
+  }
+  if (present.length === 0) return null;
+  return present.every((value) => Object.is(value, actual)) ? null : `${constraint.provenanceKey} must equal every present params.${constraint.paramPath}[*].${constraint.field} value`;
+}
+function canonicalJsonArrayLengthError(constraint, actual, params) {
+  const resolved = resolveSafeParamPath(params, constraint.paramPath);
+  if (!resolved.ok || typeof resolved.value !== "number" || !Number.isSafeInteger(resolved.value) || resolved.value < 0) {
+    return `cannot verify ${constraint.provenanceKey}: params.${constraint.paramPath} is not a non-negative safe integer`;
+  }
+  const declaredCount = declaredCollectionCount(
+    actual,
+    constraint.provenanceKey,
+    constraint.idDomain,
+    constraint.allowOpaqueDigestCount
+  );
+  if (!declaredCount.ok) return declaredCount.message;
+  const matches = constraint.relation === "equals" ? declaredCount.count === resolved.value : constraint.relation === "at_least" ? declaredCount.count >= resolved.value : resolved.value === 0 || declaredCount.count >= 1;
+  if (matches) return null;
+  if (constraint.relation === "nonempty_if_positive") {
+    return `${constraint.provenanceKey} collection count (${declaredCount.count}) must be at least one when params.${constraint.paramPath} is positive (${resolved.value})`;
+  }
+  return `${constraint.provenanceKey} collection count (${declaredCount.count}) must ${constraint.relation === "equals" ? "equal" : "be at least"} params.${constraint.paramPath} (${resolved.value})`;
+}
+function canonicalJsonArrayExactLengthError(constraint, actual) {
+  if (!Number.isSafeInteger(constraint.expectedLength) || constraint.expectedLength < 0) {
+    return `cannot verify ${constraint.provenanceKey}: the contract expectedLength is not a non-negative safe integer`;
+  }
+  const parsed = parseCanonicalScalarArray(
+    actual,
+    constraint.provenanceKey
+  );
+  if (!parsed.ok) return parsed.message;
+  return parsed.values.length === constraint.expectedLength ? null : `${constraint.provenanceKey} must contain exactly ${constraint.expectedLength} elements`;
+}
+function canonicalJsonArrayProjectedSumError(constraint, actual, params) {
+  const projected = projectedValues(
+    params,
+    constraint.paramPath,
+    constraint.field
+  );
+  if (!projected.ok) {
+    return `cannot verify ${constraint.provenanceKey}: ${projected.message}`;
+  }
+  if (!projected.values.every((value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0)) {
+    return `cannot verify ${constraint.provenanceKey}: projected counts are not non-negative safe integers`;
+  }
+  let minimum = 0;
+  for (const value of projected.values) {
+    minimum += value;
+    if (!Number.isSafeInteger(minimum)) {
+      return `cannot verify ${constraint.provenanceKey}: projected count sum exceeds the safe-integer domain`;
+    }
+  }
+  const declaredCount = declaredCollectionCount(
+    actual,
+    constraint.provenanceKey,
+    constraint.idDomain,
+    constraint.allowOpaqueDigestCount
+  );
+  if (!declaredCount.ok) return declaredCount.message;
+  return declaredCount.count >= minimum ? null : `${constraint.provenanceKey} collection count (${declaredCount.count}) must be at least the summed checked sender denominator (${minimum})`;
+}
+function provenanceParamConstraintError(constraint, params, declared) {
+  if (!Object.hasOwn(declared, constraint.provenanceKey)) return null;
+  const actual = declared[constraint.provenanceKey];
+  if (constraint.kind === "equals_literal") {
+    return Object.is(actual, constraint.value) ? null : `${constraint.provenanceKey} must equal ${JSON.stringify(constraint.value)}`;
+  }
+  if (constraint.kind === "one_of_literals") {
+    return constraint.values.some((value) => Object.is(actual, value)) ? null : `${constraint.provenanceKey} must equal one of ${JSON.stringify(constraint.values)}`;
+  }
+  if (constraint.kind === "matches_regular_time_axis") {
+    return regularTimeAxisError(constraint, actual, params);
+  }
+  if (constraint.kind === "each_label_matches_variable") {
+    return seriesLabelBindingError(constraint, actual, params);
+  }
+  if (constraint.kind === "matches_canonical_json_param") {
+    return canonicalJsonParamError(constraint, actual, params);
+  }
+  if (constraint.kind === "matches_projected_id_collection") {
+    return projectedCollectionError(constraint, actual, params);
+  }
+  if (constraint.kind === "all_projected_values_equal") {
+    return allProjectedValuesEqualError(constraint, actual, params);
+  }
+  if (constraint.kind === "canonical_json_array_length_matches_param") {
+    return canonicalJsonArrayLengthError(constraint, actual, params);
+  }
+  if (constraint.kind === "canonical_json_array_length_equals") {
+    return canonicalJsonArrayExactLengthError(constraint, actual);
+  }
+  if (constraint.kind === "canonical_json_array_length_at_least_projected_sum") {
+    return canonicalJsonArrayProjectedSumError(constraint, actual, params);
+  }
+  const paramPath = constraint.kind === "equals_param_path" ? constraint.paramPath : constraint.paramKey;
+  const resolved = resolveSafeParamPath(params, paramPath);
+  if (!resolved.ok) {
+    return `cannot verify ${constraint.provenanceKey}: ${resolved.message}`;
+  }
+  return Object.is(actual, resolved.value) ? null : `${constraint.provenanceKey} (${JSON.stringify(actual)}) must match params.${paramPath} (${JSON.stringify(resolved.value)})`;
+}
+
+// core/skills/params.ts
+var import_zod3 = require("zod");
 var PARAM_LIMITS = Object.freeze({
   // Inline JSON is defensively cloned and schema-validated more than once at
   // the trust boundary. Larger recordings must be decimated/aggregated or
@@ -1298,26 +2328,26 @@ var PARAM_LIMITS = Object.freeze({
   maxGraphEdges: 4e3
 });
 var FLOAT32_MAX3 = 34028234663852886e22;
-var timeArray = import_zod2.z.array(import_zod2.z.number()).max(PARAM_LIMITS.maxSamples);
-var gpuNumber = import_zod2.z.number().min(-FLOAT32_MAX3, "value exceeds the finite Float32 range used by render buffers").max(FLOAT32_MAX3, "value exceeds the finite Float32 range used by render buffers");
-var gpuArray = import_zod2.z.array(gpuNumber).max(PARAM_LIMITS.maxSamples);
-var idArray = import_zod2.z.array(
-  import_zod2.z.number().int("node/sender ids must be integers").nonnegative("node/sender ids must be non-negative").max(Number.MAX_SAFE_INTEGER, "node/sender ids must be safe integers")
+var timeArray = import_zod3.z.array(import_zod3.z.number()).max(PARAM_LIMITS.maxSamples);
+var gpuNumber = import_zod3.z.number().min(-FLOAT32_MAX3, "value exceeds the finite Float32 range used by render buffers").max(FLOAT32_MAX3, "value exceeds the finite Float32 range used by render buffers");
+var gpuArray = import_zod3.z.array(gpuNumber).max(PARAM_LIMITS.maxSamples);
+var idArray = import_zod3.z.array(
+  import_zod3.z.number().int("node/sender ids must be integers").nonnegative("node/sender ids must be non-negative").max(Number.MAX_SAFE_INTEGER, "node/sender ids must be safe integers")
 ).max(PARAM_LIMITS.maxSamples);
-var displayText = (max) => import_zod2.z.string().trim().min(1).max(max).regex(SAFE_DISPLAY_STRING_PATTERN, "display text must not contain control or bidi characters").meta({ "x-cortexel-normalize": "trim" });
-var Rfc3339TimestampSchema = import_zod2.z.iso.datetime({ offset: true }).max(80).regex(
+var displayText = (max) => import_zod3.z.string().trim().min(1).max(max).regex(SAFE_DISPLAY_STRING_PATTERN, "display text must not contain control or bidi characters").meta({ "x-cortexel-normalize": "trim" });
+var Rfc3339TimestampSchema = import_zod3.z.iso.datetime({ offset: true }).max(80).regex(
   /T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
   "timestamp must be RFC 3339 with seconds and an explicit UTC/numeric offset"
 );
 var units = displayText(80);
-var normalizedRecordKey2 = import_zod2.z.string().min(1).max(80).regex(
+var normalizedRecordKey2 = import_zod3.z.string().min(1).max(80).regex(
   /^\S(?:[\s\S]*\S)?$/,
   "record keys must already be trimmed and contain a non-whitespace character"
 ).regex(SAFE_DISPLAY_STRING_PATTERN, "record keys must not contain control or bidi characters");
 function equalLengthIssue(ctx, path, expectedName, expected, actual) {
   if (actual !== expected) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: [path],
       message: `${path} length (${actual}) must match ${expectedName} length (${expected})`
     });
@@ -1327,7 +2357,7 @@ function requireMonotonic(values, ctx, path) {
   for (let i = 1; i < values.length; i++) {
     if (values[i] < values[i - 1]) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: [path, i],
         message: `${path} must be monotonically non-decreasing`
       });
@@ -1335,15 +2365,29 @@ function requireMonotonic(values, ctx, path) {
     }
   }
 }
-var VoltageTraceParamsSchema = import_zod2.z.object({
-  times_ms: timeArray.min(1),
-  series: import_zod2.z.array(gpuArray.min(1)).min(1).max(PARAM_LIMITS.maxSeries),
-  series_labels: import_zod2.z.array(displayText(120)).min(1).max(PARAM_LIMITS.maxSeries),
+function requireStrictlyIncreasing(values, ctx, path) {
+  for (let i = 1; i < values.length; i++) {
+    if (!(values[i] > values[i - 1])) {
+      ctx.addIssue({
+        code: import_zod3.z.ZodIssueCode.custom,
+        path: [path, i],
+        message: `${path} must be strictly increasing`
+      });
+      return;
+    }
+  }
+}
+var VoltageTraceParamsSchema = import_zod3.z.object({
+  // At least two samples are required because the strict provenance contract
+  // promises to cross-check the declared device sampling interval.
+  times_ms: timeArray.min(2),
+  series: import_zod3.z.array(gpuArray.min(1)).min(1).max(PARAM_LIMITS.maxSeries),
+  series_labels: import_zod3.z.array(displayText(120)).min(1).max(PARAM_LIMITS.maxSeries),
   /** One shared unit for every series. Heterogeneous recorded variables must
    *  be authored as separate specs rather than sharing a misleading axis. */
   units
 }).strict().superRefine((value, ctx) => {
-  requireMonotonic(value.times_ms, ctx, "times_ms");
+  requireStrictlyIncreasing(value.times_ms, ctx, "times_ms");
   value.series.forEach((series, index) => {
     equalLengthIssue(
       ctx,
@@ -1361,7 +2405,7 @@ var VoltageTraceParamsSchema = import_zod2.z.object({
     value.series_labels.length
   );
 });
-var SpikeRasterParamsSchema = import_zod2.z.object({
+var SpikeRasterParamsSchema = import_zod3.z.object({
   times_ms: timeArray.min(1),
   senders: idArray.min(1)
 }).strict().superRefine((value, ctx) => {
@@ -1388,19 +2432,69 @@ function approximatelyEqual(actual, expected, absoluteTolerance, relativeToleran
 function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativeLowerEdge = false) {
   if (!Number.isFinite(width) || width <= 0) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: [centerPath],
       message: "histogram bin width must be a positive finite number"
     });
     return;
   }
+  const halfWidth = width / 2;
+  if (!Number.isFinite(halfWidth) || !(halfWidth > 0)) {
+    ctx.addIssue({
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: [centerPath],
+      message: "histogram bin half-width must remain positive and finite in binary64"
+    });
+    return;
+  }
+  let previousRight;
+  for (let index = 0; index < centers.length; index++) {
+    const center = centers[index];
+    const left = center - halfWidth;
+    const right = center + halfWidth;
+    const representedWidth = right - left;
+    if (!Number.isFinite(left) || !Number.isFinite(right) || !(left < center) || !(center < right) || !approximatelyEqual(
+      representedWidth,
+      width,
+      HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+      HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
+    )) {
+      ctx.addIssue({
+        code: import_zod3.z.ZodIssueCode.custom,
+        path: [centerPath, index],
+        message: "histogram bin edges must remain finite, strictly straddle their center, and retain the declared width in binary64"
+      });
+      return;
+    }
+    if (previousRight !== void 0) {
+      const difference = Math.abs(left - previousRight);
+      if (difference !== 0) {
+        const previousCenter = centers[index - 1];
+        const arithmeticTolerance = HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS * Number.EPSILON * Math.max(
+          Math.abs(previousCenter),
+          Math.abs(center),
+          Math.abs(previousRight),
+          Math.abs(left),
+          Math.abs(halfWidth)
+        );
+        if (arithmeticTolerance > GEOMETRY_MAX_ROUNDOFF_FRACTION * Math.abs(width) || difference > HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.abs(width) + arithmeticTolerance) {
+          ctx.addIssue({
+            code: import_zod3.z.ZodIssueCode.custom,
+            path: [centerPath, index],
+            message: "adjacent histogram bin edges must meet within the published bounded binary64 tolerance"
+          });
+          return;
+        }
+      }
+    }
+    previousRight = right;
+  }
   if (nonNegativeLowerEdge && centers.length > 0) {
-    const halfWidth = width / 2;
     const lowerEdge = centers[0] - halfWidth;
     const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(centers[0]), Math.abs(halfWidth));
     if (!Number.isFinite(lowerEdge) || lowerEdge < -tolerance) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: [centerPath, 0],
         message: "the first ISI bin lower edge cannot be negative"
       });
@@ -1410,7 +2504,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
   for (let index = 1; index < centers.length; index++) {
     if (!(centers[index] > centers[index - 1])) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: [centerPath, index],
         message: "histogram bin centers must be strictly increasing"
       });
@@ -1424,7 +2518,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
       HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: [centerPath, index],
         message: "adjacent histogram bin centers must differ by the declared bin width"
       });
@@ -1448,7 +2542,7 @@ function requireNormalizedHistogramMass(normalization, values, width, rules, ctx
     HISTOGRAM_MASS_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["values"],
       message: rule.measure === "density_integral" ? "probability-density values times bin width must integrate to 1" : "probability values must sum to 1"
     });
@@ -1459,13 +2553,13 @@ var isiValueUnits = {
   probability: "probability",
   probability_density: "1/ms"
 };
-var IsiDistributionParamsSchema = import_zod2.z.object({
+var IsiDistributionParamsSchema = import_zod3.z.object({
   bin_centers_ms: timeArray.min(1),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
-  normalization: import_zod2.z.enum(["count", "probability", "probability_density"]),
-  value_units: import_zod2.z.enum(["count", "probability", "1/ms"]),
-  interval_scope: import_zod2.z.enum(["per_sender", "single_train"])
+  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
+  normalization: import_zod3.z.enum(["count", "probability", "probability_density"]),
+  value_units: import_zod3.z.enum(["count", "probability", "1/ms"]),
+  interval_scope: import_zod3.z.enum(["per_sender", "single_train"])
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -1485,7 +2579,7 @@ var IsiDistributionParamsSchema = import_zod2.z.object({
   for (let index = 0; index < value.bin_centers_ms.length; index++) {
     if (value.bin_centers_ms[index] < 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["bin_centers_ms", index],
         message: "inter-spike interval bin centers cannot be negative"
       });
@@ -1494,7 +2588,7 @@ var IsiDistributionParamsSchema = import_zod2.z.object({
   }
   if (value.value_units !== isiValueUnits[value.normalization]) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${isiValueUnits[value.normalization]}' for ${value.normalization}`
     });
@@ -1503,7 +2597,7 @@ var IsiDistributionParamsSchema = import_zod2.z.object({
     const sample = value.values[index];
     if (sample < 0 || value.normalization === "probability" && sample > 1 || value.normalization === "count" && !Number.isSafeInteger(sample)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values", index],
         message: value.normalization === "count" ? "histogram counts must be non-negative safe integers" : value.normalization === "probability" ? "probability values must lie in [0, 1]" : "histogram values cannot be negative"
       });
@@ -1547,7 +2641,7 @@ function requirePsthDerivedCounts(normalization, values, trialCount, binWidthMs,
     const exactCount = normalization === "count";
     if (!Number.isFinite(rawCount) || rawCount < 0 || !Number.isSafeInteger(rounded) || (exactCount ? !Number.isSafeInteger(rawCount) : Math.abs(rawCount - rounded) > PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values", index],
         message: exactCount ? "aggregate PSTH counts must be non-negative safe integers" : "normalized PSTH values must recover a non-negative safe-integer aggregate spike count"
       });
@@ -1555,15 +2649,15 @@ function requirePsthDerivedCounts(normalization, values, trialCount, binWidthMs,
     }
   }
 }
-var PsthParamsSchema = import_zod2.z.object({
+var PsthParamsSchema = import_zod3.z.object({
   bin_centers_ms: timeArray.min(1),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
-  normalization: import_zod2.z.enum(["count", "count_per_trial", "rate_hz"]),
-  value_units: import_zod2.z.enum(["count", "count/trial", "Hz"]),
-  trial_count: import_zod2.z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
+  normalization: import_zod3.z.enum(["count", "count_per_trial", "rate_hz"]),
+  value_units: import_zod3.z.enum(["count", "count/trial", "Hz"]),
+  trial_count: import_zod3.z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   alignment_event: displayText(240),
-  aggregation: import_zod2.z.literal("selected_senders_per_trial")
+  aggregation: import_zod3.z.literal("selected_senders_per_trial")
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -1581,7 +2675,7 @@ var PsthParamsSchema = import_zod2.z.object({
   );
   if (value.value_units !== psthValueUnits[value.normalization]) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${psthValueUnits[value.normalization]}' for ${value.normalization}`
     });
@@ -1590,7 +2684,7 @@ var PsthParamsSchema = import_zod2.z.object({
     const sample = value.values[index];
     if (sample < 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values", index],
         message: "histogram values cannot be negative"
       });
@@ -1605,21 +2699,25 @@ var PsthParamsSchema = import_zod2.z.object({
     ctx
   );
 });
-var PopulationRateSeriesSchema = import_zod2.z.object({
+var PopulationRateSeriesSchema = import_zod3.z.object({
   id: displayText(120),
   label: displayText(240),
-  recorded_sender_count: import_zod2.z.number().int("recorded_sender_count must be an integer").positive("recorded_sender_count must be positive").max(Number.MAX_SAFE_INTEGER, "recorded_sender_count must be a safe integer"),
-  spike_counts: import_zod2.z.array(
-    import_zod2.z.number().int("spike counts must be integers").nonnegative("spike counts cannot be negative").max(Number.MAX_SAFE_INTEGER, "spike counts must be safe integers")
+  recorded_sender_count: import_zod3.z.number().int("recorded_sender_count must be an integer").positive("recorded_sender_count must be positive").max(Number.MAX_SAFE_INTEGER, "recorded_sender_count must be a safe integer"),
+  spike_counts: import_zod3.z.array(
+    import_zod3.z.number().int("spike counts must be integers").nonnegative("spike counts cannot be negative").max(Number.MAX_SAFE_INTEGER, "spike counts must be safe integers")
   ).min(1).max(PARAM_LIMITS.maxSamples),
   rates_hz: gpuArray.min(1)
 }).strict();
-function requirePopulationRateWindow(centers, width, start, stop, ctx) {
+function requireUniformBinWindow(centers, width, start, stop, ctx, paths = {
+  centers: "bin_centers_ms",
+  start: "window_start_ms",
+  stop: "window_stop_ms"
+}) {
   if (!(stop > start)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
-      path: ["window_stop_ms"],
-      message: "window_stop_ms must be greater than window_start_ms"
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: [paths.stop],
+      message: `${paths.stop} must be greater than ${paths.start}`
     });
     return;
   }
@@ -1646,16 +2744,16 @@ function requirePopulationRateWindow(centers, width, start, stop, ctx) {
   };
   if (!edgeMatches(firstEdge, start, firstCenter)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
-      path: ["bin_centers_ms", 0],
-      message: "the first left-closed bin edge must equal window_start_ms"
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: [paths.centers, 0],
+      message: `the first left-closed bin edge must match ${paths.start} within the published bounded binary64 tolerance`
     });
   }
   if (!edgeMatches(lastEdge, stop, lastCenter)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
-      path: ["bin_centers_ms", centers.length - 1],
-      message: "the final right-open bin edge must equal window_stop_ms"
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: [paths.centers, centers.length - 1],
+      message: `the final right-open bin edge must match ${paths.stop} within the published bounded binary64 tolerance`
     });
   }
 }
@@ -1665,7 +2763,7 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
     const item = series[seriesIndex];
     if (ids.has(item.id)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["series", seriesIndex, "id"],
         message: `duplicate population-rate series id '${item.id}'`
       });
@@ -1690,7 +2788,7 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
       const rate = item.rates_hz[binIndex];
       if (rate < 0) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["series", seriesIndex, "rates_hz", binIndex],
           message: "population rates cannot be negative"
         });
@@ -1706,7 +2804,7 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
         POPULATION_RATE_RELATIVE_TOLERANCE
       )) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["series", seriesIndex, "rates_hz", binIndex],
           message: "rate must equal spike_count \xD7 1000 / (recorded_sender_count \xD7 bin_width_ms)"
         });
@@ -1714,15 +2812,15 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
     }
   }
 }
-var PopulationRateParamsSchema = import_zod2.z.object({
+var PopulationRateParamsSchema = import_zod3.z.object({
   bin_centers_ms: timeArray.min(1),
-  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
-  window_start_ms: import_zod2.z.number(),
-  window_stop_ms: import_zod2.z.number(),
-  series: import_zod2.z.array(PopulationRateSeriesSchema).min(1).max(PARAM_LIMITS.maxSeries),
-  normalization: import_zod2.z.literal("mean_per_recorded_sender_hz"),
-  aggregation: import_zod2.z.literal("selected_senders"),
-  binning: import_zod2.z.literal("left_closed_right_open")
+  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
+  window_start_ms: import_zod3.z.number(),
+  window_stop_ms: import_zod3.z.number(),
+  series: import_zod3.z.array(PopulationRateSeriesSchema).min(1).max(PARAM_LIMITS.maxSeries),
+  normalization: import_zod3.z.literal("mean_per_recorded_sender_hz"),
+  aggregation: import_zod3.z.literal("selected_senders"),
+  binning: import_zod3.z.literal("left_closed_right_open")
 }).strict().superRefine((value, ctx) => {
   requireUniformHistogramBins(
     value.bin_centers_ms,
@@ -1730,7 +2828,7 @@ var PopulationRateParamsSchema = import_zod2.z.object({
     ctx,
     "bin_centers_ms"
   );
-  requirePopulationRateWindow(
+  requireUniformBinWindow(
     value.bin_centers_ms,
     value.bin_width_ms,
     value.window_start_ms,
@@ -1744,7 +2842,7 @@ var PopulationRateParamsSchema = import_zod2.z.object({
     ctx
   );
 });
-var RateResponseParamsSchema = import_zod2.z.object({
+var RateResponseParamsSchema = import_zod3.z.object({
   stimulus_amplitudes: gpuArray.min(1),
   rates_hz: gpuArray.min(1),
   stimulus_units: units
@@ -1760,7 +2858,7 @@ var RateResponseParamsSchema = import_zod2.z.object({
     const rate = value.rates_hz[index];
     if (rate < 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["rates_hz", index],
         message: "firing rates cannot be negative"
       });
@@ -1768,7 +2866,7 @@ var RateResponseParamsSchema = import_zod2.z.object({
     }
   }
 });
-var NetworkParamsSchema = import_zod2.z.object({
+var NetworkParamsSchema = import_zod3.z.object({
   sources: idArray.min(1),
   targets: idArray.min(1),
   weights: gpuArray.optional(),
@@ -1803,7 +2901,7 @@ var NetworkParamsSchema = import_zod2.z.object({
     const index = value.delays.findIndex((delay) => delay <= 0);
     if (index >= 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["delays", index],
         message: "connection delays must be strictly positive"
       });
@@ -1811,68 +2909,68 @@ var NetworkParamsSchema = import_zod2.z.object({
   }
   if (value.weights !== void 0 !== (value.weight_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["weight_units"],
       message: "weight_units must be present exactly when weights are present"
     });
   }
   if (value.delays !== void 0 !== (value.delay_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["delay_units"],
       message: "delay_units must be present exactly when delays are present"
     });
   }
 });
-var topologyCount = import_zod2.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "topology counts and ranks must not be negative zero");
+var topologyCount = import_zod3.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "topology counts and ranks must not be negative zero");
 var topologyPositiveCount = topologyCount.positive();
-var MpiTargetRankLocalScopeSchema = import_zod2.z.object({
-  kind: import_zod2.z.literal("mpi_target_rank_local"),
+var MpiTargetRankLocalScopeSchema = import_zod3.z.object({
+  kind: import_zod3.z.literal("mpi_target_rank_local"),
   rank: topologyCount,
   world_size: topologyPositiveCount
 }).strict().superRefine((value, ctx) => {
   if (value.rank >= value.world_size) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["rank"],
       message: "MPI rank must be smaller than world_size"
     });
   }
 });
-var SnapshotScopeSchema = import_zod2.z.discriminatedUnion("kind", [
-  import_zod2.z.object({ kind: import_zod2.z.literal("single_process_complete") }).strict(),
+var SnapshotScopeSchema = import_zod3.z.discriminatedUnion("kind", [
+  import_zod3.z.object({ kind: import_zod3.z.literal("single_process_complete") }).strict(),
   MpiTargetRankLocalScopeSchema,
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("mpi_all_ranks_merged"),
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("mpi_all_ranks_merged"),
     world_size: topologyPositiveCount
   }).strict()
 ]);
-var MpiRankLocalPositionScopeSchema = import_zod2.z.object({
-  kind: import_zod2.z.literal("mpi_rank_local"),
+var MpiRankLocalPositionScopeSchema = import_zod3.z.object({
+  kind: import_zod3.z.literal("mpi_rank_local"),
   rank: topologyCount,
   world_size: topologyPositiveCount
 }).strict().superRefine((value, ctx) => {
   if (value.rank >= value.world_size) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["rank"],
       message: "MPI rank must be smaller than world_size"
     });
   }
 });
-var PositionScopeSchema = import_zod2.z.discriminatedUnion("kind", [
-  import_zod2.z.object({ kind: import_zod2.z.literal("single_process_complete") }).strict(),
+var PositionScopeSchema = import_zod3.z.discriminatedUnion("kind", [
+  import_zod3.z.object({ kind: import_zod3.z.literal("single_process_complete") }).strict(),
   MpiRankLocalPositionScopeSchema,
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("mpi_all_ranks_merged"),
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("mpi_all_ranks_merged"),
     world_size: topologyPositiveCount
   }).strict()
 ]);
-var ConnectionGraphNodeSchema = import_zod2.z.object({
+var ConnectionGraphNodeSchema = import_zod3.z.object({
   id: idArray.element,
   label: displayText(120)
 }).strict();
-var ConnectionGraphEdgeSchema = import_zod2.z.object({
+var ConnectionGraphEdgeSchema = import_zod3.z.object({
   id: displayText(240),
   source: idArray.element,
   target: idArray.element,
@@ -1885,26 +2983,26 @@ function canonicalEdgeIdInteger(value) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 && String(parsed) === value ? parsed : void 0;
 }
-var ConnectionGraphParamsSchema = import_zod2.z.object({
-  nodes: import_zod2.z.array(ConnectionGraphNodeSchema).min(1).max(PARAM_LIMITS.maxTopologyNodes),
-  edges: import_zod2.z.array(ConnectionGraphEdgeSchema).max(PARAM_LIMITS.maxTopologyEdges),
+var ConnectionGraphParamsSchema = import_zod3.z.object({
+  nodes: import_zod3.z.array(ConnectionGraphNodeSchema).min(1).max(PARAM_LIMITS.maxTopologyNodes),
+  edges: import_zod3.z.array(ConnectionGraphEdgeSchema).max(PARAM_LIMITS.maxTopologyEdges),
   weight_units: units.optional(),
-  delay_units: import_zod2.z.literal("ms").optional(),
-  layout: import_zod2.z.literal("schematic_circle"),
-  parallel_edges: import_zod2.z.literal("preserved"),
-  self_connections: import_zod2.z.literal("preserved"),
-  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+  delay_units: import_zod3.z.literal("ms").optional(),
+  layout: import_zod3.z.literal("schematic_circle"),
+  parallel_edges: import_zod3.z.literal("preserved"),
+  self_connections: import_zod3.z.literal("preserved"),
+  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
   snapshot_scope: SnapshotScopeSchema,
-  sample_policy: import_zod2.z.enum(["complete", "deterministic_even_stride"]),
+  sample_policy: import_zod3.z.enum(["complete", "deterministic_even_stride"]),
   source_connection_count: topologyCount,
-  edge_identity: import_zod2.z.enum(["nest_connection_identifier", "canonical_sorted_ordinal"])
+  edge_identity: import_zod3.z.enum(["nest_connection_identifier", "canonical_sorted_ordinal"])
 }).strict().superRefine((value, ctx) => {
   const nodeIds = /* @__PURE__ */ new Set();
   for (let index = 0; index < value.nodes.length; index++) {
     const id2 = value.nodes[index].id;
     if (nodeIds.has(id2)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["nodes", index, "id"],
         message: "graph node ids must be unique"
       });
@@ -1919,7 +3017,7 @@ var ConnectionGraphParamsSchema = import_zod2.z.object({
     const edge = value.edges[index];
     if (edgeIds.has(edge.id)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index, "id"],
         message: "graph edge ids must be unique"
       });
@@ -1927,14 +3025,14 @@ var ConnectionGraphParamsSchema = import_zod2.z.object({
     edgeIds.add(edge.id);
     if (!nodeIds.has(edge.source)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index, "source"],
         message: "graph edge source must reference a declared node"
       });
     }
     if (!nodeIds.has(edge.target)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index, "target"],
         message: "graph edge target must reference a declared node"
       });
@@ -1947,7 +3045,7 @@ var ConnectionGraphParamsSchema = import_zod2.z.object({
       const ordinal = idParts.length === 2 && idParts[0] === "connection" ? canonicalEdgeIdInteger(idParts[1]) : void 0;
       if (ordinal === void 0 || ordinal >= value.source_connection_count) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["edges", index, "id"],
           message: "canonical edge ids must be connection:<source ordinal> within source_connection_count"
         });
@@ -1956,7 +3054,7 @@ var ConnectionGraphParamsSchema = import_zod2.z.object({
       const components = idParts.length === 6 && idParts[0] === "connection" ? idParts.slice(1).map(canonicalEdgeIdInteger) : [];
       if (components.length !== 5 || components.some((component) => component === void 0) || components[0] !== edge.source || components[1] !== edge.target) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["edges", index, "id"],
           message: "NEST edge ids must be connection:source:target:target_thread:synapse_id:port and match the edge endpoints"
         });
@@ -1970,7 +3068,7 @@ var ConnectionGraphParamsSchema = import_zod2.z.object({
   ]) {
     if (count !== 0 && count !== value.edges.length) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges"],
         message: `${field} must be present on every graph edge or none`
       });
@@ -1978,14 +3076,14 @@ var ConnectionGraphParamsSchema = import_zod2.z.object({
   }
   if (weightCount > 0 !== (value.weight_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["weight_units"],
       message: "weight_units must be present exactly when every edge carries weight"
     });
   }
   if (delayCount > 0 !== (value.delay_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["delay_units"],
       message: "delay_units must be present exactly when every edge carries delay_ms"
     });
@@ -1993,20 +3091,20 @@ var ConnectionGraphParamsSchema = import_zod2.z.object({
   if (value.sample_policy === "complete") {
     if (value.source_connection_count !== value.edges.length) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["source_connection_count"],
         message: "complete graph output must contain every source connection"
       });
     }
   } else if (value.edges.length === 0 || value.source_connection_count <= value.edges.length) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["source_connection_count"],
       message: "deterministic_even_stride requires a non-empty strict subset of source connections"
     });
   }
 });
-var MatrixCellBaseSchema = import_zod2.z.object({
+var MatrixCellBaseSchema = import_zod3.z.object({
   source_id: idArray.element,
   target_id: idArray.element,
   connection_count: topologyPositiveCount
@@ -2017,21 +3115,21 @@ var DelayMatrixCellSchema = MatrixCellBaseSchema.extend({ value: gpuNumber.posit
 var matrixBaseShape = {
   source_ids: idArray.min(1),
   target_ids: idArray.min(1),
-  axis_order: import_zod2.z.literal("target_rows_source_columns"),
-  absent_cell: import_zod2.z.literal("no_connection"),
-  sample_policy: import_zod2.z.literal("complete"),
+  axis_order: import_zod3.z.literal("target_rows_source_columns"),
+  absent_cell: import_zod3.z.literal("no_connection"),
+  sample_policy: import_zod3.z.literal("complete"),
   connection_count: topologyCount,
-  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
   snapshot_scope: SnapshotScopeSchema
 };
 function refineSparseMatrix(value, ctx) {
   const sourceIds = new Set(value.source_ids);
   const targetIds = new Set(value.target_ids);
   if (sourceIds.size !== value.source_ids.length) {
-    ctx.addIssue({ code: import_zod2.z.ZodIssueCode.custom, path: ["source_ids"], message: "source_ids must be unique" });
+    ctx.addIssue({ code: import_zod3.z.ZodIssueCode.custom, path: ["source_ids"], message: "source_ids must be unique" });
   }
   if (targetIds.size !== value.target_ids.length) {
-    ctx.addIssue({ code: import_zod2.z.ZodIssueCode.custom, path: ["target_ids"], message: "target_ids must be unique" });
+    ctx.addIssue({ code: import_zod3.z.ZodIssueCode.custom, path: ["target_ids"], message: "target_ids must be unique" });
   }
   const pairs = /* @__PURE__ */ new Set();
   let total = 0;
@@ -2039,14 +3137,14 @@ function refineSparseMatrix(value, ctx) {
     const cell = value.cells[index];
     if (!sourceIds.has(cell.source_id)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["cells", index, "source_id"],
         message: "matrix cell source_id must occur in source_ids"
       });
     }
     if (!targetIds.has(cell.target_id)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["cells", index, "target_id"],
         message: "matrix cell target_id must occur in target_ids"
       });
@@ -2054,7 +3152,7 @@ function refineSparseMatrix(value, ctx) {
     const pair = `${cell.source_id}\0${cell.target_id}`;
     if (pairs.has(pair)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["cells", index],
         message: "matrix cells must contain at most one entry per source-target pair"
       });
@@ -2063,7 +3161,7 @@ function refineSparseMatrix(value, ctx) {
     total += cell.connection_count;
     if (!Number.isSafeInteger(total)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["connection_count"],
         message: "matrix connection count sum exceeds the safe-integer range"
       });
@@ -2072,48 +3170,48 @@ function refineSparseMatrix(value, ctx) {
   }
   if (total !== value.connection_count) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["connection_count"],
       message: "connection_count must equal the sum of sparse cell connection_count values"
     });
   }
 }
-var AdjacencyMatrixParamsSchema = import_zod2.z.object({
+var AdjacencyMatrixParamsSchema = import_zod3.z.object({
   ...matrixBaseShape,
-  cells: import_zod2.z.array(AdjacencyMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
-  display: import_zod2.z.literal("binary_presence"),
-  aggregation: import_zod2.z.literal("any_connection")
+  cells: import_zod3.z.array(AdjacencyMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  display: import_zod3.z.literal("binary_presence"),
+  aggregation: import_zod3.z.literal("any_connection")
 }).strict().superRefine(refineSparseMatrix);
-var WeightMatrixParamsSchema = import_zod2.z.object({
+var WeightMatrixParamsSchema = import_zod3.z.object({
   ...matrixBaseShape,
-  cells: import_zod2.z.array(WeightMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  cells: import_zod3.z.array(WeightMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
   weight_units: units,
-  aggregation: import_zod2.z.enum(["sum", "mean", "minimum", "maximum", "single_connection"])
+  aggregation: import_zod3.z.enum(["sum", "mean", "minimum", "maximum", "single_connection"])
 }).strict().superRefine((value, ctx) => {
   refineSparseMatrix(value, ctx);
   if (value.aggregation === "single_connection") {
     const index = value.cells.findIndex((cell) => cell.connection_count !== 1);
     if (index >= 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["cells", index, "connection_count"],
         message: "single_connection aggregation requires exactly one connection per cell"
       });
     }
   }
 });
-var DelayMatrixParamsSchema = import_zod2.z.object({
+var DelayMatrixParamsSchema = import_zod3.z.object({
   ...matrixBaseShape,
-  cells: import_zod2.z.array(DelayMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
-  delay_units: import_zod2.z.literal("ms"),
-  aggregation: import_zod2.z.enum(["mean", "minimum", "maximum", "single_connection"])
+  cells: import_zod3.z.array(DelayMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  delay_units: import_zod3.z.literal("ms"),
+  aggregation: import_zod3.z.enum(["mean", "minimum", "maximum", "single_connection"])
 }).strict().superRefine((value, ctx) => {
   refineSparseMatrix(value, ctx);
   if (value.aggregation === "single_connection") {
     const index = value.cells.findIndex((cell) => cell.connection_count !== 1);
     if (index >= 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["cells", index, "connection_count"],
         message: "single_connection aggregation requires exactly one connection per cell"
       });
@@ -2123,19 +3221,19 @@ var DelayMatrixParamsSchema = import_zod2.z.object({
 var DEGREE_VALUE_ABSOLUTE_TOLERANCE = 1e-12;
 var DEGREE_VALUE_RELATIVE_TOLERANCE = 1e-12;
 function degreeDistributionSchema(direction) {
-  return import_zod2.z.object({
-    degrees: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
-    node_counts: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+  return import_zod3.z.object({
+    degrees: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+    node_counts: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
     values: gpuArray.min(1),
     node_count: topologyPositiveCount,
     connection_count: topologyCount,
-    direction: import_zod2.z.literal(direction),
-    normalization: import_zod2.z.enum(["count", "probability"]),
-    value_units: import_zod2.z.enum(["count", "probability"]),
-    edge_counting: import_zod2.z.literal("each_synapse_collection_entry"),
-    zero_degree_policy: import_zod2.z.literal("include_declared_universe"),
-    sample_policy: import_zod2.z.literal("complete"),
-    snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+    direction: import_zod3.z.literal(direction),
+    normalization: import_zod3.z.enum(["count", "probability"]),
+    value_units: import_zod3.z.enum(["count", "probability"]),
+    edge_counting: import_zod3.z.literal("each_synapse_collection_entry"),
+    zero_degree_policy: import_zod3.z.literal("include_declared_universe"),
+    sample_policy: import_zod3.z.literal("complete"),
+    snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
     snapshot_scope: SnapshotScopeSchema
   }).strict().superRefine((value, ctx) => {
     equalLengthIssue(ctx, "node_counts", "degrees", value.degrees.length, value.node_counts.length);
@@ -2143,7 +3241,7 @@ function degreeDistributionSchema(direction) {
     for (let index = 0; index < value.degrees.length; index++) {
       if (value.degrees[index] !== index) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["degrees", index],
           message: "degrees must be the contiguous integer range beginning at zero"
         });
@@ -2158,14 +3256,14 @@ function degreeDistributionSchema(direction) {
     }
     if (!Number.isSafeInteger(countedNodes) || countedNodes !== value.node_count) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["node_count"],
         message: "node_count must equal the sum of node_counts"
       });
     }
     if (!Number.isSafeInteger(countedConnections) || countedConnections !== value.connection_count) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["connection_count"],
         message: "connection_count must equal the degree-weighted sum of node_counts"
       });
@@ -2173,7 +3271,7 @@ function degreeDistributionSchema(direction) {
     const expectedUnits = value.normalization === "count" ? "count" : "probability";
     if (value.value_units !== expectedUnits) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["value_units"],
         message: `value_units must be '${expectedUnits}' for ${value.normalization}`
       });
@@ -2183,7 +3281,7 @@ function degreeDistributionSchema(direction) {
       const displayed = value.values[index];
       if (displayed < 0) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["values", index],
           message: "displayed degree values cannot be negative"
         });
@@ -2198,7 +3296,7 @@ function degreeDistributionSchema(direction) {
       );
       if (!matches) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["values", index],
           message: "displayed degree value must be derived from node_counts and node_count"
         });
@@ -2213,14 +3311,14 @@ function degreeDistributionSchema(direction) {
       DEGREE_VALUE_RELATIVE_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values"],
         message: "displayed degree probabilities must sum to one"
       });
     }
     if (direction === "out" && value.snapshot_scope.kind === "mpi_target_rank_local") {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["snapshot_scope", "kind"],
         message: "out-degree requires a complete single-process or all-ranks-merged snapshot"
       });
@@ -2234,27 +3332,27 @@ var delayDistributionValueUnits = {
   probability: "probability",
   probability_density: "1/ms"
 };
-var DelayDistributionParamsSchema = import_zod2.z.object({
+var DelayDistributionParamsSchema = import_zod3.z.object({
   bin_centers_ms: timeArray.min(1),
-  delay_counts: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+  delay_counts: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod2.z.number().finite().positive(),
-  window_start_ms: import_zod2.z.number().finite().nonnegative(),
-  window_stop_ms: import_zod2.z.number().finite().positive(),
-  normalization: import_zod2.z.enum(["count", "probability", "probability_density"]),
-  value_units: import_zod2.z.enum(["count", "probability", "1/ms"]),
-  delay_units: import_zod2.z.literal("ms"),
-  aggregation: import_zod2.z.literal("each_connection"),
-  binning: import_zod2.z.literal("left_closed_right_open"),
-  sample_policy: import_zod2.z.literal("complete"),
+  bin_width_ms: import_zod3.z.number().finite().positive(),
+  window_start_ms: import_zod3.z.number().finite().nonnegative(),
+  window_stop_ms: import_zod3.z.number().finite().positive(),
+  normalization: import_zod3.z.enum(["count", "probability", "probability_density"]),
+  value_units: import_zod3.z.enum(["count", "probability", "1/ms"]),
+  delay_units: import_zod3.z.literal("ms"),
+  aggregation: import_zod3.z.literal("each_connection"),
+  binning: import_zod3.z.literal("left_closed_right_open"),
+  sample_policy: import_zod3.z.literal("complete"),
   connection_count: topologyCount,
-  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
+  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
   snapshot_scope: SnapshotScopeSchema
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(ctx, "delay_counts", "bin_centers_ms", value.bin_centers_ms.length, value.delay_counts.length);
   equalLengthIssue(ctx, "values", "bin_centers_ms", value.bin_centers_ms.length, value.values.length);
   requireUniformHistogramBins(value.bin_centers_ms, value.bin_width_ms, ctx, "bin_centers_ms", true);
-  requirePopulationRateWindow(
+  requireUniformBinWindow(
     value.bin_centers_ms,
     value.bin_width_ms,
     value.window_start_ms,
@@ -2264,7 +3362,7 @@ var DelayDistributionParamsSchema = import_zod2.z.object({
   const expectedUnits = delayDistributionValueUnits[value.normalization];
   if (value.value_units !== expectedUnits) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${expectedUnits}' for ${value.normalization}`
     });
@@ -2273,14 +3371,14 @@ var DelayDistributionParamsSchema = import_zod2.z.object({
   for (const count of value.delay_counts) total += count;
   if (!Number.isSafeInteger(total) || total !== value.connection_count) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["connection_count"],
       message: "connection_count must equal the sum of delay_counts"
     });
   }
   if (value.connection_count === 0 && value.normalization !== "count") {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["normalization"],
       message: "an empty delay snapshot cannot be probability-normalized"
     });
@@ -2288,7 +3386,7 @@ var DelayDistributionParamsSchema = import_zod2.z.object({
   const densityDenominator = value.connection_count * value.bin_width_ms;
   if (value.normalization === "probability_density" && (!Number.isFinite(densityDenominator) || densityDenominator <= 0)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["bin_width_ms"],
       message: "connection_count \xD7 bin_width_ms must be finite for probability density"
     });
@@ -2299,7 +3397,7 @@ var DelayDistributionParamsSchema = import_zod2.z.object({
     const displayed = value.values[index];
     if (displayed < 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values", index],
         message: "displayed delay values cannot be negative"
       });
@@ -2309,7 +3407,7 @@ var DelayDistributionParamsSchema = import_zod2.z.object({
     const matches = value.normalization === "count" ? Number.isSafeInteger(displayed) && displayed === expected : Object.is(displayed, expected);
     if (!matches) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values", index],
         message: "displayed delay value must be recoverable from delay_counts"
       });
@@ -2326,14 +3424,14 @@ var DelayDistributionParamsSchema = import_zod2.z.object({
       HISTOGRAM_MASS_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values"],
         message: value.normalization === "probability_density" ? "displayed delay density must integrate to one" : "displayed delay probabilities must sum to one"
       });
     }
   }
 });
-var SpatialMap2DNodeSchema = import_zod2.z.object({
+var SpatialMap2DNodeSchema = import_zod3.z.object({
   id: idArray.element,
   label: displayText(120),
   x: gpuNumber,
@@ -2351,14 +3449,14 @@ function spatialBoundsTolerance(center, halfExtent, minimum, maximum) {
   const boundedArithmeticTolerance = arithmeticTolerance <= GEOMETRY_MAX_ROUNDOFF_FRACTION * Math.abs(halfExtent) ? arithmeticTolerance : 0;
   return extentTolerance + boundedArithmeticTolerance;
 }
-var SpatialMap2DParamsSchema = import_zod2.z.object({
-  nodes: import_zod2.z.array(SpatialMap2DNodeSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
+var SpatialMap2DParamsSchema = import_zod3.z.object({
+  nodes: import_zod3.z.array(SpatialMap2DNodeSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
   coordinate_units: units,
-  extent: import_zod2.z.tuple([gpuNumber.positive(), gpuNumber.positive()]),
-  center: import_zod2.z.tuple([gpuNumber, gpuNumber]),
-  edge_wrap: import_zod2.z.boolean(),
+  extent: import_zod3.z.tuple([gpuNumber.positive(), gpuNumber.positive()]),
+  center: import_zod3.z.tuple([gpuNumber, gpuNumber]),
+  edge_wrap: import_zod3.z.boolean(),
   position_scope: PositionScopeSchema,
-  marker_size: import_zod2.z.literal("fixed_screen_space")
+  marker_size: import_zod3.z.literal("fixed_screen_space")
 }).strict().superRefine((value, ctx) => {
   const ids = /* @__PURE__ */ new Set();
   const halfWidth = value.extent[0] / 2;
@@ -2369,14 +3467,14 @@ var SpatialMap2DParamsSchema = import_zod2.z.object({
   const maxY = value.center[1] + halfHeight;
   if (!(minX < maxX)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["extent", 0],
       message: "x extent must remain representable at the declared center"
     });
   }
   if (!(minY < maxY)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["extent", 1],
       message: "y extent must remain representable at the declared center"
     });
@@ -2387,7 +3485,7 @@ var SpatialMap2DParamsSchema = import_zod2.z.object({
     const node = value.nodes[index];
     if (ids.has(node.id)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["nodes", index, "id"],
         message: "spatial node ids must be unique"
       });
@@ -2395,7 +3493,7 @@ var SpatialMap2DParamsSchema = import_zod2.z.object({
     ids.add(node.id);
     if (node.x < minX - xTolerance || node.x > maxX + xTolerance || node.y < minY - yTolerance || node.y > maxY + yTolerance) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["nodes", index],
         message: "spatial node coordinates must lie inside center \xB1 extent/2"
       });
@@ -2406,14 +3504,22 @@ var weightHistogramValueUnits = {
   count: "count",
   probability: "probability"
 };
-var WeightHistogramParamsSchema = import_zod2.z.object({
+var WeightHistogramParamsSchema = import_zod3.z.object({
   bin_centers: gpuArray.min(1),
+  weight_counts: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
   values: gpuArray.min(1),
   bin_width: gpuNumber.positive(),
+  window_start: import_zod3.z.number().finite(),
+  window_stop: import_zod3.z.number().finite(),
   weight_units: units,
-  normalization: import_zod2.z.enum(["count", "probability"]),
-  value_units: import_zod2.z.enum(["count", "probability"]),
-  snapshot_time_ms: import_zod2.z.number().nonnegative()
+  normalization: import_zod3.z.enum(["count", "probability"]),
+  value_units: import_zod3.z.enum(["count", "probability"]),
+  aggregation: import_zod3.z.literal("each_connection"),
+  binning: import_zod3.z.literal("left_closed_right_open"),
+  sample_policy: import_zod3.z.literal("complete"),
+  connection_count: topologyCount,
+  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
+  snapshot_scope: SnapshotScopeSchema
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -2422,49 +3528,81 @@ var WeightHistogramParamsSchema = import_zod2.z.object({
     value.bin_centers.length,
     value.values.length
   );
-  requireMonotonic(value.bin_centers, ctx, "bin_centers");
+  equalLengthIssue(
+    ctx,
+    "weight_counts",
+    "bin_centers",
+    value.bin_centers.length,
+    value.weight_counts.length
+  );
   requireUniformHistogramBins(
     value.bin_centers,
     value.bin_width,
     ctx,
     "bin_centers"
   );
+  requireUniformBinWindow(
+    value.bin_centers,
+    value.bin_width,
+    value.window_start,
+    value.window_stop,
+    ctx,
+    {
+      centers: "bin_centers",
+      start: "window_start",
+      stop: "window_stop"
+    }
+  );
   if (value.value_units !== weightHistogramValueUnits[value.normalization]) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${weightHistogramValueUnits[value.normalization]}' for ${value.normalization}`
     });
   }
-  for (let index = 0; index < value.values.length; index++) {
+  let total = 0;
+  for (const count of value.weight_counts) {
+    total += count;
+    if (!Number.isSafeInteger(total)) break;
+  }
+  if (!Number.isSafeInteger(total) || total !== value.connection_count) {
+    ctx.addIssue({
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: ["connection_count"],
+      message: "connection_count must equal the sum of weight_counts"
+    });
+  }
+  if (value.connection_count === 0 && value.normalization !== "count") {
+    ctx.addIssue({
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: ["normalization"],
+      message: "an empty weight snapshot cannot be probability-normalized"
+    });
+  }
+  for (let index = 0; index < Math.min(value.values.length, value.weight_counts.length); index++) {
     const sample = value.values[index];
-    if (sample < 0 || value.normalization === "probability" && sample > 1 || value.normalization === "count" && !Number.isSafeInteger(sample)) {
+    const expected = value.normalization === "count" ? value.weight_counts[index] : value.weight_counts[index] / value.connection_count;
+    const matches = value.normalization === "count" ? Number.isSafeInteger(sample) && sample === expected : Object.is(sample, expected);
+    if (!matches) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values", index],
-        message: value.normalization === "count" ? "histogram counts must be non-negative safe integers" : value.normalization === "probability" ? "probability values must lie in [0, 1]" : "histogram values cannot be negative"
+        message: "displayed weight value must be exactly recoverable from weight_counts and connection_count"
       });
       break;
     }
   }
-  requireNormalizedHistogramMass(
-    value.normalization,
-    value.values,
-    value.bin_width,
-    { probability: { measure: "sum", target: 1 } },
-    ctx
-  );
 });
-var Spatial3DObjectSchema = import_zod2.z.object({
+var Spatial3DObjectSchema = import_zod3.z.object({
   x: gpuNumber,
   y: gpuNumber,
   z: gpuNumber
 }).passthrough();
-var Spatial3DParamsSchema = import_zod2.z.object({
-  objects: import_zod2.z.array(Spatial3DObjectSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
+var Spatial3DParamsSchema = import_zod3.z.object({
+  objects: import_zod3.z.array(Spatial3DObjectSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
   coordinate_units: units
 }).strict();
-var PlasticityParamsSchema = import_zod2.z.object({
+var PlasticityParamsSchema = import_zod3.z.object({
   times_ms: timeArray.min(1),
   weights: gpuArray.min(1),
   weight_units: units
@@ -2478,30 +3616,30 @@ var PlasticityParamsSchema = import_zod2.z.object({
   );
   requireMonotonic(value.times_ms, ctx, "times_ms");
 });
-var PhasePlaneParamsSchema = import_zod2.z.object({
-  grid: import_zod2.z.record(normalizedRecordKey2, gpuArray.min(1)).refine((g) => Object.keys(g).length === 2, {
+var PhasePlaneParamsSchema = import_zod3.z.object({
+  grid: import_zod3.z.record(normalizedRecordKey2, gpuArray.min(1)).refine((g) => Object.keys(g).length === 2, {
     message: "phase-plane grid must declare exactly two non-empty state-variable axes"
   }),
-  derivatives: import_zod2.z.record(normalizedRecordKey2, gpuArray.min(1)),
-  axis_units: import_zod2.z.record(normalizedRecordKey2, units),
-  derivative_units: import_zod2.z.record(normalizedRecordKey2, units),
-  axis_order: import_zod2.z.tuple([normalizedRecordKey2, normalizedRecordKey2]).refine(([first, second]) => first !== second, {
+  derivatives: import_zod3.z.record(normalizedRecordKey2, gpuArray.min(1)),
+  axis_units: import_zod3.z.record(normalizedRecordKey2, units),
+  derivative_units: import_zod3.z.record(normalizedRecordKey2, units),
+  axis_order: import_zod3.z.tuple([normalizedRecordKey2, normalizedRecordKey2]).refine(([first, second]) => first !== second, {
     message: "axis_order must name two distinct state variables"
   }),
-  flattening: import_zod2.z.literal("row-major-last-axis-fastest")
+  flattening: import_zod3.z.literal("row-major-last-axis-fastest")
 }).strict().superRefine((value, ctx) => {
   const axes = Object.keys(value.grid);
   const derivativeNames = Object.keys(value.derivatives);
   if (value.axis_order.some((axis) => !Object.hasOwn(value.grid, axis)) || axes.some((axis) => !value.axis_order.includes(axis))) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["axis_order"],
       message: "axis_order must be a permutation of the two grid state variables"
     });
   }
   if (derivativeNames.length !== axes.length || axes.some((axis) => !Object.hasOwn(value.derivatives, axis))) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["derivatives"],
       message: "derivatives must declare the same two state variables as grid"
     });
@@ -2514,7 +3652,7 @@ var PhasePlaneParamsSchema = import_zod2.z.object({
     const names = Object.keys(values);
     if (names.length !== axes.length || axes.some((axis) => !Object.hasOwn(values, axis))) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: [field],
         message: `${field} must declare units for the same two state variables as grid`
       });
@@ -2531,10 +3669,13 @@ var PhasePlaneParamsSchema = import_zod2.z.object({
     );
   }
 });
-var AstrocyteParamsSchema = import_zod2.z.object({
-  times_ms: timeArray.min(1),
+var AstrocyteParamsSchema = import_zod3.z.object({
+  times_ms: timeArray.min(2),
   ca_trace: gpuArray.min(1),
-  units
+  /** The legacy Ca-only skill follows the NEST astrocyte examples' explicit
+   * micromolar concentration axis. Other quantities or converted units need
+   * a typed analog-trace contract rather than overloading ca_trace. */
+  units: import_zod3.z.enum(["uM", "\xB5M", "\u03BCM"])
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -2543,11 +3684,11 @@ var AstrocyteParamsSchema = import_zod2.z.object({
     value.times_ms.length,
     value.ca_trace.length
   );
-  requireMonotonic(value.times_ms, ctx, "times_ms");
+  requireStrictlyIncreasing(value.times_ms, ctx, "times_ms");
   for (let index = 0; index < value.ca_trace.length; index++) {
     if (value.ca_trace[index] < 0) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["ca_trace", index],
         message: "absolute Ca\xB2\u207A concentration cannot be negative"
       });
@@ -2576,87 +3717,87 @@ var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
   maxAttributeStringLength: 500,
   maxExcerptLength: 1e3
 });
-var KnowledgeGraphAttributeScalarSchema = import_zod2.z.union([
-  import_zod2.z.string().max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength).regex(
+var KnowledgeGraphAttributeScalarSchema = import_zod3.z.union([
+  import_zod3.z.string().max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength).regex(
     SAFE_DISPLAY_STRING_PATTERN,
     "attribute strings must not contain control or bidi characters"
   ),
-  import_zod2.z.number(),
-  import_zod2.z.boolean(),
-  import_zod2.z.null()
+  import_zod3.z.number(),
+  import_zod3.z.boolean(),
+  import_zod3.z.null()
 ]);
-var KnowledgeGraphAttributeValueSchema = import_zod2.z.union([
+var KnowledgeGraphAttributeValueSchema = import_zod3.z.union([
   KnowledgeGraphAttributeScalarSchema,
-  import_zod2.z.array(KnowledgeGraphAttributeScalarSchema).max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems)
+  import_zod3.z.array(KnowledgeGraphAttributeScalarSchema).max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems)
 ]);
-var KnowledgeGraphAttributesSchema = import_zod2.z.record(normalizedRecordKey2, KnowledgeGraphAttributeValueSchema).superRefine((value, ctx) => {
+var KnowledgeGraphAttributesSchema = import_zod3.z.record(normalizedRecordKey2, KnowledgeGraphAttributeValueSchema).superRefine((value, ctx) => {
   if (Object.keys(value).length > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       message: `knowledge-graph attributes may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxAttributes} keys`
     });
   }
 });
-var KnowledgeGraphEvidenceRefSchema = import_zod2.z.discriminatedUnion("kind", [
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("graph_snapshot_record"),
+var KnowledgeGraphEvidenceRefSchema = import_zod3.z.discriminatedUnion("kind", [
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("graph_snapshot_record"),
     evidence_id: displayText(384),
     record_id: displayText(320),
     locator: displayText(240).optional()
   }).strict(),
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("graph_node"),
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("graph_node"),
     evidence_id: displayText(384),
     node_id: displayText(120),
     locator: displayText(240).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
   }).strict(),
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("citation"),
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("citation"),
     evidence_id: displayText(384),
     paper_id: displayText(160),
     citation_id: displayText(160),
-    page: import_zod2.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    page: import_zod3.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
     locator: displayText(240).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
     doi: displayText(240).optional()
   }).strict(),
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("external_source"),
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("external_source"),
     evidence_id: displayText(384),
     source_id: displayText(240),
     locator: displayText(240).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
   }).strict()
 ]);
-var KnowledgeGraphEvidenceRefsSchema = import_zod2.z.array(KnowledgeGraphEvidenceRefSchema).min(1).max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement).superRefine((evidence, ctx) => {
+var KnowledgeGraphEvidenceRefsSchema = import_zod3.z.array(KnowledgeGraphEvidenceRefSchema).min(1).max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement).superRefine((evidence, ctx) => {
   if (!evidence.some((reference) => reference.kind !== "graph_node")) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       message: "evidence must contain at least one direct source anchor (graph_snapshot_record, citation, or external_source); graph_node references are supplemental only"
     });
   }
 });
-var KnowledgeGraphUncalibratedScoreSchema = import_zod2.z.object({
-  kind: import_zod2.z.enum([
+var KnowledgeGraphUncalibratedScoreSchema = import_zod3.z.object({
+  kind: import_zod3.z.enum([
     "extraction_confidence",
     "citation_resolution_confidence",
     "structural_similarity",
     "behavioral_agreement",
     "retrieval_relevance"
   ]),
-  value: import_zod2.z.number().min(0).max(1),
-  calibrated_posterior: import_zod2.z.literal(false)
+  value: import_zod3.z.number().min(0).max(1),
+  calibrated_posterior: import_zod3.z.literal(false)
 }).strict();
-var DerivedAdvisoryEpistemicSchema = import_zod2.z.object({
-  status: import_zod2.z.literal("derived_advisory"),
-  advisory_only: import_zod2.z.literal(true),
-  is_paper_local_evidence: import_zod2.z.literal(false),
-  calibrated_posterior: import_zod2.z.literal(false)
+var DerivedAdvisoryEpistemicSchema = import_zod3.z.object({
+  status: import_zod3.z.literal("derived_advisory"),
+  advisory_only: import_zod3.z.literal(true),
+  is_paper_local_evidence: import_zod3.z.literal(false),
+  calibrated_posterior: import_zod3.z.literal(false)
 }).strict();
-var KnowledgeGraphNodeSchema = import_zod2.z.object({
+var KnowledgeGraphNodeSchema = import_zod3.z.object({
   id: displayText(120),
-  kind: import_zod2.z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
+  kind: import_zod3.z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
   label: displayText(240),
   detail: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDetailLength).optional(),
   attributes: KnowledgeGraphAttributesSchema,
@@ -2664,25 +3805,25 @@ var KnowledgeGraphNodeSchema = import_zod2.z.object({
   evidence: KnowledgeGraphEvidenceRefsSchema,
   uncalibrated_score: KnowledgeGraphUncalibratedScoreSchema.optional()
 }).strict();
-var KnowledgeGraphEdgeSchema = import_zod2.z.object({
+var KnowledgeGraphEdgeSchema = import_zod3.z.object({
   id: displayText(320),
   source: displayText(120),
   target: displayText(120),
-  kind: import_zod2.z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
+  kind: import_zod3.z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
   label: displayText(160),
   attributes: KnowledgeGraphAttributesSchema,
   epistemic: DerivedAdvisoryEpistemicSchema,
   evidence: KnowledgeGraphEvidenceRefsSchema,
   uncalibrated_score: KnowledgeGraphUncalibratedScoreSchema.optional()
 }).strict();
-var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
+var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
   graph_id: displayText(160),
   graph_source: displayText(200),
   graph_snapshot_id: displayText(200),
-  graph_scope: import_zod2.z.literal("corpus_entity"),
+  graph_scope: import_zod3.z.literal("corpus_entity"),
   generated_at: Rfc3339TimestampSchema,
-  nodes: import_zod2.z.array(KnowledgeGraphNodeSchema).min(1).max(PARAM_LIMITS.maxGraphNodes),
-  edges: import_zod2.z.array(KnowledgeGraphEdgeSchema).max(PARAM_LIMITS.maxGraphEdges)
+  nodes: import_zod3.z.array(KnowledgeGraphNodeSchema).min(1).max(PARAM_LIMITS.maxGraphNodes),
+  edges: import_zod3.z.array(KnowledgeGraphEdgeSchema).max(PARAM_LIMITS.maxGraphEdges)
 }).strict().superRefine((value, ctx) => {
   const ids = /* @__PURE__ */ new Set();
   const nodeKinds = /* @__PURE__ */ new Map();
@@ -2697,7 +3838,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
   value.nodes.forEach((node, index) => {
     if (ids.has(node.id)) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["nodes", index, "id"],
         message: `duplicate node id '${node.id}'`
       });
@@ -2708,7 +3849,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
   value.edges.forEach((edge, index) => {
     if (edgeIds.has(edge.id)) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index, "id"],
         message: `duplicate edge id '${edge.id}'`
       });
@@ -2721,28 +3862,28 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
     parallelCounts.set(pairKey, parallelCount);
     if (parallelCount > KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index],
         message: `at most ${KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair} parallel edges may connect one unordered node pair`
       });
     }
     if (!ids.has(edge.source)) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index, "source"],
         message: `edge source '${edge.source}' does not reference a node`
       });
     }
     if (!ids.has(edge.target)) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index, "target"],
         message: `edge target '${edge.target}' does not reference a node`
       });
     }
     if (edge.source === edge.target) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index],
         message: "self-loop edges are not renderable"
       });
@@ -2759,7 +3900,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
     const [expectedSource, expectedTarget] = expected[edge.kind];
     if (sourceKind !== void 0 && targetKind !== void 0 && (sourceKind !== expectedSource || targetKind !== expectedTarget)) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index],
         message: `${edge.kind} requires ${expectedSource} \u2192 ${expectedTarget} endpoints`
       });
@@ -2773,7 +3914,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
     };
     if (edge.uncalibrated_score && !allowedScoreKinds[edge.kind].includes(edge.uncalibrated_score.kind)) {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["edges", index, "uncalibrated_score", "kind"],
         message: `${edge.kind} does not allow score kind '${edge.uncalibrated_score.kind}'`
       });
@@ -2783,7 +3924,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
       const evidence = edge.evidence[evidenceIndex];
       if (evidenceIds.has(evidence.evidence_id)) {
         addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["edges", index, "evidence", evidenceIndex, "evidence_id"],
           message: `duplicate evidence id '${evidence.evidence_id}' on edge '${edge.id}'`
         });
@@ -2791,7 +3932,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
       evidenceIds.add(evidence.evidence_id);
       if (evidence.kind === "graph_node" && !ids.has(evidence.node_id)) {
         addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["edges", index, "evidence", evidenceIndex, "node_id"],
           message: `edge evidence node '${evidence.node_id}' does not reference a node`
         });
@@ -2801,7 +3942,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
   value.nodes.forEach((node, nodeIndex) => {
     if (node.uncalibrated_score && node.uncalibrated_score.kind !== "extraction_confidence") {
       addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["nodes", nodeIndex, "uncalibrated_score", "kind"],
         message: `knowledge-graph nodes only allow score kind 'extraction_confidence'; received '${node.uncalibrated_score.kind}'`
       });
@@ -2811,7 +3952,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
       const evidence = node.evidence[evidenceIndex];
       if (evidenceIds.has(evidence.evidence_id)) {
         addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["nodes", nodeIndex, "evidence", evidenceIndex, "evidence_id"],
           message: `duplicate evidence id '${evidence.evidence_id}' on node '${node.id}'`
         });
@@ -2819,7 +3960,7 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
       evidenceIds.add(evidence.evidence_id);
       if (evidence.kind === "graph_node" && !ids.has(evidence.node_id)) {
         addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["nodes", nodeIndex, "evidence", evidenceIndex, "node_id"],
           message: `node evidence node '${evidence.node_id}' does not reference a node`
         });
@@ -2827,26 +3968,26 @@ var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
     }
   });
 });
-var Spatial2DParamsSchema = import_zod2.z.object({
-  positions: import_zod2.z.array(import_zod2.z.tuple([gpuNumber, gpuNumber])).min(1).max(PARAM_LIMITS.maxSpatialObjects),
+var Spatial2DParamsSchema = import_zod3.z.object({
+  positions: import_zod3.z.array(import_zod3.z.tuple([gpuNumber, gpuNumber])).min(1).max(PARAM_LIMITS.maxSpatialObjects),
   coordinate_units: units
 }).strict();
-var CorrelogramPairSchema = import_zod2.z.object({
+var CorrelogramPairSchema = import_zod3.z.object({
   reference_label: displayText(240),
   target_label: displayText(240)
 }).strict();
-var CorrelogramStatisticSchema = import_zod2.z.discriminatedUnion("kind", [
-  import_zod2.z.object({ kind: import_zod2.z.literal("raw_pair_count"), units: import_zod2.z.literal("count") }).strict(),
-  import_zod2.z.object({ kind: import_zod2.z.literal("weighted_pair_sum"), units }).strict(),
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("pair_rate_hz"),
-    units: import_zod2.z.literal("Hz"),
-    exposure_s: import_zod2.z.number().positive().max(Number.MAX_VALUE)
+var CorrelogramStatisticSchema = import_zod3.z.discriminatedUnion("kind", [
+  import_zod3.z.object({ kind: import_zod3.z.literal("raw_pair_count"), units: import_zod3.z.literal("count") }).strict(),
+  import_zod3.z.object({ kind: import_zod3.z.literal("weighted_pair_sum"), units }).strict(),
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("pair_rate_hz"),
+    units: import_zod3.z.literal("Hz"),
+    exposure_s: import_zod3.z.number().positive().max(Number.MAX_VALUE)
   }).strict(),
-  import_zod2.z.object({
-    kind: import_zod2.z.literal("pearson_coefficient"),
-    units: import_zod2.z.literal("1"),
-    sample_count: import_zod2.z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+  import_zod3.z.object({
+    kind: import_zod3.z.literal("pearson_coefficient"),
+    units: import_zod3.z.literal("1"),
+    sample_count: import_zod3.z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
   }).strict()
 ]);
 function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
@@ -2854,7 +3995,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
   if (lags.length === 0 || !Number.isFinite(tauMax) || tauMax <= 0) return;
   if (lags.length % 2 === 0) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["lags_ms"],
       message: "a symmetric correlogram axis must contain an odd number of lag centers"
     });
@@ -2867,7 +4008,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["lags_ms", 0],
       message: "the first lag center must equal -tau_max_ms"
     });
@@ -2880,7 +4021,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["lags_ms", lastIndex],
       message: "the final lag center must equal tau_max_ms"
     });
@@ -2893,7 +4034,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["lags_ms", middle],
       message: "the middle lag center must be zero"
     });
@@ -2906,7 +4047,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
       HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["lags_ms", index],
         message: "lag centers must be pairwise symmetric around zero"
       });
@@ -2914,17 +4055,17 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     }
   }
 }
-var CorrelogramParamsSchema = import_zod2.z.object({
+var CorrelogramParamsSchema = import_zod3.z.object({
   lags_ms: timeArray.min(1),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
-  tau_max_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
-  counting_start_ms: import_zod2.z.number(),
-  counting_stop_ms: import_zod2.z.number(),
+  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
+  tau_max_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
+  counting_start_ms: import_zod3.z.number(),
+  counting_stop_ms: import_zod3.z.number(),
   pair: CorrelogramPairSchema,
-  lag_convention: import_zod2.z.literal("positive_target_after_reference"),
-  binning: import_zod2.z.literal("left_closed_right_open"),
-  zero_lag_policy: import_zod2.z.enum(["included", "excluded_self_pairs"]),
+  lag_convention: import_zod3.z.literal("positive_target_after_reference"),
+  binning: import_zod3.z.literal("left_closed_right_open"),
+  zero_lag_policy: import_zod3.z.enum(["included", "excluded_self_pairs"]),
   statistic: CorrelogramStatisticSchema
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
@@ -2942,7 +4083,7 @@ var CorrelogramParamsSchema = import_zod2.z.object({
   );
   if (!(value.counting_stop_ms > value.counting_start_ms)) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["counting_stop_ms"],
       message: "counting_stop_ms must be greater than counting_start_ms"
     });
@@ -2952,7 +4093,7 @@ var CorrelogramParamsSchema = import_zod2.z.object({
     const invalid = value.statistic.kind === "pearson_coefficient" ? sample < -1 || sample > 1 : value.statistic.kind === "raw_pair_count" ? sample < 0 || !Number.isSafeInteger(sample) : value.statistic.kind === "pair_rate_hz" ? sample < 0 : false;
     if (invalid) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["values", index],
         message: value.statistic.kind === "pearson_coefficient" ? "Pearson coefficients must lie in [-1, 1]" : value.statistic.kind === "raw_pair_count" ? "raw pair counts must be non-negative safe integers" : "pair rates cannot be negative"
       });
@@ -2960,7 +4101,7 @@ var CorrelogramParamsSchema = import_zod2.z.object({
     }
   }
 });
-var StimulusResponseParamsSchema = import_zod2.z.object({
+var StimulusResponseParamsSchema = import_zod3.z.object({
   times_ms: timeArray.min(1),
   stimulus: gpuArray.min(1),
   response: gpuArray.min(1)
@@ -2981,10 +4122,12 @@ var StimulusResponseParamsSchema = import_zod2.z.object({
   );
   requireMonotonic(value.times_ms, ctx, "times_ms");
 });
-var CompartmentalParamsSchema = import_zod2.z.object({
-  times_ms: timeArray.min(1),
-  compartments: import_zod2.z.array(
-    import_zod2.z.object({
+var CompartmentalParamsSchema = import_zod3.z.object({
+  // A declared sampling interval is required for this host envelope, so a
+  // one-point axis would leave that claim mechanically unverifiable.
+  times_ms: timeArray.min(2),
+  compartments: import_zod3.z.array(
+    import_zod3.z.object({
       id: displayText(120),
       parent_id: displayText(120).nullable(),
       label: displayText(240).optional(),
@@ -2992,14 +4135,14 @@ var CompartmentalParamsSchema = import_zod2.z.object({
     }).strict()
   ).min(1).max(PARAM_LIMITS.maxSeries)
 }).strict().superRefine((value, ctx) => {
-  requireMonotonic(value.times_ms, ctx, "times_ms");
+  requireStrictlyIncreasing(value.times_ms, ctx, "times_ms");
   const ids = /* @__PURE__ */ new Set();
   const parents = /* @__PURE__ */ new Map();
   let roots = 0;
   value.compartments.forEach((compartment, index) => {
     if (ids.has(compartment.id)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["compartments", index, "id"],
         message: `duplicate compartment id '${compartment.id}'`
       });
@@ -3017,7 +4160,7 @@ var CompartmentalParamsSchema = import_zod2.z.object({
   });
   if (roots === 0) {
     ctx.addIssue({
-      code: import_zod2.z.ZodIssueCode.custom,
+      code: import_zod3.z.ZodIssueCode.custom,
       path: ["compartments"],
       message: "at least one root compartment must have parent_id:null"
     });
@@ -3025,7 +4168,7 @@ var CompartmentalParamsSchema = import_zod2.z.object({
   value.compartments.forEach((compartment, index) => {
     if (compartment.parent_id !== null && !ids.has(compartment.parent_id)) {
       ctx.addIssue({
-        code: import_zod2.z.ZodIssueCode.custom,
+        code: import_zod3.z.ZodIssueCode.custom,
         path: ["compartments", index, "parent_id"],
         message: `parent '${compartment.parent_id}' does not reference a compartment`
       });
@@ -3035,7 +4178,7 @@ var CompartmentalParamsSchema = import_zod2.z.object({
     while (cursor !== null && parents.has(cursor)) {
       if (seen.has(cursor)) {
         ctx.addIssue({
-          code: import_zod2.z.ZodIssueCode.custom,
+          code: import_zod3.z.ZodIssueCode.custom,
           path: ["compartments", index, "parent_id"],
           message: "compartment parent graph must be acyclic"
         });
@@ -3046,11 +4189,11 @@ var CompartmentalParamsSchema = import_zod2.z.object({
     }
   });
 });
-var AnimationReplayParamsSchema = import_zod2.z.object({
-  frames: import_zod2.z.array(
-    import_zod2.z.object({
-      time_ms: import_zod2.z.number().nonnegative(),
-      state: import_zod2.z.record(normalizedRecordKey2, import_zod2.z.unknown()).refine((state) => Object.keys(state).length > 0, {
+var AnimationReplayParamsSchema = import_zod3.z.object({
+  frames: import_zod3.z.array(
+    import_zod3.z.object({
+      time_ms: import_zod3.z.number().nonnegative(),
+      state: import_zod3.z.record(normalizedRecordKey2, import_zod3.z.unknown()).refine((state) => Object.keys(state).length > 0, {
         message: "frame state must contain at least one field"
       }),
       annotation: displayText(500).optional()
@@ -3088,7 +4231,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
       device_id: "mm_1",
       recorded_variable: "V_m",
       units: "mV",
-      sampling_interval: 0.1
+      sampling_interval: 1
     })
   },
   "nest.spike_raster": {
@@ -3099,7 +4242,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
     provenance: synthetic({
       recorder_id: "sr_1",
       sender_ids: "[1,2]",
-      population_labels: "E",
+      population_labels: '["E"]',
       time_units: "ms"
     })
   },
@@ -3173,7 +4316,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
     provenance: synthetic({
       recorder_id: "sr_1",
       sender_ids: "[1,2]",
-      population_labels: "E",
+      population_labels: '["E"]',
       time_units: "ms",
       bin_ms: 5,
       rate_normalization: "mean_per_recorded_sender_hz",
@@ -3422,7 +4565,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({
-      source_ids: "[1,3]",
+      source_ids: "[1,2,3]",
       target_ids: "[4,5]",
       synapse_model: "static_synapse",
       connection_sample_policy: "complete",
@@ -3474,12 +4617,20 @@ var SKILL_EXAMPLE_PAYLOADS = {
     scene: "weight-histogram",
     params: {
       bin_centers: [-2, -1, 0, 1, 2],
+      weight_counts: [3, 5, 0, 7, 2],
       values: [3, 5, 0, 7, 2],
       bin_width: 1,
+      window_start: -2.5,
+      window_stop: 2.5,
       weight_units: "pA",
       normalization: "count",
       value_units: "count",
-      snapshot_time_ms: 1e3
+      aggregation: "each_connection",
+      binning: "left_closed_right_open",
+      sample_policy: "complete",
+      connection_count: 17,
+      snapshot_time_ms: 1e3,
+      snapshot_scope: { kind: "single_process_complete" }
     },
     mode: "interactive",
     themeMode: "dark",
@@ -3489,7 +4640,10 @@ var SKILL_EXAMPLE_PAYLOADS = {
       synapse_model: "static_synapse",
       weight_units: "pA",
       histogram_normalization: "count",
-      connection_sample_policy: "all matching connections at snapshot_time_ms"
+      connection_sample_policy: "complete",
+      snapshot_time_ms: 1e3,
+      snapshot_scope: "single_process_complete",
+      parallel_edge_policy: "count_each_connection"
     })
   },
   "nest.spatial_map_2d": {
@@ -3552,7 +4706,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
     mode: "interactive",
     themeMode: "dark",
     provenance: synthetic({
-      state_variables: "V,w",
+      state_variables: '["v","w"]',
       derivation_method: "model equations evaluated on Cartesian grid",
       model_context: "Hodgkin-Huxley reduced phase plane",
       fixed_parameters: "all non-plotted state variables clamped to declared values"
@@ -3816,9 +4970,49 @@ function getInvocationExamplePayload(id2) {
 }
 
 // core/skills/registry.ts
-var CORTEXEL_SKILL_VERSION = "1.6.0";
+function externalClaims(claims) {
+  return claims;
+}
+function constraintEstablishesBinding(constraint) {
+  return constraint.establishesBinding !== false;
+}
+function verificationKindForConstraints(constraints) {
+  if (constraints.every((constraint) => constraint.kind === "equals_literal" || constraint.kind === "one_of_literals")) {
+    return "literal_bound";
+  }
+  if (constraints.every((constraint) => constraint.kind === "equals_param" || constraint.kind === "equals_param_path")) {
+    return "param_bound";
+  }
+  return "derived_bound";
+}
+function provenanceVerificationForContract(contract) {
+  const verification = /* @__PURE__ */ Object.create(null);
+  const classifiedKeys = [
+    ...contract.requiredProvenanceKeys,
+    ...contract.optionalProvenanceKeys ?? []
+  ];
+  for (const key of classifiedKeys) {
+    const constraints = (contract.provenanceParamConstraints ?? []).filter(
+      (constraint) => constraint.provenanceKey === key && constraintEstablishesBinding(constraint)
+    );
+    const external = contract.externalProvenanceClaims?.[key];
+    if (constraints.length > 0 === (external !== void 0)) {
+      throw new Error(
+        `skill '${contract.id}' must classify required provenance '${key}' exactly once as mechanically bound or external`
+      );
+    }
+    verification[key] = external ? { kind: "external_claim", reason: external.reason } : { kind: verificationKindForConstraints(constraints) };
+  }
+  return verification;
+}
+function externalProvenanceDisclosure(contract) {
+  const labels = contract.requiredProvenanceKeys.filter((key) => contract.externalProvenanceClaims?.[key] !== void 0).map((key) => PROVENANCE_KEY_LABELS[key]);
+  if (labels.length === 0) return null;
+  return `Caller-declared provenance \u2014 Cortexel checked structure but could not verify against the checked payload or source: ${labels.join(", ")}.`;
+}
+var CORTEXEL_SKILL_VERSION = "1.7.0";
 var STRICT_INVOCATION_POLICY = Object.freeze({
-  version: "2",
+  version: "3",
   externalSelection: "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present",
   selfDescribingSelection: "validateSpec(payload): payload.skill is required and selects the contract",
   hostSelection: "host envelopes require payload.skill; explicit id and payload.skill must match",
@@ -3827,10 +5021,11 @@ var STRICT_INVOCATION_POLICY = Object.freeze({
   hostEnvelope: "allowed iff contract.scene is null; scene is forbidden",
   rendererRoute: "when selected, must occur in contract.rendererRoutes",
   params: "validate paramsJsonSchema then every paramConstraint",
-  provenance: "apply strictProvenancePolicy, require every contract.requiredProvenanceFlags value, then evaluate every provenanceParamConstraint"
+  provenance: "apply strictProvenancePolicy, require every contract.requiredProvenanceFlags value, then evaluate every provenanceParamConstraint",
+  provenanceVerification: "every allowed required or optional provenance key is classified exactly once as parameter/literal/derived-bound or an externally unverifiable caller claim with mandatory disclosure; all other declared keys reject"
 });
 var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: "8",
+  version: "10",
   pathSyntax: "dot-separated object keys",
   arrayWildcard: "[*]",
   objectValueWildcard: "*",
@@ -3844,6 +5039,7 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     "equal_length",
     "each_length_matches",
     "monotonic_non_decreasing",
+    "strictly_increasing",
     "non_negative",
     "property_count",
     "unique_field",
@@ -3873,6 +5069,7 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     "matrix_connection_counts",
     "degree_distribution_consistency",
     "delay_distribution_consistency",
+    "weight_histogram_consistency",
     "spatial_extent_bounds",
     "scope_compatibility",
     "acyclic"
@@ -3890,6 +5087,10 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     monotonic_non_decreasing: Object.freeze({
       pathRoles: "each path resolves an ordered numeric sequence",
       rule: "for every adjacent pair previous <= next"
+    }),
+    strictly_increasing: Object.freeze({
+      pathRoles: "each path resolves an ordered numeric sequence",
+      rule: "for every adjacent pair previous < next"
     }),
     non_negative: Object.freeze({
       pathRoles: "each path resolves numeric values",
@@ -3941,8 +5142,9 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     uniform_histogram_bins: Object.freeze({
       pathRoles: "first path resolves the ordered bin-center array; second path resolves one numeric bin width",
-      rule: "width is positive and finite; centers are strictly increasing; each adjacent delta approximately equals width",
+      rule: "width and width/2 are positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing; each adjacent delta approximately equals width",
       comparison: "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))",
+      internalEdgeComparison: "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff",
       nonNegativeLowerEdge: "when true, firstCenter-width/2 must be >= -tolerance, where tolerance uses firstCenter and width/2 in the same comparison formula"
     }),
     normalized_histogram_mass: Object.freeze({
@@ -3997,9 +5199,10 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     uniform_bin_window: Object.freeze({
       pathRoles: "ordered bin-center array, positive finite bin width, finite window start, finite window stop in that order",
-      rule: "centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop",
-      binning: "left-closed, right-open bins exactly tile [start,stop)",
+      rule: "width/2 remains positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop",
+      binning: "left-closed, right-open bins tile [start,stop) within the published bounded binary64 geometry tolerance",
       spacingComparison: "adjacent center deltas use abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual),abs(expected))",
+      internalEdgeComparison: "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff",
       edgeComparison: "exact edge equality passes; otherwise the binary64 allowance must be <= maxRoundoffFraction * abs(binWidth), then abs(edge-expected) <= absoluteTolerance + relativeTolerance * abs(binWidth) + roundoffUlps * 2^-52 * max(abs(center),abs(binWidth/2),abs(edge),abs(expected)); an unresolved absolute origin fails closed"
     }),
     population_rate_derived_values: Object.freeze({
@@ -4012,8 +5215,9 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     symmetric_lag_axis: Object.freeze({
       pathRoles: "ordered lag-center array, positive finite bin width, positive finite tau_max_ms in that order",
-      rule: "lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span exactly [-tau_max_ms,+tau_max_ms]",
-      comparison: "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))"
+      rule: "width/2 remains positive and finite; every binary64 lag-width/2 and lag+width/2 edge is finite, strictly straddles its lag center, and retains the declared width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span [-tau_max_ms,+tau_max_ms] under the published comparison",
+      comparison: "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))",
+      internalEdgeComparison: "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff"
     }),
     legacy_connection_channels: Object.freeze({
       pathRoles: "optional weights array, optional weight_units, optional delays array, and optional delay_units in that order",
@@ -4039,7 +5243,14 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
       pathRoles: "bin centers, raw delay_counts, displayed values, bin width, connection_count, normalization, value units, delay units, aggregation, and binning in that order",
       rule: "the three bin arrays have equal length; displayed values are finite and nonnegative; sum(delay_counts)=connection_count; displayed counts equal raw counts exactly; probabilities or densities exactly equal the published binary64 recovery result and globally sum or integrate to one within the accumulated-mass tolerance; non-count normalization requires a non-empty snapshot and finite density denominator",
       operationOrder: "probability=count/connection_count; probability_density=count/(connection_count*bin_width_ms) using IEEE-754 binary64; per-bin comparison uses exact Object.is-equivalent binary64 identity, while absoluteTolerance/relativeTolerance apply only to accumulated normalized mass",
-      geometry: "a separate uniform_bin_window constraint publishes and evaluates exact [start,stop) bin geometry"
+      geometry: "a separate uniform_bin_window constraint publishes and evaluates [start,stop) bin geometry within its bounded binary64 tolerance"
+    }),
+    weight_histogram_consistency: Object.freeze({
+      pathRoles: "bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order",
+      rule: "the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot",
+      operationOrder: "probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity",
+      fixedSemantics: "aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin",
+      geometry: "a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance"
     }),
     spatial_extent_bounds: Object.freeze({
       pathRoles: "nodes array, extent tuple, and center tuple in that order",
@@ -4073,12 +5284,46 @@ var NEST_SKILL_REGISTRY = {
       "units",
       "sampling_interval"
     ],
+    externalProvenanceClaims: externalClaims({
+      device_id: {
+        reason: "The multimeter/voltmeter source-device identity is not represented in trace params."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_param",
         provenanceKey: "units",
         paramKey: "units",
         description: "Declared units must match the rendered trace-axis units."
+      },
+      {
+        kind: "equals_literal",
+        provenanceKey: "units",
+        value: "mV",
+        description: "The legacy voltage_trace skill is restricted to NEST membrane-potential millivolts; other analog quantities require a typed analog-trace contract."
+      },
+      {
+        kind: "equals_literal",
+        provenanceKey: "recorded_variable",
+        value: "V_m",
+        description: "The legacy voltage_trace skill is restricted to the NEST V_m variable."
+      },
+      {
+        kind: "matches_regular_time_axis",
+        provenanceKey: "sampling_interval",
+        paramPath: "times_ms",
+        absoluteTolerance: 0,
+        relativeTolerance: 1e-12,
+        roundoffUlps: 4,
+        maxRoundoffFraction: 1e-7,
+        description: "The declared device sampling interval must match every adjacent trace timestamp delta."
+      },
+      {
+        kind: "each_label_matches_variable",
+        provenanceKey: "recorded_variable",
+        paramPath: "series_labels",
+        separator: " \xB7 ",
+        description: "Every trace label must identify the exact declared recorded variable."
       }
     ],
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
@@ -4108,12 +5353,35 @@ var NEST_SKILL_REGISTRY = {
       "population_labels",
       "time_units"
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: "The spike-recorder source identity is not represented in event params."
+      },
+      sender_ids: {
+        reason: "Observed events cannot establish the complete recorded-sender universe because silent senders disappear."
+      },
+      population_labels: {
+        reason: "Event params carry sender ids but no source population-identity mapping."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_literal",
         provenanceKey: "time_units",
         value: "ms",
         description: "The times_ms axis is expressed in milliseconds."
+      },
+      {
+        kind: "matches_projected_id_collection",
+        provenanceKey: "sender_ids",
+        paramPath: "senders",
+        idDomain: "nonnegative_safe_integer",
+        comparison: "set",
+        relation: "contains",
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "Every observed event sender must occur in the caller-declared recorded-sender universe; silent senders remain externally unverifiable."
       }
     ],
     rendererRoutes: ["media.model_graph", "d3"],
@@ -4153,6 +5421,17 @@ var NEST_SKILL_REGISTRY = {
       "histogram_normalization",
       "interval_scope"
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: "The source recorder identity is not retained by the derived histogram params."
+      },
+      sender_ids: {
+        reason: "ISI aggregation does not retain the selected sender universe."
+      },
+      population_labels: {
+        reason: "ISI aggregation does not retain population identity or membership."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_literal",
@@ -4219,6 +5498,17 @@ var NEST_SKILL_REGISTRY = {
       "event_alignment",
       "psth_aggregation"
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: "The source recorder identity is not retained by PSTH params."
+      },
+      sender_ids: {
+        reason: "PSTH aggregation retains recoverable counts but not selected sender identities."
+      },
+      population_labels: {
+        reason: "PSTH params do not retain a population-identity mapping."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_literal",
@@ -4290,7 +5580,41 @@ var NEST_SKILL_REGISTRY = {
       "rate_normalization",
       "binning_policy"
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: "The source recorder identity is not represented in rate params."
+      },
+      sender_ids: {
+        reason: "Per-series sender counts do not establish the identities of the selected senders."
+      },
+      population_labels: {
+        reason: "Series display ids/labels are not a structured source population-identity mapping."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "canonical_json_array_length_at_least_projected_sum",
+        provenanceKey: "sender_ids",
+        paramPath: "series",
+        field: "recorded_sender_count",
+        idDomain: "nonnegative_safe_integer",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "The declared sender universe must be large enough for the summed disjoint per-population sender denominators; identities remain externally unverifiable."
+      },
+      {
+        kind: "matches_projected_id_collection",
+        provenanceKey: "population_labels",
+        paramPath: "series",
+        field: "id",
+        idDomain: "nonblank_string",
+        comparison: "set",
+        relation: "equals",
+        allowDigest: true,
+        allowOpaqueDigestCount: false,
+        establishesBinding: false,
+        description: "The caller-declared population-label tokens must match the checked population-rate series ids; source population identity remains external."
+      },
       {
         kind: "equals_literal",
         provenanceKey: "time_units",
@@ -4338,6 +5662,14 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["stimulus_amplitudes", "rates_hz", "stimulus_units"],
     paramsSchema: RateResponseParamsSchema,
     requiredProvenanceKeys: ["stim_units", "bin_ms", "rate_normalization"],
+    externalProvenanceClaims: externalClaims({
+      bin_ms: {
+        reason: "The response params contain no observation window, raw counts, or bin axis from which to verify this duration."
+      },
+      rate_normalization: {
+        reason: "The response params contain rates only, without the denominator or derivation needed to verify normalization."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_param",
@@ -4382,7 +5714,45 @@ var NEST_SKILL_REGISTRY = {
       "synapse_model",
       "connection_sample_policy"
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: "The deprecated edge list retains observed endpoints, not the complete selected source universe."
+      },
+      target_ids: {
+        reason: "The deprecated edge list retains observed endpoints, not the complete selected target universe."
+      },
+      synapse_model: {
+        reason: "The deprecated edge-list params do not retain a snapshot-level synapse model."
+      },
+      connection_sample_policy: {
+        reason: "The deprecated edge-list params do not retain a sampling/completeness policy."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "matches_projected_id_collection",
+        provenanceKey: "source_ids",
+        paramPath: "sources",
+        idDomain: "nonnegative_safe_integer",
+        comparison: "set",
+        relation: "contains",
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "Every observed legacy edge source must occur in the caller-declared source universe."
+      },
+      {
+        kind: "matches_projected_id_collection",
+        provenanceKey: "target_ids",
+        paramPath: "targets",
+        idDomain: "nonnegative_safe_integer",
+        comparison: "set",
+        relation: "contains",
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "Every observed legacy edge target must occur in the caller-declared target universe."
+      },
       {
         kind: "equals_param",
         provenanceKey: "weight_units",
@@ -4396,6 +5766,7 @@ var NEST_SKILL_REGISTRY = {
         description: "When declared, legacy graph delay units must match params.delay_units."
       }
     ],
+    optionalProvenanceKeys: ["weight_units", "delay_units"],
     rendererRoutes: ["media.model_graph", "d3"],
     examples: [
       {
@@ -4465,7 +5836,53 @@ var NEST_SKILL_REGISTRY = {
       "snapshot_scope",
       "parallel_edge_policy"
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: "Graph params preserve a role-erased node union; observed edges cannot establish isolated selected sources."
+      },
+      target_ids: {
+        reason: "Graph params preserve a role-erased node union; observed edges cannot establish isolated selected targets."
+      },
+      synapse_model: {
+        reason: "Edge-level model values can prevent contradictions when present but do not establish a snapshot-level model for empty or model-omitting graphs."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "matches_projected_id_collection",
+        provenanceKey: "source_ids",
+        paramPath: "edges",
+        field: "source",
+        idDomain: "nonnegative_safe_integer",
+        comparison: "set",
+        relation: "contains",
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "Every rendered edge source must occur in the caller-declared source universe; isolated selected sources remain externally unverifiable."
+      },
+      {
+        kind: "matches_projected_id_collection",
+        provenanceKey: "target_ids",
+        paramPath: "edges",
+        field: "target",
+        idDomain: "nonnegative_safe_integer",
+        comparison: "set",
+        relation: "contains",
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "Every rendered edge target must occur in the caller-declared target universe; isolated selected targets remain externally unverifiable."
+      },
+      {
+        kind: "all_projected_values_equal",
+        provenanceKey: "synapse_model",
+        paramPath: "edges",
+        field: "synapse_model",
+        emptyPolicy: "pass_unverifiable",
+        establishesBinding: false,
+        description: "Whenever edge-level synapse models are present, every one must match the caller-declared snapshot model."
+      },
       {
         kind: "equals_param",
         provenanceKey: "connection_sample_policy",
@@ -4503,6 +5920,7 @@ var NEST_SKILL_REGISTRY = {
         description: "When declared, graph delay units must match params.delay_units."
       }
     ],
+    optionalProvenanceKeys: ["weight_units", "delay_units"],
     rendererRoutes: ["media.model_graph", "d3"],
     examples: [{
       nestExample: "SynapseCollection connection inspection",
@@ -4551,7 +5969,26 @@ var NEST_SKILL_REGISTRY = {
       "matrix_axis_order",
       "matrix_aggregation"
     ],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: "Adjacency-matrix params do not retain the snapshot synapse model."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "source_ids",
+        paramPath: "source_ids",
+        allowDigest: true,
+        description: "Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest."
+      },
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "target_ids",
+        paramPath: "target_ids",
+        allowDigest: true,
+        description: "Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest."
+      },
       { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Only complete connection snapshots may form a literal matrix." },
       { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Declared snapshot time must match params." },
       { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Declared snapshot scope must match params." },
@@ -4608,7 +6045,26 @@ var NEST_SKILL_REGISTRY = {
       "matrix_axis_order",
       "matrix_aggregation"
     ],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: "Weight-matrix params do not retain the snapshot synapse model."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "source_ids",
+        paramPath: "source_ids",
+        allowDigest: true,
+        description: "Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest."
+      },
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "target_ids",
+        paramPath: "target_ids",
+        allowDigest: true,
+        description: "Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest."
+      },
       { kind: "equals_param", provenanceKey: "weight_units", paramKey: "weight_units", description: "Weight units must match params." },
       { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Only complete connection snapshots may form a literal matrix." },
       { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
@@ -4666,7 +6122,26 @@ var NEST_SKILL_REGISTRY = {
       "matrix_axis_order",
       "matrix_aggregation"
     ],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: "Delay-matrix params do not retain the snapshot synapse model."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "source_ids",
+        paramPath: "source_ids",
+        allowDigest: true,
+        description: "Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest."
+      },
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "target_ids",
+        paramPath: "target_ids",
+        allowDigest: true,
+        description: "Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest."
+      },
       { kind: "equals_param", provenanceKey: "delay_units", paramKey: "delay_units", description: "Delay units must match params." },
       { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Only complete connection snapshots may form a literal matrix." },
       { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
@@ -4727,7 +6202,38 @@ var NEST_SKILL_REGISTRY = {
       "zero_degree_policy",
       "histogram_normalization"
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: "The aggregate degree distribution does not retain source identities."
+      },
+      target_ids: {
+        reason: "The aggregate degree distribution retains a target count but not target identities."
+      },
+      synapse_model: {
+        reason: "The aggregate degree params do not retain the snapshot synapse model."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "source_ids",
+        paramPath: "connection_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "nonempty_if_positive",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "A positive in-degree connection count requires at least one source id; aggregate degree params still do not identify that source universe."
+      },
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "target_ids",
+        paramPath: "node_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "equals",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "The declared target-universe count must equal the checked in-degree node_count; aggregate params still do not retain identities."
+      },
       { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Degree input must be complete for its declared scope." },
       { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
       { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Snapshot scope must match params." },
@@ -4789,7 +6295,38 @@ var NEST_SKILL_REGISTRY = {
       "zero_degree_policy",
       "histogram_normalization"
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: "The aggregate degree distribution retains a source count but not source identities."
+      },
+      target_ids: {
+        reason: "The aggregate degree distribution does not retain target identities."
+      },
+      synapse_model: {
+        reason: "The aggregate degree params do not retain the snapshot synapse model."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "source_ids",
+        paramPath: "node_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "equals",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "The declared source-universe count must equal the checked out-degree node_count; aggregate params still do not retain identities."
+      },
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "target_ids",
+        paramPath: "connection_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "nonempty_if_positive",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "A positive out-degree connection count requires at least one target id; aggregate degree params still do not identify that target universe."
+      },
       { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Degree input must be complete for its declared scope." },
       { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
       { kind: "equals_param_path", provenanceKey: "snapshot_scope", paramPath: "snapshot_scope.kind", description: "Snapshot scope must match params." },
@@ -4812,7 +6349,7 @@ var NEST_SKILL_REGISTRY = {
     id: "nest.delay_distribution",
     version: CORTEXEL_SKILL_VERSION,
     title: "NEST synaptic-delay distribution renderer",
-    description: "Render exact half-open bins over one delay value per selected connection.",
+    description: "Render checked left-closed/right-open bins over one delay value per selected connection.",
     deviceFamily: "get_connections",
     scene: "delay-distribution",
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "delay_distribution" },
@@ -4863,7 +6400,38 @@ var NEST_SKILL_REGISTRY = {
       "histogram_normalization",
       "binning_policy"
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: "The aggregate delay histogram does not retain source identities."
+      },
+      target_ids: {
+        reason: "The aggregate delay histogram does not retain target identities."
+      },
+      synapse_model: {
+        reason: "The aggregate delay params do not retain the snapshot synapse model."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "source_ids",
+        paramPath: "connection_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "nonempty_if_positive",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "A positive delay-observation count requires at least one source id; aggregate histogram params still do not identify the source universe."
+      },
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "target_ids",
+        paramPath: "connection_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "nonempty_if_positive",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "A positive delay-observation count requires at least one target id; aggregate histogram params still do not identify the target universe."
+      },
       { kind: "equals_param", provenanceKey: "delay_units", paramKey: "delay_units", description: "Delay units must match params." },
       { kind: "equals_param", provenanceKey: "connection_sample_policy", paramKey: "sample_policy", description: "Delay histogram input must be complete for its scope." },
       { kind: "equals_param", provenanceKey: "snapshot_time_ms", paramKey: "snapshot_time_ms", description: "Snapshot time must match params." },
@@ -4877,7 +6445,7 @@ var NEST_SKILL_REGISTRY = {
     examples: [{
       nestExample: "SynapseCollection delay inspection",
       sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
-      dataShape: "one positive millisecond delay per selected connection in exact uniform bins",
+      dataShape: "one positive millisecond delay per selected connection in checked uniform bins",
       output: "Delay count, probability, or probability-density histogram",
       note: "Out-of-window delays are transform errors, never silently discarded."
     }]
@@ -4895,12 +6463,20 @@ var NEST_SKILL_REGISTRY = {
     },
     requiredInputKeys: [
       "bin_centers",
+      "weight_counts",
       "values",
       "bin_width",
+      "window_start",
+      "window_stop",
       "weight_units",
       "normalization",
       "value_units",
-      "snapshot_time_ms"
+      "aggregation",
+      "binning",
+      "sample_policy",
+      "connection_count",
+      "snapshot_time_ms",
+      "snapshot_scope"
     ],
     paramsSchema: WeightHistogramParamsSchema,
     requiredProvenanceKeys: [
@@ -4909,9 +6485,43 @@ var NEST_SKILL_REGISTRY = {
       "synapse_model",
       "weight_units",
       "histogram_normalization",
-      "connection_sample_policy"
+      "connection_sample_policy",
+      "snapshot_time_ms",
+      "snapshot_scope",
+      "parallel_edge_policy"
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: "The aggregate weight histogram does not retain source identities."
+      },
+      target_ids: {
+        reason: "The aggregate weight histogram does not retain target identities."
+      },
+      synapse_model: {
+        reason: "The aggregate weight params do not retain the snapshot synapse model."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "source_ids",
+        paramPath: "connection_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "nonempty_if_positive",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "A positive weight-observation count requires at least one source id; aggregate histogram params still do not identify the source universe."
+      },
+      {
+        kind: "canonical_json_array_length_matches_param",
+        provenanceKey: "target_ids",
+        paramPath: "connection_count",
+        idDomain: "nonnegative_safe_integer",
+        relation: "nonempty_if_positive",
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: "A positive weight-observation count requires at least one target id; aggregate histogram params still do not identify the target universe."
+      },
       {
         kind: "equals_param",
         provenanceKey: "weight_units",
@@ -4923,6 +6533,30 @@ var NEST_SKILL_REGISTRY = {
         provenanceKey: "histogram_normalization",
         paramKey: "normalization",
         description: "Declared histogram normalization must match params.normalization."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "connection_sample_policy",
+        paramKey: "sample_policy",
+        description: "Declared connection sampling must match params.sample_policy."
+      },
+      {
+        kind: "equals_param",
+        provenanceKey: "snapshot_time_ms",
+        paramKey: "snapshot_time_ms",
+        description: "Declared snapshot time must match params.snapshot_time_ms."
+      },
+      {
+        kind: "equals_param_path",
+        provenanceKey: "snapshot_scope",
+        paramPath: "snapshot_scope.kind",
+        description: "Declared snapshot scope must match params.snapshot_scope.kind."
+      },
+      {
+        kind: "equals_literal",
+        provenanceKey: "parallel_edge_policy",
+        value: "count_each_connection",
+        description: "Every selected SynapseCollection entry contributes one weight observation."
       }
     ],
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
@@ -4930,9 +6564,9 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Plot weight matrices example / SynapseCollection snapshot",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
-        dataShape: "binned GetConnections weights at one declared simulation time",
+        dataShape: "raw per-bin connection counts from one typed complete GetConnections snapshot",
         output: "Connection-weight count or probability histogram",
-        note: "Use a GetConnections snapshot; weight_recorder events are update-event samples and bias distributions."
+        note: "Every selected connection contributes exactly one weight; weight_recorder update events are a different, biased sample."
       }
     ]
   },
@@ -4953,7 +6587,25 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["positions", "coordinate_units"],
     paramsSchema: Spatial2DParamsSchema,
     requiredProvenanceKeys: ["extent", "spatial_units", "mask", "kernel"],
+    externalProvenanceClaims: externalClaims({
+      extent: {
+        reason: "Anonymous point bounds are not the declared layer extent and params contain no center/extent object."
+      },
+      mask: {
+        reason: "The network-generation mask is source configuration, not measured position data."
+      },
+      kernel: {
+        reason: "The network-generation kernel is source configuration, not measured position data."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "canonical_json_array_length_equals",
+        provenanceKey: "extent",
+        expectedLength: 2,
+        establishesBinding: false,
+        description: "A 2D host envelope requires a canonical two-axis extent; this shape check does not verify the caller-declared layer extent."
+      },
       {
         kind: "equals_param",
         provenanceKey: "spatial_units",
@@ -5014,6 +6666,18 @@ var NEST_SKILL_REGISTRY = {
     ],
     provenanceParamConstraints: [
       {
+        kind: "matches_projected_id_collection",
+        provenanceKey: "node_ids",
+        paramPath: "nodes",
+        field: "id",
+        idDomain: "nonnegative_safe_integer",
+        comparison: "set",
+        relation: "equals",
+        allowDigest: true,
+        allowOpaqueDigestCount: false,
+        description: "Declared node ids must equal the measured node-id set or its RFC 8785 SHA-256 digest."
+      },
+      {
         kind: "equals_param",
         provenanceKey: "spatial_units",
         paramKey: "coordinate_units",
@@ -5024,6 +6688,13 @@ var NEST_SKILL_REGISTRY = {
         provenanceKey: "position_scope",
         paramPath: "position_scope.kind",
         description: "Declared position scope must match params.position_scope.kind."
+      },
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "extent",
+        paramPath: "extent",
+        allowDigest: false,
+        description: "Declared numeric extent must exactly equal params.extent in canonical JSON."
       }
     ],
     rendererRoutes: ["media.model_graph", "d3"],
@@ -5049,7 +6720,22 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["objects", "coordinate_units"],
     paramsSchema: Spatial3DParamsSchema,
     requiredProvenanceKeys: ["extent", "spatial_units", "projection_sample_policy"],
+    externalProvenanceClaims: externalClaims({
+      extent: {
+        reason: "Position bounds are not a layer extent and params contain no center/extent object."
+      },
+      projection_sample_policy: {
+        reason: "The positioned-object params do not retain a structured projection sampling policy."
+      }
+    }),
     provenanceParamConstraints: [
+      {
+        kind: "canonical_json_array_length_equals",
+        provenanceKey: "extent",
+        expectedLength: 3,
+        establishesBinding: false,
+        description: "A 3D positioned-node scene requires a canonical three-axis extent; this shape check does not verify the caller-declared layer extent."
+      },
       {
         kind: "equals_param",
         provenanceKey: "spatial_units",
@@ -5083,6 +6769,11 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["times_ms", "weights", "weight_units"],
     paramsSchema: PlasticityParamsSchema,
     requiredProvenanceKeys: ["synapse_model", "weight_units"],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: "Weight traces do not retain the recorded synapse/model identity."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_param",
@@ -5123,6 +6814,26 @@ var NEST_SKILL_REGISTRY = {
       "derivation_method",
       "model_context",
       "fixed_parameters"
+    ],
+    externalProvenanceClaims: externalClaims({
+      derivation_method: {
+        reason: "The vector-field params contain derivative values but no structured derivation method/version."
+      },
+      model_context: {
+        reason: "The vector-field params contain no structured model identity/version."
+      },
+      fixed_parameters: {
+        reason: "The vector-field params do not retain the fixed-parameter map and units."
+      }
+    }),
+    provenanceParamConstraints: [
+      {
+        kind: "matches_canonical_json_param",
+        provenanceKey: "state_variables",
+        paramPath: "axis_order",
+        allowDigest: false,
+        description: "Declared state variables must exactly match params.axis_order in canonical JSON."
+      }
     ],
     rendererRoutes: ["media.model_graph", "d3"],
     examples: [
@@ -5166,6 +6877,11 @@ var NEST_SKILL_REGISTRY = {
       "lag_convention",
       "binning_policy"
     ],
+    externalProvenanceClaims: externalClaims({
+      detector_id: {
+        reason: "The source correlation-detector identity is not represented in correlogram params."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_param",
@@ -5232,6 +6948,14 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["times_ms", "stimulus", "response"],
     paramsSchema: StimulusResponseParamsSchema,
     requiredProvenanceKeys: ["stim_units", "units", "time_units"],
+    externalProvenanceClaims: externalClaims({
+      stim_units: {
+        reason: "Stimulus-response params contain an untyped stimulus array without a unit field."
+      },
+      units: {
+        reason: "Stimulus-response params contain an untyped response array without a unit field."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_literal",
@@ -5269,6 +6993,11 @@ var NEST_SKILL_REGISTRY = {
       "time_units",
       "sampling_interval"
     ],
+    externalProvenanceClaims: externalClaims({
+      recorded_variable: {
+        reason: "The legacy ca_trace field does not distinguish the NEST Ca and Ca_astro source-variable names."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_param",
@@ -5281,6 +7010,23 @@ var NEST_SKILL_REGISTRY = {
         provenanceKey: "time_units",
         value: "ms",
         description: "The times_ms axis is expressed in milliseconds."
+      },
+      {
+        kind: "one_of_literals",
+        provenanceKey: "recorded_variable",
+        values: ["Ca", "Ca_astro"],
+        establishesBinding: false,
+        description: "The legacy ca_trace field carries only the NEST Ca/Ca_astro concentration variable."
+      },
+      {
+        kind: "matches_regular_time_axis",
+        provenanceKey: "sampling_interval",
+        paramPath: "times_ms",
+        absoluteTolerance: 0,
+        relativeTolerance: 1e-12,
+        roundoffUlps: 4,
+        maxRoundoffFraction: 1e-7,
+        description: "The declared device sampling interval must match every adjacent glial timestamp delta."
       }
     ],
     rendererRoutes: ["media.trace_figure", "matplotlib"],
@@ -5311,12 +7057,33 @@ var NEST_SKILL_REGISTRY = {
       "time_units",
       "sampling_interval"
     ],
+    externalProvenanceClaims: externalClaims({
+      morphology_disclaimer: {
+        reason: "Morphology geometry is absent; this caller text cannot substitute for a contract-owned geometry disclosure."
+      },
+      recorded_variable: {
+        reason: "Compartment traces do not carry a structured shared/per-series recorded variable."
+      },
+      units: {
+        reason: "Compartment traces do not carry a structured shared/per-series unit."
+      }
+    }),
     provenanceParamConstraints: [
       {
         kind: "equals_literal",
         provenanceKey: "time_units",
         value: "ms",
         description: "The times_ms axis is expressed in milliseconds."
+      },
+      {
+        kind: "matches_regular_time_axis",
+        provenanceKey: "sampling_interval",
+        paramPath: "times_ms",
+        absoluteTolerance: 0,
+        relativeTolerance: 1e-12,
+        roundoffUlps: 4,
+        maxRoundoffFraction: 1e-7,
+        description: "The declared device sampling interval must match every adjacent compartment timestamp delta."
       }
     ],
     rendererRoutes: ["media.model_graph", "d3"],
@@ -5341,6 +7108,11 @@ var NEST_SKILL_REGISTRY = {
     requiredInputKeys: ["frames"],
     paramsSchema: AnimationReplayParamsSchema,
     requiredProvenanceKeys: ["frame_rate"],
+    externalProvenanceClaims: externalClaims({
+      frame_rate: {
+        reason: "Playback frame rate is not derivable from simulation timestamps without an explicit playback time scale."
+      }
+    }),
     rendererRoutes: ["media.manim_storyboard", "manim"],
     examples: [
       {
@@ -5436,9 +7208,9 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       description: "Every trace series must contain one value per times_ms sample."
     },
     {
-      kind: "monotonic_non_decreasing",
+      kind: "strictly_increasing",
       paths: ["times_ms"],
-      description: "Trace timestamps must be monotonically non-decreasing."
+      description: "Trace timestamps must be strictly increasing."
     }
   ],
   "nest.spike_raster": [
@@ -5464,6 +7236,8 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       paths: ["bin_centers_ms", "bin_width_ms"],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
       nonNegativeLowerEdge: true,
       description: "ISI bins must be strictly increasing, uniformly spaced by bin_width_ms, and have a non-negative lower edge."
     },
@@ -5520,6 +7294,8 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       paths: ["bin_centers_ms", "bin_width_ms"],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
       description: "PSTH bins must be strictly increasing and uniformly spaced by bin_width_ms."
     },
     {
@@ -5583,7 +7359,7 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
       roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
       maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
-      description: "Uniform left-closed/right-open bins must exactly cover the declared [window_start_ms,window_stop_ms) interval."
+      description: "Uniform left-closed/right-open bins must cover the declared [window_start_ms,window_stop_ms) interval within the bounded binary64 geometry tolerance."
     },
     {
       kind: "population_rate_derived_values",
@@ -5738,7 +7514,7 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
       roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
       maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
-      description: "Uniform left-closed/right-open delay bins exactly cover the declared window."
+      description: "Uniform left-closed/right-open delay bins cover the declared window within the bounded binary64 geometry tolerance."
     },
     {
       kind: "delay_distribution_consistency",
@@ -5782,54 +7558,39 @@ var PARAM_VALIDATION_CONSTRAINTS = {
   ],
   "nest.weight_histogram": [
     {
-      kind: "equal_length",
-      paths: ["bin_centers", "values"],
-      description: "Every weight histogram bin center must have one value."
-    },
-    {
-      kind: "monotonic_non_decreasing",
-      paths: ["bin_centers"],
-      description: "Weight histogram bin centers must be monotonically non-decreasing."
-    },
-    {
-      kind: "uniform_histogram_bins",
-      paths: ["bin_centers", "bin_width"],
+      kind: "uniform_bin_window",
+      paths: [
+        "bin_centers",
+        "bin_width",
+        "window_start",
+        "window_stop"
+      ],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
-      description: "Weight histogram bins must be strictly increasing and uniformly spaced by bin_width."
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
+      description: "Uniform left-closed/right-open weight bins cover the declared weight window within the bounded binary64 geometry tolerance."
     },
     {
-      kind: "non_negative",
-      paths: ["values[*]"],
-      description: "Weight histogram values cannot be negative."
+      kind: "weight_histogram_consistency",
+      paths: [
+        "bin_centers",
+        "weight_counts",
+        "values",
+        "bin_width",
+        "connection_count",
+        "normalization",
+        "value_units",
+        "weight_units",
+        "aggregation",
+        "binning"
+      ],
+      description: "Raw connection counts, normalization, and displayed weight-histogram values recover one another exactly."
     },
     {
-      kind: "mapped_value",
-      paths: ["normalization", "value_units"],
-      allowedValues: {
-        count: "count",
-        probability: "probability"
-      },
-      description: "Each weight histogram normalization has one unambiguous value unit."
-    },
-    {
-      kind: "conditional_numeric_domain",
-      paths: ["normalization", "values[*]"],
-      numericDomains: {
-        count: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
-        probability: { min: 0, max: 1 }
-      },
-      description: "Weight counts are safe integers and probabilities lie in [0,1]."
-    },
-    {
-      kind: "normalized_histogram_mass",
-      paths: ["normalization", "values", "bin_width"],
-      absoluteTolerance: HISTOGRAM_MASS_TOLERANCE,
-      relativeTolerance: HISTOGRAM_MASS_TOLERANCE,
-      normalizationRules: {
-        probability: { measure: "sum", target: 1 }
-      },
-      description: "Weight-histogram probability mass must sum to one."
+      kind: "scope_compatibility",
+      paths: ["snapshot_scope"],
+      description: "Snapshot MPI rank metadata must be internally valid."
     }
   ],
   "nest.plasticity_dynamics": [
@@ -5889,6 +7650,8 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       paths: ["lags_ms", "bin_width_ms", "tau_max_ms"],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
       description: "Correlogram lag centers must be strictly increasing, uniform, odd, zero-centered, symmetric, and span [-tau_max_ms,+tau_max_ms]."
     },
     {
@@ -5927,9 +7690,9 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       description: "Every glial sample must have one timestamp."
     },
     {
-      kind: "monotonic_non_decreasing",
+      kind: "strictly_increasing",
       paths: ["times_ms"],
-      description: "Glial timestamps must be monotonically non-decreasing."
+      description: "Glial timestamps must be strictly increasing."
     },
     {
       kind: "non_negative",
@@ -5960,9 +7723,9 @@ var PARAM_VALIDATION_CONSTRAINTS = {
       description: "The compartment parent graph must be acyclic."
     },
     {
-      kind: "monotonic_non_decreasing",
+      kind: "strictly_increasing",
       paths: ["times_ms"],
-      description: "Compartment timestamps must be monotonically non-decreasing."
+      description: "Compartment timestamps must be strictly increasing."
     }
   ],
   "nest.animation_replay": [
@@ -6132,8 +7895,34 @@ for (const contract of Object.values(NEST_SKILL_REGISTRY)) {
 }
 Object.setPrototypeOf(NEST_SKILL_REGISTRY, null);
 for (const contract of Object.values(NEST_SKILL_REGISTRY)) {
+  provenanceVerificationForContract(contract);
+  const allowedConstraintKeys = /* @__PURE__ */ new Set([
+    ...contract.requiredProvenanceKeys,
+    ...contract.optionalProvenanceKeys ?? []
+  ]);
+  for (const constraint of contract.provenanceParamConstraints ?? []) {
+    if (!allowedConstraintKeys.has(constraint.provenanceKey)) {
+      throw new Error(
+        `skill '${contract.id}' constraint targets unclassified provenance '${constraint.provenanceKey}'`
+      );
+    }
+  }
+  for (const key of Object.keys(contract.externalProvenanceClaims ?? {})) {
+    if (!contract.requiredProvenanceKeys.includes(key)) {
+      throw new Error(
+        `skill '${contract.id}' external provenance '${key}' is not required`
+      );
+    }
+  }
   Object.freeze(contract.requiredInputKeys);
   Object.freeze(contract.requiredProvenanceKeys);
+  if (contract.optionalProvenanceKeys) Object.freeze(contract.optionalProvenanceKeys);
+  if (contract.externalProvenanceClaims) {
+    Object.values(contract.externalProvenanceClaims).forEach((claim) => {
+      if (claim) Object.freeze(claim);
+    });
+    Object.freeze(contract.externalProvenanceClaims);
+  }
   if (contract.requiredProvenanceFlags) Object.freeze(contract.requiredProvenanceFlags);
   if (contract.deprecation) Object.freeze(contract.deprecation);
   if (contract.routerEligibility) Object.freeze(contract.routerEligibility);
@@ -6142,7 +7931,10 @@ for (const contract of Object.values(NEST_SKILL_REGISTRY)) {
     Object.freeze(contract.transform.requiredOptions);
     Object.freeze(contract.transform);
   }
-  contract.provenanceParamConstraints?.forEach(Object.freeze);
+  contract.provenanceParamConstraints?.forEach((constraint) => {
+    if (constraint.kind === "one_of_literals") Object.freeze(constraint.values);
+    Object.freeze(constraint);
+  });
   if (contract.provenanceParamConstraints) {
     Object.freeze(contract.provenanceParamConstraints);
   }
@@ -6403,226 +8195,6 @@ var CORTICAL_LAYER_COLORS = {
   L6: colormapHex("batlow", 0.9)
 };
 
-// core/skills/provenanceKeys.ts
-var import_zod4 = require("zod");
-var PROVENANCE_KEYS = Object.freeze([
-  "device_id",
-  "recorded_variable",
-  "units",
-  "sampling_interval",
-  "recorder_id",
-  "sender_ids",
-  "population_labels",
-  "time_units",
-  "source_ids",
-  "target_ids",
-  "synapse_model",
-  "weight_units",
-  "extent",
-  "spatial_units",
-  "mask",
-  "kernel",
-  "projection_sample_policy",
-  "morphology_disclaimer",
-  "frame_rate",
-  "state_variables",
-  "derivation_method",
-  "model_context",
-  "fixed_parameters",
-  "bin_ms",
-  "histogram_normalization",
-  "interval_scope",
-  "event_alignment",
-  "psth_aggregation",
-  "connection_sample_policy",
-  "snapshot_time_ms",
-  "snapshot_scope",
-  "parallel_edge_policy",
-  "matrix_axis_order",
-  "matrix_aggregation",
-  "delay_units",
-  "degree_direction",
-  "degree_counting",
-  "zero_degree_policy",
-  "node_ids",
-  "position_scope",
-  "detector_id",
-  "reference_population",
-  "target_population",
-  "correlation_normalization",
-  "correlation_units",
-  "lag_convention",
-  "binning_policy",
-  "stim_units",
-  "rate_normalization",
-  "graph_source",
-  "graph_snapshot_id",
-  "graph_scope",
-  "identity_advisory"
-]);
-var ProvenanceKeyEnum = import_zod4.z.enum(PROVENANCE_KEYS);
-var STRICT_PROVENANCE_POLICY = Object.freeze({
-  unknownDeclaredInputKeys: "reject",
-  allowedDeclaredInputKeys: PROVENANCE_KEYS,
-  requiredKeysSource: "skill.requiredProvenanceKeys",
-  presentKnownValues: "validate every present known key with provenanceValueConstraints",
-  requiredKeysControl: "presence only; value rules apply whether required or extra",
-  normalizeBeforeValidation: true
-});
-var PROVENANCE_KEY_LABELS = Object.freeze({
-  device_id: "device id",
-  recorded_variable: "recorded variable",
-  units: "units",
-  sampling_interval: "sampling interval",
-  recorder_id: "spike_recorder id",
-  sender_ids: "sender ids",
-  population_labels: "population labels",
-  time_units: "time units",
-  source_ids: "source ids",
-  target_ids: "target ids",
-  synapse_model: "synapse model",
-  weight_units: "weight units",
-  extent: "extent",
-  spatial_units: "spatial coordinate units",
-  mask: "mask",
-  kernel: "kernel",
-  projection_sample_policy: "projection sample policy",
-  morphology_disclaimer: "morphology geometry disclaimer",
-  frame_rate: "frame rate",
-  state_variables: "state variables",
-  derivation_method: "phase-plane derivative derivation method",
-  model_context: "phase-plane model context",
-  fixed_parameters: "phase-plane fixed parameters",
-  bin_ms: "bin width",
-  histogram_normalization: "histogram normalization",
-  interval_scope: "inter-spike interval scope",
-  event_alignment: "event alignment",
-  psth_aggregation: "PSTH sender/trial aggregation",
-  connection_sample_policy: "connection sample policy",
-  snapshot_time_ms: "connection snapshot time in ms",
-  snapshot_scope: "connection snapshot completeness / MPI scope",
-  parallel_edge_policy: "parallel-edge handling policy",
-  matrix_axis_order: "matrix source/target axis order",
-  matrix_aggregation: "parallel-connection matrix aggregation",
-  delay_units: "synaptic delay units",
-  degree_direction: "directed degree orientation",
-  degree_counting: "degree edge-counting policy",
-  zero_degree_policy: "zero-degree node inclusion policy",
-  node_ids: "spatial node ids",
-  position_scope: "spatial position completeness / MPI scope",
-  detector_id: "correlation_detector id",
-  reference_population: "correlogram reference population",
-  target_population: "correlogram target population",
-  correlation_normalization: "correlogram normalization",
-  correlation_units: "correlogram value units",
-  lag_convention: "correlogram lag convention",
-  binning_policy: "bin interval policy",
-  stim_units: "stimulus units",
-  rate_normalization: "rate normalization",
-  graph_source: "graph source",
-  graph_snapshot_id: "immutable graph snapshot id",
-  graph_scope: "graph scope",
-  identity_advisory: "model-identity advisory (structural similarity, not certified sameness)"
-});
-function isProvenanceKey(value) {
-  return typeof value === "string" && PROVENANCE_KEYS.includes(value);
-}
-var PROVENANCE_PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: "2",
-  evaluationOrder: Object.freeze([
-    "apply provenanceValueConstraints normalization",
-    "validate every present known provenance value",
-    "check required provenance-key presence",
-    "evaluate provenanceParamConstraints in listed order"
-  ]),
-  kinds: Object.freeze(["equals_param", "equals_param_path", "equals_literal"]),
-  semantics: Object.freeze({
-    equals_param: "declared value must equal one checked top-level params property under Object.is",
-    equals_param_path: "declared value must equal the checked scalar reached through a dot-separated sequence of safe own data-property names under Object.is",
-    equals_literal: "declared value must equal the contract literal under Object.is"
-  })
-});
-var PROVENANCE_VALUE_CONSTRAINTS = (() => {
-  const constraints = /* @__PURE__ */ Object.create(null);
-  for (const key of PROVENANCE_KEYS) {
-    constraints[key] = { kind: "nonblank_string", normalize: "trim" };
-  }
-  for (const key of ["sampling_interval", "bin_ms", "frame_rate"]) {
-    constraints[key] = { kind: "positive_finite_number" };
-  }
-  constraints.snapshot_time_ms = { kind: "nonnegative_finite_number" };
-  for (const key of ["device_id", "recorder_id", "detector_id"]) {
-    constraints[key] = {
-      kind: "nonnegative_safe_integer_or_nonblank_string",
-      normalize: "trim"
-    };
-  }
-  constraints.identity_advisory = { kind: "literal_true" };
-  for (const constraint of Object.values(constraints)) Object.freeze(constraint);
-  return Object.freeze(constraints);
-})();
-function declaredProvenanceValueError(key, value) {
-  const constraint = PROVENANCE_VALUE_CONSTRAINTS[key];
-  switch (constraint.kind) {
-    case "positive_finite_number":
-      return typeof value === "number" && Number.isFinite(value) && value > 0 ? null : `${key} must be a positive finite number`;
-    case "nonnegative_finite_number":
-      return typeof value === "number" && Number.isFinite(value) && value >= 0 && !Object.is(value, -0) ? null : `${key} must be a non-negative finite number`;
-    case "literal_true":
-      return value === true ? null : "identity_advisory must be literal true (model identity is advisory)";
-    case "nonnegative_safe_integer_or_nonblank_string":
-      if (typeof value === "number") {
-        return Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0) ? null : `${key} numeric ids must be non-negative safe integers`;
-      }
-      return typeof value === "string" && value.trim().length > 0 ? null : `${key} must be a non-empty string or numeric id`;
-    case "string":
-      return typeof value === "string" ? null : `${key} must be a string`;
-    case "nonblank_string":
-      return typeof value === "string" && value.trim().length > 0 ? null : `${key} must be a non-empty string`;
-  }
-}
-function normalizeDeclaredProvenanceValue(key, value) {
-  const constraint = PROVENANCE_VALUE_CONSTRAINTS[key];
-  return "normalize" in constraint && constraint.normalize === "trim" && typeof value === "string" ? value.trim() : value;
-}
-function normalizeDeclaredProvenanceInputs(inputs) {
-  const normalized = {};
-  for (const key of Object.keys(inputs)) {
-    const value = inputs[key];
-    Object.defineProperty(normalized, key, {
-      value: isProvenanceKey(key) ? normalizeDeclaredProvenanceValue(key, value) : value,
-      enumerable: true,
-      writable: true,
-      configurable: true
-    });
-  }
-  return normalized;
-}
-function provenanceParamConstraintError(constraint, params, declared) {
-  if (!Object.hasOwn(declared, constraint.provenanceKey)) return null;
-  const actual = declared[constraint.provenanceKey];
-  if (constraint.kind === "equals_literal") {
-    return Object.is(actual, constraint.value) ? null : `${constraint.provenanceKey} must equal ${JSON.stringify(constraint.value)}`;
-  }
-  const paramPath = constraint.kind === "equals_param_path" ? constraint.paramPath : constraint.paramKey;
-  const segments = paramPath.split(".");
-  if (segments.length === 0 || segments.some((segment) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(segment) || segment === "__proto__" || segment === "prototype" || segment === "constructor")) {
-    return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is not a safe parameter path`;
-  }
-  let expected = params;
-  for (const segment of segments) {
-    if (expected === null || typeof expected !== "object" || Array.isArray(expected) || !Object.hasOwn(expected, segment)) {
-      return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is absent`;
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(expected, segment);
-    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-      return `cannot verify ${constraint.provenanceKey}: params.${paramPath} is not an enumerable data property`;
-    }
-    expected = descriptor.value;
-  }
-  return Object.is(actual, expected) ? null : `${constraint.provenanceKey} (${JSON.stringify(actual)}) must match params.${paramPath} (${JSON.stringify(expected)})`;
-}
-
 // core/skills/paramPreflight.ts
 var FLOAT32_MAX4 = 34028234663852886e22;
 var MAX_SAMPLES = PARAM_LIMITS.maxSamples;
@@ -6768,12 +8340,20 @@ var ALLOWED_PARAM_FIELDS = Object.freeze({
   ],
   "nest.weight_histogram": [
     "bin_centers",
+    "weight_counts",
     "values",
     "bin_width",
+    "window_start",
+    "window_stop",
     "weight_units",
     "normalization",
     "value_units",
-    "snapshot_time_ms"
+    "aggregation",
+    "binning",
+    "sample_policy",
+    "connection_count",
+    "snapshot_time_ms",
+    "snapshot_scope"
   ],
   "nest.spatial_2d": ["positions", "coordinate_units"],
   "nest.spatial_map_2d": [
@@ -7030,6 +8610,7 @@ function preflightLargeSkillParams(skillId, params) {
     case "nest.weight_histogram": {
       const issue = numericFields(params, [
         gpuField("bin_centers"),
+        idField("weight_counts"),
         gpuField("values")
       ]);
       if (issue) return issue;
@@ -7412,7 +8993,7 @@ function preflightRawSkillParams(skillId, params) {
     case "nest.delay_distribution":
       return directArrays(["bin_centers_ms", "delay_counts", "values"]);
     case "nest.weight_histogram":
-      return directArrays(["bin_centers", "values"]);
+      return directArrays(["bin_centers", "weight_counts", "values"]);
     case "nest.spatial_2d":
       return tooLong("positions", PARAM_LIMITS.maxSpatialObjects);
     case "nest.spatial_map_2d":
@@ -7579,7 +9160,7 @@ function validateSkillInvocationUnsafe(skillId, payload) {
           code: "unsupported_spec_version",
           path: "specVersion",
           message: `unsupported spec version '${safePrimitiveDiagnostic(rawVersion)}'`,
-          hint: `Use '${CORTEXEL_SPEC_VERSION}', or omit specVersion for a legacy envelope.`,
+          hint: `Re-author from the original source through buildVizSpec so '${CORTEXEL_SPEC_VERSION}' is stamped only after current validation; do not edit or remove an existing version stamp.`,
           example
         }
       ]
@@ -7689,6 +9270,10 @@ function validateSkillInvocationUnsafe(skillId, payload) {
     spec = { ...spec, provenance: prov };
   }
   const invalidDeclaredKeys = /* @__PURE__ */ new Set();
+  const allowedDeclaredKeys = /* @__PURE__ */ new Set([
+    ...contract.requiredProvenanceKeys,
+    ...contract.optionalProvenanceKeys ?? []
+  ]);
   for (const key of Object.keys(declared)) {
     if (errors.length >= MAX_INVOCATION_ERRORS) break;
     if (!isProvenanceKey(key)) {
@@ -7698,6 +9283,17 @@ function validateSkillInvocationUnsafe(skillId, payload) {
         path: `provenance.declared_inputs.${key}`,
         message: `unknown declared provenance key '${key}'`,
         hint: "Use only keys from PROVENANCE_KEYS and the selected skill contract.",
+        example: errors.some((error) => error.example) ? void 0 : example
+      });
+      continue;
+    }
+    if (!allowedDeclaredKeys.has(key)) {
+      invalidDeclaredKeys.add(key);
+      errors.push({
+        code: "invalid_provenance",
+        path: `provenance.declared_inputs.${key}`,
+        message: `declared provenance key '${key}' is not classified for skill '${skillId}'`,
+        hint: `Use only this skill's required or optional provenance keys: ${[...allowedDeclaredKeys].join(", ")}.`,
         example: errors.some((error) => error.example) ? void 0 : example
       });
       continue;
@@ -7758,11 +9354,15 @@ function validateSkillInvocationUnsafe(skillId, payload) {
     });
   }
   if (errors.length > 0) return { ok: false, errors };
-  let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  const externalDisclosure = externalProvenanceDisclosure(contract);
+  let weakDisclosure = null;
   if (contract.weak) {
-    const weakMsg = contract.weakDisclosure ?? `Derived view \u2014 ${skillId} reuses the '${contract.scene}' scene; not a 1:1 rendering.`;
-    caption = caption ? `${weakMsg} ${caption}` : weakMsg;
+    weakDisclosure = contract.weakDisclosure ?? `Derived view \u2014 ${skillId} reuses the '${contract.scene}' scene; not a 1:1 rendering.`;
   }
+  const caption = composeHonestyCaption(prov, {
+    weakSkill: weakDisclosure,
+    externalProvenance: externalDisclosure
+  });
   return {
     ok: true,
     spec,

@@ -409,6 +409,24 @@ describe('independent trace OutputAuthority evaluators', () => {
     )?.text).toBe(
       'No uncertainty is shown (not_provided). The absence of an uncertainty mark means uncertainty was not supplied — not that it is small.',
     );
+
+    const analogContract = source('neuro.analog_trace');
+    const omittedAnalogUncertainty = structuredClone(analogContract.examples.valid[0]);
+    delete omittedAnalogUncertainty.parameters.uncertainty;
+    const validatedAnalog = validateRequestValue(omittedAnalogUncertainty);
+    expect(validatedAnalog.ok).toBe(true);
+    const analogResult = buildFigure(omittedAnalogUncertainty);
+    expect(analogResult.ok).toBe(true);
+    if (!analogResult.ok) throw new Error(JSON.stringify(analogResult.errors));
+    const canonicalParameters = (
+      analogResult.artifact.canonicalRequest as JsonRecord
+    ).parameters as JsonRecord;
+    expect(Object.hasOwn(canonicalParameters, 'uncertainty')).toBe(false);
+    expect(analogResult.disclosures.find(
+      (entry) => entry.id === 'UNCERTAINTY_NOT_PROVIDED',
+    )?.text).toBe(
+      'No uncertainty is shown (not_provided). The absence of an uncertainty mark means uncertainty was not supplied — not that it is small.',
+    );
   });
 
   it('discloses honest incomplete descriptive coverage for a declared weight aggregate', () => {

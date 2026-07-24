@@ -1,12 +1,14 @@
 import {
   snapshotValue
-} from "../../chunk-WOZECEVX.js";
+} from "../../chunk-LWMLQZWM.js";
 import {
   REQUEST_CONTRACT_IDENTITY,
-  canonicalDigest,
   getBudgetLimits,
   makeError
-} from "../../chunk-22OHKNZ5.js";
+} from "../../chunk-D2XLGVGS.js";
+import {
+  canonicalDigest
+} from "../../chunk-ZYBCCIMH.js";
 
 // src/adapters/nest/recorders.ts
 var ADMITTED_NEST_VERSION = /^3\.(?:9|10)(?:\.\d+)?$/u;

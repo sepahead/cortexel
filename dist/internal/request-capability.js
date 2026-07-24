@@ -1,6 +1,6 @@
 import {
   parseJsonStrict
-} from "../chunk-L2BRNVUB.js";
+} from "../chunk-RK555DMJ.js";
 import {
   DistributionDerivationError,
   MatrixDerivationError,
@@ -13,7 +13,7 @@ import {
   deriveWeightMatrix,
   validateStructure,
   verifyHistogramValues
-} from "../chunk-TEVJHERV.js";
+} from "../chunk-45B2O2EE.js";
 import {
   LEGACY_SKILL_MAP,
   MAX_MATERIALIZED_BINS,
@@ -49,17 +49,16 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "../chunk-6TQKFRP5.js";
+} from "../chunk-UF4PAGNO.js";
 import {
   snapshotValue
-} from "../chunk-WOZECEVX.js";
+} from "../chunk-LWMLQZWM.js";
 import {
   CONTRACT_DIGEST,
   DEFAULT_PROFILE,
   MAX_ERROR_RECORDS,
   REQUEST_CONTRACT,
   REQUEST_CONTRACT_IDENTITY,
-  canonicalDigest,
   deepFreeze,
   finalizeErrors,
   isSafeDisplayString,
@@ -67,7 +66,10 @@ import {
   pointer,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-22OHKNZ5.js";
+} from "../chunk-D2XLGVGS.js";
+import {
+  canonicalDigest
+} from "../chunk-ZYBCCIMH.js";
 
 // src/core/semantics/provenance.ts
 var LIBRARY_AUTHORED_FIELDS = /* @__PURE__ */ new Set([

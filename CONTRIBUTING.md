@@ -48,7 +48,8 @@ bun install
 bun run typecheck  # tsc --noEmit
 bun run test       # vitest
 bun run build      # tsup → dist/ (ESM + CJS + d.ts) + skills.manifest.json
-bun run check      # typecheck + test
+bun run check      # generated parity + typecheck + test
+bun run check:formal # compile every pinned Lean proof with warnings as errors
 bun run check:ledger
 bun run test:python
 bun run check:python
@@ -83,6 +84,7 @@ These keep visualizations scientifically honest and visually consistent:
 ## Pull request checklist
 
 - [ ] `bun run check` passes
+- [ ] `bun run check:formal` passes
 - [ ] New behavior has a test
 - [ ] Design laws upheld (esp. honesty + bloom safety)
 - [ ] Strict params/envelope and language-neutral manifest remain in parity

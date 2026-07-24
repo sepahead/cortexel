@@ -391,6 +391,58 @@ describe('capability maturity and concrete availability', () => {
     });
   });
 
+  it('keeps every legacy migration bidirectionally owned and report-only until implemented', () => {
+    const skills = readdirSync(path.join(ROOT, 'contract/skills'))
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => readJson(`contract/skills/${name}`));
+    const skillById = new Map<string, any>(
+      skills.map((skill: any) => [skill.id, skill]),
+    );
+    const legacyById = new Map<string, any>(
+      legacyMap.entries.map((entry: any) => [entry.legacyId, entry]),
+    );
+
+    for (const skill of skills) {
+      for (const legacyId of skill.migration.legacyIds) {
+        const entry = legacyById.get(legacyId);
+        expect(entry, `${skill.id}:${legacyId}`).toBeDefined();
+        expect(entry?.targetId, `${skill.id}:${legacyId}`).toBe(skill.id);
+        expect(['migrate', 'migrate_conditional']).toContain(entry?.outcome);
+      }
+    }
+    for (const entry of legacyMap.entries) {
+      if (entry.transform !== null) {
+        expect(entry.transformExecution, entry.legacyId).toBe('report_only');
+      } else {
+        expect(entry.transformExecution, entry.legacyId).toBeUndefined();
+      }
+      if (!['migrate', 'migrate_conditional'].includes(entry.outcome)) continue;
+      const target = skillById.get(entry.targetId);
+      expect(target, entry.legacyId).toBeDefined();
+      expect(target?.migration.legacyIds, entry.legacyId).toContain(entry.legacyId);
+    }
+
+    expect(legacyById.get('nest.voltage_trace')).toMatchObject({
+      targetId: 'neuro.analog_trace',
+      transform: 'voltageTraceToAnalogTrace',
+      transformExecution: 'report_only',
+      requires: [
+        'a quantity kind for every series',
+        'an explicit time unit',
+        'a value unit for every series',
+        'an observation kind for every series',
+        'an origin for every series (and a method when derived)',
+        'stable series ids',
+        'an explicit analysis window and boundary',
+        'an explicit layout and unit-sharing policy',
+        'an explicit duplicate-time policy',
+      ],
+    });
+    expect(legacyById.get('nest.voltage_trace')).not.toHaveProperty(
+      'materializedParameters',
+    );
+  });
+
   it('detects an unreferenced renderer instead of allowing a stable-test exclusion', () => {
     const withOrphan = {
       ...evidence,

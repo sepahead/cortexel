@@ -16,12 +16,15 @@ chart code — most changes are about keeping those invariants airtight.
 bun install
 bun run typecheck   # tsc --noEmit
 bun run test        # vitest run
-bun run check       # typecheck + test (run before finishing)
+bun run check       # generated parity + typecheck + test
+bun run check:formal # compile every pinned Lean proof with warnings as errors
 bun run build       # tsup + verified dist/contract copy + legacy skills manifest
 bun run audit       # dependency advisory gate
 bun run lint:package # publint export/package metadata gate
 bun run test:package # clean-install ESM/CJS runtime + consumer type smoke
 ```
+
+Run both `bun run check` and `bun run check:formal` before finishing.
 
 Use `bun`. Supported Node runtimes are exactly the maintained majors 22, 24, and
 26 (`^22.0.0 || ^24.0.0 || ^26.0.0`); the package and CI enforce that policy.
@@ -69,8 +72,10 @@ building twice yields byte-identical output.
 
 ### 2. Honesty fails closed — and it is a security property
 
-The mandatory disclosure prefix must be derivable **only** from the
-machine-checkable provenance flags, never from caller free text:
+The flag-derived mandatory disclosure segment must be derivable **only** from the
+machine-checkable provenance flags, never from caller free text. Strict gates use
+the manifest-published order: weak-skill disclosure, external-provenance
+disclosure, flag-derived mandatory disclosure, then caller note:
 
 - `mandatoryDisclosure(p)` computes the prefix from flags alone; a caller
   `provenance.caption` is appended only as a sanitized **Caller note
@@ -234,4 +239,4 @@ code PRs here, then update downstream pins and generated snapshots deliberately.
   add a `Co-Authored-By:` trailer, a "Generated with …" line, or a 🤖 marker to any
   commit message or PR description.
 - Keep the working tree honest: if tests fail, say so; don't claim done until
-  `bun run check` passes and `dist/` is rebuilt.
+  `bun run check` and `bun run check:formal` pass and `dist/` is rebuilt.

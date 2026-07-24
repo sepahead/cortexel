@@ -8,6 +8,7 @@ import {
   getHostRendererExamplePayload,
   getExamplePayload,
   getSkill,
+  formatInvocationErrors,
   routeToScene,
   validateSkillInvocation,
   validateSkillParams,
@@ -474,6 +475,23 @@ describe('strict envelope and version contract', () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors[0].code).toBe('unsupported_spec_version');
+  });
+
+  it('refuses stamped 1.3.0 scene envelopes under the tightened 1.4.0 rules', () => {
+    expect(CORTEXEL_SPEC_VERSION).toBe('1.4.0');
+    const previous = structuredClone(getExamplePayload('nest.spike_raster')!);
+    previous.specVersion = '1.3.0' as typeof previous.specVersion;
+    const result = validateSkillInvocation('nest.spike_raster', previous);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0].code).toBe('unsupported_spec_version');
+      expect(result.errors[0].hint).toContain('buildVizSpec');
+      expect(result.errors[0].hint).toContain(
+        'do not edit or remove an existing version stamp',
+      );
+      const repair = formatInvocationErrors(result.errors);
+      expect(repair).not.toMatch(/omit specVersion|delete.*specVersion/iu);
+    }
   });
 
   it('accepts the current version and rejects whitespace-only provenance', () => {

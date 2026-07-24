@@ -105,9 +105,28 @@ function requireMonotonic(
   }
 }
 
+function requireStrictlyIncreasing(
+  values: readonly number[],
+  ctx: z.RefinementCtx,
+  path: string,
+): void {
+  for (let i = 1; i < values.length; i++) {
+    if (!(values[i] > values[i - 1])) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [path, i],
+        message: `${path} must be strictly increasing`,
+      });
+      return;
+    }
+  }
+}
+
 export const VoltageTraceParamsSchema = z
   .object({
-    times_ms: timeArray.min(1),
+    // At least two samples are required because the strict provenance contract
+    // promises to cross-check the declared device sampling interval.
+    times_ms: timeArray.min(2),
     series: z
       .array(gpuArray.min(1))
       .min(1)
@@ -122,7 +141,7 @@ export const VoltageTraceParamsSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    requireMonotonic(value.times_ms, ctx, 'times_ms');
+    requireStrictlyIncreasing(value.times_ms, ctx, 'times_ms');
     value.series.forEach((series, index) => {
       equalLengthIssue(
         ctx,
@@ -205,8 +224,72 @@ function requireUniformHistogramBins(
     });
     return;
   }
+  const halfWidth = width / 2;
+  if (!Number.isFinite(halfWidth) || !(halfWidth > 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [centerPath],
+      message: 'histogram bin half-width must remain positive and finite in binary64',
+    });
+    return;
+  }
+  let previousRight: number | undefined;
+  for (let index = 0; index < centers.length; index++) {
+    const center = centers[index];
+    const left = center - halfWidth;
+    const right = center + halfWidth;
+    const representedWidth = right - left;
+    if (
+      !Number.isFinite(left) ||
+      !Number.isFinite(right) ||
+      !(left < center) ||
+      !(center < right) ||
+      !approximatelyEqual(
+        representedWidth,
+        width,
+        HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
+        HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      )
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [centerPath, index],
+        message:
+          'histogram bin edges must remain finite, strictly straddle their center, and retain the declared width in binary64',
+      });
+      return;
+    }
+    if (previousRight !== undefined) {
+      const difference = Math.abs(left - previousRight);
+      if (difference !== 0) {
+        const previousCenter = centers[index - 1];
+        const arithmeticTolerance = HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS *
+          Number.EPSILON * Math.max(
+            Math.abs(previousCenter),
+            Math.abs(center),
+            Math.abs(previousRight),
+            Math.abs(left),
+            Math.abs(halfWidth),
+          );
+        if (
+          arithmeticTolerance > GEOMETRY_MAX_ROUNDOFF_FRACTION * Math.abs(width) ||
+          difference > HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE +
+            HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.abs(width) +
+            arithmeticTolerance
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [centerPath, index],
+            message:
+              'adjacent histogram bin edges must meet within the published bounded binary64 tolerance',
+          });
+          return;
+        }
+      }
+    }
+    previousRight = right;
+  }
   if (nonNegativeLowerEdge && centers.length > 0) {
-    const halfWidth = width / 2;
     const lowerEdge = centers[0] - halfWidth;
     const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE +
       HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE *
@@ -494,18 +577,27 @@ const PopulationRateSeriesSchema = z
   })
   .strict();
 
-function requirePopulationRateWindow(
+function requireUniformBinWindow(
   centers: readonly number[],
   width: number,
   start: number,
   stop: number,
   ctx: z.RefinementCtx,
+  paths: Readonly<{
+    centers: string;
+    start: string;
+    stop: string;
+  }> = {
+    centers: 'bin_centers_ms',
+    start: 'window_start_ms',
+    stop: 'window_stop_ms',
+  },
 ): void {
   if (!(stop > start)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['window_stop_ms'],
-      message: 'window_stop_ms must be greater than window_start_ms',
+      path: [paths.stop],
+      message: `${paths.stop} must be greater than ${paths.start}`,
     });
     return;
   }
@@ -537,15 +629,17 @@ function requirePopulationRateWindow(
   if (!edgeMatches(firstEdge, start, firstCenter)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['bin_centers_ms', 0],
-      message: 'the first left-closed bin edge must equal window_start_ms',
+      path: [paths.centers, 0],
+      message:
+        `the first left-closed bin edge must match ${paths.start} within the published bounded binary64 tolerance`,
     });
   }
   if (!edgeMatches(lastEdge, stop, lastCenter)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['bin_centers_ms', centers.length - 1],
-      message: 'the final right-open bin edge must equal window_stop_ms',
+      path: [paths.centers, centers.length - 1],
+      message:
+        `the final right-open bin edge must match ${paths.stop} within the published bounded binary64 tolerance`,
     });
   }
 }
@@ -635,7 +729,7 @@ export const PopulationRateParamsSchema = z
       ctx,
       'bin_centers_ms',
     );
-    requirePopulationRateWindow(
+    requireUniformBinWindow(
       value.bin_centers_ms,
       value.bin_width_ms,
       value.window_start_ms,
@@ -1261,7 +1355,7 @@ export const DelayDistributionParamsSchema = z
     equalLengthIssue(ctx, 'delay_counts', 'bin_centers_ms', value.bin_centers_ms.length, value.delay_counts.length);
     equalLengthIssue(ctx, 'values', 'bin_centers_ms', value.bin_centers_ms.length, value.values.length);
     requireUniformHistogramBins(value.bin_centers_ms, value.bin_width_ms, ctx, 'bin_centers_ms', true);
-    requirePopulationRateWindow(
+    requireUniformBinWindow(
       value.bin_centers_ms,
       value.bin_width_ms,
       value.window_start_ms,
@@ -1460,12 +1554,20 @@ const weightHistogramValueUnits = {
 export const WeightHistogramParamsSchema = z
   .object({
     bin_centers: gpuArray.min(1),
+    weight_counts: z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
     values: gpuArray.min(1),
     bin_width: gpuNumber.positive(),
+    window_start: z.number().finite(),
+    window_stop: z.number().finite(),
     weight_units: units,
     normalization: z.enum(['count', 'probability']),
     value_units: z.enum(['count', 'probability']),
-    snapshot_time_ms: z.number().nonnegative(),
+    aggregation: z.literal('each_connection'),
+    binning: z.literal('left_closed_right_open'),
+    sample_policy: z.literal('complete'),
+    connection_count: topologyCount,
+    snapshot_time_ms: z.number().finite().nonnegative(),
+    snapshot_scope: SnapshotScopeSchema,
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -1476,12 +1578,30 @@ export const WeightHistogramParamsSchema = z
       value.bin_centers.length,
       value.values.length,
     );
-    requireMonotonic(value.bin_centers, ctx, 'bin_centers');
+    equalLengthIssue(
+      ctx,
+      'weight_counts',
+      'bin_centers',
+      value.bin_centers.length,
+      value.weight_counts.length,
+    );
     requireUniformHistogramBins(
       value.bin_centers,
       value.bin_width,
       ctx,
       'bin_centers',
+    );
+    requireUniformBinWindow(
+      value.bin_centers,
+      value.bin_width,
+      value.window_start,
+      value.window_stop,
+      ctx,
+      {
+        centers: 'bin_centers',
+        start: 'window_start',
+        stop: 'window_stop',
+      },
     );
     if (value.value_units !== weightHistogramValueUnits[value.normalization]) {
       ctx.addIssue({
@@ -1490,30 +1610,47 @@ export const WeightHistogramParamsSchema = z
         message: `value_units must be '${weightHistogramValueUnits[value.normalization]}' for ${value.normalization}`,
       });
     }
-    for (let index = 0; index < value.values.length; index++) {
+    let total = 0;
+    for (const count of value.weight_counts) {
+      total += count;
+      if (!Number.isSafeInteger(total)) break;
+    }
+    if (!Number.isSafeInteger(total) || total !== value.connection_count) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['connection_count'],
+        message: 'connection_count must equal the sum of weight_counts',
+      });
+    }
+    if (value.connection_count === 0 && value.normalization !== 'count') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['normalization'],
+        message: 'an empty weight snapshot cannot be probability-normalized',
+      });
+    }
+    for (
+      let index = 0;
+      index < Math.min(value.values.length, value.weight_counts.length);
+      index++
+    ) {
       const sample = value.values[index];
-      if (sample < 0 ||
-          (value.normalization === 'probability' && sample > 1) ||
-          (value.normalization === 'count' && !Number.isSafeInteger(sample))) {
+      const expected = value.normalization === 'count'
+        ? value.weight_counts[index]
+        : value.weight_counts[index] / value.connection_count;
+      const matches = value.normalization === 'count'
+        ? Number.isSafeInteger(sample) && sample === expected
+        : Object.is(sample, expected);
+      if (!matches) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['values', index],
-          message: value.normalization === 'count'
-            ? 'histogram counts must be non-negative safe integers'
-            : value.normalization === 'probability'
-              ? 'probability values must lie in [0, 1]'
-              : 'histogram values cannot be negative',
+          message:
+            'displayed weight value must be exactly recoverable from weight_counts and connection_count',
         });
         break;
       }
     }
-    requireNormalizedHistogramMass(
-      value.normalization,
-      value.values,
-      value.bin_width,
-      { probability: { measure: 'sum', target: 1 } },
-      ctx,
-    );
   });
 export type WeightHistogramParams = z.infer<typeof WeightHistogramParamsSchema>;
 
@@ -1631,9 +1768,12 @@ export type PhasePlaneParams = z.infer<typeof PhasePlaneParamsSchema>;
 
 export const AstrocyteParamsSchema = z
   .object({
-    times_ms: timeArray.min(1),
+    times_ms: timeArray.min(2),
     ca_trace: gpuArray.min(1),
-    units,
+    /** The legacy Ca-only skill follows the NEST astrocyte examples' explicit
+     * micromolar concentration axis. Other quantities or converted units need
+     * a typed analog-trace contract rather than overloading ca_trace. */
+    units: z.enum(['uM', 'µM', 'μM']),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -1644,7 +1784,7 @@ export const AstrocyteParamsSchema = z
       value.times_ms.length,
       value.ca_trace.length,
     );
-    requireMonotonic(value.times_ms, ctx, 'times_ms');
+    requireStrictlyIncreasing(value.times_ms, ctx, 'times_ms');
     for (let index = 0; index < value.ca_trace.length; index++) {
       if (value.ca_trace[index] < 0) {
         ctx.addIssue({
@@ -2196,7 +2336,9 @@ export type StimulusResponseParams = z.infer<typeof StimulusResponseParamsSchema
 
 export const CompartmentalParamsSchema = z
   .object({
-    times_ms: timeArray.min(1),
+    // A declared sampling interval is required for this host envelope, so a
+    // one-point axis would leave that claim mechanically unverifiable.
+    times_ms: timeArray.min(2),
     compartments: z
       .array(
         z
@@ -2213,7 +2355,7 @@ export const CompartmentalParamsSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    requireMonotonic(value.times_ms, ctx, 'times_ms');
+    requireStrictlyIncreasing(value.times_ms, ctx, 'times_ms');
     const ids = new Set<string>();
     const parents = new Map<string, string | null>();
     let roots = 0;

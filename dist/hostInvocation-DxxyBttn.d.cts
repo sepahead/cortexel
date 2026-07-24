@@ -110,10 +110,11 @@ interface SceneFraming {
 declare const SCENE_FRAMING: Record<SceneName, SceneFraming>;
 declare const CAMERA_PRESETS: Record<CameraPresetName, CameraPreset>;
 
-/** The VizSpec contract version. Bumped when the envelope shape changes in a way
- *  a host may need to migrate. A stored payload MAY omit `specVersion` for legacy
- *  compatibility; when stamped, the runtime enforces an exact match. */
-declare const CORTEXEL_SPEC_VERSION = "1.3.0";
+/** The VizSpec contract version. Bumped when either the envelope or its strict
+ *  skill-aware acceptance rules change in a way a host may need to migrate.
+ *  A stored payload MAY omit `specVersion` for legacy compatibility; when
+ *  stamped, the runtime enforces an exact match. */
+declare const CORTEXEL_SPEC_VERSION = "1.4.0";
 /** Resource ceilings for the plain-JSON envelope. Per-skill schemas impose
  *  tighter array limits where the renderer has a smaller practical budget. */
 declare const CORTEXEL_JSON_LIMITS: Readonly<{
@@ -264,7 +265,7 @@ declare const VizSpecSchema: z.ZodObject<{
         "knowledge-graph-3d": "knowledge-graph-3d";
     }>;
     skill: z.ZodOptional<z.ZodString>;
-    specVersion: z.ZodOptional<z.ZodLiteral<"1.3.0">>;
+    specVersion: z.ZodOptional<z.ZodLiteral<"1.4.0">>;
     params: z.ZodDefault<z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>>;
     mode: z.ZodDefault<z.ZodEnum<{
         interactive: "interactive";
@@ -309,14 +310,9 @@ type ProvenanceMetadata = VizSpec['provenance'];
 declare const CONSERVATIVE_PROVENANCE: Readonly<Pick<ProvenanceMetadata, 'calibrated_posterior' | 'advisory_only' | 'is_paper_local_evidence' | 'synthetic'>>;
 /** Language-neutral caption derivation contract, emitted in the manifest. */
 declare const HONESTY_POLICY: Readonly<{
-    version: "2";
+    version: "3";
     calibratedPosteriorAccepted: false;
     captionRequiredWhenAny: readonly string[];
-    syntheticSourceMatch: Readonly<{
-        caseInsensitive: true;
-        equals: readonly string[];
-        prefixes: readonly string[];
-    }>;
     precedence: readonly string[];
     templates: Readonly<{
         synthetic: "Schematic — illustrative synthetic data, not measured.";
@@ -328,7 +324,10 @@ declare const HONESTY_POLICY: Readonly<{
     callerCaptionLabel: "Caller note (unverified):";
     callerCaptionControls: "escape C0/C1, bidi, zero-width, and BOM controls";
     bidiIsolationRequired: true;
-    weakSkillDisclosure: "prepend";
+    contractDisclosureOrder: readonly ["weak_skill", "external_provenance", "flag_derived_mandatory", "caller_note"];
+    weakSkillDisclosure: "contract_owned_first";
+    externalProvenanceDisclosure: "contract_owned_after_weak_before_flag_derived_mandatory";
+    flagDerivedMandatoryDisclosure: "derived_only_from_provenance_flags_and_always_before_caller_note";
 }>;
 /**
  * Whether the renderer must show a non-dismissible "illustrative / not measured"
@@ -344,14 +343,18 @@ declare function requiresHonestyCaption(p: ProvenanceMetadata): boolean;
  */
 declare function mandatoryDisclosure(p: ProvenanceMetadata): string;
 /**
- * Caption text when a caption is required. The mandatory disclosure ALWAYS leads;
- * a caller-supplied `caption` is only ever APPENDED as explicitly unverified
- * context, never a replacement. This is deliberate: `provenance.caption` is
- * agent-controllable and content-unchecked (see ProvenanceSchema), so an
- * unlabeled suffix could visibly contradict the disclosure. The disclosure
- * prefix can never be suppressed — the honesty boundary is fail-closed.
+ * Default caption text when no skill-owned disclosures are involved. The
+ * flag-derived mandatory disclosure leads and a caller-supplied `caption` is
+ * only ever APPENDED as explicitly unverified context, never a replacement.
  */
 declare function defaultHonestyCaption(p: ProvenanceMetadata): string;
+/** One fixed composition rule for both strict render gates. Contract-owned
+ * disclosures may precede the flag-derived segment; caller text is always last
+ * and explicitly unverified. */
+declare function composeHonestyCaption(p: ProvenanceMetadata, contractDisclosures?: Readonly<{
+    weakSkill?: string | null;
+    externalProvenance?: string | null;
+}>): string | null;
 
 declare const NEST_SKILL_IDS: readonly ["nest.voltage_trace", "nest.spike_raster", "nest.isi_distribution", "nest.psth", "nest.population_rate", "nest.rate_response", "nest.connectivity_matrix", "nest.connection_graph", "nest.adjacency_matrix", "nest.weight_matrix", "nest.delay_matrix", "nest.in_degree_distribution", "nest.out_degree_distribution", "nest.delay_distribution", "nest.weight_histogram", "nest.spatial_2d", "nest.spatial_map_2d", "nest.spatial_3d", "nest.plasticity_dynamics", "nest.phase_plane", "nest.correlogram", "nest.stimulus_response", "nest.astrocyte_dynamics", "nest.compartmental_dynamics", "nest.animation_replay", "corpus.knowledge_graph"];
 type NestSkillId = (typeof NEST_SKILL_IDS)[number];
@@ -414,7 +417,7 @@ declare function validateSkillInvocation(skillId: unknown, payload: unknown): Sk
 
 declare const HostRendererInvocationSchema: z.ZodObject<{
     skill: z.ZodString;
-    specVersion: z.ZodOptional<z.ZodLiteral<"1.3.0">>;
+    specVersion: z.ZodOptional<z.ZodLiteral<"1.4.0">>;
     params: z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>;
     provenance: z.ZodObject<{
         source: z.ZodString;
@@ -454,4 +457,4 @@ declare function validateHostRendererInvocation(skillId: unknown, payload: unkno
 /** Re-validate a stored, self-describing host-renderer invocation. */
 declare function validateHostRendererSpec(payload: unknown): HostRendererInvocationResult;
 
-export { validateHostRendererSpec as $, type STDPSynapse as A, STRING_NORMALIZATION_POLICY as B, CAMERA_PRESETS as C, DECLARED_INPUTS_PORTABLE_SCHEMA as D, ENVELOPE_NORMALIZATION_POLICY as E, type SceneFraming as F, type SkillId as G, type HostRendererInvocation as H, type SkillParamsResult as I, JSON_BUDGET_SEMANTICS as J, VALID_RENDERER_ROUTES as K, type LayerConfig as L, VIZ_ROUTER_ID as M, type NestSkillId as N, type VizRouterId as O, type ProvenanceMetadata as P, VizSpecSchema as Q, type RendererRoute as R, type SceneName as S, type VizSpecValidation as T, defaultHonestyCaption as U, type VizSpec as V, isNestSkillId as W, isSkillId as X, mandatoryDisclosure as Y, requiresHonestyCaption as Z, validateHostRendererInvocation as _, type SkillInvocationError as a, validateSkillInvocation as a0, validateSkillParams as a1, validateVizSpec as a2, type NestDeviceFamily as b, type HostRendererInvocationResult as c, type SkillInvocationResult as d, type SceneData as e, CONSERVATIVE_PROVENANCE as f, CORTEXEL_JSON_LIMITS as g, CORTEXEL_JSON_POLICY as h, CORTEXEL_SPEC_VERSION as i, type CameraPreset as j, type CameraPresetName as k, HONESTY_POLICY as l, HostRendererInvocationSchema as m, JSON_PARAMS_PORTABLE_SCHEMA as n, JsonParamsSchema as o, NEST_DEVICE_FAMILIES as p, NEST_SKILL_IDS as q, NUMERIC_MODEL_POLICY as r, type NeuralSceneHandle as s, type NeuralSceneMode as t, type NeuralSceneProps as u, type PlaybackState as v, ProvenanceSchema as w, SCENE_FRAMING as x, SCENE_NAMES as y, SKILL_IDS as z };
+export { validateHostRendererInvocation as $, type STDPSynapse as A, STRING_NORMALIZATION_POLICY as B, CAMERA_PRESETS as C, DECLARED_INPUTS_PORTABLE_SCHEMA as D, ENVELOPE_NORMALIZATION_POLICY as E, type SceneFraming as F, type SkillId as G, type HostRendererInvocation as H, type SkillParamsResult as I, JSON_BUDGET_SEMANTICS as J, VALID_RENDERER_ROUTES as K, type LayerConfig as L, VIZ_ROUTER_ID as M, type NestSkillId as N, type VizRouterId as O, type ProvenanceMetadata as P, VizSpecSchema as Q, type RendererRoute as R, type SceneName as S, type VizSpecValidation as T, composeHonestyCaption as U, type VizSpec as V, defaultHonestyCaption as W, isNestSkillId as X, isSkillId as Y, mandatoryDisclosure as Z, requiresHonestyCaption as _, type SkillInvocationError as a, validateHostRendererSpec as a0, validateSkillInvocation as a1, validateSkillParams as a2, validateVizSpec as a3, type NestDeviceFamily as b, type HostRendererInvocationResult as c, type SkillInvocationResult as d, type SceneData as e, CONSERVATIVE_PROVENANCE as f, CORTEXEL_JSON_LIMITS as g, CORTEXEL_JSON_POLICY as h, CORTEXEL_SPEC_VERSION as i, type CameraPreset as j, type CameraPresetName as k, HONESTY_POLICY as l, HostRendererInvocationSchema as m, JSON_PARAMS_PORTABLE_SCHEMA as n, JsonParamsSchema as o, NEST_DEVICE_FAMILIES as p, NEST_SKILL_IDS as q, NUMERIC_MODEL_POLICY as r, type NeuralSceneHandle as s, type NeuralSceneMode as t, type NeuralSceneProps as u, type PlaybackState as v, ProvenanceSchema as w, SCENE_FRAMING as x, SCENE_NAMES as y, SKILL_IDS as z };

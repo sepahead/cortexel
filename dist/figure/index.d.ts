@@ -14,7 +14,7 @@ export { B as BudgetProfileId, I as InputAssurance, V as ValidateOptions, a as V
 declare const PACKAGE_VERSION = "0.10.0-dev.0";
 declare const REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 declare const ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-declare const CONTRACT_DIGEST = "sha256:02c8581a22d6417560cf8c6a890f25416243287b29ad7a9d5a8714915bae216e";
+declare const CONTRACT_DIGEST = "sha256:d0ef03da20000581d71e859310419444e7fb8c9dad4e39f60a97ad3070032fc9";
 declare const CATALOG_DIGEST = "sha256:801aa157a57212ca58b092319d57edd8ab8649a80202a8a577510ca9f7162c09";
 declare const STABLE_SKILL_COUNT = 19;
 interface BuildIdentity {
@@ -213,6 +213,7 @@ interface LegacyMapEntry {
     readonly outcome: 'migrate' | 'migrate_conditional' | 'experimental' | 'removed' | 'blocked' | 'recipe';
     readonly targetId: string | null;
     readonly transform: string | null;
+    readonly transformExecution?: 'report_only' | 'implemented';
     readonly errorCode?: string;
     readonly notes: string;
     readonly requires?: readonly string[];
@@ -388,8 +389,9 @@ declare function unitLabel(code: string): string;
  *
  * The design constraint that shapes everything here: migration produces a REQUEST
  * plus a REPORT. It never produces a validation receipt, a render receipt, or an
- * artifact. A migrated request has not been validated — the consumer must revalidate
- * and re-render. Migration is a translator, not an oracle.
+ * artifact. A target skeleton has not been validated — the consumer must complete it
+ * from original source data, then revalidate and re-render. The current named
+ * per-skill transforms are report-only target mappings, not data translators.
  *
  * And it never guesses. If the legacy payload lacks a population count, a trial
  * count, a unit, a node universe, MPI completeness, an uncertainty method, or a
@@ -407,6 +409,9 @@ interface MigrationReport {
     readonly legacyId: string;
     readonly outcome: LegacyMapEntry['outcome'];
     readonly targetId: string | null;
+    /** Execution status of the named transform. Present for mapped target
+     * skeletons so callers cannot mistake an outcome label for a data rewrite. */
+    readonly transformExecution?: LegacyMapEntry['transformExecution'];
     /** Fields that were renamed or moved, oldPath -> newPath. */
     readonly operations: readonly {
         readonly op: string;
@@ -420,7 +425,8 @@ interface MigrationReport {
     readonly errors: readonly CortexelError[];
 }
 interface MigrationResult {
-    /** A partial or complete 1.0 request. Undefined when migration is blocked. */
+    /** A report-only target skeleton in the current implementation. Undefined
+     * when no current-contract target exists. */
     readonly request?: Record<string, unknown>;
     readonly report: MigrationReport;
 }
@@ -428,13 +434,12 @@ interface MigrationResult {
  * Migrate a legacy request.
  *
  * The heavy per-skill field transforms are deliberately NOT implemented as generic
- * shape-guessing here. Each is a named transform whose absence is honest: in the
- * current pre-1.0 implementation,
- * migration recognizes every legacy id and returns a precise, correct REPORT of what
- * the target is and what the caller must supply — the deterministic outcome the
- * blueprint requires — while the per-field data rewrites land incrementally with
- * their own fixtures. A caller is told exactly where they stand, never handed a
- * silently half-converted request that looks complete.
+ * shape-guessing here. Every currently named transform is `report_only`: migration
+ * recognizes the legacy id and returns a precise target skeleton and REPORT of what
+ * the caller must supply. It copies no legacy params or data. Preservation statements
+ * in the registry are obligations for a future implemented transform with its own
+ * fixtures, not claims about this execution. A caller is told exactly where they
+ * stand, never handed a silently half-converted request that looks complete.
  */
 declare function migrateLegacyRequest(input: unknown): MigrationResult;
 

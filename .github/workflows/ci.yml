@@ -62,8 +62,9 @@ jobs:
       - name: Verify committed dist is fresh
         run: test -z "$(git status --porcelain --untracked-files=all -- dist)" || (git status --short -- dist && echo "::error::dist/ is stale — run 'bun run build' and commit dist/." && exit 1)
 
-  # The proof checks only the saturating natural-number core. TypeScript property and
-  # parity tests in `check` separately establish correspondence with carrier planning.
+  # The proofs cover the saturating natural-number core and two provenance
+  # non-identifiability laws. TypeScript property and parity tests in `check`
+  # separately establish correspondence with the executable gates.
   formal:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -75,8 +76,8 @@ jobs:
         with:
           auto-config: false
           use-github-cache: false
-      - name: Prove returned-row saturation laws
-        run: lean formal/WeightRowSaturation.lean
+      - name: Prove returned-row and provenance-identifiability laws
+        run: lake build --wfail
 
   # The independent Python reader must pass its own suite. Cross-language digest parity is
   # asserted by the TypeScript suite (test/crossLanguageParity.test.ts) in `check`.

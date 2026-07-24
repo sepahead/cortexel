@@ -512,11 +512,23 @@ export function tickValues(domain: ChartDomain, count = 5): number[] {
   const scale = Math.max(Math.abs(domain.min), Math.abs(domain.max), 1);
   const scaledMin = domain.min / scale;
   const scaledMax = domain.max / scale;
-  const ticks = new Array<number>(safeCount);
+  const directSpan = domain.max - domain.min;
+  const ticks: number[] = [];
+  const seen = new Set<number>();
   for (let index = 0; index < safeCount; index++) {
     const ratio = index / (safeCount - 1);
-    const value = (scaledMin * (1 - ratio) + scaledMax * ratio) * scale;
-    ticks[index] = Object.is(value, -0) ? 0 : value;
+    const interpolated = index === 0
+      ? domain.min
+      : index === safeCount - 1
+        ? domain.max
+        : Number.isFinite(directSpan)
+          ? domain.min + directSpan * ratio
+          : (scaledMin * (1 - ratio) + scaledMax * ratio) * scale;
+    const value = Object.is(interpolated, -0) ? 0 : interpolated;
+    if (!seen.has(value)) {
+      seen.add(value);
+      ticks.push(value);
+    }
   }
   return ticks;
 }
@@ -529,4 +541,35 @@ export function formatChartNumber(value: number): string {
   if (magnitude >= 100) return value.toFixed(0);
   if (magnitude >= 10) return value.toFixed(1).replace(/\.0$/, '');
   return value.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+/** Exact shortest round-tripping decimal for checked binary64 data. This is used
+ * for interval endpoints, where two distinct edges must never acquire the same
+ * accessible label merely because the compact chart formatter rounded them. */
+export function formatExactChartNumber(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  return value === 0 ? '0' : String(value);
+}
+
+/** Keep compact tick labels when they remain injective. On a narrow domain around
+ * a large origin, fall back as one set to exact binary64 decimals so distinct
+ * ticks cannot become indistinguishable or label one boundary inconsistently. */
+export function formatDistinctChartNumbers(values: readonly number[]): string[] {
+  const compact = values.map(formatChartNumber);
+  const seen = new Map<string, number>();
+  let collision = false;
+  for (let index = 0; index < compact.length; index++) {
+    const label = compact[index];
+    const value = values[index];
+    if (seen.has(label) && seen.get(label) !== value) {
+      collision = true;
+      break;
+    }
+    seen.set(label, value);
+  }
+  return collision ? values.map(formatExactChartNumber) : compact;
+}
+
+export function formatChartInterval(start: number, stop: number): string {
+  return `[${formatExactChartNumber(start)}, ${formatExactChartNumber(stop)})`;
 }

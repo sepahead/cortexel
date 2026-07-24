@@ -3,8 +3,9 @@
  *
  * The design constraint that shapes everything here: migration produces a REQUEST
  * plus a REPORT. It never produces a validation receipt, a render receipt, or an
- * artifact. A migrated request has not been validated — the consumer must revalidate
- * and re-render. Migration is a translator, not an oracle.
+ * artifact. A target skeleton has not been validated — the consumer must complete it
+ * from original source data, then revalidate and re-render. The current named
+ * per-skill transforms are report-only target mappings, not data translators.
  *
  * And it never guesses. If the legacy payload lacks a population count, a trial
  * count, a unit, a node universe, MPI completeness, an uncertainty method, or a
@@ -28,6 +29,9 @@ export interface MigrationReport {
   readonly legacyId: string;
   readonly outcome: LegacyMapEntry['outcome'];
   readonly targetId: string | null;
+  /** Execution status of the named transform. Present for mapped target
+   * skeletons so callers cannot mistake an outcome label for a data rewrite. */
+  readonly transformExecution?: LegacyMapEntry['transformExecution'];
   /** Fields that were renamed or moved, oldPath -> newPath. */
   readonly operations: readonly { readonly op: string; readonly detail: string }[];
   /** Information the caller must still supply. Non-empty means the request is partial. */
@@ -39,7 +43,8 @@ export interface MigrationReport {
 }
 
 export interface MigrationResult {
-  /** A partial or complete 1.0 request. Undefined when migration is blocked. */
+  /** A report-only target skeleton in the current implementation. Undefined
+   * when no current-contract target exists. */
   readonly request?: Record<string, unknown>;
   readonly report: MigrationReport;
 }
@@ -48,13 +53,12 @@ export interface MigrationResult {
  * Migrate a legacy request.
  *
  * The heavy per-skill field transforms are deliberately NOT implemented as generic
- * shape-guessing here. Each is a named transform whose absence is honest: in the
- * current pre-1.0 implementation,
- * migration recognizes every legacy id and returns a precise, correct REPORT of what
- * the target is and what the caller must supply — the deterministic outcome the
- * blueprint requires — while the per-field data rewrites land incrementally with
- * their own fixtures. A caller is told exactly where they stand, never handed a
- * silently half-converted request that looks complete.
+ * shape-guessing here. Every currently named transform is `report_only`: migration
+ * recognizes the legacy id and returns a precise target skeleton and REPORT of what
+ * the caller must supply. It copies no legacy params or data. Preservation statements
+ * in the registry are obligations for a future implemented transform with its own
+ * fixtures, not claims about this execution. A caller is told exactly where they
+ * stand, never handed a silently half-converted request that looks complete.
  */
 export function migrateLegacyRequest(input: unknown): MigrationResult {
   // This is a public materialized-value boundary just like validateRequestValue.
@@ -155,6 +159,9 @@ export function migrateLegacyRequest(input: unknown): MigrationResult {
     legacyId,
     outcome: entry.outcome,
     targetId: entry.targetId,
+    ...(entry.transformExecution
+      ? { transformExecution: entry.transformExecution }
+      : {}),
   };
 
   switch (entry.outcome) {
@@ -213,10 +220,10 @@ export function migrateLegacyRequest(input: unknown): MigrationResult {
 
     case 'migrate':
     case 'migrate_conditional': {
-      // A recognized, migratable id. The target and every still-required fact are
-      // reported precisely. `requires` names the information the 1.0 contract needs
-      // that the legacy payload could not carry — the caller must supply it, and
-      // migration will not invent it.
+      // A recognized report-only target mapping. The skeleton and every required
+      // fact are reported precisely, but no legacy params or data are copied.
+      // `requires` names information the current contract needs and this mapper
+      // cannot safely establish; the caller must return to original source evidence.
       const unresolved = entry.requires ? [...entry.requires] : [];
       const warnings: CortexelError[] = [];
 
@@ -265,8 +272,7 @@ export function migrateLegacyRequest(input: unknown): MigrationResult {
                   makeError({
                     code: 'MIGRATION_INFORMATION_MISSING',
                     stage: 'migrate',
-                    severity: 'warning',
-                    message: `the 1.0 ${entry.targetId} contract requires information the legacy payload did not carry: ${unresolved.join(', ')}. Supply it and revalidate. Migration will not guess it.`,
+                    message: `this migration path to ${entry.targetId} requires information the legacy payload did not carry or cannot safely establish: ${unresolved.join(', ')}. Supply it and revalidate. Migration will not guess it.`,
                   }),
                 ]
               : [],

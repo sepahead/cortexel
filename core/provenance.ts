@@ -32,7 +32,7 @@ export const CONSERVATIVE_PROVENANCE: Readonly<
 
 /** Language-neutral caption derivation contract, emitted in the manifest. */
 export const HONESTY_POLICY = Object.freeze({
-  version: '2',
+  version: '3',
   calibratedPosteriorAccepted: false,
   captionRequiredWhenAny: Object.freeze([
     'synthetic=true',
@@ -40,11 +40,6 @@ export const HONESTY_POLICY = Object.freeze({
     'advisory_only=true',
     'is_paper_local_evidence=false',
   ]),
-  syntheticSourceMatch: Object.freeze({
-    caseInsensitive: true,
-    equals: Object.freeze(['synthetic_test']),
-    prefixes: Object.freeze(['synthetic']),
-  }),
   precedence: Object.freeze([
     'synthetic',
     'advisory_only',
@@ -61,7 +56,17 @@ export const HONESTY_POLICY = Object.freeze({
   callerCaptionLabel: 'Caller note (unverified):',
   callerCaptionControls: 'escape C0/C1, bidi, zero-width, and BOM controls',
   bidiIsolationRequired: true,
-  weakSkillDisclosure: 'prepend',
+  contractDisclosureOrder: Object.freeze([
+    'weak_skill',
+    'external_provenance',
+    'flag_derived_mandatory',
+    'caller_note',
+  ] as const),
+  weakSkillDisclosure: 'contract_owned_first',
+  externalProvenanceDisclosure:
+    'contract_owned_after_weak_before_flag_derived_mandatory',
+  flagDerivedMandatoryDisclosure:
+    'derived_only_from_provenance_flags_and_always_before_caller_note',
 });
 
 /**
@@ -85,11 +90,7 @@ export function requiresHonestyCaption(p: ProvenanceMetadata): boolean {
  * advisory; non-paper-local → advisory; then the residual posterior disclosure.
  */
 export function mandatoryDisclosure(p: ProvenanceMetadata): string {
-  if (
-    p.synthetic ||
-    p.source.toLowerCase() === 'synthetic_test' ||
-    p.source.toLowerCase().startsWith('synthetic')
-  ) {
+  if (p.synthetic) {
     return HONESTY_POLICY.templates.synthetic;
   }
   if (p.advisory_only) {
@@ -102,17 +103,37 @@ export function mandatoryDisclosure(p: ProvenanceMetadata): string {
 }
 
 /**
- * Caption text when a caption is required. The mandatory disclosure ALWAYS leads;
- * a caller-supplied `caption` is only ever APPENDED as explicitly unverified
- * context, never a replacement. This is deliberate: `provenance.caption` is
- * agent-controllable and content-unchecked (see ProvenanceSchema), so an
- * unlabeled suffix could visibly contradict the disclosure. The disclosure
- * prefix can never be suppressed — the honesty boundary is fail-closed.
+ * Default caption text when no skill-owned disclosures are involved. The
+ * flag-derived mandatory disclosure leads and a caller-supplied `caption` is
+ * only ever APPENDED as explicitly unverified context, never a replacement.
  */
 export function defaultHonestyCaption(p: ProvenanceMetadata): string {
-  const disclosure = mandatoryDisclosure(p);
+  return composeHonestyCaption(p) ?? mandatoryDisclosure(p);
+}
+
+/** One fixed composition rule for both strict render gates. Contract-owned
+ * disclosures may precede the flag-derived segment; caller text is always last
+ * and explicitly unverified. */
+export function composeHonestyCaption(
+  p: ProvenanceMetadata,
+  contractDisclosures: Readonly<{
+    weakSkill?: string | null;
+    externalProvenance?: string | null;
+  }> = {},
+): string | null {
+  const parts: string[] = [];
+  if (contractDisclosures.weakSkill) {
+    parts.push(contractDisclosures.weakSkill);
+  }
+  if (contractDisclosures.externalProvenance) {
+    parts.push(contractDisclosures.externalProvenance);
+  }
+  if (requiresHonestyCaption(p)) {
+    parts.push(mandatoryDisclosure(p));
+  }
   const note = p.caption?.trim();
-  return note
-    ? `${disclosure} Caller note (unverified): ${safeDiagnosticText(note, 500)}`
-    : disclosure;
+  if (note) {
+    parts.push(`Caller note (unverified): ${safeDiagnosticText(note, 500)}`);
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
 }

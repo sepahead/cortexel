@@ -1,6 +1,6 @@
 import {
   deriveDisclosures
-} from "./chunk-GCZJRQIF.js";
+} from "./chunk-B6TNJZR5.js";
 import {
   DistributionDerivationError,
   MATRIX_AXIS_ORDER,
@@ -15,7 +15,7 @@ import {
   deriveWeightDistribution,
   deriveWeightMatrix,
   validateArtifactStructure
-} from "./chunk-TEVJHERV.js";
+} from "./chunk-45B2O2EE.js";
 import {
   CATEGORICAL_SERIES_STYLES,
   RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
@@ -65,23 +65,25 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "./chunk-6TQKFRP5.js";
+} from "./chunk-UF4PAGNO.js";
 import {
   ARTIFACT_CONTRACT,
   ARTIFACT_CONTRACT_IDENTITY,
   BUDGET_PROFILES,
   DEFAULT_PROFILE,
-  canonicalDigest,
-  canonicalDigestExcluding,
-  canonicalize,
   deepFreeze,
   getBuildIdentity,
   makeError,
-  sha256Digest,
   tryGetBudgetLimits,
-  trySelectTighterBudgetProfile,
+  trySelectTighterBudgetProfile
+} from "./chunk-D2XLGVGS.js";
+import {
+  canonicalDigest,
+  canonicalDigestExcluding,
+  canonicalize,
+  sha256Digest,
   utf8ByteLength
-} from "./chunk-22OHKNZ5.js";
+} from "./chunk-ZYBCCIMH.js";
 
 // src/render/buildFigure.ts
 import {
@@ -17688,7 +17690,10 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const sourceIndex = Number(entry.tableMetadata?.sourceIndex ?? 0);
       const uncertaintySourceUnit = typeof analogUncertainty?.unit === "string" ? analogUncertainty.unit : entry.series.valueUnit;
       const uncertaintyTargetUnit = entry.series.normalization ? entry.series.sourceValueUnit : entry.series.valueUnit;
-      return traceOperation({ series: rawSeries[sourceIndex], uncertainty: analogUncertainty }, entry.series, window, parameters, {
+      return traceOperation({
+        series: rawSeries[sourceIndex],
+        ...analogUncertainty ? { uncertainty: analogUncertainty } : {}
+      }, entry.series, window, parameters, {
         lower: entry.uncertaintyLower,
         upper: entry.uncertaintyUpper,
         ...analogUncertainty?.kind && analogUncertainty.kind !== "none" && uncertaintySourceUnit !== uncertaintyTargetUnit ? { conversion: conversionReceipt(uncertaintySourceUnit, uncertaintyTargetUnit) } : {}
@@ -24254,4 +24259,4 @@ export {
   buildFigureFromJson,
   buildFigure
 };
-//# sourceMappingURL=chunk-PFDVYVHI.js.map
+//# sourceMappingURL=chunk-MP32BKLZ.js.map

@@ -1,7 +1,7 @@
 {
-  "manifestVersion": "8",
-  "skillAxisVersion": "1.6.0",
-  "specVersion": "1.3.0",
+  "manifestVersion": "10",
+  "skillAxisVersion": "1.7.0",
+  "specVersion": "1.4.0",
   "vizRouterId": "nest.viz_router",
   "routingDiscriminators": {
     "spike_recorder": {
@@ -170,8 +170,13 @@
       "normalize": "trim"
     },
     "sender_ids": {
-      "kind": "nonblank_string",
-      "normalize": "trim"
+      "kind": "canonical_id_collection",
+      "normalize": "trim",
+      "canonicalization": "RFC8785",
+      "idDomain": "nonnegative_safe_integer",
+      "unique": true,
+      "allowDigest": true,
+      "allowOpaqueDigestCount": true
     },
     "population_labels": {
       "kind": "nonblank_string",
@@ -182,12 +187,22 @@
       "normalize": "trim"
     },
     "source_ids": {
-      "kind": "nonblank_string",
-      "normalize": "trim"
+      "kind": "canonical_id_collection",
+      "normalize": "trim",
+      "canonicalization": "RFC8785",
+      "idDomain": "nonnegative_safe_integer",
+      "unique": true,
+      "allowDigest": true,
+      "allowOpaqueDigestCount": true
     },
     "target_ids": {
-      "kind": "nonblank_string",
-      "normalize": "trim"
+      "kind": "canonical_id_collection",
+      "normalize": "trim",
+      "canonicalization": "RFC8785",
+      "idDomain": "nonnegative_safe_integer",
+      "unique": true,
+      "allowDigest": true,
+      "allowOpaqueDigestCount": true
     },
     "synapse_model": {
       "kind": "nonblank_string",
@@ -198,8 +213,13 @@
       "normalize": "trim"
     },
     "extent": {
-      "kind": "nonblank_string",
-      "normalize": "trim"
+      "kind": "canonical_positive_finite_number_array",
+      "normalize": "trim",
+      "canonicalization": "RFC8785",
+      "allowedLengths": [
+        2,
+        3
+      ]
     },
     "spatial_units": {
       "kind": "nonblank_string",
@@ -299,8 +319,13 @@
       "normalize": "trim"
     },
     "node_ids": {
-      "kind": "nonblank_string",
-      "normalize": "trim"
+      "kind": "canonical_id_collection",
+      "normalize": "trim",
+      "canonicalization": "RFC8785",
+      "idDomain": "nonnegative_safe_integer",
+      "unique": true,
+      "allowDigest": true,
+      "allowOpaqueDigestCount": true
     },
     "position_scope": {
       "kind": "nonblank_string",
@@ -359,7 +384,7 @@
     }
   },
   "honestyPolicy": {
-    "version": "2",
+    "version": "3",
     "calibratedPosteriorAccepted": false,
     "captionRequiredWhenAny": [
       "synthetic=true",
@@ -367,15 +392,6 @@
       "advisory_only=true",
       "is_paper_local_evidence=false"
     ],
-    "syntheticSourceMatch": {
-      "caseInsensitive": true,
-      "equals": [
-        "synthetic_test"
-      ],
-      "prefixes": [
-        "synthetic"
-      ]
-    },
     "precedence": [
       "synthetic",
       "advisory_only",
@@ -392,7 +408,15 @@
     "callerCaptionLabel": "Caller note (unverified):",
     "callerCaptionControls": "escape C0/C1, bidi, zero-width, and BOM controls",
     "bidiIsolationRequired": true,
-    "weakSkillDisclosure": "prepend"
+    "contractDisclosureOrder": [
+      "weak_skill",
+      "external_provenance",
+      "flag_derived_mandatory",
+      "caller_note"
+    ],
+    "weakSkillDisclosure": "contract_owned_first",
+    "externalProvenanceDisclosure": "contract_owned_after_weak_before_flag_derived_mandatory",
+    "flagDerivedMandatoryDisclosure": "derived_only_from_provenance_flags_and_always_before_caller_note"
   },
   "envelopeNormalizationPolicy": {
     "version": "1",
@@ -420,7 +444,7 @@
     "missingHonestyFlagsMustUseConservativeDefaults": true
   },
   "provenanceParamConstraintLanguage": {
-    "version": "2",
+    "version": "4",
     "evaluationOrder": [
       "apply provenanceValueConstraints normalization",
       "validate every present known provenance value",
@@ -430,16 +454,45 @@
     "kinds": [
       "equals_param",
       "equals_param_path",
-      "equals_literal"
+      "equals_literal",
+      "one_of_literals",
+      "matches_regular_time_axis",
+      "each_label_matches_variable",
+      "matches_canonical_json_param",
+      "matches_projected_id_collection",
+      "all_projected_values_equal",
+      "canonical_json_array_length_matches_param",
+      "canonical_json_array_length_equals",
+      "canonical_json_array_length_at_least_projected_sum"
     ],
     "semantics": {
       "equals_param": "declared value must equal one checked top-level params property under Object.is",
       "equals_param_path": "declared value must equal the checked scalar reached through a dot-separated sequence of safe own data-property names under Object.is",
-      "equals_literal": "declared value must equal the contract literal under Object.is"
+      "equals_literal": "declared value must equal the contract literal under Object.is",
+      "one_of_literals": "declared value must equal one contract literal under Object.is",
+      "matches_regular_time_axis": {
+        "timeArray": "the checked array contains at least two finite, strictly increasing binary64 timestamps",
+        "declaredInterval": "a positive finite binary64 number",
+        "binary64Epsilon": 2.220446049250313e-16,
+        "relativeScale": "max(abs(right-left), abs(declaredInterval))",
+        "candidateRoundoff": "roundoffUlps * binary64Epsilon * max(abs(left), abs(right), abs(declaredInterval))",
+        "roundoffCap": "maxRoundoffFraction * abs(declaredInterval)",
+        "boundedRoundoff": "candidateRoundoff when candidateRoundoff <= roundoffCap, otherwise 0",
+        "tolerance": "absoluteTolerance + relativeTolerance * relativeScale + boundedRoundoff",
+        "acceptance": "for every adjacent pair, abs((right-left)-declaredInterval) <= tolerance"
+      },
+      "each_label_matches_variable": "every checked series label must either exactly equal the declared recorded variable or consist of a nonblank series identity, the exact published separator, and the exact declared variable as its terminal segment",
+      "matches_canonical_json_param": "the declared string must be either the RFC 8785 canonical JSON serialization of the checked array/tuple or, when allowDigest=true, its sha256:<64 lowercase hex> RFC 8785 digest",
+      "matches_projected_id_collection": "project an optional own id field from every item of the checked array; direct id arrays contain unique members in the published idDomain (non-negative safe integers or nonblank strings); ordered equality preserves order, set equality compares unique members, and contains requires every projected member to occur in the declared canonical JSON array; an exact equality digest is sha256 over RFC 8785 canonical JSON of the projected sequence (for set comparison, remove later duplicates while preserving first encounter order); when allowOpaqueDigestCount=true on a supplemental external contains check, sha256:<64 lowercase hex>;count:<n> cannot prove membership or preimage type but must declare at least the number of distinct observed ids",
+      "all_projected_values_equal": "when projected values exist, every present projected scalar must equal the declared value under Object.is; an empty or all-absent projection remains externally unverifiable and follows emptyPolicy",
+      "canonical_json_array_length_matches_param": "the declared collection is either a canonical JSON array of unique ids in the published idDomain or, when allowed, sha256:<64 lowercase hex>;count:<non-negative safe integer>; relation=equals requires its item count to equal the checked non-negative safe-integer param, relation=at_least requires at least that count, and relation=nonempty_if_positive requires at least one declared id exactly when the checked param is positive (zero permits an empty collection); the last relation rejects a provably empty endpoint universe without claiming to identify its members",
+      "canonical_json_array_length_equals": "the declared value must be an RFC 8785 canonical JSON array with exactly expectedLength elements; this per-skill shape check does not establish that an external declaration is true",
+      "canonical_json_array_length_at_least_projected_sum": "the declared collection is a unique id array or allowed opaque digest+count, and its item count must be at least the safe-integer sum of the non-negative safe-integer field projected from the checked object array; this checks the disjoint selected-population denominator lower bound without claiming to recover member identity"
     }
   },
   "strictProvenancePolicy": {
     "unknownDeclaredInputKeys": "reject",
+    "globallyKnownButSkillUnclassifiedKeys": "reject",
     "allowedDeclaredInputKeys": [
       "device_id",
       "recorded_variable",
@@ -495,13 +548,14 @@
       "graph_scope",
       "identity_advisory"
     ],
+    "perSkillAllowedKeys": "skill.requiredProvenanceKeys union skill.optionalProvenanceKeys",
     "requiredKeysSource": "skill.requiredProvenanceKeys",
-    "presentKnownValues": "validate every present known key with provenanceValueConstraints",
-    "requiredKeysControl": "presence only; value rules apply whether required or extra",
+    "presentKnownValues": "validate every present per-skill allowed key with provenanceValueConstraints",
+    "requiredKeysControl": "required keys control presence; optional keys are allowed only when classified by the selected skill",
     "normalizeBeforeValidation": true
   },
   "strictInvocationPolicy": {
-    "version": "2",
+    "version": "3",
     "externalSelection": "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present",
     "selfDescribingSelection": "validateSpec(payload): payload.skill is required and selects the contract",
     "hostSelection": "host envelopes require payload.skill; explicit id and payload.skill must match",
@@ -510,7 +564,8 @@
     "hostEnvelope": "allowed iff contract.scene is null; scene is forbidden",
     "rendererRoute": "when selected, must occur in contract.rendererRoutes",
     "params": "validate paramsJsonSchema then every paramConstraint",
-    "provenance": "apply strictProvenancePolicy, require every contract.requiredProvenanceFlags value, then evaluate every provenanceParamConstraint"
+    "provenance": "apply strictProvenancePolicy, require every contract.requiredProvenanceFlags value, then evaluate every provenanceParamConstraint",
+    "provenanceVerification": "every allowed required or optional provenance key is classified exactly once as parameter/literal/derived-bound or an externally unverifiable caller claim with mandatory disclosure; all other declared keys reject"
   },
   "stringNormalizationPolicy": {
     "version": "1",
@@ -564,7 +619,7 @@
     "fallbackIsNotValidation": true
   },
   "paramConstraintLanguage": {
-    "version": "8",
+    "version": "10",
     "pathSyntax": "dot-separated object keys",
     "arrayWildcard": "[*]",
     "objectValueWildcard": "*",
@@ -578,6 +633,7 @@
       "equal_length",
       "each_length_matches",
       "monotonic_non_decreasing",
+      "strictly_increasing",
       "non_negative",
       "property_count",
       "unique_field",
@@ -607,6 +663,7 @@
       "matrix_connection_counts",
       "degree_distribution_consistency",
       "delay_distribution_consistency",
+      "weight_histogram_consistency",
       "spatial_extent_bounds",
       "scope_compatibility",
       "acyclic"
@@ -624,6 +681,10 @@
       "monotonic_non_decreasing": {
         "pathRoles": "each path resolves an ordered numeric sequence",
         "rule": "for every adjacent pair previous <= next"
+      },
+      "strictly_increasing": {
+        "pathRoles": "each path resolves an ordered numeric sequence",
+        "rule": "for every adjacent pair previous < next"
       },
       "non_negative": {
         "pathRoles": "each path resolves numeric values",
@@ -675,8 +736,9 @@
       },
       "uniform_histogram_bins": {
         "pathRoles": "first path resolves the ordered bin-center array; second path resolves one numeric bin width",
-        "rule": "width is positive and finite; centers are strictly increasing; each adjacent delta approximately equals width",
+        "rule": "width and width/2 are positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing; each adjacent delta approximately equals width",
         "comparison": "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))",
+        "internalEdgeComparison": "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff",
         "nonNegativeLowerEdge": "when true, firstCenter-width/2 must be >= -tolerance, where tolerance uses firstCenter and width/2 in the same comparison formula"
       },
       "normalized_histogram_mass": {
@@ -731,9 +793,10 @@
       },
       "uniform_bin_window": {
         "pathRoles": "ordered bin-center array, positive finite bin width, finite window start, finite window stop in that order",
-        "rule": "centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop",
-        "binning": "left-closed, right-open bins exactly tile [start,stop)",
+        "rule": "width/2 remains positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop",
+        "binning": "left-closed, right-open bins tile [start,stop) within the published bounded binary64 geometry tolerance",
         "spacingComparison": "adjacent center deltas use abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual),abs(expected))",
+        "internalEdgeComparison": "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff",
         "edgeComparison": "exact edge equality passes; otherwise the binary64 allowance must be <= maxRoundoffFraction * abs(binWidth), then abs(edge-expected) <= absoluteTolerance + relativeTolerance * abs(binWidth) + roundoffUlps * 2^-52 * max(abs(center),abs(binWidth/2),abs(edge),abs(expected)); an unresolved absolute origin fails closed"
       },
       "population_rate_derived_values": {
@@ -746,8 +809,9 @@
       },
       "symmetric_lag_axis": {
         "pathRoles": "ordered lag-center array, positive finite bin width, positive finite tau_max_ms in that order",
-        "rule": "lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span exactly [-tau_max_ms,+tau_max_ms]",
-        "comparison": "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))"
+        "rule": "width/2 remains positive and finite; every binary64 lag-width/2 and lag+width/2 edge is finite, strictly straddles its lag center, and retains the declared width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span [-tau_max_ms,+tau_max_ms] under the published comparison",
+        "comparison": "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))",
+        "internalEdgeComparison": "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff"
       },
       "legacy_connection_channels": {
         "pathRoles": "optional weights array, optional weight_units, optional delays array, and optional delay_units in that order",
@@ -773,7 +837,14 @@
         "pathRoles": "bin centers, raw delay_counts, displayed values, bin width, connection_count, normalization, value units, delay units, aggregation, and binning in that order",
         "rule": "the three bin arrays have equal length; displayed values are finite and nonnegative; sum(delay_counts)=connection_count; displayed counts equal raw counts exactly; probabilities or densities exactly equal the published binary64 recovery result and globally sum or integrate to one within the accumulated-mass tolerance; non-count normalization requires a non-empty snapshot and finite density denominator",
         "operationOrder": "probability=count/connection_count; probability_density=count/(connection_count*bin_width_ms) using IEEE-754 binary64; per-bin comparison uses exact Object.is-equivalent binary64 identity, while absoluteTolerance/relativeTolerance apply only to accumulated normalized mass",
-        "geometry": "a separate uniform_bin_window constraint publishes and evaluates exact [start,stop) bin geometry"
+        "geometry": "a separate uniform_bin_window constraint publishes and evaluates [start,stop) bin geometry within its bounded binary64 tolerance"
+      },
+      "weight_histogram_consistency": {
+        "pathRoles": "bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order",
+        "rule": "the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot",
+        "operationOrder": "probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity",
+        "fixedSemantics": "aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin",
+        "geometry": "a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance"
       },
       "spatial_extent_bounds": {
         "pathRoles": "nodes array, extent tuple, and center tuple in that order",
@@ -828,7 +899,7 @@
       },
       "specVersion": {
         "type": "string",
-        "const": "1.3.0"
+        "const": "1.4.0"
       },
       "params": {
         "type": "object",
@@ -972,7 +1043,7 @@
       },
       "specVersion": {
         "type": "string",
-        "const": "1.3.0"
+        "const": "1.4.0"
       },
       "params": {
         "type": "object",
@@ -1097,7 +1168,7 @@
   "skills": [
     {
       "id": "nest.voltage_trace",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST voltage trace renderer",
       "description": "Render labeled multimeter/voltmeter series for one recorded variable and unit.",
       "deviceFamily": "multimeter",
@@ -1118,13 +1189,59 @@
         "units",
         "sampling_interval"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "device_id": {
+          "kind": "external_claim",
+          "reason": "The multimeter/voltmeter source-device identity is not represented in trace params."
+        },
+        "recorded_variable": {
+          "kind": "derived_bound"
+        },
+        "units": {
+          "kind": "derived_bound"
+        },
+        "sampling_interval": {
+          "kind": "derived_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: device id.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_param",
           "provenanceKey": "units",
           "paramKey": "units",
           "description": "Declared units must match the rendered trace-axis units."
+        },
+        {
+          "kind": "equals_literal",
+          "provenanceKey": "units",
+          "value": "mV",
+          "description": "The legacy voltage_trace skill is restricted to NEST membrane-potential millivolts; other analog quantities require a typed analog-trace contract."
+        },
+        {
+          "kind": "equals_literal",
+          "provenanceKey": "recorded_variable",
+          "value": "V_m",
+          "description": "The legacy voltage_trace skill is restricted to the NEST V_m variable."
+        },
+        {
+          "kind": "matches_regular_time_axis",
+          "provenanceKey": "sampling_interval",
+          "paramPath": "times_ms",
+          "absoluteTolerance": 0,
+          "relativeTolerance": 1e-12,
+          "roundoffUlps": 4,
+          "maxRoundoffFraction": 1e-7,
+          "description": "The declared device sampling interval must match every adjacent trace timestamp delta."
+        },
+        {
+          "kind": "each_label_matches_variable",
+          "provenanceKey": "recorded_variable",
+          "paramPath": "series_labels",
+          "separator": " · ",
+          "description": "Every trace label must identify the exact declared recorded variable."
         }
       ],
       "paramsJsonSchema": {
@@ -1132,7 +1249,7 @@
         "type": "object",
         "properties": {
           "times_ms": {
-            "minItems": 1,
+            "minItems": 2,
             "maxItems": 50000,
             "type": "array",
             "items": {
@@ -1202,11 +1319,11 @@
           "description": "Every trace series must contain one value per times_ms sample."
         },
         {
-          "kind": "monotonic_non_decreasing",
+          "kind": "strictly_increasing",
           "paths": [
             "times_ms"
           ],
-          "description": "Trace timestamps must be monotonically non-decreasing."
+          "description": "Trace timestamps must be strictly increasing."
         }
       ],
       "rendererRoutes": [
@@ -1246,11 +1363,11 @@
             "device_id": "mm_1",
             "recorded_variable": "V_m",
             "units": "mV",
-            "sampling_interval": 0.1
+            "sampling_interval": 1
           }
         },
         "skill": "nest.voltage_trace",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -1264,7 +1381,7 @@
     },
     {
       "id": "nest.spike_raster",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST spike raster renderer",
       "description": "Render exact spike_recorder event times and sender ids as a sender-time raster.",
       "deviceFamily": "spike_recorder",
@@ -1284,13 +1401,44 @@
         "population_labels",
         "time_units"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "recorder_id": {
+          "kind": "external_claim",
+          "reason": "The spike-recorder source identity is not represented in event params."
+        },
+        "sender_ids": {
+          "kind": "external_claim",
+          "reason": "Observed events cannot establish the complete recorded-sender universe because silent senders disappear."
+        },
+        "population_labels": {
+          "kind": "external_claim",
+          "reason": "Event params carry sender ids but no source population-identity mapping."
+        },
+        "time_units": {
+          "kind": "literal_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: spike_recorder id, sender ids, population labels.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_literal",
           "provenanceKey": "time_units",
           "value": "ms",
           "description": "The times_ms axis is expressed in milliseconds."
+        },
+        {
+          "kind": "matches_projected_id_collection",
+          "provenanceKey": "sender_ids",
+          "paramPath": "senders",
+          "idDomain": "nonnegative_safe_integer",
+          "comparison": "set",
+          "relation": "contains",
+          "allowDigest": false,
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "Every observed event sender must occur in the caller-declared recorded-sender universe; silent senders remain externally unverifiable."
         }
       ],
       "paramsJsonSchema": {
@@ -1361,12 +1509,12 @@
           "declared_inputs": {
             "recorder_id": "sr_1",
             "sender_ids": "[1,2]",
-            "population_labels": "E",
+            "population_labels": "[\"E\"]",
             "time_units": "ms"
           }
         },
         "skill": "nest.spike_raster",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -1380,7 +1528,7 @@
     },
     {
       "id": "nest.isi_distribution",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST inter-spike interval distribution renderer",
       "description": "Render an explicitly normalized histogram of within-sender or single-train inter-spike intervals.",
       "deviceFamily": "spike_recorder",
@@ -1407,7 +1555,35 @@
         "histogram_normalization",
         "interval_scope"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "recorder_id": {
+          "kind": "external_claim",
+          "reason": "The source recorder identity is not retained by the derived histogram params."
+        },
+        "sender_ids": {
+          "kind": "external_claim",
+          "reason": "ISI aggregation does not retain the selected sender universe."
+        },
+        "population_labels": {
+          "kind": "external_claim",
+          "reason": "ISI aggregation does not retain population identity or membership."
+        },
+        "time_units": {
+          "kind": "literal_bound"
+        },
+        "bin_ms": {
+          "kind": "param_bound"
+        },
+        "histogram_normalization": {
+          "kind": "param_bound"
+        },
+        "interval_scope": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: spike_recorder id, sender ids, population labels.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_literal",
@@ -1519,6 +1695,8 @@
           ],
           "absoluteTolerance": 0,
           "relativeTolerance": 1e-9,
+          "roundoffUlps": 4,
+          "maxRoundoffFraction": 1e-7,
           "nonNegativeLowerEdge": true,
           "description": "ISI bins must be strictly increasing, uniformly spaced by bin_width_ms, and have a non-negative lower edge."
         },
@@ -1629,7 +1807,7 @@
           }
         },
         "skill": "nest.isi_distribution",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -1643,7 +1821,7 @@
     },
     {
       "id": "nest.psth",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST peri-stimulus time histogram renderer",
       "description": "Render trial-aligned aggregate spike counts across selected senders, counts per trial, or firing rates around a declared event.",
       "deviceFamily": "spike_recorder",
@@ -1673,7 +1851,38 @@
         "event_alignment",
         "psth_aggregation"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "recorder_id": {
+          "kind": "external_claim",
+          "reason": "The source recorder identity is not retained by PSTH params."
+        },
+        "sender_ids": {
+          "kind": "external_claim",
+          "reason": "PSTH aggregation retains recoverable counts but not selected sender identities."
+        },
+        "population_labels": {
+          "kind": "external_claim",
+          "reason": "PSTH params do not retain a population-identity mapping."
+        },
+        "time_units": {
+          "kind": "literal_bound"
+        },
+        "bin_ms": {
+          "kind": "param_bound"
+        },
+        "histogram_normalization": {
+          "kind": "param_bound"
+        },
+        "event_alignment": {
+          "kind": "param_bound"
+        },
+        "psth_aggregation": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: spike_recorder id, sender ids, population labels.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_literal",
@@ -1803,6 +2012,8 @@
           ],
           "absoluteTolerance": 0,
           "relativeTolerance": 1e-9,
+          "roundoffUlps": 4,
+          "maxRoundoffFraction": 1e-7,
           "description": "PSTH bins must be strictly increasing and uniformly spaced by bin_width_ms."
         },
         {
@@ -1904,7 +2115,7 @@
           }
         },
         "skill": "nest.psth",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -1918,7 +2129,7 @@
     },
     {
       "id": "nest.population_rate",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST population-rate renderer",
       "description": "Render auditable mean firing-rate series derived from raw per-bin spike counts and the exact recorded-sender denominator.",
       "deviceFamily": "spike_recorder",
@@ -1947,8 +2158,59 @@
         "rate_normalization",
         "binning_policy"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "recorder_id": {
+          "kind": "external_claim",
+          "reason": "The source recorder identity is not represented in rate params."
+        },
+        "sender_ids": {
+          "kind": "external_claim",
+          "reason": "Per-series sender counts do not establish the identities of the selected senders."
+        },
+        "population_labels": {
+          "kind": "external_claim",
+          "reason": "Series display ids/labels are not a structured source population-identity mapping."
+        },
+        "time_units": {
+          "kind": "literal_bound"
+        },
+        "bin_ms": {
+          "kind": "param_bound"
+        },
+        "rate_normalization": {
+          "kind": "param_bound"
+        },
+        "binning_policy": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: spike_recorder id, sender ids, population labels.",
       "provenanceParamConstraints": [
+        {
+          "kind": "canonical_json_array_length_at_least_projected_sum",
+          "provenanceKey": "sender_ids",
+          "paramPath": "series",
+          "field": "recorded_sender_count",
+          "idDomain": "nonnegative_safe_integer",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "The declared sender universe must be large enough for the summed disjoint per-population sender denominators; identities remain externally unverifiable."
+        },
+        {
+          "kind": "matches_projected_id_collection",
+          "provenanceKey": "population_labels",
+          "paramPath": "series",
+          "field": "id",
+          "idDomain": "nonblank_string",
+          "comparison": "set",
+          "relation": "equals",
+          "allowDigest": true,
+          "allowOpaqueDigestCount": false,
+          "establishesBinding": false,
+          "description": "The caller-declared population-label tokens must match the checked population-rate series ids; source population identity remains external."
+        },
         {
           "kind": "equals_literal",
           "provenanceKey": "time_units",
@@ -2126,7 +2388,7 @@
           "relativeTolerance": 1e-9,
           "roundoffUlps": 4,
           "maxRoundoffFraction": 1e-7,
-          "description": "Uniform left-closed/right-open bins must exactly cover the declared [window_start_ms,window_stop_ms) interval."
+          "description": "Uniform left-closed/right-open bins must cover the declared [window_start_ms,window_stop_ms) interval within the bounded binary64 geometry tolerance."
         },
         {
           "kind": "population_rate_derived_values",
@@ -2191,7 +2453,7 @@
           "declared_inputs": {
             "recorder_id": "sr_1",
             "sender_ids": "[1,2]",
-            "population_labels": "E",
+            "population_labels": "[\"E\"]",
             "time_units": "ms",
             "bin_ms": 5,
             "rate_normalization": "mean_per_recorded_sender_hz",
@@ -2199,7 +2461,7 @@
           }
         },
         "skill": "nest.population_rate",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -2213,7 +2475,7 @@
     },
     {
       "id": "nest.rate_response",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST rate / IF response renderer",
       "description": "Render firing-rate / IF response points against declared stimulus amplitudes.",
       "deviceFamily": "spike_recorder",
@@ -2233,7 +2495,22 @@
         "bin_ms",
         "rate_normalization"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "stim_units": {
+          "kind": "param_bound"
+        },
+        "bin_ms": {
+          "kind": "external_claim",
+          "reason": "The response params contain no observation window, raw counts, or bin axis from which to verify this duration."
+        },
+        "rate_normalization": {
+          "kind": "external_claim",
+          "reason": "The response params contain rates only, without the denominator or derivation needed to verify normalization."
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: bin width, rate normalization.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_param",
@@ -2334,7 +2611,7 @@
           }
         },
         "skill": "nest.rate_response",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -2348,7 +2625,7 @@
     },
     {
       "id": "nest.connectivity_matrix",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST connectivity edge-list topology renderer",
       "description": "Render SynapseCollection endpoint pairs and optional unit-bound weight and delay channels as schematic node-link topology (legacy skill id; not a literal matrix heatmap).",
       "deviceFamily": "get_connections",
@@ -2373,8 +2650,61 @@
         "synapse_model",
         "connection_sample_policy"
       ],
+      "optionalProvenanceKeys": [
+        "weight_units",
+        "delay_units"
+      ],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "external_claim",
+          "reason": "The deprecated edge list retains observed endpoints, not the complete selected source universe."
+        },
+        "target_ids": {
+          "kind": "external_claim",
+          "reason": "The deprecated edge list retains observed endpoints, not the complete selected target universe."
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "The deprecated edge-list params do not retain a snapshot-level synapse model."
+        },
+        "connection_sample_policy": {
+          "kind": "external_claim",
+          "reason": "The deprecated edge-list params do not retain a sampling/completeness policy."
+        },
+        "weight_units": {
+          "kind": "param_bound"
+        },
+        "delay_units": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model, connection sample policy.",
       "provenanceParamConstraints": [
+        {
+          "kind": "matches_projected_id_collection",
+          "provenanceKey": "source_ids",
+          "paramPath": "sources",
+          "idDomain": "nonnegative_safe_integer",
+          "comparison": "set",
+          "relation": "contains",
+          "allowDigest": false,
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "Every observed legacy edge source must occur in the caller-declared source universe."
+        },
+        {
+          "kind": "matches_projected_id_collection",
+          "provenanceKey": "target_ids",
+          "paramPath": "targets",
+          "idDomain": "nonnegative_safe_integer",
+          "comparison": "set",
+          "relation": "contains",
+          "allowDigest": false,
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "Every observed legacy edge target must occur in the caller-declared target universe."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "weight_units",
@@ -2513,7 +2843,7 @@
           }
         },
         "skill": "nest.connectivity_matrix",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -2527,7 +2857,7 @@
     },
     {
       "id": "nest.connection_graph",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST connection topology graph renderer",
       "description": "Render a complete or explicitly deterministic sample of a SynapseCollection snapshot while preserving isolates, autapses, multapses, and measured channels.",
       "deviceFamily": "get_connections",
@@ -2582,8 +2912,80 @@
         "snapshot_scope",
         "parallel_edge_policy"
       ],
+      "optionalProvenanceKeys": [
+        "weight_units",
+        "delay_units"
+      ],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "external_claim",
+          "reason": "Graph params preserve a role-erased node union; observed edges cannot establish isolated selected sources."
+        },
+        "target_ids": {
+          "kind": "external_claim",
+          "reason": "Graph params preserve a role-erased node union; observed edges cannot establish isolated selected targets."
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "Edge-level model values can prevent contradictions when present but do not establish a snapshot-level model for empty or model-omitting graphs."
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "param_bound"
+        },
+        "weight_units": {
+          "kind": "param_bound"
+        },
+        "delay_units": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "matches_projected_id_collection",
+          "provenanceKey": "source_ids",
+          "paramPath": "edges",
+          "field": "source",
+          "idDomain": "nonnegative_safe_integer",
+          "comparison": "set",
+          "relation": "contains",
+          "allowDigest": false,
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "Every rendered edge source must occur in the caller-declared source universe; isolated selected sources remain externally unverifiable."
+        },
+        {
+          "kind": "matches_projected_id_collection",
+          "provenanceKey": "target_ids",
+          "paramPath": "edges",
+          "field": "target",
+          "idDomain": "nonnegative_safe_integer",
+          "comparison": "set",
+          "relation": "contains",
+          "allowDigest": false,
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "Every rendered edge target must occur in the caller-declared target universe; isolated selected targets remain externally unverifiable."
+        },
+        {
+          "kind": "all_projected_values_equal",
+          "provenanceKey": "synapse_model",
+          "paramPath": "edges",
+          "field": "synapse_model",
+          "emptyPolicy": "pass_unverifiable",
+          "establishesBinding": false,
+          "description": "Whenever edge-level synapse models are present, every one must match the caller-declared snapshot model."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "connection_sample_policy",
@@ -2922,7 +3324,7 @@
           }
         },
         "skill": "nest.connection_graph",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -2936,7 +3338,7 @@
     },
     {
       "id": "nest.adjacency_matrix",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST binary adjacency matrix renderer",
       "description": "Render sparse connection presence with target rows, source columns, and explicit multapse counts.",
       "deviceFamily": "get_connections",
@@ -2984,8 +3386,54 @@
         "matrix_axis_order",
         "matrix_aggregation"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "derived_bound"
+        },
+        "target_ids": {
+          "kind": "derived_bound"
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "Adjacency-matrix params do not retain the snapshot synapse model."
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "literal_bound"
+        },
+        "matrix_axis_order": {
+          "kind": "param_bound"
+        },
+        "matrix_aggregation": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "source_ids",
+          "paramPath": "source_ids",
+          "allowDigest": true,
+          "description": "Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest."
+        },
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "target_ids",
+          "paramPath": "target_ids",
+          "allowDigest": true,
+          "description": "Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "connection_sample_policy",
@@ -3258,7 +3706,7 @@
           }
         },
         "skill": "nest.adjacency_matrix",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -3272,7 +3720,7 @@
     },
     {
       "id": "nest.weight_matrix",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST connection-weight matrix renderer",
       "description": "Render explicitly aggregated SynapseCollection weights without conflating absent and zero-valued cells.",
       "deviceFamily": "get_connections",
@@ -3324,8 +3772,57 @@
         "matrix_axis_order",
         "matrix_aggregation"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "derived_bound"
+        },
+        "target_ids": {
+          "kind": "derived_bound"
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "Weight-matrix params do not retain the snapshot synapse model."
+        },
+        "weight_units": {
+          "kind": "param_bound"
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "literal_bound"
+        },
+        "matrix_axis_order": {
+          "kind": "param_bound"
+        },
+        "matrix_aggregation": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "source_ids",
+          "paramPath": "source_ids",
+          "allowDigest": true,
+          "description": "Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest."
+        },
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "target_ids",
+          "paramPath": "target_ids",
+          "allowDigest": true,
+          "description": "Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "weight_units",
@@ -3622,7 +4119,7 @@
           }
         },
         "skill": "nest.weight_matrix",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -3636,7 +4133,7 @@
     },
     {
       "id": "nest.delay_matrix",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST synaptic-delay matrix renderer",
       "description": "Render explicitly aggregated positive synaptic delays in milliseconds.",
       "deviceFamily": "get_connections",
@@ -3688,8 +4185,57 @@
         "matrix_axis_order",
         "matrix_aggregation"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "derived_bound"
+        },
+        "target_ids": {
+          "kind": "derived_bound"
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "Delay-matrix params do not retain the snapshot synapse model."
+        },
+        "delay_units": {
+          "kind": "param_bound"
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "literal_bound"
+        },
+        "matrix_axis_order": {
+          "kind": "param_bound"
+        },
+        "matrix_aggregation": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "source_ids",
+          "paramPath": "source_ids",
+          "allowDigest": true,
+          "description": "Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest."
+        },
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "target_ids",
+          "paramPath": "target_ids",
+          "allowDigest": true,
+          "description": "Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "delay_units",
@@ -3981,7 +4527,7 @@
           }
         },
         "skill": "nest.delay_matrix",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -3995,7 +4541,7 @@
     },
     {
       "id": "nest.in_degree_distribution",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST in-degree distribution renderer",
       "description": "Render the measured incoming-edge distribution over the complete declared target universe.",
       "deviceFamily": "get_connections",
@@ -4048,8 +4594,68 @@
         "zero_degree_policy",
         "histogram_normalization"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate degree distribution does not retain source identities."
+        },
+        "target_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate degree distribution retains a target count but not target identities."
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "The aggregate degree params do not retain the snapshot synapse model."
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "literal_bound"
+        },
+        "degree_direction": {
+          "kind": "param_bound"
+        },
+        "degree_counting": {
+          "kind": "param_bound"
+        },
+        "zero_degree_policy": {
+          "kind": "param_bound"
+        },
+        "histogram_normalization": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "source_ids",
+          "paramPath": "connection_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "nonempty_if_positive",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "A positive in-degree connection count requires at least one source id; aggregate degree params still do not identify that source universe."
+        },
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "target_ids",
+          "paramPath": "node_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "equals",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "The declared target-universe count must equal the checked in-degree node_count; aggregate params still do not retain identities."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "connection_sample_policy",
@@ -4343,7 +4949,7 @@
           }
         },
         "skill": "nest.in_degree_distribution",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -4357,7 +4963,7 @@
     },
     {
       "id": "nest.out_degree_distribution",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST out-degree distribution renderer",
       "description": "Render the measured outgoing-edge distribution over the complete declared source universe.",
       "deviceFamily": "get_connections",
@@ -4410,8 +5016,68 @@
         "zero_degree_policy",
         "histogram_normalization"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate degree distribution retains a source count but not source identities."
+        },
+        "target_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate degree distribution does not retain target identities."
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "The aggregate degree params do not retain the snapshot synapse model."
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "literal_bound"
+        },
+        "degree_direction": {
+          "kind": "param_bound"
+        },
+        "degree_counting": {
+          "kind": "param_bound"
+        },
+        "zero_degree_policy": {
+          "kind": "param_bound"
+        },
+        "histogram_normalization": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "source_ids",
+          "paramPath": "node_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "equals",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "The declared source-universe count must equal the checked out-degree node_count; aggregate params still do not retain identities."
+        },
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "target_ids",
+          "paramPath": "connection_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "nonempty_if_positive",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "A positive out-degree connection count requires at least one target id; aggregate degree params still do not identify that target universe."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "connection_sample_policy",
@@ -4688,7 +5354,7 @@
           "is_paper_local_evidence": false,
           "synthetic": true,
           "declared_inputs": {
-            "source_ids": "[1,3]",
+            "source_ids": "[1,2,3]",
             "target_ids": "[4,5]",
             "synapse_model": "static_synapse",
             "connection_sample_policy": "complete",
@@ -4702,7 +5368,7 @@
           }
         },
         "skill": "nest.out_degree_distribution",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -4716,9 +5382,9 @@
     },
     {
       "id": "nest.delay_distribution",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST synaptic-delay distribution renderer",
-      "description": "Render exact half-open bins over one delay value per selected connection.",
+      "description": "Render checked left-closed/right-open bins over one delay value per selected connection.",
       "deviceFamily": "get_connections",
       "scene": "delay-distribution",
       "weak": false,
@@ -4776,8 +5442,68 @@
         "histogram_normalization",
         "binning_policy"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate delay histogram does not retain source identities."
+        },
+        "target_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate delay histogram does not retain target identities."
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "The aggregate delay params do not retain the snapshot synapse model."
+        },
+        "delay_units": {
+          "kind": "param_bound"
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "literal_bound"
+        },
+        "bin_ms": {
+          "kind": "param_bound"
+        },
+        "histogram_normalization": {
+          "kind": "param_bound"
+        },
+        "binning_policy": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "source_ids",
+          "paramPath": "connection_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "nonempty_if_positive",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "A positive delay-observation count requires at least one source id; aggregate histogram params still do not identify the source universe."
+        },
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "target_ids",
+          "paramPath": "connection_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "nonempty_if_positive",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "A positive delay-observation count requires at least one target id; aggregate histogram params still do not identify the target universe."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "delay_units",
@@ -5006,7 +5732,7 @@
           "relativeTolerance": 1e-9,
           "roundoffUlps": 4,
           "maxRoundoffFraction": 1e-7,
-          "description": "Uniform left-closed/right-open delay bins exactly cover the declared window."
+          "description": "Uniform left-closed/right-open delay bins cover the declared window within the bounded binary64 geometry tolerance."
         },
         {
           "kind": "delay_distribution_consistency",
@@ -5095,13 +5821,13 @@
           }
         },
         "skill": "nest.delay_distribution",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
           "nestExample": "SynapseCollection delay inspection",
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
-          "dataShape": "one positive millisecond delay per selected connection in exact uniform bins",
+          "dataShape": "one positive millisecond delay per selected connection in checked uniform bins",
           "output": "Delay count, probability, or probability-density histogram",
           "note": "Out-of-window delays are transform errors, never silently discarded."
         }
@@ -5109,7 +5835,7 @@
     },
     {
       "id": "nest.weight_histogram",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST connection-weight histogram renderer",
       "description": "Render the measured weight distribution of a declared GetConnections snapshot.",
       "deviceFamily": "get_connections",
@@ -5121,12 +5847,20 @@
       },
       "requiredInputKeys": [
         "bin_centers",
+        "weight_counts",
         "values",
         "bin_width",
+        "window_start",
+        "window_stop",
         "weight_units",
         "normalization",
         "value_units",
-        "snapshot_time_ms"
+        "aggregation",
+        "binning",
+        "sample_policy",
+        "connection_count",
+        "snapshot_time_ms",
+        "snapshot_scope"
       ],
       "requiredProvenanceKeys": [
         "source_ids",
@@ -5134,10 +5868,67 @@
         "synapse_model",
         "weight_units",
         "histogram_normalization",
-        "connection_sample_policy"
+        "connection_sample_policy",
+        "snapshot_time_ms",
+        "snapshot_scope",
+        "parallel_edge_policy"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "source_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate weight histogram does not retain source identities."
+        },
+        "target_ids": {
+          "kind": "external_claim",
+          "reason": "The aggregate weight histogram does not retain target identities."
+        },
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "The aggregate weight params do not retain the snapshot synapse model."
+        },
+        "weight_units": {
+          "kind": "param_bound"
+        },
+        "histogram_normalization": {
+          "kind": "param_bound"
+        },
+        "connection_sample_policy": {
+          "kind": "param_bound"
+        },
+        "snapshot_time_ms": {
+          "kind": "param_bound"
+        },
+        "snapshot_scope": {
+          "kind": "param_bound"
+        },
+        "parallel_edge_policy": {
+          "kind": "literal_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model.",
       "provenanceParamConstraints": [
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "source_ids",
+          "paramPath": "connection_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "nonempty_if_positive",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "A positive weight-observation count requires at least one source id; aggregate histogram params still do not identify the source universe."
+        },
+        {
+          "kind": "canonical_json_array_length_matches_param",
+          "provenanceKey": "target_ids",
+          "paramPath": "connection_count",
+          "idDomain": "nonnegative_safe_integer",
+          "relation": "nonempty_if_positive",
+          "allowOpaqueDigestCount": true,
+          "establishesBinding": false,
+          "description": "A positive weight-observation count requires at least one target id; aggregate histogram params still do not identify the target universe."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "weight_units",
@@ -5149,6 +5940,30 @@
           "provenanceKey": "histogram_normalization",
           "paramKey": "normalization",
           "description": "Declared histogram normalization must match params.normalization."
+        },
+        {
+          "kind": "equals_param",
+          "provenanceKey": "connection_sample_policy",
+          "paramKey": "sample_policy",
+          "description": "Declared connection sampling must match params.sample_policy."
+        },
+        {
+          "kind": "equals_param",
+          "provenanceKey": "snapshot_time_ms",
+          "paramKey": "snapshot_time_ms",
+          "description": "Declared snapshot time must match params.snapshot_time_ms."
+        },
+        {
+          "kind": "equals_param_path",
+          "provenanceKey": "snapshot_scope",
+          "paramPath": "snapshot_scope.kind",
+          "description": "Declared snapshot scope must match params.snapshot_scope.kind."
+        },
+        {
+          "kind": "equals_literal",
+          "provenanceKey": "parallel_edge_policy",
+          "value": "count_each_connection",
+          "description": "Every selected SynapseCollection entry contributes one weight observation."
         }
       ],
       "paramsJsonSchema": {
@@ -5165,6 +5980,16 @@
               "maximum": 3.4028234663852886e+38
             }
           },
+          "weight_counts": {
+            "minItems": 1,
+            "maxItems": 50000,
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
           "values": {
             "minItems": 1,
             "maxItems": 50000,
@@ -5179,6 +6004,12 @@
             "type": "number",
             "exclusiveMinimum": 0,
             "maximum": 3.4028234663852886e+38
+          },
+          "window_start": {
+            "type": "number"
+          },
+          "window_stop": {
+            "type": "number"
           },
           "weight_units": {
             "type": "string",
@@ -5202,102 +6033,145 @@
               "probability"
             ]
           },
+          "aggregation": {
+            "type": "string",
+            "const": "each_connection"
+          },
+          "binning": {
+            "type": "string",
+            "const": "left_closed_right_open"
+          },
+          "sample_policy": {
+            "type": "string",
+            "const": "complete"
+          },
+          "connection_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
           "snapshot_time_ms": {
             "type": "number",
             "minimum": 0
+          },
+          "snapshot_scope": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "single_process_complete"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "mpi_target_rank_local"
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "world_size": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rank",
+                  "world_size"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "mpi_all_ranks_merged"
+                  },
+                  "world_size": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "kind",
+                  "world_size"
+                ],
+                "additionalProperties": false
+              }
+            ]
           }
         },
         "required": [
           "bin_centers",
+          "weight_counts",
           "values",
           "bin_width",
+          "window_start",
+          "window_stop",
           "weight_units",
           "normalization",
           "value_units",
-          "snapshot_time_ms"
+          "aggregation",
+          "binning",
+          "sample_policy",
+          "connection_count",
+          "snapshot_time_ms",
+          "snapshot_scope"
         ],
         "additionalProperties": false
       },
       "paramConstraints": [
         {
-          "kind": "equal_length",
+          "kind": "uniform_bin_window",
           "paths": [
             "bin_centers",
-            "values"
-          ],
-          "description": "Every weight histogram bin center must have one value."
-        },
-        {
-          "kind": "monotonic_non_decreasing",
-          "paths": [
-            "bin_centers"
-          ],
-          "description": "Weight histogram bin centers must be monotonically non-decreasing."
-        },
-        {
-          "kind": "uniform_histogram_bins",
-          "paths": [
-            "bin_centers",
-            "bin_width"
+            "bin_width",
+            "window_start",
+            "window_stop"
           ],
           "absoluteTolerance": 0,
           "relativeTolerance": 1e-9,
-          "description": "Weight histogram bins must be strictly increasing and uniformly spaced by bin_width."
+          "roundoffUlps": 4,
+          "maxRoundoffFraction": 1e-7,
+          "description": "Uniform left-closed/right-open weight bins cover the declared weight window within the bounded binary64 geometry tolerance."
         },
         {
-          "kind": "non_negative",
+          "kind": "weight_histogram_consistency",
           "paths": [
-            "values[*]"
-          ],
-          "description": "Weight histogram values cannot be negative."
-        },
-        {
-          "kind": "mapped_value",
-          "paths": [
-            "normalization",
-            "value_units"
-          ],
-          "allowedValues": {
-            "count": "count",
-            "probability": "probability"
-          },
-          "description": "Each weight histogram normalization has one unambiguous value unit."
-        },
-        {
-          "kind": "conditional_numeric_domain",
-          "paths": [
-            "normalization",
-            "values[*]"
-          ],
-          "numericDomains": {
-            "count": {
-              "min": 0,
-              "max": 9007199254740991,
-              "integer": true
-            },
-            "probability": {
-              "min": 0,
-              "max": 1
-            }
-          },
-          "description": "Weight counts are safe integers and probabilities lie in [0,1]."
-        },
-        {
-          "kind": "normalized_histogram_mass",
-          "paths": [
-            "normalization",
+            "bin_centers",
+            "weight_counts",
             "values",
-            "bin_width"
+            "bin_width",
+            "connection_count",
+            "normalization",
+            "value_units",
+            "weight_units",
+            "aggregation",
+            "binning"
           ],
-          "absoluteTolerance": 0.000001,
-          "relativeTolerance": 0.000001,
-          "normalizationRules": {
-            "probability": {
-              "measure": "sum",
-              "target": 1
-            }
-          },
-          "description": "Weight-histogram probability mass must sum to one."
+          "description": "Raw connection counts, normalization, and displayed weight-histogram values recover one another exactly."
+        },
+        {
+          "kind": "scope_compatibility",
+          "paths": [
+            "snapshot_scope"
+          ],
+          "description": "Snapshot MPI rank metadata must be internally valid."
         }
       ],
       "rendererRoutes": [
@@ -5315,6 +6189,13 @@
             1,
             2
           ],
+          "weight_counts": [
+            3,
+            5,
+            0,
+            7,
+            2
+          ],
           "values": [
             3,
             5,
@@ -5323,10 +6204,19 @@
             2
           ],
           "bin_width": 1,
+          "window_start": -2.5,
+          "window_stop": 2.5,
           "weight_units": "pA",
           "normalization": "count",
           "value_units": "count",
-          "snapshot_time_ms": 1000
+          "aggregation": "each_connection",
+          "binning": "left_closed_right_open",
+          "sample_policy": "complete",
+          "connection_count": 17,
+          "snapshot_time_ms": 1000,
+          "snapshot_scope": {
+            "kind": "single_process_complete"
+          }
         },
         "mode": "interactive",
         "themeMode": "dark",
@@ -5342,25 +6232,28 @@
             "synapse_model": "static_synapse",
             "weight_units": "pA",
             "histogram_normalization": "count",
-            "connection_sample_policy": "all matching connections at snapshot_time_ms"
+            "connection_sample_policy": "complete",
+            "snapshot_time_ms": 1000,
+            "snapshot_scope": "single_process_complete",
+            "parallel_edge_policy": "count_each_connection"
           }
         },
         "skill": "nest.weight_histogram",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
           "nestExample": "Plot weight matrices example / SynapseCollection snapshot",
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
-          "dataShape": "binned GetConnections weights at one declared simulation time",
+          "dataShape": "raw per-bin connection counts from one typed complete GetConnections snapshot",
           "output": "Connection-weight count or probability histogram",
-          "note": "Use a GetConnections snapshot; weight_recorder events are update-event samples and bias distributions."
+          "note": "Every selected connection contributes exactly one weight; weight_recorder update events are a different, biased sample."
         }
       ]
     },
     {
       "id": "nest.spatial_2d",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST legacy 2D position host envelope",
       "description": "Validate anonymous 2D position tuples and coordinate units for an explicitly selected host renderer; Cortexel supplies no scene.",
       "deviceFamily": "get_position",
@@ -5384,8 +6277,34 @@
         "mask",
         "kernel"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "extent": {
+          "kind": "external_claim",
+          "reason": "Anonymous point bounds are not the declared layer extent and params contain no center/extent object."
+        },
+        "spatial_units": {
+          "kind": "param_bound"
+        },
+        "mask": {
+          "kind": "external_claim",
+          "reason": "The network-generation mask is source configuration, not measured position data."
+        },
+        "kernel": {
+          "kind": "external_claim",
+          "reason": "The network-generation kernel is source configuration, not measured position data."
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: extent, mask, kernel.",
       "provenanceParamConstraints": [
+        {
+          "kind": "canonical_json_array_length_equals",
+          "provenanceKey": "extent",
+          "expectedLength": 2,
+          "establishesBinding": false,
+          "description": "A 2D host envelope requires a canonical two-axis extent; this shape check does not verify the caller-declared layer extent."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "spatial_units",
@@ -5442,7 +6361,7 @@
       ],
       "examplePayload": {
         "skill": "nest.spatial_2d",
-        "specVersion": "1.3.0",
+        "specVersion": "1.4.0",
         "rendererRoute": "d3",
         "params": {
           "positions": [
@@ -5483,7 +6402,7 @@
     },
     {
       "id": "nest.spatial_map_2d",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST measured 2D spatial map renderer",
       "description": "Render identified 2D GetPosition coordinates inside the declared layer extent with explicit periodic-boundary and MPI completeness semantics.",
       "deviceFamily": "get_position",
@@ -5524,8 +6443,36 @@
         "extent",
         "position_scope"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "node_ids": {
+          "kind": "derived_bound"
+        },
+        "spatial_units": {
+          "kind": "param_bound"
+        },
+        "extent": {
+          "kind": "derived_bound"
+        },
+        "position_scope": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": null,
       "provenanceParamConstraints": [
+        {
+          "kind": "matches_projected_id_collection",
+          "provenanceKey": "node_ids",
+          "paramPath": "nodes",
+          "field": "id",
+          "idDomain": "nonnegative_safe_integer",
+          "comparison": "set",
+          "relation": "equals",
+          "allowDigest": true,
+          "allowOpaqueDigestCount": false,
+          "description": "Declared node ids must equal the measured node-id set or its RFC 8785 SHA-256 digest."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "spatial_units",
@@ -5537,6 +6484,13 @@
           "provenanceKey": "position_scope",
           "paramPath": "position_scope.kind",
           "description": "Declared position scope must match params.position_scope.kind."
+        },
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "extent",
+          "paramPath": "extent",
+          "allowDigest": false,
+          "description": "Declared numeric extent must exactly equal params.extent in canonical JSON."
         }
       ],
       "paramsJsonSchema": {
@@ -5781,7 +6735,7 @@
           }
         },
         "skill": "nest.spatial_map_2d",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -5795,7 +6749,7 @@
     },
     {
       "id": "nest.spatial_3d",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST 3D spatial renderer",
       "description": "Render 3D population/node positions for spatial inspection.",
       "deviceFamily": "get_position",
@@ -5814,8 +6768,30 @@
         "spatial_units",
         "projection_sample_policy"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "extent": {
+          "kind": "external_claim",
+          "reason": "Position bounds are not a layer extent and params contain no center/extent object."
+        },
+        "spatial_units": {
+          "kind": "param_bound"
+        },
+        "projection_sample_policy": {
+          "kind": "external_claim",
+          "reason": "The positioned-object params do not retain a structured projection sampling policy."
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: extent, projection sample policy.",
       "provenanceParamConstraints": [
+        {
+          "kind": "canonical_json_array_length_equals",
+          "provenanceKey": "extent",
+          "expectedLength": 3,
+          "establishesBinding": false,
+          "description": "A 3D positioned-node scene requires a canonical three-axis extent; this shape check does not verify the caller-declared layer extent."
+        },
         {
           "kind": "equals_param",
           "provenanceKey": "spatial_units",
@@ -5912,7 +6888,7 @@
           }
         },
         "skill": "nest.spatial_3d",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -5926,7 +6902,7 @@
     },
     {
       "id": "nest.plasticity_dynamics",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST plasticity dynamics renderer",
       "description": "Render recorded synaptic-weight samples over time.",
       "deviceFamily": "weight_recorder",
@@ -5944,7 +6920,18 @@
         "synapse_model",
         "weight_units"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "synapse_model": {
+          "kind": "external_claim",
+          "reason": "Weight traces do not retain the recorded synapse/model identity."
+        },
+        "weight_units": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: synapse model.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_param",
@@ -6041,7 +7028,7 @@
           }
         },
         "skill": "nest.plasticity_dynamics",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -6055,7 +7042,7 @@
     },
     {
       "id": "nest.phase_plane",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST phase-plane renderer",
       "description": "Render a checked Cartesian phase-plane vector field.",
       "deviceFamily": "computed",
@@ -6078,8 +7065,35 @@
         "model_context",
         "fixed_parameters"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
-      "provenanceParamConstraints": [],
+      "provenanceVerification": {
+        "state_variables": {
+          "kind": "derived_bound"
+        },
+        "derivation_method": {
+          "kind": "external_claim",
+          "reason": "The vector-field params contain derivative values but no structured derivation method/version."
+        },
+        "model_context": {
+          "kind": "external_claim",
+          "reason": "The vector-field params contain no structured model identity/version."
+        },
+        "fixed_parameters": {
+          "kind": "external_claim",
+          "reason": "The vector-field params do not retain the fixed-parameter map and units."
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: phase-plane derivative derivation method, phase-plane model context, phase-plane fixed parameters.",
+      "provenanceParamConstraints": [
+        {
+          "kind": "matches_canonical_json_param",
+          "provenanceKey": "state_variables",
+          "paramPath": "axis_order",
+          "allowDigest": false,
+          "description": "Declared state variables must exactly match params.axis_order in canonical JSON."
+        }
+      ],
       "paramsJsonSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
@@ -6356,14 +7370,14 @@
           "is_paper_local_evidence": false,
           "synthetic": true,
           "declared_inputs": {
-            "state_variables": "V,w",
+            "state_variables": "[\"v\",\"w\"]",
             "derivation_method": "model equations evaluated on Cartesian grid",
             "model_context": "Hodgkin-Huxley reduced phase plane",
             "fixed_parameters": "all non-plotted state variables clamped to declared values"
           }
         },
         "skill": "nest.phase_plane",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -6377,7 +7391,7 @@
     },
     {
       "id": "nest.correlogram",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST correlogram / synchrony renderer",
       "description": "Render a symmetric correlation_detector lag histogram with explicit pair orientation, interval policy, counting window, zero-lag handling, and statistic semantics.",
       "deviceFamily": "correlation_detector",
@@ -6409,7 +7423,36 @@
         "lag_convention",
         "binning_policy"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "detector_id": {
+          "kind": "external_claim",
+          "reason": "The source correlation-detector identity is not represented in correlogram params."
+        },
+        "reference_population": {
+          "kind": "param_bound"
+        },
+        "target_population": {
+          "kind": "param_bound"
+        },
+        "bin_ms": {
+          "kind": "param_bound"
+        },
+        "correlation_normalization": {
+          "kind": "param_bound"
+        },
+        "correlation_units": {
+          "kind": "param_bound"
+        },
+        "lag_convention": {
+          "kind": "param_bound"
+        },
+        "binning_policy": {
+          "kind": "param_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: correlation_detector id.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_param",
@@ -6659,6 +7702,8 @@
           ],
           "absoluteTolerance": 0,
           "relativeTolerance": 1e-9,
+          "roundoffUlps": 4,
+          "maxRoundoffFraction": 1e-7,
           "description": "Correlogram lag centers must be strictly increasing, uniform, odd, zero-centered, symmetric, and span [-tau_max_ms,+tau_max_ms]."
         },
         {
@@ -6755,7 +7800,7 @@
           }
         },
         "skill": "nest.correlogram",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -6769,7 +7814,7 @@
     },
     {
       "id": "nest.stimulus_response",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST stimulus-response host envelope",
       "description": "Validate aligned time, stimulus, and response arrays for an explicitly selected host renderer; Cortexel supplies no scene.",
       "deviceFamily": "multimeter",
@@ -6788,7 +7833,22 @@
         "units",
         "time_units"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "stim_units": {
+          "kind": "external_claim",
+          "reason": "Stimulus-response params contain an untyped stimulus array without a unit field."
+        },
+        "units": {
+          "kind": "external_claim",
+          "reason": "Stimulus-response params contain an untyped response array without a unit field."
+        },
+        "time_units": {
+          "kind": "literal_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: stimulus units, units.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_literal",
@@ -6861,7 +7921,7 @@
       ],
       "examplePayload": {
         "skill": "nest.stimulus_response",
-        "specVersion": "1.3.0",
+        "specVersion": "1.4.0",
         "rendererRoute": "matplotlib",
         "params": {
           "times_ms": [
@@ -6905,7 +7965,7 @@
     },
     {
       "id": "nest.astrocyte_dynamics",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST astrocyte concentration-trace renderer",
       "description": "Render one declared non-negative glial concentration trace carried as ca_trace.",
       "deviceFamily": "multimeter",
@@ -6926,7 +7986,24 @@
         "time_units",
         "sampling_interval"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "recorded_variable": {
+          "kind": "external_claim",
+          "reason": "The legacy ca_trace field does not distinguish the NEST Ca and Ca_astro source-variable names."
+        },
+        "units": {
+          "kind": "param_bound"
+        },
+        "time_units": {
+          "kind": "literal_bound"
+        },
+        "sampling_interval": {
+          "kind": "derived_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: recorded variable.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_param",
@@ -6939,6 +8016,26 @@
           "provenanceKey": "time_units",
           "value": "ms",
           "description": "The times_ms axis is expressed in milliseconds."
+        },
+        {
+          "kind": "one_of_literals",
+          "provenanceKey": "recorded_variable",
+          "values": [
+            "Ca",
+            "Ca_astro"
+          ],
+          "establishesBinding": false,
+          "description": "The legacy ca_trace field carries only the NEST Ca/Ca_astro concentration variable."
+        },
+        {
+          "kind": "matches_regular_time_axis",
+          "provenanceKey": "sampling_interval",
+          "paramPath": "times_ms",
+          "absoluteTolerance": 0,
+          "relativeTolerance": 1e-12,
+          "roundoffUlps": 4,
+          "maxRoundoffFraction": 1e-7,
+          "description": "The declared device sampling interval must match every adjacent glial timestamp delta."
         }
       ],
       "paramsJsonSchema": {
@@ -6946,7 +8043,7 @@
         "type": "object",
         "properties": {
           "times_ms": {
-            "minItems": 1,
+            "minItems": 2,
             "maxItems": 50000,
             "type": "array",
             "items": {
@@ -6965,11 +8062,11 @@
           },
           "units": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 80,
-            "pattern": "^[^\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff]*$",
-            "x-cortexel-normalize": "trim",
-            "x-cortexel-max-utf16-code-units": 80
+            "enum": [
+              "uM",
+              "µM",
+              "μM"
+            ]
           }
         },
         "required": [
@@ -6989,11 +8086,11 @@
           "description": "Every glial sample must have one timestamp."
         },
         {
-          "kind": "monotonic_non_decreasing",
+          "kind": "strictly_increasing",
           "paths": [
             "times_ms"
           ],
-          "description": "Glial timestamps must be monotonically non-decreasing."
+          "description": "Glial timestamps must be strictly increasing."
         },
         {
           "kind": "non_negative",
@@ -7038,7 +8135,7 @@
           }
         },
         "skill": "nest.astrocyte_dynamics",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {
@@ -7052,7 +8149,7 @@
     },
     {
       "id": "nest.compartmental_dynamics",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST compartment-tree trace host envelope",
       "description": "Validate an id/parent compartment topology and aligned per-compartment values for an explicitly selected host renderer.",
       "deviceFamily": "multimeter",
@@ -7072,13 +8169,45 @@
         "time_units",
         "sampling_interval"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "morphology_disclaimer": {
+          "kind": "external_claim",
+          "reason": "Morphology geometry is absent; this caller text cannot substitute for a contract-owned geometry disclosure."
+        },
+        "recorded_variable": {
+          "kind": "external_claim",
+          "reason": "Compartment traces do not carry a structured shared/per-series recorded variable."
+        },
+        "units": {
+          "kind": "external_claim",
+          "reason": "Compartment traces do not carry a structured shared/per-series unit."
+        },
+        "time_units": {
+          "kind": "literal_bound"
+        },
+        "sampling_interval": {
+          "kind": "derived_bound"
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: morphology geometry disclaimer, recorded variable, units.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_literal",
           "provenanceKey": "time_units",
           "value": "ms",
           "description": "The times_ms axis is expressed in milliseconds."
+        },
+        {
+          "kind": "matches_regular_time_axis",
+          "provenanceKey": "sampling_interval",
+          "paramPath": "times_ms",
+          "absoluteTolerance": 0,
+          "relativeTolerance": 1e-12,
+          "roundoffUlps": 4,
+          "maxRoundoffFraction": 1e-7,
+          "description": "The declared device sampling interval must match every adjacent compartment timestamp delta."
         }
       ],
       "paramsJsonSchema": {
@@ -7086,7 +8215,7 @@
         "type": "object",
         "properties": {
           "times_ms": {
-            "minItems": 1,
+            "minItems": 2,
             "maxItems": 50000,
             "type": "array",
             "items": {
@@ -7191,11 +8320,11 @@
           "description": "The compartment parent graph must be acyclic."
         },
         {
-          "kind": "monotonic_non_decreasing",
+          "kind": "strictly_increasing",
           "paths": [
             "times_ms"
           ],
-          "description": "Compartment timestamps must be monotonically non-decreasing."
+          "description": "Compartment timestamps must be strictly increasing."
         }
       ],
       "rendererRoutes": [
@@ -7204,7 +8333,7 @@
       ],
       "examplePayload": {
         "skill": "nest.compartmental_dynamics",
-        "specVersion": "1.3.0",
+        "specVersion": "1.4.0",
         "rendererRoute": "d3",
         "params": {
           "times_ms": [
@@ -7252,7 +8381,7 @@
     },
     {
       "id": "nest.animation_replay",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "NEST state replay / animation storyboard renderer",
       "description": "Render time-evolution storyboards and inspectable state replays.",
       "deviceFamily": "computed",
@@ -7267,7 +8396,15 @@
       "requiredProvenanceKeys": [
         "frame_rate"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {},
+      "provenanceVerification": {
+        "frame_rate": {
+          "kind": "external_claim",
+          "reason": "Playback frame rate is not derivable from simulation timestamps without an explicit playback time scale."
+        }
+      },
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: frame rate.",
       "provenanceParamConstraints": [],
       "paramsJsonSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7349,7 +8486,7 @@
       ],
       "examplePayload": {
         "skill": "nest.animation_replay",
-        "specVersion": "1.3.0",
+        "specVersion": "1.4.0",
         "rendererRoute": "manim",
         "params": {
           "frames": [
@@ -7384,7 +8521,7 @@
     },
     {
       "id": "corpus.knowledge_graph",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "title": "Corpus knowledge-graph 3D renderer",
       "description": "Render a bounded, traceable cross-paper entity multigraph: paper/model/family nodes plus identified citation, instantiation, family and advisory identity assertions. Every element carries typed source evidence; every numeric score is discriminated and explicitly uncalibrated.",
       "deviceFamily": "corpus",
@@ -7409,10 +8546,26 @@
         "graph_scope",
         "identity_advisory"
       ],
+      "optionalProvenanceKeys": [],
       "requiredProvenanceFlags": {
         "advisory_only": true,
         "is_paper_local_evidence": false
       },
+      "provenanceVerification": {
+        "graph_source": {
+          "kind": "param_bound"
+        },
+        "graph_snapshot_id": {
+          "kind": "param_bound"
+        },
+        "graph_scope": {
+          "kind": "param_bound"
+        },
+        "identity_advisory": {
+          "kind": "literal_bound"
+        }
+      },
+      "externalProvenanceDisclosure": null,
       "provenanceParamConstraints": [
         {
           "kind": "equals_param",
@@ -8654,7 +9807,7 @@
           }
         },
         "skill": "corpus.knowledge_graph",
-        "specVersion": "1.3.0"
+        "specVersion": "1.4.0"
       },
       "examples": [
         {

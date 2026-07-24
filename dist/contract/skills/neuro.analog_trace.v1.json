@@ -521,7 +521,7 @@
 
   "migration": {
     "legacyIds": ["nest.voltage_trace"],
-    "notes": "The legacy id hard-coded two assumptions: that the quantity was a membrane potential and that its unit was millivolts. Neither is recoverable from the payload, and both are frequently false — the same recorder carries synaptic conductances and injected currents. Migration therefore REQUIRES an explicit quantity kind, unit, and observation kind, and blocks with MIGRATION_INFORMATION_MISSING when the legacy payload cannot supply them, rather than defaulting to `membrane_voltage` in mV and producing a figure whose axis label is a guess. The legacy id is accepted only by `cortexel migrate`; in normal validation it fails with MIGRATION_LEGACY_ID_NOT_ACCEPTED."
+    "notes": "The legacy id does not establish membrane voltage, units, point-sample semantics, recorded origin, unique series identity, an analysis window, axis-sharing policy, or duplicate-time treatment. The normative legacy map marks its named transform report-only and lists every unresolved fact; migration emits only a partial target request plus a blocking MIGRATION_INFORMATION_MISSING error until the caller supplies those facts. It never defaults to `membrane_voltage` or `recorded`. The legacy id is accepted only by `cortexel migrate`; normal validation fails with MIGRATION_LEGACY_ID_NOT_ACCEPTED."
   },
 
   "owner": "Sepehr Mahmoudian",

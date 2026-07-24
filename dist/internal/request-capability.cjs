@@ -13232,10 +13232,18 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.analog_trace",
     "transform": "voltageTraceToAnalogTrace",
-    "notes": "The signal is mapped with kind `membrane_voltage` ONLY because the legacy id asserted it was a voltage trace. The general contract does not assume every analog signal is a membrane potential.",
+    "transformExecution": "report_only",
+    "notes": "The legacy id is not evidence that the recorded quantity was membrane voltage. This report-only path materializes no quantity kind, unit, observation kind, origin, series identity, analysis window, layout, or duplicate-time policy: all must be supplied explicitly and the result revalidated against neuro.analog_trace.",
     "requires": [
+      "a quantity kind for every series",
       "an explicit time unit",
-      "an explicit value unit"
+      "a value unit for every series",
+      "an observation kind for every series",
+      "an origin for every series (and a method when derived)",
+      "stable series ids",
+      "an explicit analysis window and boundary",
+      "an explicit layout and unit-sharing policy",
+      "an explicit duplicate-time policy"
     ]
   },
   "nest.spike_raster": {
@@ -13243,7 +13251,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.spike_raster",
     "transform": "spikeRasterToSpikeRaster",
-    "notes": "Event identity and order are preserved. The RECORDED sender universe must be supplied: the legacy payload did not distinguish senders that were recorded from senders that happened to fire.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve event identity and order. The current report-only path copies neither. The RECORDED sender universe must be supplied because the legacy payload did not distinguish senders that were recorded from senders that happened to fire.",
     "requires": [
       "recordedSenderIds",
       "an observation window"
@@ -13254,7 +13263,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.population_rate",
     "transform": "populationRateToPopulationRate",
-    "notes": "Raw bin counts and the recorded-sender denominator are preserved, and the rate is re-derived and checked.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve raw bin counts and the recorded-sender denominator, then re-derive and check the rate. The current report-only path copies no bins, counts, denominator, or rate.",
     "requires": [
       "recordedSenderCount"
     ]
@@ -13264,7 +13274,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.response_curve",
     "transform": "rateResponseToResponseCurve",
-    "notes": "The current-only F-I assumption is NOT hard-coded into the neutral contract: the input quantity, response method, and event-selection scope must all be declared. Migration cannot infer one train versus a pooled sender population, membership, completeness, or pooling order from the legacy scalar curve.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must not hard-code a current-only F-I assumption into the neutral contract: the input quantity, response method, and event-selection scope must all be declared. The current report-only path copies no curve data. Neither path may infer one train versus a pooled sender population, membership, completeness, or pooling order from the legacy scalar curve.",
     "requires": [
       "an input quantity with a unit",
       "a response method",
@@ -13276,7 +13287,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.isi_distribution",
     "transform": "isiToIsiDistribution",
-    "notes": "Per-sender interval derivation, edge policy, bins, normalization, and exclusions are preserved.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve per-sender interval derivation, edge policy, bins, normalization, and exclusions. The current report-only path copies none of them.",
     "requires": [
       "a zero-interval policy"
     ]
@@ -13286,7 +13298,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.psth",
     "transform": "psthToPsth",
-    "notes": "Trial alignment, selected senders, and the trial denominator are preserved.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve trial alignment, selected senders, and the trial denominator. The current report-only path copies none of them.",
     "requires": [
       "a trial universe or count",
       "an alignment reference"
@@ -13297,7 +13310,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.correlogram",
     "transform": "correlogramToCorrelogram",
-    "notes": "The legacy caller-selected `zeroLagPolicy` is DROPPED. Self-pair treatment is now DERIVED by the registered algorithm from event identity and reported as a fact; it is no longer something a caller can assert.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must drop the legacy caller-selected `zeroLagPolicy` and derive self-pair treatment through the registered algorithm from checked event identity. The current report-only path copies no events and derives no self-pair fact; it only reports the target and missing declarations.",
     "requires": [
       "an explicit kind (auto|cross)",
       "an ordered (reference, target) pair",
@@ -13309,7 +13323,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.phase_plane",
     "transform": "phasePlaneToPhasePlane",
-    "notes": "State-variable quantities and trajectory ordering are preserved. An unverified nullcline annotation becomes a caller note or is dropped.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve state-variable quantities and trajectory ordering and must demote or drop an unverified nullcline annotation. The current report-only path copies no quantities, trajectories, or annotations.",
     "requires": [
       "x and y state quantities with units"
     ]
@@ -13319,7 +13334,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.multisignal_trace",
     "transform": "astrocyteToMultisignalTrace",
-    "notes": "Each signal keeps its REAL quantity kind and unit. Calcium and IP3 are never relabelled as membrane voltage, and dimensionally incompatible signals become small multiples rather than one forced axis. Astrocytes get a recipe, not a renderer branch.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must keep each signal's actual quantity kind and unit, never relabel distinct quantities as membrane voltage, and keep dimensionally incompatible signals off one forced axis. The current report-only path copies no signals. The target uses a general multisignal recipe rather than a source-specific renderer branch.",
     "requires": [
       "a quantity kind and unit per signal"
     ]
@@ -13329,7 +13345,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "neuro.compartment_trace",
     "transform": "compartmentalToCompartmentTrace",
-    "notes": "This was a host-only (`scene: null`) route. It now has a native renderer: small multiples below a bounded compartment count, a time-by-compartment heatmap above it.",
+    "transformExecution": "report_only",
+    "notes": "The legacy route was host-only (`scene: null`); the target contract has a native renderer with small multiples below a bounded compartment count and a time-by-compartment heatmap above it. The current report-only path copies no compartment data.",
     "requires": [
       "cellId",
       "compartment ids",
@@ -13341,7 +13358,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.connection_graph",
     "transform": "connectionGraphToConnectionGraph",
-    "notes": "Isolates, autapses, multapses, and directedness are preserved.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve isolates, autapses, multapses, and directedness. The current report-only path copies no nodes or edges.",
     "requires": [
       "a complete node universe",
       "a network scope"
@@ -13352,7 +13370,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.adjacency_matrix",
     "transform": "adjacencyToAdjacencyMatrix",
-    "notes": "Cortexel's target-row / source-column display convention is frozen and stated on the axes, in the table, and in the caption. A NEST SynapseCollection is an edge list rather than a matrix-axis authority; the official NEST plotting example uses source rows and target columns, so Cortexel does not attribute its transposed display convention to NEST (https://nest-simulator.readthedocs.io/en/v3.0/auto_examples/synapsecollection.html).",
+    "transformExecution": "report_only",
+    "notes": "The target contract freezes Cortexel's target-row / source-column display convention and states it on the axes, in the table, and in the caption. The current report-only path copies no matrix data. A NEST SynapseCollection is an edge list rather than a matrix-axis authority; the official NEST plotting example uses source rows and target columns, so Cortexel does not attribute its transposed display convention to NEST (https://nest-simulator.readthedocs.io/en/v3.0/auto_examples/synapsecollection.html).",
     "requires": [
       "complete row (target) and column (source) universes",
       "a cell mode",
@@ -13364,7 +13383,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.weight_matrix",
     "transform": "weightMatrixToWeightMatrix",
-    "notes": "A multapse aggregation is now MANDATORY. The legacy behavior had no declared policy for repeated connections mapping to one cell.",
+    "transformExecution": "report_only",
+    "notes": "The target contract requires a multapse aggregation because the legacy behavior had no declared policy for repeated connections mapping to one cell. The current report-only path copies no cells or weights.",
     "requires": [
       "a multapse aggregation",
       "a weight quantity with a declared dimension"
@@ -13375,7 +13395,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.delay_matrix",
     "transform": "delayMatrixToDelayMatrix",
-    "notes": "Delays must be finite and positive. A multapse aggregation is mandatory.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must establish finite positive delays and an explicit multapse aggregation. The current report-only path copies no cells or delays.",
     "requires": [
       "a multapse aggregation"
     ]
@@ -13385,7 +13406,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.degree_distribution",
     "transform": "inDegreeToDegreeDistribution",
-    "notes": "Merged into one contract with a closed `direction` discriminator, set here to `in`. The complete node universe is required so that zero-degree nodes survive.",
+    "transformExecution": "report_only",
+    "notes": "The target merges both directions into one contract with a closed discriminator; the report-only skeleton materializes only `direction: in`. It copies no degrees or node universe. A future implemented transform requires the complete node universe so zero-degree nodes survive.",
     "requires": [
       "a complete node universe",
       "a counting policy"
@@ -13399,7 +13421,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.degree_distribution",
     "transform": "outDegreeToDegreeDistribution",
-    "notes": "Direction is set to `out`. If the source scope is target-rank-local, migration BLOCKS with SCOPE_OUT_DEGREE_FROM_RANK_LOCAL: rank-local target evidence cannot be promoted to a global out-degree, because the connections from a local source to a remote target live on another rank.",
+    "transformExecution": "report_only",
+    "notes": "The report-only skeleton materializes only `direction: out`; it does not inspect or copy the source scope or degrees. A future implemented transform must block target-rank-local source evidence with SCOPE_OUT_DEGREE_FROM_RANK_LOCAL because connections from a local source to a remote target live on another rank.",
     "requires": [
       "a complete node universe",
       "a counting policy",
@@ -13414,7 +13437,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.delay_distribution",
     "transform": "delayDistributionToDelayDistribution",
-    "notes": "The exact edge population, sampling status, unit, bins, and normalization are preserved.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve the exact edge population, sampling status, unit, bins, and normalization. The current report-only path copies none of them.",
     "requires": [
       "an edge scope",
       "a normalization"
@@ -13425,7 +13449,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.weight_distribution",
     "transform": "weightHistogramToWeightDistribution",
-    "notes": "Signs are preserved. Weights are never absolute-valued or sign-split unless requested, and never pooled across incompatible dimensions or synapse models.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve signs, never absolute-value or sign-split weights unless requested, and never pool incompatible dimensions or synapse models. The current report-only path copies no weights.",
     "requires": [
       "an edge scope",
       "a weight quantity with a declared dimension"
@@ -13436,7 +13461,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.spatial_map_2d",
     "transform": "spatialMap2dToSpatialMap2d",
-    "notes": "Coordinate frame, center/extent, and periodic-wrap metadata are preserved.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must preserve coordinate frame, center/extent, and periodic-wrap metadata. The current report-only path copies no positions or spatial metadata.",
     "requires": [
       "a coordinate frame",
       "positions covering the node universe"
@@ -13447,7 +13473,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.synaptic_weight_trace",
     "transform": "plasticityToSynapticWeightTrace",
-    "notes": "The observation kind must be declared: event-updated weights are piecewise-constant and are drawn as STEPS, while sampled continuous values are drawn as a line. Drawing an STDP update as a smooth line would invent values that never existed.",
+    "transformExecution": "report_only",
+    "notes": "A future implemented transform must require the observation kind so event-updated weights render as steps and sampled continuous values render as a line. The current report-only path copies no weight observations. Drawing an event update as a smooth line would invent values that never existed.",
     "requires": [
       "a stable synapse identity",
       "an observation kind"
@@ -13482,7 +13509,8 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate",
     "targetId": "network.connection_graph",
     "transform": "connectivityEdgeListToConnectionGraph",
-    "notes": "Despite its historical name, the pre-1.0 registry bound this id to the network-topology scene and accepted endpoint pairs with optional unit-bound weight and delay channels; it was not a literal matrix. Migration therefore targets network.connection_graph and reports every graph fact the edge list could not carry. It never infers isolates from endpoints, promotes an unknown scope to global, or invents edge identity and multapse/autapse semantics. A caller who wants a matrix must separately author the matching adjacency, weight, or delay request.",
+    "transformExecution": "report_only",
+    "notes": "Despite its historical name, the pre-1.0 registry bound this id to the network-topology scene and accepted endpoint pairs with optional unit-bound weight and delay channels; it was not a literal matrix. The report-only path therefore emits only a network.connection_graph target skeleton and reports every unresolved graph fact; it copies no endpoints or measurement channels. A future implemented transform must never infer isolates from endpoints, promote an unknown scope to global, or invent edge identity and multapse/autapse semantics. A caller who wants a matrix must separately author the matching adjacency, weight, or delay request.",
     "requires": [
       "a complete node universe including isolates",
       "stable node and edge identities",
@@ -13495,8 +13523,9 @@ var LEGACY_SKILL_MAP = freezeGenerated({
     "outcome": "migrate_conditional",
     "targetId": "network.spatial_map_2d",
     "transform": "spatial2dToSpatialMap2d",
+    "transformExecution": "report_only",
     "errorCode": "MIGRATION_INFORMATION_MISSING",
-    "notes": "A host-only route with no Cortexel-owned output. It migrates ONLY when the legacy payload already carries the complete measured-position contract \u2014 node ids bound to positions, a coordinate frame, and units. Otherwise migration returns a field-by-field error rather than fabricating a coordinate frame.",
+    "notes": "This was a host-only route with no Cortexel-owned output. The current report-only path always emits only a target skeleton plus blocking unresolved facts and copies no positions. A future implemented transform may complete the request only when source evidence supplies node ids bound to positions, a coordinate frame, and units; otherwise it must fail rather than fabricate a coordinate frame.",
     "requires": [
       "node ids bound to positions",
       "a coordinate frame",
@@ -23419,7 +23448,7 @@ function validateStructure(request, skillId) {
 // src/generated/identity.ts
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:02c8581a22d6417560cf8c6a890f25416243287b29ad7a9d5a8714915bae216e";
+var CONTRACT_DIGEST = "sha256:d0ef03da20000581d71e859310419444e7fb8c9dad4e39f60a97ad3070032fc9";
 
 // src/core/contract-identity.ts
 var CONTRACT_VALUE = /^([a-z][a-z0-9-]*)\/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;

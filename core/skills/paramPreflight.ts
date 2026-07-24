@@ -77,8 +77,10 @@ const ALLOWED_PARAM_FIELDS: Readonly<Record<string, readonly string[]>> = Object
     'snapshot_time_ms', 'snapshot_scope',
   ],
   'nest.weight_histogram': [
-    'bin_centers', 'values', 'bin_width', 'weight_units', 'normalization',
-    'value_units', 'snapshot_time_ms',
+    'bin_centers', 'weight_counts', 'values', 'bin_width', 'window_start',
+    'window_stop', 'weight_units', 'normalization', 'value_units',
+    'aggregation', 'binning', 'sample_policy', 'connection_count',
+    'snapshot_time_ms', 'snapshot_scope',
   ],
   'nest.spatial_2d': ['positions', 'coordinate_units'],
   'nest.spatial_map_2d': [
@@ -339,6 +341,7 @@ export function preflightLargeSkillParams(
     case 'nest.weight_histogram': {
       const issue = numericFields(params, [
         gpuField('bin_centers'),
+        idField('weight_counts'),
         gpuField('values'),
       ]);
       if (issue) return issue;
@@ -791,7 +794,7 @@ export function preflightRawSkillParams(
     case 'nest.delay_distribution':
       return directArrays(['bin_centers_ms', 'delay_counts', 'values']);
     case 'nest.weight_histogram':
-      return directArrays(['bin_centers', 'values']);
+      return directArrays(['bin_centers', 'weight_counts', 'values']);
     case 'nest.spatial_2d':
       return tooLong('positions', PARAM_LIMITS.maxSpatialObjects);
     case 'nest.spatial_map_2d':
