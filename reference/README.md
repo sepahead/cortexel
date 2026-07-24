@@ -22,7 +22,7 @@ computed by the code under test is not a golden — it is a tautology.
 
 The layers stack. An external vector never replaces a hand vector.
 
-## Honest status for 0.9.0
+## Honest current status (unchanged since 0.9.0)
 
 **No pinned reference environment has been executed in this repository.**
 
@@ -30,7 +30,8 @@ The corresponding evidence-ledger gates are recorded as `NOT_RUN`, and every ski
 contract's `evidence.externalOracle.status` is `not_run`. That is not an oversight; it
 is the honest state. Producing these vectors requires installing NEST 3.10.0, Elephant
 1.2.1, Neo 0.14.5, and PyNWB 4.0.0 in a clean, pinned environment and running the
-generator below — an environment this release was not built in.
+generator below. Neither the `0.9.0` release record nor the current development tree
+contains a receipt from that environment.
 
 A generated vector must never be committed with a `passed` status until it was actually
 produced by the pinned oracle and reviewed. Claiming an oracle passed without a receipt

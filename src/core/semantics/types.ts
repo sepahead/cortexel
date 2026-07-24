@@ -85,7 +85,7 @@ export function getParameters(context: SemanticContext): Record<string, unknown>
  * in the right neighbourhood. A rate that is 1% off is not a rounding error; it is
  * a different rate.
  */
-export const NUMERIC_TOLERANCE = { relative: 1e-9, absolute: 1e-12 } as const;
+export const NUMERIC_TOLERANCE = Object.freeze({ relative: 1e-9, absolute: 1e-12 } as const);
 
 export function approximatelyEqual(actual: number, expected: number): boolean {
   if (actual === expected) return true;

@@ -106,7 +106,8 @@ function sampleStops(stops: readonly RGB[], t: number): RGB {
   ];
 }
 
-// Turbo — Google's improved rainbow (Anton Mikhailov, 2019). Exact polynomial
+// Turbo — Google's improved rainbow (Anton Mikhailov, 2019). Copyright 2019
+// Google LLC, Apache-2.0; modified TypeScript port. Exact polynomial
 // fit, so no LUT is needed. It is the one "rainbow" that is reasonably
 // perceptual; we reserve it for signed/divergent fields and flow, never for
 // magnitude where viridis-family maps are the honest choice.
@@ -557,8 +558,8 @@ export const AXIS_COLORS = {
 
 // ───────────────────────── GLSL colormap source ─────────────────────────
 // Drop-in functions for shaders that map a scalar field → color. Turbo is the
-// exact polynomial above; viridis is the well-established analytic fit
-// (Mikhailov / Zucker) accurate to within a few LSBs. batlow and vik use a
+// exact polynomial above; viridis is the CC0 Shadertoy WlfXRN analytic fit,
+// preserved by Google Research ZapBench, accurate to within a few LSBs. batlow and vik use a
 // 13/11-stop LUT interpolated in sRGB — accurate enough for shader use at the
 // resolutions we render. Inject with string concatenation into a ShaderMaterial.
 

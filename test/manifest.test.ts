@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -13,6 +14,7 @@ import {
   getSkill,
   type ParamValidationConstraint,
 } from '../core/skills/registry';
+import type { ProvenanceParamConstraint } from '../core/skills/provenanceKeys';
 import { NEST_SKILL_IDS } from '../core/skills/skillIds';
 import { ROUTING_DISCRIMINATORS } from '../core/skills/router';
 import { SCENE_NAMES } from '../core/designLaws';
@@ -81,6 +83,65 @@ function portableApproximatelyEqual(
       absoluteTolerance + relativeTolerance * Math.max(Math.abs(actual), Math.abs(expected));
 }
 
+function portableRepresentableUniformBinEdges(
+  centers: readonly unknown[],
+  width: number,
+  absoluteTolerance: number,
+  relativeTolerance: number,
+  roundoffUlps: number | undefined,
+  maxRoundoffFraction: number | undefined,
+): boolean {
+  if (
+    typeof roundoffUlps !== 'number' ||
+    !Number.isFinite(roundoffUlps) ||
+    roundoffUlps < 0 ||
+    typeof maxRoundoffFraction !== 'number' ||
+    !Number.isFinite(maxRoundoffFraction) ||
+    maxRoundoffFraction < 0
+  ) return false;
+  const halfWidth = width / 2;
+  if (!Number.isFinite(halfWidth) || !(halfWidth > 0)) return false;
+  let previousRight: number | undefined;
+  for (let index = 0; index < centers.length; index++) {
+    const rawCenter = centers[index];
+    if (typeof rawCenter !== 'number' || !Number.isFinite(rawCenter)) return false;
+    const left = rawCenter - halfWidth;
+    const right = rawCenter + halfWidth;
+    if (
+      !Number.isFinite(left) ||
+      !Number.isFinite(right) ||
+      !(left < rawCenter) ||
+      !(rawCenter < right) ||
+      !portableApproximatelyEqual(
+        right - left,
+        width,
+        absoluteTolerance,
+        relativeTolerance,
+      )
+    ) return false;
+    if (previousRight !== undefined) {
+      const difference = Math.abs(left - previousRight);
+      if (difference !== 0) {
+        const previousCenter = centers[index - 1] as number;
+        const arithmeticTolerance = roundoffUlps * Number.EPSILON * Math.max(
+          Math.abs(previousCenter),
+          Math.abs(rawCenter),
+          Math.abs(previousRight),
+          Math.abs(left),
+          Math.abs(halfWidth),
+        );
+        if (
+          arithmeticTolerance > maxRoundoffFraction * Math.abs(width) ||
+          difference > absoluteTolerance + relativeTolerance * Math.abs(width) +
+            arithmeticTolerance
+        ) return false;
+      }
+    }
+    previousRight = right;
+  }
+  return true;
+}
+
 function portableEdgeIdInteger(value: string): number | undefined {
   if (!/^(?:0|[1-9][0-9]*)$/.test(value)) return undefined;
   const parsed = Number(value);
@@ -110,6 +171,10 @@ function portableConstraintPass(
     case 'monotonic_non_decreasing':
       return sequences.every((values) => values.every(
         (value, index) => index === 0 || (values[index - 1] as number) <= (value as number),
+      ));
+    case 'strictly_increasing':
+      return sequences.every((values) => values.every(
+        (value, index) => index === 0 || (values[index - 1] as number) < (value as number),
       ));
     case 'non_negative':
       return sequences.every((values) => values.every((value) => (value as number) >= 0));
@@ -198,9 +263,17 @@ function portableConstraintPass(
         typeof relativeTolerance !== 'number' || relativeTolerance < 0 ||
         !centers.every((center) => typeof center === 'number' && Number.isFinite(center))
       ) return false;
+      if (!portableRepresentableUniformBinEdges(
+        centers,
+        width,
+        absoluteTolerance,
+        relativeTolerance,
+        constraint.roundoffUlps,
+        constraint.maxRoundoffFraction,
+      )) return false;
+      const halfWidth = width / 2;
       if (constraint.nonNegativeLowerEdge && centers.length > 0) {
         const first = centers[0] as number;
-        const halfWidth = width / 2;
         const tolerance = absoluteTolerance +
           relativeTolerance * Math.max(Math.abs(first), Math.abs(halfWidth));
         const lowerEdge = first - halfWidth;
@@ -364,6 +437,15 @@ function portableConstraintPass(
         !Number.isFinite(maxRoundoffFraction) || maxRoundoffFraction < 0 ||
         !centers.every((center) => typeof center === 'number' && Number.isFinite(center))
       ) return false;
+      if (!portableRepresentableUniformBinEdges(
+        centers,
+        width,
+        absoluteTolerance,
+        relativeTolerance,
+        roundoffUlps,
+        maxRoundoffFraction,
+      )) return false;
+      const halfWidth = width / 2;
       for (let index = 1; index < centers.length; index++) {
         const previous = centers[index - 1] as number;
         const current = centers[index] as number;
@@ -374,7 +456,6 @@ function portableConstraintPass(
           relativeTolerance,
         )) return false;
       }
-      const halfWidth = width / 2;
       const edgeMatches = (center: number, edge: number, expected: number) => {
         const difference = Math.abs(edge - expected);
         if (difference === 0) return true;
@@ -456,6 +537,14 @@ function portableConstraintPass(
         typeof relativeTolerance !== 'number' || relativeTolerance < 0 ||
         !lags.every((lag) => typeof lag === 'number' && Number.isFinite(lag))
       ) return false;
+      if (!portableRepresentableUniformBinEdges(
+        lags,
+        width,
+        absoluteTolerance,
+        relativeTolerance,
+        constraint.roundoffUlps,
+        constraint.maxRoundoffFraction,
+      )) return false;
       for (let index = 1; index < lags.length; index++) {
         const previous = lags[index - 1] as number;
         const current = lags[index] as number;
@@ -669,6 +758,67 @@ function portableConstraintPass(
       }
       return true;
     }
+    case 'weight_histogram_consistency': {
+      const centers = sequences[0];
+      const counts = sequences[1];
+      const values = sequences[2];
+      const width = sequences[3][0];
+      const connectionCount = sequences[4][0];
+      const normalization = sequences[5][0];
+      const valueUnits = sequences[6][0];
+      const weightUnits = sequences[7][0];
+      const aggregation = sequences[8][0];
+      const binning = sequences[9][0];
+      if (
+        centers.length === 0 ||
+        counts.length !== centers.length ||
+        values.length !== centers.length ||
+        typeof width !== 'number' ||
+        !Number.isFinite(width) ||
+        width <= 0 ||
+        typeof connectionCount !== 'number' ||
+        !Number.isSafeInteger(connectionCount) ||
+        connectionCount < 0 ||
+        typeof weightUnits !== 'string' ||
+        weightUnits.trim().length === 0 ||
+        aggregation !== 'each_connection' ||
+        binning !== 'left_closed_right_open'
+      ) return false;
+      const expectedUnits = normalization === 'count'
+        ? 'count'
+        : normalization === 'probability'
+          ? 'probability'
+          : undefined;
+      if (
+        valueUnits !== expectedUnits ||
+        (connectionCount === 0 && normalization !== 'count')
+      ) return false;
+      let total = 0;
+      for (let index = 0; index < counts.length; index++) {
+        const count = counts[index];
+        const displayed = values[index];
+        if (
+          typeof count !== 'number' ||
+          !Number.isSafeInteger(count) ||
+          count < 0 ||
+          typeof displayed !== 'number' ||
+          !Number.isFinite(displayed)
+        ) return false;
+        total += count;
+        if (!Number.isSafeInteger(total)) return false;
+        const expected = normalization === 'count'
+          ? count
+          : count / connectionCount;
+        if (normalization === 'count') {
+          if (!Number.isSafeInteger(displayed) || displayed !== expected) {
+            return false;
+          }
+        } else if (!Object.is(displayed, expected)) {
+          return false;
+        }
+      }
+      return total === connectionCount;
+    }
     case 'spatial_extent_bounds': {
       const nodes = sequences[0];
       const extent = sequences[1];
@@ -753,6 +903,413 @@ function portableConstraintPass(
   }
 }
 
+function portableSafeOwnPath(
+  root: Record<string, unknown> | undefined,
+  rawPath: string,
+): { ok: true; value: unknown } | { ok: false } {
+  const segments = rawPath.split('.');
+  if (
+    !root ||
+    segments.length === 0 ||
+    segments.some((segment) =>
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(segment) ||
+      segment === '__proto__' ||
+      segment === 'prototype' ||
+      segment === 'constructor')
+  ) {
+    return { ok: false };
+  }
+  let value: unknown = root;
+  for (const segment of segments) {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      !Object.hasOwn(value, segment)
+    ) {
+      return { ok: false };
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, segment);
+    if (!descriptor || !('value' in descriptor) || !descriptor.enumerable) {
+      return { ok: false };
+    }
+    value = descriptor.value;
+  }
+  return { ok: true, value };
+}
+
+function portableWellFormedString(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = index + 1 < value.length
+        ? value.charCodeAt(index + 1)
+        : 0;
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function portableJsonScalarKey(value: unknown): string | undefined {
+  if (value === null || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && !Object.is(value, -0)
+      ? JSON.stringify(value)
+      : undefined;
+  }
+  if (typeof value === 'string' && portableWellFormedString(value)) {
+    return JSON.stringify(value);
+  }
+  return undefined;
+}
+
+function portableCanonicalScalarArray(
+  value: unknown,
+): { text: string; values: readonly unknown[] } | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const keys = value.map(portableJsonScalarKey);
+  if (keys.some((key) => key === undefined)) return undefined;
+  return {
+    text: `[${(keys as string[]).join(',')}]`,
+    values: value,
+  };
+}
+
+function portableParseCanonicalScalarArray(
+  value: unknown,
+): readonly unknown[] | undefined {
+  if (typeof value !== 'string') return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+  const canonical = portableCanonicalScalarArray(parsed);
+  return canonical?.text === value ? canonical.values : undefined;
+}
+
+function portableId(
+  value: unknown,
+  idDomain: 'nonnegative_safe_integer' | 'nonblank_string',
+): value is string | number {
+  return idDomain === 'nonblank_string'
+    ? typeof value === 'string' && value.trim().length > 0
+    : typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value >= 0 &&
+      !Object.is(value, -0);
+}
+
+function portableParseCanonicalIdArray(
+  value: unknown,
+  idDomain: 'nonnegative_safe_integer' | 'nonblank_string',
+): readonly (string | number)[] | undefined {
+  const parsed = portableParseCanonicalScalarArray(value);
+  if (!parsed || !parsed.every((item) => portableId(item, idDomain))) {
+    return undefined;
+  }
+  const keys = parsed.map(portableJsonScalarKey);
+  return new Set(keys).size === keys.length
+    ? parsed
+    : undefined;
+}
+
+function portableDigestCanonicalArray(values: readonly unknown[]): string | undefined {
+  const canonical = portableCanonicalScalarArray(values);
+  return canonical
+    ? `sha256:${createHash('sha256').update(canonical.text, 'utf8').digest('hex')}`
+    : undefined;
+}
+
+function portableOpaqueDigestCount(value: unknown): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const match = /^sha256:[0-9a-f]{64};count:(0|[1-9][0-9]*)$/.exec(value);
+  if (!match) return undefined;
+  const count = Number(match[1]);
+  return Number.isSafeInteger(count) && count >= 0 ? count : undefined;
+}
+
+function portableDeclaredCollectionCount(
+  value: unknown,
+  idDomain: 'nonnegative_safe_integer' | 'nonblank_string',
+  allowOpaqueDigestCount: boolean,
+): number | undefined {
+  if (allowOpaqueDigestCount) {
+    const count = portableOpaqueDigestCount(value);
+    if (count !== undefined) return count;
+  }
+  return portableParseCanonicalIdArray(value, idDomain)?.length;
+}
+
+function portableCollection(
+  values: readonly unknown[],
+  comparison: 'ordered' | 'set',
+): readonly unknown[] | undefined {
+  const keyed = values.map((value) => ({
+    key: portableJsonScalarKey(value),
+    value,
+  }));
+  if (keyed.some(({ key }) => key === undefined)) return undefined;
+  if (comparison === 'ordered') return keyed.map(({ value }) => value);
+  const unique = new Map<string, unknown>();
+  for (const { key, value } of keyed) unique.set(key!, value);
+  return [...unique.entries()]
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([, value]) => value);
+}
+
+function portableProjectedDigestCollection(
+  values: readonly unknown[],
+  comparison: 'ordered' | 'set',
+): readonly unknown[] | undefined {
+  const result: unknown[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const key = portableJsonScalarKey(value);
+    if (key === undefined) return undefined;
+    if (comparison === 'set' && seen.has(key)) continue;
+    seen.add(key);
+    result.push(value);
+  }
+  return result;
+}
+
+function portableProvenanceConstraintPass(
+  constraint: ProvenanceParamConstraint,
+  params: Record<string, unknown> | undefined,
+  declared: Record<string, unknown>,
+): boolean {
+  // Optional declared claims are correlated only when present, matching the
+  // TypeScript gate. Required-key presence is checked separately.
+  if (!Object.hasOwn(declared, constraint.provenanceKey)) return true;
+  const actual = declared[constraint.provenanceKey];
+  switch (constraint.kind) {
+    case 'equals_literal':
+      return Object.is(actual, constraint.value);
+    case 'one_of_literals':
+      return constraint.values.some((value) => Object.is(actual, value));
+    case 'equals_param':
+    case 'equals_param_path': {
+      const path = constraint.kind === 'equals_param_path'
+        ? constraint.paramPath
+        : constraint.paramKey;
+      const resolved = portableSafeOwnPath(params, path);
+      return resolved.ok && Object.is(actual, resolved.value);
+    }
+    case 'matches_regular_time_axis': {
+      if (!(typeof actual === 'number' && Number.isFinite(actual) && actual > 0)) {
+        return false;
+      }
+      const resolved = portableSafeOwnPath(params, constraint.paramPath);
+      if (
+        !resolved.ok ||
+        !Array.isArray(resolved.value) ||
+        resolved.value.length < 2 ||
+        !resolved.value.every((value) =>
+          typeof value === 'number' && Number.isFinite(value))
+      ) {
+        return false;
+      }
+      if (
+        !Number.isFinite(constraint.absoluteTolerance) ||
+        constraint.absoluteTolerance < 0 ||
+        !Number.isFinite(constraint.relativeTolerance) ||
+        constraint.relativeTolerance < 0 ||
+        !Number.isFinite(constraint.roundoffUlps) ||
+        constraint.roundoffUlps < 0 ||
+        !Number.isFinite(constraint.maxRoundoffFraction) ||
+        constraint.maxRoundoffFraction < 0
+      ) {
+        return false;
+      }
+      const times = resolved.value as number[];
+      for (let index = 1; index < times.length; index++) {
+        const left = times[index - 1];
+        const right = times[index];
+        const delta = right - left;
+        if (!(delta > 0) || !Number.isFinite(delta)) return false;
+        const candidateRoundoff =
+          constraint.roundoffUlps *
+          Number.EPSILON *
+          Math.max(Math.abs(left), Math.abs(right), Math.abs(actual));
+        const roundoffCap = constraint.maxRoundoffFraction * Math.abs(actual);
+        const boundedRoundoff =
+          candidateRoundoff <= roundoffCap ? candidateRoundoff : 0;
+        const tolerance =
+          constraint.absoluteTolerance +
+          constraint.relativeTolerance * Math.max(Math.abs(delta), Math.abs(actual)) +
+          boundedRoundoff;
+        if (Math.abs(delta - actual) > tolerance) return false;
+      }
+      return true;
+    }
+    case 'each_label_matches_variable': {
+      if (typeof actual !== 'string' || actual.length === 0 ||
+          constraint.separator.length === 0) {
+        return false;
+      }
+      const resolved = portableSafeOwnPath(params, constraint.paramPath);
+      if (
+        !resolved.ok ||
+        !Array.isArray(resolved.value) ||
+        !resolved.value.every((value) => typeof value === 'string')
+      ) {
+        return false;
+      }
+      const suffix = `${constraint.separator}${actual}`;
+      return resolved.value.every((value) => {
+        const label = value as string;
+        return label === actual ||
+          (label.endsWith(suffix) &&
+            label.slice(0, -suffix.length).trim().length > 0);
+      });
+    }
+    case 'matches_canonical_json_param': {
+      const resolved = portableSafeOwnPath(params, constraint.paramPath);
+      if (!resolved.ok || !Array.isArray(resolved.value)) return false;
+      if (
+        constraint.allowDigest &&
+        typeof actual === 'string' &&
+        /^sha256:[0-9a-f]{64}$/.test(actual)
+      ) {
+        return actual === portableDigestCanonicalArray(resolved.value);
+      }
+      const parsed = portableParseCanonicalScalarArray(actual);
+      const expected = portableCanonicalScalarArray(resolved.value);
+      return parsed !== undefined &&
+        expected !== undefined &&
+        portableCanonicalScalarArray(parsed)?.text === expected.text;
+    }
+    case 'matches_projected_id_collection': {
+      const resolved = portableSafeOwnPath(params, constraint.paramPath);
+      if (!resolved.ok || !Array.isArray(resolved.value)) return false;
+      const projected: unknown[] = [];
+      for (const item of resolved.value) {
+        if (constraint.field === undefined) {
+          projected.push(item);
+          continue;
+        }
+        const record = asRecord(item);
+        if (!record || !Object.hasOwn(record, constraint.field)) return false;
+        projected.push(record[constraint.field]);
+      }
+      const expected = portableCollection(projected, constraint.comparison);
+      if (
+        !expected ||
+        !expected.every((value) => portableId(value, constraint.idDomain))
+      ) return false;
+      const digestCollection = portableProjectedDigestCollection(
+        projected,
+        constraint.comparison,
+      );
+      if (!digestCollection) return false;
+      if (
+        constraint.relation === 'equals' &&
+        constraint.allowDigest &&
+        typeof actual === 'string' &&
+        /^sha256:[0-9a-f]{64}$/.test(actual)
+      ) {
+        return actual === portableDigestCanonicalArray(digestCollection);
+      }
+      if (
+        constraint.relation === 'contains' &&
+        constraint.establishesBinding === false &&
+        constraint.allowOpaqueDigestCount
+      ) {
+        const opaqueCount = portableOpaqueDigestCount(actual);
+        if (opaqueCount !== undefined) return opaqueCount >= expected.length;
+      }
+      const parsed = portableParseCanonicalIdArray(actual, constraint.idDomain);
+      if (!parsed) return false;
+      const declaredCollection = portableCollection(
+        parsed,
+        constraint.comparison,
+      );
+      if (!declaredCollection) return false;
+      if (constraint.relation === 'equals') {
+        return portableCanonicalScalarArray(declaredCollection)?.text ===
+          portableCanonicalScalarArray(expected)?.text;
+      }
+      const declared = new Set(
+        declaredCollection.map(portableJsonScalarKey),
+      );
+      return expected.every((value) =>
+        declared.has(portableJsonScalarKey(value)));
+    }
+    case 'all_projected_values_equal': {
+      const resolved = portableSafeOwnPath(params, constraint.paramPath);
+      if (!resolved.ok || !Array.isArray(resolved.value)) return false;
+      const present: unknown[] = [];
+      for (const item of resolved.value) {
+        const record = asRecord(item);
+        if (!record) return false;
+        if (Object.hasOwn(record, constraint.field)) {
+          present.push(record[constraint.field]);
+        }
+      }
+      return present.length === 0 ||
+        present.every((value) => Object.is(value, actual));
+    }
+    case 'canonical_json_array_length_matches_param': {
+      const resolved = portableSafeOwnPath(params, constraint.paramPath);
+      if (
+        !resolved.ok ||
+        typeof resolved.value !== 'number' ||
+        !Number.isSafeInteger(resolved.value) ||
+        resolved.value < 0
+      ) {
+        return false;
+      }
+      const count = portableDeclaredCollectionCount(
+        actual,
+        constraint.idDomain,
+        constraint.allowOpaqueDigestCount,
+      );
+      return count !== undefined &&
+        (constraint.relation === 'equals'
+          ? count === resolved.value
+          : constraint.relation === 'at_least'
+            ? count >= resolved.value
+            : resolved.value === 0 || count >= 1);
+    }
+    case 'canonical_json_array_length_equals': {
+      const parsed = portableParseCanonicalScalarArray(actual);
+      return parsed !== undefined &&
+        Number.isSafeInteger(constraint.expectedLength) &&
+        constraint.expectedLength >= 0 &&
+        parsed.length === constraint.expectedLength;
+    }
+    case 'canonical_json_array_length_at_least_projected_sum': {
+      const resolved = portableSafeOwnPath(params, constraint.paramPath);
+      if (!resolved.ok || !Array.isArray(resolved.value)) return false;
+      const counts = resolved.value.map((item) =>
+        asRecord(item)?.[constraint.field]);
+      if (!counts.every((value) =>
+        typeof value === 'number' &&
+        Number.isSafeInteger(value) &&
+        value >= 0)) {
+        return false;
+      }
+      let minimum = 0;
+      for (const value of counts as number[]) {
+        minimum += value;
+        if (!Number.isSafeInteger(minimum)) return false;
+      }
+      const count = portableDeclaredCollectionCount(
+        actual,
+        constraint.idDomain,
+        constraint.allowOpaqueDigestCount,
+      );
+      return count !== undefined && count >= minimum;
+    }
+  }
+}
+
 function portableInvocationPolicyPass(
   manifest: SkillsManifest,
   skill: SkillManifestEntry,
@@ -771,14 +1328,29 @@ function portableInvocationPolicyPass(
   for (const [flag, expected] of Object.entries(skill.requiredProvenanceFlags)) {
     if (provenance?.[flag] !== expected) return false;
   }
-  const declared = asRecord(provenance?.declared_inputs) ?? {};
-  if (Object.keys(declared).some((key) => !manifest.provenanceKeys.includes(key))) return false;
-  if (skill.requiredProvenanceKeys.some((key) => !Object.hasOwn(declared, key))) return false;
-  for (const [key, value] of Object.entries(declared)) {
+  const rawDeclared = asRecord(provenance?.declared_inputs) ?? {};
+  const allowedDeclared = new Set([
+    ...skill.requiredProvenanceKeys,
+    ...skill.optionalProvenanceKeys,
+  ]);
+  if (Object.keys(rawDeclared).some((key) =>
+    !manifest.provenanceKeys.includes(key) || !allowedDeclared.has(key))) {
+    return false;
+  }
+  if (skill.requiredProvenanceKeys.some((key) => !Object.hasOwn(rawDeclared, key))) return false;
+  const declared: Record<string, unknown> = Object.create(null);
+  for (const [key, rawValue] of Object.entries(rawDeclared)) {
     const constraint = manifest.provenanceValueConstraints[
       key as keyof typeof manifest.provenanceValueConstraints
     ];
     if (!constraint) return false;
+    const value =
+      'normalize' in constraint &&
+      constraint.normalize === 'trim' &&
+      typeof rawValue === 'string'
+        ? rawValue.trim()
+        : rawValue;
+    declared[key] = value;
     switch (constraint.kind) {
       case 'positive_finite_number':
         if (!(typeof value === 'number' && Number.isFinite(value) && value > 0)) return false;
@@ -795,6 +1367,39 @@ function portableInvocationPolicyPass(
           (typeof value === 'string' && value.trim().length > 0)
         )) return false;
         break;
+      case 'canonical_id_collection':
+        if (typeof value !== 'string') return false;
+        if (
+          constraint.allowDigest &&
+          /^sha256:[0-9a-f]{64}$/.test(value)
+        ) {
+          break;
+        }
+        if (
+          constraint.allowOpaqueDigestCount &&
+          portableOpaqueDigestCount(value) !== undefined
+        ) {
+          break;
+        }
+        if (!portableParseCanonicalIdArray(value, constraint.idDomain)) {
+          return false;
+        }
+        break;
+      case 'canonical_positive_finite_number_array': {
+        const parsed = portableParseCanonicalScalarArray(value);
+        if (
+          parsed === undefined ||
+          !constraint.allowedLengths.includes(parsed.length) ||
+          !parsed.every((element) =>
+            typeof element === 'number' &&
+            Number.isFinite(element) &&
+            element > 0 &&
+            !Object.is(element, -0))
+        ) {
+          return false;
+        }
+        break;
+      }
       case 'string':
         if (typeof value !== 'string') return false;
         break;
@@ -804,13 +1409,11 @@ function portableInvocationPolicyPass(
     }
   }
   for (const constraint of skill.provenanceParamConstraints) {
-    const actual = declared[constraint.provenanceKey];
-    const expected = constraint.kind === 'equals_literal'
-      ? constraint.value
-      : constraint.kind === 'equals_param_path'
-        ? resolvePath(asRecord(payload.params), constraint.paramPath)[0]
-        : asRecord(payload.params)?.[constraint.paramKey];
-    if (!Object.is(actual, expected)) return false;
+    if (!portableProvenanceConstraintPass(
+      constraint,
+      asRecord(payload.params),
+      declared,
+    )) return false;
   }
   return true;
 }
@@ -821,8 +1424,8 @@ const distManifest = join(here, '..', 'dist', 'skills.manifest.json');
 describe('skills manifest', () => {
   it('covers every skill id', () => {
     const m = buildManifest();
-    expect(m.skillAxisVersion).toBe('1.6.0');
-    expect(m.specVersion).toBe('1.3.0');
+    expect(m.skillAxisVersion).toBe('1.7.0');
+    expect(m.specVersion).toBe('1.4.0');
     expect(m.skills).toHaveLength(26);
     expect(m.skills.map((s) => s.id).sort()).toEqual([...NEST_SKILL_IDS].sort());
   });
@@ -890,7 +1493,6 @@ describe('skills manifest', () => {
     for (const id of [
       'nest.isi_distribution',
       'nest.psth',
-      'nest.weight_histogram',
     ]) {
       expect(byId[id].paramConstraints.map((constraint) => constraint.kind)).toEqual(
         expect.arrayContaining([
@@ -903,11 +1505,18 @@ describe('skills manifest', () => {
         ]),
       );
     }
-    for (const id of ['nest.isi_distribution', 'nest.weight_histogram']) {
-      expect(byId[id].paramConstraints).toContainEqual(
-        expect.objectContaining({ kind: 'normalized_histogram_mass' }),
-      );
-    }
+    expect(byId['nest.isi_distribution'].paramConstraints).toContainEqual(
+      expect.objectContaining({ kind: 'normalized_histogram_mass' }),
+    );
+    expect(
+      byId['nest.weight_histogram'].paramConstraints.map(
+        (constraint) => constraint.kind,
+      ),
+    ).toEqual([
+      'uniform_bin_window',
+      'weight_histogram_consistency',
+      'scope_compatibility',
+    ]);
     expect(byId['nest.psth'].paramConstraints).not.toContainEqual(
       expect.objectContaining({ kind: 'normalized_histogram_mass' }),
     );
@@ -1084,6 +1693,20 @@ describe('skills manifest', () => {
     expect(manifest.provenanceValueConstraints.sampling_interval).toEqual({
       kind: 'positive_finite_number',
     });
+    expect(manifest.provenanceValueConstraints.source_ids).toMatchObject({
+      kind: 'canonical_id_collection',
+      canonicalization: 'RFC8785',
+      idDomain: 'nonnegative_safe_integer',
+      unique: true,
+      allowDigest: true,
+      allowOpaqueDigestCount: true,
+    });
+    expect(manifest.provenanceValueConstraints.extent).toEqual({
+      kind: 'canonical_positive_finite_number_array',
+      normalize: 'trim',
+      canonicalization: 'RFC8785',
+      allowedLengths: [2, 3],
+    });
     expect(manifest.provenanceKeys).not.toContain('node_kinds');
     expect(manifest.provenanceKeys).not.toContain('edge_kinds');
     expect(Object.hasOwn(manifest.provenanceValueConstraints, 'node_kinds')).toBe(false);
@@ -1091,10 +1714,26 @@ describe('skills manifest', () => {
     expect(manifest.honestyPolicy.callerCaption).toBe('append_only_unverified');
     expect(manifest.honestyPolicy.callerCaptionLabel).toBe('Caller note (unverified):');
     expect(manifest.honestyPolicy.bidiIsolationRequired).toBe(true);
+    expect(manifest.honestyPolicy.version).toBe('3');
+    expect(manifest.honestyPolicy.contractDisclosureOrder).toEqual([
+      'weak_skill',
+      'external_provenance',
+      'flag_derived_mandatory',
+      'caller_note',
+    ]);
     expect(manifest.honestyPolicy.templates.synthetic).toMatch(/^Schematic/);
-    expect(manifest.manifestVersion).toBe('8');
-    expect(manifest.paramConstraintLanguage.version).toBe('8');
-    expect(manifest.provenanceParamConstraintLanguage.version).toBe('2');
+    expect(manifest.manifestVersion).toBe('10');
+    expect(manifest.paramConstraintLanguage.version).toBe('10');
+    expect(manifest.provenanceParamConstraintLanguage.version).toBe('4');
+    expect(
+      manifest.provenanceParamConstraintLanguage.semantics
+        .matches_regular_time_axis,
+    ).toMatchObject({
+      binary64Epsilon: Number.EPSILON,
+      boundedRoundoff:
+        'candidateRoundoff when candidateRoundoff <= roundoffCap, otherwise 0',
+    });
+    expect(manifest.paramConstraintLanguage.semantics.strictly_increasing).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.references_exist).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.uniform_histogram_bins).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.normalized_histogram_mass).toBeDefined();
@@ -1113,12 +1752,24 @@ describe('skills manifest', () => {
     expect(manifest.paramConstraintLanguage.semantics.matrix_connection_counts).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.degree_distribution_consistency).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.delay_distribution_consistency).toBeDefined();
+    expect(manifest.paramConstraintLanguage.semantics.weight_histogram_consistency).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.spatial_extent_bounds).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.scope_compatibility).toBeDefined();
     expect(manifest.provenanceParamConstraintLanguage.semantics.equals_param_path).toContain('dot-separated');
+    expect(
+      manifest.provenanceParamConstraintLanguage.semantics
+        .canonical_json_array_length_matches_param,
+    ).toContain('at least one');
+    expect(
+      manifest.provenanceParamConstraintLanguage.semantics
+        .canonical_json_array_length_equals,
+    ).toContain('expectedLength');
     expect(manifest.envelopeNormalizationPolicy.missingHonestyFlagsMustUseConservativeDefaults).toBe(true);
     expect(manifest.strictProvenancePolicy.unknownDeclaredInputKeys).toBe('reject');
-    expect(manifest.strictInvocationPolicy.version).toBe('2');
+    expect(
+      manifest.strictProvenancePolicy.globallyKnownButSkillUnclassifiedKeys,
+    ).toBe('reject');
+    expect(manifest.strictInvocationPolicy.version).toBe('3');
     expect(manifest.strictInvocationPolicy.rendererRoute).toContain('contract.rendererRoutes');
     expect(manifest.strictInvocationPolicy.provenance).toContain('requiredProvenanceFlags');
     expect(manifest.numericModelPolicy.representation).toBe('IEEE-754 binary64');
@@ -1155,6 +1806,61 @@ describe('skills manifest', () => {
     expect(declared.type).toBe('object');
     expect(declared.propertyNames).toBeDefined();
     expect(declared.additionalProperties).toBeDefined();
+  });
+
+  it('classifies every required provenance key exactly once and discloses external claims', () => {
+    const manifest = buildManifest();
+    const verificationKinds = new Set([
+      'param_bound',
+      'literal_bound',
+      'derived_bound',
+      'external_claim',
+    ]);
+    for (const skill of manifest.skills) {
+      const classifiedKeys = [
+        ...skill.requiredProvenanceKeys,
+        ...skill.optionalProvenanceKeys,
+      ];
+      expect(
+        Object.keys(skill.provenanceVerification).sort(),
+        skill.id,
+      ).toEqual([...classifiedKeys].sort());
+      const allowedTargets = new Set([
+        ...skill.requiredProvenanceKeys,
+        ...skill.optionalProvenanceKeys,
+      ]);
+      for (const constraint of skill.provenanceParamConstraints) {
+        expect(
+          allowedTargets.has(constraint.provenanceKey),
+          `${skill.id}:${constraint.provenanceKey}`,
+        ).toBe(true);
+      }
+      let externalCount = 0;
+      for (const key of classifiedKeys) {
+        const verification = skill.provenanceVerification[key]!;
+        expect(verificationKinds.has(verification.kind), `${skill.id}:${key}`).toBe(true);
+        const establishing = skill.provenanceParamConstraints.filter(
+          (constraint) =>
+            constraint.provenanceKey === key &&
+            constraint.establishesBinding !== false,
+        );
+        if (verification.kind === 'external_claim') {
+          externalCount += 1;
+          expect(verification.reason?.trim().length, `${skill.id}:${key}`).toBeGreaterThan(0);
+          expect(establishing, `${skill.id}:${key}`).toHaveLength(0);
+        } else {
+          expect(verification.reason, `${skill.id}:${key}`).toBeUndefined();
+          expect(establishing.length, `${skill.id}:${key}`).toBeGreaterThan(0);
+        }
+      }
+      if (externalCount > 0) {
+        expect(skill.externalProvenanceDisclosure, skill.id).toMatch(
+          /^Caller-declared provenance —/,
+        );
+      } else {
+        expect(skill.externalProvenanceDisclosure, skill.id).toBeNull();
+      }
+    }
   });
 
   it('passes every worked envelope and params schema through independent draft-2020-12 validation', () => {
@@ -1321,6 +2027,19 @@ describe('skills manifest', () => {
       mutate(params);
       expect(portableConstraintPass(constraint, params), `${skillId}:${kind}`).toBe(false);
     };
+    const acceptConstraint = (
+      skillId: string,
+      kind: ParamValidationConstraint['kind'],
+      mutate: (params: Record<string, unknown>) => void,
+    ) => {
+      const skill = manifest.skills.find((entry) => entry.id === skillId)!;
+      const constraint = skill.paramConstraints.find((entry) => entry.kind === kind)!;
+      const params = structuredClone(
+        (skill.examplePayload as { params: Record<string, unknown> }).params,
+      );
+      mutate(params);
+      expect(portableConstraintPass(constraint, params), `${skillId}:${kind}`).toBe(true);
+    };
 
     rejectConstraint('nest.spike_raster', 'equal_length', (params) => {
       params.senders = [];
@@ -1355,6 +2074,10 @@ describe('skills manifest', () => {
     rejectConstraint('nest.isi_distribution', 'uniform_histogram_bins', (params) => {
       params.bin_centers_ms = [5e-13, 1.0005e-9];
       params.bin_width_ms = 1e-12;
+    });
+    rejectConstraint('nest.isi_distribution', 'uniform_histogram_bins', (params) => {
+      params.bin_centers_ms = [0, Number.MIN_VALUE];
+      params.bin_width_ms = Number.MIN_VALUE;
     });
     rejectConstraint('nest.isi_distribution', 'conditional_numeric_domain', (params) => {
       params.normalization = 'probability';
@@ -1410,34 +2133,67 @@ describe('skills manifest', () => {
     rejectConstraint('nest.psth', 'psth_derived_counts', (params) => {
       params.aggregation = 'mean_per_sender';
     });
-    rejectConstraint('nest.weight_histogram', 'mapped_value', (params) => {
+    rejectConstraint('nest.weight_histogram', 'weight_histogram_consistency', (params) => {
       params.value_units = 'probability';
     });
-    rejectConstraint('nest.weight_histogram', 'conditional_numeric_domain', (params) => {
+    rejectConstraint('nest.weight_histogram', 'weight_histogram_consistency', (params) => {
       params.values = [0.5, 1, 2, 3, 4];
     });
-    rejectConstraint('nest.weight_histogram', 'uniform_histogram_bins', (params) => {
+    rejectConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
       params.bin_centers = [-2, -1, -1, 0, 1];
     });
-    rejectConstraint('nest.weight_histogram', 'uniform_histogram_bins', (params) => {
+    rejectConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
       params.bin_centers = [-2, -1, 0, 2, 3];
     });
-    rejectConstraint('nest.weight_histogram', 'uniform_histogram_bins', (params) => {
+    rejectConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
       params.bin_width = 0.5;
     });
-    rejectConstraint('nest.weight_histogram', 'uniform_histogram_bins', (params) => {
+    rejectConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
       params.bin_centers = [0, 1e-9];
       params.bin_width = 1e-12;
     });
-    rejectConstraint('nest.weight_histogram', 'conditional_numeric_domain', (params) => {
+    rejectConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
+      params.bin_centers = [0, Number.MIN_VALUE];
+      params.bin_width = Number.MIN_VALUE;
+      params.window_start = 0;
+      params.window_stop = Number.MIN_VALUE;
+    });
+    rejectConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
+      const origin = 2 ** 52;
+      params.bin_centers = [origin, origin + 1];
+      params.bin_width = 1;
+      params.window_start = origin - 0.5;
+      params.window_stop = origin + 2;
+    });
+    acceptConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
+      params.bin_centers = [0.05, 0.15];
+      params.bin_width = 0.1;
+      params.window_start = 0;
+      params.window_stop = 0.2;
+    });
+    acceptConstraint('nest.weight_histogram', 'uniform_bin_window', (params) => {
+      const width = 1e-30;
+      const start = -1.0000000000000001e-24;
+      const centers = [start + 0.5 * width, start + 1.5 * width];
+      params.bin_centers = centers;
+      params.bin_width = width;
+      params.window_start = centers[0] - width / 2;
+      params.window_stop = centers[1] + width / 2;
+    });
+    rejectConstraint('nest.weight_histogram', 'weight_histogram_consistency', (params) => {
       params.normalization = 'probability';
       params.value_units = 'probability';
       params.values = [1.1, 0, 0, 0, 0];
     });
-    rejectConstraint('nest.weight_histogram', 'normalized_histogram_mass', (params) => {
-      params.normalization = 'probability';
-      params.value_units = 'probability';
-      params.values = [0.1, 0.1, 0.1, 0.1, 0.1];
+    rejectConstraint('nest.weight_histogram', 'weight_histogram_consistency', (params) => {
+      params.connection_count = 16;
+    });
+    rejectConstraint('nest.weight_histogram', 'scope_compatibility', (params) => {
+      params.snapshot_scope = {
+        kind: 'mpi_target_rank_local',
+        rank: 2,
+        world_size: 2,
+      };
     });
     rejectConstraint('nest.voltage_trace', 'each_length_matches', (params) => {
       params.series = [[-65]];
@@ -1463,6 +2219,11 @@ describe('skills manifest', () => {
     });
     rejectConstraint('nest.correlogram', 'symmetric_lag_axis', (params) => {
       params.lags_ms = [-2, -1, 0, 1, 1.5];
+    });
+    rejectConstraint('nest.correlogram', 'symmetric_lag_axis', (params) => {
+      params.lags_ms = [-Number.MIN_VALUE, 0, Number.MIN_VALUE];
+      params.bin_width_ms = Number.MIN_VALUE;
+      params.tau_max_ms = Number.MIN_VALUE;
     });
     rejectConstraint('nest.correlogram', 'ordered_interval', (params) => {
       params.counting_stop_ms = params.counting_start_ms;
@@ -1754,6 +2515,109 @@ describe('skills manifest', () => {
     const unknownClaim = structuredClone(spike.examplePayload) as Record<string, unknown>;
     (asRecord(asRecord(unknownClaim.provenance)?.declared_inputs)!).certified = true;
     expect(portableInvocationPolicyPass(manifest, spike, unknownClaim)).toBe(false);
+    const knownButUnclassified = structuredClone(
+      spike.examplePayload,
+    ) as Record<string, unknown>;
+    (asRecord(
+      asRecord(knownButUnclassified.provenance)?.declared_inputs,
+    )!).synapse_model = 'static_synapse';
+    expect(
+      portableInvocationPolicyPass(manifest, spike, knownButUnclassified),
+    ).toBe(false);
+    for (const malformedIds of ['abc', '[1,1]', '["1"]', '[1, 2]']) {
+      const malformed = structuredClone(spike.examplePayload) as Record<
+        string,
+        unknown
+      >;
+      asRecord(asRecord(malformed.provenance)?.declared_inputs)!.sender_ids =
+        malformedIds;
+      expect(
+        portableInvocationPolicyPass(manifest, spike, malformed),
+        malformedIds,
+      ).toBe(false);
+    }
+
+    const voltage = manifest.skills.find(
+      (skill) => skill.id === 'nest.voltage_trace',
+    )!;
+    const whitespaceNormalized = structuredClone(
+      voltage.examplePayload,
+    ) as Record<string, unknown>;
+    const voltageDeclared = asRecord(
+      asRecord(whitespaceNormalized.provenance)?.declared_inputs,
+    )!;
+    voltageDeclared.recorded_variable = ' V_m ';
+    voltageDeclared.units = ' mV ';
+    expect(
+      portableInvocationPolicyPass(
+        manifest,
+        voltage,
+        whitespaceNormalized,
+      ),
+    ).toBe(true);
+
+    const contradictProvenance = (
+      skillId: string,
+      key: string,
+      value: unknown,
+    ) => {
+      const skill = manifest.skills.find((entry) => entry.id === skillId)!;
+      const contradicted = structuredClone(skill.examplePayload) as Record<string, unknown>;
+      asRecord(asRecord(contradicted.provenance)?.declared_inputs)![key] = value;
+      expect(
+        portableInvocationPolicyPass(manifest, skill, contradicted),
+        `${skillId}:${key}`,
+      ).toBe(false);
+    };
+    contradictProvenance('nest.voltage_trace', 'sampling_interval', 0.1);
+    contradictProvenance('nest.voltage_trace', 'recorded_variable', 'I_syn');
+    contradictProvenance('nest.spike_raster', 'sender_ids', '[999]');
+    contradictProvenance('nest.population_rate', 'sender_ids', '[1]');
+    contradictProvenance('nest.population_rate', 'population_labels', '["I"]');
+    contradictProvenance('nest.connection_graph', 'synapse_model', 'stdp_synapse');
+    contradictProvenance('nest.adjacency_matrix', 'source_ids', '[999]');
+    contradictProvenance('nest.weight_matrix', 'target_ids', '[998]');
+    contradictProvenance('nest.delay_matrix', 'source_ids', '[999]');
+    contradictProvenance('nest.in_degree_distribution', 'target_ids', '[3]');
+    contradictProvenance('nest.in_degree_distribution', 'source_ids', '[]');
+    contradictProvenance('nest.out_degree_distribution', 'source_ids', '[1]');
+    contradictProvenance('nest.out_degree_distribution', 'target_ids', '[]');
+    contradictProvenance('nest.delay_distribution', 'source_ids', '[]');
+    contradictProvenance('nest.delay_distribution', 'target_ids', '[]');
+    contradictProvenance('nest.weight_histogram', 'source_ids', '[]');
+    contradictProvenance('nest.weight_histogram', 'target_ids', '[]');
+    contradictProvenance('nest.spatial_map_2d', 'node_ids', '[999]');
+    contradictProvenance('nest.spatial_map_2d', 'extent', '[999,999]');
+    contradictProvenance('nest.phase_plane', 'state_variables', '["Ca","IP3"]');
+    contradictProvenance('nest.weight_histogram', 'snapshot_time_ms', 0);
+    contradictProvenance(
+      'nest.weight_histogram',
+      'snapshot_scope',
+      'mpi_all_ranks_merged',
+    );
+    contradictProvenance(
+      'nest.weight_histogram',
+      'parallel_edge_policy',
+      'collapsed',
+    );
+    contradictProvenance('nest.spike_raster', 'sender_ids', '[1,1]');
+    contradictProvenance('nest.population_rate', 'sender_ids', '[1,1]');
+    contradictProvenance('nest.in_degree_distribution', 'target_ids', '[3,3]');
+    contradictProvenance('nest.out_degree_distribution', 'source_ids', '[1,1,1]');
+
+    const opaqueUniverse = structuredClone(spike.examplePayload) as Record<string, unknown>;
+    asRecord(asRecord(opaqueUniverse.provenance)?.declared_inputs)!.sender_ids =
+      `sha256:${'0'.repeat(64)};count:2`;
+    expect(
+      portableInvocationPolicyPass(manifest, spike, opaqueUniverse),
+      'opaque externally declared sender universe',
+    ).toBe(true);
+    asRecord(asRecord(opaqueUniverse.provenance)?.declared_inputs)!.sender_ids =
+      `sha256:${'0'.repeat(64)};count:0`;
+    expect(
+      portableInvocationPolicyPass(manifest, spike, opaqueUniverse),
+      'opaque sender universe below the observed lower bound',
+    ).toBe(false);
 
     const graph = manifest.skills.find((skill) => skill.id === 'corpus.knowledge_graph')!;
     for (const [flag, value] of [
@@ -1781,6 +2645,35 @@ describe('skills manifest', () => {
     const wrongRoute = structuredClone(host.examplePayload) as Record<string, unknown>;
     wrongRoute.rendererRoute = 'fiber';
     expect(portableInvocationPolicyPass(manifest, host, wrongRoute)).toBe(false);
+    for (const extent of ['abc', '[1,2,3]', '[1, 2]', '[1,0]']) {
+      const malformedExtent = structuredClone(host.examplePayload) as Record<
+        string,
+        unknown
+      >;
+      asRecord(
+        asRecord(malformedExtent.provenance)?.declared_inputs,
+      )!.extent = extent;
+      expect(
+        portableInvocationPolicyPass(manifest, host, malformedExtent),
+        `nest.spatial_2d:${extent}`,
+      ).toBe(false);
+    }
+
+    const spatial3d = manifest.skills.find(
+      (skill) => skill.id === 'nest.spatial_3d',
+    )!;
+    for (const extent of ['abc', '[1,2]', '[1,2,3,4]', '[1,2,-1]']) {
+      const malformedExtent = structuredClone(
+        spatial3d.examplePayload,
+      ) as Record<string, unknown>;
+      asRecord(
+        asRecord(malformedExtent.provenance)?.declared_inputs,
+      )!.extent = extent;
+      expect(
+        portableInvocationPolicyPass(manifest, spatial3d, malformedExtent),
+        `nest.spatial_3d:${extent}`,
+      ).toBe(false);
+    }
   });
 
   it('publishes a complete, self-describing example envelope for every skill', () => {

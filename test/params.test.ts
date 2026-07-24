@@ -171,6 +171,17 @@ describe('correlogram statistic, lag axis, and counting semantics are explicit',
       expect(CorrelogramParamsSchema.safeParse({ ...base, ...mutation }).success).toBe(false);
     }
   });
+
+  it('rejects lag bins whose declared width has no positive binary64 half-width', () => {
+    expect(CorrelogramParamsSchema.safeParse({
+      ...base,
+      lags_ms: [-Number.MIN_VALUE, 0, Number.MIN_VALUE],
+      values: [0, 0, 0],
+      bin_width_ms: Number.MIN_VALUE,
+      tau_max_ms: Number.MIN_VALUE,
+      statistic: { kind: 'raw_pair_count', units: 'count' },
+    }).success).toBe(false);
+  });
 });
 
 describe('NEST histogram schemas preserve bin, unit, and normalization semantics', () => {
@@ -222,6 +233,12 @@ describe('NEST histogram schemas preserve bin, unit, and normalization semantics
       ...valid,
       bin_centers_ms: [5e-13, 1.0005e-9],
       bin_width_ms: 1e-12,
+    }).success).toBe(false);
+    expect(IsiDistributionParamsSchema.safeParse({
+      ...valid,
+      bin_centers_ms: [0, Number.MIN_VALUE],
+      values: [1, 1],
+      bin_width_ms: Number.MIN_VALUE,
     }).success).toBe(false);
 
     const probability = {
@@ -339,12 +356,20 @@ describe('NEST histogram schemas preserve bin, unit, and normalization semantics
   it('validates GetConnections snapshot weight histograms without event sampling', () => {
     const valid = {
       bin_centers: [-1, 0, 1],
+      weight_counts: [2, 0, 3],
       values: [2, 0, 3],
       bin_width: 1,
+      window_start: -1.5,
+      window_stop: 1.5,
       weight_units: 'pA',
       normalization: 'count' as const,
       value_units: 'count' as const,
+      aggregation: 'each_connection' as const,
+      binning: 'left_closed_right_open' as const,
+      sample_policy: 'complete' as const,
+      connection_count: 5,
       snapshot_time_ms: 100,
+      snapshot_scope: { kind: 'single_process_complete' as const },
     };
     expect(WeightHistogramParamsSchema.safeParse(valid).success).toBe(true);
     expect(WeightHistogramParamsSchema.safeParse({
@@ -380,15 +405,73 @@ describe('NEST histogram schemas preserve bin, unit, and normalization semantics
     expect(WeightHistogramParamsSchema.safeParse({
       ...valid,
       bin_centers: [0, 1e-9],
+      weight_counts: [1, 1],
       values: [1, 1],
       bin_width: 1e-12,
     }).success).toBe(false);
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      bin_centers: [0, Number.MIN_VALUE],
+      weight_counts: [1, 1],
+      values: [1, 1],
+      bin_width: Number.MIN_VALUE,
+      window_start: 0,
+      window_stop: Number.MIN_VALUE,
+      connection_count: 2,
+    }).success).toBe(false);
+    const largeOrigin = 2 ** 52;
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      bin_centers: [largeOrigin, largeOrigin + 1],
+      weight_counts: [1, 1],
+      values: [1, 1],
+      bin_width: 1,
+      window_start: largeOrigin - 0.5,
+      window_stop: largeOrigin + 2,
+      connection_count: 2,
+    }).success).toBe(false);
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      bin_centers: [largeOrigin, largeOrigin + 2],
+      weight_counts: [1, 1],
+      values: [1, 1],
+      bin_width: 2,
+      window_start: largeOrigin - 1,
+      window_stop: largeOrigin + 3,
+      connection_count: 2,
+    }).success).toBe(true);
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      bin_centers: [0.05, 0.15],
+      weight_counts: [1, 1],
+      values: [1, 1],
+      bin_width: 0.1,
+      window_start: 0,
+      window_stop: 0.2,
+      connection_count: 2,
+    }).success).toBe(true);
+    const narrowWidth = 1e-30;
+    const narrowStart = -1.0000000000000001e-24;
+    const narrowCenters = [
+      narrowStart + 0.5 * narrowWidth,
+      narrowStart + 1.5 * narrowWidth,
+    ];
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      bin_centers: narrowCenters,
+      weight_counts: [1, 1],
+      values: [1, 1],
+      bin_width: narrowWidth,
+      window_start: narrowCenters[0] - narrowWidth / 2,
+      window_stop: narrowCenters[1] + narrowWidth / 2,
+      connection_count: 2,
+    }).success).toBe(true);
 
     const probability = {
       ...valid,
       normalization: 'probability' as const,
       value_units: 'probability' as const,
-      values: [0.25, 0.5, 0.25],
+      values: [0.4, 0, 0.6],
     };
     expect(WeightHistogramParamsSchema.safeParse(probability).success).toBe(true);
     expect(WeightHistogramParamsSchema.safeParse({
@@ -398,6 +481,26 @@ describe('NEST histogram schemas preserve bin, unit, and normalization semantics
     expect(WeightHistogramParamsSchema.safeParse({
       ...probability,
       values: [0.2, 0.2, 0.2],
+    }).success).toBe(false);
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      connection_count: 4,
+    }).success).toBe(false);
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      snapshot_scope: {
+        kind: 'mpi_target_rank_local',
+        rank: 2,
+        world_size: 2,
+      },
+    }).success).toBe(false);
+    expect(WeightHistogramParamsSchema.safeParse({
+      ...valid,
+      weight_counts: [0, 0, 0],
+      values: [0, 0, 0],
+      connection_count: 0,
+      normalization: 'probability',
+      value_units: 'probability',
     }).success).toBe(false);
   });
 });

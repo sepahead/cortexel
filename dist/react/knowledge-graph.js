@@ -1,6 +1,6 @@
 import {
   safeDiagnosticText
-} from "../chunk-X23XMWZH.js";
+} from "../chunk-UEJPZXDX.js";
 
 // react/KnowledgeGraph3DScene.tsx
 import { useCallback, useEffect as useEffect2, useLayoutEffect, useMemo as useMemo2, useRef } from "react";

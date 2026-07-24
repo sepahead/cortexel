@@ -357,13 +357,13 @@ describe('NEST input hardening', () => {
   it('reads typed-array lengths intrinsically without invoking subclass getters', () => {
     let lengthReads = 0;
     class HostileFloat64Array extends Float64Array {
-      get length(): number {
+      override get length(): number {
         lengthReads += 1;
         throw new Error('subclass length getter must not execute');
       }
     }
     class HostileUint32Array extends Uint32Array {
-      get length(): number {
+      override get length(): number {
         lengthReads += 1;
         throw new Error('subclass length getter must not execute');
       }

@@ -10,7 +10,7 @@
  *   3. IDENTITY    — is this request written against a contract we implement?
  *   4. STRUCTURAL  — JSON Schema. Does it have the right shape?
  *   5. SEMANTIC    — the named rules. Does it MEAN anything?
- *   6. CANONICAL   — materialize documented defaults, record every conversion.
+ *   6. CANONICAL   — materialize documented defaults and the resolved skill revision.
  *
  * A failure at any stage stops the pipeline. There is no partial success and no
  * "valid enough": the output of this function is either a canonical request that
@@ -23,18 +23,26 @@
  */
 
 import { canonicalDigest } from './canonicalize.js';
+import { deepFreeze } from './deep-freeze.js';
 import {
   finalizeErrors,
   makeError,
   type CortexelError,
 } from './errors.js';
-import { getBudgetLimits, type BudgetProfileId } from './limits.js';
+import {
+  DEFAULT_PROFILE,
+  tryGetBudgetLimits,
+  trySelectTighterBudgetProfile,
+  type BudgetProfileId,
+  type BudgetLimits,
+} from './limits.js';
 import { parseJsonStrict, type JsonValue } from './parse-json.js';
 import { snapshotValue } from './safe-snapshot.js';
 import { checkCallerAuthority, runSemanticValidators } from './semantics/index.js';
 import { validateStructure } from './structural-validator.js';
 import { SKILL_CATALOG, LEGACY_SKILL_MAP } from '../generated/catalog.js';
 import { CONTRACT_DIGEST, REQUEST_CONTRACT } from '../generated/identity.js';
+import { REQUEST_CONTRACT_IDENTITY } from './contract-identity.js';
 
 /** How the request entered, and what that boundary could certify. */
 export interface InputAssurance {
@@ -47,13 +55,16 @@ export interface InputAssurance {
 }
 
 const VALIDATED = Symbol('cortexel.validated');
+const VALIDATED_REQUESTS = new WeakSet<object>();
 
 /**
  * A request that has actually been through the pipeline.
  *
- * The symbol cannot be forged by shape — an object literal with the same fields is
- * not assignable, and the runtime check looks for the symbol itself. This is the
- * mechanism behind "rendering cannot be invoked with a plain look-alike object".
+ * The private symbol prevents accidental TypeScript construction. Runtime authority is
+ * stronger: only object identities minted by this module are entered in a private
+ * `WeakSet`. A proxy cannot forge membership with a `get` trap, and a copied object has
+ * a different identity. The whole token is deeply frozen before it is minted so the
+ * request and its digest cannot diverge after validation.
  */
 export interface ValidatedRequest {
   readonly [VALIDATED]: true;
@@ -67,11 +78,7 @@ export interface ValidatedRequest {
 }
 
 export function isValidatedRequest(value: unknown): value is ValidatedRequest {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    (value as Record<symbol, unknown>)[VALIDATED] === true
-  );
+  return typeof value === 'object' && value !== null && VALIDATED_REQUESTS.has(value);
 }
 
 export type ValidationOutcome =
@@ -80,6 +87,78 @@ export type ValidationOutcome =
 
 export interface ValidateOptions {
   readonly budgetProfile?: BudgetProfileId;
+}
+
+function resolveBudgetProfile(options: ValidateOptions): {
+  readonly profile: string;
+  readonly limits?: BudgetLimits;
+} {
+  let requested: unknown = DEFAULT_PROFILE;
+  try {
+    if (options !== null && options !== undefined) {
+      if (typeof options !== 'object') throw new Error('invalid options');
+      const descriptor = Object.getOwnPropertyDescriptor(options, 'budgetProfile');
+      if (descriptor !== undefined) {
+        if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+          throw new Error('accessor-backed options');
+        }
+        requested = descriptor.value ?? DEFAULT_PROFILE;
+      }
+    }
+  } catch {
+    // An accessor or throwing Proxy is not an omission. Preserve it as invalid without
+    // invoking ordinary getters or granting inherited properties resource authority.
+    requested = null;
+  }
+
+  return {
+    profile: typeof requested === 'string' ? requested : '<invalid>',
+    limits: tryGetBudgetLimits(requested),
+  };
+}
+
+function invalidBudgetProfile(assurance: InputAssurance): ValidationOutcome {
+  return fail(
+    [
+      makeError({
+        code: 'RESOURCE_BUDGET_PROFILE_UNKNOWN',
+        stage: 'budget',
+        message:
+          'the selected budget profile is not in this build\'s closed registry. Unknown and inherited profile ids cannot disable resource limits.',
+      }),
+    ],
+    assurance,
+  );
+}
+
+/** Read the request's profile only after it has been reduced to a plain JSON tree. */
+function requestedBudgetProfile(value: JsonValue): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return DEFAULT_PROFILE;
+  const presentation = (value as Record<string, unknown>).presentation;
+  if (presentation === null || typeof presentation !== 'object' || Array.isArray(presentation)) {
+    return DEFAULT_PROFILE;
+  }
+  return Object.prototype.hasOwnProperty.call(presentation, 'budgetProfile')
+    ? (presentation as Record<string, unknown>).budgetProfile
+    : DEFAULT_PROFILE;
+}
+
+function assuranceFor(
+  boundary: InputAssurance['boundary'],
+  profile: unknown,
+): InputAssurance {
+  return {
+    boundary,
+    duplicateKeys:
+      boundary === 'raw_json_text'
+        ? 'rejected_before_materialization'
+        : 'not_observable_after_materialization',
+    parserProfile:
+      boundary === 'raw_json_text'
+        ? 'cortexel-strict-json/1.0'
+        : 'cortexel-safe-snapshot/1.0',
+    budgetProfile: typeof profile === 'string' ? profile : '<invalid>',
+  };
 }
 
 function fail(errors: readonly CortexelError[], assurance: InputAssurance): ValidationOutcome {
@@ -99,17 +178,21 @@ function checkIdentity(request: Record<string, unknown>): CortexelError[] {
 
   const contract = request.contract;
   if (typeof contract !== 'object' || contract === null || Array.isArray(contract)) {
+    const expectedContract = {
+      name: REQUEST_CONTRACT_IDENTITY.name,
+      version: REQUEST_CONTRACT_IDENTITY.version,
+    };
     errors.push(
       makeError({
         code: 'CONTRACT_MISSING',
         stage: 'identity',
         instancePath: '/contract',
         message:
-          'the request does not declare its contract. Add {"contract":{"name":"cortexel-figure-request","version":"1.0"}} — an undeclared contract is not a 1.0 request.',
+          `the request does not declare its contract. Add ${JSON.stringify({ contract: expectedContract })} — an undeclared contract is not a ${REQUEST_CONTRACT_IDENTITY.version} request.`,
         repair: {
           operation: 'add',
           path: '/contract',
-          value: { name: 'cortexel-figure-request', version: '1.0' },
+          value: expectedContract,
           reasonCode: 'CONTRACT_MISSING',
         },
       }),
@@ -118,13 +201,16 @@ function checkIdentity(request: Record<string, unknown>): CortexelError[] {
   }
 
   const record = contract as Record<string, unknown>;
-  if (record.name !== 'cortexel-figure-request' || record.version !== '1.0') {
+  if (
+    record.name !== REQUEST_CONTRACT_IDENTITY.name ||
+    record.version !== REQUEST_CONTRACT_IDENTITY.version
+  ) {
     errors.push(
       makeError({
         code: 'CONTRACT_UNSUPPORTED_VERSION',
         stage: 'identity',
         instancePath: '/contract',
-        message: `this build implements ${REQUEST_CONTRACT}. Run \`cortexel identity --json\` to compare, or \`cortexel migrate\` to convert.`,
+        message: `this build implements ${REQUEST_CONTRACT}. Compare with getBuildIdentity(), then use migrateLegacyRequest() for a supported pre-1.0 request. The packaged CLI equivalents are \`cortexel identity --json\` and \`cortexel migrate ...\`; a repository checkout may run the same implementation through \`bun src/cli/main.ts ...\`.`,
       }),
     );
   }
@@ -172,7 +258,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
         code: 'MIGRATION_LEGACY_ID_NOT_ACCEPTED',
         stage: 'structural',
         instancePath: '/skill/id',
-        message: `"${skillId}" is a pre-1.0 id. ${legacy.targetId ? `It maps to "${legacy.targetId}".` : ''} Run \`cortexel migrate\`. Legacy ids are never silently aliased: a silent alias would make the stored artifact ambiguous about which contract actually validated it.`,
+        message: `"${skillId}" is a pre-1.0 id. ${legacy.targetId ? `It maps to "${legacy.targetId}".` : ''} Use migrateLegacyRequest() or \`cortexel migrate\`. Legacy ids are never silently aliased: a silent alias would make the stored artifact ambiguous about which contract actually validated it.`,
         ...(legacy.targetId
           ? {
               repair: {
@@ -193,7 +279,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
         code: 'CAPABILITY_EXPERIMENTAL',
         stage: 'structural',
         instancePath: '/skill/id',
-        message: `"${skillId}" is experimental and cannot be selected through the stable entry point. Import its explicit experimental subpath; it carries no contract, determinism, or accessibility guarantee.`,
+        message: `"${skillId}" is experimental and cannot be selected through the stable entry point. Consult CAPABILITY_CATALOG and its availability field; no experimental FigureRequestV1 skill is currently callable, and a legacy experimental package export is not a replacement.`,
       }),
     ];
   }
@@ -203,7 +289,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
       code: 'SCHEMA_UNKNOWN_SKILL',
       stage: 'structural',
       instancePath: '/skill/id',
-      message: `"${skillId}" is not in the stable catalog. Run \`cortexel catalog\`.`,
+      message: `"${skillId}" is not in the stable catalog. Read STABLE_SKILL_IDS or run \`cortexel catalog\`.`,
     }),
   ];
 }
@@ -217,8 +303,21 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
  * it does not recognize. Canonicalization makes a request comparable; it must not
  * make it different.
  */
-function canonicalizeRequest(request: Record<string, unknown>): Record<string, unknown> {
+function canonicalizeRequest(
+  request: Record<string, unknown>,
+  resolvedSkillRevision: number,
+): Record<string, unknown> {
   const out: Record<string, unknown> = { ...request };
+
+  // Resolution has already failed closed above. Stamp that installed identity into a
+  // fresh skill object even when the caller omitted the optional pin. Consequently an
+  // unpinned request and an explicit-current request have one canonical identity, while
+  // the detached authored snapshot remains an authored request rather than an output
+  // object we mutate in place.
+  out.skill = {
+    ...(request.skill as Record<string, unknown>),
+    revision: resolvedSkillRevision,
+  };
 
   const presentation = (out.presentation ?? {}) as Record<string, unknown>;
   out.presentation = {
@@ -293,9 +392,9 @@ function validateSnapshot(
   if (blocking.length > 0) return fail(semanticErrors, assurance);
 
   // STAGE 6 — canonicalize.
-  const canonicalRequest = canonicalizeRequest(request);
+  const canonicalRequest = canonicalizeRequest(request, catalog.revision);
 
-  const validated: ValidatedRequest = {
+  const validated = deepFreeze<ValidatedRequest>({
     [VALIDATED]: true,
     skillId,
     skillRevision: catalog.revision,
@@ -303,8 +402,16 @@ function validateSnapshot(
     inputAssurance: assurance,
     requestDigest: canonicalDigest(canonicalRequest),
     warnings: semanticErrors.filter((error) => error.severity === 'warning'),
-    checkedValidatorIds: catalog.semanticValidators.map((validator) => validator.id),
-  };
+    // This artifact field is the ordered set of registry rule identifiers, not an
+    // invocation log. A contract may invoke one rule more than once with different
+    // parameters (for example, validating both x and y domains). The validator still
+    // executes every catalog entry above; summarize repeated rule kinds once so the
+    // public `checkedRuleIds` set remains truthful and schema-valid.
+    checkedValidatorIds: [
+      ...new Set(catalog.semanticValidators.map((validator) => validator.id)),
+    ],
+  });
+  VALIDATED_REQUESTS.add(validated);
 
   return { ok: true, request: validated };
 }
@@ -320,18 +427,39 @@ export function parseAndValidateRequest(
   text: string,
   options: ValidateOptions = {},
 ): ValidationOutcome {
-  const profile = options.budgetProfile ?? 'standard';
-  const limits = getBudgetLimits(profile);
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor('raw_json_text', host.profile);
 
-  const assurance: InputAssurance = {
-    boundary: 'raw_json_text',
-    duplicateKeys: 'rejected_before_materialization',
-    parserProfile: 'cortexel-strict-json/1.0',
-    budgetProfile: profile,
-  };
+  if (!host.limits) return invalidBudgetProfile(assurance);
 
-  const parsed = parseJsonStrict(text, { limits });
+  if (typeof text !== 'string') {
+    return fail(
+      [
+        makeError({
+          code: 'JSON_SYNTAX',
+          stage: 'parse',
+          message: 'the raw request boundary accepts a JSON text string only.',
+        }),
+      ],
+      assurance,
+    );
+  }
+
+  let parsed = parseJsonStrict(text, { limits: host.limits });
   if (!parsed.ok) return fail(parsed.errors, assurance);
+
+  const requested = requestedBudgetProfile(parsed.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor('raw_json_text', effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+
+  // A request may narrow its own authority. Re-run the raw boundary under that tighter
+  // envelope so the recorded profile covers bytes, depth, nodes, strings, and arrays —
+  // not merely the later derivation/render stages.
+  if (effective.profile !== host.profile) {
+    parsed = parseJsonStrict(text, { limits: effective.limits });
+    if (!parsed.ok) return fail(parsed.errors, assurance);
+  }
 
   return validateSnapshot(parsed.value, assurance);
 }
@@ -349,18 +477,23 @@ export function validateRequestValue(
   value: unknown,
   options: ValidateOptions = {},
 ): ValidationOutcome {
-  const profile = options.budgetProfile ?? 'standard';
-  const limits = getBudgetLimits(profile);
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor('materialized_value', host.profile);
 
-  const assurance: InputAssurance = {
-    boundary: 'materialized_value',
-    duplicateKeys: 'not_observable_after_materialization',
-    parserProfile: 'cortexel-safe-snapshot/1.0',
-    budgetProfile: profile,
-  };
+  if (!host.limits) return invalidBudgetProfile(assurance);
 
-  const snapshot = snapshotValue(value, limits);
+  let snapshot = snapshotValue(value, host.limits);
   if (!snapshot.ok) return fail(snapshot.errors, assurance);
+
+  const requested = requestedBudgetProfile(snapshot.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor('materialized_value', effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+
+  if (effective.profile !== host.profile) {
+    snapshot = snapshotValue(value, effective.limits);
+    if (!snapshot.ok) return fail(snapshot.errors, assurance);
+  }
 
   return validateSnapshot(snapshot.value, assurance);
 }

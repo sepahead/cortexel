@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   CORTEXEL_PALETTE,
   getPalette,
@@ -263,8 +263,8 @@ describe('validateSkillInvocation palette gate', () => {
         source: 'test',
         declared_inputs: {
           recorder_id: 'rec1',
-          sender_ids: '1,2',
-          population_labels: 'E,I',
+          sender_ids: '[1,2]',
+          population_labels: '["E","I"]',
           time_units: 'ms',
         },
       },
@@ -288,8 +288,8 @@ describe('validateSkillInvocation palette gate', () => {
         source: 'test',
         declared_inputs: {
           recorder_id: 'rec1',
-          sender_ids: '1,2',
-          population_labels: 'E,I',
+          sender_ids: '[1,2]',
+          population_labels: '["E","I"]',
           time_units: 'ms',
         },
       },
@@ -306,8 +306,8 @@ describe('validateSkillInvocation palette gate', () => {
         source: 'test',
         declared_inputs: {
           recorder_id: 'rec1',
-          sender_ids: '1,2',
-          population_labels: 'E,I',
+          sender_ids: '[1,2]',
+          population_labels: '["E","I"]',
           time_units: 'ms',
         },
       },

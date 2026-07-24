@@ -19,10 +19,11 @@ import {
   safeErrorMessage,
 } from './safeRuntime';
 
-/** The VizSpec contract version. Bumped when the envelope shape changes in a way
- *  a host may need to migrate. A stored payload MAY omit `specVersion` for legacy
- *  compatibility; when stamped, the runtime enforces an exact match. */
-export const CORTEXEL_SPEC_VERSION = '1.3.0';
+/** The VizSpec contract version. Bumped when either the envelope or its strict
+ *  skill-aware acceptance rules change in a way a host may need to migrate.
+ *  A stored payload MAY omit `specVersion` for legacy compatibility; when
+ *  stamped, the runtime enforces an exact match. */
+export const CORTEXEL_SPEC_VERSION = '1.4.0';
 
 /** Resource ceilings for the plain-JSON envelope. Per-skill schemas impose
  *  tighter array limits where the renderer has a smaller practical budget. */

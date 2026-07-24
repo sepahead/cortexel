@@ -1,7 +1,7 @@
 import * as react from 'react';
-import { R as RenderSceneArgs } from '../VizSpecRenderer-99Za229a.cjs';
+import { R as RenderSceneArgs } from '../VizSpecRenderer-CGY3aVpH.cjs';
 import { R as ReadonlySemanticPalette } from '../colormaps-CZ6XejJa.cjs';
-import { a as SkillInvocationError } from '../hostInvocation-B4xa-O3Q.cjs';
+import { a as SkillInvocationError } from '../hostInvocation-DxxyBttn.cjs';
 import 'zod';
 
 interface ChartDomain {
@@ -82,6 +82,15 @@ declare function phasePlaneSamples(axisOrder: readonly [string, string], grid: R
 declare function phasePlaneArrowPath(samples: readonly PhasePlaneSample[], xDomain: ChartDomain, yDomain: ChartDomain, frame: ChartFrame): string;
 declare function tickValues(domain: ChartDomain, count?: number): number[];
 declare function formatChartNumber(value: number): string;
+/** Exact shortest round-tripping decimal for checked binary64 data. This is used
+ * for interval endpoints, where two distinct edges must never acquire the same
+ * accessible label merely because the compact chart formatter rounded them. */
+declare function formatExactChartNumber(value: number): string;
+/** Keep compact tick labels when they remain injective. On a narrow domain around
+ * a large origin, fall back as one set to exact binary64 decimals so distinct
+ * ticks cannot become indistinguishable or label one boundary inconsistently. */
+declare function formatDistinctChartNumbers(values: readonly number[]): string[];
+declare function formatChartInterval(start: number, stop: number): string;
 
 declare const MATRIX_VALUE_LEVELS_PER_SIGN = 8;
 interface MatrixCellDatum {
@@ -218,4 +227,4 @@ interface ReferenceVizSpecFigureProps {
  * sees only its detached, checked params/provenance snapshot. */
 declare function ReferenceVizSpecFigure({ spec, skillId, active, activePalette, width, height, onError, onInvocationError, }: ReferenceVizSpecFigureProps): react.JSX.Element;
 
-export { type AggregatedDegreeBin, type AggregatedDegreeBins, type AggregatedUniformHistogramBin, type AggregatedUniformHistogramBins, type BoundedChartPath, type BoundedStemPointPaths, type ChartDomain, type ChartFrame, type CircleTopologyGeometry, MATRIX_VALUE_LEVELS_PER_SIGN, type MatrixCellDatum, type MatrixValueBucketPath, type MatrixValueBucketPaths, type PhasePlaneSample, REFERENCE_CHART_DIMENSIONS, REFERENCE_CHART_SKILLS, ReferenceChartScene, type ReferenceChartSceneProps, type ReferenceChartSkill, ReferenceVizSpecFigure, type ReferenceVizSpecFigureProps, type TopologyEdgeDatum, type TopologyNodeDatum, type TopologyNodeId, type TopologyNodePosition, aggregateDegreeBins, aggregateUniformHistogramBins, binnedStepPath, boundedExtremaIndices, boundedStemPointPaths, chartPlotHeight, chartPlotWidth, chartX, chartY, circleTopologyGeometry, equalAspectDomains, formatChartNumber, histogramBarPath, histogramDomain, linePath, matrixValueBucketPaths, nestedNumericDomain, normalizeChartDimension, numericDomain, phasePlaneArrowPath, phasePlaneSamples, pointPath, rasterTickPath, scaleToRange, sortedLinePath, stemPath, tickValues, variableHistogramPath };
+export { type AggregatedDegreeBin, type AggregatedDegreeBins, type AggregatedUniformHistogramBin, type AggregatedUniformHistogramBins, type BoundedChartPath, type BoundedStemPointPaths, type ChartDomain, type ChartFrame, type CircleTopologyGeometry, MATRIX_VALUE_LEVELS_PER_SIGN, type MatrixCellDatum, type MatrixValueBucketPath, type MatrixValueBucketPaths, type PhasePlaneSample, REFERENCE_CHART_DIMENSIONS, REFERENCE_CHART_SKILLS, ReferenceChartScene, type ReferenceChartSceneProps, type ReferenceChartSkill, ReferenceVizSpecFigure, type ReferenceVizSpecFigureProps, type TopologyEdgeDatum, type TopologyNodeDatum, type TopologyNodeId, type TopologyNodePosition, aggregateDegreeBins, aggregateUniformHistogramBins, binnedStepPath, boundedExtremaIndices, boundedStemPointPaths, chartPlotHeight, chartPlotWidth, chartX, chartY, circleTopologyGeometry, equalAspectDomains, formatChartInterval, formatChartNumber, formatDistinctChartNumbers, formatExactChartNumber, histogramBarPath, histogramDomain, linePath, matrixValueBucketPaths, nestedNumericDomain, normalizeChartDimension, numericDomain, phasePlaneArrowPath, phasePlaneSamples, pointPath, rasterTickPath, scaleToRange, sortedLinePath, stemPath, tickValues, variableHistogramPath };

@@ -35,7 +35,7 @@ import {
   synapseCollectionToOutDegreeDistributionParams,
   synapseCollectionToWeightMatrixParams,
   weightRecorderToSceneData
-} from "./chunk-YAZIP32C.js";
+} from "./chunk-OP6PRAHE.js";
 import {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,
@@ -135,11 +135,13 @@ import {
   colormapHex,
   colormapRgba,
   colormapSvgStops,
+  composeHonestyCaption,
   conservativeProvenance,
   declaredProvenanceValueError,
   defaultHonestyCaption,
   describeSkill,
   describeSkills,
+  externalProvenanceDisclosure,
   formatInvocationErrors,
   getExamplePayload,
   getHostRendererExamplePayload,
@@ -157,6 +159,7 @@ import {
   normalizeDeclaredProvenanceInputs,
   normalizeDeclaredProvenanceValue,
   provenanceParamConstraintError,
+  provenanceVerificationForContract,
   registerPalette,
   requiresHonestyCaption,
   sampleColormap,
@@ -169,8 +172,9 @@ import {
   validateSkillParams,
   validateSpec,
   validateVizSpec
-} from "./chunk-DXRNJDB7.js";
-import "./chunk-X23XMWZH.js";
+} from "./chunk-RT5WPA3I.js";
+import "./chunk-UEJPZXDX.js";
+import "./chunk-ZYBCCIMH.js";
 export {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,
@@ -284,6 +288,7 @@ export {
   colormapHex,
   colormapRgba,
   colormapSvgStops,
+  composeHonestyCaption,
   conservativeProvenance,
   correlationDetectorToCorrelogramParams,
   declaredProvenanceValueError,
@@ -291,6 +296,7 @@ export {
   describeSkill,
   describeSkills,
   detectEmptyScene,
+  externalProvenanceDisclosure,
   formatInvocationErrors,
   getConnectionsToSceneData,
   getExamplePayload,
@@ -313,6 +319,7 @@ export {
   normalizeDeclaredProvenanceValue,
   normalizeSynapseCollectionSnapshot,
   provenanceParamConstraintError,
+  provenanceVerificationForContract,
   registerPalette,
   requiresHonestyCaption,
   routeToScene,

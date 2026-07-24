@@ -1,7 +1,8 @@
 # Cortexel security model (technical / threat model)
 
-> **Version 0.9.0 — a pre-1.0 development preview.** This document describes the
-> threat model and the technical controls that back it. It makes **no stable-contract
+> **Status: `0.9.0` is the last tagged pre-1.0 release; this document tracks the
+> private, unreleased `0.10.0-dev.0` source tree.** It describes the threat model and
+> the technical controls that back it. Neither identity makes a stable-contract
 > claim**: interfaces, limits, and even control boundaries may change before 1.0. No
 > package is published to npm or PyPI, and no DOI has been minted, so the npm/PyPI/DOI
 > badges are inactive by design.
@@ -29,7 +30,8 @@ stable/experimental/removed matrix is `contract/registries/capabilities.v1.json`
 
 Cortexel turns an **untrusted, machine-authored figure request** (plain JSON, often
 emitted by an LLM agent) into a **checked figure artifact** — deterministic SVG, an
-exact-value table, disclosures, and cross-referenced digests. The request is data
+exact-value in-memory table, disclosures, and an artifact that currently binds the SVG
+digest. The table has no canonical bound sidecar in the current development tree. The request is data
 from an unauthenticated source. The output may be embedded in a web page, a paper, a
 lab notebook, or a downstream pipeline, and a human or another model will trust it.
 
@@ -43,9 +45,20 @@ Two things follow from that shape, and they define the whole model:
    measured zero, is a *scientific* integrity failure — and in this project that is
    treated as a security-class defect, not a cosmetic one.
 
-The stable contract kernel therefore does **no network, no filesystem-of-its-own,
-no `eval`, no dynamic code loading, no clock, and no random state** during
-validation and rendering. It is a pure function from bytes to a checked artifact.
+The stable contract kernel does **no network, no caller-selected filesystem access,
+no `eval`, no dynamic code loading, no clock, and no random state** during validation
+and rendering. Structural validation reads the immutable JSON Schemas shipped beside
+the installed module under `dist/contract`; it never searches `process.cwd()` or fetches
+a schema URL. After that module-relative load, scientific validation and rendering are
+pure functions from bytes to a checked artifact.
+
+Repository tooling has a separate credential boundary. Bun normally loads `.env`
+implicitly, including for nested package scripts; Cortexel's checked-in `bunfig.toml`
+sets `env = false`, and a nested sentinel test enforces that runtime behavior. Bun's
+package manager, Vite, and arbitrary dependencies may still inspect checkout files, so
+neither this setting nor `.gitignore` is treated as filesystem isolation. Research and
+developer credentials stay outside the repository and outside the build/test environment;
+a narrowly scoped first-party client must read its external credential store explicitly.
 
 ---
 
@@ -60,7 +73,7 @@ The things worth protecting, ranked by what an attacker gains by subverting them
 | **The host process** | An agent backend embeds the kernel. A payload that exhausts memory/CPU, pollutes `Object.prototype`, or runs caller code during validation compromises the host, not just one figure. |
 | **The consuming surface** | The SVG is rendered somewhere. If a hostile label can inject `<script>`, an `on*` handler, `<foreignObject>`, or an external URL, Cortexel becomes an XSS/SSRF vector for every downstream viewer. |
 | **The caller's environment** | Diagnostics, artifact metadata, and CLI output must not leak secrets, filesystem paths, tokens, or large verbatim chunks of the offending input back to logs or other agents. |
-| **The stable/experimental boundary** | Experimental capabilities (3D, knowledge graph, animation, resolvers, MCP) carry *no* determinism, accessibility, or contract guarantee. Their leaking into the stable surface silently downgrades every guarantee a consumer relied on. |
+| **Capability maturity and availability** | A metadata record must not turn absent code into a callable capability, and packaged legacy WebGL must not be mistaken for the separately packaged FigureRequestV1 path. Packaged, published, and `releaseReady` are independent facts; conflating them silently downgrades every guarantee a consumer relied on. |
 
 ---
 
@@ -80,26 +93,45 @@ traverses them:
    check it cannot perform.
 3. **Snapshot → structural schema → semantics → canonical request**
    (`src/core/request.ts`). Ajv 2020 strict schema, then named semantic validators,
-   then conservative canonicalization. Emits a **branded** `ValidatedRequest` that
-   rendering will later *require*; a look-alike object cannot be rendered.
+   then conservative canonicalization. Identity resolution first refuses a mismatched
+   optional skill pin; every success stamps the resolved installed revision into the
+   detached `canonicalRequest.skill.revision`. Emits a **branded** `ValidatedRequest`
+   that rendering will later *require*; a look-alike object cannot be rendered.
 4. **Contract identity & digests** (`src/core/canonicalize.ts`, `sha256.ts`). RFC
    8785 canonicalization and a dependency-free SHA-256 root every cross-language and
    cross-artifact digest. A pinned `contractDigest` may only *narrow* what a caller
    accepts, never assert a digest the build does not have.
-5. **Render plan → SVG / CSV output** (`src/render/svg.ts`, `buildFigure.ts`). The
-   serializer is the boundary between validated data and a document that will be
-   rendered by an untrusted-to-Cortexel viewer.
-6. **Adapters** (`cortexel/adapters/*`). Simulator/corpus output (e.g. a NEST
-   recorder dict) crosses into the request contract. `cortexel/adapters/nest` is
-   stable; **`cortexel/adapters/ncp` is experimental** — no immutable NCP release
-   has been certified, so it makes no compatibility claim.
-7. **The CLI** (`src/cli/main.ts`). Files, stdin, and the process filesystem. Atomic
-   writes, no-overwrite-by-default, stable exit codes, and no network.
-8. **Experimental resolvers / MCP / 3D**. Everything that would touch the network, a
-   GPU, or a live external service is quarantined *outside* the stable kernel behind
-   explicit `cortexel/experimental/*` subpaths and `CAPABILITY_EXPERIMENTAL`. A
-   `DataRef` is resolved to verified bytes **by the host, not by Cortexel** — stable
-   core performs no I/O of its own (`DATA_REFERENCE_UNRESOLVED`).
+5. **Validated request + compiler plan → closed plan authority**
+   (`src/render/plan-closure.ts`, `output-authority-gate.ts`). A compiler-only boundary
+   detaches and deeply freezes the plan. The gate internally resolves a request-only
+   evaluator and compares exact table rows, summary, disclosures, and the ordered
+   class/provenance sequence of role-tagged carriers. It is carrier-only, synchronous,
+   and non-persisted; see [`OUTPUT_AUTHORITY.md`](./OUTPUT_AUTHORITY.md).
+6. **Closed render plan → SVG output plus in-memory table** (`src/render/svg.ts`,
+   `buildFigure.ts`). The serializer is the boundary between validated data and a
+   document that will be rendered by an untrusted-to-Cortexel viewer. No canonical CSV
+   or detached table sidecar is emitted. OutputAuthority does not verify this serialized
+   boundary.
+7. **Adapters** (`src/adapters/*`). Simulator output (for example a NEST recorder
+   object) crosses into the request contract. The NEST entry is packaged and
+   semantically stable but not release-certified. No NCP adapter implementation or
+   capability exists.
+8. **The packaged offline CLI** (`src/cli/main.ts`, installed as `cortexel`). Files, stdin, and the process
+   filesystem. It bounds bytes before fatal UTF-8 decoding, uses one fixed cooperative
+   lock in the resolved physical output directory, inspects final entries without
+   following symlinks, stages complete payloads in short, unique, exclusively-created
+   temporary siblings, and uses atomic hard-link no-replace publication for non-force
+   writes (refusing filesystems without that primitive). The directory-wide lock covers
+   case/Unicode filename aliases and is never guessed stale. Force mode removes the old
+   artifact marker before replacing the SVG; canonical artifact JSON is installed last
+   as the completion marker. This is not a two-file transaction, and the host must
+   provide a trusted output directory. Closed arguments and exit codes; no network.
+   Importing either built module is guarded and does not execute the dispatcher.
+9. **Legacy WebGL and host resolvers.** The packaged pre-1.0 React/WebGL API is outside
+   FigureRequestV1. No new-contract experimental 3D, animation, NCP, resolver, or MCP
+   capability currently exists. A `DataRef` is resolved to verified bytes **by the
+   host, not by Cortexel** — stable core performs no I/O of its own
+   (`DATA_REFERENCE_UNRESOLVED`).
 
 **Out of scope of the kernel, and explicitly the host's responsibility:** actually
 displaying the mandatory caption; resolving `DataRef` bytes and verifying their
@@ -187,14 +219,15 @@ scientific review (§7), not a runtime gate.
   what Cortexel validated.
 - **Output is deterministic to the byte.** The SVG serializer uses no clock, no
   random id, no locale, and no generator timestamp; element ids derive from the
-  artifact digest and a local counter; attribute order is fixed; `-0` normalizes to
+  canonical request digest and deterministic local ids; attribute order is fixed; `-0` normalizes to
   `0`. Two identical figures hash identically, and a tampered figure hashes
   differently.
 
 ### Repudiation — "that isn't the figure I validated"
 
 - **Content-addressed identity.** RFC 8785 canonicalization plus a SHA-256 request
-  digest, an artifact digest over the SVG bytes, a `contractDigest` over the
+  digest, an artifact digest over the logical artifact (which includes the SVG output
+  digest), a `contractDigest` over the
   normative source set, and a `catalogDigest` over the stable catalog let any party
   re-derive and confirm exactly what was validated and drawn. A local build reports
   `sourceRevision: "unreleased-worktree"` and `release: false` rather than guessing a
@@ -217,8 +250,10 @@ scientific review (§7), not a runtime gate.
   free-form instruction-shaped text that a downstream model could be steered by, and
   it is never auto-applied.
 - **The SVG metadata block is public identities only.** It carries the contract id,
-  the skill id, and the artifact digest — no raw source data, no local path, no
-  token, no prompt (`src/render/svg.ts`).
+  the skill id, and the canonical request digest — no raw source data, no local path,
+  no token, no prompt (`src/render/svg.ts`). The artifact digest cannot appear in the
+  SVG because the artifact itself binds the SVG digest; doing both would create a
+  digest cycle.
 - **The CLI leaks no paths into the artifact.** Filesystem errors are reported to
   stderr; the artifact and SVG contain only the checked figure.
 
@@ -262,36 +297,55 @@ scientific review (§7), not a runtime gate.
   elements the writer can emit. A hostile label becomes escaped text and nothing more.
   This is what keeps Cortexel from being an XSS/SSRF vector for every downstream
   viewer.
-- **No network, filesystem, `eval`, or dynamic load in stable core.** The CLI is
+- **No network, caller-selected schema path, `eval`, or dynamic load in stable core.**
+  The validator opens only its module-relative packaged contract copy; it does not use
+  cwd, a URL, or caller path input. The CLI is
   offline by construction — there is no `--url`, no implicit HTTP, and no shell hook —
   because a scientific validator that can be turned into an ETL tool is a validator
   with an attack surface (`src/cli/main.ts`). A `DataRef` is resolved to verified
-  bytes by the host *before* Cortexel is invoked; stable core performs no I/O.
-- **The CLI writes atomically and refuses to clobber.** `render` writes to a
-  temporary sibling and `rename`s into place, so a crash mid-write cannot leave a
-  half-written file that looks complete; it **refuses to overwrite an existing path
-  without `--force`** (`writeAtomic` in `src/cli/main.ts`). Exit codes are a stable
-  contract (0 ok, 2 usage, 3 parse, 4 schema, 5 semantic, 6 budget, 7 I/O, 8
-  internal).
-- **Experimental capabilities cannot leak into the stable surface.** 3D
-  (`experimental.network.spatial_3d`), the knowledge graph
-  (`experimental.evidence.knowledge_graph`), and animation replay
-  (`experimental.neuro.animation_replay`) are absent from stable counts, default
-  discovery, root exports, and the conformance badge. Requesting one through a stable
-  entry point fails with `CAPABILITY_EXPERIMENTAL`; `cortexel catalog` lists only
-  stable ids unless `--include-experimental` is passed, so an agent cannot select an
-  experiment by accident. WebGL/force-layout output is explicitly nondeterministic,
-  has no byte-stable export, and must visibly state that it is experimental; a stable,
-  accessible, exportable equivalent (a 2D figure plus an exact-value table) always
-  exists.
+  bytes by the host *before* Cortexel is invoked; stable core performs no other I/O.
+- **The packaged CLI bounds and strictly decodes input, then serializes cooperative
+  publication in each resolved physical output directory.** File and stdin reads stop
+  at the configured raw-byte limit plus one; fatal UTF-8 decoding preserves malformed
+  encoding as an error, while the parser separately rejects a BOM and duplicate members.
+  A fixed `.cortexel.figure-emission.lock`, acquired with `O_EXCL` before preflight and
+  held through publication fsyncs, makes byte-distinct case/Unicode aliases converge on
+  one authority. Cortexel never guesses that an existing lock is stale. It inspects final
+  directory entries with `lstat`, so a dangling symlink counts as occupied, and hard-links
+  each short, unpredictable, exclusively-created staged sibling into place without
+  replacing an entry created by a concurrent writer. If that primitive is unavailable,
+  it refuses rather than falling back to a clobber-prone rename. In force mode it removes
+  the old artifact completion marker before replacing the SVG and installs the new
+  canonical artifact JSON last. Uninstalled temporaries are cleaned best-effort. This is not a
+  transaction across the SVG and artifact: a failure after SVG publication can leave an
+  SVG with no artifact marker. It also cannot establish output authority against another
+  principal who may unlink or rename entries in the caller-selected directory. The CLI
+  emits no canonical data sidecar. Whole-emission
+  atomicity, trusted output-directory authority, and detached verification remain open
+  release gates.
+- **Unavailable capabilities cannot leak into the stable surface.** The new-contract
+  registry contains no 3D, knowledge-graph, animation, NCP-adapter, or bundle skill.
+  Their legacy ids have null-target or blocking migration outcomes, so stable validation
+  fails closed instead of inventing an `experimental.*` replacement. The separately
+  packaged legacy `cortexel/react/knowledge-graph` export is explicitly experimental
+  and nondeterministic; it is not a FigureRequestV1 skill or a byte-stable output path.
 - **Closed schemas.** Stable request schemas reject unknown properties
   (`SCHEMA_UNKNOWN_PROPERTY`) and perform no type coercion, so a typo in a scientific
   field fails rather than being silently ignored, and a request cannot smuggle an
   unmodeled field past the gate.
-- **Rendering requires the brand.** `parseAndValidateRequest` /
-  `validateRequestValue` return a symbol-branded `ValidatedRequest`; rendering checks
-  for the symbol itself, so a plain object that merely looks validated cannot be
-  drawn. "No renderer bypasses validation" is a runtime fact, not a convention.
+- **Public rendering cannot accept a raw plan.** `parseAndValidateRequest` /
+  `validateRequestValue` mint a deeply frozen `ValidatedRequest` whose identity is held
+  in a module-private registry. Every packaged ESM and CommonJS entry routes to the same
+  package-private CommonJS module-cache instance, so the registry is shared across all
+  four producer/renderer format pairings without a forgeable `Symbol.for` or global.
+  The package export map is API encapsulation, not a sandbox against code already
+  executing in the host process; the physical shared module therefore exports only the
+  same validating functions as `cortexel/figure`, never registry membership mutation.
+  `buildFigureFromValidated` checks that identity before reading any property; the other
+  public builders validate their input first. Raw plan
+  construction, resource accounting, formatting/scaling primitives, and SVG serialization
+  remain internal to the package, so a plain object that merely looks validated or planned
+  cannot reach a supported public renderer.
 
 ---
 
@@ -306,10 +360,11 @@ A compact index of the mechanisms above against the boundaries they defend.
 | Structure / semantics / canonical | caller-authority precheck, closed schemas, no coercion, branded output | `PROVENANCE_CALLER_ASSURANCE_FORBIDDEN`, `SCHEMA_UNKNOWN_PROPERTY`, `SCHEMA_TYPE_MISMATCH` |
 | Provenance / honesty | derived-only disclosure, `calibrated_posterior` rejection, scope integrity, bidi/control note rejection | `PROVENANCE_NOTE_UNSAFE_DISPLAY`, `SCOPE_LOCAL_CANNOT_CLAIM_GLOBAL`, `SCOPE_OUT_DEGREE_FROM_RANK_LOCAL` |
 | Budgets | fail-not-truncate, min-only limits, quadratic refusal, bounded diagnostics | `RESOURCE_PAIRWISE_EXCEEDED`, `RESOURCE_MARKS_EXCEEDED`, `ERROR_LIMIT_REACHED` |
-| SVG / CSV output | closed-vocabulary serializer, independent text/attribute escaping, public-only metadata, deterministic bytes | (structural — no injectable element exists) |
-| Adapters | accessor-free typed input, no scalar broadcast, certified-version matrix, NCP experimental | `ADAPTER_ACCESSOR_INPUT_REJECTED`, `ADAPTER_UNSUPPORTED_VERSION` |
-| CLI | offline, atomic writes, no-overwrite default, stable exit codes | (I/O exit code 7) |
-| Experimental (3D / KG / animation / resolvers / MCP) | quarantined subpaths, stable-entry rejection, host-owned I/O, nondeterminism disclosed | `CAPABILITY_EXPERIMENTAL`, `DATA_REFERENCE_UNRESOLVED` |
+| Frozen-plan OutputAuthority | live validated-request + closed-plan capabilities; closed independent evaluator registry; exact rows, one-pass source summary, disclosures, and carrier class/provenance sequence; evaluator/environment fact separation; no SVG/persisted claim | internal refusal (`INTERNAL_INVARIANT_VIOLATED`) |
+| SVG / in-memory table output | closed-vocabulary SVG serializer, independent text/attribute escaping, public-only metadata, complete-returned-or-refuse table boundary; artifact binds table shape only | (structural — no injectable element exists) |
+| Adapters | accessor-free typed input, no scalar broadcast, explicit packaged availability independent of revision-admitted source-version declarations; no claimed upstream certification or NCP implementation | `ADAPTER_ACCESSOR_INPUT_REJECTED`, `ADAPTER_UNSUPPORTED_VERSION` |
+| Packaged CLI | offline; exact shebang and direct-execution guard; closed arguments; byte-bounded fatal UTF-8 input; one non-reclaimed directory-wide O_EXCL publication lock; lstat-safe final-entry checks; short O_EXCL temporary siblings; atomic non-force no-replace or refusal; force removes stale artifact first; artifact-last completion marker; file/parent fsync where supported; bounded path-free diagnostics; no whole-emission atomicity or trusted output-directory authority | (I/O exit code 7) |
+| Legacy WebGL / future host resolvers | separated from FigureRequestV1; mandatory availability evidence; host-owned I/O; legacy KG nondeterminism disclosed | `CAPABILITY_EXPERIMENTAL`, `DATA_REFERENCE_UNRESOLVED` |
 
 ---
 
@@ -333,14 +388,16 @@ release ledger — that bounds or will close it.
 - **The materialized-value boundary cannot detect duplicate members.** Once
   `JSON.parse` has run, one duplicate has already silently won. **Gate:** the boundary
   reports `duplicateKeys: "not_observable_after_materialization"`, and the raw-text
-  entry (`cortexel validate`, `parseAndValidateRequest`) is the one that certifies
+  entry (`parseAndValidateRequest`, or `cortexel validate`) is the one that certifies
   `rejected_before_materialization`. Prefer the text boundary at any network edge.
 
-- **No independent second reader of the portable schema yet.** A Python mirror is
-  generated and kept in lockstep, but an independent Python parser, canonicalizer, and
-  semantic validator — the second implementation that would let the cross-language
-  contract be adversarially cross-checked — is not yet built. **Gate:** the
-  cross-language parity work tracked in the ledger (R019/R022 Python side, R071–R076).
+- **The independent Python reader remains partial.** It has an independent strict
+  parser, canonicalizer, structural validator, and selected portable semantic evaluators,
+  including adversarial cross-language vectors. It intentionally returns
+  `SEMANTIC_VALIDATOR_UNAVAILABLE` where a skill's complete semantic rule set has not
+  been implemented; it does not turn partial parity into a success claim. **Gate:** the
+  remaining cross-language coverage tracked in the ledger (R019/R022 Python side,
+  R071–R076).
 
 - **Text metrics are nominal.** Layout uses fixed margins and a generic font stack
   rather than a bundled metrics table, so a very long tick label could overflow its
@@ -348,13 +405,12 @@ release ledger — that bounds or will close it.
   escaping hold regardless. **Gate:** the layout/metrics work in the ledger
   (R083–R085).
 
-- **Experimental capabilities carry no security guarantee.** 3D/WebGL output depends
-  on GPU and driver and is nondeterministic; force-layout geometry is schematic;
-  resolver/MCP surfaces that touch the network live entirely outside the stable
-  kernel. **Gate:** the experimental-quarantine boundary itself
-  (`CAPABILITY_EXPERIMENTAL`, explicit subpaths, host-owned I/O) plus the per-capability
-  promotion criteria in `contract/registries/capabilities.v1.json`. Until a capability
-  is promoted, treat its output as untrusted for any integrity purpose.
+- **Legacy WebGL carries no FigureRequestV1 security guarantee.** GPU output is
+  nondeterministic, and the packaged legacy knowledge-graph force layout is schematic.
+  No current-contract 3D, animation, NCP, resolver, or MCP capability exists; a future
+  record must prove concrete availability before it can be callable. **Gate:** the
+  package/source availability checker, stable-entry rejection, host-owned I/O, and the
+  explicit legacy-export limitations in `contract/registries/capabilities.v1.json`.
 
 - **Host obligations are outside Cortexel's control.** Cortexel returns the mandatory
   caption but the host must *display* it; the host must resolve and digest-verify any
@@ -382,6 +438,6 @@ must ship with a regression test.
 
 ---
 
-*Cortexel 0.9.0 — pre-1.0 development preview. © Sepehr Mahmoudian. MIT licensed.
+*Cortexel `0.10.0-dev.0` source tree; `0.9.0` is the last tag. © Sepehr Mahmoudian. MIT licensed.
 This document describes intended and implemented controls at the current
 development state; it is not a certification, an audit, or a warranty.*

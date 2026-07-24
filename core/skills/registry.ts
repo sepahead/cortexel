@@ -19,10 +19,118 @@ import {
   type NestDeviceFamily,
   type RendererRoute,
 } from './skillIds';
-import type {
-  ProvenanceKey,
-  ProvenanceParamConstraint,
+import {
+  PROVENANCE_KEY_LABELS,
+  type ProvenanceKey,
+  type ProvenanceParamConstraint,
 } from './provenanceKeys';
+/*
+ * Keep provenance verification explicit. A present declaration is not
+ * automatically evidence that Cortexel checked it against params or source
+ * data; every required key is classified below.
+ */
+export type ProvenanceVerificationKind =
+  | 'param_bound'
+  | 'literal_bound'
+  | 'derived_bound'
+  | 'external_claim';
+
+export interface ExternalProvenanceClaim {
+  /** Why the checked params cannot establish this source-level assertion. */
+  reason: string;
+}
+
+export interface ProvenanceVerification {
+  kind: ProvenanceVerificationKind;
+  /** Present for external claims; absent for mechanically correlated claims. */
+  reason?: string;
+}
+
+type ExternalProvenanceClaims = Readonly<
+  Partial<Record<ProvenanceKey, ExternalProvenanceClaim>>
+>;
+
+function externalClaims(
+  claims: Partial<Record<ProvenanceKey, ExternalProvenanceClaim>>,
+): ExternalProvenanceClaims {
+  return claims;
+}
+
+/*
+ * `establishesBinding:false` constraints are useful contradiction checks (for
+ * example, every observed endpoint must occur in a caller-declared universe)
+ * but do not turn that universe into a source-verified claim.
+ */
+function constraintEstablishesBinding(
+  constraint: ProvenanceParamConstraint,
+): boolean {
+  return constraint.establishesBinding !== false;
+}
+
+function verificationKindForConstraints(
+  constraints: readonly ProvenanceParamConstraint[],
+): Exclude<ProvenanceVerificationKind, 'external_claim'> {
+  if (constraints.every((constraint) =>
+    constraint.kind === 'equals_literal' ||
+    constraint.kind === 'one_of_literals')) {
+    return 'literal_bound';
+  }
+  if (constraints.every((constraint) =>
+    constraint.kind === 'equals_param' ||
+    constraint.kind === 'equals_param_path')) {
+    return 'param_bound';
+  }
+  return 'derived_bound';
+}
+
+export function provenanceVerificationForContract(
+  contract: Pick<
+    SkillContract,
+    'id' | 'requiredProvenanceKeys' | 'provenanceParamConstraints' |
+      'externalProvenanceClaims' | 'optionalProvenanceKeys'
+  >,
+): Partial<Record<ProvenanceKey, ProvenanceVerification>> {
+  const verification = Object.create(null) as Partial<Record<
+    ProvenanceKey,
+    ProvenanceVerification
+  >>;
+  const classifiedKeys = [
+    ...contract.requiredProvenanceKeys,
+    ...(contract.optionalProvenanceKeys ?? []),
+  ];
+  for (const key of classifiedKeys) {
+    const constraints = (contract.provenanceParamConstraints ?? []).filter(
+      (constraint) =>
+        constraint.provenanceKey === key &&
+        constraintEstablishesBinding(constraint),
+    );
+    const external = contract.externalProvenanceClaims?.[key];
+    if ((constraints.length > 0) === (external !== undefined)) {
+      throw new Error(
+        `skill '${contract.id}' must classify required provenance '${key}' ` +
+        'exactly once as mechanically bound or external',
+      );
+    }
+    verification[key] = external
+      ? { kind: 'external_claim', reason: external.reason }
+      : { kind: verificationKindForConstraints(constraints) };
+  }
+  return verification;
+}
+
+export function externalProvenanceDisclosure(
+  contract: Pick<
+    SkillContract,
+    'requiredProvenanceKeys' | 'externalProvenanceClaims'
+  >,
+): string | null {
+  const labels = contract.requiredProvenanceKeys
+    .filter((key) => contract.externalProvenanceClaims?.[key] !== undefined)
+    .map((key) => PROVENANCE_KEY_LABELS[key]);
+  if (labels.length === 0) return null;
+  return `Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: ${labels.join(', ')}.`;
+}
+
 import {
   AdjacencyMatrixParamsSchema,
   AnimationReplayParamsSchema,
@@ -63,10 +171,10 @@ import {
 } from './params';
 import { getExamplePayload, getHostRendererExamplePayload } from './examples';
 
-export const CORTEXEL_SKILL_VERSION = '1.6.0';
+export const CORTEXEL_SKILL_VERSION = '1.7.0';
 
 export const STRICT_INVOCATION_POLICY = Object.freeze({
-  version: '2',
+  version: '3',
   externalSelection: 'validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present' as const,
   selfDescribingSelection: 'validateSpec(payload): payload.skill is required and selects the contract' as const,
   hostSelection: 'host envelopes require payload.skill; explicit id and payload.skill must match' as const,
@@ -76,6 +184,7 @@ export const STRICT_INVOCATION_POLICY = Object.freeze({
   rendererRoute: 'when selected, must occur in contract.rendererRoutes' as const,
   params: 'validate paramsJsonSchema then every paramConstraint' as const,
   provenance: 'apply strictProvenancePolicy, require every contract.requiredProvenanceFlags value, then evaluate every provenanceParamConstraint' as const,
+  provenanceVerification: 'every allowed required or optional provenance key is classified exactly once as parameter/literal/derived-bound or an externally unverifiable caller claim with mandatory disclosure; all other declared keys reject' as const,
 });
 
 export type RequiredProvenanceFlags = Readonly<Partial<{
@@ -99,6 +208,7 @@ export interface ParamValidationConstraint {
     | 'equal_length'
     | 'each_length_matches'
     | 'monotonic_non_decreasing'
+    | 'strictly_increasing'
     | 'non_negative'
     | 'property_count'
     | 'unique_field'
@@ -128,6 +238,7 @@ export interface ParamValidationConstraint {
     | 'matrix_connection_counts'
     | 'degree_distribution_consistency'
     | 'delay_distribution_consistency'
+    | 'weight_histogram_consistency'
     | 'spatial_extent_bounds'
     | 'scope_compatibility'
     | 'acyclic';
@@ -215,6 +326,12 @@ export interface SkillContract {
   requiredProvenanceFlags?: RequiredProvenanceFlags;
   /** Deterministic params↔provenance consistency checks. */
   provenanceParamConstraints?: readonly ProvenanceParamConstraint[];
+  /** Required source-level claims that cannot be established from the checked
+   * params. These remain structurally validated and receive a mandatory
+   * contract-owned disclosure instead of being presented as machine-verified. */
+  externalProvenanceClaims?: ExternalProvenanceClaims;
+  /** Non-required known claims that receive a consistency check when present. */
+  optionalProvenanceKeys?: readonly ProvenanceKey[];
   rendererRoutes: readonly RendererRoute[];
   examples: readonly SkillExample[];
 }
@@ -223,7 +340,7 @@ export interface SkillContract {
  *  deliberately tiny JSONPath subset so non-TS hosts do not have to guess how
  *  `[*]`, `*`, or `?` are interpreted. */
 export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: '8',
+  version: '10',
   pathSyntax: 'dot-separated object keys',
   arrayWildcard: '[*]',
   objectValueWildcard: '*',
@@ -237,6 +354,7 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     'equal_length',
     'each_length_matches',
     'monotonic_non_decreasing',
+    'strictly_increasing',
     'non_negative',
     'property_count',
     'unique_field',
@@ -266,6 +384,7 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     'matrix_connection_counts',
     'degree_distribution_consistency',
     'delay_distribution_consistency',
+    'weight_histogram_consistency',
     'spatial_extent_bounds',
     'scope_compatibility',
     'acyclic',
@@ -283,6 +402,10 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     monotonic_non_decreasing: Object.freeze({
       pathRoles: 'each path resolves an ordered numeric sequence',
       rule: 'for every adjacent pair previous <= next',
+    }),
+    strictly_increasing: Object.freeze({
+      pathRoles: 'each path resolves an ordered numeric sequence',
+      rule: 'for every adjacent pair previous < next',
     }),
     non_negative: Object.freeze({
       pathRoles: 'each path resolves numeric values',
@@ -334,8 +457,9 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     uniform_histogram_bins: Object.freeze({
       pathRoles: 'first path resolves the ordered bin-center array; second path resolves one numeric bin width',
-      rule: 'width is positive and finite; centers are strictly increasing; each adjacent delta approximately equals width',
+      rule: 'width and width/2 are positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing; each adjacent delta approximately equals width',
       comparison: 'abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))',
+      internalEdgeComparison: 'exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff',
       nonNegativeLowerEdge: 'when true, firstCenter-width/2 must be >= -tolerance, where tolerance uses firstCenter and width/2 in the same comparison formula',
     }),
     normalized_histogram_mass: Object.freeze({
@@ -390,9 +514,10 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     uniform_bin_window: Object.freeze({
       pathRoles: 'ordered bin-center array, positive finite bin width, finite window start, finite window stop in that order',
-      rule: 'centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop',
-      binning: 'left-closed, right-open bins exactly tile [start,stop)',
+      rule: 'width/2 remains positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop',
+      binning: 'left-closed, right-open bins tile [start,stop) within the published bounded binary64 geometry tolerance',
       spacingComparison: 'adjacent center deltas use abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual),abs(expected))',
+      internalEdgeComparison: 'exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff',
       edgeComparison: 'exact edge equality passes; otherwise the binary64 allowance must be <= maxRoundoffFraction * abs(binWidth), then abs(edge-expected) <= absoluteTolerance + relativeTolerance * abs(binWidth) + roundoffUlps * 2^-52 * max(abs(center),abs(binWidth/2),abs(edge),abs(expected)); an unresolved absolute origin fails closed',
     }),
     population_rate_derived_values: Object.freeze({
@@ -405,8 +530,9 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     symmetric_lag_axis: Object.freeze({
       pathRoles: 'ordered lag-center array, positive finite bin width, positive finite tau_max_ms in that order',
-      rule: 'lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span exactly [-tau_max_ms,+tau_max_ms]',
+      rule: 'width/2 remains positive and finite; every binary64 lag-width/2 and lag+width/2 edge is finite, strictly straddles its lag center, and retains the declared width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span [-tau_max_ms,+tau_max_ms] under the published comparison',
       comparison: 'abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))',
+      internalEdgeComparison: 'exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff',
     }),
     legacy_connection_channels: Object.freeze({
       pathRoles: 'optional weights array, optional weight_units, optional delays array, and optional delay_units in that order',
@@ -432,7 +558,14 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
       pathRoles: 'bin centers, raw delay_counts, displayed values, bin width, connection_count, normalization, value units, delay units, aggregation, and binning in that order',
       rule: 'the three bin arrays have equal length; displayed values are finite and nonnegative; sum(delay_counts)=connection_count; displayed counts equal raw counts exactly; probabilities or densities exactly equal the published binary64 recovery result and globally sum or integrate to one within the accumulated-mass tolerance; non-count normalization requires a non-empty snapshot and finite density denominator',
       operationOrder: 'probability=count/connection_count; probability_density=count/(connection_count*bin_width_ms) using IEEE-754 binary64; per-bin comparison uses exact Object.is-equivalent binary64 identity, while absoluteTolerance/relativeTolerance apply only to accumulated normalized mass',
-      geometry: 'a separate uniform_bin_window constraint publishes and evaluates exact [start,stop) bin geometry',
+      geometry: 'a separate uniform_bin_window constraint publishes and evaluates [start,stop) bin geometry within its bounded binary64 tolerance',
+    }),
+    weight_histogram_consistency: Object.freeze({
+      pathRoles: 'bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order',
+      rule: 'the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot',
+      operationOrder: 'probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity',
+      fixedSemantics: 'aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin',
+      geometry: 'a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance',
     }),
     spatial_extent_bounds: Object.freeze({
       pathRoles: 'nodes array, extent tuple, and center tuple in that order',
@@ -468,12 +601,46 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'units',
       'sampling_interval',
     ],
+    externalProvenanceClaims: externalClaims({
+      device_id: {
+        reason: 'The multimeter/voltmeter source-device identity is not represented in trace params.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_param',
         provenanceKey: 'units',
         paramKey: 'units',
         description: 'Declared units must match the rendered trace-axis units.',
+      },
+      {
+        kind: 'equals_literal',
+        provenanceKey: 'units',
+        value: 'mV',
+        description: 'The legacy voltage_trace skill is restricted to NEST membrane-potential millivolts; other analog quantities require a typed analog-trace contract.',
+      },
+      {
+        kind: 'equals_literal',
+        provenanceKey: 'recorded_variable',
+        value: 'V_m',
+        description: 'The legacy voltage_trace skill is restricted to the NEST V_m variable.',
+      },
+      {
+        kind: 'matches_regular_time_axis',
+        provenanceKey: 'sampling_interval',
+        paramPath: 'times_ms',
+        absoluteTolerance: 0,
+        relativeTolerance: 1e-12,
+        roundoffUlps: 4,
+        maxRoundoffFraction: 1e-7,
+        description: 'The declared device sampling interval must match every adjacent trace timestamp delta.',
+      },
+      {
+        kind: 'each_label_matches_variable',
+        provenanceKey: 'recorded_variable',
+        paramPath: 'series_labels',
+        separator: ' · ',
+        description: 'Every trace label must identify the exact declared recorded variable.',
       },
     ],
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
@@ -505,12 +672,35 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'population_labels',
       'time_units',
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: 'The spike-recorder source identity is not represented in event params.',
+      },
+      sender_ids: {
+        reason: 'Observed events cannot establish the complete recorded-sender universe because silent senders disappear.',
+      },
+      population_labels: {
+        reason: 'Event params carry sender ids but no source population-identity mapping.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_literal',
         provenanceKey: 'time_units',
         value: 'ms',
         description: 'The times_ms axis is expressed in milliseconds.',
+      },
+      {
+        kind: 'matches_projected_id_collection',
+        provenanceKey: 'sender_ids',
+        paramPath: 'senders',
+        idDomain: 'nonnegative_safe_integer',
+        comparison: 'set',
+        relation: 'contains',
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'Every observed event sender must occur in the caller-declared recorded-sender universe; silent senders remain externally unverifiable.',
       },
     ],
     rendererRoutes: ['media.model_graph', 'd3'],
@@ -552,6 +742,17 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'histogram_normalization',
       'interval_scope',
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: 'The source recorder identity is not retained by the derived histogram params.',
+      },
+      sender_ids: {
+        reason: 'ISI aggregation does not retain the selected sender universe.',
+      },
+      population_labels: {
+        reason: 'ISI aggregation does not retain population identity or membership.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_literal',
@@ -620,6 +821,17 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'event_alignment',
       'psth_aggregation',
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: 'The source recorder identity is not retained by PSTH params.',
+      },
+      sender_ids: {
+        reason: 'PSTH aggregation retains recoverable counts but not selected sender identities.',
+      },
+      population_labels: {
+        reason: 'PSTH params do not retain a population-identity mapping.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_literal',
@@ -693,7 +905,41 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'rate_normalization',
       'binning_policy',
     ],
+    externalProvenanceClaims: externalClaims({
+      recorder_id: {
+        reason: 'The source recorder identity is not represented in rate params.',
+      },
+      sender_ids: {
+        reason: 'Per-series sender counts do not establish the identities of the selected senders.',
+      },
+      population_labels: {
+        reason: 'Series display ids/labels are not a structured source population-identity mapping.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'canonical_json_array_length_at_least_projected_sum',
+        provenanceKey: 'sender_ids',
+        paramPath: 'series',
+        field: 'recorded_sender_count',
+        idDomain: 'nonnegative_safe_integer',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'The declared sender universe must be large enough for the summed disjoint per-population sender denominators; identities remain externally unverifiable.',
+      },
+      {
+        kind: 'matches_projected_id_collection',
+        provenanceKey: 'population_labels',
+        paramPath: 'series',
+        field: 'id',
+        idDomain: 'nonblank_string',
+        comparison: 'set',
+        relation: 'equals',
+        allowDigest: true,
+        allowOpaqueDigestCount: false,
+        establishesBinding: false,
+        description: 'The caller-declared population-label tokens must match the checked population-rate series ids; source population identity remains external.',
+      },
       {
         kind: 'equals_literal',
         provenanceKey: 'time_units',
@@ -743,6 +989,14 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     requiredInputKeys: ['stimulus_amplitudes', 'rates_hz', 'stimulus_units'],
     paramsSchema: RateResponseParamsSchema,
     requiredProvenanceKeys: ['stim_units', 'bin_ms', 'rate_normalization'],
+    externalProvenanceClaims: externalClaims({
+      bin_ms: {
+        reason: 'The response params contain no observation window, raw counts, or bin axis from which to verify this duration.',
+      },
+      rate_normalization: {
+        reason: 'The response params contain rates only, without the denominator or derivation needed to verify normalization.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_param',
@@ -757,9 +1011,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'IF curve example',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/if_curve.html',
-        dataShape: 'stimulus amplitudes and rates_hz with a declared counting window',
+        dataShape: 'stimulus amplitudes and rates_hz with declared stimulus units',
         output: 'F-I response line and points with declared stimulus and rate units',
-        note: 'Always show bin width / counting window so rates stay auditable.',
+        note: 'Show the declared bin width and rate normalization; this legacy envelope carries no counting-window bounds.',
       },
     ],
   },
@@ -768,14 +1022,14 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     version: CORTEXEL_SKILL_VERSION,
     title: 'NEST connectivity edge-list topology renderer',
     description:
-      'Render SynapseCollection endpoint pairs and optional weights as schematic node-link topology (legacy skill id; not a literal matrix heatmap).',
+      'Render SynapseCollection endpoint pairs and optional unit-bound weight and delay channels as schematic node-link topology (legacy skill id; not a literal matrix heatmap).',
     deviceFamily: 'get_connections',
     scene: 'network-topology',
-    // Connectivity evidence contains endpoints/weights, not measured spatial
+    // Connectivity evidence contains endpoints and optional measured channels, not spatial
     // coordinates. Any node placement in the topology scene is schematic.
     weak: true,
     weakDisclosure:
-      'Schematic topology layout — node positions and distances are derived for readability; only the declared edges and weights are evidence.',
+      'Schematic topology layout — node positions and distances are derived for readability; only the declared endpoint pairs and optional measurement channels are evidence.',
     deprecation: {
       since: '1.6.0',
       replacement: 'nest.connection_graph',
@@ -790,7 +1044,45 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'synapse_model',
       'connection_sample_policy',
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: 'The deprecated edge list retains observed endpoints, not the complete selected source universe.',
+      },
+      target_ids: {
+        reason: 'The deprecated edge list retains observed endpoints, not the complete selected target universe.',
+      },
+      synapse_model: {
+        reason: 'The deprecated edge-list params do not retain a snapshot-level synapse model.',
+      },
+      connection_sample_policy: {
+        reason: 'The deprecated edge-list params do not retain a sampling/completeness policy.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'matches_projected_id_collection',
+        provenanceKey: 'source_ids',
+        paramPath: 'sources',
+        idDomain: 'nonnegative_safe_integer',
+        comparison: 'set',
+        relation: 'contains',
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'Every observed legacy edge source must occur in the caller-declared source universe.',
+      },
+      {
+        kind: 'matches_projected_id_collection',
+        provenanceKey: 'target_ids',
+        paramPath: 'targets',
+        idDomain: 'nonnegative_safe_integer',
+        comparison: 'set',
+        relation: 'contains',
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'Every observed legacy edge target must occur in the caller-declared target universe.',
+      },
       {
         kind: 'equals_param',
         provenanceKey: 'weight_units',
@@ -804,15 +1096,16 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         description: 'When declared, legacy graph delay units must match params.delay_units.',
       },
     ],
+    optionalProvenanceKeys: ['weight_units', 'delay_units'],
     rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
       {
         nestExample: 'Plot weight matrices example / SynapseCollection',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html',
-        dataShape: 'parallel source/target endpoint arrays plus optional weights',
+        dataShape: 'parallel source/target endpoint arrays plus optional unit-bound weights and delays',
         output: 'Schematic node-edge topology from the checked edge list',
-        note: 'Keep absent connections distinct from zero-weight connections; topology positions/distances are schematic.',
+        note: 'Optional weights and delays remain edge measurements; topology positions and distances are schematic.',
       },
     ],
   },
@@ -876,7 +1169,53 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'snapshot_scope',
       'parallel_edge_policy',
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: 'Graph params preserve a role-erased node union; observed edges cannot establish isolated selected sources.',
+      },
+      target_ids: {
+        reason: 'Graph params preserve a role-erased node union; observed edges cannot establish isolated selected targets.',
+      },
+      synapse_model: {
+        reason: 'Edge-level model values can prevent contradictions when present but do not establish a snapshot-level model for empty or model-omitting graphs.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'matches_projected_id_collection',
+        provenanceKey: 'source_ids',
+        paramPath: 'edges',
+        field: 'source',
+        idDomain: 'nonnegative_safe_integer',
+        comparison: 'set',
+        relation: 'contains',
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'Every rendered edge source must occur in the caller-declared source universe; isolated selected sources remain externally unverifiable.',
+      },
+      {
+        kind: 'matches_projected_id_collection',
+        provenanceKey: 'target_ids',
+        paramPath: 'edges',
+        field: 'target',
+        idDomain: 'nonnegative_safe_integer',
+        comparison: 'set',
+        relation: 'contains',
+        allowDigest: false,
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'Every rendered edge target must occur in the caller-declared target universe; isolated selected targets remain externally unverifiable.',
+      },
+      {
+        kind: 'all_projected_values_equal',
+        provenanceKey: 'synapse_model',
+        paramPath: 'edges',
+        field: 'synapse_model',
+        emptyPolicy: 'pass_unverifiable',
+        establishesBinding: false,
+        description: 'Whenever edge-level synapse models are present, every one must match the caller-declared snapshot model.',
+      },
       {
         kind: 'equals_param', provenanceKey: 'connection_sample_policy', paramKey: 'sample_policy',
         description: 'Declared graph sampling must match params.sample_policy.',
@@ -902,6 +1241,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         description: 'When declared, graph delay units must match params.delay_units.',
       },
     ],
+    optionalProvenanceKeys: ['weight_units', 'delay_units'],
     rendererRoutes: ['media.model_graph', 'd3'],
     examples: [{
       nestExample: 'SynapseCollection connection inspection',
@@ -936,7 +1276,26 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'snapshot_time_ms', 'snapshot_scope', 'parallel_edge_policy',
       'matrix_axis_order', 'matrix_aggregation',
     ],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: 'Adjacency-matrix params do not retain the snapshot synapse model.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'source_ids',
+        paramPath: 'source_ids',
+        allowDigest: true,
+        description: 'Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest.',
+      },
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'target_ids',
+        paramPath: 'target_ids',
+        allowDigest: true,
+        description: 'Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest.',
+      },
       { kind: 'equals_param', provenanceKey: 'connection_sample_policy', paramKey: 'sample_policy', description: 'Only complete connection snapshots may form a literal matrix.' },
       { kind: 'equals_param', provenanceKey: 'snapshot_time_ms', paramKey: 'snapshot_time_ms', description: 'Declared snapshot time must match params.' },
       { kind: 'equals_param_path', provenanceKey: 'snapshot_scope', paramPath: 'snapshot_scope.kind', description: 'Declared snapshot scope must match params.' },
@@ -978,7 +1337,26 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'connection_sample_policy', 'snapshot_time_ms', 'snapshot_scope',
       'parallel_edge_policy', 'matrix_axis_order', 'matrix_aggregation',
     ],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: 'Weight-matrix params do not retain the snapshot synapse model.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'source_ids',
+        paramPath: 'source_ids',
+        allowDigest: true,
+        description: 'Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest.',
+      },
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'target_ids',
+        paramPath: 'target_ids',
+        allowDigest: true,
+        description: 'Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest.',
+      },
       { kind: 'equals_param', provenanceKey: 'weight_units', paramKey: 'weight_units', description: 'Weight units must match params.' },
       { kind: 'equals_param', provenanceKey: 'connection_sample_policy', paramKey: 'sample_policy', description: 'Only complete connection snapshots may form a literal matrix.' },
       { kind: 'equals_param', provenanceKey: 'snapshot_time_ms', paramKey: 'snapshot_time_ms', description: 'Snapshot time must match params.' },
@@ -1021,7 +1399,26 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'connection_sample_policy', 'snapshot_time_ms', 'snapshot_scope',
       'parallel_edge_policy', 'matrix_axis_order', 'matrix_aggregation',
     ],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: 'Delay-matrix params do not retain the snapshot synapse model.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'source_ids',
+        paramPath: 'source_ids',
+        allowDigest: true,
+        description: 'Declared source axes must equal the exact ordered matrix source_ids or their RFC 8785 SHA-256 digest.',
+      },
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'target_ids',
+        paramPath: 'target_ids',
+        allowDigest: true,
+        description: 'Declared target axes must equal the exact ordered matrix target_ids or their RFC 8785 SHA-256 digest.',
+      },
       { kind: 'equals_param', provenanceKey: 'delay_units', paramKey: 'delay_units', description: 'Delay units must match params.' },
       { kind: 'equals_param', provenanceKey: 'connection_sample_policy', paramKey: 'sample_policy', description: 'Only complete connection snapshots may form a literal matrix.' },
       { kind: 'equals_param', provenanceKey: 'snapshot_time_ms', paramKey: 'snapshot_time_ms', description: 'Snapshot time must match params.' },
@@ -1065,7 +1462,38 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'degree_direction', 'degree_counting', 'zero_degree_policy',
       'histogram_normalization',
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: 'The aggregate degree distribution does not retain source identities.',
+      },
+      target_ids: {
+        reason: 'The aggregate degree distribution retains a target count but not target identities.',
+      },
+      synapse_model: {
+        reason: 'The aggregate degree params do not retain the snapshot synapse model.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'source_ids',
+        paramPath: 'connection_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'nonempty_if_positive',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'A positive in-degree connection count requires at least one source id; aggregate degree params still do not identify that source universe.',
+      },
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'target_ids',
+        paramPath: 'node_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'equals',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'The declared target-universe count must equal the checked in-degree node_count; aggregate params still do not retain identities.',
+      },
       { kind: 'equals_param', provenanceKey: 'connection_sample_policy', paramKey: 'sample_policy', description: 'Degree input must be complete for its declared scope.' },
       { kind: 'equals_param', provenanceKey: 'snapshot_time_ms', paramKey: 'snapshot_time_ms', description: 'Snapshot time must match params.' },
       { kind: 'equals_param_path', provenanceKey: 'snapshot_scope', paramPath: 'snapshot_scope.kind', description: 'Snapshot scope must match params.' },
@@ -1110,7 +1538,38 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'degree_direction', 'degree_counting', 'zero_degree_policy',
       'histogram_normalization',
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: 'The aggregate degree distribution retains a source count but not source identities.',
+      },
+      target_ids: {
+        reason: 'The aggregate degree distribution does not retain target identities.',
+      },
+      synapse_model: {
+        reason: 'The aggregate degree params do not retain the snapshot synapse model.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'source_ids',
+        paramPath: 'node_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'equals',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'The declared source-universe count must equal the checked out-degree node_count; aggregate params still do not retain identities.',
+      },
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'target_ids',
+        paramPath: 'connection_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'nonempty_if_positive',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'A positive out-degree connection count requires at least one target id; aggregate degree params still do not identify that target universe.',
+      },
       { kind: 'equals_param', provenanceKey: 'connection_sample_policy', paramKey: 'sample_policy', description: 'Degree input must be complete for its declared scope.' },
       { kind: 'equals_param', provenanceKey: 'snapshot_time_ms', paramKey: 'snapshot_time_ms', description: 'Snapshot time must match params.' },
       { kind: 'equals_param_path', provenanceKey: 'snapshot_scope', paramPath: 'snapshot_scope.kind', description: 'Snapshot scope must match params.' },
@@ -1133,7 +1592,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     id: 'nest.delay_distribution',
     version: CORTEXEL_SKILL_VERSION,
     title: 'NEST synaptic-delay distribution renderer',
-    description: 'Render exact half-open bins over one delay value per selected connection.',
+    description: 'Render checked left-closed/right-open bins over one delay value per selected connection.',
     deviceFamily: 'get_connections',
     scene: 'delay-distribution',
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: 'delay_distribution' },
@@ -1158,7 +1617,38 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'connection_sample_policy', 'snapshot_time_ms', 'snapshot_scope',
       'parallel_edge_policy', 'bin_ms', 'histogram_normalization', 'binning_policy',
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: 'The aggregate delay histogram does not retain source identities.',
+      },
+      target_ids: {
+        reason: 'The aggregate delay histogram does not retain target identities.',
+      },
+      synapse_model: {
+        reason: 'The aggregate delay params do not retain the snapshot synapse model.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'source_ids',
+        paramPath: 'connection_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'nonempty_if_positive',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'A positive delay-observation count requires at least one source id; aggregate histogram params still do not identify the source universe.',
+      },
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'target_ids',
+        paramPath: 'connection_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'nonempty_if_positive',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'A positive delay-observation count requires at least one target id; aggregate histogram params still do not identify the target universe.',
+      },
       { kind: 'equals_param', provenanceKey: 'delay_units', paramKey: 'delay_units', description: 'Delay units must match params.' },
       { kind: 'equals_param', provenanceKey: 'connection_sample_policy', paramKey: 'sample_policy', description: 'Delay histogram input must be complete for its scope.' },
       { kind: 'equals_param', provenanceKey: 'snapshot_time_ms', paramKey: 'snapshot_time_ms', description: 'Snapshot time must match params.' },
@@ -1172,7 +1662,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     examples: [{
       nestExample: 'SynapseCollection delay inspection',
       sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections',
-      dataShape: 'one positive millisecond delay per selected connection in exact uniform bins',
+      dataShape: 'one positive millisecond delay per selected connection in checked uniform bins',
       output: 'Delay count, probability, or probability-density histogram',
       note: 'Out-of-window delays are transform errors, never silently discarded.',
     }],
@@ -1191,12 +1681,20 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     },
     requiredInputKeys: [
       'bin_centers',
+      'weight_counts',
       'values',
       'bin_width',
+      'window_start',
+      'window_stop',
       'weight_units',
       'normalization',
       'value_units',
+      'aggregation',
+      'binning',
+      'sample_policy',
+      'connection_count',
       'snapshot_time_ms',
+      'snapshot_scope',
     ],
     paramsSchema: WeightHistogramParamsSchema,
     requiredProvenanceKeys: [
@@ -1206,8 +1704,42 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'weight_units',
       'histogram_normalization',
       'connection_sample_policy',
+      'snapshot_time_ms',
+      'snapshot_scope',
+      'parallel_edge_policy',
     ],
+    externalProvenanceClaims: externalClaims({
+      source_ids: {
+        reason: 'The aggregate weight histogram does not retain source identities.',
+      },
+      target_ids: {
+        reason: 'The aggregate weight histogram does not retain target identities.',
+      },
+      synapse_model: {
+        reason: 'The aggregate weight params do not retain the snapshot synapse model.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'source_ids',
+        paramPath: 'connection_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'nonempty_if_positive',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'A positive weight-observation count requires at least one source id; aggregate histogram params still do not identify the source universe.',
+      },
+      {
+        kind: 'canonical_json_array_length_matches_param',
+        provenanceKey: 'target_ids',
+        paramPath: 'connection_count',
+        idDomain: 'nonnegative_safe_integer',
+        relation: 'nonempty_if_positive',
+        allowOpaqueDigestCount: true,
+        establishesBinding: false,
+        description: 'A positive weight-observation count requires at least one target id; aggregate histogram params still do not identify the target universe.',
+      },
       {
         kind: 'equals_param',
         provenanceKey: 'weight_units',
@@ -1220,6 +1752,30 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         paramKey: 'normalization',
         description: 'Declared histogram normalization must match params.normalization.',
       },
+      {
+        kind: 'equals_param',
+        provenanceKey: 'connection_sample_policy',
+        paramKey: 'sample_policy',
+        description: 'Declared connection sampling must match params.sample_policy.',
+      },
+      {
+        kind: 'equals_param',
+        provenanceKey: 'snapshot_time_ms',
+        paramKey: 'snapshot_time_ms',
+        description: 'Declared snapshot time must match params.snapshot_time_ms.',
+      },
+      {
+        kind: 'equals_param_path',
+        provenanceKey: 'snapshot_scope',
+        paramPath: 'snapshot_scope.kind',
+        description: 'Declared snapshot scope must match params.snapshot_scope.kind.',
+      },
+      {
+        kind: 'equals_literal',
+        provenanceKey: 'parallel_edge_policy',
+        value: 'count_each_connection',
+        description: 'Every selected SynapseCollection entry contributes one weight observation.',
+      },
     ],
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [
@@ -1227,17 +1783,18 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Plot weight matrices example / SynapseCollection snapshot',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html',
-        dataShape: 'binned GetConnections weights at one declared simulation time',
+        dataShape: 'raw per-bin connection counts from one typed complete GetConnections snapshot',
         output: 'Connection-weight count or probability histogram',
-        note: 'Use a GetConnections snapshot; weight_recorder events are update-event samples and bias distributions.',
+        note: 'Every selected connection contributes exactly one weight; weight_recorder update events are a different, biased sample.',
       },
     ],
   },
   'nest.spatial_2d': {
     id: 'nest.spatial_2d',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST 2D spatial renderer',
-    description: 'Render 2D layer positions, masks, kernels and sampled projections.',
+    title: 'NEST legacy 2D position host envelope',
+    description:
+      'Validate anonymous 2D position tuples and coordinate units for an explicitly selected host renderer; Cortexel supplies no scene.',
     deviceFamily: 'get_position',
     scene: null, // no honest 2D-spatial scene yet (would violate sphere/voxel law)
     deprecation: {
@@ -1249,7 +1806,25 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     requiredInputKeys: ['positions', 'coordinate_units'],
     paramsSchema: Spatial2DParamsSchema,
     requiredProvenanceKeys: ['extent', 'spatial_units', 'mask', 'kernel'],
+    externalProvenanceClaims: externalClaims({
+      extent: {
+        reason: 'Anonymous point bounds are not the declared layer extent and params contain no center/extent object.',
+      },
+      mask: {
+        reason: 'The network-generation mask is source configuration, not measured position data.',
+      },
+      kernel: {
+        reason: 'The network-generation kernel is source configuration, not measured position data.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'canonical_json_array_length_equals',
+        provenanceKey: 'extent',
+        expectedLength: 2,
+        establishesBinding: false,
+        description: 'A 2D host envelope requires a canonical two-axis extent; this shape check does not verify the caller-declared layer extent.',
+      },
       {
         kind: 'equals_param',
         provenanceKey: 'spatial_units',
@@ -1263,9 +1838,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Circular mask, Gaussian kernel, grid/free spatial examples',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/connex.html',
-        dataShape: 'node x/y positions, masks, kernels, sampled edges',
-        output: 'No Cortexel scene yet — route to a 2D d3 map on the host.',
-        note: 'scene:null — render via host d3, not a Cortexel 3D scene.',
+        dataShape: 'anonymous x/y position tuples plus coordinate units',
+        output: 'Validated host envelope only; the selected host owns rendering and caption display.',
+        note: 'Extent, mask, and kernel are caller-declared metadata, not structured render data; use nest.spatial_map_2d for identified measured positions.',
       },
     ],
   },
@@ -1312,6 +1887,18 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     ],
     provenanceParamConstraints: [
       {
+        kind: 'matches_projected_id_collection',
+        provenanceKey: 'node_ids',
+        paramPath: 'nodes',
+        field: 'id',
+        idDomain: 'nonnegative_safe_integer',
+        comparison: 'set',
+        relation: 'equals',
+        allowDigest: true,
+        allowOpaqueDigestCount: false,
+        description: 'Declared node ids must equal the measured node-id set or its RFC 8785 SHA-256 digest.',
+      },
+      {
         kind: 'equals_param',
         provenanceKey: 'spatial_units',
         paramKey: 'coordinate_units',
@@ -1322,6 +1909,13 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         provenanceKey: 'position_scope',
         paramPath: 'position_scope.kind',
         description: 'Declared position scope must match params.position_scope.kind.',
+      },
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'extent',
+        paramPath: 'extent',
+        allowDigest: false,
+        description: 'Declared numeric extent must exactly equal params.extent in canonical JSON.',
       },
     ],
     rendererRoutes: ['media.model_graph', 'd3'],
@@ -1347,7 +1941,22 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     requiredInputKeys: ['objects', 'coordinate_units'],
     paramsSchema: Spatial3DParamsSchema,
     requiredProvenanceKeys: ['extent', 'spatial_units', 'projection_sample_policy'],
+    externalProvenanceClaims: externalClaims({
+      extent: {
+        reason: 'Position bounds are not a layer extent and params contain no center/extent object.',
+      },
+      projection_sample_policy: {
+        reason: 'The positioned-object params do not retain a structured projection sampling policy.',
+      },
+    }),
     provenanceParamConstraints: [
+      {
+        kind: 'canonical_json_array_length_equals',
+        provenanceKey: 'extent',
+        expectedLength: 3,
+        establishesBinding: false,
+        description: 'A 3D positioned-node scene requires a canonical three-axis extent; this shape check does not verify the caller-declared layer extent.',
+      },
       {
         kind: 'equals_param',
         provenanceKey: 'spatial_units',
@@ -1366,9 +1975,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: '3D spatial network with exponential/Gaussian probabilities',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/spatial/test_3d.html',
-        dataShape: 'node x/y/z positions, extent, sampled edges',
+        dataShape: 'x/y/z positioned objects plus coordinate units',
         output: 'Unit-labelled 3D positioned-node scene for host rendering',
-        note: 'Use 3D as inspection aid; do not imply biological geometry.',
+        note: 'Extent and projection-sample policy are caller declarations, not edge data; use 3D only as a positioned-node inspection aid.',
       },
     ],
   },
@@ -1382,6 +1991,11 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     requiredInputKeys: ['times_ms', 'weights', 'weight_units'],
     paramsSchema: PlasticityParamsSchema,
     requiredProvenanceKeys: ['synapse_model', 'weight_units'],
+    externalProvenanceClaims: externalClaims({
+      synapse_model: {
+        reason: 'Weight traces do not retain the recorded synapse/model identity.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_param',
@@ -1423,6 +2037,26 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'derivation_method',
       'model_context',
       'fixed_parameters',
+    ],
+    externalProvenanceClaims: externalClaims({
+      derivation_method: {
+        reason: 'The vector-field params contain derivative values but no structured derivation method/version.',
+      },
+      model_context: {
+        reason: 'The vector-field params contain no structured model identity/version.',
+      },
+      fixed_parameters: {
+        reason: 'The vector-field params do not retain the fixed-parameter map and units.',
+      },
+    }),
+    provenanceParamConstraints: [
+      {
+        kind: 'matches_canonical_json_param',
+        provenanceKey: 'state_variables',
+        paramPath: 'axis_order',
+        allowDigest: false,
+        description: 'Declared state variables must exactly match params.axis_order in canonical JSON.',
+      },
     ],
     rendererRoutes: ['media.model_graph', 'd3'],
     examples: [
@@ -1468,6 +2102,11 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'lag_convention',
       'binning_policy',
     ],
+    externalProvenanceClaims: externalClaims({
+      detector_id: {
+        reason: 'The source correlation-detector identity is not represented in correlogram params.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_param',
@@ -1527,14 +2166,22 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
   'nest.stimulus_response': {
     id: 'nest.stimulus_response',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST stimulus-response protocol renderer',
+    title: 'NEST stimulus-response host envelope',
     description:
-      'Render aligned stimulus waveforms, responses, spikes and protocol epochs.',
+      'Validate aligned time, stimulus, and response arrays for an explicitly selected host renderer; Cortexel supplies no scene.',
     deviceFamily: 'multimeter',
     scene: null, // composite multi-panel protocol; no single Cortexel scene
     requiredInputKeys: ['times_ms', 'stimulus', 'response'],
     paramsSchema: StimulusResponseParamsSchema,
     requiredProvenanceKeys: ['stim_units', 'units', 'time_units'],
+    externalProvenanceClaims: externalClaims({
+      stim_units: {
+        reason: 'Stimulus-response params contain an untyped stimulus array without a unit field.',
+      },
+      units: {
+        reason: 'Stimulus-response params contain an untyped response array without a unit field.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_literal',
@@ -1549,22 +2196,22 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Sinusoidal generator / pulse packet / repeated stimulation',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/pulsepacket.html',
-        dataShape: 'stimulus waveform, analog response, spike events, epochs',
-        output: 'Composite protocol panels — host-composed, no single scene.',
-        note: 'scene:null — multi-panel protocol composed by the host.',
+        dataShape: 'aligned times_ms, stimulus, and response arrays',
+        output: 'Validated host envelope only; the selected host owns any composite panels.',
+        note: 'The envelope carries no spike-event or epoch structure; the host must not infer either.',
       },
     ],
   },
   'nest.astrocyte_dynamics': {
     id: 'nest.astrocyte_dynamics',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST astrocyte Ca²⁺/IP₃ dynamics renderer',
-    description: 'Render tripartite-synapse calcium/IP3 state-variable traces.',
+    title: 'NEST astrocyte concentration-trace renderer',
+    description: 'Render one declared non-negative glial concentration trace carried as ca_trace.',
     deviceFamily: 'multimeter',
     scene: 'voltage-trace',
     weak: true, // analog-trace reuse: Ca/IP3 are not membrane voltage
     weakDisclosure:
-      "Derived view — Ca²⁺/IP₃ shown through the analog-trace scene; these are glial signals, not membrane voltage.",
+      'Derived view — a declared glial concentration trace is shown through the analog-trace scene; it is not membrane voltage.',
     requiredInputKeys: ['times_ms', 'ca_trace', 'units'],
     paramsSchema: AstrocyteParamsSchema,
     requiredProvenanceKeys: [
@@ -1573,6 +2220,11 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'time_units',
       'sampling_interval',
     ],
+    externalProvenanceClaims: externalClaims({
+      recorded_variable: {
+        reason: 'The legacy ca_trace field does not distinguish the NEST Ca and Ca_astro source-variable names.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_param',
@@ -1586,6 +2238,23 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         value: 'ms',
         description: 'The times_ms axis is expressed in milliseconds.',
       },
+      {
+        kind: 'one_of_literals',
+        provenanceKey: 'recorded_variable',
+        values: ['Ca', 'Ca_astro'],
+        establishesBinding: false,
+        description: 'The legacy ca_trace field carries only the NEST Ca/Ca_astro concentration variable.',
+      },
+      {
+        kind: 'matches_regular_time_axis',
+        provenanceKey: 'sampling_interval',
+        paramPath: 'times_ms',
+        absoluteTolerance: 0,
+        relativeTolerance: 1e-12,
+        roundoffUlps: 4,
+        maxRoundoffFraction: 1e-7,
+        description: 'The declared device sampling interval must match every adjacent glial timestamp delta.',
+      },
     ],
     rendererRoutes: ['media.trace_figure', 'matplotlib'],
     examples: [
@@ -1593,18 +2262,18 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Single astrocyte / tripartite interaction examples',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/astrocytes/astrocyte_single.html',
-        dataShape: 'Ca/IP3/state variables, linked neuron events',
-        output: 'Calcium/IP3 traces via the analog-trace scene (flagged derived)',
-        note: 'weak:true — keep glial and neuronal units explicitly separate.',
+        dataShape: 'times_ms, one ca_trace array, and its declared units',
+        output: 'One glial concentration trace via the analog-trace scene (flagged derived)',
+        note: 'The legacy envelope carries neither multiple state variables nor linked neuronal events.',
       },
     ],
   },
   'nest.compartmental_dynamics': {
     id: 'nest.compartmental_dynamics',
     version: CORTEXEL_SKILL_VERSION,
-    title: 'NEST compartmental morphology + dynamics renderer',
+    title: 'NEST compartment-tree trace host envelope',
     description:
-      'Render multi-compartment morphologies, receptor ports and soma/dendrite traces.',
+      'Validate an id/parent compartment topology and aligned per-compartment values for an explicitly selected host renderer.',
     deviceFamily: 'multimeter',
     scene: null, // morphology geometry has no honest Cortexel scene (no invented geometry)
     requiredInputKeys: ['times_ms', 'compartments'],
@@ -1616,12 +2285,33 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'time_units',
       'sampling_interval',
     ],
+    externalProvenanceClaims: externalClaims({
+      morphology_disclaimer: {
+        reason: 'Morphology geometry is absent; this caller text cannot substitute for a contract-owned geometry disclosure.',
+      },
+      recorded_variable: {
+        reason: 'Compartment traces do not carry a structured shared/per-series recorded variable.',
+      },
+      units: {
+        reason: 'Compartment traces do not carry a structured shared/per-series unit.',
+      },
+    }),
     provenanceParamConstraints: [
       {
         kind: 'equals_literal',
         provenanceKey: 'time_units',
         value: 'ms',
         description: 'The times_ms axis is expressed in milliseconds.',
+      },
+      {
+        kind: 'matches_regular_time_axis',
+        provenanceKey: 'sampling_interval',
+        paramPath: 'times_ms',
+        absoluteTolerance: 0,
+        relativeTolerance: 1e-12,
+        roundoffUlps: 4,
+        maxRoundoffFraction: 1e-7,
+        description: 'The declared device sampling interval must match every adjacent compartment timestamp delta.',
       },
     ],
     rendererRoutes: ['media.model_graph', 'd3'],
@@ -1630,9 +2320,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Receptors/current and two-compartment neuron examples',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/compartmental_model/receptors_and_current.html',
-        dataShape: 'compartments, receptor ports, soma/dendrite traces',
-        output: 'No Cortexel scene — host d3 morphology tree with linked traces.',
-        note: 'scene:null — do not invent morphology geometry from labels.',
+        dataShape: 'times_ms plus compartments with id, parent_id, optional label, and aligned values',
+        output: 'Validated host envelope for a schematic compartment tree and aligned traces.',
+        note: 'The envelope carries no receptor-port or morphology-geometry data; the host must not invent either.',
       },
     ],
   },
@@ -1646,6 +2336,11 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     requiredInputKeys: ['frames'],
     paramsSchema: AnimationReplayParamsSchema,
     requiredProvenanceKeys: ['frame_rate'],
+    externalProvenanceClaims: externalClaims({
+      frame_rate: {
+        reason: 'Playback frame rate is not derivable from simulation timestamps without an explicit playback time scale.',
+      },
+    }),
     rendererRoutes: ['media.manim_storyboard', 'manim'],
     examples: [
       {
@@ -1748,9 +2443,9 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       description: 'Every trace series must contain one value per times_ms sample.',
     },
     {
-      kind: 'monotonic_non_decreasing',
+      kind: 'strictly_increasing',
       paths: ['times_ms'],
-      description: 'Trace timestamps must be monotonically non-decreasing.',
+      description: 'Trace timestamps must be strictly increasing.',
     },
   ],
   'nest.spike_raster': [
@@ -1776,6 +2471,8 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       paths: ['bin_centers_ms', 'bin_width_ms'],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
       nonNegativeLowerEdge: true,
       description: 'ISI bins must be strictly increasing, uniformly spaced by bin_width_ms, and have a non-negative lower edge.',
     },
@@ -1832,6 +2529,8 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       paths: ['bin_centers_ms', 'bin_width_ms'],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
       description: 'PSTH bins must be strictly increasing and uniformly spaced by bin_width_ms.',
     },
     {
@@ -1895,7 +2594,7 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
       roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
       maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
-      description: 'Uniform left-closed/right-open bins must exactly cover the declared [window_start_ms,window_stop_ms) interval.',
+      description: 'Uniform left-closed/right-open bins must cover the declared [window_start_ms,window_stop_ms) interval within the bounded binary64 geometry tolerance.',
     },
     {
       kind: 'population_rate_derived_values',
@@ -2036,7 +2735,7 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
       roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
       maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
-      description: 'Uniform left-closed/right-open delay bins exactly cover the declared window.',
+      description: 'Uniform left-closed/right-open delay bins cover the declared window within the bounded binary64 geometry tolerance.',
     },
     {
       kind: 'delay_distribution_consistency',
@@ -2073,54 +2772,39 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
   ],
   'nest.weight_histogram': [
     {
-      kind: 'equal_length',
-      paths: ['bin_centers', 'values'],
-      description: 'Every weight histogram bin center must have one value.',
-    },
-    {
-      kind: 'monotonic_non_decreasing',
-      paths: ['bin_centers'],
-      description: 'Weight histogram bin centers must be monotonically non-decreasing.',
-    },
-    {
-      kind: 'uniform_histogram_bins',
-      paths: ['bin_centers', 'bin_width'],
+      kind: 'uniform_bin_window',
+      paths: [
+        'bin_centers',
+        'bin_width',
+        'window_start',
+        'window_stop',
+      ],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
-      description: 'Weight histogram bins must be strictly increasing and uniformly spaced by bin_width.',
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
+      description: 'Uniform left-closed/right-open weight bins cover the declared weight window within the bounded binary64 geometry tolerance.',
     },
     {
-      kind: 'non_negative',
-      paths: ['values[*]'],
-      description: 'Weight histogram values cannot be negative.',
+      kind: 'weight_histogram_consistency',
+      paths: [
+        'bin_centers',
+        'weight_counts',
+        'values',
+        'bin_width',
+        'connection_count',
+        'normalization',
+        'value_units',
+        'weight_units',
+        'aggregation',
+        'binning',
+      ],
+      description: 'Raw connection counts, normalization, and displayed weight-histogram values recover one another exactly.',
     },
     {
-      kind: 'mapped_value',
-      paths: ['normalization', 'value_units'],
-      allowedValues: {
-        count: 'count',
-        probability: 'probability',
-      },
-      description: 'Each weight histogram normalization has one unambiguous value unit.',
-    },
-    {
-      kind: 'conditional_numeric_domain',
-      paths: ['normalization', 'values[*]'],
-      numericDomains: {
-        count: { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true },
-        probability: { min: 0, max: 1 },
-      },
-      description: 'Weight counts are safe integers and probabilities lie in [0,1].',
-    },
-    {
-      kind: 'normalized_histogram_mass',
-      paths: ['normalization', 'values', 'bin_width'],
-      absoluteTolerance: HISTOGRAM_MASS_TOLERANCE,
-      relativeTolerance: HISTOGRAM_MASS_TOLERANCE,
-      normalizationRules: {
-        probability: { measure: 'sum', target: 1 },
-      },
-      description: 'Weight-histogram probability mass must sum to one.',
+      kind: 'scope_compatibility',
+      paths: ['snapshot_scope'],
+      description: 'Snapshot MPI rank metadata must be internally valid.',
     },
   ],
   'nest.plasticity_dynamics': [
@@ -2180,6 +2864,8 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       paths: ['lags_ms', 'bin_width_ms', 'tau_max_ms'],
       absoluteTolerance: HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE,
       relativeTolerance: HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE,
+      roundoffUlps: HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS,
+      maxRoundoffFraction: GEOMETRY_MAX_ROUNDOFF_FRACTION,
       description: 'Correlogram lag centers must be strictly increasing, uniform, odd, zero-centered, symmetric, and span [-tau_max_ms,+tau_max_ms].',
     },
     {
@@ -2218,9 +2904,9 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       description: 'Every glial sample must have one timestamp.',
     },
     {
-      kind: 'monotonic_non_decreasing',
+      kind: 'strictly_increasing',
       paths: ['times_ms'],
-      description: 'Glial timestamps must be monotonically non-decreasing.',
+      description: 'Glial timestamps must be strictly increasing.',
     },
     {
       kind: 'non_negative',
@@ -2251,9 +2937,9 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
       description: 'The compartment parent graph must be acyclic.',
     },
     {
-      kind: 'monotonic_non_decreasing',
+      kind: 'strictly_increasing',
       paths: ['times_ms'],
-      description: 'Compartment timestamps must be monotonically non-decreasing.',
+      description: 'Compartment timestamps must be strictly increasing.',
     },
   ],
   'nest.animation_replay': [
@@ -2433,8 +3119,36 @@ export const SKILL_REGISTRY = NEST_SKILL_REGISTRY;
 // "__proto__" or "constructor" can never resolve to inherited objects.
 Object.setPrototypeOf(NEST_SKILL_REGISTRY, null);
 for (const contract of Object.values(NEST_SKILL_REGISTRY)) {
+  // Evaluate the total classification before freezing or exposing discovery.
+  provenanceVerificationForContract(contract);
+  const allowedConstraintKeys = new Set<ProvenanceKey>([
+    ...contract.requiredProvenanceKeys,
+    ...(contract.optionalProvenanceKeys ?? []),
+  ]);
+  for (const constraint of contract.provenanceParamConstraints ?? []) {
+    if (!allowedConstraintKeys.has(constraint.provenanceKey)) {
+      throw new Error(
+        `skill '${contract.id}' constraint targets unclassified provenance ` +
+        `'${constraint.provenanceKey}'`,
+      );
+    }
+  }
+  for (const key of Object.keys(contract.externalProvenanceClaims ?? {}) as ProvenanceKey[]) {
+    if (!contract.requiredProvenanceKeys.includes(key)) {
+      throw new Error(
+        `skill '${contract.id}' external provenance '${key}' is not required`,
+      );
+    }
+  }
   Object.freeze(contract.requiredInputKeys);
   Object.freeze(contract.requiredProvenanceKeys);
+  if (contract.optionalProvenanceKeys) Object.freeze(contract.optionalProvenanceKeys);
+  if (contract.externalProvenanceClaims) {
+    Object.values(contract.externalProvenanceClaims).forEach((claim) => {
+      if (claim) Object.freeze(claim);
+    });
+    Object.freeze(contract.externalProvenanceClaims);
+  }
   if (contract.requiredProvenanceFlags) Object.freeze(contract.requiredProvenanceFlags);
   if (contract.deprecation) Object.freeze(contract.deprecation);
   if (contract.routerEligibility) Object.freeze(contract.routerEligibility);
@@ -2443,7 +3157,10 @@ for (const contract of Object.values(NEST_SKILL_REGISTRY)) {
     Object.freeze(contract.transform.requiredOptions);
     Object.freeze(contract.transform);
   }
-  contract.provenanceParamConstraints?.forEach(Object.freeze);
+  contract.provenanceParamConstraints?.forEach((constraint) => {
+    if (constraint.kind === 'one_of_literals') Object.freeze(constraint.values);
+    Object.freeze(constraint);
+  });
   if (contract.provenanceParamConstraints) {
     Object.freeze(contract.provenanceParamConstraints);
   }
@@ -2492,7 +3209,10 @@ export interface SkillDescriptor {
   };
   requiredInputKeys: string[];
   requiredProvenanceKeys: ProvenanceKey[];
+  optionalProvenanceKeys: ProvenanceKey[];
   requiredProvenanceFlags: RequiredProvenanceFlags;
+  provenanceVerification: Partial<Record<ProvenanceKey, ProvenanceVerification>>;
+  externalProvenanceDisclosure: string | null;
   provenanceParamConstraints: ProvenanceParamConstraint[];
   /** Machine-readable JSON Schema for `params` (JSON Schema draft 2020-12),
    *  derived from the skill's zod schema. Agents and non-TS hosts can validate
@@ -2585,9 +3305,17 @@ export function describeSkill(id: unknown): SkillDescriptor | undefined {
       : undefined,
     requiredInputKeys: [...c.requiredInputKeys],
     requiredProvenanceKeys: [...c.requiredProvenanceKeys],
+    optionalProvenanceKeys: [...(c.optionalProvenanceKeys ?? [])],
     requiredProvenanceFlags: { ...(c.requiredProvenanceFlags ?? {}) },
+    provenanceVerification: provenanceVerificationForContract(c),
+    externalProvenanceDisclosure: externalProvenanceDisclosure(c),
     provenanceParamConstraints: (c.provenanceParamConstraints ?? []).map(
-      (constraint) => ({ ...constraint }),
+      (constraint) => ({
+        ...constraint,
+        ...(constraint.kind === 'one_of_literals'
+          ? { values: [...constraint.values] }
+          : {}),
+      }),
     ),
     paramsJsonSchema: skillParamsJsonSchema(c),
     paramConstraints: (c.paramConstraints ?? []).map((constraint) => ({

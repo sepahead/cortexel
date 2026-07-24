@@ -6,13 +6,15 @@
  * `bun run check:generated` fails if this file drifts from its source.
  */
 
-export const BUDGET_PROFILE_IDS = [
+import { freezeGenerated } from '../core/deep-freeze.js';
+
+export const BUDGET_PROFILE_IDS = freezeGenerated([
   "standard",
   "agent"
-] as const;
+] as const);
 export type BudgetProfileId = (typeof BUDGET_PROFILE_IDS)[number];
 
-export const BUDGET_PROFILES = Object.freeze({
+export const BUDGET_PROFILES = freezeGenerated({
   "standard": {
     "rawInputBytes": 33554432,
     "jsonDepth": 64,
@@ -31,9 +33,8 @@ export const BUDGET_PROFILES = Object.freeze({
     "svgTextNodes": 20000,
     "svgBytes": 20971520,
     "sidecarBytes": 104857600,
-    "inlineTableRows": 500,
-    "errorRecords": 32,
-    "bundlePanels": 8
+    "returnedTableRows": 500,
+    "errorRecords": 32
   },
   "agent": {
     "rawInputBytes": 4194304,
@@ -53,13 +54,12 @@ export const BUDGET_PROFILES = Object.freeze({
     "svgTextNodes": 5000,
     "svgBytes": 5242880,
     "sidecarBytes": 20971520,
-    "inlineTableRows": 200,
-    "errorRecords": 32,
-    "bundlePanels": 8
+    "returnedTableRows": 200,
+    "errorRecords": 32
   }
-}) as Readonly<Record<BudgetProfileId, Readonly<Record<string, number>>>> as any;
+}) as Readonly<Record<BudgetProfileId, Readonly<Record<string, number>>>>;
 
-export const COMPACTION_POLICIES = Object.freeze({
+export const COMPACTION_POLICIES = freezeGenerated({
   "none": {
     "id": "none",
     "revision": 1,

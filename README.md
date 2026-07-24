@@ -12,9 +12,10 @@
 [![types: TypeScript](https://img.shields.io/badge/types-TypeScript-3178c6.svg)](#)
 <!-- npm and PyPI badges are intentionally inactive: no package is published yet. -->
 
-> **Status: `0.9.0` — a pre-1.0 development preview. There is no stable release, no
-> published package, and no DOI.** `main` may still change. Do not cite HEAD as a
-> released product.
+> **Status: `0.9.0` is the last tagged pre-1.0 development release. This working tree
+> identifies itself as the private, unreleased `0.10.0-dev.0`; it is not a release. There
+> is no stable release, published package, or DOI.** `main` may still change. Do not cite
+> HEAD or the development version as a released product.
 >
 > The honest, gate-by-gate state of the release is in
 > [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) and the machine-readable
@@ -25,12 +26,16 @@
 for neural-simulation data. An agent, an adapter, or a person emits a declarative
 JSON request; Cortexel validates its shape and its *scientific meaning*, canonicalizes
 it, records honest provenance that **fails closed**, and renders a deterministic,
-accessible SVG — plus an exact-value table and a verifiable artifact bound together by
-SHA-256.
+accessible SVG. The development API also returns an exact-value in-memory table and a
+FigureArtifactV1 whose output inventory binds the SVG by SHA-256. A canonical,
+digest-bound table sidecar and detached output verifier are not implemented yet; the
+render boundary refuses any result that would require an incomplete table excerpt.
 
 The value is in the **contract and its invariants**, not in a pile of chart code.
 Cortexel refuses to make a plausible-looking figure from an ambiguous input, and every
-output it does make can be inspected, reproduced, and challenged.
+output it does make can be inspected, compared, and challenged. Current development
+artifacts report `sourceRevision: "unreleased-worktree"`; exact commit recovery requires
+a separately retained full SHA until a release-stamping producer exists.
 
 ## What it is — and is not
 
@@ -51,17 +56,49 @@ raw JSON text  ──▶  strict parse (rejects duplicate keys before materializ
                ──▶  caller-authority check (no forged conclusions)
                ──▶  contract identity
                ──▶  structural validation (JSON Schema 2020-12, no coercion)
-               ──▶  semantic validation (35 named scientific rules)
+               ──▶  semantic validation (closed, named scientific rules)
                ──▶  canonicalize (RFC 8785)  ──▶  branded validated request
                ──▶  derive (deterministic analysis)
                ──▶  compile pure render plan
-               ──▶  deterministic SVG + exact-value table + FigureArtifactV1
+               ──▶  close/freeze plan + OutputAuthority translation gate
+               ──▶  deterministic SVG + complete returned exact-value table
+               ──▶  FigureArtifactV1 (binds SVG bytes and table shape, not table cells)
 ```
 
-Every stage is independently testable. No renderer can bypass validation: rendering
-accepts only the branded token the validator produces.
+Every stage is independently testable. Each public rendering entrypoint either validates
+its input itself or accepts only the live branded token the validator produces. The raw
+RenderPlan model, resource counter, formatter/scale primitives, and SVG serializer are
+internal and are not exported from `cortexel/render-svg`. The internal OutputAuthority
+gate independently checks exact plan table rows, source-template summary, disclosures,
+and role-tagged carrier identities immediately before serialization. It is deliberately
+plan-level, non-persisted, and carrier-only; it does not establish SVG bytes, coordinates,
+visibility, accessibility effectiveness, or artifact-bound table cells. See
+[`docs/OUTPUT_AUTHORITY.md`](./docs/OUTPUT_AUTHORITY.md).
 
-## Quick look (CLI)
+## Additive package surfaces
+
+The installable artifact preserves every legacy entry (`cortexel`, `cortexel/core`,
+the three React subpaths, and `cortexel/skills.manifest.json`) and adds explicit
+FigureRequestV1 capabilities alongside them:
+
+- `cortexel/figure` — validation, canonicalization, identity, provenance, and migration;
+- `cortexel/render-svg` — deterministic headless SVG + complete returned table;
+- `cortexel/adapters/nest` — the narrow, revision-2-admitted plain-data NEST adapter
+  profile (not upstream certification);
+- `cortexel/contract/manifest.json` and `cortexel/contract/*` — the exact normative
+  registries, schemas, and skill sources copied once under `dist/contract`;
+- `cortexel` (bin) — the offline CLI.
+
+These paths load no React, Three, R3F, or D3. Structural validation reads only the
+module-relative packaged contract files; it never resolves a schema from the working
+directory or network. **Packaged** describes the output of this repository's build and
+tarball. It does not mean the package has been published, and it does not make any
+skill `releaseReady`; all nineteen remain `releaseReady: false`.
+
+## Offline CLI
+
+After installing the artifact, invoke the bin directly; from a repository checkout,
+`bun src/cli/main.ts ...` exercises the same implementation:
 
 ```bash
 # What contract and identity is this build?
@@ -73,17 +110,30 @@ cortexel catalog
 # Validate a request from a file or stdin. Exit code 0 = valid.
 cortexel validate request.json
 
-# Render a deterministic SVG plus an artifact and a data table, written atomically.
+# Render an SVG plus its SVG-binding artifact. Final entries are inspected without
+# following symlinks. One cooperative directory-wide lock covers case/Unicode aliases;
+# a pre-existing lock is never guessed stale. Non-force publication is atomic no-replace
+# (or refuses when unavailable), and the artifact is installed last as the completion
+# marker. The pair is not a transaction; the host must own the output directory.
+# tableBinding=shape_only records that no canonical row-byte sidecar exists.
 cortexel render request.json --output figure.svg
+
+# Machine-readable validation and render receipts use the closed JSON format.
+cortexel render request.json --dry-run --format json
 ```
 
-The CLI is offline: no network, no shell hook, no `--url`. Exit codes are a stable
-contract (`0` ok, `2` usage, `3` parse, `4` schema, `5` semantic, `6` budget, `7` I/O,
-`8` internal).
+The CLI is offline: no network, no shell hook, no `--url`. Its packaged interface has
+a closed, tested exit-code vocabulary (`0` ok, `2` usage, `3` parse, `4` schema,
+`5` semantic, `6` budget, `7` I/O, `8` internal). File and stdin input is bounded before
+decoding, malformed UTF-8 and a BOM are rejected rather than normalized, and duplicate
+JSON members remain observable to the strict parser. If a writer crashes while holding
+the lock, recovery is deliberately manual: remove `.cortexel.figure-emission.lock` only
+after establishing that no publisher is alive. `validate` and `render` accept
+`--format json`; `migrate` is always JSON.
 
-## The stable catalog
+## The semantically stable packaged catalog
 
-Nineteen single-figure contracts plus the `figure.bundle` composition kind:
+Nineteen single-figure contracts:
 
 **Neural signals & events** — `neuro.analog_trace`, `neuro.spike_raster`,
 `neuro.population_rate`, `neuro.response_curve`, `neuro.isi_distribution`,
@@ -100,9 +150,10 @@ purpose, closed request schema, named validators, budgets, disclosures, an
 accessibility table, migration mapping, and living valid/invalid examples that the
 test suite executes.
 
-3D scenes, the evidence knowledge graph, and animation are **experimental** — they
-carry no stable contract, determinism, or accessibility guarantee, and are never
-counted among the stable figures.
+The packaged pre-1.0 React surface still contains legacy WebGL scenes, and its explicit
+`cortexel/react/knowledge-graph` subpath is experimental. No 3D, knowledge-graph,
+animation, NCP-adapter, or bundle skill/compiler exists in the FigureRequestV1 catalog;
+stable validation fails closed instead of inventing those capabilities.
 
 ## Why the invariants matter
 

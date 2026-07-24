@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/validation-error.v1.schema.json",
+  "title": "CortexelErrorV1",
+  "description": "A single diagnostic. Diagnostics are themselves part of the untrusted-input boundary: a small validation failure must not be able to amplify a hostile payload through logs, agent context, repair prompts, and the DOM.\n\nTwo consequences follow. First, `actualSummary` is a bounded CATEGORY, never raw caller content. Second, a `repair` is structured DATA — never instruction-shaped prose that a downstream language model might read as a command.",
+
+  "type": "object",
+  "properties": {
+    "code": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/errorCode",
+      "description": "Stable, append-only, and the thing tests assert on. Prose may improve; a code's meaning may not."
+    },
+    "severity": { "type": "string", "enum": ["error", "warning"] },
+    "stage": {
+      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/errorStage"
+    },
+    "instancePath": {
+      "type": "string",
+      "description": "An RFC 6901 JSON Pointer into the request. The empty string is the root. `~` and `/` are escaped identically in TypeScript and Python.",
+      "maxLength": 240
+    },
+    "schemaPath": { "type": "string", "maxLength": 240 },
+    "skillId": { "type": "string" },
+    "validatorId": { "type": "string" },
+    "message": { "type": "string", "maxLength": 500 },
+    "limit": {
+      "type": "object",
+      "description": "For a resource failure: what the bound was and what was observed. Reporting the observed COUNT is safe; echoing the offending token is not.",
+      "properties": {
+        "name": { "type": "string" },
+        "limit": { "type": "number" },
+        "observed": { "type": "number" }
+      },
+      "required": ["name", "limit"],
+      "additionalProperties": false
+    },
+    "actualSummary": {
+      "type": "string",
+      "description": "A bounded category such as `string(length=1024)` or `<object>`. Never the value itself: rendering an untrusted value into a diagnostic would execute its toString/valueOf/Symbol.toPrimitive hook while handling an error.",
+      "maxLength": 120
+    },
+    "repair": {
+      "type": "object",
+      "description": "A machine-applicable correction. `applySafeRepairs` accepts only allow-listed operations and always revalidates from the start; `validate` never auto-applies one.",
+      "properties": {
+        "operation": { "type": "string", "enum": ["replace", "remove", "add", "migrate"] },
+        "path": { "type": "string", "maxLength": 240 },
+        "value": {},
+        "reasonCode": { "type": "string" }
+      },
+      "required": ["operation", "path", "reasonCode"],
+      "additionalProperties": false
+    },
+    "omittedCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Only on ERROR_LIMIT_REACHED: how many diagnostics the budget suppressed. No failure is ever hidden without saying so."
+    }
+  },
+  "required": ["code", "severity", "stage", "instancePath", "message"],
+  "additionalProperties": false
+}

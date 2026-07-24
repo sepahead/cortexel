@@ -1,0 +1,5 @@
+# Repository build and test tooling must never inherit secrets merely because a
+# developer keeps an ignored .env file beside package.json. A command that truly
+# needs dotenv data must opt in with an explicit --env-file argument.
+env = false
+telemetry = false

@@ -12,6 +12,15 @@
  * Half-open is the only convention under which bins tile a line without gap or overlap.
  */
 
+import {
+  MAX_MATERIALIZED_BINS,
+  materializeWidthBins,
+} from '../core/binning.js';
+import {
+  exactBinary64Sum,
+  roundedBinary64Mean,
+} from '../core/exact-binary64.js';
+
 export interface Bins {
   /** n+1 strictly increasing edges defining n bins. */
   readonly edges: readonly number[];
@@ -19,19 +28,19 @@ export interface Bins {
   readonly finalEdgeInclusive: boolean;
 }
 
+export { MAX_MATERIALIZED_BINS };
+
 /** Build edges from a width that tiles [start, stop). */
 export function edgesFromWidth(start: number, stop: number, width: number): number[] {
-  if (!(width > 0) || !(stop > start)) {
-    throw new Error('binning requires width > 0 and stop > start');
-  }
-  const count = Math.ceil((stop - start) / width);
-  const edges: number[] = [];
-  // Accumulate from the index, never `edge += width`: repeated addition lets binary64
-  // error compound across thousands of bins and drift the final edge off the window.
-  for (let i = 0; i <= count; i++) {
-    edges.push(start + i * width);
-  }
-  return edges;
+  const result = materializeWidthBins(start, stop, width);
+  if (!result.ok) throw new Error(`invalid width-mode bin specification (${result.reason})`);
+  return [...result.edges];
+}
+
+/** The no-throw form for public boundaries and preflight code. */
+export function tryEdgesFromWidth(start: number, stop: number, width: number): number[] | undefined {
+  const result = materializeWidthBins(start, stop, width);
+  return result.ok ? [...result.edges] : undefined;
 }
 
 /**
@@ -43,7 +52,7 @@ export function edgesFromWidth(start: number, stop: number, width: number): numb
 export function binIndex(value: number, bins: Bins): number {
   const { edges, finalEdgeInclusive } = bins;
   const n = edges.length - 1;
-  if (n < 1) return -1;
+  if (!Number.isFinite(value) || n < 1) return -1;
 
   if (value < edges[0]) return -1;
   if (value > edges[n]) return -1;
@@ -97,7 +106,7 @@ export function binCounts(
 export function binWidths(bins: Bins): number[] {
   const widths: number[] = [];
   for (let i = 0; i < bins.edges.length - 1; i++) {
-    widths.push(bins.edges[i + 1] - bins.edges[i]);
+    widths.push(exactBinary64Sum([bins.edges[i + 1], -bins.edges[i]]));
   }
   return widths;
 }
@@ -105,7 +114,7 @@ export function binWidths(bins: Bins): number[] {
 export function binCenters(bins: Bins): number[] {
   const centers: number[] = [];
   for (let i = 0; i < bins.edges.length - 1; i++) {
-    centers.push((bins.edges[i] + bins.edges[i + 1]) / 2);
+    centers.push(roundedBinary64Mean([bins.edges[i], bins.edges[i + 1]]));
   }
   return centers;
 }

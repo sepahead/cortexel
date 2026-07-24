@@ -1,10 +1,11 @@
 import {
   VizSpecRenderer
-} from "../chunk-22ASKDTA.js";
-import "../chunk-DXRNJDB7.js";
+} from "../chunk-KAJVMXW4.js";
+import "../chunk-RT5WPA3I.js";
 import {
   safeDiagnosticText
-} from "../chunk-X23XMWZH.js";
+} from "../chunk-UEJPZXDX.js";
+import "../chunk-ZYBCCIMH.js";
 
 // react/charts/chartGeometry.ts
 var REFERENCE_CHART_DIMENSIONS = Object.freeze({
@@ -344,11 +345,17 @@ function tickValues(domain, count = 5) {
   const scale = Math.max(Math.abs(domain.min), Math.abs(domain.max), 1);
   const scaledMin = domain.min / scale;
   const scaledMax = domain.max / scale;
-  const ticks = new Array(safeCount);
+  const directSpan = domain.max - domain.min;
+  const ticks = [];
+  const seen = /* @__PURE__ */ new Set();
   for (let index = 0; index < safeCount; index++) {
     const ratio = index / (safeCount - 1);
-    const value = (scaledMin * (1 - ratio) + scaledMax * ratio) * scale;
-    ticks[index] = Object.is(value, -0) ? 0 : value;
+    const interpolated = index === 0 ? domain.min : index === safeCount - 1 ? domain.max : Number.isFinite(directSpan) ? domain.min + directSpan * ratio : (scaledMin * (1 - ratio) + scaledMax * ratio) * scale;
+    const value = Object.is(interpolated, -0) ? 0 : interpolated;
+    if (!seen.has(value)) {
+      seen.add(value);
+      ticks.push(value);
+    }
   }
   return ticks;
 }
@@ -360,6 +367,28 @@ function formatChartNumber(value) {
   if (magnitude >= 100) return value.toFixed(0);
   if (magnitude >= 10) return value.toFixed(1).replace(/\.0$/, "");
   return value.toFixed(2).replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+}
+function formatExactChartNumber(value) {
+  if (!Number.isFinite(value)) return "\u2014";
+  return value === 0 ? "0" : String(value);
+}
+function formatDistinctChartNumbers(values) {
+  const compact = values.map(formatChartNumber);
+  const seen = /* @__PURE__ */ new Map();
+  let collision = false;
+  for (let index = 0; index < compact.length; index++) {
+    const label = compact[index];
+    const value = values[index];
+    if (seen.has(label) && seen.get(label) !== value) {
+      collision = true;
+      break;
+    }
+    seen.set(label, value);
+  }
+  return collision ? values.map(formatExactChartNumber) : compact;
+}
+function formatChartInterval(start, stop) {
+  return `[${formatExactChartNumber(start)}, ${formatExactChartNumber(stop)})`;
 }
 
 // react/charts/topologyGeometry.ts
@@ -869,6 +898,8 @@ function ChartShell({
   const descriptionId = `${id}-description`;
   const xTicks = requestedXTicks ?? tickValues(xDomain);
   const yTicks = requestedYTicks ?? tickValues(yDomain);
+  const xTickLabels = formatDistinctChartNumbers(xTicks);
+  const yTickLabels = formatDistinctChartNumbers(yTicks);
   const plotWidth = chartPlotWidth(frame);
   const plotHeight = chartPlotHeight(frame);
   const legendEntries = legend.slice(0, 8);
@@ -932,7 +963,7 @@ function ChartShell({
                         fill: colors.muted,
                         fontSize: 10,
                         textAnchor: "middle",
-                        children: formatChartNumber(tick)
+                        children: xTickLabels[index]
                       }
                     )
                   ] }, `x-${index}`);
@@ -960,7 +991,7 @@ function ChartShell({
                         fill: colors.muted,
                         fontSize: 10,
                         textAnchor: "end",
-                        children: formatChartNumber(tick)
+                        children: yTickLabels[index]
                       }
                     )
                   ] }, `y-${index}`);
@@ -1262,7 +1293,7 @@ function PopulationRateChart(args, width, height, id) {
       scene: args.scene,
       title: "Population firing rate",
       description: `${params.series.length} exact checked population-rate series over ${params.bin_centers_ms.length} uniform bins. Horizontal steps show the supplied bin values without interpolation or smoothing. Series: ${seriesLabelSummary(params.series.map((series) => `${series.label} (${series.id})`))}. ${formula}.`,
-      metadata: `${params.series.length} series \u2022 ${params.bin_centers_ms.length} bins \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms \u2022 window [${formatChartNumber(params.window_start_ms)}, ${formatChartNumber(params.window_stop_ms)}) ms`,
+      metadata: `${params.series.length} series \u2022 ${params.bin_centers_ms.length} bins \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms \u2022 window ${formatChartInterval(params.window_start_ms, params.window_stop_ms)} ms`,
       note: `Rate formula: ${formula}. Binning: ${params.binning}; aggregation: ${params.aggregation}; normalization: ${params.normalization}.${compacted ? " Long series are visually compacted to exact per-bucket extrema; omitted bins are never bridged." : ""}`,
       accessibleDetails: seriesDetails,
       xLabel: "Time (ms)",
@@ -1516,7 +1547,7 @@ function CorrelogramChart(args, width, height, id) {
       title: "Spike-train correlogram",
       description: `${params.values.length} exact binned ${params.statistic.kind} values for the oriented pair ${pair}. Positive lag means the target follows the reference. Signed values and lag asymmetry are preserved; bins are shown as independent stems and points with no interpolation or mirroring. The zero-lag reference line does not add a zero bin.`,
       metadata: `${pair} \u2022 ${statistic} \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms \u2022 \u03C4 range \xB1${formatChartNumber(params.tau_max_ms)} ms`,
-      note: `Pair orientation: ${pair}. Lag convention: ${params.lag_convention}. Statistic: ${statistic}. Counting window: [${formatChartNumber(params.counting_start_ms)}, ${formatChartNumber(params.counting_stop_ms)}) ms. Binning: ${params.binning}. Zero-lag policy: ${params.zero_lag_policy}; the lag-zero line is a reference only and does not invent a bin.${marks.compacted ? " Long series are visually compacted to exact per-bucket extrema; omitted bins remain disconnected and are never mirrored." : ""}`,
+      note: `Pair orientation: ${pair}. Lag convention: ${params.lag_convention}. Statistic: ${statistic}. Counting window: ${formatChartInterval(params.counting_start_ms, params.counting_stop_ms)} ms. Binning: ${params.binning}. Zero-lag policy: ${params.zero_lag_policy}; the lag-zero line is a reference only and does not invent a bin.${marks.compacted ? " Long series are visually compacted to exact per-bucket extrema; omitted bins remain disconnected and are never mirrored." : ""}`,
       xLabel: "Lag (ms)",
       yLabel: `${params.statistic.kind} (${params.statistic.units})`,
       xDomain,
@@ -1572,24 +1603,81 @@ function CorrelogramChart(args, width, height, id) {
     }
   );
 }
+var WEIGHT_RENDER_BIN_BUDGET = 4096;
 function WeightHistogramChart(args, width, height, id) {
   const params = args.params;
+  const aggregated = aggregateUniformHistogramBins(
+    params.bin_centers,
+    params.weight_counts,
+    params.values,
+    params.bin_width,
+    params.normalization,
+    WEIGHT_RENDER_BIN_BUDGET
+  );
+  const frame = makeFrame(width, height);
+  const xDomain = { min: params.window_start, max: params.window_stop };
+  const yDomain = numericDomain(
+    aggregated.bins.map((bin) => bin.value),
+    { includeZero: true }
+  );
+  const path = variableHistogramPath(
+    aggregated.bins,
+    xDomain,
+    yDomain,
+    frame
+  );
+  const scope = metadataValue(params.snapshot_scope);
   return /* @__PURE__ */ jsx(
-    HistogramChart,
+    ChartShell,
     {
-      args,
-      width,
-      height,
       id,
+      skill: args.skill,
+      scene: args.scene,
       title: "Connection-weight distribution",
-      description: `${params.values.length} weight bins from the declared connection snapshot at ${params.snapshot_time_ms} ms, using ${params.normalization} normalization.`,
-      metadata: `${params.normalization} \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms \u2022 bin ${formatChartNumber(params.bin_width)} ${params.weight_units}`,
+      description: `${params.values.length} checked ${formatChartNumber(params.bin_width)} ${params.weight_units} bins with raw connection counts retained alongside ${params.normalization} values. The typed snapshot scope and complete sampling policy distinguish rank-local from merged evidence.`,
+      metadata: `${aggregated.sourceRawCount} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
+      note: `Weight units: ${params.weight_units}; normalization: ${params.normalization}; aggregation: ${params.aggregation}; binning: ${params.binning}; sample policy: ${params.sample_policy}; window ${formatChartInterval(params.window_start, params.window_stop)} ${params.weight_units}. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema sampling was used.` : " Every source bin is rendered directly."}`,
+      accessibleDetails: [
+        `Raw connection count is ${aggregated.sourceRawCount} before and ${aggregated.renderedRawCount} after display grouping.`
+      ],
+      accessibleDetailsLabel: "Connection-weight distribution summary",
       xLabel: `Connection weight (${params.weight_units})`,
       yLabel: params.value_units,
-      centers: params.bin_centers,
-      values: params.values,
-      binWidth: params.bin_width,
-      color: args.palette.violet
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.values.length,
+      dataRows: {
+        key: `weight-${params.snapshot_time_ms}-${params.values.length}`,
+        label: "Connection-weight bin data",
+        rowCount: params.values.length,
+        rowAt: (index) => {
+          const left = params.bin_centers[index] - params.bin_width / 2;
+          const right = params.bin_centers[index] + params.bin_width / 2;
+          return `Weight bin ${formatChartInterval(left, right)} ${params.weight_units}: ${params.weight_counts[index]} connection${params.weight_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`;
+        }
+      },
+      children: /* @__PURE__ */ jsx(
+        "path",
+        {
+          "data-mark": "weight-histogram-bars",
+          "data-bar-count": params.values.length,
+          "data-source-bin-count": aggregated.sourceBinCount,
+          "data-rendered-bin-count": aggregated.renderedBinCount,
+          "data-source-connection-count": aggregated.sourceRawCount,
+          "data-rendered-connection-count": aggregated.renderedRawCount,
+          "data-compacted": aggregated.compacted ? "true" : "false",
+          "data-sample-policy": params.sample_policy,
+          "data-snapshot-scope": params.snapshot_scope.kind,
+          d: path,
+          fill: args.palette.violet,
+          fillOpacity: 0.82,
+          stroke: args.palette.violet,
+          strokeWidth: 0.6,
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
     }
   );
 }
@@ -2098,9 +2186,9 @@ function DelayDistributionChart(args, width, height, id) {
       skill: args.skill,
       scene: args.scene,
       title: "Connection-delay distribution",
-      description: `${params.values.length} exact ${params.bin_width_ms} ms delay bins with raw connection counts retained alongside ${params.normalization} values. Adjacent visual compaction preserves raw counts and displayed mass.`,
+      description: `${params.values.length} checked ${params.bin_width_ms} ms delay bins with raw connection counts retained alongside ${params.normalization} values. Adjacent visual compaction preserves raw counts and displayed mass.`,
       metadata: `${aggregated.sourceRawCount} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
-      note: `Delay units: ${params.delay_units}; normalization: ${params.normalization}; aggregation: ${params.aggregation}; binning: ${params.binning}; sample policy: ${params.sample_policy}; window [${formatChartNumber(params.window_start_ms)}, ${formatChartNumber(params.window_stop_ms)}) ms. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema sampling was used.` : " Every source bin is rendered directly."}`,
+      note: `Delay units: ${params.delay_units}; normalization: ${params.normalization}; aggregation: ${params.aggregation}; binning: ${params.binning}; sample policy: ${params.sample_policy}; window ${formatChartInterval(params.window_start_ms, params.window_stop_ms)} ms. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema sampling was used.` : " Every source bin is rendered directly."}`,
       accessibleDetails: [
         `Raw delay-event count is ${aggregated.sourceRawCount} before and ${aggregated.renderedRawCount} after display grouping.`
       ],
@@ -2119,7 +2207,7 @@ function DelayDistributionChart(args, width, height, id) {
         rowAt: (index) => {
           const left = params.bin_centers_ms[index] - params.bin_width_ms / 2;
           const right = params.bin_centers_ms[index] + params.bin_width_ms / 2;
-          return `Delay bin [${formatChartNumber(left)}, ${formatChartNumber(right)}) ms: ${params.delay_counts[index]} connection${params.delay_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`;
+          return `Delay bin ${formatChartInterval(left, right)} ms: ${params.delay_counts[index]} connection${params.delay_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`;
         }
       },
       children: /* @__PURE__ */ jsx(
@@ -2345,7 +2433,10 @@ export {
   chartY,
   circleTopologyGeometry,
   equalAspectDomains,
+  formatChartInterval,
   formatChartNumber,
+  formatDistinctChartNumbers,
+  formatExactChartNumber,
   histogramBarPath,
   histogramDomain,
   linePath,

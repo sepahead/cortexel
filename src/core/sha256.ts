@@ -129,6 +129,32 @@ export function toHex(bytes: Uint8Array): string {
 
 const UTF8 = new TextEncoder();
 
+/** The number of UTF-8 bytes in a string, without allocating a second full-size buffer. */
+export function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (let index = 0; index < text.length; index++) {
+    const first = text.charCodeAt(index);
+    if (first <= 0x7f) {
+      bytes += 1;
+    } else if (first <= 0x7ff) {
+      bytes += 2;
+    } else if (first >= 0xd800 && first <= 0xdbff) {
+      const second = index + 1 < text.length ? text.charCodeAt(index + 1) : 0;
+      if (second >= 0xdc00 && second <= 0xdfff) {
+        bytes += 4;
+        index++;
+      } else {
+        // TextEncoder encodes an unpaired surrogate as U+FFFD (three UTF-8 bytes).
+        bytes += 3;
+      }
+    } else {
+      // Includes ordinary BMP code points and lone low surrogates (U+FFFD).
+      bytes += 3;
+    }
+  }
+  return bytes;
+}
+
 /** SHA-256 of a UTF-8 string, as 64 lowercase hex characters. */
 export function sha256Hex(text: string): string {
   return toHex(sha256Bytes(UTF8.encode(text)));

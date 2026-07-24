@@ -6,9 +6,9 @@ golden value produced by the code under test is a tautology, not evidence.
 
 It is INTENTIONALLY not executed as part of this repository's tests. Producing real
 vectors requires the pinned reference environment (Elephant 1.2.1 on the versions in
-reference/README.md), which this release was not built in. Until that environment runs,
-the corresponding evidence-ledger gates stay NOT_RUN and no contract claims its oracle
-passed.
+reference/README.md), which neither the 0.9.0 release record nor the current development
+tree has executed. Until that environment runs, the corresponding evidence-ledger gates
+stay NOT_RUN and no contract claims its oracle passed.
 
 The bin-edge, t_stop, and normalization conventions below are written to MATCH
 Cortexel's documented conventions parameter for parameter. A comparison against an

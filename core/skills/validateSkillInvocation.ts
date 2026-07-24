@@ -19,11 +19,13 @@ import {
   type VizSpec,
 } from '../vizSpec';
 import {
-  defaultHonestyCaption,
-  requiresHonestyCaption,
+  composeHonestyCaption,
 } from '../provenance';
 import { SCENE_NAMES, type SceneName } from '../designLaws';
-import { getSkill } from './registry';
+import {
+  externalProvenanceDisclosure,
+  getSkill,
+} from './registry';
 import {
   getExamplePayload,
   getInvocationExamplePayload,
@@ -35,6 +37,7 @@ import {
   isProvenanceKey,
   normalizeDeclaredProvenanceInputs,
   provenanceParamConstraintError,
+  type ProvenanceKey,
 } from './provenanceKeys';
 import {
   boundValidationIssue,
@@ -361,7 +364,7 @@ function validateSkillInvocationUnsafe(
           code: 'unsupported_spec_version',
           path: 'specVersion',
           message: `unsupported spec version '${safePrimitiveDiagnostic(rawVersion)}'`,
-          hint: `Use '${CORTEXEL_SPEC_VERSION}', or omit specVersion for a legacy envelope.`,
+          hint: `Re-author from the original source through buildVizSpec so '${CORTEXEL_SPEC_VERSION}' is stamped only after current validation; do not edit or remove an existing version stamp.`,
           example,
         },
       ],
@@ -485,6 +488,10 @@ function validateSkillInvocationUnsafe(
     spec = { ...spec, provenance: prov };
   }
   const invalidDeclaredKeys = new Set<string>();
+  const allowedDeclaredKeys = new Set<ProvenanceKey>([
+    ...contract.requiredProvenanceKeys,
+    ...(contract.optionalProvenanceKeys ?? []),
+  ]);
   for (const key of Object.keys(declared)) {
     if (errors.length >= MAX_INVOCATION_ERRORS) break;
     if (!isProvenanceKey(key)) {
@@ -494,6 +501,17 @@ function validateSkillInvocationUnsafe(
         path: `provenance.declared_inputs.${key}`,
         message: `unknown declared provenance key '${key}'`,
         hint: 'Use only keys from PROVENANCE_KEYS and the selected skill contract.',
+        example: errors.some((error) => error.example) ? undefined : example,
+      });
+      continue;
+    }
+    if (!allowedDeclaredKeys.has(key)) {
+      invalidDeclaredKeys.add(key);
+      errors.push({
+        code: 'invalid_provenance',
+        path: `provenance.declared_inputs.${key}`,
+        message: `declared provenance key '${key}' is not classified for skill '${skillId}'`,
+        hint: `Use only this skill's required or optional provenance keys: ${[...allowedDeclaredKeys].join(', ')}.`,
         example: errors.some((error) => error.example) ? undefined : example,
       });
       continue;
@@ -565,13 +583,17 @@ function validateSkillInvocationUnsafe(
   // advisory data semantics), falling back to a generic scene-reuse sentence.
   // (With calibrated_posterior=true rejected upstream, requiresHonestyCaption is
   // effectively always true on the accepted path, so this augments the caption.)
-  let caption = requiresHonestyCaption(prov) ? defaultHonestyCaption(prov) : null;
+  const externalDisclosure = externalProvenanceDisclosure(contract);
+  let weakDisclosure: string | null = null;
   if (contract.weak) {
-    const weakMsg =
+    weakDisclosure =
       contract.weakDisclosure ??
       `Derived view — ${skillId} reuses the '${contract.scene}' scene; not a 1:1 rendering.`;
-    caption = caption ? `${weakMsg} ${caption}` : weakMsg;
   }
+  const caption = composeHonestyCaption(prov, {
+    weakSkill: weakDisclosure,
+    externalProvenance: externalDisclosure,
+  });
 
   return {
     ok: true,

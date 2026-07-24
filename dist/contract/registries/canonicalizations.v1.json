@@ -1,0 +1,147 @@
+{
+  "registry": "cortexel-canonicalizations",
+  "version": "1.0",
+  "description": "Closed, language-neutral canonicalization algorithms that create stable scientific identity. Entries are immutable and append-only after release. A schema may name an exact algorithm id; every conforming host must recognize and execute that id or fail closed.",
+  "algorithms": [
+    {
+      "id": "cortexel_utf16_sorted_unique_identifier_array_rfc8785_v1",
+      "revision": 1,
+      "status": "stable",
+      "input": {
+        "container": "nonempty_array",
+        "itemType": "string",
+        "rejectEmptyItems": true,
+        "rejectDuplicates": true,
+        "unicodeDomain": "well_formed_unicode"
+      },
+      "equality": {
+        "stringEquality": "exact_unicode_sequence",
+        "unicodeNormalization": "none"
+      },
+      "sort": {
+        "order": "utf16_code_unit_lexicographic_ascending",
+        "locale": "none"
+      },
+      "serialization": {
+        "scheme": "rfc8785",
+        "value": "sorted_identifier_array"
+      },
+      "encoding": "utf-8",
+      "digest": "sha256",
+      "output": "sha256_colon_64_lowercase_hex",
+      "operations": [
+        "validate_nonempty_array",
+        "validate_nonempty_unique_well_formed_strings",
+        "sort_utf16_code_units_ascending",
+        "serialize_rfc8785",
+        "encode_utf8",
+        "digest_sha256",
+        "prefix_sha256_colon_lowercase_hex"
+      ],
+      "conformanceVectors": [
+        {
+          "name": "single_identifier",
+          "outcome": "accept",
+          "inputEncoding": "unicode_strings",
+          "input": ["cell-1"],
+          "normalizedInput": ["cell-1"],
+          "canonicalJson": "[\"cell-1\"]",
+          "digest": "sha256:67195d72e6a26feedd72d3a9eda3627d4f12f1ba1f0cafd1ff8aa2347f791faf"
+        },
+        {
+          "name": "permutation_and_numeric_suffixes",
+          "outcome": "accept",
+          "inputEncoding": "unicode_strings",
+          "input": ["n7", "n2", "n6", "n1", "n5", "n3", "n4"],
+          "normalizedInput": ["n1", "n2", "n3", "n4", "n5", "n6", "n7"],
+          "canonicalJson": "[\"n1\",\"n2\",\"n3\",\"n4\",\"n5\",\"n6\",\"n7\"]",
+          "digest": "sha256:fdb6b814de98ab8daa241acb8895573a50c4ff7e6864cef64c80b023054b29ce"
+        },
+        {
+          "name": "utf16_astral_before_high_bmp",
+          "outcome": "accept",
+          "inputEncoding": "unicode_strings",
+          "input": ["", "𐀀"],
+          "normalizedInput": ["𐀀", ""],
+          "canonicalJson": "[\"𐀀\",\"\"]",
+          "digest": "sha256:e8bdee294d4a756532cd1660a49d7d99325bb04ec58c236f78b94ff2718d31de"
+        },
+        {
+          "name": "no_unicode_normalization",
+          "outcome": "accept",
+          "inputEncoding": "unicode_strings",
+          "input": ["é", "é"],
+          "normalizedInput": ["é", "é"],
+          "canonicalJson": "[\"é\",\"é\"]",
+          "digest": "sha256:d056a09c651dab55ceb8f30b349ec21de471bdf5ce4a94db7f29dc9594f54ec3"
+        },
+        {
+          "name": "json_string_escaping",
+          "outcome": "accept",
+          "inputEncoding": "unicode_strings",
+          "input": ["quote\"", "slash\\", "line\n"],
+          "normalizedInput": ["line\n", "quote\"", "slash\\"],
+          "canonicalJson": "[\"line\\n\",\"quote\\\"\",\"slash\\\\\"]",
+          "digest": "sha256:2926b92f9ea190405919eac2fa2c0a0d8b7d01bbc15252eff56686969778d0be"
+        },
+        {
+          "name": "empty_array_rejected",
+          "outcome": "reject",
+          "inputEncoding": "unicode_strings",
+          "input": [],
+          "failureClass": "empty_set"
+        },
+        {
+          "name": "non_array_rejected",
+          "outcome": "reject",
+          "inputEncoding": "json_value",
+          "input": "cell-1",
+          "failureClass": "not_array"
+        },
+        {
+          "name": "non_string_identifier_rejected",
+          "outcome": "reject",
+          "inputEncoding": "json_value",
+          "input": ["cell-1", 1],
+          "failureClass": "non_string_identifier"
+        },
+        {
+          "name": "empty_identifier_rejected",
+          "outcome": "reject",
+          "inputEncoding": "unicode_strings",
+          "input": [""],
+          "failureClass": "empty_identifier"
+        },
+        {
+          "name": "duplicate_identifier_rejected",
+          "outcome": "reject",
+          "inputEncoding": "unicode_strings",
+          "input": ["n1", "n1"],
+          "failureClass": "duplicate_identifier"
+        },
+        {
+          "name": "lone_high_surrogate_rejected",
+          "outcome": "reject",
+          "inputEncoding": "utf16_code_units",
+          "inputCodeUnits": [[55296]],
+          "failureClass": "ill_formed_unicode"
+        }
+      ],
+      "failureClasses": [
+        "not_array",
+        "empty_set",
+        "non_string_identifier",
+        "empty_identifier",
+        "duplicate_identifier",
+        "ill_formed_unicode"
+      ]
+    }
+  ],
+  "compatibility": {
+    "entryPolicy": "append_only_immutable_after_release",
+    "semanticChange": "new_algorithm_id_or_revision",
+    "unknownAlgorithm": "fail_closed",
+    "fallback": "forbidden",
+    "manifestBinding": "exact_id_revision_and_entry_digest"
+  }
+}

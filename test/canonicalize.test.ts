@@ -6,6 +6,49 @@ import {
   canonicalDigestExcluding,
   CanonicalizationError,
 } from '../src/core/canonicalize.js';
+import {
+  RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
+  normalizeResponseEventMemberIds,
+  responseEventMembershipDigest,
+} from '../src/core/response-curve-basis.js';
+
+describe('versioned identifier-set canonicalization', () => {
+  it('matches exact conformance vectors and is permutation-invariant', () => {
+    expect(RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID).toBe(
+      'cortexel_utf16_sorted_unique_identifier_array_rfc8785_v1',
+    );
+    expect(responseEventMembershipDigest(['cell-1'])).toBe(
+      'sha256:67195d72e6a26feedd72d3a9eda3627d4f12f1ba1f0cafd1ff8aa2347f791faf',
+    );
+    const members = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7'];
+    const expected =
+      'sha256:fdb6b814de98ab8daa241acb8895573a50c4ff7e6864cef64c80b023054b29ce';
+    expect(responseEventMembershipDigest(members)).toBe(expected);
+    expect(responseEventMembershipDigest(['n7', 'n2', 'n6', 'n1', 'n5', 'n3', 'n4']))
+      .toBe(expected);
+  });
+
+  it('uses UTF-16 order without Unicode normalization', () => {
+    const astral = String.fromCodePoint(0x10000);
+    const bmp = String.fromCodePoint(0xe000);
+    expect(normalizeResponseEventMemberIds([bmp, astral])).toEqual([astral, bmp]);
+    expect(responseEventMembershipDigest([bmp, astral])).toBe(
+      'sha256:e8bdee294d4a756532cd1660a49d7d99325bb04ec58c236f78b94ff2718d31de',
+    );
+    expect(responseEventMembershipDigest(['é', 'e\u0301'])).toBe(
+      'sha256:d056a09c651dab55ceb8f30b349ec21de471bdf5ce4a94db7f29dc9594f54ec3',
+    );
+  });
+
+  it('rejects empty, duplicate, and ill-formed members', () => {
+    expect(() => responseEventMembershipDigest([])).toThrow(RangeError);
+    expect(() => responseEventMembershipDigest([''])).toThrow(TypeError);
+    expect(() => responseEventMembershipDigest(['n1', 'n1'])).toThrow(RangeError);
+    expect(() => normalizeResponseEventMemberIds(['\ud800'])).toThrow(TypeError);
+    expect(() => normalizeResponseEventMemberIds(['\udc00'])).toThrow(TypeError);
+    expect(() => responseEventMembershipDigest(['\ud800'])).toThrow(TypeError);
+  });
+});
 
 /**
  * RFC 8785 (JSON Canonicalization Scheme). If TypeScript and Python disagree on one

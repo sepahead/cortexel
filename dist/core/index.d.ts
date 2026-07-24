@@ -1,8 +1,8 @@
 export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CATEGORICAL, a as CORTEXEL_PALETTE, b as CORTICAL_LAYER_COLORS, c as ColormapName, O as OKABE_ITO, P as PALETTE_REGISTRY_POLICY, d as PaletteEntry, e as PaletteMetadata, f as PaletteName, g as RGB, h as ReadonlyPaletteMetadata, R as ReadonlySemanticPalette, S as SEMANTIC_PALETTE_KEYS, i as SYNAPSE_COLORS, j as SemanticPalette, T as TURBO_GLSL, V as VIK_GLSL, k as VIRIDIS_GLSL, l as categorical, m as colormapGradient, n as colormapHex, o as colormapRgba, p as colormapSvgStops, q as getPalette, r as getPaletteEntry, s as isRegisteredPalette, t as listPalettes, u as registerPalette, v as sampleColormap, w as validatePalette } from '../colormaps-CZ6XejJa.js';
-import { N as NestSkillId, b as NestDeviceFamily, S as SceneName, R as RendererRoute, V as VizSpec, H as HostRendererInvocation, c as HostRendererInvocationResult, d as SkillInvocationResult, a as SkillInvocationError, e as SceneData } from '../hostInvocation-B4xa-O3Q.js';
-export { C as CAMERA_PRESETS, f as CONSERVATIVE_PROVENANCE, g as CORTEXEL_JSON_LIMITS, h as CORTEXEL_JSON_POLICY, i as CORTEXEL_SPEC_VERSION, j as CameraPreset, k as CameraPresetName, D as DECLARED_INPUTS_PORTABLE_SCHEMA, E as ENVELOPE_NORMALIZATION_POLICY, l as HONESTY_POLICY, m as HostRendererInvocationSchema, J as JSON_BUDGET_SEMANTICS, n as JSON_PARAMS_PORTABLE_SCHEMA, o as JsonParamsSchema, L as LayerConfig, p as NEST_DEVICE_FAMILIES, q as NEST_SKILL_IDS, r as NUMERIC_MODEL_POLICY, s as NeuralSceneHandle, t as NeuralSceneMode, u as NeuralSceneProps, v as PlaybackState, P as ProvenanceMetadata, w as ProvenanceSchema, x as SCENE_FRAMING, y as SCENE_NAMES, z as SKILL_IDS, A as STDPSynapse, B as STRING_NORMALIZATION_POLICY, F as SceneFraming, G as SkillId, I as SkillParamsResult, K as VALID_RENDERER_ROUTES, M as VIZ_ROUTER_ID, O as VizRouterId, Q as VizSpecSchema, T as VizSpecValidation, U as defaultHonestyCaption, W as isNestSkillId, X as isSkillId, Y as mandatoryDisclosure, Z as requiresHonestyCaption, _ as validateHostRendererInvocation, $ as validateHostRendererSpec, a0 as validateSkillInvocation, a1 as validateSkillParams, a2 as validateVizSpec } from '../hostInvocation-B4xa-O3Q.js';
-import { K as KnowledgeGraph3DParams, C as CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, a as CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, b as CorrelogramParams, I as IsiDistributionParams, P as PopulationRateParams, c as PsthParams, S as SnapshotScope, d as PositionScope, e as SpatialMap2DParams, A as AdjacencyMatrixParams, f as ConnectionGraphParams, D as DelayDistributionParams, g as DelayMatrixParams, h as InDegreeDistributionParams, O as OutDegreeDistributionParams, W as WeightMatrixParams } from '../params-C6ubJU-Q.js';
-export { i as AdjacencyMatrixParamsSchema, j as AnimationReplayParams, k as AnimationReplayParamsSchema, l as AstrocyteParams, m as AstrocyteParamsSchema, n as CompartmentalParams, o as CompartmentalParamsSchema, p as ConnectionGraphParamsSchema, q as CorrelogramParamsSchema, r as DelayDistributionParamsSchema, s as DelayMatrixParamsSchema, G as GEOMETRY_MAX_ROUNDOFF_FRACTION, H as HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE, t as HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE, u as HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS, v as HISTOGRAM_MASS_TOLERANCE, w as InDegreeDistributionParamsSchema, x as IsiDistributionParamsSchema, y as KNOWLEDGE_GRAPH_LIMITS, z as KnowledgeGraph3DParamsSchema, N as NetworkParams, B as NetworkParamsSchema, E as OutDegreeDistributionParamsSchema, F as PARAM_LIMITS, J as POPULATION_RATE_ABSOLUTE_TOLERANCE, L as POPULATION_RATE_RELATIVE_TOLERANCE, M as PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE, Q as PhasePlaneParams, R as PhasePlaneParamsSchema, T as PlasticityParams, U as PlasticityParamsSchema, V as PopulationRateParamsSchema, X as PositionScopeSchema, Y as PsthParamsSchema, Z as RateResponseParams, _ as RateResponseParamsSchema, $ as Rfc3339TimestampSchema, a0 as SPATIAL_BOUNDS_ROUNDOFF_ULPS, a1 as SnapshotScopeSchema, a2 as Spatial2DParams, a3 as Spatial2DParamsSchema, a4 as Spatial3DParams, a5 as Spatial3DParamsSchema, a6 as SpatialMap2DParamsSchema, a7 as SpikeRasterParams, a8 as SpikeRasterParamsSchema, a9 as StimulusResponseParams, aa as StimulusResponseParamsSchema, ab as VoltageTraceParams, ac as VoltageTraceParamsSchema, ad as WeightHistogramParams, ae as WeightHistogramParamsSchema, af as WeightMatrixParamsSchema } from '../params-C6ubJU-Q.js';
+import { N as NestSkillId, b as NestDeviceFamily, S as SceneName, R as RendererRoute, V as VizSpec, H as HostRendererInvocation, c as HostRendererInvocationResult, d as SkillInvocationResult, a as SkillInvocationError, e as SceneData } from '../hostInvocation-DxxyBttn.js';
+export { C as CAMERA_PRESETS, f as CONSERVATIVE_PROVENANCE, g as CORTEXEL_JSON_LIMITS, h as CORTEXEL_JSON_POLICY, i as CORTEXEL_SPEC_VERSION, j as CameraPreset, k as CameraPresetName, D as DECLARED_INPUTS_PORTABLE_SCHEMA, E as ENVELOPE_NORMALIZATION_POLICY, l as HONESTY_POLICY, m as HostRendererInvocationSchema, J as JSON_BUDGET_SEMANTICS, n as JSON_PARAMS_PORTABLE_SCHEMA, o as JsonParamsSchema, L as LayerConfig, p as NEST_DEVICE_FAMILIES, q as NEST_SKILL_IDS, r as NUMERIC_MODEL_POLICY, s as NeuralSceneHandle, t as NeuralSceneMode, u as NeuralSceneProps, v as PlaybackState, P as ProvenanceMetadata, w as ProvenanceSchema, x as SCENE_FRAMING, y as SCENE_NAMES, z as SKILL_IDS, A as STDPSynapse, B as STRING_NORMALIZATION_POLICY, F as SceneFraming, G as SkillId, I as SkillParamsResult, K as VALID_RENDERER_ROUTES, M as VIZ_ROUTER_ID, O as VizRouterId, Q as VizSpecSchema, T as VizSpecValidation, U as composeHonestyCaption, W as defaultHonestyCaption, X as isNestSkillId, Y as isSkillId, Z as mandatoryDisclosure, _ as requiresHonestyCaption, $ as validateHostRendererInvocation, a0 as validateHostRendererSpec, a1 as validateSkillInvocation, a2 as validateSkillParams, a3 as validateVizSpec } from '../hostInvocation-DxxyBttn.js';
+import { K as KnowledgeGraph3DParams, C as CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, a as CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, b as CorrelogramParams, I as IsiDistributionParams, P as PopulationRateParams, c as PsthParams, S as SnapshotScope, d as PositionScope, e as SpatialMap2DParams, A as AdjacencyMatrixParams, f as ConnectionGraphParams, D as DelayDistributionParams, g as DelayMatrixParams, h as InDegreeDistributionParams, O as OutDegreeDistributionParams, W as WeightMatrixParams } from '../params-C973XJOY.js';
+export { i as AdjacencyMatrixParamsSchema, j as AnimationReplayParams, k as AnimationReplayParamsSchema, l as AstrocyteParams, m as AstrocyteParamsSchema, n as CompartmentalParams, o as CompartmentalParamsSchema, p as ConnectionGraphParamsSchema, q as CorrelogramParamsSchema, r as DelayDistributionParamsSchema, s as DelayMatrixParamsSchema, G as GEOMETRY_MAX_ROUNDOFF_FRACTION, H as HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE, t as HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE, u as HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS, v as HISTOGRAM_MASS_TOLERANCE, w as InDegreeDistributionParamsSchema, x as IsiDistributionParamsSchema, y as KNOWLEDGE_GRAPH_LIMITS, z as KnowledgeGraph3DParamsSchema, N as NetworkParams, B as NetworkParamsSchema, E as OutDegreeDistributionParamsSchema, F as PARAM_LIMITS, J as POPULATION_RATE_ABSOLUTE_TOLERANCE, L as POPULATION_RATE_RELATIVE_TOLERANCE, M as PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE, Q as PhasePlaneParams, R as PhasePlaneParamsSchema, T as PlasticityParams, U as PlasticityParamsSchema, V as PopulationRateParamsSchema, X as PositionScopeSchema, Y as PsthParamsSchema, Z as RateResponseParams, _ as RateResponseParamsSchema, $ as Rfc3339TimestampSchema, a0 as SPATIAL_BOUNDS_ROUNDOFF_ULPS, a1 as SnapshotScopeSchema, a2 as Spatial2DParams, a3 as Spatial2DParamsSchema, a4 as Spatial3DParams, a5 as Spatial3DParamsSchema, a6 as SpatialMap2DParamsSchema, a7 as SpikeRasterParams, a8 as SpikeRasterParamsSchema, a9 as StimulusResponseParams, aa as StimulusResponseParamsSchema, ab as VoltageTraceParams, ac as VoltageTraceParamsSchema, ad as WeightHistogramParams, ae as WeightHistogramParamsSchema, af as WeightMatrixParamsSchema } from '../params-C973XJOY.js';
 import { z } from 'zod';
 
 declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "spatial_units", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "derivation_method", "model_context", "fixed_parameters", "bin_ms", "histogram_normalization", "interval_scope", "event_alignment", "psth_aggregation", "connection_sample_policy", "snapshot_time_ms", "snapshot_scope", "parallel_edge_policy", "matrix_axis_order", "matrix_aggregation", "delay_units", "degree_direction", "degree_counting", "zero_degree_policy", "node_ids", "position_scope", "detector_id", "reference_population", "target_population", "correlation_normalization", "correlation_units", "lag_convention", "binning_policy", "stim_units", "rate_normalization", "graph_source", "graph_snapshot_id", "graph_scope", "identity_advisory"];
@@ -64,10 +64,12 @@ declare const ProvenanceKeyEnum: z.ZodEnum<{
 }>;
 declare const STRICT_PROVENANCE_POLICY: Readonly<{
     unknownDeclaredInputKeys: "reject";
+    globallyKnownButSkillUnclassifiedKeys: "reject";
     allowedDeclaredInputKeys: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "spatial_units", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "derivation_method", "model_context", "fixed_parameters", "bin_ms", "histogram_normalization", "interval_scope", "event_alignment", "psth_aggregation", "connection_sample_policy", "snapshot_time_ms", "snapshot_scope", "parallel_edge_policy", "matrix_axis_order", "matrix_aggregation", "delay_units", "degree_direction", "degree_counting", "zero_degree_policy", "node_ids", "position_scope", "detector_id", "reference_population", "target_population", "correlation_normalization", "correlation_units", "lag_convention", "binning_policy", "stim_units", "rate_normalization", "graph_source", "graph_snapshot_id", "graph_scope", "identity_advisory"];
+    perSkillAllowedKeys: "skill.requiredProvenanceKeys union skill.optionalProvenanceKeys";
     requiredKeysSource: "skill.requiredProvenanceKeys";
-    presentKnownValues: "validate every present known key with provenanceValueConstraints";
-    requiredKeysControl: "presence only; value rules apply whether required or extra";
+    presentKnownValues: "validate every present per-skill allowed key with provenanceValueConstraints";
+    requiredKeysControl: "required keys control presence; optional keys are allowed only when classified by the selected skill";
     normalizeBeforeValidation: true;
 }>;
 declare const PROVENANCE_KEY_LABELS: Readonly<Record<ProvenanceKey, string>>;
@@ -82,6 +84,19 @@ type ProvenanceValueConstraint = {
     kind: 'nonnegative_safe_integer_or_nonblank_string';
     normalize: 'trim';
 } | {
+    kind: 'canonical_id_collection';
+    normalize: 'trim';
+    canonicalization: 'RFC8785';
+    idDomain: 'nonnegative_safe_integer';
+    unique: true;
+    allowDigest: true;
+    allowOpaqueDigestCount: true;
+} | {
+    kind: 'canonical_positive_finite_number_array';
+    normalize: 'trim';
+    canonicalization: 'RFC8785';
+    allowedLengths: readonly number[];
+} | {
     kind: 'string';
     allowEmpty: true;
 } | {
@@ -91,7 +106,7 @@ type ProvenanceValueConstraint = {
 /** Machine-verifiable relationships between checked params and declared
  *  provenance. They do not prove a claim true, but prevent the gate from
  *  blessing contradictions such as params.units='mV' with declared units='pA'. */
-type ProvenanceParamConstraint = {
+type ProvenanceParamConstraint = ({
     kind: 'equals_param';
     provenanceKey: ProvenanceKey;
     paramKey: string;
@@ -107,15 +122,118 @@ type ProvenanceParamConstraint = {
     provenanceKey: ProvenanceKey;
     value: string | number | true;
     description: string;
+} | {
+    kind: 'one_of_literals';
+    provenanceKey: ProvenanceKey;
+    values: readonly (string | number | true)[];
+    description: string;
+} | {
+    kind: 'matches_regular_time_axis';
+    provenanceKey: ProvenanceKey;
+    /** Dot-separated own-property path to the checked numeric time array. */
+    paramPath: string;
+    absoluteTolerance: number;
+    relativeTolerance: number;
+    /** Approximate binary64 roundoff allowance at the two timestamps. */
+    roundoffUlps: number;
+    /** Never repair more than this fraction of the declared interval. */
+    maxRoundoffFraction: number;
+    description: string;
+} | {
+    kind: 'each_label_matches_variable';
+    provenanceKey: ProvenanceKey;
+    /** Dot-separated own-property path to the checked series-label array. */
+    paramPath: string;
+    separator: string;
+    description: string;
+} | {
+    kind: 'matches_canonical_json_param';
+    provenanceKey: ProvenanceKey;
+    /** Dot-separated own-property path to a checked JSON array/tuple. */
+    paramPath: string;
+    /** Large arrays may be represented by their RFC 8785 SHA-256 digest. */
+    allowDigest: boolean;
+    description: string;
+} | {
+    kind: 'matches_projected_id_collection';
+    provenanceKey: ProvenanceKey;
+    /** Dot-separated own-property path to a checked array. */
+    paramPath: string;
+    /** Optional own field projected from every array item. */
+    field?: string;
+    idDomain: 'nonnegative_safe_integer' | 'nonblank_string';
+    comparison: 'ordered' | 'set';
+    relation: 'equals' | 'contains';
+    /** Digest form is sound only for equality, never membership. */
+    allowDigest: boolean;
+    /** A digest with a separately declared count can establish only a
+     * cardinality lower bound for a disclosed external universe. */
+    allowOpaqueDigestCount: boolean;
+    description: string;
+} | {
+    kind: 'all_projected_values_equal';
+    provenanceKey: ProvenanceKey;
+    /** Dot-separated own-property path to a checked object array. */
+    paramPath: string;
+    field: string;
+    /** Empty/all-absent projections are externally unverifiable and pass. */
+    emptyPolicy: 'pass_unverifiable';
+    description: string;
+} | {
+    kind: 'canonical_json_array_length_matches_param';
+    provenanceKey: ProvenanceKey;
+    /** Dot-separated own-property path to a checked non-negative count. */
+    paramPath: string;
+    idDomain: 'nonnegative_safe_integer' | 'nonblank_string';
+    relation: 'equals' | 'at_least' | 'nonempty_if_positive';
+    allowOpaqueDigestCount: boolean;
+    description: string;
+} | {
+    kind: 'canonical_json_array_length_equals';
+    provenanceKey: ProvenanceKey;
+    expectedLength: number;
+    description: string;
+} | {
+    kind: 'canonical_json_array_length_at_least_projected_sum';
+    provenanceKey: ProvenanceKey;
+    /** Dot-separated own-property path to a checked object array. */
+    paramPath: string;
+    field: string;
+    idDomain: 'nonnegative_safe_integer' | 'nonblank_string';
+    allowOpaqueDigestCount: boolean;
+    description: string;
+}) & {
+    /** False for a supplemental contradiction check that cannot establish the
+     * source-level provenance claim by itself. */
+    establishesBinding?: boolean;
 };
 declare const PROVENANCE_PARAM_CONSTRAINT_LANGUAGE: Readonly<{
-    version: "2";
+    version: "4";
     evaluationOrder: readonly string[];
-    kinds: readonly ["equals_param", "equals_param_path", "equals_literal"];
+    kinds: readonly ["equals_param", "equals_param_path", "equals_literal", "one_of_literals", "matches_regular_time_axis", "each_label_matches_variable", "matches_canonical_json_param", "matches_projected_id_collection", "all_projected_values_equal", "canonical_json_array_length_matches_param", "canonical_json_array_length_equals", "canonical_json_array_length_at_least_projected_sum"];
     semantics: Readonly<{
         equals_param: "declared value must equal one checked top-level params property under Object.is";
         equals_param_path: "declared value must equal the checked scalar reached through a dot-separated sequence of safe own data-property names under Object.is";
         equals_literal: "declared value must equal the contract literal under Object.is";
+        one_of_literals: "declared value must equal one contract literal under Object.is";
+        matches_regular_time_axis: Readonly<{
+            timeArray: "the checked array contains at least two finite, strictly increasing binary64 timestamps";
+            declaredInterval: "a positive finite binary64 number";
+            binary64Epsilon: number;
+            relativeScale: "max(abs(right-left), abs(declaredInterval))";
+            candidateRoundoff: "roundoffUlps * binary64Epsilon * max(abs(left), abs(right), abs(declaredInterval))";
+            roundoffCap: "maxRoundoffFraction * abs(declaredInterval)";
+            boundedRoundoff: "candidateRoundoff when candidateRoundoff <= roundoffCap, otherwise 0";
+            tolerance: "absoluteTolerance + relativeTolerance * relativeScale + boundedRoundoff";
+            acceptance: "for every adjacent pair, abs((right-left)-declaredInterval) <= tolerance";
+        }>;
+        each_label_matches_variable: "every checked series label must either exactly equal the declared recorded variable or consist of a nonblank series identity, the exact published separator, and the exact declared variable as its terminal segment";
+        matches_canonical_json_param: "the declared string must be either the RFC 8785 canonical JSON serialization of the checked array/tuple or, when allowDigest=true, its sha256:<64 lowercase hex> RFC 8785 digest";
+        matches_projected_id_collection: "project an optional own id field from every item of the checked array; direct id arrays contain unique members in the published idDomain (non-negative safe integers or nonblank strings); ordered equality preserves order, set equality compares unique members, and contains requires every projected member to occur in the declared canonical JSON array; an exact equality digest is sha256 over RFC 8785 canonical JSON of the projected sequence (for set comparison, remove later duplicates while preserving first encounter order); when allowOpaqueDigestCount=true on a supplemental external contains check, sha256:<64 lowercase hex>;count:<n> cannot prove membership or preimage type but must declare at least the number of distinct observed ids";
+        all_projected_values_equal: "when projected values exist, every present projected scalar must equal the declared value under Object.is; an empty or all-absent projection remains externally unverifiable and follows emptyPolicy";
+        canonical_json_array_length_matches_param: "the declared collection is either a canonical JSON array of unique ids in the published idDomain or, when allowed, sha256:<64 lowercase hex>;count:<non-negative safe integer>; relation=equals requires its item count to equal the checked non-negative safe-integer param, relation=at_least requires at least that count, and relation=nonempty_if_positive requires at least one declared id exactly when the checked param is positive (zero permits an empty collection); the last relation rejects a provably empty endpoint universe without claiming to identify its members";
+        canonical_json_array_length_equals: "the declared value must be an RFC 8785 canonical JSON array with exactly expectedLength elements; this per-skill shape check does not establish that an external declaration is true";
+        canonical_json_array_length_at_least_projected_sum: "the declared collection is a unique id array or allowed opaque digest+count, and its item count must be at least the safe-integer sum of the non-negative safe-integer field projected from the checked object array; this checks the disjoint selected-population denominator lower bound without claiming to recover member identity";
     }>;
 }>;
 /** Exact semantic rule applied to every required declared-input value. Non-TS
@@ -188,9 +306,22 @@ type AdaptEngramCorpusEntityGraphResult = {
 declare function adaptEngramCorpusEntityGraph(graph: EngramCorpusEntityGraphResponse, options: AdaptEngramCorpusEntityGraphOptions): AdaptEngramCorpusEntityGraphResult;
 declare function adaptEngramCorpusEntityGraph(graph: unknown, options: unknown): AdaptEngramCorpusEntityGraphResult;
 
-declare const CORTEXEL_SKILL_VERSION = "1.6.0";
+type ProvenanceVerificationKind = 'param_bound' | 'literal_bound' | 'derived_bound' | 'external_claim';
+interface ExternalProvenanceClaim {
+    /** Why the checked params cannot establish this source-level assertion. */
+    reason: string;
+}
+interface ProvenanceVerification {
+    kind: ProvenanceVerificationKind;
+    /** Present for external claims; absent for mechanically correlated claims. */
+    reason?: string;
+}
+type ExternalProvenanceClaims = Readonly<Partial<Record<ProvenanceKey, ExternalProvenanceClaim>>>;
+declare function provenanceVerificationForContract(contract: Pick<SkillContract, 'id' | 'requiredProvenanceKeys' | 'provenanceParamConstraints' | 'externalProvenanceClaims' | 'optionalProvenanceKeys'>): Partial<Record<ProvenanceKey, ProvenanceVerification>>;
+declare function externalProvenanceDisclosure(contract: Pick<SkillContract, 'requiredProvenanceKeys' | 'externalProvenanceClaims'>): string | null;
+declare const CORTEXEL_SKILL_VERSION = "1.7.0";
 declare const STRICT_INVOCATION_POLICY: Readonly<{
-    version: "2";
+    version: "3";
     externalSelection: "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present";
     selfDescribingSelection: "validateSpec(payload): payload.skill is required and selects the contract";
     hostSelection: "host envelopes require payload.skill; explicit id and payload.skill must match";
@@ -200,6 +331,7 @@ declare const STRICT_INVOCATION_POLICY: Readonly<{
     rendererRoute: "when selected, must occur in contract.rendererRoutes";
     params: "validate paramsJsonSchema then every paramConstraint";
     provenance: "apply strictProvenancePolicy, require every contract.requiredProvenanceFlags value, then evaluate every provenanceParamConstraint";
+    provenanceVerification: "every allowed required or optional provenance key is classified exactly once as parameter/literal/derived-bound or an externally unverifiable caller claim with mandatory disclosure; all other declared keys reject";
 }>;
 type RequiredProvenanceFlags = Readonly<Partial<{
     advisory_only: boolean;
@@ -216,7 +348,7 @@ interface SkillExample {
 /** Cross-field rules JSON Schema cannot express (such as two arrays having the
  *  same length). Non-TypeScript hosts apply these after paramsJsonSchema. */
 interface ParamValidationConstraint {
-    kind: 'equal_length' | 'each_length_matches' | 'monotonic_non_decreasing' | 'non_negative' | 'property_count' | 'unique_field' | 'unique_tuple' | 'references_exist' | 'no_self_loops' | 'same_keys' | 'cartesian_product_length' | 'permutation_of_keys' | 'endpoint_kinds' | 'mapped_value' | 'conditional_numeric_domain' | 'uniform_histogram_bins' | 'normalized_histogram_mass' | 'psth_derived_counts' | 'max_parallel_edges' | 'each_unique_field' | 'each_contains_field_value' | 'node_score_kind' | 'edge_score_kind' | 'ordered_interval' | 'uniform_bin_window' | 'population_rate_derived_values' | 'symmetric_lag_axis' | 'legacy_connection_channels' | 'connection_graph_snapshot' | 'matrix_connection_counts' | 'degree_distribution_consistency' | 'delay_distribution_consistency' | 'spatial_extent_bounds' | 'scope_compatibility' | 'acyclic';
+    kind: 'equal_length' | 'each_length_matches' | 'monotonic_non_decreasing' | 'strictly_increasing' | 'non_negative' | 'property_count' | 'unique_field' | 'unique_tuple' | 'references_exist' | 'no_self_loops' | 'same_keys' | 'cartesian_product_length' | 'permutation_of_keys' | 'endpoint_kinds' | 'mapped_value' | 'conditional_numeric_domain' | 'uniform_histogram_bins' | 'normalized_histogram_mass' | 'psth_derived_counts' | 'max_parallel_edges' | 'each_unique_field' | 'each_contains_field_value' | 'node_score_kind' | 'edge_score_kind' | 'ordered_interval' | 'uniform_bin_window' | 'population_rate_derived_values' | 'symmetric_lag_axis' | 'legacy_connection_channels' | 'connection_graph_snapshot' | 'matrix_connection_counts' | 'degree_distribution_consistency' | 'delay_distribution_consistency' | 'weight_histogram_consistency' | 'spatial_extent_bounds' | 'scope_compatibility' | 'acyclic';
     paths: readonly string[];
     field?: string;
     min?: number;
@@ -298,6 +430,12 @@ interface SkillContract {
     requiredProvenanceFlags?: RequiredProvenanceFlags;
     /** Deterministic params↔provenance consistency checks. */
     provenanceParamConstraints?: readonly ProvenanceParamConstraint[];
+    /** Required source-level claims that cannot be established from the checked
+     * params. These remain structurally validated and receive a mandatory
+     * contract-owned disclosure instead of being presented as machine-verified. */
+    externalProvenanceClaims?: ExternalProvenanceClaims;
+    /** Non-required known claims that receive a consistency check when present. */
+    optionalProvenanceKeys?: readonly ProvenanceKey[];
     rendererRoutes: readonly RendererRoute[];
     examples: readonly SkillExample[];
 }
@@ -305,13 +443,13 @@ interface SkillContract {
  *  deliberately tiny JSONPath subset so non-TS hosts do not have to guess how
  *  `[*]`, `*`, or `?` are interpreted. */
 declare const PARAM_CONSTRAINT_LANGUAGE: Readonly<{
-    version: "8";
+    version: "10";
     pathSyntax: "dot-separated object keys";
     arrayWildcard: "[*]";
     objectValueWildcard: "*";
     optionalSuffix: "?";
     evaluationOrder: readonly string[];
-    kinds: readonly ["equal_length", "each_length_matches", "monotonic_non_decreasing", "non_negative", "property_count", "unique_field", "unique_tuple", "references_exist", "no_self_loops", "same_keys", "cartesian_product_length", "permutation_of_keys", "endpoint_kinds", "mapped_value", "conditional_numeric_domain", "uniform_histogram_bins", "normalized_histogram_mass", "psth_derived_counts", "max_parallel_edges", "each_unique_field", "each_contains_field_value", "node_score_kind", "edge_score_kind", "ordered_interval", "uniform_bin_window", "population_rate_derived_values", "symmetric_lag_axis", "legacy_connection_channels", "connection_graph_snapshot", "matrix_connection_counts", "degree_distribution_consistency", "delay_distribution_consistency", "spatial_extent_bounds", "scope_compatibility", "acyclic"];
+    kinds: readonly ["equal_length", "each_length_matches", "monotonic_non_decreasing", "strictly_increasing", "non_negative", "property_count", "unique_field", "unique_tuple", "references_exist", "no_self_loops", "same_keys", "cartesian_product_length", "permutation_of_keys", "endpoint_kinds", "mapped_value", "conditional_numeric_domain", "uniform_histogram_bins", "normalized_histogram_mass", "psth_derived_counts", "max_parallel_edges", "each_unique_field", "each_contains_field_value", "node_score_kind", "edge_score_kind", "ordered_interval", "uniform_bin_window", "population_rate_derived_values", "symmetric_lag_axis", "legacy_connection_channels", "connection_graph_snapshot", "matrix_connection_counts", "degree_distribution_consistency", "delay_distribution_consistency", "weight_histogram_consistency", "spatial_extent_bounds", "scope_compatibility", "acyclic"];
     semantics: Readonly<{
         equal_length: Readonly<{
             pathRoles: "all paths resolve to arrays";
@@ -325,6 +463,10 @@ declare const PARAM_CONSTRAINT_LANGUAGE: Readonly<{
         monotonic_non_decreasing: Readonly<{
             pathRoles: "each path resolves an ordered numeric sequence";
             rule: "for every adjacent pair previous <= next";
+        }>;
+        strictly_increasing: Readonly<{
+            pathRoles: "each path resolves an ordered numeric sequence";
+            rule: "for every adjacent pair previous < next";
         }>;
         non_negative: Readonly<{
             pathRoles: "each path resolves numeric values";
@@ -376,8 +518,9 @@ declare const PARAM_CONSTRAINT_LANGUAGE: Readonly<{
         }>;
         uniform_histogram_bins: Readonly<{
             pathRoles: "first path resolves the ordered bin-center array; second path resolves one numeric bin width";
-            rule: "width is positive and finite; centers are strictly increasing; each adjacent delta approximately equals width";
+            rule: "width and width/2 are positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing; each adjacent delta approximately equals width";
             comparison: "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))";
+            internalEdgeComparison: "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff";
             nonNegativeLowerEdge: "when true, firstCenter-width/2 must be >= -tolerance, where tolerance uses firstCenter and width/2 in the same comparison formula";
         }>;
         normalized_histogram_mass: Readonly<{
@@ -432,9 +575,10 @@ declare const PARAM_CONSTRAINT_LANGUAGE: Readonly<{
         }>;
         uniform_bin_window: Readonly<{
             pathRoles: "ordered bin-center array, positive finite bin width, finite window start, finite window stop in that order";
-            rule: "centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop";
-            binning: "left-closed, right-open bins exactly tile [start,stop)";
+            rule: "width/2 remains positive and finite; every binary64 center-width/2 and center+width/2 edge is finite and strictly straddles its center; every represented edge span approximately equals width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; centers are strictly increasing and uniformly spaced by width; firstCenter-width/2 equals start and lastCenter+width/2 equals stop";
+            binning: "left-closed, right-open bins tile [start,stop) within the published bounded binary64 geometry tolerance";
             spacingComparison: "adjacent center deltas use abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual),abs(expected))";
+            internalEdgeComparison: "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff";
             edgeComparison: "exact edge equality passes; otherwise the binary64 allowance must be <= maxRoundoffFraction * abs(binWidth), then abs(edge-expected) <= absoluteTolerance + relativeTolerance * abs(binWidth) + roundoffUlps * 2^-52 * max(abs(center),abs(binWidth/2),abs(edge),abs(expected)); an unresolved absolute origin fails closed";
         }>;
         population_rate_derived_values: Readonly<{
@@ -447,8 +591,9 @@ declare const PARAM_CONSTRAINT_LANGUAGE: Readonly<{
         }>;
         symmetric_lag_axis: Readonly<{
             pathRoles: "ordered lag-center array, positive finite bin width, positive finite tau_max_ms in that order";
-            rule: "lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span exactly [-tau_max_ms,+tau_max_ms]";
+            rule: "width/2 remains positive and finite; every binary64 lag-width/2 and lag+width/2 edge is finite, strictly straddles its lag center, and retains the declared width; adjacent represented edges meet within the bounded local-width/origin-roundoff tolerance; lags are strictly increasing, uniformly spaced by width, odd in count, pairwise symmetric about a zero center, and span [-tau_max_ms,+tau_max_ms] under the published comparison";
             comparison: "abs(actual-expected) <= absoluteTolerance + relativeTolerance * max(abs(actual), abs(expected))";
+            internalEdgeComparison: "exact equality passes; otherwise origin-scaled roundoffUlps * 2^-52 must not exceed maxRoundoffFraction * abs(width), and abs(nextLeft-previousRight) <= absoluteTolerance + relativeTolerance * abs(width) + that bounded roundoff";
         }>;
         legacy_connection_channels: Readonly<{
             pathRoles: "optional weights array, optional weight_units, optional delays array, and optional delay_units in that order";
@@ -474,7 +619,14 @@ declare const PARAM_CONSTRAINT_LANGUAGE: Readonly<{
             pathRoles: "bin centers, raw delay_counts, displayed values, bin width, connection_count, normalization, value units, delay units, aggregation, and binning in that order";
             rule: "the three bin arrays have equal length; displayed values are finite and nonnegative; sum(delay_counts)=connection_count; displayed counts equal raw counts exactly; probabilities or densities exactly equal the published binary64 recovery result and globally sum or integrate to one within the accumulated-mass tolerance; non-count normalization requires a non-empty snapshot and finite density denominator";
             operationOrder: "probability=count/connection_count; probability_density=count/(connection_count*bin_width_ms) using IEEE-754 binary64; per-bin comparison uses exact Object.is-equivalent binary64 identity, while absoluteTolerance/relativeTolerance apply only to accumulated normalized mass";
-            geometry: "a separate uniform_bin_window constraint publishes and evaluates exact [start,stop) bin geometry";
+            geometry: "a separate uniform_bin_window constraint publishes and evaluates [start,stop) bin geometry within its bounded binary64 tolerance";
+        }>;
+        weight_histogram_consistency: Readonly<{
+            pathRoles: "bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order";
+            rule: "the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot";
+            operationOrder: "probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity";
+            fixedSemantics: "aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin";
+            geometry: "a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance";
         }>;
         spatial_extent_bounds: Readonly<{
             pathRoles: "nodes array, extent tuple, and center tuple in that order";
@@ -525,7 +677,10 @@ interface SkillDescriptor {
     };
     requiredInputKeys: string[];
     requiredProvenanceKeys: ProvenanceKey[];
+    optionalProvenanceKeys: ProvenanceKey[];
     requiredProvenanceFlags: RequiredProvenanceFlags;
+    provenanceVerification: Partial<Record<ProvenanceKey, ProvenanceVerification>>;
+    externalProvenanceDisclosure: string | null;
     provenanceParamConstraints: ProvenanceParamConstraint[];
     /** Machine-readable JSON Schema for `params` (JSON Schema draft 2020-12),
      *  derived from the skill's zod schema. Agents and non-TS hosts can validate
@@ -972,4 +1127,4 @@ declare function synapseCollectionToDelayDistributionParams(input: unknown, opti
 declare function getPositionToSpatialMap2DParams(input: unknown, options: SpatialMap2DOptions): NestTopologyResult<SpatialMap2DParams>;
 declare function getPositionToSpatialMap2DParams(input: unknown, options: unknown): NestTopologyResult<SpatialMap2DParams>;
 
-export { type AdaptEngramCorpusEntityGraphOptions, type AdaptEngramCorpusEntityGraphResult, type AdapterResult, AdjacencyMatrixParams, type BuildHostRendererInvocationInput, type BuildVizSpecInput, CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, CORTEXEL_SKILL_VERSION, type ConnectionGraphOptions, ConnectionGraphParams, type ConnectionSnapshotOptions, type CorrelationDetectorOptions, type CorrelationDetectorStatus, CorrelationDetectorStatusSchema, CorrelogramParams, type DeclaredInputs, type DegreeDistributionOptions, type DelayDistributionOptions, DelayDistributionParams, type DelayMatrixOptions, DelayMatrixParams, type Disambiguator, type EmptySceneResult, type EngramCorpusEntityEdge, type EngramCorpusEntityEdgeKind, type EngramCorpusEntityGraphResponse, type EngramCorpusEntityNode, type EngramCorpusEntityNodeKind, type GetConnections, type GetConnectionsDataKind, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type GetPositionDataKind, HOST_RENDERER_EXAMPLE_PAYLOADS, HostRendererInvocation, HostRendererInvocationResult, InDegreeDistributionParams, type IsiAnalysisOptions, IsiDistributionParams, KnowledgeGraph3DParams, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_ADAPTER_LIMITS, NEST_ANALYSIS_LIMITS, NEST_INPUT_LIMITS, NEST_SKILL_REGISTRY, NEST_TOPOLOGY_LIMITS, type NestAnalysisResult, NestDeviceFamily, NestSkillId, type NestTopologyResult, type NormalizedSynapseCollectionSnapshot, OutDegreeDistributionParams, PARAM_CONSTRAINT_LANGUAGE, PARAM_VALIDATION_CONSTRAINTS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE, PROVENANCE_VALUE_CONSTRAINTS, type ParamValidationConstraint, type PopulationRateOptions, PopulationRateParams, type PopulationRatePopulation, PositionScope, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceOverrides, type ProvenanceParamConstraint, type ProvenanceValueConstraint, type PsthAnalysisOptions, PsthParams, ROUTING_DISCRIMINATORS, RendererRoute, type RequiredProvenanceFlags, type RouteDataKind, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SKILL_REGISTRY, STRICT_INVOCATION_POLICY, STRICT_PROVENANCE_POLICY, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, SkillInvocationError, SkillInvocationResult, SnapshotScope, type SpatialMap2DOptions, SpatialMap2DParams, type SpikeDataKind, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VizSpec, type WeightMatrixOptions, WeightMatrixParams, type WeightRecorderEvents, WeightRecorderEventsSchema, type WeightRecorderSplitResult, type WeightSynapseSeries, adaptEngramCorpusEntityGraph, buildHostRendererInvocation, buildVizSpec, conservativeProvenance, correlationDetectorToCorrelogramParams, declaredProvenanceValueError, describeSkill, describeSkills, detectEmptyScene, formatInvocationErrors, getConnectionsToSceneData, getExamplePayload, getHostRendererExamplePayload, getInvocationExamplePayload, getPositionToSceneData, getPositionToSpatialMap2DParams, getSkill, isProvenanceKey, listSkills, multimeterToSceneData, normalizeDeclaredProvenanceInputs, normalizeDeclaredProvenanceValue, normalizeSynapseCollectionSnapshot, provenanceParamConstraintError, routeToScene, skillParamsJsonSchema, spikeRecorderToIsiParams, spikeRecorderToPopulationRateParams, spikeRecorderToSceneData, spikeTrialsToPsthParams, splitMultimeterBySender, splitWeightRecorderBySynapse, synapseCollectionToAdjacencyMatrixParams, synapseCollectionToConnectionGraphParams, synapseCollectionToDelayDistributionParams, synapseCollectionToDelayMatrixParams, synapseCollectionToInDegreeDistributionParams, synapseCollectionToOutDegreeDistributionParams, synapseCollectionToWeightMatrixParams, toPortableJsonSchema, validateSpec, weightRecorderToSceneData };
+export { type AdaptEngramCorpusEntityGraphOptions, type AdaptEngramCorpusEntityGraphResult, type AdapterResult, AdjacencyMatrixParams, type BuildHostRendererInvocationInput, type BuildVizSpecInput, CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, CORTEXEL_SKILL_VERSION, type ConnectionGraphOptions, ConnectionGraphParams, type ConnectionSnapshotOptions, type CorrelationDetectorOptions, type CorrelationDetectorStatus, CorrelationDetectorStatusSchema, CorrelogramParams, type DeclaredInputs, type DegreeDistributionOptions, type DelayDistributionOptions, DelayDistributionParams, type DelayMatrixOptions, DelayMatrixParams, type Disambiguator, type EmptySceneResult, type EngramCorpusEntityEdge, type EngramCorpusEntityEdgeKind, type EngramCorpusEntityGraphResponse, type EngramCorpusEntityNode, type EngramCorpusEntityNodeKind, type ExternalProvenanceClaim, type GetConnections, type GetConnectionsDataKind, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type GetPositionDataKind, HOST_RENDERER_EXAMPLE_PAYLOADS, HostRendererInvocation, HostRendererInvocationResult, InDegreeDistributionParams, type IsiAnalysisOptions, IsiDistributionParams, KnowledgeGraph3DParams, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_ADAPTER_LIMITS, NEST_ANALYSIS_LIMITS, NEST_INPUT_LIMITS, NEST_SKILL_REGISTRY, NEST_TOPOLOGY_LIMITS, type NestAnalysisResult, NestDeviceFamily, NestSkillId, type NestTopologyResult, type NormalizedSynapseCollectionSnapshot, OutDegreeDistributionParams, PARAM_CONSTRAINT_LANGUAGE, PARAM_VALIDATION_CONSTRAINTS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE, PROVENANCE_VALUE_CONSTRAINTS, type ParamValidationConstraint, type PopulationRateOptions, PopulationRateParams, type PopulationRatePopulation, PositionScope, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceOverrides, type ProvenanceParamConstraint, type ProvenanceValueConstraint, type ProvenanceVerification, type ProvenanceVerificationKind, type PsthAnalysisOptions, PsthParams, ROUTING_DISCRIMINATORS, RendererRoute, type RequiredProvenanceFlags, type RouteDataKind, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SKILL_REGISTRY, STRICT_INVOCATION_POLICY, STRICT_PROVENANCE_POLICY, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, SkillInvocationError, SkillInvocationResult, SnapshotScope, type SpatialMap2DOptions, SpatialMap2DParams, type SpikeDataKind, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VizSpec, type WeightMatrixOptions, WeightMatrixParams, type WeightRecorderEvents, WeightRecorderEventsSchema, type WeightRecorderSplitResult, type WeightSynapseSeries, adaptEngramCorpusEntityGraph, buildHostRendererInvocation, buildVizSpec, conservativeProvenance, correlationDetectorToCorrelogramParams, declaredProvenanceValueError, describeSkill, describeSkills, detectEmptyScene, externalProvenanceDisclosure, formatInvocationErrors, getConnectionsToSceneData, getExamplePayload, getHostRendererExamplePayload, getInvocationExamplePayload, getPositionToSceneData, getPositionToSpatialMap2DParams, getSkill, isProvenanceKey, listSkills, multimeterToSceneData, normalizeDeclaredProvenanceInputs, normalizeDeclaredProvenanceValue, normalizeSynapseCollectionSnapshot, provenanceParamConstraintError, provenanceVerificationForContract, routeToScene, skillParamsJsonSchema, spikeRecorderToIsiParams, spikeRecorderToPopulationRateParams, spikeRecorderToSceneData, spikeTrialsToPsthParams, splitMultimeterBySender, splitWeightRecorderBySynapse, synapseCollectionToAdjacencyMatrixParams, synapseCollectionToConnectionGraphParams, synapseCollectionToDelayDistributionParams, synapseCollectionToDelayMatrixParams, synapseCollectionToInDegreeDistributionParams, synapseCollectionToOutDegreeDistributionParams, synapseCollectionToWeightMatrixParams, toPortableJsonSchema, validateSpec, weightRecorderToSceneData };

@@ -76,6 +76,28 @@ function serializeNumber(value: number, path: string): string {
   return JSON.stringify(value);
 }
 
+function safeOwnKeys(value: object, path: string): (string | symbol)[] {
+  try {
+    return Reflect.ownKeys(value);
+  } catch {
+    throw new CanonicalizationError('object keys could not be inspected without executing a hostile trap', path);
+  }
+}
+
+function safeDescriptor(value: object, key: PropertyKey, path: string): PropertyDescriptor {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) return descriptor;
+  } catch {
+    // Reframed below as a deterministic domain error.
+  }
+  throw new CanonicalizationError('an object member could not be inspected safely', path);
+}
+
+function childPath(path: string, key: string): string {
+  return `${path}/${key.replace(/~/gu, '~0').replace(/\//gu, '~1')}`;
+}
+
 function serialize(value: unknown, path: string, depth: number): string {
   if (depth > 128) {
     throw new CanonicalizationError('value nests deeper than the canonicalizer permits', path);
@@ -104,18 +126,58 @@ function serialize(value: unknown, path: string, depth: number): string {
       );
   }
 
-  if (Array.isArray(value)) {
+  let array = false;
+  try {
+    array = Array.isArray(value);
+  } catch {
+    throw new CanonicalizationError('the value could not be inspected safely', path);
+  }
+
+  if (array) {
     // Array ORDER is data. It is never sorted — sorting an event sequence would
     // silently change what the figure says.
+    const keys = safeOwnKeys(value as object, path);
+    const lengthDescriptor = safeDescriptor(value as object, 'length', path);
+    const length = lengthDescriptor.value;
+    if (!Number.isSafeInteger(length) || length < 0) {
+      throw new CanonicalizationError('array length is outside the canonical JSON domain', path);
+    }
+    const indexKeys: string[] = [];
+    for (const key of keys) {
+      if (typeof key === 'symbol') {
+        throw new CanonicalizationError('symbol-keyed array members are outside the JSON domain', path);
+      }
+      if (key === 'length') continue;
+      const index = Number(key);
+      if (!/^(0|[1-9][0-9]*)$/u.test(key) || !Number.isSafeInteger(index) || index >= length) {
+        throw new CanonicalizationError('named array members are outside the JSON domain', path);
+      }
+      const descriptor = safeDescriptor(value as object, key, childPath(path, key));
+      if (!descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+        throw new CanonicalizationError('array accessors and hidden members are outside the JSON domain', path);
+      }
+      indexKeys.push(key);
+    }
+    if (indexKeys.length !== length) {
+      throw new CanonicalizationError('sparse arrays are outside the canonical JSON domain', path);
+    }
+    indexKeys.sort((left, right) => Number(left) - Number(right));
     const parts: string[] = [];
-    for (let i = 0; i < value.length; i++) {
-      parts.push(serialize(value[i], `${path}/${i}`, depth + 1));
+    for (const key of indexKeys) {
+      const at = childPath(path, key);
+      const descriptor = safeDescriptor(value as object, key, at);
+      parts.push(serialize(descriptor.value, at, depth + 1));
     }
     return `[${parts.join(',')}]`;
   }
 
   const record = value as Record<string, unknown>;
-  const prototype = Object.getPrototypeOf(record);
+  let prototype: object | null;
+  try {
+    prototype = Object.getPrototypeOf(record);
+  } catch {
+    throw new CanonicalizationError('the object prototype could not be inspected safely', path);
+  }
   if (prototype !== Object.prototype && prototype !== null) {
     throw new CanonicalizationError(
       'only plain objects can be canonicalized; a class instance has no canonical JSON form',
@@ -124,22 +186,35 @@ function serialize(value: unknown, path: string, depth: number): string {
   }
 
   // UTF-16 code-unit ordering, per RFC 8785 §3.2.3. Default sort() is exactly this.
-  const keys = Object.keys(record).sort();
+  const ownKeys = safeOwnKeys(record, path);
+  const keys: string[] = [];
+  for (const key of ownKeys) {
+    if (typeof key === 'symbol') {
+      throw new CanonicalizationError('symbol-keyed members are outside the JSON domain', path);
+    }
+    const descriptor = safeDescriptor(record, key, childPath(path, key));
+    if (!descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      throw new CanonicalizationError('accessors and hidden members are outside the JSON domain', path);
+    }
+    keys.push(key);
+  }
+  keys.sort();
 
   const parts: string[] = [];
   for (const key of keys) {
     assertWellFormed(key, path);
-    const child = record[key];
+    const at = childPath(path, key);
+    const child = safeDescriptor(record, key, at).value;
     // `undefined` is not a JSON value. JSON.stringify silently DROPS such a
     // member, which would let two semantically different objects canonicalize to
     // the same bytes. Rejecting is the only safe answer.
     if (child === undefined) {
       throw new CanonicalizationError(
         `member ${JSON.stringify(key)} is undefined; undefined is not a JSON value`,
-        path,
+        at,
       );
     }
-    parts.push(`${JSON.stringify(key)}:${serialize(child, `${path}/${key}`, depth + 1)}`);
+    parts.push(`${JSON.stringify(key)}:${serialize(child, at, depth + 1)}`);
   }
   return `{${parts.join(',')}}`;
 }
@@ -176,9 +251,16 @@ export function canonicalDigestExcluding(
   value: Record<string, unknown>,
   excludeKey: string,
 ): string {
-  const copy: Record<string, unknown> = {};
-  for (const key of Object.keys(value)) {
-    if (key !== excludeKey) copy[key] = value[key];
+  const copy: Record<string, unknown> = Object.create(null);
+  for (const key of safeOwnKeys(value, '')) {
+    if (typeof key === 'symbol') {
+      throw new CanonicalizationError('symbol-keyed members are outside the JSON domain', '');
+    }
+    const descriptor = safeDescriptor(value, key, childPath('', key));
+    if (!descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
+      throw new CanonicalizationError('accessors and hidden members are outside the JSON domain', '');
+    }
+    if (key !== excludeKey) copy[key] = descriptor.value;
   }
   return canonicalDigest(copy);
 }

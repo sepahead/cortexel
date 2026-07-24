@@ -11,8 +11,7 @@ import {
   ProvenanceSchema,
 } from '../vizSpec';
 import {
-  defaultHonestyCaption,
-  requiresHonestyCaption,
+  composeHonestyCaption,
 } from '../provenance';
 import { getHostRendererExamplePayload } from './examples';
 import {
@@ -20,8 +19,12 @@ import {
   isProvenanceKey,
   normalizeDeclaredProvenanceInputs,
   provenanceParamConstraintError,
+  type ProvenanceKey,
 } from './provenanceKeys';
-import { getSkill } from './registry';
+import {
+  externalProvenanceDisclosure,
+  getSkill,
+} from './registry';
 import {
   NEST_SKILL_IDS,
   VALID_RENDERER_ROUTES,
@@ -148,7 +151,7 @@ function validateHostRendererInvocationUnsafe(
           code: 'unsupported_spec_version',
           path: 'specVersion',
           message: `unsupported spec version '${safePrimitiveDiagnostic(rawVersion)}'`,
-          hint: `Use '${CORTEXEL_SPEC_VERSION}', or omit specVersion for a legacy envelope.`,
+          hint: `Re-author from the original source through buildHostRendererInvocation so '${CORTEXEL_SPEC_VERSION}' is stamped only after current validation; do not edit or remove an existing version stamp.`,
           example: getHostRendererExamplePayload(contract.id),
         },
       ],
@@ -240,6 +243,10 @@ function validateHostRendererInvocationUnsafe(
     };
   }
   const invalidDeclaredKeys = new Set<string>();
+  const allowedDeclaredKeys = new Set<ProvenanceKey>([
+    ...contract.requiredProvenanceKeys,
+    ...(contract.optionalProvenanceKeys ?? []),
+  ]);
   for (const key of Object.keys(declared)) {
     if (errors.length >= MAX_HOST_ERRORS) break;
     if (!isProvenanceKey(key)) {
@@ -249,6 +256,17 @@ function validateHostRendererInvocationUnsafe(
         path: `provenance.declared_inputs.${key}`,
         message: `unknown declared provenance key '${key}'`,
         hint: 'Use only keys from PROVENANCE_KEYS and the selected skill contract.',
+        example: errors.some((item) => item.example) ? undefined : example,
+      });
+      continue;
+    }
+    if (!allowedDeclaredKeys.has(key)) {
+      invalidDeclaredKeys.add(key);
+      errors.push({
+        code: 'invalid_provenance',
+        path: `provenance.declared_inputs.${key}`,
+        message: `declared provenance key '${key}' is not classified for skill '${contract.id}'`,
+        hint: `Use only this skill's required or optional provenance keys: ${[...allowedDeclaredKeys].join(', ')}.`,
         example: errors.some((item) => item.example) ? undefined : example,
       });
       continue;
@@ -316,15 +334,17 @@ function validateHostRendererInvocationUnsafe(
 
   if (errors.length > 0) return { ok: false, errors };
 
-  let caption = requiresHonestyCaption(spec.provenance)
-    ? defaultHonestyCaption(spec.provenance)
-    : null;
+  const externalDisclosure = externalProvenanceDisclosure(contract);
+  let weakDisclosure: string | null = null;
   if (contract.weak) {
-    const disclosure =
+    weakDisclosure =
       contract.weakDisclosure ??
       `Derived host view — '${contract.id}' is not a native Cortexel scene.`;
-    caption = caption ? `${disclosure} ${caption}` : disclosure;
   }
+  const caption = composeHonestyCaption(spec.provenance, {
+    weakSkill: weakDisclosure,
+    externalProvenance: externalDisclosure,
+  });
   return {
     ok: true,
     spec,

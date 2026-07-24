@@ -22,32 +22,39 @@ import { idsUnique, seriesEqualLength } from './structure.js';
 import {
   binsStrictlyIncreasing,
   eventsSenderUniverseDeclared,
+  eventsSourceClockDeclared,
   eventsTrialUniverseDeclared,
   eventsWithinWindow,
   histogramNormalizationConsistent,
   rateDenominatorPositive,
-  rateVerifyNormalization,
   windowValid,
 } from './events.js';
 import {
+  correlogramEventTrainsValid,
   correlogramLagRangeValid,
+  correlogramPrebinnedAxisConsistent,
+  correlogramRolesDisjoint,
   correlogramStatisticDenominator,
-  isiWithinTrainOnly,
-  isiZeroIntervalPolicy,
   psthAlignmentDeclared,
 } from './spikes.js';
 import {
-  degreeCountingPolicyDeclared,
   spatialEqualAxisUnits,
   spatialPositionCoverageComplete,
-  topologyDelayPositive,
   topologyEdgeEndpointsInUniverse,
+  topologyMatrixContract,
   topologyMultapseAggregationDeclared,
   topologyNodeUniverseDeclared,
   topologyScopeDeclared,
   topologyScopeSupportsClaim,
-  topologyWeightGroupCompatible,
 } from './topology.js';
+import {
+  degreeCountingPolicyDeclared,
+  isiWithinTrainOnly,
+  isiZeroIntervalPolicy,
+  rateVerifyNormalization,
+  topologyDelayPositive,
+  topologyWeightGroupCompatible,
+} from './distributions.js';
 import {
   phasePlaneDerivativeDimension,
   responseCurveEstimatorDeclared,
@@ -55,8 +62,9 @@ import {
   traceDuplicateTimePolicy,
   uncertaintySupportedVariant,
   uncertaintyValid,
-  weightTraceObservationKindDeclared,
 } from './uncertainty.js';
+import { weightTraceObservationKindDeclared } from './weight-trace.js';
+import { compartmentTraceSeriesIdentityDeclared } from './compartment-trace.js';
 
 export type { SemanticContext, SemanticValidator } from './types.js';
 
@@ -72,6 +80,7 @@ export const SEMANTIC_VALIDATORS: Readonly<Record<string, SemanticValidator>> = 
 
   'bins.strictly_increasing': binsStrictlyIncreasing,
   'window.valid': windowValid,
+  'events.source_clock_declared': eventsSourceClockDeclared,
   'events.within_window': eventsWithinWindow,
   'events.sender_universe_declared': eventsSenderUniverseDeclared,
   'events.trial_universe_declared': eventsTrialUniverseDeclared,
@@ -82,13 +91,17 @@ export const SEMANTIC_VALIDATORS: Readonly<Record<string, SemanticValidator>> = 
   'isi.within_train_only': isiWithinTrainOnly,
   'isi.zero_interval_policy': isiZeroIntervalPolicy,
   'psth.alignment_declared': psthAlignmentDeclared,
+  'correlogram.event_trains_valid': correlogramEventTrainsValid,
   'correlogram.lag_range_valid': correlogramLagRangeValid,
+  'correlogram.prebinned_axis_consistent': correlogramPrebinnedAxisConsistent,
+  'correlogram.roles_disjoint': correlogramRolesDisjoint,
   'correlogram.statistic_denominator': correlogramStatisticDenominator,
 
   'topology.scope_declared': topologyScopeDeclared,
   'topology.scope_supports_claim': topologyScopeSupportsClaim,
   'topology.node_universe_declared': topologyNodeUniverseDeclared,
   'topology.edge_endpoints_in_universe': topologyEdgeEndpointsInUniverse,
+  'topology.matrix_contract': topologyMatrixContract,
   'topology.multapse_aggregation_declared': topologyMultapseAggregationDeclared,
   'topology.delay_positive': topologyDelayPositive,
   'topology.weight_group_compatible': topologyWeightGroupCompatible,
@@ -102,6 +115,7 @@ export const SEMANTIC_VALIDATORS: Readonly<Record<string, SemanticValidator>> = 
 
   'trace.duplicate_time_policy': traceDuplicateTimePolicy,
   'trace.axis_dimension_compatible': traceAxisDimensionCompatible,
+  'compartment_trace.series_identity_declared': compartmentTraceSeriesIdentityDeclared,
   'phase_plane.derivative_dimension': phasePlaneDerivativeDimension,
   'weight_trace.observation_kind_declared': weightTraceObservationKindDeclared,
   'response_curve.estimator_declared': responseCurveEstimatorDeclared,

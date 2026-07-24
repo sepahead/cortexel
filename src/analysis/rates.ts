@@ -12,8 +12,14 @@
  * request in microseconds is correct without a special case.
  */
 
-import { binCounts, binWidths, type Bins } from './bins.js';
-import { toSeconds } from '../core/units.js';
+import { binCounts, type Bins } from './bins.js';
+import {
+  binary64RelativeDifferenceWithinTolerance,
+} from '../core/exact-binary64.js';
+import {
+  convertDifference,
+  divideExactIntegerByConvertedDifference,
+} from '../core/units.js';
 
 export interface RateResult {
   readonly binStart: number[];
@@ -38,27 +44,45 @@ export function computePopulationRate(
   recordedSenderCount: number,
   normalization: 'mean_rate_per_recorded_sender' | 'total_event_rate',
 ): RateResult {
-  if (recordedSenderCount < 1) {
-    throw new Error('recorded sender count must be positive');
+  if (!Number.isSafeInteger(recordedSenderCount) || recordedSenderCount < 1) {
+    throw new Error('recorded sender count must be a positive safe integer');
+  }
+  if (
+    normalization !== 'mean_rate_per_recorded_sender' &&
+    normalization !== 'total_event_rate'
+  ) {
+    throw new Error('population-rate normalization is not registered');
   }
 
   const { counts, underflow, overflow } = binCounts([...eventTimes], bins);
-  const widths = binWidths(bins);
 
   const binStart: number[] = [];
   const binEnd: number[] = [];
+  const widths: number[] = [];
   const rateHz: number[] = [];
 
   for (let i = 0; i < counts.length; i++) {
-    binStart.push(bins.edges[i]);
-    binEnd.push(bins.edges[i + 1]);
+    const lower = bins.edges[i];
+    const upper = bins.edges[i + 1];
+    binStart.push(lower);
+    binEnd.push(upper);
 
-    const widthSeconds = toSeconds(widths[i], timeUnit);
-    const denominator =
-      normalization === 'mean_rate_per_recorded_sender'
-        ? recordedSenderCount * widthSeconds
-        : widthSeconds;
-    rateHz.push(denominator > 0 ? counts[i] / denominator : 0);
+    // Subtracting first can overflow (`-MAX_VALUE` to `MAX_VALUE`) or erase a narrow
+    // separation at a large origin. Convert the exact endpoint separation and round
+    // only the result.
+    widths.push(convertDifference(lower, upper, timeUnit, timeUnit));
+    const integerFactor =
+      normalization === 'mean_rate_per_recorded_sender' ? recordedSenderCount : 1;
+    rateHz.push(
+      divideExactIntegerByConvertedDifference(
+        counts[i],
+        integerFactor,
+        lower,
+        upper,
+        timeUnit,
+        's',
+      ),
+    );
   }
 
   return {
@@ -85,6 +109,10 @@ export function computePopulationRate(
  * is the check behind SCIENCE_NORMALIZATION_UNVERIFIABLE: Cortexel re-derives rather than
  * trusts, so a rate that was mistranscribed or computed with the wrong denominator is
  * caught before it reaches a figure.
+ *
+ * The absolute tolerance field is retained for API compatibility, but it is never
+ * applied to a non-zero rate. A fixed `1e-12` floor would make every positive
+ * subnormal rate compare equal to values hundreds of orders of magnitude larger.
  */
 export function verifyRates(
   counts: readonly number[],
@@ -97,22 +125,49 @@ export function verifyRates(
 ): number[] {
   const mismatches: number[] = [];
   const n = Math.min(counts.length, suppliedRates.length);
+  if (
+    !Number.isSafeInteger(recordedSenderCount) ||
+    recordedSenderCount < 1 ||
+    (
+      normalization !== 'mean_rate_per_recorded_sender' &&
+      normalization !== 'total_event_rate'
+    )
+  ) {
+    return Array.from({ length: n }, (_, index) => index);
+  }
 
   for (let i = 0; i < n; i++) {
-    const width = edges[i + 1] - edges[i];
-    const widthSeconds = toSeconds(width, timeUnit);
-    if (!(widthSeconds > 0)) continue;
+    let expected: number;
+    try {
+      if (!Number.isSafeInteger(counts[i]) || counts[i] < 0) {
+        throw new Error('rate verification requires exact non-negative safe-integer counts');
+      }
+      const integerFactor =
+        normalization === 'mean_rate_per_recorded_sender' ? recordedSenderCount : 1;
+      expected = divideExactIntegerByConvertedDifference(
+        counts[i],
+        integerFactor,
+        edges[i],
+        edges[i + 1],
+        timeUnit,
+        's',
+      );
+    } catch {
+      // The return value is the set of bins that could not be verified. A numeric or
+      // unit failure is therefore a mismatch, never an instruction to trust the input.
+      mismatches.push(i);
+      continue;
+    }
 
-    const denominator =
-      normalization === 'mean_rate_per_recorded_sender'
-        ? recordedSenderCount * widthSeconds
-        : widthSeconds;
-    const expected = counts[i] / denominator;
     const actual = suppliedRates[i];
-
-    const difference = Math.abs(actual - expected);
-    const scale = Math.max(Math.abs(actual), Math.abs(expected));
-    if (difference > Math.max(tolerance.absolute, tolerance.relative * scale)) {
+    const zeroClassMatches = (actual === 0) === (expected === 0);
+    const signMatches = actual === 0 || expected === 0 || Math.sign(actual) === Math.sign(expected);
+    if (
+      !Number.isFinite(actual) ||
+      !zeroClassMatches ||
+      !signMatches ||
+      !binary64RelativeDifferenceWithinTolerance(actual, expected, tolerance.relative)
+    ) {
       mismatches.push(i);
     }
   }
