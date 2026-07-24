@@ -105,6 +105,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The lockfile now overrides Ajv's compatible `fast-uri` range to patched `3.1.4`,
   excluding the high-severity literal-backslash authority-confusion vulnerability in
   `3.0.0` through `3.1.3` without adding a second, incompatible major version.
+- The lockfile also overrides compatible PostCSS ranges to patched `8.5.18`,
+  excluding the high-severity previous-source-map path-traversal vulnerability in
+  `8.5.17` and earlier.
 - CI now exercises every declared Python minor (3.11–3.14) and the closed supported
   Node-major set 22/24/26; `engines.node` names that same set rather than an
   open-ended range that would silently claim untested future majors or EOL Node 20.

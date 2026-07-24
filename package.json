@@ -159,7 +159,8 @@
   },
   "overrides": {
     "esbuild": "0.28.1",
-    "fast-uri": "3.1.4"
+    "fast-uri": "3.1.4",
+    "postcss": "8.5.18"
   },
   "peerDependencies": {
     "@types/react": "^19",
