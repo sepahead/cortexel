@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process';
 import {
   cpSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   rmSync,
   symlinkSync,
@@ -113,7 +114,11 @@ function prepareIsolatedTree(destination: string): void {
   assertGeneratedPathsAbsent(destination);
 }
 
-function runGenerator(root: string, stdio: 'inherit' | 'pipe'): void {
+function runGenerator(
+  root: string,
+  stdio: 'inherit' | 'pipe',
+  temporaryRoot: string,
+): void {
   const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
   execFileSync(process.execPath, [tsxCli, 'scripts/generate-contract.ts'], {
     cwd: root,
@@ -127,27 +132,40 @@ function runGenerator(root: string, stdio: 'inherit' | 'pipe'): void {
       LC_ALL: 'C.UTF-8',
       TZ: 'UTC',
       NO_COLOR: '1',
+      // tsx uses a private IPC socket. Keep it inside the already-isolated
+      // generation tree instead of falling back to a host-global temp path
+      // that a containing sandbox correctly excludes.
+      TMPDIR: temporaryRoot,
+      TMP: temporaryRoot,
+      TEMP: temporaryRoot,
     },
   });
 }
 
 function main(): number {
   const original = snapshotGeneratedTree(ROOT);
-  const temporaryParent = mkdtempSync(path.join(tmpdir(), 'cortexel-generated-check-'));
+  // Unix-domain socket paths are length-bounded on macOS. Keep the isolated
+  // namespace deliberately short while retaining separate runtime state for
+  // the two determinism passes.
+  const temporaryParent = mkdtempSync(path.join(tmpdir(), 'cxg-'));
   const firstRoot = path.join(temporaryParent, 'first');
   const secondRoot = path.join(temporaryParent, 'second');
+  const firstRuntime = path.join(temporaryParent, 'r1');
+  const secondRuntime = path.join(temporaryParent, 'r2');
 
   try {
+    mkdirSync(firstRuntime);
+    mkdirSync(secondRuntime);
     process.stdout.write('Regenerating the contract in two independent zero-state trees...\n');
     prepareIsolatedTree(firstRoot);
-    runGenerator(firstRoot, 'inherit');
+    runGenerator(firstRoot, 'inherit', firstRuntime);
     const first = snapshotGeneratedTree(firstRoot);
 
     // A second pass over the first output could conceal a generator that only writes
     // missing files or copies its own stale bytes. Start from an independent source
     // copy with the complete generated namespace absent instead.
     prepareIsolatedTree(secondRoot);
-    runGenerator(secondRoot, 'pipe');
+    runGenerator(secondRoot, 'pipe', secondRuntime);
     const second = snapshotGeneratedTree(secondRoot);
 
     const nondeterministic = generatedSnapshotDifferences(first, second);
