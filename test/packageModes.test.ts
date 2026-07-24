@@ -28,7 +28,10 @@ describe('deterministic package modes', () => {
     const packageJson = JSON.parse(readFileSync(
       path.resolve(import.meta.dirname, '../package.json'),
       'utf8',
-    )) as { scripts: { build: string } };
+    )) as { scripts: Record<string, string> };
+    expect(packageJson.scripts.build).toContain('tsx scripts/build-package.ts');
+    expect(packageJson.scripts.build).not.toMatch(/(?:^|&&\s*)tsup(?:\s*&&|$)/u);
+    expect(packageJson.scripts['lint:package']).toBe('publint --pack=false');
     expect(packageJson.scripts.build.endsWith('tsx scripts/finalize-package.ts')).toBe(true);
     expect(packageJson.scripts.build.indexOf('tsx scripts/emit-manifest.ts'))
       .toBeLessThan(packageJson.scripts.build.indexOf('tsx scripts/finalize-package.ts'));
@@ -66,7 +69,7 @@ describe('deterministic package modes', () => {
     }
   });
 
-  it('normalizes the exact root tarball inventory as well as dist', () => {
+  it('verifies the exact root tarball inventory while normalizing generated dist', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'cortexel-package-root-modes-'));
     const previousUmask = process.umask(0o077);
     try {
@@ -90,6 +93,19 @@ describe('deterministic package modes', () => {
     }
 
     try {
+      chmodSync(path.join(root, 'package.json'), PACKAGE_FILE_MODES.regular);
+      for (const relative of CLOSED_PACKAGE_FILES) {
+        if (relative === 'dist') continue;
+        const target = path.join(root, relative);
+        chmodSync(
+          target,
+          relative === 'LICENSES'
+            ? PACKAGE_FILE_MODES.directory
+            : PACKAGE_FILE_MODES.regular,
+        );
+      }
+      chmodSync(path.join(root, 'LICENSES', 'license.txt'), PACKAGE_FILE_MODES.regular);
+
       const receipt = finalizePackageModes(root);
       expect(receipt).toEqual({ directories: 3, regularFiles: 13, executableFiles: 1 });
       for (const relative of ['package.json', 'README.md', 'LICENSES/license.txt', 'dist/index.js']) {
@@ -98,6 +114,19 @@ describe('deterministic package modes', () => {
       expect(permissions(path.join(root, 'LICENSES'))).toBe(PACKAGE_FILE_MODES.directory);
       expect(permissions(path.join(root, 'dist', 'cli', 'main.js')))
         .toBe(PACKAGE_FILE_MODES.executable);
+
+      chmodSync(path.join(root, 'README.md'), 0o600);
+      expect(() => finalizePackageModes(root)).toThrow(
+        'package source entry must have mode 644: README.md; found 600',
+      );
+      expect(permissions(path.join(root, 'README.md'))).toBe(0o600);
+
+      chmodSync(path.join(root, 'README.md'), PACKAGE_FILE_MODES.regular);
+      chmodSync(path.join(root, 'LICENSES'), 0o700);
+      expect(() => finalizePackageModes(root)).toThrow(
+        'package source entry must have mode 755: LICENSES; found 700',
+      );
+      expect(permissions(path.join(root, 'LICENSES'))).toBe(0o700);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

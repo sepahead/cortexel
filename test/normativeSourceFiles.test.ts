@@ -17,6 +17,16 @@ import { enumerateNormativeContractFiles } from '../scripts/lib/normative-source
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SOURCE = path.join(ROOT, 'contract');
+const HOST_INVALID_UTF8_FILENAME_RESULT =
+  'CORTEXEL_HOST_INVALID_UTF8_FILENAME_RESULT';
+const ATTESTED_APFS_REJECTION = 'EILSEQ_ATTESTED_V1';
+
+function isAttestedSandboxInterposition(error: unknown): boolean {
+  return (
+    (error as NodeJS.ErrnoException).code === 'EPERM' &&
+    process.env[HOST_INVALID_UTF8_FILENAME_RESULT] === ATTESTED_APFS_REJECTION
+  );
+}
 
 function withContractCopy(fn: (root: string) => void): void {
   const temporary = mkdtempSync(path.join(tmpdir(), 'cortexel-source-files-'));
@@ -84,13 +94,38 @@ describe('closed recursive normative-source inventory', () => {
       } catch (error) {
         // APFS rejects ill-formed UTF-8 names at creation time; that host already
         // enforces the boundary this fixture exercises on byte-oriented filesystems.
-        if ((error as NodeJS.ErrnoException).code === 'EILSEQ') return;
+        // macOS Seatbelt can interpose EPERM before APFS evaluates the name. An
+        // adoption sandbox may acknowledge only that exact interposition, and only
+        // after a trusted host probe attested the underlying EILSEQ result.
+        if (
+          (error as NodeJS.ErrnoException).code === 'EILSEQ' ||
+          isAttestedSandboxInterposition(error)
+        ) return;
         throw error;
       }
       expect(() => enumerateNormativeContractFiles(temporary)).toThrow(
         'normative directory registries/future contains a filename that is not well-formed UTF-8',
       );
     });
+  });
+
+  it('requires an exact host attestation before accepting sandbox interposition', () => {
+    const previous = process.env[HOST_INVALID_UTF8_FILENAME_RESULT];
+    try {
+      delete process.env[HOST_INVALID_UTF8_FILENAME_RESULT];
+      expect(isAttestedSandboxInterposition({ code: 'EPERM' })).toBe(false);
+      process.env[HOST_INVALID_UTF8_FILENAME_RESULT] = 'EILSEQ';
+      expect(isAttestedSandboxInterposition({ code: 'EPERM' })).toBe(false);
+      process.env[HOST_INVALID_UTF8_FILENAME_RESULT] = ATTESTED_APFS_REJECTION;
+      expect(isAttestedSandboxInterposition({ code: 'EACCES' })).toBe(false);
+      expect(isAttestedSandboxInterposition({ code: 'EPERM' })).toBe(true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env[HOST_INVALID_UTF8_FILENAME_RESULT];
+      } else {
+        process.env[HOST_INVALID_UTF8_FILENAME_RESULT] = previous;
+      }
+    }
   });
 
   it('rejects unexpected root entries and non-JSON files below a normative root', () => {

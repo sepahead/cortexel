@@ -1,4 +1,4 @@
-/** Deterministic, indirect-entry-free mode normalization for the built package tree. */
+/** Deterministic, indirect-entry-free package mode normalization and verification. */
 
 import { chmodSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
@@ -94,12 +94,23 @@ function requireDirectRegularFile(target: string, relative: string): void {
   }
 }
 
-function normalizeClosedRegularTree(root: string, relative: string): PackageModeReceipt {
+function requireExactMode(target: string, relative: string, expected: number): void {
+  const actual = lstatSync(target).mode & 0o7777;
+  if (actual !== expected) {
+    throw new Error(
+      `package source entry must have mode ${expected.toString(8)}: ${relative}; ` +
+      `found ${actual.toString(8)}`,
+    );
+  }
+}
+
+function verifyClosedRegularTree(root: string, relative: string): PackageModeReceipt {
   const absolute = path.join(root, relative);
   const rootStat = lstatSync(absolute);
   if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) {
     throw new Error(`package root entry must be a direct directory: ${relative}`);
   }
+  requireExactMode(absolute, relative, DIRECTORY_MODE);
   let directories = 0;
   let regularFiles = 0;
   const walk = (directory: string, display: string): void => {
@@ -107,7 +118,7 @@ function normalizeClosedRegularTree(root: string, relative: string): PackageMode
     if (stat.isSymbolicLink() || !stat.isDirectory()) {
       throw new Error(`package root contains an indirect or non-directory entry: ${display}`);
     }
-    chmodSync(directory, DIRECTORY_MODE);
+    requireExactMode(directory, display, DIRECTORY_MODE);
     directories += 1;
     for (const name of readdirSync(directory).sort()) {
       const child = path.join(directory, name);
@@ -123,7 +134,7 @@ function normalizeClosedRegularTree(root: string, relative: string): PackageMode
       if (!childStat.isFile()) {
         throw new Error(`package root contains a non-regular entry: ${childDisplay}`);
       }
-      chmodSync(child, REGULAR_MODE);
+      requireExactMode(child, childDisplay, REGULAR_MODE);
       regularFiles += 1;
     }
   };
@@ -131,7 +142,10 @@ function normalizeClosedRegularTree(root: string, relative: string): PackageMode
   return { directories, regularFiles, executableFiles: 0 };
 }
 
-/** Normalize the exact npm package inventory without traversing unrelated repo paths. */
+/**
+ * Normalize generated dist modes and verify tracked package-source modes without
+ * mutating those read-only inputs or traversing unrelated repository paths.
+ */
 export function finalizePackageModes(repositoryRoot: string): PackageModeReceipt {
   const packagePath = path.join(repositoryRoot, 'package.json');
   requireDirectRegularFile(packagePath, 'package.json');
@@ -148,18 +162,18 @@ export function finalizePackageModes(repositoryRoot: string): PackageModeReceipt
     throw new Error('package.json files must equal the closed package mode inventory');
   }
 
-  const dist = normalizePackageModes(path.join(repositoryRoot, 'dist'));
-  let regularFiles = dist.regularFiles;
+  let sourceRegularFiles = 0;
   for (const relative of ROOT_REGULAR_FILES) {
     const target = path.join(repositoryRoot, relative);
     requireDirectRegularFile(target, relative);
-    chmodSync(target, REGULAR_MODE);
-    regularFiles += 1;
+    requireExactMode(target, relative, REGULAR_MODE);
+    sourceRegularFiles += 1;
   }
-  const licenses = normalizeClosedRegularTree(repositoryRoot, 'LICENSES');
+  const licenses = verifyClosedRegularTree(repositoryRoot, 'LICENSES');
+  const dist = normalizePackageModes(path.join(repositoryRoot, 'dist'));
   return {
     directories: dist.directories + licenses.directories,
-    regularFiles: regularFiles + licenses.regularFiles,
+    regularFiles: dist.regularFiles + sourceRegularFiles + licenses.regularFiles,
     executableFiles: dist.executableFiles,
   };
 }

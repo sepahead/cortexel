@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — read-only source builds
+
+- Generated-contract checks now confine each determinism pass's `tsx` runtime
+  state to a separate short temporary namespace, keeping Unix-domain sockets
+  inside the caller's sandbox without sharing cache state between passes.
+- Package builds pass the reviewed static options directly to tsup with config
+  rediscovery disabled, avoiding its beside-source temporary config bundle.
+  Finalization normalizes generated `dist` modes while verifying tracked package
+  inputs fail-closed instead of attempting to chmod read-only source files.
+- Package linting no longer asks Bun to open tracked metadata for writing; the
+  independent package smoke remains the authoritative packed-file, mode, install,
+  export, and runtime check. A macOS sandbox may acknowledge `EPERM` for the
+  invalid-filename fixture only after an exact trusted host probe attests APFS's
+  underlying `EILSEQ` rejection.
+
 ### Fixed — legacy VizSpec provenance closure
 
 - The exact-match pre-1.0 `VizSpec` version is now `1.4.0`, so stored `1.3.0`

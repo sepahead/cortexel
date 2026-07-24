@@ -9,6 +9,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const receipt = finalizePackageModes(ROOT);
 
 process.stdout.write(
-  `[cortexel] normalized ${receipt.regularFiles} package files and ` +
+  `[cortexel] verified deterministic modes for ${receipt.regularFiles} package files and ` +
   `${receipt.directories} directories; cli/main.js is the sole executable\n`,
 );
