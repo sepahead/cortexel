@@ -109,13 +109,53 @@ jobs:
         run: uvx --no-config --from ruff==0.15.18 ruff check python/src python/tests scripts/smoke-python-package.py
       - name: Provision exact hash-pinned Python build backend
         if: matrix.python == '3.14'
-        run: >-
-          uv pip install --no-config --python "$(python -c 'import sys; print(sys.executable)')"
-          --no-deps --require-hashes --only-binary :all:
-          --requirements .github/requirements/python-package-build.txt
+        run: |
+          umask 022
+          temporary="$(python -I -S -B -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$RUNNER_TEMP")"
+          runtime="$temporary/cortexel-python-package-runtime"
+          bootstrap_home="$temporary/cortexel-python-package-bootstrap-home"
+          wheelhouse="$temporary/cortexel-python-package-backend-wheelhouse"
+          python -m venv --copies --without-pip "$runtime"
+          mkdir -p "$bootstrap_home"
+          uv_path="$(python -c 'import pathlib, shutil; print(pathlib.Path(shutil.which("uv")).resolve(strict=True))')"
+          env -i \
+            HOME="$bootstrap_home" \
+            PATH="$(dirname "$runtime/bin/python"):/usr/bin:/bin" \
+            TMPDIR="$temporary" \
+            SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+            /usr/bin/timeout --signal=TERM --kill-after=10s 300s \
+            "$runtime/bin/python" -I -S -B scripts/smoke-python-package.py \
+              bootstrap-backend-wheelhouse "$wheelhouse"
+          env -i \
+            HOME="$bootstrap_home" \
+            PATH="$(dirname "$uv_path"):/usr/bin:/bin" \
+            TMPDIR="$temporary" \
+            UV_NO_CONFIG=1 \
+            UV_NO_SYSTEM_CONFIG=1 \
+            UV_NO_ENV_FILE=1 \
+            UV_PYTHON_DOWNLOADS=never \
+            UV_OFFLINE=1 \
+            /usr/bin/timeout --signal=TERM --kill-after=10s 300s \
+            "$uv_path" pip install \
+              --no-config \
+              --no-cache \
+              --python "$runtime/bin/python" \
+              --no-deps \
+              --require-hashes \
+              --only-binary :all: \
+              --no-index \
+              --find-links "$wheelhouse" \
+              --requirements .github/requirements/python-package-build.txt
+          {
+            echo "CORTEXEL_PACKAGE_PYTHON=$runtime/bin/python"
+            echo "CORTEXEL_UV=$uv_path"
+            echo "CORTEXEL_BUILD_BACKEND_WHEELHOUSE=$wheelhouse"
+          } >> "$GITHUB_ENV"
       - name: Reproducible wheel/sdist and clean-install smoke
         if: matrix.python == '3.14'
-        run: python scripts/smoke-python-package.py
+        run: |
+          umask 022
+          "$CORTEXEL_PACKAGE_PYTHON" -I -S -B scripts/smoke-python-package.py
 
   package-smoke:
     runs-on: ubuntu-latest

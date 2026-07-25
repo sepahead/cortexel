@@ -19,11 +19,34 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   package manager, and preloads network/write denial into every Node consumer
   process. The no-argument developer command remains an ephemeral orchestration
   of the same prepare/execute contract.
+- Child processes receive a closed operational environment and a fixed executable
+  search path. Ambient API keys, package tokens, proxy credentials, Node/loader
+  injection controls, npm configuration, and OpenSSL configuration cannot cross
+  the package-smoke process boundary.
 - The prepare boundary now independently decodes the produced gzip/USTAR bytes
   before any install. It rejects extension/link/special entries and archive
   ambiguity, proves exact path/size/mode/content parity with both npm's JSON and
   the reviewed source closure, and then proves each tar-owned installed file is
   byte-for-byte identical. The execute boundary repeats the archive proof.
+
+### Fixed — Python artifact and build-runtime closure
+
+- The standalone Python wheel/sdist smoke now has a distinct Python 3.14.x
+  package-build runtime, exact `uv` authority, finite subprocess and archive
+  budgets, deterministic raw ZIP/gzip/USTAR inspection, and a byte-closed clean
+  install probed under isolated no-site/no-bytecode mode. The installed package
+  itself remains compatible with Python 3.11 and newer.
+- The build backend is provisioned from a retained exact-five-wheel wheelhouse.
+  URL, filename, distribution identity, version, and SHA-256 are fixed, and the
+  installed site-packages file and directory inventory is compared directly to
+  independently parsed wheel bytes. Installed `RECORD` files cannot bless a
+  mutated backend or an injected PEP 420 namespace directory.
+- Core Metadata fields, archive modes/attributes, hardlink and mutation identity,
+  `pyvenv.cfg`, site customization, install metadata, and cumulative resource
+  bounds now fail closed at the release-evidence boundary.
+- Backend provisioning and the smoke run now share an explicit `umask 022`; the
+  gate rejects any different ambient umask before work begins instead of letting
+  caller-specific 0600/0700 modes make the exact installed closure irreproducible.
 
 ### Fixed — read-only source builds
 

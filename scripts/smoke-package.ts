@@ -901,24 +901,36 @@ function resolveNpmCli(explicit: string | undefined): string {
   fail('npm executable must resolve to npm-cli.js (a Windows npm.cmd shim is accepted when its CLI is adjacent)');
 }
 
-function scrubbedEnvironment(nodeExecutable: string): NodeJS.ProcessEnv {
+export function scrubbedEnvironment(
+  nodeExecutable: string,
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    const upper = key.toUpperCase();
-    if (
-      upper.startsWith('NODE_') ||
-      upper.startsWith('DYLD_') ||
-      upper.startsWith('LD_') ||
-      upper.startsWith('NPM_CONFIG_') ||
-      upper.startsWith('OPENSSL_') ||
-      upper === 'GCONV_PATH' ||
-      upper === 'LOCPATH'
-    ) {
-      continue;
-    }
-    environment[key] = value;
+  const inherited = new Map(
+    Object.entries(source).map(([key, value]) => [key.toUpperCase(), value] as const),
+  );
+  for (const name of [
+    'HOME',
+    'TMPDIR',
+    'TMP',
+    'TEMP',
+    'SYSTEMROOT',
+    'WINDIR',
+    'COMSPEC',
+    'PATHEXT',
+    'SSL_CERT_FILE',
+    'SSL_CERT_DIR',
+  ]) {
+    const value = inherited.get(name);
+    if (value !== undefined) environment[name] = value;
   }
-  environment.PATH = [dirname(nodeExecutable), process.env.PATH ?? ''].filter(Boolean).join(delimiter);
+  const systemRoot = inherited.get('SYSTEMROOT') ?? inherited.get('WINDIR');
+  const fixedSystemPaths = process.platform === 'win32'
+    ? [systemRoot === undefined ? undefined : join(systemRoot, 'System32'), systemRoot]
+    : ['/usr/bin', '/bin'];
+  environment.PATH = [dirname(nodeExecutable), ...fixedSystemPaths]
+    .filter((value): value is string => value !== undefined)
+    .join(delimiter);
   environment.LANG = 'C';
   environment.LC_ALL = 'C';
   environment.NO_COLOR = '1';

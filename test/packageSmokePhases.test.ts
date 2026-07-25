@@ -18,6 +18,7 @@ import {
   inspectNpmPackageTarball,
   installedArtifactMode,
   parsePackageSmokeInvocation,
+  scrubbedEnvironment,
   type ExpectedPackageFile,
   type PackedFile,
   type PackedResult,
@@ -142,6 +143,28 @@ afterEach(() => {
 });
 
 describe('two-phase package smoke contract', () => {
+  it('passes only network/runtime necessities and never ambient credentials', () => {
+    const environment = scrubbedEnvironment('/reviewed/bin/node', {
+      PATH: '/unreviewed/bin',
+      HOME: '/isolated/home',
+      HTTPS_PROXY: 'https://user:secret@proxy.invalid',
+      ANTHROPIC_API_KEY: 'must-not-cross',
+      NPM_TOKEN: 'must-not-cross',
+      NODE_OPTIONS: '--require=unreviewed.cjs',
+      LD_PRELOAD: '/unreviewed/library.so',
+      OPENSSL_CONF: '/unreviewed/openssl.cnf',
+    });
+    expect(environment.PATH).toContain('/reviewed/bin');
+    expect(environment.PATH).not.toContain('/unreviewed');
+    expect(environment.HOME).toBe('/isolated/home');
+    expect(environment.HTTPS_PROXY).toBeUndefined();
+    expect(environment.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(environment.NPM_TOKEN).toBeUndefined();
+    expect(environment.NODE_OPTIONS).toBeUndefined();
+    expect(environment.LD_PRELOAD).toBeUndefined();
+    expect(environment.OPENSSL_CONF).toBeUndefined();
+  });
+
   it('requires an absolute persistent workspace and a carried state digest', () => {
     const workspace = resolve('package-smoke-test-workspace');
     expect(parsePackageSmokeInvocation([])).toEqual({ command: 'all' });

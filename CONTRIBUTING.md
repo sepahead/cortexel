@@ -59,6 +59,78 @@ bun run lint:package
 bun run test:package
 ```
 
+The Python distribution smoke deliberately refuses an ambient interpreter or build
+backend. The package itself supports Python 3.11+, but this reproducible build-evidence
+gate deliberately requires a separate Python 3.14.x interpreter/runtime. Use the exact
+`uv 0.11.16` binary and a fresh copied virtual environment;
+do not add pip, setuptools, another distribution, a `.pth` file, or a site customization:
+
+```bash
+(
+umask 022
+package_python="$(command -v python3.14)"
+package_python="$("$package_python" -I -S -B -c 'import pathlib, sys; print(pathlib.Path(sys.executable).resolve(strict=True))')"
+temporary="$("$package_python" -I -S -B -c 'import pathlib, tempfile; print(pathlib.Path(tempfile.mkdtemp()).resolve(strict=True))')"
+runtime="$temporary/cortexel-python-package-runtime"
+"$package_python" -m venv --copies --without-pip "$runtime"
+uv_path="$("$package_python" -c 'import pathlib, shutil; print(pathlib.Path(shutil.which("uv")).resolve(strict=True))')"
+mkdir -p "$runtime/bootstrap-home" "$runtime/bootstrap-tmp"
+wheelhouse="$runtime/backend-wheelhouse"
+
+env -i \
+  HOME="$runtime/bootstrap-home" \
+  PATH="$(dirname "$runtime/bin/python"):/usr/bin:/bin" \
+  TMPDIR="$runtime/bootstrap-tmp" \
+  "$runtime/bin/python" -I -S -B scripts/smoke-python-package.py \
+    bootstrap-backend-wheelhouse "$wheelhouse"
+
+env -i \
+  HOME="$runtime/bootstrap-home" \
+  PATH="$(dirname "$uv_path"):$(dirname "$runtime/bin/python"):/usr/bin:/bin" \
+  TMPDIR="$runtime/bootstrap-tmp" \
+  UV_NO_CONFIG=1 \
+  UV_NO_SYSTEM_CONFIG=1 \
+  UV_NO_ENV_FILE=1 \
+  UV_PYTHON_DOWNLOADS=never \
+  UV_OFFLINE=1 \
+  "$uv_path" pip install \
+    --no-config --no-cache --python "$runtime/bin/python" --no-deps \
+    --require-hashes --only-binary :all: \
+    --no-index --find-links "$wheelhouse" \
+    --requirements .github/requirements/python-package-build.txt
+
+CORTEXEL_UV="$uv_path" \
+CORTEXEL_BUILD_BACKEND_WHEELHOUSE="$wheelhouse" \
+  "$runtime/bin/python" -I -S -B scripts/smoke-python-package.py
+)
+```
+
+Run the complete block in that one subshell. The explicit `umask 022` is part of the
+evidence protocol: it deterministically creates the reviewed 0644 backend files and
+0755 directories even when the parent shell uses a restrictive umask. The smoke checks
+the ambient value before doing work and fails with provisioning guidance if it differs.
+The explicit wheelhouse download is the only network-eligible step. Each retained URL,
+filename, distribution identity, version, and SHA-256 digest is fixed by the smoke. The
+backend install is offline, and the smoke compares every installed backend byte and the
+complete file/directory inventory to those independently parsed wheels; a consistently
+rewritten installed `RECORD` is not a root of trust. It then uses a new empty uv cache,
+removes the ambient `PATH`, disables bytecode writes, and performs both builds and the
+clean-wheel install without dependency resolution or interpreter downloads. Top-level
+`-S` prevents `.pth` and `sitecustomize.py` execution before the wheel-rooted closure is
+inspected; only the subsequently launched, already-validated backend process enables
+the closed site-packages tree. `bun run test:python-package` invokes the same
+`-I -S -B` entry point and therefore expects `python`, `CORTEXEL_UV`, and
+`CORTEXEL_BUILD_BACKEND_WHEELHOUSE` to name that separate, already-provisioned Python
+3.14 runtime, exact uv executable, and retained exact-five-wheel evidence. Do not point
+this authority at Engram's ordinary developer/test Python (which legitimately contains
+pytest, mypy, and ruff); give the integration a distinct package-build runtime.
+The bootstrap's empty environment intentionally drops ambient index, proxy, token, and
+pip configuration authority. CI also
+places a 300-second TERM/KILL bound around that network step; the smoke applies finite
+bounds to every build, install, and executable probe.
+This release-evidence procedure is currently supported on macOS and Linux; the pinned
+CI realization runs on Ubuntu. It is not evidence for a Windows package-build boundary.
+
 `bun run test:package` is the backwards-compatible local orchestration. Release
 harnesses must keep the two phases explicit:
 
