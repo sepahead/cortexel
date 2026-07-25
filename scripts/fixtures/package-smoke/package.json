@@ -1,0 +1,23 @@
+{
+  "name": "cortexel-package-smoke-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "cortexel": "file:cortexel-smoke.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "typescript": "5.9.3"
+  },
+  "optionalDependencies": {
+    "@react-three/fiber": "9.6.1",
+    "@types/three": "0.185.1",
+    "d3-force-3d": "3.0.6",
+    "three": "0.185.1"
+  }
+}

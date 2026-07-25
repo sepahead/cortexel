@@ -107,6 +107,12 @@ jobs:
         run: uvx --no-config --from mypy==1.19.1 mypy --config-file python/pyproject.toml python/src/cortexel
       - name: Python lint
         run: uvx --no-config --from ruff==0.15.18 ruff check python/src python/tests scripts/smoke-python-package.py
+      - name: Provision exact hash-pinned Python build backend
+        if: matrix.python == '3.14'
+        run: >-
+          uv pip install --no-config --python "$(python -c 'import sys; print(sys.executable)')"
+          --no-deps --require-hashes --only-binary :all:
+          --requirements .github/requirements/python-package-build.txt
       - name: Reproducible wheel/sdist and clean-install smoke
         if: matrix.python == '3.14'
         run: python scripts/smoke-python-package.py

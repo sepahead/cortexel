@@ -59,6 +59,46 @@ bun run lint:package
 bun run test:package
 ```
 
+`bun run test:package` is the backwards-compatible local orchestration. Release
+harnesses must keep the two phases explicit:
+
+```bash
+bun scripts/smoke-package.ts prepare \
+  --workspace /absolute/persistent/workspace \
+  --node-executable /absolute/reviewed/node \
+  --npm-executable /absolute/reviewed/npm-cli.js
+
+# Capture the canonical JSON. Inspect every path in `nodeModules`, retain
+# `stateDigest`, deny network access, and mount/retain the workspace read-only.
+
+bun scripts/smoke-package.ts execute \
+  --workspace /absolute/persistent/workspace \
+  --expected-state-digest sha256:PREPARE_OUTPUT_STATE_DIGEST \
+  --node-executable /absolute/reviewed/node
+```
+
+The execute phase never installs or materializes files. It fails if the prepared
+state, package artifact, lock-bound consumer trees, filesystem topology, modes, or
+bytes changed across the inspection gap. Preparation makes the workspace
+mode-read-only on POSIX; on every platform the release harness must mount or
+otherwise retain it read-only. The in-process network/write guard is defense in
+depth; the release harness remains responsible for OS-level network denial and
+for inspecting all three reported `nodeModules` trees. A Windows `npm.cmd` path is
+accepted when its adjacent `node_modules/npm/bin/npm-cli.js` can be resolved, but
+the canonical prepared state records and invokes the JavaScript CLI through the
+reviewed Node executable.
+
+Before `npm ci`, prepare independently accepts only one canonical npm-portable
+gzip member containing regular-file USTAR entries and exactly two end blocks.
+It rejects PAX/GNU extensions, links, directories, devices, FIFOs, traversal,
+semantic path collisions, nonzero padding and trailing data, then compares every
+file's path, size, mode and SHA-256 digest with both npm's inventory and the
+reviewed source closure. Bounds are 128 MiB compressed, 512 MiB inflated,
+128 MiB per file, 10,000 archive entries, 99 bytes per `package/...` tar path,
+20,000 source filesystem nodes, depth 32, and 10,000 children per directory.
+After each install, the same closure is checked against every tar-owned file;
+the nested `cortexel/node_modules` dependency graft remains lock- and seal-owned.
+
 ## Design laws (non-negotiable)
 
 These keep visualizations scientifically honest and visually consistent:

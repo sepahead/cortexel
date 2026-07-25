@@ -6,6 +6,25 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — inspectable package smoke
+
+- The package smoke now has an explicit two-phase release boundary. A networked
+  `prepare` uses one reviewed, exact npm lock with install scripts disabled to
+  materialize separate core-only, charts-only, and full consumer trees in a
+  caller-owned workspace. Its canonical JSON output exposes all three
+  `node_modules` roots and a prepared-state digest so an outer release harness can
+  inspect the complete installed closure before any consumer code runs.
+- `execute` requires that carried state digest, verifies the sealed workspace
+  (including read-only modes on POSIX) and fresh package tarball before and after the smoke, invokes no
+  package manager, and preloads network/write denial into every Node consumer
+  process. The no-argument developer command remains an ephemeral orchestration
+  of the same prepare/execute contract.
+- The prepare boundary now independently decodes the produced gzip/USTAR bytes
+  before any install. It rejects extension/link/special entries and archive
+  ambiguity, proves exact path/size/mode/content parity with both npm's JSON and
+  the reviewed source closure, and then proves each tar-owned installed file is
+  byte-for-byte identical. The execute boundary repeats the archive proof.
+
 ### Fixed — read-only source builds
 
 - Generated-contract checks now confine each determinism pass's `tsx` runtime
