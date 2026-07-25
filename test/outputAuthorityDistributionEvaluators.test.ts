@@ -265,6 +265,209 @@ describe('independent distribution OutputAuthority evaluators', () => {
     ]);
   });
 
+  it('binds an edge-corrected correlogram numerator to the same eligible references as its denominator', () => {
+    const request = structuredClone(source('neuro.correlogram').examples.valid[1]);
+    request.data.referenceTrain.eventTimes.values = [5, 9.8];
+    request.data.referenceTrain.eventSenderIds = ['e1', 'e1'];
+    request.data.targetTrain.label = 'target I pool';
+    request.data.targetTrain.eventTimes.values = [5.1, 9.9];
+    request.data.targetTrain.eventSenderIds = ['i1', 'i1'];
+    request.parameters.statistic = 'target_rate_per_reference_event';
+    request.parameters.edgeCorrection = 'eligible_reference_events';
+
+    const evaluation = evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      request as JsonValue,
+    );
+    const table = field(evaluation.fields, 'table.rows');
+    expect(table.tag).toBe('row_sequence');
+    if (table.tag !== 'row_sequence') return;
+
+    // The 9.8 -> 9.9 ms pair has a central-bin lag, but its reference cannot expose
+    // the entire [-0.5,+0.5) ms shifted bin inside [0,10) ms. It must therefore be
+    // absent from the numerator as well as from the denominator.
+    expect(table.rows.map((row) => row[3])).toEqual([0, 0, 1, 0, 0]);
+    expect(table.rows.map((row) => row[4])).toEqual([2, 2, 1, 1, 1]);
+    expect(table.rows[2].slice(3, 9)).toEqual([
+      1,
+      1,
+      0.001,
+      1000,
+      'Hz',
+      'defined',
+    ]);
+    const summary = field(evaluation.fields, 'summary.facts');
+    expect(summary.tag).toBe('summary_fact_map');
+    if (summary.tag === 'summary_fact_map') {
+      expect(summary.facts.candidatePairCount).toBe('4');
+      expect(summary.facts.countedPairCount).toBe('1');
+      expect(summary.facts.notCountedPairCount).toBe('3');
+      expect(summary.facts.sameEventSelfPairCountExcluded).toBe('0');
+      expect(summary.facts.notCountedPairBreakdown).toBe(
+        'Other not-counted split: 2 lag-out-of-range + 1 in-range edge-ineligible.',
+      );
+    }
+  });
+
+  it('does not invent a lag-versus-eligibility split for pre-binned pair remainders', () => {
+    const request = structuredClone(source('neuro.correlogram').examples.valid[3]);
+    const evaluation = evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      request as JsonValue,
+    );
+    const summary = field(evaluation.fields, 'summary.facts');
+    expect(summary.tag).toBe('summary_fact_map');
+    if (summary.tag !== 'summary_fact_map') return;
+    expect(summary.facts.candidatePairCount).toBe('20');
+    expect(summary.facts.countedPairCount).toBe('11');
+    expect(summary.facts.notCountedPairCount).toBe('9');
+    expect(summary.facts.sameEventSelfPairCountExcluded).toBe('0');
+    expect(summary.facts.notCountedPairBreakdown).toBe(
+      'Other not-counted split: unavailable from pre-binned aggregate input; Cortexel does not relabel the remainder as lag-out-of-range or edge-ineligible.',
+    );
+  });
+
+  it('independently refuses impossible pre-binned eligible-reference numerators', () => {
+    const contract = source('neuro.correlogram');
+    const cross = structuredClone(contract.examples.valid[3]);
+    cross.data.pairCounts = [5, 0, 0, 0, 0];
+    cross.data.eligibleReferenceEventCounts = [1, 1, 1, 1, 1];
+    expect(() => evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      cross as JsonValue,
+    )).toThrow(
+      'pre-binned correlogram bin 0 declares 5 pairs, exceeding its exact eligible-reference maximum 4',
+    );
+
+    const auto = structuredClone(contract.examples.valid[2]);
+    auto.parameters.edgeCorrection = 'eligible_reference_events';
+    auto.data.eligibleReferenceEventCounts = [1, 1, 1, 1, 1];
+    auto.data.pairCounts = [6, 0, 0, 0, 0];
+    expect(() => evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      auto as JsonValue,
+    )).toThrow(
+      'pre-binned correlogram bin 0 declares 6 pairs, exceeding its exact eligible-reference maximum 5',
+    );
+  });
+
+  it('keeps auto self-pairs outside the other-not-counted accounting bucket', () => {
+    const request = structuredClone(source('neuro.correlogram').examples.valid[0]);
+    const evaluation = evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      request as JsonValue,
+    );
+    const summary = field(evaluation.fields, 'summary.facts');
+    expect(summary.tag).toBe('summary_fact_map');
+    if (summary.tag !== 'summary_fact_map') return;
+    expect(summary.facts.candidatePairCount).toBe('9');
+    expect(summary.facts.countedPairCount).toBe('2');
+    expect(summary.facts.notCountedPairCount).toBe('4');
+    expect(summary.facts.sameEventSelfPairCountExcluded).toBe('3');
+    expect(summary.facts.notCountedPairBreakdown).toBe(
+      'Other not-counted split: 4 lag-out-of-range + 0 in-range edge-ineligible.',
+    );
+  });
+
+  it('counts a dense edge-ineligible Cartesian product without enumerating excluded pairs', () => {
+    const request = structuredClone(source('neuro.correlogram').examples.valid[1]);
+    const eventCount = 2_048;
+    request.data.referenceTrain.eventTimes.values = new Array(eventCount).fill(0.9);
+    request.data.referenceTrain.eventSenderIds = new Array(eventCount).fill('e1');
+    request.data.targetTrain.eventTimes.values = new Array(eventCount).fill(0.9);
+    request.data.targetTrain.eventSenderIds = new Array(eventCount).fill('i1');
+    request.data.window = {
+      start: 0,
+      stop: 1,
+      unit: 'ms',
+      boundary: '[start,stop)',
+    };
+    request.parameters.statistic = 'target_rate_per_reference_event';
+    request.parameters.edgeCorrection = 'eligible_reference_events';
+
+    const evaluation = evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      request as JsonValue,
+    );
+    const summary = field(evaluation.fields, 'summary.facts');
+    expect(summary.tag).toBe('summary_fact_map');
+    if (summary.tag !== 'summary_fact_map') return;
+    expect(summary.facts.candidatePairCount).toBe('4194304');
+    expect(summary.facts.countedPairCount).toBe('0');
+    expect(summary.facts.notCountedPairCount).toBe('4194304');
+    expect(summary.facts.notCountedPairBreakdown).toBe(
+      'Other not-counted split: 0 lag-out-of-range + 4194304 in-range edge-ineligible.',
+    );
+  });
+
+  it('classifies a tiny typed lag before rounding large absolute times', () => {
+    const request = structuredClone(source('neuro.correlogram').examples.valid[1]);
+    const referenceTime = 1.693447539283061;
+    const targetTime = 1.6934475392830612;
+    expect(referenceTime * 1000).toBe(targetTime * 1000);
+    request.data.referenceTrain.eventTimes = {
+      kind: 'time',
+      unit: 's',
+      values: [referenceTime],
+    };
+    request.data.referenceTrain.eventSenderIds = ['e1'];
+    request.data.targetTrain.eventTimes = {
+      kind: 'time',
+      unit: 's',
+      values: [targetTime],
+    };
+    request.data.targetTrain.eventSenderIds = ['i1'];
+    request.data.window = {
+      start: 1.6,
+      stop: 1.8,
+      unit: 's',
+      boundary: '[start,stop)',
+    };
+    request.parameters.lagRange = { unit: 'ms', min: -2e-13, max: 2e-13 };
+    request.parameters.bins = { unit: 'ms', width: 1e-13 };
+
+    const evaluation = evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      request as JsonValue,
+    );
+    const table = field(evaluation.fields, 'table.rows');
+    expect(table.tag).toBe('row_sequence');
+    if (table.tag !== 'row_sequence') return;
+
+    // The exact received separation is 2.220446049250313e-13 ms: it belongs to the
+    // positive outer bin. Converting each absolute time to ms first collapses both to
+    // one binary64 value and would dishonestly move this pair to the zero-lag bin.
+    expect(table.rows.map((row) => row[3])).toEqual([0, 0, 0, 0, 1]);
+  });
+
+  it('independently refuses a rounded mixed-unit lag that crosses its exact bin boundary', () => {
+    const request = structuredClone(source('neuro.correlogram').examples.valid[1]);
+    const width = 1.1996580033106383e-105;
+    const targetTime = 5.998290016553191e-109;
+    request.data.referenceTrain.eventTimes = {
+      kind: 'time',
+      unit: 's',
+      values: [0],
+    };
+    request.data.referenceTrain.eventSenderIds = ['e1'];
+    request.data.targetTrain.eventTimes = {
+      kind: 'time',
+      unit: 's',
+      values: [targetTime],
+    };
+    request.data.targetTrain.eventSenderIds = ['i1'];
+    request.data.window = {
+      start: 0,
+      stop: 1e-108,
+      unit: 's',
+      boundary: '[start,stop)',
+    };
+    request.parameters.lagRange = { unit: 'ms', min: -2 * width, max: 2 * width };
+    request.parameters.bins = { unit: 'ms', width };
+
+    const validated = validateRequestValue(request);
+    expect(validated.ok, validated.ok ? '' : JSON.stringify(validated.errors)).toBe(true);
+    if (!validated.ok) return;
+    expect(() => evaluator('neuro.correlogram').evaluateCanonicalRequest(
+      validated.request.canonicalRequest as JsonValue,
+    )).toThrow(
+      'exact correlogram lag classification is not representable by one binary64 lag conversion',
+    );
+  });
+
   it('refuses a giant supplied degree before allocating its dense row ladder', () => {
     const request = structuredClone(source('network.degree_distribution').examples.valid[0]);
     request.data.connections.sourceIds = new Array(500).fill('1');

@@ -537,7 +537,7 @@ function graphModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const GRAPH_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.connection_graph', 3),
+  authorityEvaluatorId('network.connection_graph', 4),
   (request) => modelFields(graphModel(request)),
 );
 
@@ -837,7 +837,7 @@ function spatialModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const SPATIAL_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.spatial_map_2d', 3),
+  authorityEvaluatorId('network.spatial_map_2d', 4),
   (request) => modelFields(spatialModel(request)),
 );
 
@@ -1223,7 +1223,7 @@ function phaseModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const PHASE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.phase_plane', 3),
+  authorityEvaluatorId('neuro.phase_plane', 4),
   (request) => modelFields(phaseModel(request)),
 );
 
@@ -1793,7 +1793,7 @@ function responseModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const RESPONSE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.response_curve', 3),
+  authorityEvaluatorId('neuro.response_curve', 4),
   (request) => modelFields(responseModel(request)),
 );
 

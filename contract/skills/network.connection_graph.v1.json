@@ -1,6 +1,6 @@
 {
   "id": "network.connection_graph",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Directed connection graph of a declared network snapshot",
@@ -288,7 +288,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.connection_graph", "revision": 3 },
+  "renderer": { "id": "figure.connection_graph", "revision": 4 },
 
   "budgets": {
     "maxObservations": 200000,
@@ -312,7 +312,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.connection_graph.output_authority.v3"
+      "id": "network.connection_graph.output_authority.v4"
     },
     "requestPaths": [
       {

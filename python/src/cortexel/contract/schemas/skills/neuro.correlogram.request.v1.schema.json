@@ -52,7 +52,7 @@
       "$defs": {
         "eventProcess": {
           "type": "object",
-          "description": "The only multi-sender interpretation revision 2 accepts: one aggregate event process formed by preserving every event record from a complete recorded-sender universe. No per-sender divisor is implied.",
+          "description": "The only multi-sender interpretation revision 4 accepts: one aggregate event process formed by preserving every event record from a complete recorded-sender universe. No per-sender divisor is implied.",
           "properties": {
             "aggregation": {
               "const": "pooled_total_event_process"
@@ -291,7 +291,7 @@
         },
         {
           "type": "object",
-          "description": "Pre-binned autocorrelogram. Pair counts remain the exact numerator; Cortexel did not observe events and cannot repair self-pairs, re-bin, or re-orient them.",
+          "description": "Pre-binned autocorrelogram. Pair counts remain the declared exact numerator; Cortexel did not observe events and cannot repair self-pairs, re-bin, re-orient, verify numerator eligibility, or recover the reason each other candidate was not counted.",
           "properties": {
             "mode": {
               "const": "prebinned_auto"
@@ -314,7 +314,7 @@
             "referenceEventCount": {
               "type": "integer",
               "minimum": 0,
-              "description": "Exact source event count. It is required for pair conservation even when raw_pair_count has no rate denominator. Auto accounting derives candidate pairs n*n, excludes exactly n same-record self-pairs, and assigns the remainder outside the published lag ladder."
+              "description": "Exact source event count. It is required for pair conservation even when raw_pair_count has no rate denominator. Auto accounting derives candidate pairs n*n, excludes exactly n same-record self-pairs, and derives one aggregate other-not-counted remainder; without raw events Cortexel does not invent its lag-range versus edge-eligibility split."
             },
             "eligibleReferenceEventCounts": {
               "type": "array",
@@ -379,12 +379,12 @@
             "referenceEventCount": {
               "type": "integer",
               "minimum": 0,
-              "description": "Exact reference-role source event count, required for pair conservation and any rate denominator."
+              "description": "Exact reference-role source event count, required for candidate-count conservation and any rate denominator."
             },
             "targetEventCount": {
               "type": "integer",
               "minimum": 0,
-              "description": "Exact target-role source event count, required so candidate pairs and the out-of-range remainder are derived rather than guessed."
+              "description": "Exact target-role source event count, required so candidate pairs and the aggregate other-not-counted remainder are derived rather than guessed. The pre-binned product cannot classify that remainder by cause."
             },
             "eligibleReferenceEventCounts": {
               "type": "array",
@@ -475,7 +475,7 @@
             "raw_pair_count",
             "target_rate_per_reference_event"
           ],
-          "description": "Closed revision-2 statistic set. Every accepted member is rendered. Weighted sums and coefficient-like products are not accepted by this skill."
+          "description": "Closed revision-4 statistic set. Every accepted member is rendered. Weighted sums and coefficient-like products are not accepted by this skill."
         },
         "edgeCorrection": {
           "type": "string",
@@ -501,7 +501,7 @@
               ]
             }
           ],
-          "description": "Explicit absence only. Revision 2 has no accepted dispersion or interval branch because no uncertainty kind yet reaches the table, summary, legend, and geometry together."
+          "description": "Explicit absence only. Revision 4 has no accepted dispersion or interval branch because no uncertainty kind yet reaches the table, summary, legend, and geometry together."
         }
       },
       "required": [

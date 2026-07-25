@@ -1,7 +1,7 @@
 import {
   VizSpecRenderer
-} from "../chunk-KAJVMXW4.js";
-import "../chunk-RT5WPA3I.js";
+} from "../chunk-MJLTHKYM.js";
+import "../chunk-E5I6ZDY7.js";
 import {
   safeDiagnosticText
 } from "../chunk-UEJPZXDX.js";
@@ -917,7 +917,8 @@ function ChartShell({
           "svg",
           {
             role: "img",
-            "aria-labelledby": `${titleId} ${descriptionId}`,
+            "aria-labelledby": titleId,
+            "aria-describedby": descriptionId,
             viewBox: `0 0 ${frame.width} ${frame.height}`,
             width: frame.width,
             height: frame.height,

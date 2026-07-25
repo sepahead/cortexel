@@ -1,6 +1,6 @@
 {
   "id": "network.delay_distribution",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Synaptic delay distribution over a declared edge population",
@@ -499,7 +499,7 @@
   ],
   "renderer": {
     "id": "figure.distribution",
-    "revision": 3
+    "revision": 4
   },
   "budgets": {
     "maxObservations": 200000,
@@ -537,7 +537,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.delay_distribution.output_authority.v3"
+      "id": "network.delay_distribution.output_authority.v4"
     },
     "requestPaths": [
       {

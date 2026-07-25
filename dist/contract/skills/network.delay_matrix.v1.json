@@ -1,6 +1,6 @@
 {
   "id": "network.delay_matrix",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Transmission-delay matrix over a declared target-row / source-column node universe",
@@ -387,7 +387,7 @@
   ],
   "renderer": {
     "id": "figure.matrix",
-    "revision": 3,
+    "revision": 4,
     "axisOrder": "target_rows_source_columns"
   },
   "budgets": {
@@ -423,7 +423,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.delay_matrix.output_authority.v3"
+      "id": "network.delay_matrix.output_authority.v4"
     },
     "requestPaths": [
       {

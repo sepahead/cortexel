@@ -1905,8 +1905,8 @@ var ERROR_CODE_META = freezeGenerated({
   "SCIENCE_DENOMINATOR_INVALID": {
     "stage": "science",
     "severity": "error",
-    "summary": "A rate denominator is missing, zero, or negative.",
-    "correctiveAction": "Supply a positive recorded-sender count. Cortexel does NOT infer population size from the number of senders that happened to spike \u2014 a silent neuron is still a recorded neuron."
+    "summary": "A declared or derived rate/normalization denominator is absent, non-exact, contradictory, or outside the selected skill's allowed domain.",
+    "correctiveAction": "Supply the denominator authority required by the skill and make it coherent with its source counts and scope (for example a recorded-sender, trial, event, or eligible-reference count). Zero is allowed only where that skill declares an explicit zero-exposure result; Cortexel never infers a missing universe from active observations."
   },
   "SCIENCE_POPULATION_UNIVERSE_REQUIRED": {
     "stage": "science",
@@ -2031,8 +2031,8 @@ var ERROR_CODE_META = freezeGenerated({
   "SCIENCE_CORRELATION_DENOMINATOR_INVALID": {
     "stage": "science",
     "severity": "error",
-    "summary": "A correlation coefficient was requested but its required statistics or a valid variance denominator are absent.",
-    "correctiveAction": "Supply the required statistics, or use `raw_count` or an explicitly named rate normalization. A scaled pair count is not a correlation coefficient."
+    "summary": "A correlogram statistic, edge-correction/denominator declaration, or exact pair-accounting identity is unsupported or incoherent.",
+    "correctiveAction": "Use `raw_pair_count` with edge correction `none`, or `target_rate_per_reference_event` with `none` or `eligible_reference_events`, and supply exact role, pair, and eligible-reference counts that satisfy the published bounds. Cortexel does not synthesize a correlation coefficient from scaled pair counts."
   },
   "SCIENCE_UNCERTAINTY_BOUNDS_INVALID": {
     "stage": "science",
@@ -2116,7 +2116,7 @@ var ERROR_CODE_META = freezeGenerated({
     "stage": "provenance",
     "severity": "error",
     "summary": "The request tried to set a field that only Cortexel may author.",
-    "correctiveAction": "Remove it. Validation results, reference-comparison status, accessibility conformance, completeness, output digests, and disclosure text are library-generated facts. A caller declares what its data IS, never what Cortexel concluded about it."
+    "correctiveAction": "Remove it. Validation results, reference-comparison status, completeness, output digests, and disclosure text are library-generated facts. Structural accessibility evidence is also library-authored, and FigureArtifactV1 deliberately contains no accessibility-conformance conclusion. A caller declares what its data IS, never what Cortexel concluded about it."
   },
   "PROVENANCE_NOTE_TOO_LONG": {
     "stage": "provenance",
@@ -4035,7 +4035,7 @@ var CAPABILITY_AVAILABILITIES = freezeGenerated([
 var SKILL_CATALOG = freezeGenerated({
   "network.adjacency_matrix": {
     "id": "network.adjacency_matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -4053,7 +4053,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 3,
+      "revision": 4,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -4267,7 +4267,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.adjacency_matrix.output_authority.v3"
+        "id": "network.adjacency_matrix.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -4437,7 +4437,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.connection_graph": {
     "id": "network.connection_graph",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -4454,7 +4454,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -4738,7 +4738,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.connection_graph.output_authority.v3"
+        "id": "network.connection_graph.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -4935,7 +4935,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.degree_distribution": {
     "id": "network.degree_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -4954,7 +4954,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -5124,7 +5124,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.degree_distribution.output_authority.v3"
+        "id": "network.degree_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -5291,7 +5291,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_distribution": {
     "id": "network.delay_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5311,7 +5311,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -5544,7 +5544,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_distribution.output_authority.v3"
+        "id": "network.delay_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -5728,7 +5728,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_matrix": {
     "id": "network.delay_matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5747,7 +5747,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 3,
+      "revision": 4,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -5974,7 +5974,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_matrix.output_authority.v3"
+        "id": "network.delay_matrix.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -6151,7 +6151,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.spatial_map_2d": {
     "id": "network.spatial_map_2d",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6172,7 +6172,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -6470,7 +6470,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.spatial_map_2d.output_authority.v3"
+        "id": "network.spatial_map_2d.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -6672,7 +6672,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.synaptic_weight_trace": {
     "id": "network.synaptic_weight_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6693,7 +6693,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -7022,7 +7022,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.synaptic_weight_trace.output_authority.v3"
+        "id": "network.synaptic_weight_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -7253,7 +7253,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_distribution": {
     "id": "network.weight_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7273,7 +7273,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -7468,7 +7468,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_distribution.output_authority.v3"
+        "id": "network.weight_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -7647,7 +7647,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_matrix": {
     "id": "network.weight_matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7664,7 +7664,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 3,
+      "revision": 4,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -7904,7 +7904,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_matrix.output_authority.v3"
+        "id": "network.weight_matrix.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -8081,7 +8081,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.analog_trace": {
     "id": "neuro.analog_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8099,7 +8099,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -8377,7 +8377,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.analog_trace.output_authority.v3"
+        "id": "neuro.analog_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -8564,7 +8564,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.compartment_trace": {
     "id": "neuro.compartment_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8582,7 +8582,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -8805,7 +8805,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.compartment_trace.output_authority.v3"
+        "id": "neuro.compartment_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -9016,7 +9016,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.correlogram": {
     "id": "neuro.correlogram",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9025,7 +9025,7 @@ var SKILL_CATALOG = freezeGenerated({
     "cannotEstablish": [
       "That either train drives the other. A peak at +2 ms is equally consistent with a monosynaptic connection, a common input arriving with different conduction delays, and a shared oscillation. A correlogram cannot separate them.",
       "That a peak is larger than chance. This figure draws no significance band and computes no surrogate, jitter, or shift predictor. The expected count under independence depends on both firing rates and on any nonstationarity, none of which it estimates.",
-      "Anything from the symmetry of an autocorrelogram. Forming both ordered pairs of every distinct event pair makes value(-lag) = value(+lag) by construction, up to the bin-edge rule below. The symmetry is a property of the algorithm, not evidence about the neuron.",
+      "Anything directional from the symmetry or asymmetry of an autocorrelogram. With edgeCorrection none, forming both ordered pairs of every distinct event pair makes opposite-lag counts symmetric except at the published half-open bin edges. With eligible_reference_events, the bin-specific complete-exposure subset can differ at opposite window boundaries, so symmetry is not guaranteed. Either result is a property of the declared algorithm and finite window, not evidence about the neuron.",
       "Fine-timescale synchrony when the two firing rates co-vary slowly across the window. Slow co-modulation produces a broad central peak that is not spike synchrony, and pooling every pair in the window cannot tell the two apart.",
       "Single-neuron refractoriness or bursting from a pooled multi-unit train. A pooled autocorrelogram counts cross-neuron coincidences as pairs, so its central region is not a refractory trough.",
       "That no coupling exists because no peak is visible. The bin width sets the temporal resolution: coupling jittered on a finer scale than the bin is smeared away, and weak coupling can sit inside the sampling noise of the counts.",
@@ -9035,7 +9035,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -9109,7 +9109,7 @@ var SKILL_CATALOG = freezeGenerated({
       "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Correlogram ({correlationKind}): target {targetLabel} relative to reference {referenceLabel}. Positive lag means target follows reference. Declared senders, including silent: {referenceRecordedSenderCount} reference, {targetRecordedSenderCount} target. {binCount} left-closed/right-open bins of {binWidth} {lagUnit}, centred from {lagMin} to {lagMax}; positive outer edge excluded. {statistic} ({valueUnit}); denominator {denominatorStatement}. Events: {referenceEventCount} reference, {targetEventCount} target, over {observationDuration} {timeUnit}; {sourceAuthorityStatement}. Exact pairs: {candidatePairCount} candidate = {countedPairCount} in-range + {outOfRangePairCount} out-of-range + {sameEventSelfPairCountExcluded} same-event self-pairs excluded. {undefinedRateBinCount} rate bins are null because their eligible-reference count is zero. {uncertaintyStatement}",
+      "summaryTemplate": "Correlogram ({correlationKind}): target {targetLabel} relative to reference {referenceLabel}. Positive lag means target follows reference. Declared senders, including silent: {referenceRecordedSenderCount} reference, {targetRecordedSenderCount} target. {binCount} left-closed/right-open bins of {binWidth} {lagUnit}, centred from {lagMin} to {lagMax}; positive outer edge excluded. {statistic} ({valueUnit}); denominator {denominatorStatement}. Events: {referenceEventCount} reference, {targetEventCount} target, over {observationDuration} {timeUnit}; {sourceAuthorityStatement}. Pair accounting: {candidatePairCount} candidate = {countedPairCount} counted numerator + {notCountedPairCount} other not counted + {sameEventSelfPairCountExcluded} same-event self-pairs excluded. {notCountedPairBreakdown} {undefinedRateBinCount} rate bins are null because their eligible-reference count is zero. {uncertaintyStatement}",
       "tableColumns": [
         {
           "key": "lagBinStart",
@@ -9141,7 +9141,7 @@ var SKILL_CATALOG = freezeGenerated({
           "cellType": "finite_number",
           "nullable": false,
           "keyPart": false,
-          "description": "Exact integer count of ordered (reference, target) event pairs whose lag falls in this bin. It is the value for raw_pair_count and the numerator for target_rate_per_reference_event."
+          "description": "Exact integer counted numerator for this bin. For raw_pair_count it contains every non-self pair whose exact lag falls in the bin. For target_rate_per_reference_event with eligible_reference_events it contains only pairs whose reference ordinal belongs to the identical eligible subset used by the denominator."
         },
         {
           "key": "eligibleReferenceEvents",
@@ -9149,7 +9149,7 @@ var SKILL_CATALOG = freezeGenerated({
           "cellType": "finite_number",
           "nullable": true,
           "keyPart": false,
-          "description": "Reference events whose lag-shifted bin lies inside the observation window. Null for raw_pair_count, which has no denominator; for target_rate_per_reference_event it equals the reference event count when edge correction is none."
+          "description": "Reference events whose entire lag-shifted bin lies inside the observation window and whose pairs are therefore eligible for this numerator. Null for raw_pair_count, which has no denominator; for target_rate_per_reference_event it equals the reference event count when edge correction is none."
         },
         {
           "key": "denominator",
@@ -9202,7 +9202,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.correlogram.output_authority.v3"
+        "id": "neuro.correlogram.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -9350,8 +9350,9 @@ var SKILL_CATALOG = freezeGenerated({
           "sourceAuthorityStatement",
           "candidatePairCount",
           "countedPairCount",
-          "outOfRangePairCount",
+          "notCountedPairCount",
           "sameEventSelfPairCountExcluded",
+          "notCountedPairBreakdown",
           "undefinedRateBinCount",
           "uncertaintyStatement"
         ],
@@ -9380,21 +9381,21 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "The pairwise budget is the binding limit, not the observation limit: two trains of about 7,000 events each already reach the standard profile's 50,000,000-pair preflight bound, and larger trains are refused rather than attempted.",
+      "The pairwise budget is the binding limit, not the observation limit: dense trains with more than 50,000,000 non-self pairs admitted to the requested numerator under the standard profile are refused before pair derivation. A larger Cartesian product may still pass when exact typed lower-bound preflight proves that its lag-range and edge-eligible subset is within budget.",
       "The unit registry has no code for a product of two simulator-defined incoming connection weights, and raw spike times do not retain those weights. weighted_pair_sum is therefore absent from the accepted statistic enum; supporting it later requires an explicit upstream weight authority, product quantity, unit semantics and verified summation rule.",
       "No disclosure id exists for a pooled multi-unit train. The pooled sender universe is stated in the summary and the table, but no mandatory footer line announces that an autocorrelogram is multi-unit; the registry gap is recorded rather than papered over with a caller note.",
       "No disclosure id exists for a pre-binned histogram whose source kept its self-pairs, so such input is refused outright instead of being drawn with a caveat that the registry cannot express.",
       "The figure refuses to compact. Merging adjacent lag bins would widen the bin width, which IS the scientific parameter of a correlogram: a 1 ms coincidence peak merged into 5 ms bins becomes a broad hump indistinguishable from slow rate co-modulation. Oversized lag axes are refused, not summarized.",
       "Pre-binned input cannot be re-binned or re-oriented. Cortexel checks the arithmetic that connects the counts to the values; it cannot check that the source binned or oriented them the way the request declares.",
       "A correlogram is a co-occurrence statistic. Connectivity, causality, and significance are outside it, and Cortexel adds no significance band that would suggest otherwise.",
-      "Revision 2 accepts uncertainty kind none only. Dispersion or interval input needs a future branch whose units, missingness mask, table cells, summary, legend and geometry are all executable; accepting those arrays before that path exists would silently discard caller data.",
-      "A pre-binned target rate retains exact pair counts, exact role event counts, and either the referenceEventCount under edgeCorrection none or parallel eligibleReferenceEventCounts. Zero denominators are admitted only with zero numerator and compile to an explicit null-with-reason value. Cortexel derives every defined rate and the exact in-range/out-of-range/self-pair partition; it accepts no caller-supplied rate or accounting remainder. It still cannot verify that the upstream source counted or oriented events as declared.",
+      "Revision 4 accepts uncertainty kind none only. Dispersion or interval input needs a future branch whose units, missingness mask, table cells, summary, legend and geometry are all executable; accepting those arrays before that path exists would silently discard caller data.",
+      "A pre-binned target rate retains declared exact pair counts, exact role event counts, and either the referenceEventCount under edgeCorrection none or parallel eligibleReferenceEventCounts. Zero denominators are admitted only with zero numerator and compile to an explicit null-with-reason value. Cortexel derives each defined rate and the aggregate candidate/count/not-counted/self-pair identity, but raw events are absent: it cannot verify that the source used the same eligible-reference subset for numerator and denominator, or split other not-counted pairs between lag-out-of-range and in-range edge-ineligible causes. The artifact states that split is unavailable instead of assigning the whole remainder to one cause.",
       "Raw auto and cross inputs are separate products. events_auto has one train in both roles; events_cross has explicit referenceTrain and targetTrain containers with disjoint complete sender universes. Event counts and duration are derived from those role-local arrays and the shared typed window, never supplied twice."
     ]
   },
   "neuro.isi_distribution": {
     "id": "neuro.isi_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9411,7 +9412,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -9639,7 +9640,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.isi_distribution.output_authority.v3"
+        "id": "neuro.isi_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -9821,7 +9822,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.multisignal_trace": {
     "id": "neuro.multisignal_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9838,7 +9839,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -10245,7 +10246,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.multisignal_trace.output_authority.v3"
+        "id": "neuro.multisignal_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -10455,7 +10456,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.phase_plane": {
     "id": "neuro.phase_plane",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10476,7 +10477,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -10709,7 +10710,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.phase_plane.output_authority.v3"
+        "id": "neuro.phase_plane.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -10923,7 +10924,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.population_rate": {
     "id": "neuro.population_rate",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10937,7 +10938,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -11093,7 +11094,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.population_rate.output_authority.v3"
+        "id": "neuro.population_rate.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -11247,7 +11248,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.psth": {
     "id": "neuro.psth",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -11264,7 +11265,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -11607,7 +11608,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.psth.output_authority.v3"
+        "id": "neuro.psth.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -11815,7 +11816,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.response_curve": {
     "id": "neuro.response_curve",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -11834,7 +11835,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -12159,7 +12160,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.response_curve.output_authority.v3"
+        "id": "neuro.response_curve.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -12381,7 +12382,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -12399,7 +12400,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -12582,7 +12583,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.spike_raster.output_authority.v3"
+        "id": "neuro.spike_raster.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -13551,7 +13552,7 @@ var LEGACY_SKILL_MAP = freezeGenerated({
 var RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -13563,7 +13564,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -13575,7 +13576,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -13586,7 +13587,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rule",
@@ -13597,7 +13598,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "path",
@@ -13609,7 +13610,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rect",
@@ -13621,7 +13622,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rule",
@@ -13633,7 +13634,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rect",
@@ -13645,7 +13646,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "point",
@@ -13657,7 +13658,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -13670,7 +13671,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -13683,7 +13684,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rect",
@@ -13694,7 +13695,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "point",
@@ -13707,7 +13708,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "path",
@@ -16375,7 +16376,7 @@ var correlogramStatisticDenominator = (context) => {
         stage: "science",
         instancePath: pointer("parameters", "statistic"),
         validatorId: "correlogram.statistic_denominator",
-        message: "revision 2 renders only raw_pair_count and target_rate_per_reference_event. An unknown statistic is refused even if a structural gate was skipped."
+        message: "revision 4 renders only raw_pair_count and target_rate_per_reference_event. An unknown statistic is refused even if a structural gate was skipped."
       })
     ];
   }
@@ -16461,18 +16462,18 @@ var correlogramStatisticDenominator = (context) => {
   }
   const eligible = asArray(data.eligibleReferenceEventCounts);
   if (statistic === "raw_pair_count" || edgeCorrection === "none") {
-    if (eligible === void 0) return [];
-    return [
-      makeError({
-        code: "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
-        stage: "science",
-        instancePath: pointer("data", "eligibleReferenceEventCounts"),
-        validatorId: "correlogram.statistic_denominator",
-        message: statistic === "raw_pair_count" ? "raw_pair_count has no per-bin denominator, so eligibleReferenceEventCounts is a meaningless second authority." : "edgeCorrection `none` uses referenceEventCount for every lag; a parallel eligible-reference array would create two denominator authorities."
-      })
-    ];
-  }
-  if (!eligible || !pairCounts || eligible.length !== pairCounts.length) {
+    if (eligible !== void 0) {
+      return [
+        makeError({
+          code: "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
+          stage: "science",
+          instancePath: pointer("data", "eligibleReferenceEventCounts"),
+          validatorId: "correlogram.statistic_denominator",
+          message: statistic === "raw_pair_count" ? "raw_pair_count has no per-bin denominator, so eligibleReferenceEventCounts is a meaningless second authority." : "edgeCorrection `none` uses referenceEventCount for every lag; a parallel eligible-reference array would create two denominator authorities."
+        })
+      ];
+    }
+  } else if (!eligible || !pairCounts || eligible.length !== pairCounts.length) {
     return [
       makeError({
         code: "SEMANTIC_LENGTH_MISMATCH",
@@ -16483,8 +16484,9 @@ var correlogramStatisticDenominator = (context) => {
       })
     ];
   }
-  for (let index = 0; index < eligible.length; index++) {
-    const eligibleCount = asNumber(eligible[index]);
+  if (!pairCounts || referenceCount === void 0 || targetCount === void 0) return [];
+  for (let index = 0; index < pairCounts.length; index++) {
+    const eligibleCount = edgeCorrection === "none" ? referenceCount : asNumber(eligible?.[index]);
     const pairCount = asNumber(pairCounts[index]);
     if (eligibleCount === void 0 || !Number.isSafeInteger(eligibleCount) || eligibleCount < 0) continue;
     if (referenceCount !== void 0 && eligibleCount > referenceCount) {
@@ -16506,6 +16508,21 @@ var correlogramStatisticDenominator = (context) => {
           instancePath: pointer("data", "pairCounts", index),
           validatorId: "correlogram.statistic_denominator",
           message: "a zero eligible-reference denominator can produce no eligible ordered pair. The bin is valid only with pairCount 0 and compiles to null with status undefined_zero_eligible_reference_events."
+        })
+      ];
+    }
+    if (pairCount === void 0 || !Number.isSafeInteger(pairCount) || pairCount < 0) continue;
+    const targetChoices = mode === "prebinned_auto" ? Math.max(0, targetCount - 1) : targetCount;
+    const maximumPairCount = BigInt(eligibleCount) * BigInt(targetChoices);
+    if (BigInt(pairCount) > maximumPairCount) {
+      const roleExplanation = mode === "prebinned_auto" ? `${targetChoices} distinct target ordinals after same-event self-pair exclusion` : `${targetChoices} target-role events`;
+      return [
+        makeError({
+          code: "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
+          stage: "science",
+          instancePath: pointer("data", "pairCounts", index),
+          validatorId: "correlogram.statistic_denominator",
+          message: `pre-binned pair count ${pairCount} exceeds the exact per-bin maximum ${maximumPairCount.toString()} = ${eligibleCount} eligible reference events multiplied by ${roleExplanation}. A pre-binned numerator cannot contain more ordered pairs than its declared role cardinalities permit.`
         })
       ];
     }
@@ -23450,7 +23467,7 @@ function validateStructure(request, skillId) {
 // src/generated/identity.ts
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121";
+var CONTRACT_DIGEST = "sha256:116ee37659546e6432fa4e4f543764da847d9a2696f2b153877ae610492b789d";
 
 // src/core/contract-identity.ts
 var CONTRACT_VALUE = /^([a-z][a-z0-9-]*)\/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;

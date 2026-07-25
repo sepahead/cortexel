@@ -204,9 +204,9 @@ interface ChartDataRows {
 const MAX_CHART_DATA_PAGE_SIZE = 100;
 const DEFAULT_CHART_DATA_PAGE_SIZE = 25;
 
-/** A bounded DOM mirror for data-rich SVG figures. It pulls only the active
- * page through rowAt, so a 50,000-cell matrix never materializes 50,000 strings
- * or DOM nodes merely to remain keyboard and screen-reader accessible. */
+/** A bounded paginated DOM mirror for data-rich SVG figures. It pulls only the
+ * active page through rowAt, so a 50,000-cell matrix never materializes 50,000
+ * strings or DOM nodes merely to expose exact row text and page controls. */
 function PaginatedChartData({
   label,
   rowCount,
@@ -348,7 +348,8 @@ function ChartShell({
     >
       <svg
         role="img"
-        aria-labelledby={`${titleId} ${descriptionId}`}
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         viewBox={`0 0 ${frame.width} ${frame.height}`}
         width={frame.width}
         height={frame.height}

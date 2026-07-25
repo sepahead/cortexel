@@ -1016,11 +1016,10 @@ interface PsthAnalysisOptions {
     alignmentEvent: string;
 }
 interface CorrelationDetectorOptions {
-    measurement: 'count_histogram' | 'histogram';
+    measurement: 'count_histogram';
     referenceLabel: string;
     targetLabel: string;
-    zeroLagPolicy: 'included' | 'excluded_self_pairs';
-    weightedUnits?: string;
+    zeroLagPolicy: 'included';
 }
 /** Bin unordered NEST spike-recorder events into exact per-population rates. */
 declare function spikeRecorderToPopulationRateParams(events: unknown, options: PopulationRateOptions): NestAnalysisResult<PopulationRateParams>;
@@ -1031,7 +1030,7 @@ declare function spikeRecorderToIsiParams(events: unknown, options: unknown): Ne
 /** Aggregate explicitly separate trials around their declared alignment times. */
 declare function spikeTrialsToPsthParams(trials: unknown, options: PsthAnalysisOptions): NestAnalysisResult<PsthParams>;
 declare function spikeTrialsToPsthParams(trials: unknown, options: unknown): NestAnalysisResult<PsthParams>;
-/** Project the documented NEST correlation_detector status histogram. */
+/** Project only documented raw counts without inventing weighted units or self-pair removal. */
 declare function correlationDetectorToCorrelogramParams(status: unknown, options: CorrelationDetectorOptions): NestAnalysisResult<CorrelogramParams>;
 declare function correlationDetectorToCorrelogramParams(status: unknown, options: unknown): NestAnalysisResult<CorrelogramParams>;
 

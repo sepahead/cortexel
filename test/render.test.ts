@@ -20,6 +20,7 @@ import { linearTicks } from '../src/render/scale.js';
 import { canonicalDigestExcluding } from '../src/core/canonicalize.js';
 import { isValidatedRequest, validateRequestValue } from '../src/core/request.js';
 import { sha256Digest, utf8ByteLength } from '../src/core/sha256.js';
+import { renderSvg } from '../src/render/svg.js';
 
 const populationRate = JSON.parse(
   readFileSync(
@@ -69,6 +70,75 @@ describe('end-to-end render — population rate', () => {
       expect(a.svg).toBe(b.svg);
       expect(a.artifact.artifactDigest).toBe(b.artifact.artifactDigest);
     }
+  });
+
+  it('uses distinct aria-labelledby and aria-describedby references', () => {
+    const result = buildFigure(populationRate);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const titleId = `${result.plan.figureId}-title`;
+    const descriptionId = `${result.plan.figureId}-desc`;
+    expect(result.svg).toContain(`aria-labelledby="${titleId}"`);
+    expect(result.svg).toContain(`aria-describedby="${descriptionId}"`);
+    expect(result.svg).not.toContain(`aria-labelledby="${titleId} ${descriptionId}"`);
+    expect(result.svg).toContain(`<title id="${titleId}">`);
+    expect(result.svg).toContain(`<desc id="${descriptionId}">`);
+  });
+
+  it('rotates bounded left and right axis labels wholly within the SVG viewport', () => {
+    const result = buildFigure(populationRate);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const panel = result.plan.panels[0];
+    const verticalAxis = panel.axes.find((axis) => axis.orientation === 'left');
+    expect(verticalAxis).toBeDefined();
+    if (!verticalAxis) return;
+    const leftLabel = 'L'.repeat(120);
+    const rightLabel = 'R'.repeat(120);
+    const plan = {
+      ...result.plan,
+      panels: [
+        {
+          ...panel,
+          axes: [
+            ...panel.axes.filter((axis) => axis.orientation !== 'left'),
+            { ...verticalAxis, orientation: 'left' as const, label: leftLabel },
+            { ...verticalAxis, orientation: 'right' as const, label: rightLabel },
+          ],
+        },
+        ...result.plan.panels.slice(1),
+      ],
+    };
+    const svg = renderSvg(plan, sha256Digest).svg;
+    const attributesFor = (label: string): string => {
+      const match = svg.match(new RegExp(`<text ([^>]*)>${label}</text>`, 'u'));
+      expect(match).not.toBeNull();
+      return match?.[1] ?? '';
+    };
+    const attribute = (attributes: string, name: string): string => {
+      const match = attributes.match(new RegExp(`${name}="([^"]+)"`, 'u'));
+      expect(match).not.toBeNull();
+      return match?.[1] ?? '';
+    };
+
+    for (const [label, angle] of [[leftLabel, -90], [rightLabel, 90]] as const) {
+      const attributes = attributesFor(label);
+      const xText = attribute(attributes, 'x');
+      const yText = attribute(attributes, 'y');
+      const x = Number(xText);
+      const y = Number(yText);
+      const textLength = Number(attribute(attributes, 'textLength'));
+      expect(attribute(attributes, 'transform')).toBe(
+        `rotate(${angle} ${xText} ${yText})`,
+      );
+      expect(attribute(attributes, 'lengthAdjust')).toBe('spacingAndGlyphs');
+      expect(x).toBeGreaterThanOrEqual(12);
+      expect(x).toBeLessThanOrEqual(plan.width - 12);
+      expect(y - textLength / 2).toBeGreaterThanOrEqual(0);
+      expect(y + textLength / 2).toBeLessThanOrEqual(plan.height);
+      expect(textLength).toBeLessThanOrEqual(panel.height);
+    }
+    expect(renderSvg(plan, sha256Digest).svg).toBe(svg);
   });
 
   it('binds the SVG to the artifact by digest', () => {

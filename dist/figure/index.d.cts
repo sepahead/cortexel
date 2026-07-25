@@ -1,5 +1,5 @@
-import { J as JsonValue, B as BudgetLimits } from '../parse-json-DLZ2fGD_.cjs';
-export { a as DEFAULT_PROFILE, D as Disclosure, b as DisclosureFacts, R as ResolvedBudgetProfile, d as deriveDisclosures, g as getBudgetLimits, p as parseJsonStrict, r as restrictLimits, t as tryGetBudgetLimits, c as trySelectTighterBudgetProfile } from '../parse-json-DLZ2fGD_.cjs';
+import { J as JsonValue, B as BudgetLimits } from '../parse-json-D-Z0f5ut.cjs';
+export { a as DEFAULT_PROFILE, D as Disclosure, b as DisclosureFacts, R as ResolvedBudgetProfile, d as deriveDisclosures, g as getBudgetLimits, p as parseJsonStrict, r as restrictLimits, t as tryGetBudgetLimits, c as trySelectTighterBudgetProfile } from '../parse-json-D-Z0f5ut.cjs';
 import { S as SemanticValidatorId, D as DisclosureId, U as UncertaintyKind, R as Result, C as CortexelError } from '../errors-DUbFUu6n.cjs';
 export { a as CANONICALIZATION_ALGORITHMS, b as CANONICALIZATION_IDS, c as CanonicalizationId, d as DISCLOSURE_RULES, E as ERROR_CODES, e as ERROR_CODE_META, f as ErrorCode, g as ErrorStage, Q as QUANTITY_KINDS, h as QuantityKind, i as RepairOperation, j as Severity, k as UNITS, l as UNIT_CODES, m as UnitCode, n as finalizeErrors, o as isSafeDisplayString, p as makeError, q as pointer, s as safeText } from '../errors-DUbFUu6n.cjs';
 export { B as BudgetProfileId, I as InputAssurance, V as ValidateOptions, a as ValidatedRequest, b as ValidationOutcome, i as isValidatedRequest, p as parseAndValidateRequest, v as validateRequestValue } from '../request-BfsYJWaE.cjs';
@@ -14,8 +14,8 @@ export { B as BudgetProfileId, I as InputAssurance, V as ValidateOptions, a as V
 declare const PACKAGE_VERSION = "0.10.0-dev.0";
 declare const REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 declare const ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-declare const CONTRACT_DIGEST = "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121";
-declare const CATALOG_DIGEST = "sha256:56f15211b76d250f9d1d2142bb735dd904d89222798a7ac2ed4c37b9ebd2534d";
+declare const CONTRACT_DIGEST = "sha256:116ee37659546e6432fa4e4f543764da847d9a2696f2b153877ae610492b789d";
+declare const CATALOG_DIGEST = "sha256:4f534010ee514ffe9c1c9a9d6be365d7bdb7289e54008f2fab0e2df81fe0e001";
 declare const STABLE_SKILL_COUNT = 19;
 interface BuildIdentity {
     readonly packageVersion: string;

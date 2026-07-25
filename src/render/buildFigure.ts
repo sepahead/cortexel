@@ -76,11 +76,10 @@ import {
   derivePsth,
   PsthDerivationError,
   computeDegrees,
-  computeCorrelogram,
-  countEligibleCorrelogramPairs,
+  CorrelogramDerivationError,
   PairwiseBudgetExceededError,
-  deriveEligibleCorrelogramReferenceCounts,
-  deriveCorrelogramPairAccounting,
+  deriveTypedEventCorrelogram,
+  derivePrebinnedCorrelogramPairAccounting,
   deriveCorrelogramTargetRates,
   deriveResponseCurve,
   derivePopulationRateCounts,
@@ -933,10 +932,10 @@ function correlogramAxis(parameters: Record<string, unknown>): CorrelogramAxis {
 }
 
 interface RawCorrelogramInputs extends CorrelogramAxis {
-  readonly ref: readonly number[];
-  readonly tgt: readonly number[];
-  readonly referenceTimesInSourceUnit: readonly number[];
+  readonly referenceTimes: readonly number[];
   readonly referenceTimeUnit: string;
+  readonly targetTimes: readonly number[];
+  readonly targetTimeUnit: string;
   readonly kind: 'auto' | 'cross';
   readonly referenceLabel: string;
   readonly targetLabel: string;
@@ -988,14 +987,6 @@ function eventCorrelogramInputs(
   if (referenceTimeUnit === undefined || targetTimeUnit === undefined) {
     throw new Error('validated correlogram event train has no explicit event-time unit');
   }
-  const ref = referenceTimeUnit === axis.lagUnit
-    ? [...referenceSourceValues]
-    : referenceSourceValues.map((value) => convert(value, referenceTimeUnit, axis.lagUnit));
-  const tgt = kind === 'auto'
-    ? ref
-    : targetTimeUnit === axis.lagUnit
-      ? [...targetSourceValues]
-      : targetSourceValues.map((value) => convert(value, targetTimeUnit, axis.lagUnit));
   const referenceConversion = referenceTimeUnit === axis.lagUnit
     ? undefined
     : conversionReceipt(referenceTimeUnit, axis.lagUnit);
@@ -1005,10 +996,10 @@ function eventCorrelogramInputs(
 
   return {
     ...axis,
-    ref,
-    tgt,
-    referenceTimesInSourceUnit: referenceSourceValues,
+    referenceTimes: referenceSourceValues,
     referenceTimeUnit,
+    targetTimes: targetSourceValues,
+    targetTimeUnit,
     kind,
     referenceLabel: String(referenceTrain.label),
     targetLabel: String(targetTrain.label),
@@ -1023,13 +1014,52 @@ function eventCorrelogramInputs(
     unitConversions: [
       ...axis.unitConversions,
       ...(referenceConversion
-        ? [conversionDisclosureText('correlogram reference-event times', referenceConversion)]
+        ? [conversionDisclosureText(
+          'correlogram reference terms in exact lag differences',
+          referenceConversion,
+        )]
         : []),
       ...(targetConversion
-        ? [conversionDisclosureText('correlogram target-event times', targetConversion)]
+        ? [conversionDisclosureText(
+          'correlogram target terms in exact lag differences',
+          targetConversion,
+        )]
         : []),
     ],
   };
+}
+
+function correlogramDerivationRequestPath(mode: string, instancePath: string): string {
+  const parts = instancePath.split('/');
+  const field = parts[1];
+  const ordinal = parts[2];
+  if (
+    (field === 'referenceTimes' || field === 'targetTimes') &&
+    ordinal !== undefined &&
+    /^(?:0|[1-9][0-9]*)$/u.test(ordinal)
+  ) {
+    const role = mode === 'events_auto'
+      ? 'train'
+      : field === 'referenceTimes'
+        ? 'referenceTrain'
+        : 'targetTrain';
+    return `/data/${role}/eventTimes/values/${ordinal}`;
+  }
+  if (field === 'referenceTimeUnit' || field === 'targetTimeUnit') {
+    const role = mode === 'events_auto'
+      ? 'train'
+      : field === 'referenceTimeUnit'
+        ? 'referenceTrain'
+        : 'targetTrain';
+    return `/data/${role}/eventTimes/unit`;
+  }
+  if (field === 'window') {
+    return parts.length > 2 ? `/data/window/${parts.slice(2).join('/')}` : '/data/window';
+  }
+  if (field === 'bins') {
+    return parts[2] === 'unit' ? '/parameters/lagRange/unit' : '/parameters/bins';
+  }
+  return '/data';
 }
 
 /**
@@ -7714,6 +7744,7 @@ function compile(
   if (skillId === 'neuro.correlogram') {
     const statistic = String(parameters.statistic);
     const edgeCorrection = String(parameters.edgeCorrection);
+    const mode = String(data.mode);
     if (
       statistic !== 'raw_pair_count' &&
       statistic !== 'target_rate_per_reference_event'
@@ -7721,7 +7752,7 @@ function compile(
       return fail(
         'RENDER_UNSUPPORTED_SKILL',
         'render',
-        `correlogram statistic ${statistic} is outside the closed revision-2 product.`,
+        `correlogram statistic ${statistic} is outside the closed revision-4 product.`,
         '/parameters/statistic',
       );
     }
@@ -7740,14 +7771,13 @@ function compile(
     }
 
     try {
-      const mode = String(data.mode);
       const preBinned = mode === 'prebinned_auto' || mode === 'prebinned_cross';
       const rawInputs = eventCorrelogramInputs(data, parameters);
       if (!preBinned && !rawInputs) {
         return fail(
           'RENDER_UNSUPPORTED_SKILL',
           'render',
-          `correlogram data mode ${mode} is outside the four closed revision-2 modes.`,
+          `correlogram data mode ${mode} is outside the four closed revision-4 modes.`,
           '/data/mode',
         );
       }
@@ -7764,28 +7794,60 @@ function compile(
       let referenceRecordedSenderCount: number;
       let targetRecordedSenderCount: number;
       let window: RawCorrelogramInputs['window'];
-      let pairAccounting: ReturnType<typeof deriveCorrelogramPairAccounting>;
+      let pairAccounting:
+        | ReturnType<typeof deriveTypedEventCorrelogram>['pairAccounting']
+        | ReturnType<typeof derivePrebinnedCorrelogramPairAccounting>;
+      let rawEligibleReferenceEventCounts: readonly number[] | undefined;
+      let rawKernelReceipt:
+        | ReturnType<typeof deriveTypedEventCorrelogram>['receipt']
+        | undefined;
       let zeroLagRetainedDistinctPairs: number | undefined;
       let unitConversions = [...axis.unitConversions];
 
       if (rawInputs) {
-        const result = computeCorrelogram(
-          rawInputs.ref,
-          rawInputs.tgt,
-          rawInputs.spec,
-          rawInputs.kind,
-          pairwiseOperations,
-        );
-        pairCounts = result.counts;
+        const typedBins = {
+          edges,
+          unit: axis.lagUnit,
+          finalEdgeInclusive: false,
+        } as const;
+        const typedEdgeCorrection = edgeCorrection === 'eligible_reference_events'
+          ? 'eligible_reference_events' as const
+          : 'none' as const;
+        const result = rawInputs.kind === 'auto'
+          ? deriveTypedEventCorrelogram({
+            kind: 'auto',
+            referenceTimes: rawInputs.referenceTimes,
+            referenceTimeUnit: rawInputs.referenceTimeUnit,
+            bins: typedBins,
+            edgeCorrection: typedEdgeCorrection,
+            window: rawInputs.window,
+            maximumPairwiseOperations: pairwiseOperations,
+          })
+          : deriveTypedEventCorrelogram({
+            kind: 'cross',
+            referenceTimes: rawInputs.referenceTimes,
+            referenceTimeUnit: rawInputs.referenceTimeUnit,
+            targetTimes: rawInputs.targetTimes,
+            targetTimeUnit: rawInputs.targetTimeUnit,
+            bins: typedBins,
+            edgeCorrection: typedEdgeCorrection,
+            window: rawInputs.window,
+            maximumPairwiseOperations: pairwiseOperations,
+          });
+        pairCounts = [...result.counts];
         kind = rawInputs.kind;
-        referenceEventCount = rawInputs.ref.length;
-        targetEventCount = kind === 'auto' ? referenceEventCount : rawInputs.tgt.length;
+        referenceEventCount = rawInputs.referenceTimes.length;
+        targetEventCount = kind === 'auto'
+          ? referenceEventCount
+          : rawInputs.targetTimes.length;
         referenceLabel = rawInputs.referenceLabel;
         targetLabel = rawInputs.targetLabel;
         referenceRecordedSenderCount = rawInputs.referenceRecordedSenderCount;
         targetRecordedSenderCount = rawInputs.targetRecordedSenderCount;
         window = rawInputs.window;
-        pairAccounting = result.receipt.pairAccounting;
+        pairAccounting = result.pairAccounting;
+        rawEligibleReferenceEventCounts = result.eligibleReferenceEventCounts;
+        rawKernelReceipt = result.receipt;
         zeroLagRetainedDistinctPairs = result.zeroLagRetainedDistinctPairs;
         unitConversions = [...rawInputs.unitConversions];
       } else {
@@ -7812,7 +7874,7 @@ function compile(
         if (!Number.isSafeInteger(countedPairCount)) {
           throw new RangeError('pre-binned correlogram counted-pair sum exceeds the exact JSON integer domain');
         }
-        pairAccounting = deriveCorrelogramPairAccounting(
+        pairAccounting = derivePrebinnedCorrelogramPairAccounting(
           referenceEventCount,
           targetEventCount,
           kind,
@@ -7847,13 +7909,7 @@ function compile(
         const exactEligible = edgeCorrection === 'none'
           ? pairCounts.map(() => referenceEventCount)
           : rawInputs
-            ? deriveEligibleCorrelogramReferenceCounts(
-              rawInputs.referenceTimesInSourceUnit,
-              rawInputs.referenceTimeUnit,
-              edges,
-              axis.lagUnit,
-              rawInputs.window,
-            )
+            ? [...rawEligibleReferenceEventCounts!]
             : numbers(data.eligibleReferenceEventCounts);
         const rateBins = deriveCorrelogramTargetRates(
           pairCounts,
@@ -7883,12 +7939,16 @@ function compile(
       const sourceAuthorityStatement = preBinned
         ? 'Source event counts and exact pair numerators were declared by the pre-binned product; duration was derived from its window'
         : 'Source event counts were derived from the explicit event arrays, and duration was derived from their shared window';
+      const notCountedPairBreakdown =
+        pairAccounting.notCountedPairBreakdown.kind === 'unavailable_from_prebinned_input'
+          ? 'Other not-counted split: unavailable from pre-binned aggregate input; Cortexel does not relabel the remainder as lag-out-of-range or edge-ineligible.'
+          : `Other not-counted split: ${pairAccounting.notCountedPairBreakdown.lagOutOfRangePairCount} lag-out-of-range + ${pairAccounting.notCountedPairBreakdown.edgeIneligibleInRangePairCount} in-range edge-ineligible.`;
       const summaryStatements = [
         `Correlogram (${kind}): target ${targetLabel} relative to reference ${referenceLabel}. Positive lag means target follows reference. Declared senders, including silent: ${referenceRecordedSenderCount} reference and ${targetRecordedSenderCount} target.`,
         `${centers.length} centred left-closed/right-open bins of ${exactNumberText(axis.binWidthInLagUnit)} ${unitLabel(axis.lagUnit) || axis.lagUnit}, from centre ${exactNumberText(centers[0])} through ${exactNumberText(centers[centers.length - 1])}; the positive outer edge is excluded.`,
         `${statistic} (${valueUnit}); denominator: ${denominatorStatement}. ${undefinedRateBinCount} rate bins are null because their eligible-reference count is zero.`,
         `Events: ${referenceEventCount} reference and ${targetEventCount} target over ${exactNumberText(observationDuration)} ${unitLabel(window.unit) || window.unit}, boundary ${window.boundary}. ${sourceAuthorityStatement}`,
-        `Exact pair accounting: ${pairAccounting.candidatePairCount} candidate = ${pairAccounting.countedPairCount} in-range + ${pairAccounting.outOfRangePairCount} out-of-range + ${pairAccounting.sameEventSelfPairCountExcluded} same-event self-pairs excluded.`,
+        `Pair accounting: ${pairAccounting.candidatePairCount} candidate = ${pairAccounting.countedPairCount} counted numerator + ${pairAccounting.notCountedPairCount} other not counted + ${pairAccounting.sameEventSelfPairCountExcluded} same-event self-pairs excluded. ${notCountedPairBreakdown}`,
         'Uncertainty kind none: no uncertainty interval is estimated or drawn.',
         ...(pairAccounting.countedPairCount === 0
           ? ['The all-zero pair statistic is reported without interpreting it as evidence of independence.']
@@ -7937,10 +7997,11 @@ function compile(
           sourceAuthorityStatement,
           candidatePairCount: distributionCompilerNumber(pairAccounting.candidatePairCount),
           countedPairCount: distributionCompilerNumber(pairAccounting.countedPairCount),
-          outOfRangePairCount: distributionCompilerNumber(pairAccounting.outOfRangePairCount),
+          notCountedPairCount: distributionCompilerNumber(pairAccounting.notCountedPairCount),
           sameEventSelfPairCountExcluded: distributionCompilerNumber(
             pairAccounting.sameEventSelfPairCountExcluded,
           ),
+          notCountedPairBreakdown,
           undefinedRateBinCount: distributionCompilerNumber(undefinedRateBinCount),
           uncertaintyStatement: 'No uncertainty interval is estimated or drawn.',
         },
@@ -7963,49 +8024,53 @@ function compile(
           panelSummaries: summaryStatements,
         },
       };
-      const operation = derivationOperation(
-        'correlogram.pair_count_and_rate',
-        'cortexel.correlogram.exact_centered_pair_ladder',
-        {
-          mode,
-          kind,
-          statistic,
-          edgeCorrection,
-          lagConvention: 'target_time_minus_reference_time',
-          binBoundary: 'left_closed_right_open',
-          positiveOuterEdge: 'excluded',
-          binWidth: axis.binWidth,
-          lagUnit: axis.lagUnit,
-        },
-        data,
-        {
-          edges,
-          centers,
-          pairCounts,
-          eligibleReferenceEvents,
-          denominatorsSeconds: denominators,
-          values,
-          valueUnit,
-          valueStatuses,
-        },
-        {
-          sourceAuthority: preBinned
-            ? 'prebinned_exact_pair_counts_and_declared_role_event_counts'
-            : 'explicit_raw_event_arrays',
-          referenceEventCount,
-          targetEventCount,
-          referenceRecordedSenderCount,
-          targetRecordedSenderCount,
-          observationDuration,
-          observationDurationUnit: window.unit,
-          observationWindowBoundary: window.boundary,
-          undefinedRateBinCount,
-          ...pairAccounting,
-          ...(zeroLagRetainedDistinctPairs === undefined
-            ? {}
-            : { zeroLagRetainedDistinctPairs }),
-        },
-      );
+      const operation: DerivationOperation = {
+        ...derivationOperation(
+          'correlogram.pair_count_and_rate',
+          'cortexel.correlogram.exact_centered_pair_ladder',
+          {
+            mode,
+            kind,
+            statistic,
+            edgeCorrection,
+            lagConvention: 'target_time_minus_reference_time',
+            binBoundary: 'left_closed_right_open',
+            positiveOuterEdge: 'excluded',
+            binWidth: axis.binWidth,
+            lagUnit: axis.lagUnit,
+          },
+          data,
+          {
+            edges,
+            centers,
+            pairCounts,
+            eligibleReferenceEvents,
+            denominatorsSeconds: denominators,
+            values,
+            valueUnit,
+            valueStatuses,
+          },
+          {
+            sourceAuthority: preBinned
+              ? 'prebinned_exact_pair_counts_and_declared_role_event_counts'
+              : 'explicit_raw_event_arrays',
+            referenceEventCount,
+            targetEventCount,
+            referenceRecordedSenderCount,
+            targetRecordedSenderCount,
+            observationDuration,
+            observationDurationUnit: window.unit,
+            observationWindowBoundary: window.boundary,
+            undefinedRateBinCount,
+            ...pairAccounting,
+            ...(rawKernelReceipt === undefined ? {} : { rawKernelReceipt }),
+            ...(zeroLagRetainedDistinctPairs === undefined
+              ? {}
+              : { zeroLagRetainedDistinctPairs }),
+          },
+        ),
+        algorithmRevision: 2,
+      };
       return done(
         withContractTable(summarizedGeometry, compileContext, skillId, tableRows),
         [operation],
@@ -8013,11 +8078,32 @@ function compile(
       );
     } catch (error) {
       if (error instanceof PairwiseBudgetExceededError) {
+        return {
+          errors: [makeError({
+            code: 'RESOURCE_PAIRWISE_EXCEEDED',
+            stage: 'budget',
+            instancePath: '/data',
+            skillId,
+            message: `the exact eligible correlogram numerator requires at least ${error.observedLowerBound} admitted pairs, over the active limit of ${error.limit}. The typed lower-bound preflight formed no pairs and Cortexel refuses before numerator derivation or geometry allocation.`,
+            limit: {
+              name: 'pairwiseOperations',
+              limit: error.limit,
+              observed: error.observedLowerBound,
+            },
+          })],
+        };
+      }
+      if (error instanceof CorrelogramDerivationError) {
+        const stage: ErrorStage = error.code === 'RESOURCE_PAIRWISE_EXCEEDED'
+          ? 'budget'
+          : error.code === 'INTERNAL_INVARIANT_VIOLATED'
+            ? 'internal'
+            : 'science';
         return fail(
-          'RESOURCE_PAIRWISE_EXCEEDED',
-          'budget',
-          `correlogram pair formation exceeded the active limit of ${error.limit}.`,
-          '/data',
+          error.code,
+          stage,
+          error.message,
+          correlogramDerivationRequestPath(mode, error.instancePath),
         );
       }
       return fail(
@@ -13093,59 +13179,6 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
         },
       ],
     };
-  }
-
-  if (validated.skillId === 'neuro.correlogram') {
-    try {
-      const inputs = eventCorrelogramInputs(
-        rec(request.data) ?? {},
-        rec(request.parameters) ?? {},
-      );
-      if (inputs) {
-        const pairs = countEligibleCorrelogramPairs(
-          inputs.ref,
-          inputs.tgt,
-          inputs.spec,
-          inputs.kind,
-          limits.pairwiseOperations,
-        );
-        if (pairs > limits.pairwiseOperations) {
-          const pairCarrierPath = inputs.kind === 'auto'
-            ? '/data/train/eventTimes/values'
-            : '/data';
-          return {
-            ok: false,
-            errors: [
-              makeError({
-                code: 'RESOURCE_PAIRWISE_EXCEEDED',
-                stage: 'budget',
-                instancePath: pairCarrierPath,
-                skillId: validated.skillId,
-                message: `the eligible correlogram pair count is at least ${limits.pairwiseOperations + 1}, over the active limit of ${limits.pairwiseOperations}. The bounded sorted-window preflight formed no pairs and Cortexel refuses before derivation or geometry allocation.`,
-                limit: {
-                  name: 'pairwiseOperations',
-                  limit: limits.pairwiseOperations,
-                  observed: pairs,
-                },
-              }),
-            ],
-          };
-        }
-      }
-    } catch (error) {
-      return {
-        ok: false,
-        errors: [makeError({
-          code: 'INTERNAL_INVARIANT_VIOLATED',
-          stage: 'internal',
-          instancePath: '/data',
-          skillId: validated.skillId,
-          message: error instanceof Error
-            ? `the validated correlogram could not be closed during pairwise preflight: ${error.message}`
-            : 'the validated correlogram could not be closed during pairwise preflight.',
-        })],
-      };
-    }
   }
 
   const forced = forcedDisclosures(validated.skillId, request);

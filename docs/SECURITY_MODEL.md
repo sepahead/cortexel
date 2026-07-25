@@ -172,10 +172,13 @@ not Cortexel's guarantees.
 The signature threat. A caller **declares what its data IS; it never declares what
 Cortexel concluded about it.** That asymmetry is enforced, not merely documented.
 
-- **Caller-authored conclusions are rejected first.** Validation-result status,
-  reference-comparison outcome, accessibility conformance, completeness, output
-  digests, and disclosure text are library-generated facts. Any attempt to set one
-  is rejected with `PROVENANCE_CALLER_ASSURANCE_FORBIDDEN`, and the check runs
+- **Caller-authored conclusions and reserved evidence are rejected first.**
+  Validation-result status, reference-comparison outcome, completeness, output digests,
+  and disclosure text are library-generated facts; structural accessibility evidence is
+  library-generated metadata. The artifact deliberately exposes that evidence rather
+  than an accessibility-conformance conclusion. Any caller attempt to set one of those
+  reserved fields or to author a conformance claim is rejected with
+  `PROVENANCE_CALLER_ASSURANCE_FORBIDDEN`, and the check runs
   **before** identity and schema (`src/core/request.ts`, stage 2, on the raw
   request) so it cannot hide behind a schema error or be smuggled in through a
   default.

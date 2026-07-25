@@ -1,6 +1,6 @@
 {
   "id": "network.weight_matrix",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Synaptic weight matrix (target rows, source columns)",
@@ -254,7 +254,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.matrix", "revision": 3, "axisOrder": "target_rows_source_columns" },
+  "renderer": { "id": "figure.matrix", "revision": 4, "axisOrder": "target_rows_source_columns" },
 
   "budgets": {
     "maxObservations": 200000,
@@ -292,7 +292,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.weight_matrix.output_authority.v3"
+      "id": "network.weight_matrix.output_authority.v4"
     },
     "requestPaths": [
       {

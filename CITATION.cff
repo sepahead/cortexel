@@ -6,7 +6,8 @@ abstract: >-
   A closed, versioned catalog of scientifically constrained neural-data figure
   contracts, with strict validation, coordinated contract identity, explicit
   units, scope and uncertainty, provenance that fails closed, and deterministic
-  accessible SVG rendering for neural-simulation data and AI agents.
+  SVG rendering with distinct programmatic title and description references and
+  exact-value data tables for neural-simulation data and AI agents.
 type: software
 authors:
   - family-names: Mahmoudian

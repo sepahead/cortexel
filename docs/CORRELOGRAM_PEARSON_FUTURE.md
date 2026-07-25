@@ -2,7 +2,7 @@
 
 **Status: exploratory; not release ready.** This record freezes a boundary for later
 work. It does not add a capability, schema, validator, renderer, migration target, or
-release claim. Revision 2 of `neuro.correlogram` accepts only exact pair counts and
+release claim. Revision 4 of `neuro.correlogram` accepts only exact pair counts and
 target rate per reference event.
 
 ## Separate scientific product

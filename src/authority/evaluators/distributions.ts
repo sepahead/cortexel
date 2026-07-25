@@ -18,6 +18,7 @@ import {
   exactBinary64Mean,
   exactBinary64Sum,
   exactRationalToBinary64,
+  roundedBinary64Mean,
 } from '../../core/exact-binary64.js';
 import type {
   AuthorityCellV1,
@@ -527,7 +528,7 @@ function degreeModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const DEGREE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.degree_distribution', 3),
+  authorityEvaluatorId('network.degree_distribution', 4),
   (request) => modelFields(degreeModel(request)),
 );
 
@@ -638,7 +639,7 @@ function populationRateModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const POPULATION_RATE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.population_rate', 3),
+  authorityEvaluatorId('neuro.population_rate', 4),
   (request) => modelFields(populationRateModel(request)),
 );
 
@@ -809,7 +810,7 @@ function rasterModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.spike_raster', 3),
+  authorityEvaluatorId('neuro.spike_raster', 4),
   (request) => modelFields(rasterModel(request)),
 );
 
@@ -1061,7 +1062,7 @@ function delayModel(requestValue: JsonValue): AuthorityModel {
 }
 
 DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.delay_distribution', 3),
+  authorityEvaluatorId('network.delay_distribution', 4),
   (request) => modelFields(delayModel(request)),
 );
 
@@ -1252,7 +1253,7 @@ function weightModel(requestValue: JsonValue): AuthorityModel {
 }
 
 WEIGHT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.weight_distribution', 3),
+  authorityEvaluatorId('network.weight_distribution', 4),
   (request) => modelFields(weightModel(request)),
 );
 
@@ -1434,7 +1435,7 @@ function isiModel(requestValue: JsonValue): AuthorityModel {
 }
 
 ISI_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.isi_distribution', 3),
+  authorityEvaluatorId('neuro.isi_distribution', 4),
   (request) => modelFields(isiModel(request)),
 );
 
@@ -1464,7 +1465,7 @@ function correlogramAxis(parameters: JsonRecord): CorrelogramAxisModel {
   if (!materialized.ok) throw new Error('cannot independently materialize lag ladder');
   const edges = materialized.edges;
   const centers = edges.slice(0, -1).map((lower, index) =>
-    lower + (edges[index + 1] - lower) / 2);
+    roundedBinary64Mean([lower, edges[index + 1]]));
   return {
     bins: { edges, unit: lagUnit, finalEdgeInclusive: false },
     centers,
@@ -1478,14 +1479,23 @@ function correlogramAxis(parameters: JsonRecord): CorrelogramAxisModel {
   };
 }
 
-function eligibleReferenceCounts(
-  referenceTimes: readonly number[],
+interface EligibleReferenceBinInterval {
+  readonly start: number;
+  readonly stop: number;
+}
+
+/**
+ * Exact contiguous bin interval for which one reference event has complete exposure.
+ * No shifted endpoint is materialized as binary64: each registered-unit sum is compared
+ * directly with the received window endpoint.
+ */
+function eligibleReferenceBinInterval(
+  referenceTime: number,
   referenceUnit: string,
   bins: Bins,
   window: JsonRecord,
-): number[] {
+): EligibleReferenceBinInterval {
   const binCount = bins.edges.length - 1;
-  const changes = new Array<number>(binCount + 1).fill(0);
   const firstTrue = (predicate: (edge: number) => boolean): number => {
     let low = 0;
     let high = bins.edges.length;
@@ -1497,29 +1507,42 @@ function eligibleReferenceCounts(
     return low;
   };
   const openStart = window.boundary === '(start,stop]';
-  for (const time of referenceTimes) {
-    const firstLower = firstTrue((edge) => {
-      const comparison = compareExactUnitSumToValue(
-        [
-          { value: time, unit: referenceUnit },
-          { value: edge, unit: bins.unit },
-        ],
-        { value: Number(window.start), unit: String(window.unit) },
-      );
-      return openStart ? comparison > 0 : comparison >= 0;
-    });
-    const firstUpperBeyond = firstTrue((edge) => compareExactUnitSumToValue(
+  const firstLower = firstTrue((edge) => {
+    const comparison = compareExactUnitSumToValue(
       [
-        { value: time, unit: referenceUnit },
+        { value: referenceTime, unit: referenceUnit },
         { value: edge, unit: bins.unit },
       ],
-      { value: Number(window.stop), unit: String(window.unit) },
-    ) > 0);
-    const lower = Math.min(firstLower, binCount);
-    const upper = Math.max(0, Math.min(firstUpperBeyond - 1, binCount));
-    if (lower < upper) {
-      changes[lower]++;
-      changes[upper]--;
+      { value: Number(window.start), unit: String(window.unit) },
+    );
+    return openStart ? comparison > 0 : comparison >= 0;
+  });
+  const firstUpperBeyond = firstTrue((edge) => compareExactUnitSumToValue(
+    [
+      { value: referenceTime, unit: referenceUnit },
+      { value: edge, unit: bins.unit },
+    ],
+    { value: Number(window.stop), unit: String(window.unit) },
+  ) > 0);
+  return {
+    start: Math.min(firstLower, binCount),
+    stop: Math.max(0, Math.min(firstUpperBeyond - 1, binCount)),
+  };
+}
+
+function eligibleReferenceCounts(
+  referenceTimes: readonly number[],
+  referenceUnit: string,
+  bins: Bins,
+  window: JsonRecord,
+): number[] {
+  const binCount = bins.edges.length - 1;
+  const changes = new Array<number>(binCount + 1).fill(0);
+  for (const time of referenceTimes) {
+    const interval = eligibleReferenceBinInterval(time, referenceUnit, bins, window);
+    if (interval.start < interval.stop) {
+      changes[interval.start]++;
+      changes[interval.stop]--;
     }
   }
   let active = 0;
@@ -1527,6 +1550,275 @@ function eligibleReferenceCounts(
     active += change;
     return active;
   });
+}
+
+interface CorrelogramPairCounts {
+  readonly counts: readonly number[];
+  readonly lagOutOfRangePairCount: number;
+  readonly edgeIneligibleInRangePairCount: number;
+}
+
+type CorrelogramAuthorityPairBreakdown =
+  | {
+    readonly kind: 'raw_exact';
+    readonly lagOutOfRangePairCount: number;
+    readonly edgeIneligibleInRangePairCount: number;
+  }
+  | {
+    readonly kind: 'unavailable_from_prebinned_input';
+  };
+
+interface CorrelogramTimedEvent {
+  readonly time: number;
+  readonly sourceOrdinal: number;
+}
+
+/**
+ * Independently close the necessary per-bin cardinality law for producer-supplied
+ * correlogram numerators. This evaluator must still refuse an impossible aggregate if
+ * its public semantic gate is accidentally bypassed.
+ */
+function requirePrebinnedCorrelogramPairBounds(
+  pairCounts: readonly number[],
+  eligibleReferenceCounts: readonly number[],
+  referenceEventCount: number,
+  targetEventCount: number,
+  expectedBinCount: number,
+  kind: 'auto' | 'cross',
+): void {
+  if (
+    !Number.isSafeInteger(referenceEventCount) || referenceEventCount < 0 ||
+    !Number.isSafeInteger(targetEventCount) || targetEventCount < 0 ||
+    pairCounts.length !== eligibleReferenceCounts.length ||
+    pairCounts.length !== expectedBinCount
+  ) {
+    throw new Error('pre-binned correlogram per-bin pair authority has no exact cardinality domain');
+  }
+
+  for (let index = 0; index < pairCounts.length; index++) {
+    const pairCount = pairCounts[index];
+    const eligibleReferenceCount = eligibleReferenceCounts[index];
+    if (
+      !Number.isSafeInteger(pairCount) || pairCount < 0 ||
+      !Number.isSafeInteger(eligibleReferenceCount) || eligibleReferenceCount < 0 ||
+      eligibleReferenceCount > referenceEventCount
+    ) {
+      throw new Error(
+        `pre-binned correlogram bin ${index} has no exact eligible-reference cardinality authority`,
+      );
+    }
+    const targetChoices = kind === 'auto'
+      ? Math.max(0, targetEventCount - 1)
+      : targetEventCount;
+    const maximumPairCount = BigInt(eligibleReferenceCount) * BigInt(targetChoices);
+    if (BigInt(pairCount) > maximumPairCount) {
+      throw new Error(
+        `pre-binned correlogram bin ${index} declares ${pairCount} pairs, exceeding its exact eligible-reference maximum ${maximumPairCount.toString()}`,
+      );
+    }
+  }
+}
+
+/** Compare the exact typed separation `target - reference` with one typed lag edge. */
+function compareTypedLagToEdge(
+  target: number,
+  targetUnit: string,
+  reference: number,
+  referenceUnit: string,
+  edge: number,
+  edgeUnit: string,
+): -1 | 0 | 1 {
+  return compareExactUnitSumToValue(
+    [
+      { value: target, unit: targetUnit },
+      { value: -reference, unit: referenceUnit },
+    ],
+    { value: edge, unit: edgeUnit },
+  );
+}
+
+function firstTargetAtOrAboveLag(
+  targets: readonly CorrelogramTimedEvent[],
+  targetUnit: string,
+  reference: CorrelogramTimedEvent,
+  referenceUnit: string,
+  edge: number,
+  edgeUnit: string,
+): number {
+  let low = 0;
+  let high = targets.length;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    const comparison = compareTypedLagToEdge(
+      targets[middle].time,
+      targetUnit,
+      reference.time,
+      referenceUnit,
+      edge,
+      edgeUnit,
+    );
+    if (comparison >= 0) high = middle;
+    else low = middle + 1;
+  }
+  return low;
+}
+
+function exactTypedLagBinIndex(
+  target: number,
+  targetUnit: string,
+  reference: number,
+  referenceUnit: string,
+  bins: Bins,
+): number {
+  let low = 0;
+  let high = bins.edges.length;
+  // Find the first edge strictly greater than the exact physical lag. Its
+  // predecessor is the inclusive lower edge of the owning half-open bin.
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    const comparison = compareTypedLagToEdge(
+      target,
+      targetUnit,
+      reference,
+      referenceUnit,
+      bins.edges[middle],
+      bins.unit,
+    );
+    if (comparison >= 0) low = middle + 1;
+    else high = middle;
+  }
+  const index = low - 1;
+  return index >= 0 && index < bins.edges.length - 1 ? index : -1;
+}
+
+/**
+ * Independently classify raw typed pairs with the normative precedence: same-event
+ * self-pairs, then lag-range exclusion, then per-bin reference eligibility.
+ */
+function rawCorrelogramPairCounts(
+  referenceTimes: readonly number[],
+  referenceUnit: string,
+  targetTimes: readonly number[],
+  targetUnit: string,
+  bins: Bins,
+  kind: 'auto' | 'cross',
+  applyEdgeEligibility: boolean,
+  window: JsonRecord,
+): CorrelogramPairCounts {
+  const references = referenceTimes.map((time, sourceOrdinal) => ({ time, sourceOrdinal }));
+  const targets = [...(kind === 'auto'
+    ? references
+    : targetTimes.map((time, sourceOrdinal) => ({ time, sourceOrdinal })))]
+    .sort((left, right) => left.time - right.time || left.sourceOrdinal - right.sourceOrdinal);
+  const targetIndexBySourceOrdinal = kind === 'auto'
+    ? new Map(targets.map((target, index) => [target.sourceOrdinal, index]))
+    : null;
+  const counts = new Array<number>(bins.edges.length - 1).fill(0);
+  let lagOutOfRangePairCount = 0;
+  let edgeIneligibleInRangePairCount = 0;
+  const minimum = bins.edges[0];
+  const maximum = bins.edges[bins.edges.length - 1];
+  const sliceNonselfCount = (
+    reference: CorrelogramTimedEvent,
+    start: number,
+    stop: number,
+  ): number => {
+    const selfIndex = targetIndexBySourceOrdinal?.get(reference.sourceOrdinal);
+    return stop - start - (
+      selfIndex !== undefined && selfIndex >= start && selfIndex < stop ? 1 : 0
+    );
+  };
+
+  for (const reference of references) {
+    const outerStart = firstTargetAtOrAboveLag(
+      targets,
+      targetUnit,
+      reference,
+      referenceUnit,
+      minimum,
+      bins.unit,
+    );
+    const outerStop = firstTargetAtOrAboveLag(
+      targets,
+      targetUnit,
+      reference,
+      referenceUnit,
+      maximum,
+      bins.unit,
+    );
+    const outerNonselfCount = sliceNonselfCount(reference, outerStart, outerStop);
+    lagOutOfRangePairCount += targets.length - (kind === 'auto' ? 1 : 0) -
+      outerNonselfCount;
+    const eligibleInterval = applyEdgeEligibility
+      ? eligibleReferenceBinInterval(reference.time, referenceUnit, bins, window)
+      : { start: 0, stop: counts.length };
+    const eligibleStart = eligibleInterval.start < eligibleInterval.stop
+      ? firstTargetAtOrAboveLag(
+        targets,
+        targetUnit,
+        reference,
+        referenceUnit,
+        bins.edges[eligibleInterval.start],
+        bins.unit,
+      )
+      : outerStart;
+    const eligibleStop = eligibleInterval.start < eligibleInterval.stop
+      ? firstTargetAtOrAboveLag(
+        targets,
+        targetUnit,
+        reference,
+        referenceUnit,
+        bins.edges[eligibleInterval.stop],
+        bins.unit,
+      )
+      : outerStart;
+    const eligibleNonselfCount = sliceNonselfCount(reference, eligibleStart, eligibleStop);
+    if (
+      eligibleStart < outerStart || eligibleStop > outerStop ||
+      eligibleNonselfCount > outerNonselfCount
+    ) {
+      throw new Error('correlogram eligible target slice escaped the exact lag range');
+    }
+    edgeIneligibleInRangePairCount += outerNonselfCount - eligibleNonselfCount;
+
+    // Only the pairs that can influence a published numerator are materialized.
+    // Outer-range and edge-ineligible cardinalities remain exact binary-search facts.
+    for (let targetIndex = eligibleStart; targetIndex < eligibleStop; targetIndex++) {
+      const target = targets[targetIndex];
+      if (kind === 'auto' && reference.sourceOrdinal === target.sourceOrdinal) continue;
+      const binIndex = exactTypedLagBinIndex(
+        target.time,
+        targetUnit,
+        reference.time,
+        referenceUnit,
+        bins,
+      );
+      const roundedLag = convertExactUnitSum(
+        [
+          { value: target.time, unit: targetUnit },
+          { value: -reference.time, unit: referenceUnit },
+        ],
+        bins.unit,
+      );
+      if (ordinaryBinIndex(roundedLag, bins.unit, bins) !== binIndex) {
+        throw new Error(
+          'exact correlogram lag classification is not representable by one binary64 lag conversion',
+        );
+      }
+      if (binIndex < 0) {
+        throw new Error('correlogram eligible target slice escaped its exact lag bin interval');
+      }
+      if (binIndex < eligibleInterval.start || binIndex >= eligibleInterval.stop) {
+        throw new Error('correlogram eligible target slice escaped its reference exposure');
+      }
+      counts[binIndex]++;
+    }
+  }
+  return {
+    counts,
+    lagOutOfRangePairCount,
+    edgeIneligibleInRangePairCount,
+  };
 }
 
 function correlogramModel(requestValue: JsonValue): AuthorityModel {
@@ -1549,71 +1841,75 @@ function correlogramModel(requestValue: JsonValue): AuthorityModel {
   const targetSourceUnit = preBinned
     ? axis.lagUnit
     : String(record(targetTrain.eventTimes).unit);
-  const referenceTimes = preBinned
-    ? []
-    : referenceSourceTimes.map((value) => converted(value, referenceSourceUnit, axis.lagUnit));
-  const targetTimes = preBinned
-    ? []
-    : kind === 'auto'
-      ? referenceTimes
-      : targetSourceTimes.map((value) => converted(value, targetSourceUnit, axis.lagUnit));
   let pairCounts: number[];
   let referenceEventCount: number;
   let targetEventCount: number;
+  let pairBreakdown: CorrelogramAuthorityPairBreakdown;
   if (preBinned) {
     pairCounts = numbers(data.pairCounts);
     referenceEventCount = Number(data.referenceEventCount);
     targetEventCount = kind === 'auto' ? referenceEventCount : Number(data.targetEventCount);
+    // Counts alone expose the aggregate remainder but cannot identify whether one
+    // omitted pair was beyond the lag ladder or used an edge-ineligible reference.
+    pairBreakdown = { kind: 'unavailable_from_prebinned_input' };
   } else {
-    const sortedReference = [...referenceTimes].sort((left, right) => left - right);
-    const sortedTarget = kind === 'auto'
-      ? sortedReference
-      : [...targetTimes].sort((left, right) => left - right);
-    pairCounts = new Array<number>(axis.centers.length).fill(0);
-    // The live build preflight has already bounded the eligible pair count. Walk only
-    // the monotone lag window here instead of expanding the full reference×target
-    // product; far-out pairs are counted algebraically below and never enumerated.
-    const minimumLag = axis.bins.edges[0];
-    const maximumLag = axis.bins.edges[axis.bins.edges.length - 1];
-    let firstEligibleTarget = 0;
-    let firstTargetPastWindow = 0;
-    for (let referenceIndex = 0; referenceIndex < sortedReference.length; referenceIndex++) {
-      const referenceTime = sortedReference[referenceIndex];
-      while (
-        firstEligibleTarget < sortedTarget.length &&
-        sortedTarget[firstEligibleTarget] - referenceTime < minimumLag
-      ) {
-        firstEligibleTarget++;
-      }
-      if (firstTargetPastWindow < firstEligibleTarget) {
-        firstTargetPastWindow = firstEligibleTarget;
-      }
-      while (
-        firstTargetPastWindow < sortedTarget.length &&
-        sortedTarget[firstTargetPastWindow] - referenceTime < maximumLag
-      ) {
-        firstTargetPastWindow++;
-      }
-      for (
-        let targetIndex = firstEligibleTarget;
-        targetIndex < firstTargetPastWindow;
-        targetIndex++
-      ) {
-        if (kind === 'auto' && referenceIndex === targetIndex) continue;
-        const lag = sortedTarget[targetIndex] - referenceTime;
-        const index = ordinaryBinIndex(lag, axis.lagUnit, axis.bins);
-        if (index >= 0) pairCounts[index]++;
-      }
-    }
-    referenceEventCount = referenceTimes.length;
-    targetEventCount = kind === 'auto' ? referenceEventCount : targetTimes.length;
+    const classified = rawCorrelogramPairCounts(
+      referenceSourceTimes,
+      referenceSourceUnit,
+      targetSourceTimes,
+      targetSourceUnit,
+      axis.bins,
+      kind,
+      parameters.edgeCorrection === 'eligible_reference_events',
+      record(data.window),
+    );
+    pairCounts = [...classified.counts];
+    pairBreakdown = {
+      kind: 'raw_exact',
+      lagOutOfRangePairCount: classified.lagOutOfRangePairCount,
+      edgeIneligibleInRangePairCount: classified.edgeIneligibleInRangePairCount,
+    };
+    referenceEventCount = referenceSourceTimes.length;
+    targetEventCount = kind === 'auto' ? referenceEventCount : targetSourceTimes.length;
   }
-  const countedPairCount = pairCounts.reduce((sum, count) => sum + count, 0);
-  const candidatePairCount = referenceEventCount * targetEventCount;
+  const countedPairCountExact = pairCounts.reduce((sum, count) => sum + BigInt(count), 0n);
+  const candidatePairCountExact = BigInt(referenceEventCount) * BigInt(targetEventCount);
+  if (
+    countedPairCountExact > BigInt(Number.MAX_SAFE_INTEGER) ||
+    candidatePairCountExact > BigInt(Number.MAX_SAFE_INTEGER)
+  ) {
+    throw new Error('correlogram pair accounting exceeds the exact JSON integer domain');
+  }
+  const countedPairCount = Number(countedPairCountExact);
+  const candidatePairCount = Number(candidatePairCountExact);
   const sameEventSelfPairCountExcluded = kind === 'auto' ? referenceEventCount : 0;
-  const outOfRangePairCount = candidatePairCount - countedPairCount - sameEventSelfPairCountExcluded;
+  const notCountedPairCount = candidatePairCount - countedPairCount -
+    sameEventSelfPairCountExcluded;
+  if (!Number.isSafeInteger(notCountedPairCount) || notCountedPairCount < 0) {
+    throw new Error('correlogram counted pairs exceed the exact candidate role product');
+  }
+  if (
+    pairBreakdown.kind === 'raw_exact' &&
+    notCountedPairCount !==
+      pairBreakdown.lagOutOfRangePairCount + pairBreakdown.edgeIneligibleInRangePairCount
+  ) {
+    throw new Error('raw correlogram pair classes do not conserve the candidate role product');
+  }
   const statistic = String(parameters.statistic);
   const edgeCorrection = String(parameters.edgeCorrection);
+  if (preBinned) {
+    const effectiveEligibleReferenceCounts = edgeCorrection === 'eligible_reference_events'
+      ? numbers(data.eligibleReferenceEventCounts)
+      : pairCounts.map(() => referenceEventCount);
+    requirePrebinnedCorrelogramPairBounds(
+      pairCounts,
+      effectiveEligibleReferenceCounts,
+      referenceEventCount,
+      targetEventCount,
+      axis.bins.edges.length - 1,
+      kind,
+    );
+  }
   let eligible: (number | null)[];
   let denominators: (number | null)[];
   let values: (number | null)[];
@@ -1688,14 +1984,14 @@ function correlogramModel(requestValue: JsonValue): AuthorityModel {
   const conversions = [...axis.conversions];
   if (!preBinned && referenceSourceUnit !== axis.lagUnit) {
     conversions.push(conversionDisclosure(
-      'correlogram reference-event times',
+      'correlogram reference terms in exact lag differences',
       referenceSourceUnit,
       axis.lagUnit,
     ));
   }
   if (!preBinned && kind === 'cross' && targetSourceUnit !== axis.lagUnit) {
     conversions.push(conversionDisclosure(
-      'correlogram target-event times',
+      'correlogram target terms in exact lag differences',
       targetSourceUnit,
       axis.lagUnit,
     ));
@@ -1742,8 +2038,11 @@ function correlogramModel(requestValue: JsonValue): AuthorityModel {
       sourceAuthorityStatement,
       candidatePairCount: exactText(candidatePairCount),
       countedPairCount: exactText(countedPairCount),
-      outOfRangePairCount: exactText(outOfRangePairCount),
+      notCountedPairCount: exactText(notCountedPairCount),
       sameEventSelfPairCountExcluded: exactText(sameEventSelfPairCountExcluded),
+      notCountedPairBreakdown: pairBreakdown.kind === 'unavailable_from_prebinned_input'
+        ? 'Other not-counted split: unavailable from pre-binned aggregate input; Cortexel does not relabel the remainder as lag-out-of-range or edge-ineligible.'
+        : `Other not-counted split: ${pairBreakdown.lagOutOfRangePairCount} lag-out-of-range + ${pairBreakdown.edgeIneligibleInRangePairCount} in-range edge-ineligible.`,
       undefinedRateBinCount: exactText(undefinedCount),
       uncertaintyStatement: 'No uncertainty interval is estimated or drawn.',
     },
@@ -1756,7 +2055,7 @@ function correlogramModel(requestValue: JsonValue): AuthorityModel {
 }
 
 CORRELOGRAM_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.correlogram', 3),
+  authorityEvaluatorId('neuro.correlogram', 4),
   (request) => modelFields(correlogramModel(request)),
 );
 
@@ -2127,7 +2426,7 @@ function psthModel(requestValue: JsonValue): AuthorityModel {
 }
 
 PSTH_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.psth', 3),
+  authorityEvaluatorId('neuro.psth', 4),
   (request) => modelFields(psthModel(request)),
 );
 

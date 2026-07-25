@@ -1303,7 +1303,7 @@ function analogModel(requestValue: JsonValue): {
 }
 
 const ANALOG_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.analog_trace', 3),
+  authorityEvaluatorId('neuro.analog_trace', 4),
   (request) => {
     const model = analogModel(request);
     return {
@@ -1495,7 +1495,7 @@ function multisignalModel(requestValue: JsonValue): {
 }
 
 const MULTISIGNAL_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.multisignal_trace', 3),
+  authorityEvaluatorId('neuro.multisignal_trace', 4),
   (request) => {
     const model = multisignalModel(request);
     return {
@@ -1838,7 +1838,7 @@ function compartmentModel(requestValue: JsonValue): {
 }
 
 const COMPARTMENT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.compartment_trace', 3),
+  authorityEvaluatorId('neuro.compartment_trace', 4),
   (request) => {
     const model = compartmentModel(request);
     return {
@@ -3481,7 +3481,7 @@ function weightModel(requestValue: JsonValue): {
 }
 
 const WEIGHT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.synaptic_weight_trace', 3),
+  authorityEvaluatorId('network.synaptic_weight_trace', 4),
   (request) => {
     const model = weightModel(request);
     return {

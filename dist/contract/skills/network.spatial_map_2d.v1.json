@@ -1,6 +1,6 @@
 {
   "id": "network.spatial_map_2d",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Two-dimensional spatial map of declared node positions",
@@ -447,7 +447,7 @@
     { "id": "uncertainty.supported_variant", "parameters": { "supported": ["none"] } }
   ],
 
-  "renderer": { "id": "figure.spatial_map_2d", "revision": 3 },
+  "renderer": { "id": "figure.spatial_map_2d", "revision": 4 },
 
   "budgets": {
     "maxObservations": 200000,
@@ -471,7 +471,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.spatial_map_2d.output_authority.v3"
+      "id": "network.spatial_map_2d.output_authority.v4"
     },
     "requestPaths": [
       {

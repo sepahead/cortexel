@@ -76,7 +76,7 @@ function renderDirectChart(
 }
 
 describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
-  it('covers all nineteen declared chart skills with an accessible SVG and bound caption', () => {
+  it('covers all nineteen chart skills with distinct SVG naming structure and a bound caption', () => {
     expect(REFERENCE_CHART_SKILLS).toHaveLength(19);
     for (const skill of REFERENCE_CHART_SKILLS) {
       const html = renderSkill(skill);
@@ -84,6 +84,17 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
       expect(html, skill).toContain('role="img"');
       expect(html, skill).toContain(`<title`);
       expect(html, skill).toContain('<desc');
+      const svgAttributes = html.match(/<svg\b([^>]*)>/u)?.[1] ?? '';
+      const titleId = html.match(/<title id="([^"]+)"/u)?.[1];
+      const descriptionId = html.match(/<desc id="([^"]+)"/u)?.[1];
+      expect(titleId, skill).toBeDefined();
+      expect(descriptionId, skill).toBeDefined();
+      expect(titleId, skill).not.toBe(descriptionId);
+      expect(svgAttributes, skill).toContain(`aria-labelledby="${titleId}"`);
+      expect(svgAttributes, skill).toContain(`aria-describedby="${descriptionId}"`);
+      expect(svgAttributes, skill).not.toContain(
+        `aria-labelledby="${titleId} ${descriptionId}"`,
+      );
       expect(html, skill).toContain(`data-skill="${skill}"`);
       expect(html, skill).toContain('role="note"');
       expect(html, skill).toContain('Scientific provenance disclosure');
@@ -91,7 +102,26 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
         /class="cortexel-honesty-caption"[^>]*style="[^"]*position:relative/,
       );
       expect(html, skill).not.toMatch(/(?:NaN|Infinity)/);
+      expect(renderSkill(skill), skill).toBe(html);
     }
+  });
+
+  it('keeps hostile label text escaped while retaining deterministic accessibility ids', () => {
+    const spec = getExamplePayload('nest.voltage_trace')!;
+    spec.params = {
+      ...spec.params,
+      series_labels: ['probe <&> "one" · V_m'],
+    };
+    const first = renderToStaticMarkup(<ReferenceVizSpecFigure spec={spec} />);
+    const second = renderToStaticMarkup(<ReferenceVizSpecFigure spec={spec} />);
+    expect(second).toBe(first);
+    expect(first).toContain('probe &lt;&amp;&gt; &quot;one&quot; · V_m');
+    expect(first).not.toContain('probe <&> "one" · V_m');
+    const svgAttributes = first.match(/<svg\b([^>]*)>/u)?.[1] ?? '';
+    const titleId = first.match(/<title id="([^"]+)"/u)?.[1];
+    const descriptionId = first.match(/<desc id="([^"]+)"/u)?.[1];
+    expect(svgAttributes).toContain(`aria-labelledby="${titleId}"`);
+    expect(svgAttributes).toContain(`aria-describedby="${descriptionId}"`);
   });
 
   it('renders labeled voltage series from the exact checked fields', () => {
@@ -171,7 +201,7 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
     expect(path).toContain('V');
   });
 
-  it('keeps multiple population series distinct in geometry, legend, and accessible detail', () => {
+  it('keeps multiple population series distinct in geometry, legend, and DOM detail', () => {
     const spec = getExamplePayload('nest.population_rate')!;
     const params = spec.params as typeof spec.params & {
       series: Array<Record<string, unknown>>;

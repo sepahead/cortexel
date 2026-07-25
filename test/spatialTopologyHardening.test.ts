@@ -212,7 +212,7 @@ describe('spatial/topology scientific hardening', () => {
     expect(validated.ok).toBe(true);
     if (!validated.ok) return;
     const evaluator = TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS.find(
-      (candidate) => candidate.id === 'network.spatial_map_2d.output_authority.v3',
+      (candidate) => candidate.id === 'network.spatial_map_2d.output_authority.v4',
     )!;
     const fields = evaluator.evaluateCanonicalRequest(
       validated.request.canonicalRequest as JsonValue,

@@ -60,7 +60,7 @@ Summary:
 | Pre-1.0 id | Outcome | FigureRequestV1 target |
 |---|---|---|
 | `nest.voltage_trace` | report-only target skeleton | `neuro.analog_trace` (never infers membrane voltage, origin, units, identity, window, layout, or duplicate-time policy) |
-| `nest.spike_raster` | report-only target skeleton | `neuro.spike_raster` revision 3 (requires the recorded sender universe and an explicit event-window clock/closure; a NEST memory export additionally requires origin, start, stop, `time_in_steps: false`, a revision-2-admitted 3.9/3.10 source-version declaration, and an export digest; admission is not upstream certification) |
+| `nest.spike_raster` | report-only target skeleton | the installed `neuro.spike_raster` contract (currently revision 4; requires the recorded sender universe and an explicit event-window clock/closure; a NEST memory export additionally requires origin, start, stop, `time_in_steps: false`, a revision-2-admitted 3.9/3.10 source-version declaration, and an export digest; admission is not upstream certification) |
 | `nest.population_rate` | report-only target skeleton | `neuro.population_rate` (requires a recorded-sender count) |
 | `nest.rate_response` | report-only target skeleton | `neuro.response_curve` (requires input quantity + response method + caller-declared event scope) |
 | `nest.isi_distribution` | report-only target skeleton | `neuro.isi_distribution` |

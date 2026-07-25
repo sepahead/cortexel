@@ -1,5 +1,5 @@
 import { V as ValidateOptions, a as ValidatedRequest } from '../request-BDtRhnDs.js';
-import { J as JsonValue, D as Disclosure } from '../parse-json-bVQD5dC-.js';
+import { J as JsonValue, D as Disclosure } from '../parse-json-BGhVgzef.js';
 import { C as CortexelError } from '../errors-DUbFUu6n.js';
 
 /**
@@ -8,8 +8,8 @@ import { C as CortexelError } from '../errors-DUbFUu6n.js';
  * Cortexel owns the attribution and the Unicode isolation marks. The caller supplies
  * only the already-validated statement body, so it cannot move its text ahead of a
  * mandatory disclosure, remove the unverified attribution, or inject its own bidi
- * controls. The complete rendered string is carried unchanged by the SVG, accessible
- * summary, and returned-table metadata.
+ * controls. The complete rendered string is carried unchanged by the SVG's
+ * programmatically referenced description and returned-table metadata.
  */
 type CallerSourceStatementKind = 'declared_limitation' | 'declared_note';
 interface CallerSourceStatement {

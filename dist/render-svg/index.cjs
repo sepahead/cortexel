@@ -1053,8 +1053,8 @@ var ERROR_CODE_META = freezeGenerated({
   "SCIENCE_DENOMINATOR_INVALID": {
     "stage": "science",
     "severity": "error",
-    "summary": "A rate denominator is missing, zero, or negative.",
-    "correctiveAction": "Supply a positive recorded-sender count. Cortexel does NOT infer population size from the number of senders that happened to spike \u2014 a silent neuron is still a recorded neuron."
+    "summary": "A declared or derived rate/normalization denominator is absent, non-exact, contradictory, or outside the selected skill's allowed domain.",
+    "correctiveAction": "Supply the denominator authority required by the skill and make it coherent with its source counts and scope (for example a recorded-sender, trial, event, or eligible-reference count). Zero is allowed only where that skill declares an explicit zero-exposure result; Cortexel never infers a missing universe from active observations."
   },
   "SCIENCE_POPULATION_UNIVERSE_REQUIRED": {
     "stage": "science",
@@ -1179,8 +1179,8 @@ var ERROR_CODE_META = freezeGenerated({
   "SCIENCE_CORRELATION_DENOMINATOR_INVALID": {
     "stage": "science",
     "severity": "error",
-    "summary": "A correlation coefficient was requested but its required statistics or a valid variance denominator are absent.",
-    "correctiveAction": "Supply the required statistics, or use `raw_count` or an explicitly named rate normalization. A scaled pair count is not a correlation coefficient."
+    "summary": "A correlogram statistic, edge-correction/denominator declaration, or exact pair-accounting identity is unsupported or incoherent.",
+    "correctiveAction": "Use `raw_pair_count` with edge correction `none`, or `target_rate_per_reference_event` with `none` or `eligible_reference_events`, and supply exact role, pair, and eligible-reference counts that satisfy the published bounds. Cortexel does not synthesize a correlation coefficient from scaled pair counts."
   },
   "SCIENCE_UNCERTAINTY_BOUNDS_INVALID": {
     "stage": "science",
@@ -1264,7 +1264,7 @@ var ERROR_CODE_META = freezeGenerated({
     "stage": "provenance",
     "severity": "error",
     "summary": "The request tried to set a field that only Cortexel may author.",
-    "correctiveAction": "Remove it. Validation results, reference-comparison status, accessibility conformance, completeness, output digests, and disclosure text are library-generated facts. A caller declares what its data IS, never what Cortexel concluded about it."
+    "correctiveAction": "Remove it. Validation results, reference-comparison status, completeness, output digests, and disclosure text are library-generated facts. Structural accessibility evidence is also library-authored, and FigureArtifactV1 deliberately contains no accessibility-conformance conclusion. A caller declares what its data IS, never what Cortexel concluded about it."
   },
   "PROVENANCE_NOTE_TOO_LONG": {
     "stage": "provenance",
@@ -5417,7 +5417,7 @@ var CAPABILITY_AVAILABILITIES = freezeGenerated([
 var SKILL_CATALOG = freezeGenerated({
   "network.adjacency_matrix": {
     "id": "network.adjacency_matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5435,7 +5435,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 3,
+      "revision": 4,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -5649,7 +5649,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.adjacency_matrix.output_authority.v3"
+        "id": "network.adjacency_matrix.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -5819,7 +5819,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.connection_graph": {
     "id": "network.connection_graph",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5836,7 +5836,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -6120,7 +6120,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.connection_graph.output_authority.v3"
+        "id": "network.connection_graph.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -6317,7 +6317,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.degree_distribution": {
     "id": "network.degree_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6336,7 +6336,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -6506,7 +6506,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.degree_distribution.output_authority.v3"
+        "id": "network.degree_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -6673,7 +6673,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_distribution": {
     "id": "network.delay_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6693,7 +6693,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -6926,7 +6926,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_distribution.output_authority.v3"
+        "id": "network.delay_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -7110,7 +7110,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_matrix": {
     "id": "network.delay_matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7129,7 +7129,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 3,
+      "revision": 4,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -7356,7 +7356,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_matrix.output_authority.v3"
+        "id": "network.delay_matrix.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -7533,7 +7533,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.spatial_map_2d": {
     "id": "network.spatial_map_2d",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7554,7 +7554,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -7852,7 +7852,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.spatial_map_2d.output_authority.v3"
+        "id": "network.spatial_map_2d.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -8054,7 +8054,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.synaptic_weight_trace": {
     "id": "network.synaptic_weight_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8075,7 +8075,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -8404,7 +8404,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.synaptic_weight_trace.output_authority.v3"
+        "id": "network.synaptic_weight_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -8635,7 +8635,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_distribution": {
     "id": "network.weight_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8655,7 +8655,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -8850,7 +8850,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_distribution.output_authority.v3"
+        "id": "network.weight_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -9029,7 +9029,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_matrix": {
     "id": "network.weight_matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9046,7 +9046,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 3,
+      "revision": 4,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -9286,7 +9286,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_matrix.output_authority.v3"
+        "id": "network.weight_matrix.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -9463,7 +9463,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.analog_trace": {
     "id": "neuro.analog_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9481,7 +9481,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -9759,7 +9759,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.analog_trace.output_authority.v3"
+        "id": "neuro.analog_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -9946,7 +9946,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.compartment_trace": {
     "id": "neuro.compartment_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9964,7 +9964,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -10187,7 +10187,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.compartment_trace.output_authority.v3"
+        "id": "neuro.compartment_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -10398,7 +10398,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.correlogram": {
     "id": "neuro.correlogram",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10407,7 +10407,7 @@ var SKILL_CATALOG = freezeGenerated({
     "cannotEstablish": [
       "That either train drives the other. A peak at +2 ms is equally consistent with a monosynaptic connection, a common input arriving with different conduction delays, and a shared oscillation. A correlogram cannot separate them.",
       "That a peak is larger than chance. This figure draws no significance band and computes no surrogate, jitter, or shift predictor. The expected count under independence depends on both firing rates and on any nonstationarity, none of which it estimates.",
-      "Anything from the symmetry of an autocorrelogram. Forming both ordered pairs of every distinct event pair makes value(-lag) = value(+lag) by construction, up to the bin-edge rule below. The symmetry is a property of the algorithm, not evidence about the neuron.",
+      "Anything directional from the symmetry or asymmetry of an autocorrelogram. With edgeCorrection none, forming both ordered pairs of every distinct event pair makes opposite-lag counts symmetric except at the published half-open bin edges. With eligible_reference_events, the bin-specific complete-exposure subset can differ at opposite window boundaries, so symmetry is not guaranteed. Either result is a property of the declared algorithm and finite window, not evidence about the neuron.",
       "Fine-timescale synchrony when the two firing rates co-vary slowly across the window. Slow co-modulation produces a broad central peak that is not spike synchrony, and pooling every pair in the window cannot tell the two apart.",
       "Single-neuron refractoriness or bursting from a pooled multi-unit train. A pooled autocorrelogram counts cross-neuron coincidences as pairs, so its central region is not a refractory trough.",
       "That no coupling exists because no peak is visible. The bin width sets the temporal resolution: coupling jittered on a finer scale than the bin is smeared away, and weak coupling can sit inside the sampling noise of the counts.",
@@ -10417,7 +10417,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -10491,7 +10491,7 @@ var SKILL_CATALOG = freezeGenerated({
       "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Correlogram ({correlationKind}): target {targetLabel} relative to reference {referenceLabel}. Positive lag means target follows reference. Declared senders, including silent: {referenceRecordedSenderCount} reference, {targetRecordedSenderCount} target. {binCount} left-closed/right-open bins of {binWidth} {lagUnit}, centred from {lagMin} to {lagMax}; positive outer edge excluded. {statistic} ({valueUnit}); denominator {denominatorStatement}. Events: {referenceEventCount} reference, {targetEventCount} target, over {observationDuration} {timeUnit}; {sourceAuthorityStatement}. Exact pairs: {candidatePairCount} candidate = {countedPairCount} in-range + {outOfRangePairCount} out-of-range + {sameEventSelfPairCountExcluded} same-event self-pairs excluded. {undefinedRateBinCount} rate bins are null because their eligible-reference count is zero. {uncertaintyStatement}",
+      "summaryTemplate": "Correlogram ({correlationKind}): target {targetLabel} relative to reference {referenceLabel}. Positive lag means target follows reference. Declared senders, including silent: {referenceRecordedSenderCount} reference, {targetRecordedSenderCount} target. {binCount} left-closed/right-open bins of {binWidth} {lagUnit}, centred from {lagMin} to {lagMax}; positive outer edge excluded. {statistic} ({valueUnit}); denominator {denominatorStatement}. Events: {referenceEventCount} reference, {targetEventCount} target, over {observationDuration} {timeUnit}; {sourceAuthorityStatement}. Pair accounting: {candidatePairCount} candidate = {countedPairCount} counted numerator + {notCountedPairCount} other not counted + {sameEventSelfPairCountExcluded} same-event self-pairs excluded. {notCountedPairBreakdown} {undefinedRateBinCount} rate bins are null because their eligible-reference count is zero. {uncertaintyStatement}",
       "tableColumns": [
         {
           "key": "lagBinStart",
@@ -10523,7 +10523,7 @@ var SKILL_CATALOG = freezeGenerated({
           "cellType": "finite_number",
           "nullable": false,
           "keyPart": false,
-          "description": "Exact integer count of ordered (reference, target) event pairs whose lag falls in this bin. It is the value for raw_pair_count and the numerator for target_rate_per_reference_event."
+          "description": "Exact integer counted numerator for this bin. For raw_pair_count it contains every non-self pair whose exact lag falls in the bin. For target_rate_per_reference_event with eligible_reference_events it contains only pairs whose reference ordinal belongs to the identical eligible subset used by the denominator."
         },
         {
           "key": "eligibleReferenceEvents",
@@ -10531,7 +10531,7 @@ var SKILL_CATALOG = freezeGenerated({
           "cellType": "finite_number",
           "nullable": true,
           "keyPart": false,
-          "description": "Reference events whose lag-shifted bin lies inside the observation window. Null for raw_pair_count, which has no denominator; for target_rate_per_reference_event it equals the reference event count when edge correction is none."
+          "description": "Reference events whose entire lag-shifted bin lies inside the observation window and whose pairs are therefore eligible for this numerator. Null for raw_pair_count, which has no denominator; for target_rate_per_reference_event it equals the reference event count when edge correction is none."
         },
         {
           "key": "denominator",
@@ -10584,7 +10584,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.correlogram.output_authority.v3"
+        "id": "neuro.correlogram.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -10732,8 +10732,9 @@ var SKILL_CATALOG = freezeGenerated({
           "sourceAuthorityStatement",
           "candidatePairCount",
           "countedPairCount",
-          "outOfRangePairCount",
+          "notCountedPairCount",
           "sameEventSelfPairCountExcluded",
+          "notCountedPairBreakdown",
           "undefinedRateBinCount",
           "uncertaintyStatement"
         ],
@@ -10762,21 +10763,21 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "The pairwise budget is the binding limit, not the observation limit: two trains of about 7,000 events each already reach the standard profile's 50,000,000-pair preflight bound, and larger trains are refused rather than attempted.",
+      "The pairwise budget is the binding limit, not the observation limit: dense trains with more than 50,000,000 non-self pairs admitted to the requested numerator under the standard profile are refused before pair derivation. A larger Cartesian product may still pass when exact typed lower-bound preflight proves that its lag-range and edge-eligible subset is within budget.",
       "The unit registry has no code for a product of two simulator-defined incoming connection weights, and raw spike times do not retain those weights. weighted_pair_sum is therefore absent from the accepted statistic enum; supporting it later requires an explicit upstream weight authority, product quantity, unit semantics and verified summation rule.",
       "No disclosure id exists for a pooled multi-unit train. The pooled sender universe is stated in the summary and the table, but no mandatory footer line announces that an autocorrelogram is multi-unit; the registry gap is recorded rather than papered over with a caller note.",
       "No disclosure id exists for a pre-binned histogram whose source kept its self-pairs, so such input is refused outright instead of being drawn with a caveat that the registry cannot express.",
       "The figure refuses to compact. Merging adjacent lag bins would widen the bin width, which IS the scientific parameter of a correlogram: a 1 ms coincidence peak merged into 5 ms bins becomes a broad hump indistinguishable from slow rate co-modulation. Oversized lag axes are refused, not summarized.",
       "Pre-binned input cannot be re-binned or re-oriented. Cortexel checks the arithmetic that connects the counts to the values; it cannot check that the source binned or oriented them the way the request declares.",
       "A correlogram is a co-occurrence statistic. Connectivity, causality, and significance are outside it, and Cortexel adds no significance band that would suggest otherwise.",
-      "Revision 2 accepts uncertainty kind none only. Dispersion or interval input needs a future branch whose units, missingness mask, table cells, summary, legend and geometry are all executable; accepting those arrays before that path exists would silently discard caller data.",
-      "A pre-binned target rate retains exact pair counts, exact role event counts, and either the referenceEventCount under edgeCorrection none or parallel eligibleReferenceEventCounts. Zero denominators are admitted only with zero numerator and compile to an explicit null-with-reason value. Cortexel derives every defined rate and the exact in-range/out-of-range/self-pair partition; it accepts no caller-supplied rate or accounting remainder. It still cannot verify that the upstream source counted or oriented events as declared.",
+      "Revision 4 accepts uncertainty kind none only. Dispersion or interval input needs a future branch whose units, missingness mask, table cells, summary, legend and geometry are all executable; accepting those arrays before that path exists would silently discard caller data.",
+      "A pre-binned target rate retains declared exact pair counts, exact role event counts, and either the referenceEventCount under edgeCorrection none or parallel eligibleReferenceEventCounts. Zero denominators are admitted only with zero numerator and compile to an explicit null-with-reason value. Cortexel derives each defined rate and the aggregate candidate/count/not-counted/self-pair identity, but raw events are absent: it cannot verify that the source used the same eligible-reference subset for numerator and denominator, or split other not-counted pairs between lag-out-of-range and in-range edge-ineligible causes. The artifact states that split is unavailable instead of assigning the whole remainder to one cause.",
       "Raw auto and cross inputs are separate products. events_auto has one train in both roles; events_cross has explicit referenceTrain and targetTrain containers with disjoint complete sender universes. Event counts and duration are derived from those role-local arrays and the shared typed window, never supplied twice."
     ]
   },
   "neuro.isi_distribution": {
     "id": "neuro.isi_distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10793,7 +10794,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -11021,7 +11022,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.isi_distribution.output_authority.v3"
+        "id": "neuro.isi_distribution.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -11203,7 +11204,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.multisignal_trace": {
     "id": "neuro.multisignal_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -11220,7 +11221,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -11627,7 +11628,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.multisignal_trace.output_authority.v3"
+        "id": "neuro.multisignal_trace.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -11837,7 +11838,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.phase_plane": {
     "id": "neuro.phase_plane",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -11858,7 +11859,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -12091,7 +12092,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.phase_plane.output_authority.v3"
+        "id": "neuro.phase_plane.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -12305,7 +12306,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.population_rate": {
     "id": "neuro.population_rate",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -12319,7 +12320,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -12475,7 +12476,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.population_rate.output_authority.v3"
+        "id": "neuro.population_rate.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -12629,7 +12630,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.psth": {
     "id": "neuro.psth",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -12646,7 +12647,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -12989,7 +12990,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.psth.output_authority.v3"
+        "id": "neuro.psth.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -13197,7 +13198,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.response_curve": {
     "id": "neuro.response_curve",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -13216,7 +13217,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -13541,7 +13542,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.response_curve.output_authority.v3"
+        "id": "neuro.response_curve.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -13763,7 +13764,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -13781,7 +13782,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 3
+      "revision": 4
     },
     "semanticValidators": [
       {
@@ -13964,7 +13965,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.spike_raster.output_authority.v3"
+        "id": "neuro.spike_raster.output_authority.v4"
       },
       "requestPaths": [
         {
@@ -14933,7 +14934,7 @@ var LEGACY_SKILL_MAP = freezeGenerated({
 var RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -14945,7 +14946,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -14957,7 +14958,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -14968,7 +14969,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rule",
@@ -14979,7 +14980,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "path",
@@ -14991,7 +14992,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rect",
@@ -15003,7 +15004,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rule",
@@ -15015,7 +15016,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rect",
@@ -15027,7 +15028,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "point",
@@ -15039,7 +15040,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -15052,7 +15053,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "line",
@@ -15065,7 +15066,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "rect",
@@ -15076,7 +15077,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "point",
@@ -15089,7 +15090,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 3,
+    "revision": 4,
     "status": "stable",
     "marks": [
       "path",
@@ -16892,11 +16893,25 @@ var COMPACTION_POLICIES = freezeGenerated({
 
 // src/analysis/correlogram.ts
 var DEFAULT_MAX_PAIRWISE_OPERATIONS = BUDGET_PROFILES.standard.pairwiseOperations;
-var PairwiseBudgetExceededError = class extends Error {
+var CorrelogramDerivationError = class extends Error {
+  code;
+  instancePath;
+  constructor(code, instancePath, message) {
+    super(message);
+    this.name = "CorrelogramDerivationError";
+    this.code = code;
+    this.instancePath = instancePath;
+  }
+};
+var PairwiseBudgetExceededError = class extends CorrelogramDerivationError {
   limit;
   observedLowerBound;
   constructor(limit, observedLowerBound) {
-    super(`correlogram pair count exceeds ${limit}`);
+    super(
+      "RESOURCE_PAIRWISE_EXCEEDED",
+      "/maximumPairwiseOperations",
+      `correlogram pair count exceeds ${limit}`
+    );
     this.name = "PairwiseBudgetExceededError";
     this.limit = limit;
     this.observedLowerBound = observedLowerBound;
@@ -16907,7 +16922,7 @@ function requireExactCount(value, name) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
   }
 }
-function deriveCorrelogramPairAccounting(referenceEventCount, targetEventCount, kind, countedPairCount) {
+function deriveCorrelogramPairAccountingBase(referenceEventCount, targetEventCount, kind, countedPairCount) {
   requireExactCount(referenceEventCount, "reference event count");
   requireExactCount(targetEventCount, "target event count");
   requireExactCount(countedPairCount, "counted pair count");
@@ -16917,8 +16932,8 @@ function deriveCorrelogramPairAccounting(referenceEventCount, targetEventCount, 
   const candidate = BigInt(referenceEventCount) * BigInt(targetEventCount);
   const selfPairs = kind === "auto" ? BigInt(referenceEventCount) : 0n;
   const counted = BigInt(countedPairCount);
-  const outOfRange = candidate - selfPairs - counted;
-  if (outOfRange < 0n) {
+  const notCounted = candidate - selfPairs - counted;
+  if (notCounted < 0n) {
     throw new RangeError(
       "counted pairs exceed the candidate role product after the auto self-pair exclusion"
     );
@@ -16929,13 +16944,38 @@ function deriveCorrelogramPairAccounting(referenceEventCount, targetEventCount, 
   return {
     candidatePairCount: Number(candidate),
     countedPairCount,
-    outOfRangePairCount: Number(outOfRange),
+    notCountedPairCount: Number(notCounted),
     sameEventSelfPairCountExcluded: Number(selfPairs)
   };
 }
-function deriveEligibleCorrelogramReferenceCounts(referenceTimes, referenceTimeUnit, binEdges, binEdgeUnit, window) {
+function derivePrebinnedCorrelogramPairAccounting(referenceEventCount, targetEventCount, kind, countedPairCount) {
+  const accounting = deriveCorrelogramPairAccountingBase(
+    referenceEventCount,
+    targetEventCount,
+    kind,
+    countedPairCount
+  );
+  return {
+    ...accounting,
+    notCountedPairBreakdown: { kind: "unavailable_from_prebinned_input" }
+  };
+}
+function firstTrueEdge(edges, predicate) {
+  let lower = 0;
+  let upper = edges.length;
+  while (lower < upper) {
+    const middle = lower + Math.floor((upper - lower) / 2);
+    if (predicate(edges[middle])) upper = middle;
+    else lower = middle + 1;
+  }
+  return lower;
+}
+function requireEligibilityInputs(referenceTimes, binEdges, window) {
   if (!Number.isFinite(window.start) || !Number.isFinite(window.stop) || !(window.stop > window.start)) {
     throw new RangeError("correlogram eligibility window must be finite and ordered");
+  }
+  if (window.boundary !== "[start,stop)" && window.boundary !== "[start,stop]" && window.boundary !== "(start,stop]") {
+    throw new RangeError("correlogram eligibility window has an unsupported boundary");
   }
   if (binEdges.length < 2) {
     throw new RangeError("correlogram eligibility requires at least two bin edges");
@@ -16953,54 +16993,34 @@ function deriveEligibleCorrelogramReferenceCounts(referenceTimes, referenceTimeU
       throw new RangeError(`correlogram reference time ${index} must be finite`);
     }
   }
+}
+function correlogramEligibilityInterval(time, referenceTimeUnit, binEdges, binEdgeUnit, window) {
   const openStart = window.boundary === "(start,stop]";
   const binCount = binEdges.length - 1;
-  const deltas = new Array(binCount + 1).fill(0);
-  const firstTrue = (predicate) => {
-    let lower = 0;
-    let upper = binEdges.length;
-    while (lower < upper) {
-      const middle = lower + Math.floor((upper - lower) / 2);
-      if (predicate(binEdges[middle])) upper = middle;
-      else lower = middle + 1;
-    }
-    return lower;
-  };
-  for (const time of referenceTimes) {
-    const firstAdmissibleLowerEdge = firstTrue((edge) => {
-      const comparison = compareExactUnitSumToValue(
-        [
-          { value: time, unit: referenceTimeUnit },
-          { value: edge, unit: binEdgeUnit }
-        ],
-        { value: window.start, unit: window.unit }
-      );
-      return openStart ? comparison > 0 : comparison >= 0;
-    });
-    const firstUpperEdgeBeyondStop = firstTrue((edge) => compareExactUnitSumToValue(
+  const firstAdmissibleLowerEdge = firstTrueEdge(binEdges, (edge) => {
+    const comparison = compareExactUnitSumToValue(
       [
         { value: time, unit: referenceTimeUnit },
         { value: edge, unit: binEdgeUnit }
       ],
-      { value: window.stop, unit: window.unit }
-    ) > 0);
-    const lowerBin = Math.min(firstAdmissibleLowerEdge, binCount);
-    const upperBinExclusive = Math.max(
+      { value: window.start, unit: window.unit }
+    );
+    return openStart ? comparison > 0 : comparison >= 0;
+  });
+  const firstUpperEdgeBeyondStop = firstTrueEdge(binEdges, (edge) => compareExactUnitSumToValue(
+    [
+      { value: time, unit: referenceTimeUnit },
+      { value: edge, unit: binEdgeUnit }
+    ],
+    { value: window.stop, unit: window.unit }
+  ) > 0);
+  return {
+    lowerBin: Math.min(firstAdmissibleLowerEdge, binCount),
+    upperBinExclusive: Math.max(
       0,
       Math.min(firstUpperEdgeBeyondStop - 1, binCount)
-    );
-    if (lowerBin < upperBinExclusive) {
-      deltas[lowerBin]++;
-      deltas[upperBinExclusive]--;
-    }
-  }
-  const counts = new Array(binCount);
-  let active = 0;
-  for (let index = 0; index < binCount; index++) {
-    active += deltas[index];
-    counts[index] = active;
-  }
-  return counts;
+    )
+  };
 }
 function deriveCorrelogramTargetRates(pairCounts, eligibleReferenceEventCounts, binWidth) {
   if (pairCounts.length !== eligibleReferenceEventCounts.length) {
@@ -17049,101 +17069,377 @@ function deriveCorrelogramTargetRates(pairCounts, eligibleReferenceEventCounts, 
     };
   });
 }
-function sortedTrains(referenceTimes, targetTimes, kind) {
-  const ref = [...referenceTimes].sort((a, b) => a - b);
-  return { ref, tgt: kind === "auto" ? ref : [...targetTimes].sort((a, b) => a - b) };
+function correlogramFailure(code, instancePath, message) {
+  throw new CorrelogramDerivationError(code, instancePath, message);
 }
-function requireCorrelogramBins(bins) {
-  if (bins.finalEdgeInclusive) {
-    throw new RangeError(
-      "correlogram bins are left-closed/right-open at every edge; finalEdgeInclusive must be false"
+function requireTypedTimeUnit(unit, instancePath) {
+  if (dimensionOf(unit) !== "time") {
+    correlogramFailure(
+      "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+      instancePath,
+      `${instancePath} must name a registered physical time unit.`
     );
   }
 }
-function countSortedEligiblePairs(ref, tgt, bins, kind, stopAfter) {
-  const lagMin = bins.edges[0];
-  const lagMax = bins.edges[bins.edges.length - 1];
-  let lower = 0;
-  let upper = 0;
-  let total = 0;
-  for (let i = 0; i < ref.length; i++) {
-    const reference = ref[i];
-    while (lower < tgt.length && tgt[lower] - reference < lagMin) lower++;
-    if (upper < lower) upper = lower;
-    while (upper < tgt.length && tgt[upper] - reference < lagMax) {
-      upper++;
+function requireFiniteTypedTimes(values, instancePath) {
+  for (let index = 0; index < values.length; index++) {
+    if (!Number.isFinite(values[index])) {
+      correlogramFailure(
+        "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+        `${instancePath}/${index}`,
+        `correlogram event time ${index} must be finite.`
+      );
     }
-    let eligible = upper - lower;
-    if (kind === "auto" && i >= lower && i < upper) eligible--;
-    total += eligible;
-    if (total > stopAfter) return stopAfter + 1;
   }
-  return total;
 }
-function countEligibleCorrelogramPairs(referenceTimes, targetTimes, bins, kind, stopAfter = Number.MAX_SAFE_INTEGER - 1) {
-  if (!Number.isSafeInteger(stopAfter) || stopAfter < 0) {
-    throw new RangeError("correlogram pair budget must be a non-negative safe integer");
+function requireTypedCorrelogramBins(bins) {
+  if (bins.finalEdgeInclusive !== false) {
+    correlogramFailure(
+      "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+      "/bins/finalEdgeInclusive",
+      "typed correlogram bins must be left-closed/right-open, including the final edge."
+    );
   }
-  requireCorrelogramBins(bins);
-  const { ref, tgt } = sortedTrains(referenceTimes, targetTimes, kind);
-  return countSortedEligiblePairs(ref, tgt, bins, kind, stopAfter);
+  requireTypedTimeUnit(bins.unit, "/bins/unit");
+  if (bins.edges.length < 2) {
+    correlogramFailure(
+      "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+      "/bins/edges",
+      "typed correlogram classification requires at least two bin edges."
+    );
+  }
+  for (let index = 0; index < bins.edges.length; index++) {
+    if (!Number.isFinite(bins.edges[index])) {
+      correlogramFailure(
+        "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+        `/bins/edges/${index}`,
+        `typed correlogram bin edge ${index} must be finite.`
+      );
+    }
+    if (index > 0 && !(bins.edges[index] > bins.edges[index - 1])) {
+      correlogramFailure(
+        "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+        "/bins/edges",
+        "typed correlogram bin edges must be strictly increasing."
+      );
+    }
+  }
 }
-function computeCorrelogram(referenceTimes, targetTimes, bins, kind, maxPairwiseOperations = DEFAULT_MAX_PAIRWISE_OPERATIONS) {
-  if (!Number.isSafeInteger(maxPairwiseOperations) || maxPairwiseOperations < 0) {
-    throw new RangeError("correlogram pair budget must be a non-negative safe integer");
+function exactTypedLagBinIndex(terms, bins) {
+  const compare = (edge) => compareExactUnitSumToValue(
+    terms,
+    { value: edge, unit: bins.unit }
+  );
+  const finalIndex = bins.edges.length - 1;
+  if (compare(bins.edges[0]) < 0 || compare(bins.edges[finalIndex]) >= 0) return -1;
+  let lower = 0;
+  let upper = finalIndex;
+  while (lower < upper) {
+    const middle = Math.floor((lower + upper + 1) / 2);
+    if (compare(bins.edges[middle]) >= 0) lower = middle;
+    else upper = middle - 1;
   }
-  requireCorrelogramBins(bins);
-  const lagMin = bins.edges[0];
-  const lagMax = bins.edges[bins.edges.length - 1];
-  const counts = new Array(Math.max(0, bins.edges.length - 1)).fill(0);
-  const selfPairsExcluded = kind === "auto" ? referenceTimes.length : 0;
+  return lower;
+}
+function stableTimeOrderedEvents(values) {
+  return values.map((time, sourceOrdinal) => ({ time, sourceOrdinal })).sort((left, right) => left.time < right.time ? -1 : left.time > right.time ? 1 : left.sourceOrdinal - right.sourceOrdinal);
+}
+function firstTargetAtOrAboveLag(target, targetTimeUnit, reference, referenceTimeUnit, edge, edgeUnit) {
+  let lower = 0;
+  let upper = target.length;
+  while (lower < upper) {
+    const middle = lower + Math.floor((upper - lower) / 2);
+    const comparison = compareExactUnitSumToValue(
+      [
+        { value: target[middle].time, unit: targetTimeUnit },
+        { value: -reference, unit: referenceTimeUnit }
+      ],
+      { value: edge, unit: edgeUnit }
+    );
+    if (comparison >= 0) upper = middle;
+    else lower = middle + 1;
+  }
+  return lower;
+}
+function typedEligibility(referenceTimes, referenceTimeUnit, bins, edgeCorrection, window) {
+  const binCount = bins.edges.length - 1;
+  if (edgeCorrection === "none") {
+    return {
+      intervals: referenceTimes.map(() => ({ lowerBin: 0, upperBinExclusive: binCount })),
+      counts: new Array(binCount).fill(referenceTimes.length)
+    };
+  }
+  if (!window) {
+    correlogramFailure(
+      "INTERNAL_INVARIANT_VIOLATED",
+      "/window",
+      "eligible-reference edge correction requires one typed observation window."
+    );
+  }
+  let intervals;
+  try {
+    requireEligibilityInputs(referenceTimes, bins.edges, window);
+    intervals = referenceTimes.map((time) => correlogramEligibilityInterval(
+      time,
+      referenceTimeUnit,
+      bins.edges,
+      bins.unit,
+      window
+    ));
+  } catch (error) {
+    if (error instanceof CorrelogramDerivationError) throw error;
+    correlogramFailure(
+      "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+      "/window",
+      `typed correlogram eligibility cannot be represented exactly (${error instanceof Error ? error.message : "unknown numeric failure"}).`
+    );
+  }
+  const deltas = new Array(binCount + 1).fill(0);
+  for (const interval of intervals) {
+    if (interval.lowerBin < interval.upperBinExclusive) {
+      deltas[interval.lowerBin]++;
+      deltas[interval.upperBinExclusive]--;
+    }
+  }
+  const counts = new Array(binCount);
+  let active = 0;
+  for (let index = 0; index < binCount; index++) {
+    active += deltas[index];
+    counts[index] = active;
+  }
+  return { intervals, counts };
+}
+function deriveTypedEventCorrelogram(input) {
+  const maximumPairwiseOperations = input.maximumPairwiseOperations ?? DEFAULT_MAX_PAIRWISE_OPERATIONS;
+  if (!Number.isSafeInteger(maximumPairwiseOperations) || maximumPairwiseOperations < 0 || maximumPairwiseOperations >= Number.MAX_SAFE_INTEGER) {
+    correlogramFailure(
+      "INTERNAL_INVARIANT_VIOLATED",
+      "/maximumPairwiseOperations",
+      "correlogram pairwiseOperations must be a non-negative safe integer below Number.MAX_SAFE_INTEGER."
+    );
+  }
+  requireTypedCorrelogramBins(input.bins);
+  requireTypedTimeUnit(input.referenceTimeUnit, "/referenceTimeUnit");
+  requireFiniteTypedTimes(input.referenceTimes, "/referenceTimes");
+  if (input.window) {
+    requireTypedTimeUnit(input.window.unit, "/window/unit");
+  }
+  const targetTimes = input.kind === "auto" ? input.referenceTimes : input.targetTimes;
+  const targetTimeUnit = input.kind === "auto" ? input.referenceTimeUnit : input.targetTimeUnit;
+  requireTypedTimeUnit(targetTimeUnit, "/targetTimeUnit");
+  requireFiniteTypedTimes(targetTimes, "/targetTimes");
+  const candidate = BigInt(input.referenceTimes.length) * BigInt(targetTimes.length);
+  if (candidate > BigInt(Number.MAX_SAFE_INTEGER)) {
+    correlogramFailure(
+      "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+      "/pairAccounting/candidatePairCount",
+      "the raw correlogram candidate role product exceeds the exact JSON safe-integer domain."
+    );
+  }
+  const candidatePairCount = Number(candidate);
+  const eligibility = typedEligibility(
+    input.referenceTimes,
+    input.referenceTimeUnit,
+    input.bins,
+    input.edgeCorrection,
+    input.window
+  );
+  const referenceEvents = stableTimeOrderedEvents(input.referenceTimes);
+  const targetEvents = input.kind === "auto" ? referenceEvents : stableTimeOrderedEvents(targetTimes);
+  const lagLower = input.bins.edges[0];
+  const lagUpper = input.bins.edges[input.bins.edges.length - 1];
+  const slices = [];
+  let countedPairCount = 0;
+  let inRangePairCount = 0;
+  try {
+    for (let referenceSortedOrdinal = 0; referenceSortedOrdinal < referenceEvents.length; referenceSortedOrdinal++) {
+      const reference = referenceEvents[referenceSortedOrdinal];
+      const inRangeLower = firstTargetAtOrAboveLag(
+        targetEvents,
+        targetTimeUnit,
+        reference.time,
+        input.referenceTimeUnit,
+        lagLower,
+        input.bins.unit
+      );
+      const inRangeUpper = firstTargetAtOrAboveLag(
+        targetEvents,
+        targetTimeUnit,
+        reference.time,
+        input.referenceTimeUnit,
+        lagUpper,
+        input.bins.unit
+      );
+      const selfInRange = input.kind === "auto" && referenceSortedOrdinal >= inRangeLower && referenceSortedOrdinal < inRangeUpper;
+      inRangePairCount += inRangeUpper - inRangeLower - (selfInRange ? 1 : 0);
+      const eligible = eligibility.intervals[reference.sourceOrdinal];
+      let lowerTarget;
+      let upperTargetExclusive;
+      if (eligible.lowerBin >= eligible.upperBinExclusive) {
+        lowerTarget = 0;
+        upperTargetExclusive = 0;
+      } else if (input.edgeCorrection === "none") {
+        lowerTarget = inRangeLower;
+        upperTargetExclusive = inRangeUpper;
+      } else {
+        lowerTarget = firstTargetAtOrAboveLag(
+          targetEvents,
+          targetTimeUnit,
+          reference.time,
+          input.referenceTimeUnit,
+          input.bins.edges[eligible.lowerBin],
+          input.bins.unit
+        );
+        upperTargetExclusive = firstTargetAtOrAboveLag(
+          targetEvents,
+          targetTimeUnit,
+          reference.time,
+          input.referenceTimeUnit,
+          input.bins.edges[eligible.upperBinExclusive],
+          input.bins.unit
+        );
+      }
+      const selfInNumerator = input.kind === "auto" && referenceSortedOrdinal >= lowerTarget && referenceSortedOrdinal < upperTargetExclusive;
+      const admitted = upperTargetExclusive - lowerTarget - (selfInNumerator ? 1 : 0);
+      if (admitted < 0) {
+        correlogramFailure(
+          "INTERNAL_INVARIANT_VIOLATED",
+          "/pairAccounting",
+          "the exact correlogram target slice produced a negative admitted-pair count."
+        );
+      }
+      if (countedPairCount + admitted > maximumPairwiseOperations) {
+        throw new PairwiseBudgetExceededError(
+          maximumPairwiseOperations,
+          countedPairCount + admitted
+        );
+      }
+      countedPairCount += admitted;
+      slices.push({
+        reference,
+        lowerTarget,
+        upperTargetExclusive
+      });
+    }
+  } catch (error) {
+    if (error instanceof CorrelogramDerivationError) throw error;
+    correlogramFailure(
+      "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+      "/bins/edges",
+      `exact typed correlogram target bounds cannot be represented (${error instanceof Error ? error.message : "unknown numeric failure"}).`
+    );
+  }
+  const sameEventSelfPairCountExcluded = input.kind === "auto" ? input.referenceTimes.length : 0;
+  const lagOutOfRangePairCount = candidatePairCount - sameEventSelfPairCountExcluded - inRangePairCount;
+  const edgeIneligibleInRangePairCount = inRangePairCount - countedPairCount;
+  if (lagOutOfRangePairCount < 0 || edgeIneligibleInRangePairCount < 0) {
+    correlogramFailure(
+      "INTERNAL_INVARIANT_VIOLATED",
+      "/pairAccounting",
+      "exact typed target slices produced a negative pair-accounting remainder."
+    );
+  }
+  const counts = new Array(input.bins.edges.length - 1).fill(0);
+  let filledPairCount = 0;
   let zeroLagRetainedDistinctPairs = 0;
-  let totalPairs = 0;
-  const { ref, tgt } = sortedTrains(referenceTimes, targetTimes, kind);
-  const eligible = countSortedEligiblePairs(ref, tgt, bins, kind, maxPairwiseOperations);
-  if (eligible > maxPairwiseOperations) {
-    throw new PairwiseBudgetExceededError(maxPairwiseOperations, eligible);
-  }
-  let lower = 0;
-  let upper = 0;
-  for (let i = 0; i < ref.length; i++) {
-    const r = ref[i];
-    while (lower < tgt.length && tgt[lower] - r < lagMin) lower++;
-    if (upper < lower) upper = lower;
-    while (upper < tgt.length && tgt[upper] - r < lagMax) {
-      upper++;
-    }
-    for (let j = lower; j < upper; j++) {
-      if (kind === "auto" && i === j) {
+  for (const slice of slices) {
+    for (let targetSortedOrdinal = slice.lowerTarget; targetSortedOrdinal < slice.upperTargetExclusive; targetSortedOrdinal++) {
+      const target = targetEvents[targetSortedOrdinal];
+      if (input.kind === "auto" && slice.reference.sourceOrdinal === target.sourceOrdinal) {
         continue;
       }
-      const lag = tgt[j] - r;
-      const index = binIndex(lag, bins);
-      if (index < 0) continue;
-      counts[index]++;
-      totalPairs++;
-      if (lag === 0) zeroLagRetainedDistinctPairs++;
+      const terms = [
+        { value: target.time, unit: targetTimeUnit },
+        { value: -slice.reference.time, unit: input.referenceTimeUnit }
+      ];
+      let exactIndex;
+      let roundedLag;
+      try {
+        exactIndex = exactTypedLagBinIndex(terms, input.bins);
+        if (exactIndex < 0) {
+          correlogramFailure(
+            "INTERNAL_INVARIANT_VIOLATED",
+            "/pairAccounting",
+            `an exact target slice admitted an out-of-range pair at reference source ordinal ${slice.reference.sourceOrdinal} and target source ordinal ${target.sourceOrdinal}.`
+          );
+        }
+        roundedLag = convertExactUnitSum(terms, input.bins.unit);
+      } catch (error) {
+        if (error instanceof CorrelogramDerivationError) throw error;
+        correlogramFailure(
+          "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+          `/targetTimes/${target.sourceOrdinal}`,
+          `typed lag for reference source ordinal ${slice.reference.sourceOrdinal} and target source ordinal ${target.sourceOrdinal} cannot be represented (${error instanceof Error ? error.message : "unknown numeric failure"}).`
+        );
+      }
+      const roundedIndex = binIndex(roundedLag, input.bins);
+      if (roundedIndex !== exactIndex) {
+        correlogramFailure(
+          "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+          `/targetTimes/${target.sourceOrdinal}`,
+          `the exact typed lag for reference source ordinal ${slice.reference.sourceOrdinal} and target source ordinal ${target.sourceOrdinal} classifies into bin ${exactIndex}, but its one rounded ${input.bins.unit} value classifies into bin ${roundedIndex}.`
+        );
+      }
+      counts[exactIndex]++;
+      filledPairCount++;
+      try {
+        if (compareExactUnitSumToValue(terms, { value: 0, unit: input.bins.unit }) === 0) {
+          zeroLagRetainedDistinctPairs++;
+        }
+      } catch (error) {
+        correlogramFailure(
+          "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+          `/targetTimes/${target.sourceOrdinal}`,
+          `the exact typed zero-lag comparison failed (${error instanceof Error ? error.message : "unknown numeric failure"}).`
+        );
+      }
     }
   }
-  const pairAccounting = deriveCorrelogramPairAccounting(
-    referenceTimes.length,
-    kind === "auto" ? referenceTimes.length : targetTimes.length,
-    kind,
-    totalPairs
-  );
+  if (filledPairCount !== countedPairCount) {
+    correlogramFailure(
+      "INTERNAL_INVARIANT_VIOLATED",
+      "/pairAccounting/countedPairCount",
+      "the exact typed correlogram fill pass disagreed with its bounded target-slice preflight."
+    );
+  }
+  const notCountedPairCount = candidatePairCount - countedPairCount - sameEventSelfPairCountExcluded;
+  if (countedPairCount + lagOutOfRangePairCount + edgeIneligibleInRangePairCount + sameEventSelfPairCountExcluded !== candidatePairCount) {
+    correlogramFailure(
+      "INTERNAL_INVARIANT_VIOLATED",
+      "/pairAccounting",
+      "typed correlogram pair accounting did not partition the candidate role product."
+    );
+  }
+  const pairAccounting = {
+    candidatePairCount,
+    countedPairCount,
+    notCountedPairCount,
+    sameEventSelfPairCountExcluded,
+    notCountedPairBreakdown: {
+      kind: "raw_exact",
+      lagOutOfRangePairCount,
+      edgeIneligibleInRangePairCount
+    }
+  };
   return {
     counts,
-    kind,
-    totalPairs,
-    selfPairsExcluded,
+    eligibleReferenceEventCounts: eligibility.counts,
+    kind: input.kind,
+    totalPairs: countedPairCount,
+    selfPairsExcluded: sameEventSelfPairCountExcluded,
     zeroLagRetainedDistinctPairs,
+    pairAccounting,
     receipt: {
-      operation: "correlogram.pair_count",
+      operation: "correlogram.typed_pair_count",
+      algorithmRevision: 2,
       lagConvention: "target_time - reference_time",
+      lagArithmetic: "exact_typed_difference_classify_then_one_round",
+      pairIteration: "stable_time_then_source_ordinal_exact_target_slices",
       binBoundary: "left_closed_right_open",
       positiveOuterEdge: "excluded",
-      kind,
-      selfPairPolicy: kind === "auto" ? "identical-event self-pairs excluded; distinct coincident events retained" : "no self-pair exclusion (cross-correlogram of two trains)",
+      edgeCorrection: input.edgeCorrection,
+      kind: input.kind,
+      selfPairPolicy: input.kind === "auto" ? "same source ordinal excluded; distinct coincident source ordinals retained as ordered pairs" : "no self-pair exclusion (cross-correlogram of two declared roles)",
       pairAccounting
     }
   };
@@ -20080,8 +20376,8 @@ function formatCoordinate(value) {
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121";
-var CATALOG_DIGEST = "sha256:56f15211b76d250f9d1d2142bb735dd904d89222798a7ac2ed4c37b9ebd2534d";
+var CONTRACT_DIGEST = "sha256:116ee37659546e6432fa4e4f543764da847d9a2696f2b153877ae610492b789d";
+var CATALOG_DIGEST = "sha256:4f534010ee514ffe9c1c9a9d6be365d7bdb7289e54008f2fab0e2df81fe0e001";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
   return Object.freeze({
@@ -20418,7 +20714,7 @@ function emitMark(writer, mark, colors) {
       break;
   }
 }
-function emitText(writer, mark) {
+function emitText(writer, mark, rotation) {
   const attrs = [
     ["x", formatCoordinate(mark.x)],
     ["y", formatCoordinate(mark.y)],
@@ -20428,9 +20724,28 @@ function emitText(writer, mark) {
     ["font-family", "sans-serif"]
   ];
   if (mark.decorative) attrs.push(["aria-hidden", "true"]);
+  if (rotation) {
+    const pivot = `${formatCoordinate(rotation.pivotX)} ${formatCoordinate(rotation.pivotY)}`;
+    attrs.push(
+      ["transform", `rotate(${rotation.angle} ${pivot})`],
+      ["textLength", formatCoordinate(rotation.textLength)],
+      ["lengthAdjust", "spacingAndGlyphs"]
+    );
+  }
   writer.text("text", mark.text, attrs);
 }
-function emitAxis(writer, axis, panel, colors) {
+var AXIS_LABEL_FONT_SIZE = 12;
+var AXIS_LABEL_VIEWPORT_INSET = AXIS_LABEL_FONT_SIZE;
+var AXIS_LABEL_APPROXIMATE_ADVANCE = AXIS_LABEL_FONT_SIZE * 0.6;
+function codePointCount(value) {
+  let count = 0;
+  for (let index = 0; index < value.length; count++) {
+    const codePoint = value.codePointAt(index);
+    index += codePoint > 65535 ? 2 : 1;
+  }
+  return count;
+}
+function emitAxis(writer, axis, panel, colors, viewportWidth, viewportHeight) {
   writer.open("g", [["data-axis", axis.orientation], ["aria-hidden", "true"]]);
   const isBottom = axis.orientation === "bottom";
   const isLeft = axis.orientation === "left";
@@ -20514,16 +20829,56 @@ function emitAxis(writer, axis, panel, colors) {
       });
     }
   }
-  emitText(writer, {
-    type: "text",
-    x: isBottom || isTop ? panel.x + panel.width / 2 : isLeft ? panel.x - 44 : panel.x + panel.width + 44,
-    y: isBottom ? panel.y + panel.height + 38 : isTop ? panel.y - 28 : panel.y + panel.height / 2,
-    text: axis.label,
-    anchor: "middle",
-    fontSize: 12,
-    fill: colors.text,
-    decorative: true
-  });
+  if (isBottom || isTop) {
+    emitText(writer, {
+      type: "text",
+      x: panel.x + panel.width / 2,
+      y: isBottom ? panel.y + panel.height + 38 : panel.y - 28,
+      text: axis.label,
+      anchor: "middle",
+      fontSize: AXIS_LABEL_FONT_SIZE,
+      fill: colors.text,
+      decorative: true
+    });
+  } else {
+    const unclampedX = isLeft ? panel.x - 44 : panel.x + panel.width + 44;
+    const maximumX = Math.max(
+      AXIS_LABEL_VIEWPORT_INSET,
+      viewportWidth - AXIS_LABEL_VIEWPORT_INSET
+    );
+    const x = Math.min(maximumX, Math.max(AXIS_LABEL_VIEWPORT_INSET, unclampedX));
+    const maximumY = Math.max(AXIS_LABEL_VIEWPORT_INSET, viewportHeight - AXIS_LABEL_VIEWPORT_INSET);
+    const y = Math.min(
+      maximumY,
+      Math.max(AXIS_LABEL_VIEWPORT_INSET, panel.y + panel.height / 2)
+    );
+    const centeredViewportSpan = 2 * Math.max(0, Math.min(
+      y - AXIS_LABEL_VIEWPORT_INSET,
+      viewportHeight - AXIS_LABEL_VIEWPORT_INSET - y
+    ));
+    const availableLength = Math.max(1, Math.min(panel.height, centeredViewportSpan));
+    const intendedLength = Math.max(
+      1,
+      codePointCount(axis.label) * AXIS_LABEL_APPROXIMATE_ADVANCE
+    );
+    const renderedLength = Math.min(intendedLength, availableLength);
+    const angle = isLeft ? -90 : 90;
+    emitText(writer, {
+      type: "text",
+      x,
+      y,
+      text: axis.label,
+      anchor: "middle",
+      fontSize: AXIS_LABEL_FONT_SIZE,
+      fill: colors.text,
+      decorative: true
+    }, {
+      angle,
+      pivotX: x,
+      pivotY: y,
+      textLength: renderedLength
+    });
+  }
   writer.close("g");
 }
 function countMarks(marks) {
@@ -20593,7 +20948,8 @@ function renderSvg(plan, digestOf) {
     ["width", plan.width],
     ["height", plan.height],
     ["role", "img"],
-    ["aria-labelledby", `${plan.figureId}-title ${plan.figureId}-desc`]
+    ["aria-labelledby", `${plan.figureId}-title`],
+    ["aria-describedby", `${plan.figureId}-desc`]
   ]);
   writer.text("title", plan.title, [["id", `${plan.figureId}-title`]]);
   writer.text("desc", plan.accessibility.summary, [["id", `${plan.figureId}-desc`]]);
@@ -20735,7 +21091,9 @@ function renderSvg(plan, digestOf) {
         decorative: true
       });
     } else {
-      for (const axis of panel.axes) emitAxis(writer, axis, panel, colors);
+      for (const axis of panel.axes) {
+        emitAxis(writer, axis, panel, colors, plan.width, plan.height);
+      }
       for (const mark of panel.marks) {
         emitMark(writer, mark, colors);
       }
@@ -24893,7 +25251,7 @@ function degreeModel(requestValue) {
   };
 }
 var DEGREE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.degree_distribution", 3),
+  authorityEvaluatorId("network.degree_distribution", 4),
   (request) => modelFields(degreeModel(request))
 );
 function populationRateModel(requestValue) {
@@ -24996,7 +25354,7 @@ function populationRateModel(requestValue) {
   };
 }
 var POPULATION_RATE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.population_rate", 3),
+  authorityEvaluatorId("neuro.population_rate", 4),
   (request) => modelFields(populationRateModel(request))
 );
 function rasterPartition(data) {
@@ -25140,7 +25498,7 @@ function rasterModel(requestValue) {
   };
 }
 var RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.spike_raster", 3),
+  authorityEvaluatorId("neuro.spike_raster", 4),
   (request) => modelFields(rasterModel(request))
 );
 function aggregate3(values, method) {
@@ -25351,7 +25709,7 @@ function delayModel(requestValue) {
   };
 }
 DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.delay_distribution", 3),
+  authorityEvaluatorId("network.delay_distribution", 4),
   (request) => modelFields(delayModel(request))
 );
 function weightGroups(data, parameters, bins) {
@@ -25520,7 +25878,7 @@ function weightModel(requestValue) {
   };
 }
 WEIGHT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.weight_distribution", 3),
+  authorityEvaluatorId("network.weight_distribution", 4),
   (request) => modelFields(weightModel(request))
 );
 function isiTrainKey(sender, trial) {
@@ -25677,7 +26035,7 @@ function isiModel(requestValue) {
   };
 }
 ISI_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.isi_distribution", 3),
+  authorityEvaluatorId("neuro.isi_distribution", 4),
   (request) => modelFields(isiModel(request))
 );
 function correlogramAxis(parameters) {
@@ -25695,7 +26053,7 @@ function correlogramAxis(parameters) {
   );
   if (!materialized.ok) throw new Error("cannot independently materialize lag ladder");
   const edges = materialized.edges;
-  const centers = edges.slice(0, -1).map((lower, index) => lower + (edges[index + 1] - lower) / 2);
+  const centers = edges.slice(0, -1).map((lower, index) => roundedBinary64Mean([lower, edges[index + 1]]));
   return {
     bins: { edges, unit: lagUnit, finalEdgeInclusive: false },
     centers,
@@ -25706,9 +26064,8 @@ function correlogramAxis(parameters) {
     conversions: typedWidthUnit === lagUnit ? [] : [conversionDisclosure("correlogram bin width", typedWidthUnit, lagUnit)]
   };
 }
-function eligibleReferenceCounts(referenceTimes, referenceUnit, bins, window) {
+function eligibleReferenceBinInterval(referenceTime, referenceUnit, bins, window) {
   const binCount = bins.edges.length - 1;
-  const changes = new Array(binCount + 1).fill(0);
   const firstTrue = (predicate) => {
     let low = 0;
     let high = bins.edges.length;
@@ -25720,29 +26077,36 @@ function eligibleReferenceCounts(referenceTimes, referenceUnit, bins, window) {
     return low;
   };
   const openStart = window.boundary === "(start,stop]";
-  for (const time of referenceTimes) {
-    const firstLower = firstTrue((edge) => {
-      const comparison = compareExactUnitSumToValue(
-        [
-          { value: time, unit: referenceUnit },
-          { value: edge, unit: bins.unit }
-        ],
-        { value: Number(window.start), unit: String(window.unit) }
-      );
-      return openStart ? comparison > 0 : comparison >= 0;
-    });
-    const firstUpperBeyond = firstTrue((edge) => compareExactUnitSumToValue(
+  const firstLower = firstTrue((edge) => {
+    const comparison = compareExactUnitSumToValue(
       [
-        { value: time, unit: referenceUnit },
+        { value: referenceTime, unit: referenceUnit },
         { value: edge, unit: bins.unit }
       ],
-      { value: Number(window.stop), unit: String(window.unit) }
-    ) > 0);
-    const lower = Math.min(firstLower, binCount);
-    const upper = Math.max(0, Math.min(firstUpperBeyond - 1, binCount));
-    if (lower < upper) {
-      changes[lower]++;
-      changes[upper]--;
+      { value: Number(window.start), unit: String(window.unit) }
+    );
+    return openStart ? comparison > 0 : comparison >= 0;
+  });
+  const firstUpperBeyond = firstTrue((edge) => compareExactUnitSumToValue(
+    [
+      { value: referenceTime, unit: referenceUnit },
+      { value: edge, unit: bins.unit }
+    ],
+    { value: Number(window.stop), unit: String(window.unit) }
+  ) > 0);
+  return {
+    start: Math.min(firstLower, binCount),
+    stop: Math.max(0, Math.min(firstUpperBeyond - 1, binCount))
+  };
+}
+function eligibleReferenceCounts(referenceTimes, referenceUnit, bins, window) {
+  const binCount = bins.edges.length - 1;
+  const changes = new Array(binCount + 1).fill(0);
+  for (const time of referenceTimes) {
+    const interval = eligibleReferenceBinInterval(time, referenceUnit, bins, window);
+    if (interval.start < interval.stop) {
+      changes[interval.start]++;
+      changes[interval.stop]--;
     }
   }
   let active = 0;
@@ -25750,6 +26114,164 @@ function eligibleReferenceCounts(referenceTimes, referenceUnit, bins, window) {
     active += change;
     return active;
   });
+}
+function requirePrebinnedCorrelogramPairBounds(pairCounts, eligibleReferenceCounts2, referenceEventCount, targetEventCount, expectedBinCount, kind) {
+  if (!Number.isSafeInteger(referenceEventCount) || referenceEventCount < 0 || !Number.isSafeInteger(targetEventCount) || targetEventCount < 0 || pairCounts.length !== eligibleReferenceCounts2.length || pairCounts.length !== expectedBinCount) {
+    throw new Error("pre-binned correlogram per-bin pair authority has no exact cardinality domain");
+  }
+  for (let index = 0; index < pairCounts.length; index++) {
+    const pairCount = pairCounts[index];
+    const eligibleReferenceCount = eligibleReferenceCounts2[index];
+    if (!Number.isSafeInteger(pairCount) || pairCount < 0 || !Number.isSafeInteger(eligibleReferenceCount) || eligibleReferenceCount < 0 || eligibleReferenceCount > referenceEventCount) {
+      throw new Error(
+        `pre-binned correlogram bin ${index} has no exact eligible-reference cardinality authority`
+      );
+    }
+    const targetChoices = kind === "auto" ? Math.max(0, targetEventCount - 1) : targetEventCount;
+    const maximumPairCount = BigInt(eligibleReferenceCount) * BigInt(targetChoices);
+    if (BigInt(pairCount) > maximumPairCount) {
+      throw new Error(
+        `pre-binned correlogram bin ${index} declares ${pairCount} pairs, exceeding its exact eligible-reference maximum ${maximumPairCount.toString()}`
+      );
+    }
+  }
+}
+function compareTypedLagToEdge(target, targetUnit, reference, referenceUnit, edge, edgeUnit) {
+  return compareExactUnitSumToValue(
+    [
+      { value: target, unit: targetUnit },
+      { value: -reference, unit: referenceUnit }
+    ],
+    { value: edge, unit: edgeUnit }
+  );
+}
+function firstTargetAtOrAboveLag2(targets, targetUnit, reference, referenceUnit, edge, edgeUnit) {
+  let low = 0;
+  let high = targets.length;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    const comparison = compareTypedLagToEdge(
+      targets[middle].time,
+      targetUnit,
+      reference.time,
+      referenceUnit,
+      edge,
+      edgeUnit
+    );
+    if (comparison >= 0) high = middle;
+    else low = middle + 1;
+  }
+  return low;
+}
+function exactTypedLagBinIndex2(target, targetUnit, reference, referenceUnit, bins) {
+  let low = 0;
+  let high = bins.edges.length;
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2);
+    const comparison = compareTypedLagToEdge(
+      target,
+      targetUnit,
+      reference,
+      referenceUnit,
+      bins.edges[middle],
+      bins.unit
+    );
+    if (comparison >= 0) low = middle + 1;
+    else high = middle;
+  }
+  const index = low - 1;
+  return index >= 0 && index < bins.edges.length - 1 ? index : -1;
+}
+function rawCorrelogramPairCounts(referenceTimes, referenceUnit, targetTimes, targetUnit, bins, kind, applyEdgeEligibility, window) {
+  const references = referenceTimes.map((time, sourceOrdinal) => ({ time, sourceOrdinal }));
+  const targets = [...kind === "auto" ? references : targetTimes.map((time, sourceOrdinal) => ({ time, sourceOrdinal }))].sort((left, right) => left.time - right.time || left.sourceOrdinal - right.sourceOrdinal);
+  const targetIndexBySourceOrdinal = kind === "auto" ? new Map(targets.map((target, index) => [target.sourceOrdinal, index])) : null;
+  const counts = new Array(bins.edges.length - 1).fill(0);
+  let lagOutOfRangePairCount = 0;
+  let edgeIneligibleInRangePairCount = 0;
+  const minimum = bins.edges[0];
+  const maximum = bins.edges[bins.edges.length - 1];
+  const sliceNonselfCount = (reference, start, stop) => {
+    const selfIndex = targetIndexBySourceOrdinal?.get(reference.sourceOrdinal);
+    return stop - start - (selfIndex !== void 0 && selfIndex >= start && selfIndex < stop ? 1 : 0);
+  };
+  for (const reference of references) {
+    const outerStart = firstTargetAtOrAboveLag2(
+      targets,
+      targetUnit,
+      reference,
+      referenceUnit,
+      minimum,
+      bins.unit
+    );
+    const outerStop = firstTargetAtOrAboveLag2(
+      targets,
+      targetUnit,
+      reference,
+      referenceUnit,
+      maximum,
+      bins.unit
+    );
+    const outerNonselfCount = sliceNonselfCount(reference, outerStart, outerStop);
+    lagOutOfRangePairCount += targets.length - (kind === "auto" ? 1 : 0) - outerNonselfCount;
+    const eligibleInterval = applyEdgeEligibility ? eligibleReferenceBinInterval(reference.time, referenceUnit, bins, window) : { start: 0, stop: counts.length };
+    const eligibleStart = eligibleInterval.start < eligibleInterval.stop ? firstTargetAtOrAboveLag2(
+      targets,
+      targetUnit,
+      reference,
+      referenceUnit,
+      bins.edges[eligibleInterval.start],
+      bins.unit
+    ) : outerStart;
+    const eligibleStop = eligibleInterval.start < eligibleInterval.stop ? firstTargetAtOrAboveLag2(
+      targets,
+      targetUnit,
+      reference,
+      referenceUnit,
+      bins.edges[eligibleInterval.stop],
+      bins.unit
+    ) : outerStart;
+    const eligibleNonselfCount = sliceNonselfCount(reference, eligibleStart, eligibleStop);
+    if (eligibleStart < outerStart || eligibleStop > outerStop || eligibleNonselfCount > outerNonselfCount) {
+      throw new Error("correlogram eligible target slice escaped the exact lag range");
+    }
+    edgeIneligibleInRangePairCount += outerNonselfCount - eligibleNonselfCount;
+    for (let targetIndex = eligibleStart; targetIndex < eligibleStop; targetIndex++) {
+      const target = targets[targetIndex];
+      if (kind === "auto" && reference.sourceOrdinal === target.sourceOrdinal) continue;
+      const binIndex2 = exactTypedLagBinIndex2(
+        target.time,
+        targetUnit,
+        reference.time,
+        referenceUnit,
+        bins
+      );
+      const roundedLag = convertExactUnitSum(
+        [
+          { value: target.time, unit: targetUnit },
+          { value: -reference.time, unit: referenceUnit }
+        ],
+        bins.unit
+      );
+      if (ordinaryBinIndex(roundedLag, bins.unit, bins) !== binIndex2) {
+        throw new Error(
+          "exact correlogram lag classification is not representable by one binary64 lag conversion"
+        );
+      }
+      if (binIndex2 < 0) {
+        throw new Error("correlogram eligible target slice escaped its exact lag bin interval");
+      }
+      if (binIndex2 < eligibleInterval.start || binIndex2 >= eligibleInterval.stop) {
+        throw new Error("correlogram eligible target slice escaped its reference exposure");
+      }
+      counts[binIndex2]++;
+    }
+  }
+  return {
+    counts,
+    lagOutOfRangePairCount,
+    edgeIneligibleInRangePairCount
+  };
 }
 function correlogramModel(requestValue) {
   const request = record2(requestValue);
@@ -25765,50 +26287,63 @@ function correlogramModel(requestValue) {
   const targetSourceTimes = kind === "auto" ? referenceSourceTimes : numbers(record2(targetTrain.eventTimes).values);
   const referenceSourceUnit = preBinned ? axis.lagUnit : String(record2(referenceTrain.eventTimes).unit);
   const targetSourceUnit = preBinned ? axis.lagUnit : String(record2(targetTrain.eventTimes).unit);
-  const referenceTimes = preBinned ? [] : referenceSourceTimes.map((value) => converted(value, referenceSourceUnit, axis.lagUnit));
-  const targetTimes = preBinned ? [] : kind === "auto" ? referenceTimes : targetSourceTimes.map((value) => converted(value, targetSourceUnit, axis.lagUnit));
   let pairCounts;
   let referenceEventCount;
   let targetEventCount;
+  let pairBreakdown;
   if (preBinned) {
     pairCounts = numbers(data.pairCounts);
     referenceEventCount = Number(data.referenceEventCount);
     targetEventCount = kind === "auto" ? referenceEventCount : Number(data.targetEventCount);
+    pairBreakdown = { kind: "unavailable_from_prebinned_input" };
   } else {
-    const sortedReference = [...referenceTimes].sort((left, right) => left - right);
-    const sortedTarget = kind === "auto" ? sortedReference : [...targetTimes].sort((left, right) => left - right);
-    pairCounts = new Array(axis.centers.length).fill(0);
-    const minimumLag = axis.bins.edges[0];
-    const maximumLag = axis.bins.edges[axis.bins.edges.length - 1];
-    let firstEligibleTarget = 0;
-    let firstTargetPastWindow = 0;
-    for (let referenceIndex = 0; referenceIndex < sortedReference.length; referenceIndex++) {
-      const referenceTime = sortedReference[referenceIndex];
-      while (firstEligibleTarget < sortedTarget.length && sortedTarget[firstEligibleTarget] - referenceTime < minimumLag) {
-        firstEligibleTarget++;
-      }
-      if (firstTargetPastWindow < firstEligibleTarget) {
-        firstTargetPastWindow = firstEligibleTarget;
-      }
-      while (firstTargetPastWindow < sortedTarget.length && sortedTarget[firstTargetPastWindow] - referenceTime < maximumLag) {
-        firstTargetPastWindow++;
-      }
-      for (let targetIndex = firstEligibleTarget; targetIndex < firstTargetPastWindow; targetIndex++) {
-        if (kind === "auto" && referenceIndex === targetIndex) continue;
-        const lag = sortedTarget[targetIndex] - referenceTime;
-        const index = ordinaryBinIndex(lag, axis.lagUnit, axis.bins);
-        if (index >= 0) pairCounts[index]++;
-      }
-    }
-    referenceEventCount = referenceTimes.length;
-    targetEventCount = kind === "auto" ? referenceEventCount : targetTimes.length;
+    const classified = rawCorrelogramPairCounts(
+      referenceSourceTimes,
+      referenceSourceUnit,
+      targetSourceTimes,
+      targetSourceUnit,
+      axis.bins,
+      kind,
+      parameters.edgeCorrection === "eligible_reference_events",
+      record2(data.window)
+    );
+    pairCounts = [...classified.counts];
+    pairBreakdown = {
+      kind: "raw_exact",
+      lagOutOfRangePairCount: classified.lagOutOfRangePairCount,
+      edgeIneligibleInRangePairCount: classified.edgeIneligibleInRangePairCount
+    };
+    referenceEventCount = referenceSourceTimes.length;
+    targetEventCount = kind === "auto" ? referenceEventCount : targetSourceTimes.length;
   }
-  const countedPairCount = pairCounts.reduce((sum, count) => sum + count, 0);
-  const candidatePairCount = referenceEventCount * targetEventCount;
+  const countedPairCountExact = pairCounts.reduce((sum, count) => sum + BigInt(count), 0n);
+  const candidatePairCountExact = BigInt(referenceEventCount) * BigInt(targetEventCount);
+  if (countedPairCountExact > BigInt(Number.MAX_SAFE_INTEGER) || candidatePairCountExact > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("correlogram pair accounting exceeds the exact JSON integer domain");
+  }
+  const countedPairCount = Number(countedPairCountExact);
+  const candidatePairCount = Number(candidatePairCountExact);
   const sameEventSelfPairCountExcluded = kind === "auto" ? referenceEventCount : 0;
-  const outOfRangePairCount = candidatePairCount - countedPairCount - sameEventSelfPairCountExcluded;
+  const notCountedPairCount = candidatePairCount - countedPairCount - sameEventSelfPairCountExcluded;
+  if (!Number.isSafeInteger(notCountedPairCount) || notCountedPairCount < 0) {
+    throw new Error("correlogram counted pairs exceed the exact candidate role product");
+  }
+  if (pairBreakdown.kind === "raw_exact" && notCountedPairCount !== pairBreakdown.lagOutOfRangePairCount + pairBreakdown.edgeIneligibleInRangePairCount) {
+    throw new Error("raw correlogram pair classes do not conserve the candidate role product");
+  }
   const statistic = String(parameters.statistic);
   const edgeCorrection = String(parameters.edgeCorrection);
+  if (preBinned) {
+    const effectiveEligibleReferenceCounts = edgeCorrection === "eligible_reference_events" ? numbers(data.eligibleReferenceEventCounts) : pairCounts.map(() => referenceEventCount);
+    requirePrebinnedCorrelogramPairBounds(
+      pairCounts,
+      effectiveEligibleReferenceCounts,
+      referenceEventCount,
+      targetEventCount,
+      axis.bins.edges.length - 1,
+      kind
+    );
+  }
   let eligible;
   let denominators;
   let values;
@@ -25873,14 +26408,14 @@ function correlogramModel(requestValue) {
   const conversions = [...axis.conversions];
   if (!preBinned && referenceSourceUnit !== axis.lagUnit) {
     conversions.push(conversionDisclosure(
-      "correlogram reference-event times",
+      "correlogram reference terms in exact lag differences",
       referenceSourceUnit,
       axis.lagUnit
     ));
   }
   if (!preBinned && kind === "cross" && targetSourceUnit !== axis.lagUnit) {
     conversions.push(conversionDisclosure(
-      "correlogram target-event times",
+      "correlogram target terms in exact lag differences",
       targetSourceUnit,
       axis.lagUnit
     ));
@@ -25921,8 +26456,9 @@ function correlogramModel(requestValue) {
       sourceAuthorityStatement,
       candidatePairCount: exactText(candidatePairCount),
       countedPairCount: exactText(countedPairCount),
-      outOfRangePairCount: exactText(outOfRangePairCount),
+      notCountedPairCount: exactText(notCountedPairCount),
       sameEventSelfPairCountExcluded: exactText(sameEventSelfPairCountExcluded),
+      notCountedPairBreakdown: pairBreakdown.kind === "unavailable_from_prebinned_input" ? "Other not-counted split: unavailable from pre-binned aggregate input; Cortexel does not relabel the remainder as lag-out-of-range or edge-ineligible." : `Other not-counted split: ${pairBreakdown.lagOutOfRangePairCount} lag-out-of-range + ${pairBreakdown.edgeIneligibleInRangePairCount} in-range edge-ineligible.`,
       undefinedRateBinCount: exactText(undefinedCount),
       uncertaintyStatement: "No uncertainty interval is estimated or drawn."
     },
@@ -25934,7 +26470,7 @@ function correlogramModel(requestValue) {
   };
 }
 CORRELOGRAM_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.correlogram", 3),
+  authorityEvaluatorId("neuro.correlogram", 4),
   (request) => modelFields(correlogramModel(request))
 );
 function psthNormalizedValues(counts, denominators, bins, selectedSenderCount, normalization, valueUnit) {
@@ -26222,7 +26758,7 @@ function psthModel(requestValue) {
   };
 }
 PSTH_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.psth", 3),
+  authorityEvaluatorId("neuro.psth", 4),
   (request) => modelFields(psthModel(request))
 );
 var DISTRIBUTION_AUTHORITY_EVALUATORS = [
@@ -26238,25 +26774,25 @@ var DISTRIBUTION_AUTHORITY_EVALUATORS = [
 
 // src/authority/evaluators/implementation-ids.ts
 var OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
-  "network.adjacency_matrix.output_authority.v3",
-  "network.connection_graph.output_authority.v3",
-  "network.degree_distribution.output_authority.v3",
-  "network.delay_distribution.output_authority.v3",
-  "network.delay_matrix.output_authority.v3",
-  "network.spatial_map_2d.output_authority.v3",
-  "network.synaptic_weight_trace.output_authority.v3",
-  "network.weight_distribution.output_authority.v3",
-  "network.weight_matrix.output_authority.v3",
-  "neuro.analog_trace.output_authority.v3",
-  "neuro.compartment_trace.output_authority.v3",
-  "neuro.correlogram.output_authority.v3",
-  "neuro.isi_distribution.output_authority.v3",
-  "neuro.multisignal_trace.output_authority.v3",
-  "neuro.phase_plane.output_authority.v3",
-  "neuro.population_rate.output_authority.v3",
-  "neuro.psth.output_authority.v3",
-  "neuro.response_curve.output_authority.v3",
-  "neuro.spike_raster.output_authority.v3"
+  "network.adjacency_matrix.output_authority.v4",
+  "network.connection_graph.output_authority.v4",
+  "network.degree_distribution.output_authority.v4",
+  "network.delay_distribution.output_authority.v4",
+  "network.delay_matrix.output_authority.v4",
+  "network.spatial_map_2d.output_authority.v4",
+  "network.synaptic_weight_trace.output_authority.v4",
+  "network.weight_distribution.output_authority.v4",
+  "network.weight_matrix.output_authority.v4",
+  "neuro.analog_trace.output_authority.v4",
+  "neuro.compartment_trace.output_authority.v4",
+  "neuro.correlogram.output_authority.v4",
+  "neuro.isi_distribution.output_authority.v4",
+  "neuro.multisignal_trace.output_authority.v4",
+  "neuro.phase_plane.output_authority.v4",
+  "neuro.population_rate.output_authority.v4",
+  "neuro.psth.output_authority.v4",
+  "neuro.response_curve.output_authority.v4",
+  "neuro.spike_raster.output_authority.v4"
 ]);
 var IMPLEMENTATION_ID = /^[a-z][a-z0-9_.-]*$/u;
 var DANGEROUS_MAP_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
@@ -26875,15 +27411,15 @@ function delayModel2(requestValue) {
   };
 }
 var ADJACENCY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.adjacency_matrix", 3),
+  authorityEvaluatorId("network.adjacency_matrix", 4),
   (request) => modelFields2(adjacencyModel(request))
 );
 var WEIGHT_AUTHORITY2 = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.weight_matrix", 3),
+  authorityEvaluatorId("network.weight_matrix", 4),
   (request) => modelFields2(weightModel2(request))
 );
 var DELAY_AUTHORITY2 = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.delay_matrix", 3),
+  authorityEvaluatorId("network.delay_matrix", 4),
   (request) => modelFields2(delayModel2(request))
 );
 var MATRIX_AUTHORITY_EVALUATORS = [
@@ -27271,7 +27807,7 @@ function graphModel(requestValue) {
   };
 }
 var GRAPH_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.connection_graph", 3),
+  authorityEvaluatorId("network.connection_graph", 4),
   (request) => modelFields3(graphModel(request))
 );
 function spatialModel(requestValue) {
@@ -27516,7 +28052,7 @@ function spatialModel(requestValue) {
   };
 }
 var SPATIAL_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.spatial_map_2d", 3),
+  authorityEvaluatorId("network.spatial_map_2d", 4),
   (request) => modelFields3(spatialModel(request))
 );
 function convertedCarrier(value, targetUnit) {
@@ -27874,7 +28410,7 @@ function phaseModel(requestValue) {
   };
 }
 var PHASE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.phase_plane", 3),
+  authorityEvaluatorId("neuro.phase_plane", 4),
   (request) => modelFields3(phaseModel(request))
 );
 function responseEstimate(values, estimator, trimFraction) {
@@ -28316,7 +28852,7 @@ function responseModel(requestValue) {
   };
 }
 var RESPONSE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.response_curve", 3),
+  authorityEvaluatorId("neuro.response_curve", 4),
   (request) => modelFields3(responseModel(request))
 );
 var TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS = [
@@ -29239,7 +29775,7 @@ function analogModel(requestValue) {
   };
 }
 var ANALOG_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.analog_trace", 3),
+  authorityEvaluatorId("neuro.analog_trace", 4),
   (request) => {
     const model = analogModel(request);
     return {
@@ -29410,7 +29946,7 @@ function multisignalModel(requestValue) {
   };
 }
 var MULTISIGNAL_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.multisignal_trace", 3),
+  authorityEvaluatorId("neuro.multisignal_trace", 4),
   (request) => {
     const model = multisignalModel(request);
     return {
@@ -29713,7 +30249,7 @@ function compartmentModel(requestValue) {
   };
 }
 var COMPARTMENT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.compartment_trace", 3),
+  authorityEvaluatorId("neuro.compartment_trace", 4),
   (request) => {
     const model = compartmentModel(request);
     return {
@@ -30945,7 +31481,7 @@ function weightModel3(requestValue) {
   };
 }
 var WEIGHT_AUTHORITY3 = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.synaptic_weight_trace", 3),
+  authorityEvaluatorId("network.synaptic_weight_trace", 4),
   (request) => {
     const model = weightModel3(request);
     return {
@@ -32031,16 +32567,14 @@ function eventCorrelogramInputs(data, parameters) {
   if (referenceTimeUnit === void 0 || targetTimeUnit === void 0) {
     throw new Error("validated correlogram event train has no explicit event-time unit");
   }
-  const ref = referenceTimeUnit === axis.lagUnit ? [...referenceSourceValues] : referenceSourceValues.map((value) => convert(value, referenceTimeUnit, axis.lagUnit));
-  const tgt = kind === "auto" ? ref : targetTimeUnit === axis.lagUnit ? [...targetSourceValues] : targetSourceValues.map((value) => convert(value, targetTimeUnit, axis.lagUnit));
   const referenceConversion = referenceTimeUnit === axis.lagUnit ? void 0 : conversionReceipt(referenceTimeUnit, axis.lagUnit);
   const targetConversion = kind === "cross" && targetTimeUnit !== axis.lagUnit ? conversionReceipt(targetTimeUnit, axis.lagUnit) : void 0;
   return {
     ...axis,
-    ref,
-    tgt,
-    referenceTimesInSourceUnit: referenceSourceValues,
+    referenceTimes: referenceSourceValues,
     referenceTimeUnit,
+    targetTimes: targetSourceValues,
+    targetTimeUnit,
     kind,
     referenceLabel: String(referenceTrain.label),
     targetLabel: String(targetTrain.label),
@@ -32054,10 +32588,36 @@ function eventCorrelogramInputs(data, parameters) {
     },
     unitConversions: [
       ...axis.unitConversions,
-      ...referenceConversion ? [conversionDisclosureText("correlogram reference-event times", referenceConversion)] : [],
-      ...targetConversion ? [conversionDisclosureText("correlogram target-event times", targetConversion)] : []
+      ...referenceConversion ? [conversionDisclosureText(
+        "correlogram reference terms in exact lag differences",
+        referenceConversion
+      )] : [],
+      ...targetConversion ? [conversionDisclosureText(
+        "correlogram target terms in exact lag differences",
+        targetConversion
+      )] : []
     ]
   };
+}
+function correlogramDerivationRequestPath(mode, instancePath) {
+  const parts = instancePath.split("/");
+  const field = parts[1];
+  const ordinal = parts[2];
+  if ((field === "referenceTimes" || field === "targetTimes") && ordinal !== void 0 && /^(?:0|[1-9][0-9]*)$/u.test(ordinal)) {
+    const role = mode === "events_auto" ? "train" : field === "referenceTimes" ? "referenceTrain" : "targetTrain";
+    return `/data/${role}/eventTimes/values/${ordinal}`;
+  }
+  if (field === "referenceTimeUnit" || field === "targetTimeUnit") {
+    const role = mode === "events_auto" ? "train" : field === "referenceTimeUnit" ? "referenceTrain" : "targetTrain";
+    return `/data/${role}/eventTimes/unit`;
+  }
+  if (field === "window") {
+    return parts.length > 2 ? `/data/window/${parts.slice(2).join("/")}` : "/data/window";
+  }
+  if (field === "bins") {
+    return parts[2] === "unit" ? "/parameters/lagRange/unit" : "/parameters/bins";
+  }
+  return "/data";
 }
 function compileNullableCorrelogramStemFigure(context, edges, centers, values, xLabel, yLabel, skillId) {
   if (centers.length !== values.length) {
@@ -37101,11 +37661,12 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
   if (skillId === "neuro.correlogram") {
     const statistic = String(parameters.statistic);
     const edgeCorrection = String(parameters.edgeCorrection);
+    const mode = String(data.mode);
     if (statistic !== "raw_pair_count" && statistic !== "target_rate_per_reference_event") {
       return fail2(
         "RENDER_UNSUPPORTED_SKILL",
         "render",
-        `correlogram statistic ${statistic} is outside the closed revision-2 product.`,
+        `correlogram statistic ${statistic} is outside the closed revision-4 product.`,
         "/parameters/statistic"
       );
     }
@@ -37118,14 +37679,13 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       );
     }
     try {
-      const mode = String(data.mode);
       const preBinned = mode === "prebinned_auto" || mode === "prebinned_cross";
       const rawInputs = eventCorrelogramInputs(data, parameters);
       if (!preBinned && !rawInputs) {
         return fail2(
           "RENDER_UNSUPPORTED_SKILL",
           "render",
-          `correlogram data mode ${mode} is outside the four closed revision-2 modes.`,
+          `correlogram data mode ${mode} is outside the four closed revision-4 modes.`,
           "/data/mode"
         );
       }
@@ -37142,26 +37702,48 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       let targetRecordedSenderCount;
       let window;
       let pairAccounting;
+      let rawEligibleReferenceEventCounts;
+      let rawKernelReceipt;
       let zeroLagRetainedDistinctPairs;
       let unitConversions = [...axis.unitConversions];
       if (rawInputs) {
-        const result = computeCorrelogram(
-          rawInputs.ref,
-          rawInputs.tgt,
-          rawInputs.spec,
-          rawInputs.kind,
-          pairwiseOperations
-        );
-        pairCounts = result.counts;
+        const typedBins = {
+          edges,
+          unit: axis.lagUnit,
+          finalEdgeInclusive: false
+        };
+        const typedEdgeCorrection = edgeCorrection === "eligible_reference_events" ? "eligible_reference_events" : "none";
+        const result = rawInputs.kind === "auto" ? deriveTypedEventCorrelogram({
+          kind: "auto",
+          referenceTimes: rawInputs.referenceTimes,
+          referenceTimeUnit: rawInputs.referenceTimeUnit,
+          bins: typedBins,
+          edgeCorrection: typedEdgeCorrection,
+          window: rawInputs.window,
+          maximumPairwiseOperations: pairwiseOperations
+        }) : deriveTypedEventCorrelogram({
+          kind: "cross",
+          referenceTimes: rawInputs.referenceTimes,
+          referenceTimeUnit: rawInputs.referenceTimeUnit,
+          targetTimes: rawInputs.targetTimes,
+          targetTimeUnit: rawInputs.targetTimeUnit,
+          bins: typedBins,
+          edgeCorrection: typedEdgeCorrection,
+          window: rawInputs.window,
+          maximumPairwiseOperations: pairwiseOperations
+        });
+        pairCounts = [...result.counts];
         kind = rawInputs.kind;
-        referenceEventCount = rawInputs.ref.length;
-        targetEventCount = kind === "auto" ? referenceEventCount : rawInputs.tgt.length;
+        referenceEventCount = rawInputs.referenceTimes.length;
+        targetEventCount = kind === "auto" ? referenceEventCount : rawInputs.targetTimes.length;
         referenceLabel = rawInputs.referenceLabel;
         targetLabel = rawInputs.targetLabel;
         referenceRecordedSenderCount = rawInputs.referenceRecordedSenderCount;
         targetRecordedSenderCount = rawInputs.targetRecordedSenderCount;
         window = rawInputs.window;
-        pairAccounting = result.receipt.pairAccounting;
+        pairAccounting = result.pairAccounting;
+        rawEligibleReferenceEventCounts = result.eligibleReferenceEventCounts;
+        rawKernelReceipt = result.receipt;
         zeroLagRetainedDistinctPairs = result.zeroLagRetainedDistinctPairs;
         unitConversions = [...rawInputs.unitConversions];
       } else {
@@ -37186,7 +37768,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         if (!Number.isSafeInteger(countedPairCount)) {
           throw new RangeError("pre-binned correlogram counted-pair sum exceeds the exact JSON integer domain");
         }
-        pairAccounting = deriveCorrelogramPairAccounting(
+        pairAccounting = derivePrebinnedCorrelogramPairAccounting(
           referenceEventCount,
           targetEventCount,
           kind,
@@ -37216,13 +37798,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         values = [...pairCounts];
         valueStatuses = pairCounts.map(() => "defined");
       } else {
-        const exactEligible = edgeCorrection === "none" ? pairCounts.map(() => referenceEventCount) : rawInputs ? deriveEligibleCorrelogramReferenceCounts(
-          rawInputs.referenceTimesInSourceUnit,
-          rawInputs.referenceTimeUnit,
-          edges,
-          axis.lagUnit,
-          rawInputs.window
-        ) : numbers4(data.eligibleReferenceEventCounts);
+        const exactEligible = edgeCorrection === "none" ? pairCounts.map(() => referenceEventCount) : rawInputs ? [...rawEligibleReferenceEventCounts] : numbers4(data.eligibleReferenceEventCounts);
         const rateBins = deriveCorrelogramTargetRates(
           pairCounts,
           exactEligible,
@@ -37244,12 +37820,13 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       );
       const denominatorStatement = statistic === "raw_pair_count" ? "none" : edgeCorrection === "none" ? "reference event count multiplied by the typed bin width in seconds" : "the per-bin eligible-reference count multiplied by the typed bin width in seconds; zero exposure yields null";
       const sourceAuthorityStatement = preBinned ? "Source event counts and exact pair numerators were declared by the pre-binned product; duration was derived from its window" : "Source event counts were derived from the explicit event arrays, and duration was derived from their shared window";
+      const notCountedPairBreakdown = pairAccounting.notCountedPairBreakdown.kind === "unavailable_from_prebinned_input" ? "Other not-counted split: unavailable from pre-binned aggregate input; Cortexel does not relabel the remainder as lag-out-of-range or edge-ineligible." : `Other not-counted split: ${pairAccounting.notCountedPairBreakdown.lagOutOfRangePairCount} lag-out-of-range + ${pairAccounting.notCountedPairBreakdown.edgeIneligibleInRangePairCount} in-range edge-ineligible.`;
       const summaryStatements = [
         `Correlogram (${kind}): target ${targetLabel} relative to reference ${referenceLabel}. Positive lag means target follows reference. Declared senders, including silent: ${referenceRecordedSenderCount} reference and ${targetRecordedSenderCount} target.`,
         `${centers.length} centred left-closed/right-open bins of ${exactNumberText(axis.binWidthInLagUnit)} ${unitLabel(axis.lagUnit) || axis.lagUnit}, from centre ${exactNumberText(centers[0])} through ${exactNumberText(centers[centers.length - 1])}; the positive outer edge is excluded.`,
         `${statistic} (${valueUnit}); denominator: ${denominatorStatement}. ${undefinedRateBinCount} rate bins are null because their eligible-reference count is zero.`,
         `Events: ${referenceEventCount} reference and ${targetEventCount} target over ${exactNumberText(observationDuration)} ${unitLabel(window.unit) || window.unit}, boundary ${window.boundary}. ${sourceAuthorityStatement}`,
-        `Exact pair accounting: ${pairAccounting.candidatePairCount} candidate = ${pairAccounting.countedPairCount} in-range + ${pairAccounting.outOfRangePairCount} out-of-range + ${pairAccounting.sameEventSelfPairCountExcluded} same-event self-pairs excluded.`,
+        `Pair accounting: ${pairAccounting.candidatePairCount} candidate = ${pairAccounting.countedPairCount} counted numerator + ${pairAccounting.notCountedPairCount} other not counted + ${pairAccounting.sameEventSelfPairCountExcluded} same-event self-pairs excluded. ${notCountedPairBreakdown}`,
         "Uncertainty kind none: no uncertainty interval is estimated or drawn.",
         ...pairAccounting.countedPairCount === 0 ? ["The all-zero pair statistic is reported without interpreting it as evidence of independence."] : []
       ];
@@ -37295,10 +37872,11 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           sourceAuthorityStatement,
           candidatePairCount: distributionCompilerNumber(pairAccounting.candidatePairCount),
           countedPairCount: distributionCompilerNumber(pairAccounting.countedPairCount),
-          outOfRangePairCount: distributionCompilerNumber(pairAccounting.outOfRangePairCount),
+          notCountedPairCount: distributionCompilerNumber(pairAccounting.notCountedPairCount),
           sameEventSelfPairCountExcluded: distributionCompilerNumber(
             pairAccounting.sameEventSelfPairCountExcluded
           ),
+          notCountedPairBreakdown,
           undefinedRateBinCount: distributionCompilerNumber(undefinedRateBinCount),
           uncertaintyStatement: "No uncertainty interval is estimated or drawn."
         }
@@ -37319,45 +37897,49 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           panelSummaries: summaryStatements
         }
       };
-      const operation = derivationOperation(
-        "correlogram.pair_count_and_rate",
-        "cortexel.correlogram.exact_centered_pair_ladder",
-        {
-          mode,
-          kind,
-          statistic,
-          edgeCorrection,
-          lagConvention: "target_time_minus_reference_time",
-          binBoundary: "left_closed_right_open",
-          positiveOuterEdge: "excluded",
-          binWidth: axis.binWidth,
-          lagUnit: axis.lagUnit
-        },
-        data,
-        {
-          edges,
-          centers,
-          pairCounts,
-          eligibleReferenceEvents,
-          denominatorsSeconds: denominators,
-          values,
-          valueUnit,
-          valueStatuses
-        },
-        {
-          sourceAuthority: preBinned ? "prebinned_exact_pair_counts_and_declared_role_event_counts" : "explicit_raw_event_arrays",
-          referenceEventCount,
-          targetEventCount,
-          referenceRecordedSenderCount,
-          targetRecordedSenderCount,
-          observationDuration,
-          observationDurationUnit: window.unit,
-          observationWindowBoundary: window.boundary,
-          undefinedRateBinCount,
-          ...pairAccounting,
-          ...zeroLagRetainedDistinctPairs === void 0 ? {} : { zeroLagRetainedDistinctPairs }
-        }
-      );
+      const operation = {
+        ...derivationOperation(
+          "correlogram.pair_count_and_rate",
+          "cortexel.correlogram.exact_centered_pair_ladder",
+          {
+            mode,
+            kind,
+            statistic,
+            edgeCorrection,
+            lagConvention: "target_time_minus_reference_time",
+            binBoundary: "left_closed_right_open",
+            positiveOuterEdge: "excluded",
+            binWidth: axis.binWidth,
+            lagUnit: axis.lagUnit
+          },
+          data,
+          {
+            edges,
+            centers,
+            pairCounts,
+            eligibleReferenceEvents,
+            denominatorsSeconds: denominators,
+            values,
+            valueUnit,
+            valueStatuses
+          },
+          {
+            sourceAuthority: preBinned ? "prebinned_exact_pair_counts_and_declared_role_event_counts" : "explicit_raw_event_arrays",
+            referenceEventCount,
+            targetEventCount,
+            referenceRecordedSenderCount,
+            targetRecordedSenderCount,
+            observationDuration,
+            observationDurationUnit: window.unit,
+            observationWindowBoundary: window.boundary,
+            undefinedRateBinCount,
+            ...pairAccounting,
+            ...rawKernelReceipt === void 0 ? {} : { rawKernelReceipt },
+            ...zeroLagRetainedDistinctPairs === void 0 ? {} : { zeroLagRetainedDistinctPairs }
+          }
+        ),
+        algorithmRevision: 2
+      };
       return done(
         withContractTable(summarizedGeometry, compileContext, skillId, tableRows),
         [operation],
@@ -37365,11 +37947,28 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       );
     } catch (error) {
       if (error instanceof PairwiseBudgetExceededError) {
+        return {
+          errors: [makeError({
+            code: "RESOURCE_PAIRWISE_EXCEEDED",
+            stage: "budget",
+            instancePath: "/data",
+            skillId,
+            message: `the exact eligible correlogram numerator requires at least ${error.observedLowerBound} admitted pairs, over the active limit of ${error.limit}. The typed lower-bound preflight formed no pairs and Cortexel refuses before numerator derivation or geometry allocation.`,
+            limit: {
+              name: "pairwiseOperations",
+              limit: error.limit,
+              observed: error.observedLowerBound
+            }
+          })]
+        };
+      }
+      if (error instanceof CorrelogramDerivationError) {
+        const stage = error.code === "RESOURCE_PAIRWISE_EXCEEDED" ? "budget" : error.code === "INTERNAL_INVARIANT_VIOLATED" ? "internal" : "science";
         return fail2(
-          "RESOURCE_PAIRWISE_EXCEEDED",
-          "budget",
-          `correlogram pair formation exceeded the active limit of ${error.limit}.`,
-          "/data"
+          error.code,
+          stage,
+          error.message,
+          correlogramDerivationRequestPath(mode, error.instancePath)
         );
       }
       return fail2(
@@ -41454,54 +42053,6 @@ function buildFigureFromValidated(validated) {
         }
       ]
     };
-  }
-  if (validated.skillId === "neuro.correlogram") {
-    try {
-      const inputs = eventCorrelogramInputs(
-        rec(request.data) ?? {},
-        rec(request.parameters) ?? {}
-      );
-      if (inputs) {
-        const pairs = countEligibleCorrelogramPairs(
-          inputs.ref,
-          inputs.tgt,
-          inputs.spec,
-          inputs.kind,
-          limits.pairwiseOperations
-        );
-        if (pairs > limits.pairwiseOperations) {
-          const pairCarrierPath = inputs.kind === "auto" ? "/data/train/eventTimes/values" : "/data";
-          return {
-            ok: false,
-            errors: [
-              makeError({
-                code: "RESOURCE_PAIRWISE_EXCEEDED",
-                stage: "budget",
-                instancePath: pairCarrierPath,
-                skillId: validated.skillId,
-                message: `the eligible correlogram pair count is at least ${limits.pairwiseOperations + 1}, over the active limit of ${limits.pairwiseOperations}. The bounded sorted-window preflight formed no pairs and Cortexel refuses before derivation or geometry allocation.`,
-                limit: {
-                  name: "pairwiseOperations",
-                  limit: limits.pairwiseOperations,
-                  observed: pairs
-                }
-              })
-            ]
-          };
-        }
-      }
-    } catch (error) {
-      return {
-        ok: false,
-        errors: [makeError({
-          code: "INTERNAL_INVARIANT_VIOLATED",
-          stage: "internal",
-          instancePath: "/data",
-          skillId: validated.skillId,
-          message: error instanceof Error ? `the validated correlogram could not be closed during pairwise preflight: ${error.message}` : "the validated correlogram could not be closed during pairwise preflight."
-        })]
-      };
-    }
   }
   const forced = forcedDisclosures(validated.skillId, request);
   const makeContext = (_rowsTotal, extraFacts = {}) => {

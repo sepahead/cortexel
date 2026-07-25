@@ -1,6 +1,6 @@
 {
   "id": "neuro.psth",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Peri-event time histogram (trial-aligned event counts)",
@@ -411,7 +411,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.psth", "revision": 3 },
+  "renderer": { "id": "figure.psth", "revision": 4 },
 
   "budgets": {
     "maxObservations": 2000000,
@@ -445,7 +445,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.psth.output_authority.v3"
+      "id": "neuro.psth.output_authority.v4"
     },
     "requestPaths": [
       {

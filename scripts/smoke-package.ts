@@ -82,6 +82,8 @@ const RUNTIME_ANCESTRY_HASH_DOMAIN = 'cortexel-package-smoke-path-ancestry-v1\0'
 const MAX_RUNTIME_EXECUTABLE_BYTES = 256 * 1024 * 1024;
 const COMMAND_RESULT_SCHEMA = 'cortexel-package-smoke-command.v1' as const;
 const COMMAND_HANDSHAKE_SCHEMA = 'cortexel-package-smoke-command-handshake.v1' as const;
+const COMMAND_TARGET_COMPLETION_SCHEMA =
+  'cortexel-package-smoke-target-completion.v1' as const;
 const COMMAND_TEST_HOOK_SCHEMA = 'cortexel-package-smoke-command-test-hook.v1' as const;
 const COMMAND_TEST_HOOK_ENVIRONMENT = 'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK';
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60_000;
@@ -152,13 +154,20 @@ export interface ReviewedNodeCommandTestHook {
  * trusted gated wrapper in a fresh POSIX process group. The supervisor publishes
  * that PGID to the outer caller before opening the wrapper's stdin gate; only then
  * may the wrapper spawn reviewed code in its own group. Both supervisor and outer
- * caller can therefore apply the terminal SIGKILL sweep, even if reviewed code
- * kills either intermediate parent. Bun's synchronous child API does not expose
- * fd 3, so the bounded canonical protocol uses two stdout lines.
+ * caller can therefore apply the terminal SIGKILL sweep. On normal completion
+ * the wrapper publishes the target status through a private pipe and signals its
+ * own group while its live leader identity still pins the PGID. No trusted layer
+ * re-addresses that number after the leader is reaped. Abnormal parent death can
+ * only use a reusable numeric fallback and therefore still requires an external
+ * lifetime authority against hostile code. Bun's synchronous child API does not
+ * expose fd 3, so the outer bounded protocol uses two stdout lines; the inner
+ * supervisor-to-wrapper boundary may use its own private fd 3.
  */
 const REVIEWED_NODE_TARGET_WRAPPER = String.raw`'use strict';
 const childProcess = require('node:child_process');
+const fs = require('node:fs');
 const payloadName = 'CORTEXEL_PACKAGE_SMOKE_WRAPPER_PAYLOAD';
+const targetCompletionSchema = ${JSON.stringify(COMMAND_TARGET_COMPLETION_SCHEMA)};
 let payload;
 try {
   payload = JSON.parse(process.env[payloadName] || 'null');
@@ -166,6 +175,38 @@ try {
   process.exit(70);
 }
 delete process.env[payloadName];
+const publishCompletionAndSweep = (status, signal) => {
+  const validStatus = Number.isInteger(status) && status >= 0 && status <= 255;
+  const validSignal = typeof signal === 'string' && /^SIG[A-Z0-9]+$/.test(signal);
+  if (validStatus === validSignal) process.exit(70);
+  const record = Buffer.from(JSON.stringify({
+    schema: targetCompletionSchema,
+    signal: validSignal ? signal : null,
+    status: validStatus ? status : null,
+  }) + '\n', 'utf8');
+  try {
+    if (fs.writeSync(3, record) !== record.length) process.exit(70);
+  } catch {
+    process.exit(70);
+  }
+  try {
+    // The destructive signal is issued while this live group leader still
+    // authenticates the numeric PGID. A successful call covers members for
+    // which this process retains signal authority; it is not a hostile sandbox.
+    process.kill(-process.pid, 'SIGKILL');
+  } catch (error) {
+    try {
+      fs.writeSync(
+        2,
+        'reviewed Node wrapper process-group sweep unproven: signal authority lost (' +
+          String(error && error.code ? error.code : 'unknown') + ')\n',
+      );
+    } catch {
+      // The nonzero exit remains fail-closed if the diagnostic write fails.
+    }
+  }
+  process.exit(70);
+};
 let gate = '';
 let gated = false;
 const gateTimer = setTimeout(() => process.exit(70), 5000);
@@ -191,13 +232,7 @@ process.stdin.once('end', () => {
     process.exit(70);
   }
   target.once('error', () => process.exit(70));
-  target.once('close', (status, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-    process.exit(Number.isInteger(status) ? status : 70);
-  });
+  target.once('close', publishCompletionAndSweep);
 });
 process.stdin.once('error', () => process.exit(70));
 `;
@@ -209,6 +244,7 @@ const payloadName = 'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD';
 const wrapperPayloadName = 'CORTEXEL_PACKAGE_SMOKE_WRAPPER_PAYLOAD';
 const testHookPayloadName = 'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK';
 const wrapperSource = ${JSON.stringify(REVIEWED_NODE_TARGET_WRAPPER)};
+const targetCompletionSchema = ${JSON.stringify(COMMAND_TARGET_COMPLETION_SCHEMA)};
 let payload;
 let trustedTestHook = null;
 try {
@@ -250,12 +286,30 @@ let capturedBytes = 0;
 let outputOverflow = false;
 let timedOut = false;
 let settled = false;
+let goSent = false;
 let child;
+let childLeaderLive = false;
 let groupKillStarted = false;
 let cancellationStarted = false;
+let cancellationExitCode = null;
 let timer;
 let testHookTimer;
-const finish = (status, signal, spawnError) => {
+let targetCompletion = null;
+const targetCompletionChunks = [];
+let targetCompletionBytes = 0;
+const failUnprovenGroupSweep = (stage) => {
+  try {
+    fs.writeSync(
+      2,
+      'reviewed Node process-group sweep unproven: signal authority lost (' +
+        stage + ': EPERM)\n',
+    );
+  } catch {
+    // The stable exit status still fails closed if the diagnostic descriptor failed.
+  }
+  process.exit(70);
+};
+const finish = (status, signal, spawnError, bindProcessGroup = true) => {
   if (settled) return;
   settled = true;
   clearTimeout(timer);
@@ -265,7 +319,7 @@ const finish = (status, signal, spawnError) => {
   fs.writeSync(1, JSON.stringify({
     groupKillCount: groupKillStarted ? 1 : 0,
     outputOverflow,
-    processGroupId: child && Number.isSafeInteger(child.pid) ? child.pid : null,
+    processGroupId: bindProcessGroup && child && Number.isSafeInteger(child.pid) ? child.pid : null,
     schema: 'cortexel-package-smoke-command.v1',
     signal,
     spawnError,
@@ -277,11 +331,27 @@ const finish = (status, signal, spawnError) => {
 };
 const hardKill = () => {
   if (!child || !Number.isSafeInteger(child.pid) || groupKillStarted) return;
+  if (!childLeaderLive) {
+    try {
+      fs.writeSync(
+        2,
+        'reviewed Node process-group sweep refused after its leader was reaped\n',
+      );
+    } catch {
+      // The nonzero exit remains fail-closed if the diagnostic write fails.
+    }
+    process.exit(70);
+  }
   groupKillStarted = true;
   try {
     process.kill(-child.pid, 'SIGKILL');
   } catch (error) {
-    if (error && error.code !== 'ESRCH') throw error;
+    if (error && error.code === 'ESRCH') return;
+    if (error && error.code === 'EPERM') {
+      failUnprovenGroupSweep('SIGKILL');
+      return;
+    }
+    throw error;
   }
 };
 const cancelSupervisor = (exitCode) => {
@@ -291,7 +361,7 @@ const cancelSupervisor = (exitCode) => {
     return;
   }
   cancellationStarted = true;
-  settled = true;
+  cancellationExitCode = exitCode;
   if (timer) clearTimeout(timer);
   if (testHookTimer) clearTimeout(testHookTimer);
   try {
@@ -304,27 +374,7 @@ const cancelSupervisor = (exitCode) => {
     process.exit(exitCode);
     return;
   }
-  const deadline = Date.now() + 2000;
-  const probe = () => {
-    try {
-      process.kill(-child.pid, 0);
-    } catch (error) {
-      if (error && error.code === 'ESRCH') {
-        process.exit(exitCode);
-        return;
-      }
-      if (!error || error.code !== 'EPERM') {
-        process.exit(70);
-        return;
-      }
-    }
-    if (Date.now() >= deadline) {
-      process.exit(70);
-      return;
-    }
-    setTimeout(probe, 10);
-  };
-  probe();
+  testHookTimer = setTimeout(() => process.exit(70), 2000);
 };
 const stopAtTrustedTestHook = (phase) => {
   if (!trustedTestHook || trustedTestHook.phase !== phase) return false;
@@ -356,39 +406,61 @@ const capture = (stream) => (chunk) => {
   chunks[stream].push(chunk);
   capturedBytes += chunk.length;
 };
-const finishAfterGroupClosure = (status, signal) => {
-  if (settled) return;
-  if (!child || !Number.isSafeInteger(child.pid)) {
-    finish(status, signal, null);
-    return;
+const captureTargetCompletion = (chunk) => {
+  if (targetCompletion !== null || cancellationStarted) return;
+  targetCompletionBytes += chunk.length;
+  if (targetCompletionBytes > 512) process.exit(70);
+  targetCompletionChunks.push(chunk);
+};
+const acceptTargetCompletion = () => {
+  if (
+    !goSent ||
+    targetCompletion !== null ||
+    cancellationStarted ||
+    timedOut ||
+    outputOverflow ||
+    groupKillStarted
+  ) return;
+  const raw = Buffer.concat(targetCompletionChunks);
+  let value;
+  try {
+    value = JSON.parse(raw.toString('utf8'));
+  } catch {
+    process.exit(70);
   }
-  const deadline = Date.now() + 2000;
-  const probe = () => {
-    try {
-      process.kill(-child.pid, 0);
-    } catch (error) {
-      if (error && error.code === 'ESRCH') {
-        finish(status, signal, null);
-        return;
-      }
-      if (!error || error.code !== 'EPERM') throw error;
-    }
-    if (Date.now() >= deadline) {
-      process.exitCode = 70;
-      return;
-    }
-    setTimeout(probe, 10);
-  };
-  probe();
+  const keys = value && typeof value === 'object' && !Array.isArray(value)
+    ? Object.keys(value).sort()
+    : [];
+  const validStatus = value && Number.isInteger(value.status) &&
+    value.status >= 0 && value.status <= 255;
+  const validSignal = value && typeof value.signal === 'string' &&
+    /^SIG[A-Z0-9]+$/.test(value.signal);
+  const canonical = value && JSON.stringify({
+    schema: value.schema,
+    signal: value.signal,
+    status: value.status,
+  }) + '\n';
+  if (
+    JSON.stringify(keys) !== '["schema","signal","status"]' ||
+    value.schema !== targetCompletionSchema ||
+    validStatus === validSignal ||
+    typeof canonical !== 'string' ||
+    !raw.equals(Buffer.from(canonical, 'utf8'))
+  ) {
+    process.exit(70);
+  }
+  targetCompletion = value;
+  clearTimeout(timer);
 };
 try {
   child = childProcess.spawn(process.execPath, ['-e', wrapperSource], {
     cwd: payload.cwd,
     detached: true,
     env: { ...process.env, [wrapperPayloadName]: JSON.stringify(payload) },
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
     windowsHide: true,
   });
+  childLeaderLive = Number.isSafeInteger(child.pid);
 } catch (error) {
   child = null;
 }
@@ -401,7 +473,10 @@ if (!child) {
 } else {
   child.stdout.on('data', capture('stdout'));
   child.stderr.on('data', capture('stderr'));
+  child.stdio[3].on('data', captureTargetCompletion);
+  child.stdio[3].once('end', acceptTargetCompletion);
   child.once('spawn', () => {
+    childLeaderLive = true;
     if (stopAtTrustedTestHook('wrapper-spawned-before-handshake')) return;
     const handshake = Buffer.from(JSON.stringify({
       processGroupId: child.pid,
@@ -411,14 +486,46 @@ if (!child) {
       throw new Error('process-group handshake was not published atomically');
     }
     if (stopAtTrustedTestHook('handshake-published-before-go')) return;
+    goSent = true;
     child.stdin.end('GO\n');
   });
-  child.once('error', (error) => finish(null, null, String(error)));
+  child.once('error', (error) => finish(null, null, String(error), false));
   child.once('exit', () => {
+    childLeaderLive = false;
     clearTimeout(timer);
-    hardKill();
   });
-  child.once('close', (status, signal) => finishAfterGroupClosure(status, signal));
+  child.once('close', (status, signal) => {
+    childLeaderLive = false;
+    clearTimeout(timer);
+    clearTimeout(testHookTimer);
+    if (cancellationStarted) {
+      process.exit(cancellationExitCode === null ? 70 : cancellationExitCode);
+      return;
+    }
+    if (
+      targetCompletion !== null &&
+      !timedOut &&
+      !outputOverflow &&
+      !groupKillStarted
+    ) {
+      if (status !== null || signal !== 'SIGKILL') process.exit(70);
+      groupKillStarted = true;
+      finish(targetCompletion.status, targetCompletion.signal, null);
+      return;
+    }
+    if (groupKillStarted) {
+      finish(status, signal, null);
+      return;
+    }
+    if (!goSent) {
+      finish(null, null, 'reviewed Node wrapper exited before its GO gate', false);
+      return;
+    }
+    // An uncommanded wrapper death cannot safely return a receipt. The outer
+    // caller will reject this abnormal supervisor completion and may apply its
+    // explicitly reuse-limited one-shot fallback when a PGID was published.
+    process.exit(70);
+  });
 }
 `;
 
@@ -735,7 +842,6 @@ export function runReviewedNodeCommand(
   });
   const outerStdout = Buffer.isBuffer(outer.stdout) ? outer.stdout : Buffer.alloc(0);
   let publishedProcessGroupId: number | null = null;
-  let outerFallbackSweepApplied = false;
   let resultRaw = outerStdout;
   const firstLineEnd = outerStdout.indexOf(0x0a);
   if (firstLineEnd >= 0 && firstLineEnd + 1 <= MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES) {
@@ -762,55 +868,51 @@ export function runReviewedNodeCommand(
       resultRaw = outerStdout.subarray(firstLineEnd + 1);
     }
   }
-  if (publishedProcessGroupId !== null) {
-    let groupExists = false;
+  const supervisorCompletedAbnormally =
+    outer.error !== undefined || outer.status !== 0 || outer.signal !== null;
+  let outerCleanupFailure: string | null = null;
+  if (supervisorCompletedAbnormally && publishedProcessGroupId !== null) {
+    // Clean completion never reaches this reusable numeric identifier after the
+    // wrapper leader is reaped. Abnormal supervisor death has no portable identity
+    // handle, so this one-shot fallback retains a documented PGID-reuse race and
+    // cannot replace external process-lifetime containment.
     try {
-      process.kill(-publishedProcessGroupId, 0);
-      groupExists = true;
+      process.kill(-publishedProcessGroupId, 'SIGKILL');
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-    }
-    if (groupExists) {
-      outerFallbackSweepApplied = true;
-      try {
-        process.kill(-publishedProcessGroupId, 'SIGKILL');
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-      }
-    }
-    const deadline = Date.now() + 2_000;
-    while (true) {
-      try {
-        process.kill(-publishedProcessGroupId, 0);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ESRCH') break;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EPERM') {
+        outerCleanupFailure =
+          'process-group cleanup unproven: signal authority lost (outer SIGKILL: EPERM)';
+      } else if (code !== 'ESRCH') {
         throw error;
       }
-      if (Date.now() >= deadline) {
-        fail('reviewed Node outer fallback could not close the published process group');
-      }
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }
   }
+  const outerCleanupSuffix = outerCleanupFailure === null ? '' : `; ${outerCleanupFailure}`;
   assertNodeExecutableAuthority(expectedNodeAuthority, 'post-command');
   if (outer.error !== undefined) {
     const code = (outer.error as NodeJS.ErrnoException).code;
-    if (code === 'ENOBUFS') fail('reviewed Node command supervisor crossed its outer output bound');
-    if (code === 'ETIMEDOUT') fail('reviewed Node command supervisor crossed its outer hard timeout');
-    fail(`reviewed Node command supervisor failed: ${code ?? 'unknown error'}`);
+    if (code === 'ENOBUFS') {
+      fail(`reviewed Node command supervisor crossed its outer output bound${outerCleanupSuffix}`);
+    }
+    if (code === 'ETIMEDOUT') {
+      fail(`reviewed Node command supervisor crossed its outer hard timeout${outerCleanupSuffix}`);
+    }
+    fail(
+      `reviewed Node command supervisor failed: ${code ?? 'unknown error'}` +
+      outerCleanupSuffix,
+    );
   }
   if (outer.status !== 0 || outer.signal !== null) {
     const detail = Buffer.isBuffer(outer.stderr) && outer.stderr.byteLength > 0
-      ? decodeUtf8Fatal(outer.stderr, 'reviewed Node supervisor stderr').slice(0, 2_048)
+      ? decodeUtf8Fatal(outer.stderr, 'reviewed Node supervisor stderr').slice(0, 2_048).trimEnd()
       : '';
     fail(
       `reviewed Node command supervisor failed its outer SIGKILL boundary` +
       ` (status ${String(outer.status)}, signal ${String(outer.signal)})` +
-      (detail ? `: ${detail}` : ''),
+      (detail ? `: ${detail}` : '') +
+      outerCleanupSuffix,
     );
-  }
-  if (outerFallbackSweepApplied) {
-    fail('reviewed Node supervisor claimed success but required an outer fallback sweep');
   }
   const outerStderr = Buffer.isBuffer(outer.stderr) ? outer.stderr : Buffer.alloc(0);
   if (outerStderr.byteLength !== 0) {
@@ -893,12 +995,10 @@ export function runReviewedNodeCommand(
   if (record.processGroupId === null) {
     fail('reviewed Node command did not bind its POSIX process group');
   }
-  try {
-    process.kill(-(record.processGroupId as number), 0);
-    fail('reviewed Node command left its process group alive');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
-  }
+  // Normal completion is accepted only after the wrapper published the target
+  // result and terminated by its anchored group SIGKILL. Timeout/overflow paths
+  // likewise signal while the direct wrapper leader is live. Never turn the
+  // reaped leader's reusable PGID into a later closure claim.
   const decodeCanonicalBase64 = (value: string, label: string): Buffer => {
     if (value.length % 4 !== 0) {
       fail(`${label} is not canonical base64`);

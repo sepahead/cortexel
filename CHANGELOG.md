@@ -6,6 +6,57 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — exact correlogram and output authority
+
+- `neuro.correlogram` and `figure.correlogram` now publish revision 4, and the
+  versioned `correlogram.pair_count_and_rate` derivation publishes algorithm
+  revision 2. Raw-event lags are classified from the exact typed difference
+  `target_time - reference_time` before one rounded conversion; if that rounded
+  value would select a different bin, the request fails closed. Absolute event
+  clocks are never converted separately and then subtracted.
+- Edge-corrected numerators now use the identical reference-ordinal eligibility
+  interval as their denominator. Stable per-train time/source-ordinal ordering and
+  exact target slices preflight only the admitted numerator work, so a large but
+  lag-sparse or edge-ineligible Cartesian product is not refused merely for being
+  large. The published complexity includes the binary searches over the lag-bin
+  ladder, and typed failures map back to the exact role-local request field rather
+  than collapsing every diagnostic to `/data`.
+- Raw-event pair accounting partitions the exact candidate product into counted,
+  lag-out-of-range, in-range edge-ineligible, and same-event-self-pair classes.
+  Pre-binned input retains only the aggregate not-counted remainder and explicitly
+  reports that the finer split is unavailable. An independent OutputAuthority
+  evaluator recomputes the same table and summary facts without calling the
+  compiler kernel. Unit disclosures identify terms in exact lag differences rather
+  than implying that absolute event clocks were individually converted.
+- The legacy NEST correlation-detector projection now accepts only documented
+  `count_histogram` data with an included zero-lag policy. It no longer invents
+  units for NEST's weighted histogram or claims that the upstream detector removed
+  same-event self-pairs. Randomized exact-integer and boundary regressions support
+  these implementation claims; NEST/Elephant differential evidence remains
+  `NOT_RUN`, and the skill remains `releaseReady: false`.
+
+### Fixed — SVG naming and vertical-axis geometry
+
+- Both SVG paths now use the figure `<title>` only for `aria-labelledby` and the
+  complete summary only for `aria-describedby`, rather than concatenating the
+  description into the accessible name.
+- Normative left and right axis labels are rotated in their conventional directions
+  around deterministic, viewport-bounded pivots. A bounded `textLength` keeps even
+  long labels inside the serialized headless geometry without dropping their text.
+- Because these changes alter the serialized output of every stable SVG renderer, all
+  nineteen stable skills and all fourteen stable renderers now publish revision 4 as
+  one coordinated output-identity boundary. Correlogram had already moved to revision
+  4 with its scientific correction; the other eighteen skills and thirteen renderers
+  move from revision 3 to 4, and an explicit revision-3 skill pin refuses rather than
+  silently receiving changed SVG bytes. The contract requires each OutputAuthority
+  evaluator ID to carry its owning skill revision, so the other eighteen evaluator
+  registrations also move to `v4` and all nineteen are now aligned. Their
+  non-correlogram implementation logic is unchanged; the coordinated identifier is not
+  a claim of a new evaluator algorithm.
+- These regressions establish deterministic ARIA references and bounded SVG geometry
+  only. They do not establish assistive-technology behavior, WCAG conformance,
+  palette contrast, zoom/reflow behavior, or publication accessibility.
+
 ### Fixed — inspectable package smoke
 
 - The package smoke now has an explicit two-phase release boundary. A networked
@@ -36,19 +87,25 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   authority and revalidates the leaf's digest, identity, ownership, and `0444`
   mode after active work.
   A trusted gated wrapper enters a fresh POSIX process group. The supervisor
-  publishes that group before it permits reviewed code to execute. It applies one
-  terminal SIGKILL sweep and proves group closure. If the supervisor fails, the
-  outer caller closes the published group and rejects the command. This boundary
-  cleans descendants that remain in the group. It is not a sandbox against
-  same-UID signaling, reusable numeric PGIDs, a descendant that starts another
-  session or process group, or simultaneous uncatchable death of both outer caller
-  and supervisor. Handled `TERM`, `INT`, and `HUP` cancellation is covered;
+  publishes that group before it permits reviewed code to execute. On ordinary
+  completion, the still-live wrapper publishes a canonical target result over a
+  private pipe and self-sweeps the group before its leader identity can be reused.
+  Timeout, output overflow, and handled `TERM`, `INT`, or `HUP` cancellation likewise
+  signal only while the direct wrapper leader is live. No clean path re-addresses or
+  probes a PGID after that leader is reaped: POSIX supplies no portable process-group
+  closure receipt. The anchored sweep covers descendants that remain in the group
+  and retain signaling authority; `EPERM` is cleanup-unproven and fails closed.
+  If the supervisor fails after reviewed code could start, the outer caller attempts
+  one abnormal-only numeric-PGID fallback and rejects the command. That fallback has
+  a residual reuse race. This boundary is not a sandbox against same-UID signaling,
+  a descendant that starts another session/process group or changes signaling
+  authority, or simultaneous uncatchable death of both outer caller and supervisor;
   stronger lifetime containment requires an external sandbox/cgroup.
   Windows fails closed until an equivalent reviewed Job Object boundary exists.
   Supervisor-only, one-way regression rendezvous now prove that killing the
   wrapper before or after handshake publication, or the supervisor after
-  publication but before `GO`, cannot start target code and still closes the
-  published group.
+  publication but before `GO`, cannot start target code; the controlled wrapper
+  fixture also terminates without turning its published number into a closure claim.
   Protocol-size limits account for base64 expansion without giant regular
   expressions. Directory reads and file hashes are allocation-bounded. Every
   installed package container, scope, package identity,
@@ -282,10 +339,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and binned-value switches are absent rather than structurally accepted without a
   renderer. A separate future Pearson design record is explicitly not release ready.
 - Pre-binned products carry exact role event counts so the compiler derives one exact
-  candidate = counted + out-of-range + excluded-self-pair receipt. Zero eligible
-  denominators are represented by a null rate with an explicit status, never by a
-  fabricated zero or a validation exception. Caller-supplied rates and weighted pair
-  sums remain refused. The pre-1.0 packaged `VizSpec`/NEST adapter remains unchanged.
+  candidate = counted + other-not-counted + excluded-self-pair receipt. Without raw
+  events, the lag-out-of-range versus edge-ineligible split remains unavailable. Zero
+  eligible denominators are represented by a null rate with an explicit status, never
+  by a fabricated zero or a validation exception. Caller-supplied rates and weighted
+  pair sums remain refused. The later revision-4 NEST restriction is recorded above.
 - Correlogram uncertainty is narrowed to explicit `none` in revision 2. Dispersion
   and interval arrays stay refused until one branch carries them through units,
   missingness, table, summary, legend, and geometry without dropping a field.
@@ -1063,7 +1121,7 @@ regenerate cached descriptors/manifests before adopting this release.
   binary64 and UTF-16 semantics, strict invocation/provenance/palette policies,
   caption derivation, versioned params/provenance constraint languages, and complete
   examples at `cortexel/skills.manifest.json`.
-- `KnowledgeGraphA11yList`, a keyboard- and screen-reader-accessible DOM mirror with
+- `KnowledgeGraphA11yList`, a paginated DOM mirror with
   paginated nodes, node kinds, and separately paginated directed relationship detail
   for the WebGL graph.
 - Native, agent-invocable `nest.isi_distribution`, `nest.psth`, and
@@ -1125,7 +1183,7 @@ regenerate cached descriptors/manifests before adopting this release.
 - Knowledge-graph search now uses the same bounded metadata-aware matcher in WebGL
   and the DOM companion, and applies the query coherently to nodes, edges,
   arrowheads, and flow particles instead of leaving a bright unrelated edge field behind. Selected
-  nodes remain available to assistive technology through filtered views, duplicate
+  selected nodes remain present in the DOM companion through filtered views, duplicate
   ids fail closed at both direct React entrypoints, relationship disclosures have a
   touch-sized target, and the force-layout clock no longer allocates from `useFrame`.
 

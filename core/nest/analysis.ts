@@ -102,11 +102,10 @@ const PsthOptionsSchema = z
 
 const CorrelationDetectorOptionsSchema = z
   .object({
-    measurement: z.enum(['count_histogram', 'histogram']),
+    measurement: z.literal('count_histogram'),
     referenceLabel: displayText(240),
     targetLabel: displayText(240),
-    zeroLagPolicy: z.enum(['included', 'excluded_self_pairs']),
-    weightedUnits: displayText(80).optional(),
+    zeroLagPolicy: z.literal('included'),
   })
   .strict();
 
@@ -142,11 +141,10 @@ export interface PsthAnalysisOptions {
 }
 
 export interface CorrelationDetectorOptions {
-  measurement: 'count_histogram' | 'histogram';
+  measurement: 'count_histogram';
   referenceLabel: string;
   targetLabel: string;
-  zeroLagPolicy: 'included' | 'excluded_self_pairs';
-  weightedUnits?: string;
+  zeroLagPolicy: 'included';
 }
 
 function error(message: string): { ok: false; errors: string[] } {
@@ -577,7 +575,7 @@ export function spikeTrialsToPsthParams(
   }
 }
 
-/** Project the documented NEST correlation_detector status histogram. */
+/** Project only documented raw counts without inventing weighted units or self-pair removal. */
 export function correlationDetectorToCorrelogramParams(
   status: unknown,
   options: CorrelationDetectorOptions,
@@ -597,7 +595,6 @@ export function correlationDetectorToCorrelogramParams(
       'Tstart',
       'Tstop',
       'count_histogram',
-      'histogram',
     ]);
     if (!projectedStatus.ok) return projectedStatus;
     const parsedStatus = parseNestInput(
@@ -608,14 +605,8 @@ export function correlationDetectorToCorrelogramParams(
     const parsedOptions = parseNestInput(CorrelationDetectorOptionsSchema, options);
     if (!parsedOptions.ok) return parsedOptions;
     const opts = parsedOptions.data;
-    if (opts.measurement === 'histogram' && opts.weightedUnits === undefined) {
-      return error('weightedUnits is required when measurement is histogram');
-    }
-    if (opts.measurement === 'count_histogram' && opts.weightedUnits !== undefined) {
-      return error('weightedUnits is only valid when measurement is histogram');
-    }
-    const values = parsedStatus.data[opts.measurement];
-    if (!values) return error(`${opts.measurement} is absent from the detector status`);
+    const values = parsedStatus.data.count_histogram;
+    if (!values) return error('count_histogram is absent from the detector status');
 
     const halfBinRatio = parsedStatus.data.tau_max / parsedStatus.data.delta_tau;
     const halfBinCount = Math.round(halfBinRatio);
@@ -635,7 +626,7 @@ export function correlationDetectorToCorrelogramParams(
     }
     if (values.length !== expectedLength) {
       return error(
-        `${opts.measurement} length (${values.length}) must equal 2*tau_max/delta_tau+1 (${expectedLength})`,
+        `count_histogram length (${values.length}) must equal 2*tau_max/delta_tau+1 (${expectedLength})`,
       );
     }
 
@@ -650,10 +641,6 @@ export function correlationDetectorToCorrelogramParams(
             ? parsedStatus.data.tau_max
             : centeredIndex * parsedStatus.data.delta_tau;
     }
-    const statistic: CorrelogramParams['statistic'] =
-      opts.measurement === 'count_histogram'
-        ? { kind: 'raw_pair_count', units: 'count' }
-        : { kind: 'weighted_pair_sum', units: opts.weightedUnits! };
     return validateOutput(CorrelogramParamsSchema, {
       lags_ms: lags,
       values: [...values],
@@ -667,8 +654,8 @@ export function correlationDetectorToCorrelogramParams(
       },
       lag_convention: 'positive_target_after_reference',
       binning: 'left_closed_right_open',
-      zero_lag_policy: opts.zeroLagPolicy,
-      statistic,
+      zero_lag_policy: 'included',
+      statistic: { kind: 'raw_pair_count', units: 'count' },
     });
   } catch {
     return error('correlation-detector analysis could not safely process the input');

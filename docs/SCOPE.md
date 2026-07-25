@@ -25,8 +25,9 @@ Cortexel is a **closed, versioned catalog of scientifically constrained figure
 contracts for neural-simulation data**. A caller authors a declarative
 `FigureRequestV1` (plain JSON); Cortexel validates it against a fixed catalog,
 re-derives the scientific quantities it is willing to draw, renders a deterministic
-accessible SVG, and emits a `FigureArtifactV1` that records what was validated, what
-was computed, what scope the claim has, and the disclosures that fact set requires.
+SVG with distinct title and description references, and emits a `FigureArtifactV1`
+that records what was validated, what was computed, what scope the claim has, and the
+disclosures that fact set requires.
 
 Four properties define the product, and everything else is subordinate to them:
 
@@ -49,15 +50,18 @@ Four properties define the product, and everything else is subordinate to them:
    a closed rule registry, never from caller free text, and in stable mode they cannot
    be suppressed. See §5.
 
-4. **Deterministic, accessible output.** The stable render path is designed to be
-   free of clocks, random state, and locale: no `<script>`, no `foreignObject`, no
-   event handlers, no external references, no remote fonts. Every accepted stable
-   figure is paired with an exact-value table so the figure is never the only route to
-   its numbers. A compiler may emit an excerpt only with a digest-bound complete
-   sidecar; otherwise it fails closed. The current development build deliberately
-   advertises only `svg+table` for every stable figure and refuses before a sidecar or
-   compaction would be required; `+sidecar` will be claimed only when the library owns
-   deterministic sidecar bytes and binds them into the artifact outputs.
+4. **Deterministic SVG with explicit descriptive surfaces.** The stable render path is
+   designed to be free of clocks, random state, and locale: no `<script>`, no
+   `foreignObject`, no event handlers, no external references, no remote fonts. Every
+   accepted stable SVG references its title and complete description separately through
+   deterministic IDs and is paired with an exact-value table, so the graphical marks
+   are never the only route to its numbers. These structural surfaces do not establish
+   behavior in any assistive technology or WCAG conformance. A compiler may emit an
+   excerpt only with a digest-bound complete sidecar; otherwise it fails closed. The
+   current development build deliberately advertises only `svg+table` for every stable
+   figure and refuses before a sidecar or compaction would be required; `+sidecar` will
+   be claimed only when the library owns deterministic sidecar bytes and binds them into
+   the artifact outputs.
 
 The unit of value is the **contract and its invariants**, not chart code.
 
@@ -74,8 +78,8 @@ the four properties above.
 - **Not a notebook, dashboard, or application.** Cortexel produces one validated
   figure at a time. It owns no multi-figure composition engine, no interactivity
   framework, no state store, and no page. The host owns the page and its WCAG
-  conformance (a stable figure carries its own accessibility surface, but the package
-  does not claim whole-page compliance).
+  conformance. Cortexel's deterministic title/description references and exact-value
+  table do not establish assistive-technology behavior or figure/page WCAG conformance.
 
 - **Not a storage or interchange format.** Cortexel is not NWB, Neo, HDF5, or a
   database. It reads adapter input and emits a figure artifact; it is not a place to

@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertFinalizedHostFile,
   assertInstalledRecursivePackageClosure,
@@ -482,12 +482,14 @@ describe('two-phase package smoke contract', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-reviewed-node-command-')));
     cleanups.push(workspace);
     const environment = packageSmokeEnvironment(reviewedNode, workspace, {});
+    const nonTimeoutCommandTimeoutMs = 10_000;
+    const intentionalTimeoutMs = 5_000;
 
     const successful = runReviewedNodeCommand(
       reviewedNode,
       ['-e', 'process.stdout.write("bounded-ok")'],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
     expect(successful).toMatchObject({
       status: 0,
@@ -499,6 +501,24 @@ describe('two-phase package smoke contract', () => {
     });
     expect(successful.processGroupId).toBeGreaterThan(0);
 
+    // This completion deliberately exceeds the former one-second test assumption.
+    // The production wall-clock timer remains authoritative; only this regression's
+    // requested non-timeout budget is larger than scheduler startup noise.
+    const delayedSuccessful = runReviewedNodeCommand(
+      reviewedNode,
+      ['-e', 'setTimeout(() => process.stdout.write("delayed-ok"), 1_200)'],
+      workspace,
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
+    );
+    expect(delayedSuccessful).toMatchObject({
+      status: 0,
+      signal: null,
+      stdout: 'delayed-ok',
+      stderr: '',
+      timedOut: false,
+      outputOverflow: false,
+    });
+
     // The base64 protocol envelope is larger than the bounded raw output. This
     // crosses the ordinary 16 MiB JSON-file limit while remaining below the
     // command's advertised 16 MiB raw-output limit.
@@ -507,10 +527,16 @@ describe('two-phase package smoke contract', () => {
       reviewedNode,
       ['-e', `process.stdout.write('x'.repeat(${largeOutputBytes}))`],
       workspace,
-      { environment, timeoutMs: 5_000, outputLimitBytes: 16 * 1024 * 1024 },
+      {
+        environment,
+        timeoutMs: nonTimeoutCommandTimeoutMs,
+        outputLimitBytes: 16 * 1024 * 1024,
+      },
     );
     expect(largeOutput.status).toBe(0);
     expect(largeOutput.signal).toBeNull();
+    expect(largeOutput.timedOut).toBe(false);
+    expect(largeOutput.outputOverflow).toBe(false);
     expect(largeOutput.stdout.length).toBe(largeOutputBytes);
     expect(largeOutput.groupKillCount).toBe(1);
 
@@ -521,7 +547,7 @@ describe('two-phase package smoke contract', () => {
         'process.stdout.write("o".repeat(512)); process.stderr.write("e".repeat(512));',
       ],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
     expect(exactSplitOutput).toMatchObject({
       status: 0,
@@ -536,11 +562,13 @@ describe('two-phase package smoke contract', () => {
       reviewedNode,
       ['-e', 'process.stderr.write("bounded-error"); process.exit(7)'],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
     expect(nonzero.status).toBe(7);
     expect(nonzero.signal).toBeNull();
     expect(nonzero.stderr).toBe('bounded-error');
+    expect(nonzero.timedOut).toBe(false);
+    expect(nonzero.outputOverflow).toBe(false);
     expect(successful.groupKillCount).toBe(1);
     expect(nonzero.groupKillCount).toBe(1);
 
@@ -557,7 +585,7 @@ describe('two-phase package smoke contract', () => {
          process.exit(${exitCode});`,
       ],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
     const successChildPid = join(workspace, 'success-child.pid');
     const nonzeroChildPid = join(workspace, 'nonzero-child.pid');
@@ -565,8 +593,36 @@ describe('two-phase package smoke contract', () => {
     const nonzeroWithChild = exitWithChild(9, nonzeroChildPid);
     expect(successfulWithChild.status).toBe(0);
     expect(nonzeroWithChild.status).toBe(9);
+    expect(successfulWithChild.timedOut).toBe(false);
+    expect(nonzeroWithChild.timedOut).toBe(false);
+    expect(successfulWithChild.outputOverflow).toBe(false);
+    expect(nonzeroWithChild.outputOverflow).toBe(false);
     expect(successfulWithChild.groupKillCount).toBe(1);
     expect(nonzeroWithChild.groupKillCount).toBe(1);
+
+    const signaledChildPid = join(workspace, 'signaled-child.pid');
+    const signaledWithChild = runReviewedNodeCommand(
+      reviewedNode,
+      [
+        '-e',
+        `const child = require('node:child_process').spawn(
+           process.execPath,
+           ['-e', 'setInterval(() => {}, 1000)'],
+           { stdio: 'ignore' },
+         );
+         require('node:fs').writeFileSync(${JSON.stringify(signaledChildPid)}, String(child.pid));
+         process.kill(process.pid, 'SIGTERM');`,
+      ],
+      workspace,
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
+    );
+    expect(signaledWithChild).toMatchObject({
+      status: -1,
+      signal: 'SIGTERM',
+      timedOut: false,
+      outputOverflow: false,
+      groupKillCount: 1,
+    });
 
     const timeoutChildPid = join(workspace, 'timeout-child.pid');
     const timedOut = runReviewedNodeCommand(
@@ -584,7 +640,7 @@ describe('two-phase package smoke contract', () => {
          setInterval(() => {}, 1000);`,
       ],
       workspace,
-      { environment, timeoutMs: 500, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: intentionalTimeoutMs, outputLimitBytes: 1_024 },
     );
     expect(timedOut.timedOut).toBe(true);
     expect(timedOut.outputOverflow).toBe(false);
@@ -608,7 +664,7 @@ describe('two-phase package smoke contract', () => {
          setInterval(() => {}, 1000);`,
       ],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
     expect(overflow.timedOut).toBe(false);
     expect(overflow.outputOverflow).toBe(true);
@@ -621,7 +677,7 @@ describe('two-phase package smoke contract', () => {
       reviewedNode,
       ['-e', 'process.stderr.write("e".repeat(2048)); setInterval(() => {}, 1000);'],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
     expect(stderrOverflow).toMatchObject({
       signal: 'SIGKILL',
@@ -640,7 +696,7 @@ describe('two-phase package smoke contract', () => {
           'setInterval(() => {}, 1000);',
       ],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
     expect(combinedOverflow).toMatchObject({
       signal: 'SIGKILL',
@@ -658,34 +714,59 @@ describe('two-phase package smoke contract', () => {
           process.kill(processGroup ? -pid : pid, 0);
         } catch (error) {
           const code = (error as NodeJS.ErrnoException).code;
-          // EPERM means this numeric PID/PGID has already ceased to identify
-          // our same-UID child and may have been reused by another authority.
-          if (code === 'ESRCH' || code === 'EPERM') return true;
+          if (code === 'ESRCH') return true;
+          if (code === 'EPERM') {
+            // These fixed test programs never change credentials or security
+            // labels. EPERM therefore means their numeric identity was reused by
+            // another authority, not that the original fixture escaped cleanup.
+            return true;
+          }
           throw error;
         }
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
       }
       return false;
     };
-    const parentKillPidFile = join(workspace, 'parent-kill-target.pid');
-    const killedImmediateParent = runReviewedNodeCommand(
-      reviewedNode,
-      [
-        '-e',
-        `require('node:fs').writeFileSync(
-           ${JSON.stringify(parentKillPidFile)},
-           String(process.pid),
-         );
-         process.kill(process.ppid, 'SIGKILL');
-         setInterval(() => {}, 1000);`,
-      ],
-      workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
-    );
-    expect(killedImmediateParent.signal).toBe('SIGKILL');
-    expect(killedImmediateParent.groupKillCount).toBe(1);
-    expect(waitForGone(killedImmediateParent.processGroupId!, true)).toBe(true);
-    expect(waitForGone(Number(readFileSync(parentKillPidFile, 'utf8')), false)).toBe(true);
+    const parentKillWrapperPidFile = join(workspace, 'parent-kill-wrapper.pid');
+    const parentKillTargetPidFile = join(workspace, 'parent-kill-target.pid');
+    let parentKillWrapperPid: number | undefined;
+    let parentKillTargetPid: number | undefined;
+    try {
+      expect(() => runReviewedNodeCommand(
+        reviewedNode,
+        [
+          '-e',
+          `const fs = require('node:fs');
+           fs.writeFileSync(${JSON.stringify(parentKillWrapperPidFile)}, String(process.ppid));
+           fs.writeFileSync(${JSON.stringify(parentKillTargetPidFile)}, String(process.pid));
+           process.kill(process.ppid, 'SIGKILL');
+           setInterval(() => {}, 1000);`,
+        ],
+        workspace,
+        { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
+      )).toThrow(/outer SIGKILL boundary/u);
+      parentKillWrapperPid = Number(readFileSync(parentKillWrapperPidFile, 'utf8'));
+      parentKillTargetPid = Number(readFileSync(parentKillTargetPidFile, 'utf8'));
+      expect(parentKillWrapperPid).toBeGreaterThan(0);
+      expect(parentKillTargetPid).toBeGreaterThan(0);
+      expect(waitForGone(parentKillWrapperPid, true)).toBe(true);
+      expect(waitForGone(parentKillTargetPid, false)).toBe(true);
+    } finally {
+      if (existsSync(parentKillWrapperPidFile)) {
+        parentKillWrapperPid = Number(readFileSync(parentKillWrapperPidFile, 'utf8'));
+      }
+      if (existsSync(parentKillTargetPidFile)) {
+        parentKillTargetPid = Number(readFileSync(parentKillTargetPidFile, 'utf8'));
+      }
+      if (parentKillWrapperPid !== undefined) {
+        try {
+          process.kill(-parentKillWrapperPid, 'SIGKILL');
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== 'ESRCH' && code !== 'EPERM') throw error;
+        }
+      }
+    }
 
     const supervisorKillWrapperPidFile = join(workspace, 'supervisor-kill-wrapper.pid');
     const supervisorKillPidFile = join(workspace, 'supervisor-kill-target.pid');
@@ -714,7 +795,7 @@ describe('two-phase package smoke contract', () => {
            setInterval(() => {}, 1000);`,
         ],
         workspace,
-        { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+        { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
       )).toThrow(/outer SIGKILL boundary/u);
       supervisorKillWrapperPid = Number(readFileSync(supervisorKillWrapperPidFile, 'utf8'));
       supervisorKillTargetPid = Number(readFileSync(supervisorKillPidFile, 'utf8'));
@@ -745,13 +826,24 @@ describe('two-phase package smoke contract', () => {
     for (const [result, pidFile] of [
       [successfulWithChild, successChildPid],
       [nonzeroWithChild, nonzeroChildPid],
-      [timedOut, timeoutChildPid],
+      [signaledWithChild, signaledChildPid],
       [overflow, overflowChildPid],
     ] as const) {
       expect(waitForGone(result.processGroupId!, true)).toBe(true);
       expect(waitForGone(Number(readFileSync(pidFile, 'utf8')), false)).toBe(true);
     }
-    for (const result of [exactSplitOutput, stderrOverflow, combinedOverflow]) {
+    expect(waitForGone(timedOut.processGroupId!, true)).toBe(true);
+    expect(existsSync(timeoutChildPid)).toBe(true);
+    expect(waitForGone(Number(readFileSync(timeoutChildPid, 'utf8')), false)).toBe(true);
+    for (const result of [
+      successful,
+      delayedSuccessful,
+      largeOutput,
+      exactSplitOutput,
+      nonzero,
+      stderrOverflow,
+      combinedOverflow,
+    ]) {
       expect(waitForGone(result.processGroupId!, true)).toBe(true);
     }
 
@@ -759,13 +851,13 @@ describe('two-phase package smoke contract', () => {
       reviewedNode,
       ['-e', 'process.stdout.write(Buffer.from([0xff]));'],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     )).toThrow(/well-formed UTF-8/u);
     expect(() => runReviewedNodeCommand(
       reviewedNode,
       ['-e', 'process.exit(0)', 'nul\0argument'],
       workspace,
-      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     )).toThrow(/argument 2/u);
     expect(() => runReviewedNodeCommand(
       reviewedNode,
@@ -776,7 +868,7 @@ describe('two-phase package smoke contract', () => {
           ...environment,
           CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK: '{}',
         },
-        timeoutMs: 1_000,
+        timeoutMs: nonTimeoutCommandTimeoutMs,
         outputLimitBytes: 1_024,
       },
     )).toThrow(/reserved entry/u);
@@ -794,11 +886,157 @@ describe('two-phase package smoke contract', () => {
       reviewedNode,
       ['-e', 'process.stdout.write(process.execPath)'],
       workspace,
-      { environment: sentinelEnvironment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+      {
+        environment: sentinelEnvironment,
+        timeoutMs: nonTimeoutCommandTimeoutMs,
+        outputLimitBytes: 1_024,
+      },
     );
+    expect(exactRuntime.timedOut).toBe(false);
+    expect(exactRuntime.outputOverflow).toBe(false);
+    expect(waitForGone(exactRuntime.processGroupId!, true)).toBe(true);
     expect(realpathSync(exactRuntime.stdout)).toBe(reviewedNode);
     expect(() => realpathSync(sentinelMarker)).toThrow();
-  }, 15_000);
+  }, 60_000);
+
+  it('does not re-address a reusable process-group id after a clean supervisor receipt', () => {
+    if (process.platform === 'win32') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], { encoding: 'utf8' });
+    if (nodeProbe.status !== 0 || nodeProbe.signal !== null) {
+      throw new Error('the clean-receipt regression requires Node');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-clean-pgid-')));
+    cleanups.push(workspace);
+    const environment = packageSmokeEnvironment(reviewedNode, workspace, {});
+    const hostSignals: { pid: number; signal: string | number | undefined }[] = [];
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      hostSignals.push({ pid, signal });
+      throw new Error('the outer caller re-addressed a clean supervisor process group');
+    });
+    let result;
+    try {
+      result = runReviewedNodeCommand(
+        reviewedNode,
+        ['-e', 'process.stdout.write("clean-receipt")'],
+        workspace,
+        { environment, timeoutMs: 10_000, outputLimitBytes: 1_024 },
+      );
+    } finally {
+      killSpy.mockRestore();
+    }
+    expect(hostSignals).toEqual([]);
+    expect(result).toMatchObject({
+      status: 0,
+      signal: null,
+      stdout: 'clean-receipt',
+      timedOut: false,
+      outputOverflow: false,
+      groupKillCount: 1,
+    });
+  }, 20_000);
+
+  it('keeps outer failure primary when fallback process-group authority is lost', () => {
+    if (process.platform === 'win32') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], { encoding: 'utf8' });
+    if (nodeProbe.status !== 0 || nodeProbe.signal !== null) {
+      throw new Error('the fallback-authority regression requires Node');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-fallback-eperm-')));
+    cleanups.push(workspace);
+    const environment = packageSmokeEnvironment(reviewedNode, workspace, {});
+    const wrapperPidFile = join(workspace, 'wrapper.pid');
+    const targetPidFile = join(workspace, 'target.pid');
+    const psExecutable = process.platform === 'darwin' ? '/bin/ps' : '/usr/bin/ps';
+    const originalKill = process.kill;
+    let publishedProcessGroupId: number | undefined;
+    let targetPid: number | undefined;
+    let failure: unknown;
+    let cleanupGroupGone = false;
+    let cleanupTargetGone = false;
+    const waitForGone = (pid: number, group: boolean): boolean => {
+      const deadline = Date.now() + 2_000;
+      while (Date.now() < deadline) {
+        try {
+          originalKill(group ? -pid : pid, 0);
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code === 'ESRCH') return true;
+          if (code === 'EPERM') {
+            // After the injected failure is removed, this fixed same-UID target
+            // cannot lose authority. EPERM therefore identifies PID/PGID reuse.
+            return true;
+          }
+          throw error;
+        }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+      return false;
+    };
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid < 0 && signal === 'SIGKILL') {
+        publishedProcessGroupId = -pid;
+        throw Object.assign(new Error('injected process-group authority loss'), { code: 'EPERM' });
+      }
+      return originalKill(pid, signal);
+    });
+    try {
+      try {
+        runReviewedNodeCommand(
+          reviewedNode,
+          [
+            '-e',
+            `const childProcess = require('node:child_process');
+             const fs = require('node:fs');
+             fs.writeFileSync(${JSON.stringify(wrapperPidFile)}, String(process.ppid));
+             fs.writeFileSync(${JSON.stringify(targetPidFile)}, String(process.pid));
+             const supervisorPid = Number(childProcess.execFileSync(
+               ${JSON.stringify(psExecutable)},
+               ['-o', 'ppid=', '-p', String(process.ppid)],
+               { encoding: 'utf8' },
+             ).trim());
+             if (!Number.isSafeInteger(supervisorPid) || supervisorPid <= 1) process.exit(71);
+             process.kill(supervisorPid, 'SIGKILL');
+             setInterval(() => {}, 1000);`,
+          ],
+          workspace,
+          { environment, timeoutMs: 10_000, outputLimitBytes: 1_024 },
+        );
+      } catch (error) {
+        failure = error;
+      }
+    } finally {
+      killSpy.mockRestore();
+      if (publishedProcessGroupId === undefined && existsSync(wrapperPidFile)) {
+        publishedProcessGroupId = Number(readFileSync(wrapperPidFile, 'utf8'));
+      }
+      if (existsSync(targetPidFile)) {
+        targetPid = Number(readFileSync(targetPidFile, 'utf8'));
+      }
+      if (publishedProcessGroupId !== undefined) {
+        try {
+          originalKill(-publishedProcessGroupId, 'SIGKILL');
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== 'ESRCH') throw error;
+        }
+        cleanupGroupGone = waitForGone(publishedProcessGroupId, true);
+      }
+      if (targetPid !== undefined) {
+        cleanupTargetGone = waitForGone(targetPid, false);
+      }
+    }
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toMatch(/failed its outer SIGKILL boundary/u);
+    expect((failure as Error).message).toMatch(
+      /process-group cleanup unproven: signal authority lost \(outer SIGKILL: EPERM\)/u,
+    );
+    expect(publishedProcessGroupId).toBeGreaterThan(0);
+    expect(targetPid).toBeGreaterThan(0);
+    expect(cleanupGroupGone).toBe(true);
+    expect(cleanupTargetGone).toBe(true);
+  }, 30_000);
 
   it('kills the detached target group when its outer supervisor group is cancelled', () => {
     if (process.platform === 'win32') return;
@@ -831,9 +1069,12 @@ describe('two-phase package smoke contract', () => {
         return false;
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
-        // A surviving child created by this test is same-UID and signalable.
-        // EPERM therefore proves the number has rebound to another authority.
-        if (code === 'ESRCH' || code === 'EPERM') return true;
+        if (code === 'ESRCH') return true;
+        if (code === 'EPERM') {
+          // The controlled fixture never changes signal authority; EPERM proves
+          // this numeric identity has rebound after the fixture exited.
+          return true;
+        }
         throw error;
       }
     };
@@ -941,7 +1182,12 @@ describe('two-phase package smoke contract', () => {
         return false;
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'ESRCH' || code === 'EPERM') return true;
+        if (code === 'ESRCH') return true;
+        if (code === 'EPERM') {
+          // The controlled fixture never changes signal authority; EPERM proves
+          // this numeric identity has rebound after the fixture exited.
+          return true;
+        }
         throw error;
       }
     };
@@ -955,7 +1201,7 @@ describe('two-phase package smoke contract', () => {
       {
         phase: 'handshake-published-before-go',
         victim: 'wrapper',
-        expectedKind: 'returned',
+        expectedKind: 'threw',
       },
       {
         phase: 'handshake-published-before-go',
@@ -1046,8 +1292,8 @@ describe('two-phase package smoke contract', () => {
         expect(outcome.kind).toBe(expectedKind);
         if (expectedKind === 'threw') {
           expect(outcome.message).toMatch(
-            phase === 'wrapper-spawned-before-handshake'
-              ? /handshake/u
+            victim === 'wrapper'
+              ? /reviewed Node target spawn failed.*wrapper exited before its GO gate/u
               : /outer SIGKILL boundary/u,
           );
         } else {

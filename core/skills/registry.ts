@@ -2421,7 +2421,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         sourceUrl:
           'https://github.com/sepahead/Paper2Brain#knowledge-graph',
         dataShape: 'snapshot-bound paper/model/family nodes and stable-id multigraph edges, each with typed evidence, bounded attributes, derived/advisory epistemic status and optional uncalibrated scores',
-        output: 'Traceable 3D force-directed multigraph with citation-flow particles and accessible evidence detail',
+        output: 'Traceable 3D force-directed multigraph with citation-flow particles and programmatically exposed DOM evidence detail',
         note: '1.4 contract: every assertion is traceable; identity edges are advisory and force-layout geometry is non-evidentiary.',
       },
     ],

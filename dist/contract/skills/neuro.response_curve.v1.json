@@ -1,6 +1,6 @@
 {
   "id": "neuro.response_curve",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Input-response curve across declared conditions",
@@ -904,7 +904,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.response_curve", "revision": 3 },
+  "renderer": { "id": "figure.response_curve", "revision": 4 },
 
   "budgets": {
     "maxObservations": 20000,
@@ -938,7 +938,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.response_curve.output_authority.v3"
+      "id": "neuro.response_curve.output_authority.v4"
     },
     "requestPaths": [
       {

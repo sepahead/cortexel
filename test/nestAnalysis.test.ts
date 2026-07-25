@@ -380,22 +380,23 @@ describe('correlationDetectorToCorrelogramParams', () => {
     expect(unrelatedReads).toBe(0);
   });
 
-  it('requires weighted units and rejects missing/wrong-length detector channels', () => {
+  it('rejects unsupported weighted/self-pair claims and missing or wrong-length counts', () => {
     expect(correlationDetectorToCorrelogramParams(
       { ...status, count_histogram: undefined, histogram: [0.1, 0.2, 0.3, 0.2, 0.1] },
-      { ...options, measurement: 'histogram' },
+      options,
     ).ok).toBe(false);
-    const weighted = correlationDetectorToCorrelogramParams(
-      { ...status, count_histogram: undefined, histogram: [-1, 0, 2, 0, -1] },
-      { ...options, measurement: 'histogram', weightedUnits: 'pA²' },
-    );
-    expect(weighted.ok).toBe(true);
-    if (weighted.ok) {
-      expect(weighted.params.statistic).toEqual({
-        kind: 'weighted_pair_sum',
-        units: 'pA²',
-      });
-    }
+    expect(correlationDetectorToCorrelogramParams(status, {
+      ...options,
+      measurement: 'histogram',
+    }).ok).toBe(false);
+    expect(correlationDetectorToCorrelogramParams(status, {
+      ...options,
+      weightedUnits: 'pA²',
+    }).ok).toBe(false);
+    expect(correlationDetectorToCorrelogramParams(status, {
+      ...options,
+      zeroLagPolicy: 'excluded_self_pairs',
+    }).ok).toBe(false);
     expect(correlationDetectorToCorrelogramParams(
       { ...status, count_histogram: [1, 2, 3] },
       options,

@@ -1,7 +1,7 @@
-// DOM companions for pointer-driven R3F population/neuron primitives. WebGL
-// objects never enter the browser accessibility tree, so hosts pair these real
-// buttons with ExpandablePopulation/ExpandableNeurons rather than treating a
-// mesh click handler as an accessible interaction.
+// DOM companions for pointer-driven R3F population/neuron primitives. The WebGL
+// objects do not expose equivalent DOM controls, so hosts pair these buttons with
+// ExpandablePopulation/ExpandableNeurons. This records an additional interaction
+// surface; it is not an assistive-technology behavior claim.
 
 import { useEffect, useState } from 'react';
 import { safeDiagnosticText } from '../core/safeRuntime';

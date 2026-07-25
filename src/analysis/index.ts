@@ -45,18 +45,27 @@ export {
 } from './psth.js';
 export {
   DEFAULT_MAX_PAIRWISE_OPERATIONS,
+  CorrelogramDerivationError,
   PairwiseBudgetExceededError,
   countEligibleCorrelogramPairs,
   computeCorrelogram,
+  deriveTypedEventCorrelogram,
   deriveEligibleCorrelogramReferenceCounts,
   deriveCorrelogramPairAccounting,
+  derivePrebinnedCorrelogramPairAccounting,
   deriveCorrelogramTargetRates,
+  type CorrelogramDerivationErrorCode,
   type CorrelogramPairAccounting,
+  type CorrelogramTypedBins,
   type CorrelogramRateBin,
   type CorrelogramRateStatus,
   type CorrelogramResult,
   type CorrelogramTypedWindow,
   type CorrelogramWindowBoundary,
+  type PrebinnedCorrelogramPairAccounting,
+  type TypedCorrelogramPairAccounting,
+  type TypedEventCorrelogramInput,
+  type TypedEventCorrelogramResult,
 } from './correlogram.js';
 export {
   aggregateTopologyScalar,

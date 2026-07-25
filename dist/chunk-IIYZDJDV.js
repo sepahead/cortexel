@@ -26,7 +26,7 @@ import {
   WeightMatrixParamsSchema,
   isSkillId,
   listSkills
-} from "./chunk-RT5WPA3I.js";
+} from "./chunk-E5I6ZDY7.js";
 import {
   PUBLIC_DIAGNOSTIC_LIMITS,
   SAFE_DISPLAY_STRING_PATTERN,
@@ -1885,11 +1885,10 @@ var PsthOptionsSchema = z4.object({
   alignmentEvent: displayText(240)
 }).strict();
 var CorrelationDetectorOptionsSchema = z4.object({
-  measurement: z4.enum(["count_histogram", "histogram"]),
+  measurement: z4.literal("count_histogram"),
   referenceLabel: displayText(240),
   targetLabel: displayText(240),
-  zeroLagPolicy: z4.enum(["included", "excluded_self_pairs"]),
-  weightedUnits: displayText(80).optional()
+  zeroLagPolicy: z4.literal("included")
 }).strict();
 function error(message) {
   return { ok: false, errors: [message] };
@@ -2219,8 +2218,7 @@ function correlationDetectorToCorrelogramParams(status, options) {
       "tau_max",
       "Tstart",
       "Tstop",
-      "count_histogram",
-      "histogram"
+      "count_histogram"
     ]);
     if (!projectedStatus.ok) return projectedStatus;
     const parsedStatus = parseNestInput(
@@ -2231,14 +2229,8 @@ function correlationDetectorToCorrelogramParams(status, options) {
     const parsedOptions = parseNestInput(CorrelationDetectorOptionsSchema, options);
     if (!parsedOptions.ok) return parsedOptions;
     const opts = parsedOptions.data;
-    if (opts.measurement === "histogram" && opts.weightedUnits === void 0) {
-      return error("weightedUnits is required when measurement is histogram");
-    }
-    if (opts.measurement === "count_histogram" && opts.weightedUnits !== void 0) {
-      return error("weightedUnits is only valid when measurement is histogram");
-    }
-    const values = parsedStatus.data[opts.measurement];
-    if (!values) return error(`${opts.measurement} is absent from the detector status`);
+    const values = parsedStatus.data.count_histogram;
+    if (!values) return error("count_histogram is absent from the detector status");
     const halfBinRatio = parsedStatus.data.tau_max / parsedStatus.data.delta_tau;
     const halfBinCount = Math.round(halfBinRatio);
     const halfBinTolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(halfBinRatio), Math.abs(halfBinCount));
@@ -2251,7 +2243,7 @@ function correlationDetectorToCorrelogramParams(status, options) {
     }
     if (values.length !== expectedLength) {
       return error(
-        `${opts.measurement} length (${values.length}) must equal 2*tau_max/delta_tau+1 (${expectedLength})`
+        `count_histogram length (${values.length}) must equal 2*tau_max/delta_tau+1 (${expectedLength})`
       );
     }
     const lags = new Array(expectedLength);
@@ -2259,7 +2251,6 @@ function correlationDetectorToCorrelogramParams(status, options) {
       const centeredIndex = index - halfBinCount;
       lags[index] = centeredIndex === 0 ? 0 : centeredIndex === -halfBinCount ? -parsedStatus.data.tau_max : centeredIndex === halfBinCount ? parsedStatus.data.tau_max : centeredIndex * parsedStatus.data.delta_tau;
     }
-    const statistic = opts.measurement === "count_histogram" ? { kind: "raw_pair_count", units: "count" } : { kind: "weighted_pair_sum", units: opts.weightedUnits };
     return validateOutput(CorrelogramParamsSchema, {
       lags_ms: lags,
       values: [...values],
@@ -2273,8 +2264,8 @@ function correlationDetectorToCorrelogramParams(status, options) {
       },
       lag_convention: "positive_target_after_reference",
       binning: "left_closed_right_open",
-      zero_lag_policy: opts.zeroLagPolicy,
-      statistic
+      zero_lag_policy: "included",
+      statistic: { kind: "raw_pair_count", units: "count" }
     });
   } catch {
     return error("correlation-detector analysis could not safely process the input");
@@ -3087,4 +3078,4 @@ export {
   synapseCollectionToDelayDistributionParams,
   getPositionToSpatialMap2DParams
 };
-//# sourceMappingURL=chunk-OP6PRAHE.js.map
+//# sourceMappingURL=chunk-IIYZDJDV.js.map

@@ -8,11 +8,11 @@ import {
   exactBinary64Mean,
   exactBinary64Sum,
   exactRationalToBinary64
-} from "./chunk-ESH2QFML.js";
+} from "./chunk-DXJPMLTB.js";
 import {
   finalizeErrors,
   makeError
-} from "./chunk-4V63AFDR.js";
+} from "./chunk-OLQMLMTT.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding
@@ -2869,4 +2869,4 @@ export {
   deriveWeightDistribution,
   verifyHistogramValues
 };
-//# sourceMappingURL=chunk-SKDD7I5J.js.map
+//# sourceMappingURL=chunk-UU7RYO22.js.map

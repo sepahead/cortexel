@@ -1,6 +1,6 @@
 {
   "id": "neuro.analog_trace",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Analog quantities over a declared time axis",
@@ -284,7 +284,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.analog_trace", "revision": 3 },
+  "renderer": { "id": "figure.analog_trace", "revision": 4 },
 
   "budgets": {
     "maxObservations": 2000000,
@@ -319,7 +319,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.analog_trace.output_authority.v3"
+      "id": "neuro.analog_trace.output_authority.v4"
     },
     "requestPaths": [
       {

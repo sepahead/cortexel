@@ -9,8 +9,8 @@
 export const PACKAGE_VERSION = "0.10.0-dev.0";
 export const REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 export const ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-export const CONTRACT_DIGEST = "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121";
-export const CATALOG_DIGEST = "sha256:56f15211b76d250f9d1d2142bb735dd904d89222798a7ac2ed4c37b9ebd2534d";
+export const CONTRACT_DIGEST = "sha256:116ee37659546e6432fa4e4f543764da847d9a2696f2b153877ae610492b789d";
+export const CATALOG_DIGEST = "sha256:4f534010ee514ffe9c1c9a9d6be365d7bdb7289e54008f2fab0e2df81fe0e001";
 export const STABLE_SKILL_COUNT = 19;
 
 export interface BuildIdentity {

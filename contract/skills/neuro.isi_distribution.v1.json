@@ -1,6 +1,6 @@
 {
   "id": "neuro.isi_distribution",
-  "revision": 3,
+  "revision": 4,
   "status": "stable",
   "releaseReady": false,
   "title": "Inter-spike interval distribution",
@@ -247,7 +247,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.distribution", "revision": 3 },
+  "renderer": { "id": "figure.distribution", "revision": 4 },
 
   "budgets": {
     "maxObservations": 2000000,
@@ -271,7 +271,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.isi_distribution.output_authority.v3"
+      "id": "neuro.isi_distribution.output_authority.v4"
     },
     "requestPaths": [
       {

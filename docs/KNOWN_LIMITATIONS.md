@@ -19,13 +19,15 @@ The machine-readable state of every release gate is in
   binning, population-rate, ISI, correlogram, and topology rules. That is useful unit
   evidence, but it is not an independent golden corpus for every stable contract.
   *Gates: R031–R059.*
-- **Raw-event correlogram release evidence is blocked by two known defects.** The
-  current edge-corrected rate path can count a pair from a boundary reference that
-  its `eligible_reference_events` denominator excludes, and converting two large
-  absolute event times separately can round away a small nonzero lag before bin
-  assignment. Hand-authored histogram input is not affected by those two raw-event
-  derivation defects. Release certification for `neuro.correlogram` remains blocked
-  until numerator eligibility and difference-before-conversion regressions pass.
+- **Raw-event correlogram has internal derivation evidence, not release certification.**
+  Revision 4 classifies the exact typed `target - reference` difference before one
+  rounded conversion, refuses a conversion that would change bins, and uses the same
+  reference-ordinal eligibility subset for corrected numerators and denominators.
+  Hand vectors, a randomized exact-integer oracle, boundary regressions, and an
+  independently implemented OutputAuthority evaluator exercise those rules. They are
+  still repository-local evidence: no version-pinned NEST or Elephant differential
+  corpus has run, so `neuro.correlogram` remains `releaseReady: false` and the external
+  certification gates remain `NOT_RUN`.
   *Gates: R034, R036–R038, R053.*
 - **Multi-rank NEST topology is not certified.** The MPI scope rules are validated
   against hand vectors and the scope validator; they have not been run against a real
@@ -40,11 +42,13 @@ The machine-readable state of every release gate is in
 
 ## Rendering
 
-- **Accessibility conformance is not established and the current renderers have
-  known defects.** Both SVG paths currently concatenate `<title>` and `<desc>` as
-  one accessible name instead of exposing a separate description. The normative
-  left-axis label is horizontal and can leave the viewBox; registered/legacy
-  palettes contain role/surface pairs below their stated contrast target; several
+- **Accessibility conformance is not established.** Both SVG paths now reference
+  `<title>` as the accessible name and `<desc>` as a separate description. Normative
+  left/right axis labels are rotated around deterministic bounded pivots with bounded
+  serialized text lengths. Automated regressions establish those ARIA references and
+  headless SVG geometry only; they do not establish browser or assistive-technology
+  behavior. Registered/legacy palettes still contain role/surface pairs below their
+  stated contrast target; several
   multi-series, matrix-sign, and phase-plane distinctions remain color-only; and
   the legacy React surface lacks exact paginated DOM rows for ten of nineteen
   supported skills. The new FigureRequest tables and mandatory disclosure footer
@@ -222,9 +226,10 @@ The machine-readable state of every release gate is in
   it snapshots an exported NEST spike-recorder object, requires the recorded sender universe
   (never inferring it), requires the top-level device-status `n_events` field to be a
   non-negative safe integer exactly equal to both event-array lengths, does not assume
-  chronological events, and produces a revision-3 `neuro.spike_raster` request for
-  explicit NEST 3.9/3.10 memory output with
-  `time_in_steps: false`. The request retains `(origin + start, origin + stop]`, native
+  chronological events, and produces an unpinned `neuro.spike_raster` request for
+  explicit NEST 3.9/3.10 memory output with `time_in_steps: false`. Strict validation
+  resolves that request against the installed skill revision (currently revision 4).
+  The request retains `(origin + start, origin + stop]`, native
   binary64 milliseconds, multiplicity, and a digest of the detached export. Step/offset,
   ASCII, screen, MPI, and SIONlib paths fail closed: no contract currently preserves their
   raw clock authority. Exact arithmetic proves relations among received binary64 values;
@@ -263,11 +268,18 @@ The machine-readable state of every release gate is in
   R099–R107 remain governed by their evidence-ledger receipts.*
 - **Package-smoke authority is not a hostile process sandbox.** Prepared-state v2
   seals the exact Node executable and npm package tree, but not Node's dynamic
-  libraries, operating-system services, or the TypeScript harness runtime. POSIX
-  descendant cleanup uses a reusable numeric process-group id and covers handled
-  `TERM`/`INT`/`HUP` cancellation while a sweeper survives; same-UID signaling,
-  deliberate re-grouping, or simultaneous uncatchable death of the outer caller
-  and supervisor require external sandbox/cgroup containment. The prepared
+  libraries, operating-system services, or the TypeScript harness runtime. On the
+  ordinary path, the live wrapper group leader publishes the target result and
+  self-sweeps its group; timeout, output overflow, and handled `TERM`/`INT`/`HUP`
+  cancellation are also signaled only while that leader remains live. Cortexel does
+  not re-address the PGID after the leader is reaped, because POSIX provides no
+  portable closure receipt for a reusable numeric process-group id. These anchored
+  sweeps cover members that retain the caller's signal authority, but same-UID
+  signaling, deliberate re-grouping, a credential/security-label transition that
+  removes signal authority, the reuse race before an abnormal numeric-PGID fallback,
+  or simultaneous uncatchable death of the outer caller and supervisor require
+  external sandbox/cgroup containment. `EPERM` is cleanup-unproven and fails closed.
+  The prepared
   workspace's root, parent ancestry, modes, topology, and bytes are change-bound,
   but mode hardening is not a substitute for an externally enforced read-only
   mount against a hostile same-UID actor.

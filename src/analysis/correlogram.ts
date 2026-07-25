@@ -23,17 +23,41 @@ import { BUDGET_PROFILES } from '../generated/budgets.js';
 import {
   compareExactUnitSumToValue,
   convertDifference,
+  convertExactUnitSum,
   deriveExactCountRateInUnit,
+  dimensionOf,
 } from '../core/units.js';
 
 export const DEFAULT_MAX_PAIRWISE_OPERATIONS = BUDGET_PROFILES.standard.pairwiseOperations;
 
-export class PairwiseBudgetExceededError extends Error {
+export type CorrelogramDerivationErrorCode =
+  | 'RESOURCE_PAIRWISE_EXCEEDED'
+  | 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE'
+  | 'INTERNAL_INVARIANT_VIOLATED';
+
+/** Typed failure boundary for the exact raw-event kernel. */
+export class CorrelogramDerivationError extends Error {
+  readonly code: CorrelogramDerivationErrorCode;
+  readonly instancePath: string;
+
+  constructor(code: CorrelogramDerivationErrorCode, instancePath: string, message: string) {
+    super(message);
+    this.name = 'CorrelogramDerivationError';
+    this.code = code;
+    this.instancePath = instancePath;
+  }
+}
+
+export class PairwiseBudgetExceededError extends CorrelogramDerivationError {
   readonly limit: number;
   readonly observedLowerBound: number;
 
   constructor(limit: number, observedLowerBound: number) {
-    super(`correlogram pair count exceeds ${limit}`);
+    super(
+      'RESOURCE_PAIRWISE_EXCEEDED',
+      '/maximumPairwiseOperations',
+      `correlogram pair count exceeds ${limit}`,
+    );
     this.name = 'PairwiseBudgetExceededError';
     this.limit = limit;
     this.observedLowerBound = observedLowerBound;
@@ -51,24 +75,39 @@ export interface CorrelogramPairAccounting {
   readonly sameEventSelfPairCountExcluded: number;
 }
 
+export interface PrebinnedCorrelogramPairAccounting {
+  /** Full role Cartesian product, before the declared same-record exclusion. */
+  readonly candidatePairCount: number;
+  /** Exact sum of the caller's declared per-bin numerators. */
+  readonly countedPairCount: number;
+  /** Non-self candidate pairs absent from the declared numerator. */
+  readonly notCountedPairCount: number;
+  /** Exactly one per declared source event in auto mode; zero in cross mode. */
+  readonly sameEventSelfPairCountExcluded: number;
+  /** Aggregate counts cannot identify why an absent pair was not counted. */
+  readonly notCountedPairBreakdown: {
+    readonly kind: 'unavailable_from_prebinned_input';
+  };
+}
+
 function requireExactCount(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
   }
 }
 
-/**
- * Derive the one exact pair partition used by raw and pre-binned products.
- *
- * The out-of-range term is not caller authority. It is the unique remainder in
- * candidate = counted + out-of-range + excluded-self-pairs.
- */
-export function deriveCorrelogramPairAccounting(
+/** Derive the exact candidate/count/other/self partition shared by public views. */
+function deriveCorrelogramPairAccountingBase(
   referenceEventCount: number,
   targetEventCount: number,
   kind: 'auto' | 'cross',
   countedPairCount: number,
-): CorrelogramPairAccounting {
+): {
+  readonly candidatePairCount: number;
+  readonly countedPairCount: number;
+  readonly notCountedPairCount: number;
+  readonly sameEventSelfPairCountExcluded: number;
+} {
   requireExactCount(referenceEventCount, 'reference event count');
   requireExactCount(targetEventCount, 'target event count');
   requireExactCount(countedPairCount, 'counted pair count');
@@ -79,8 +118,8 @@ export function deriveCorrelogramPairAccounting(
   const candidate = BigInt(referenceEventCount) * BigInt(targetEventCount);
   const selfPairs = kind === 'auto' ? BigInt(referenceEventCount) : 0n;
   const counted = BigInt(countedPairCount);
-  const outOfRange = candidate - selfPairs - counted;
-  if (outOfRange < 0n) {
+  const notCounted = candidate - selfPairs - counted;
+  if (notCounted < 0n) {
     throw new RangeError(
       'counted pairs exceed the candidate role product after the auto self-pair exclusion',
     );
@@ -92,8 +131,49 @@ export function deriveCorrelogramPairAccounting(
   return {
     candidatePairCount: Number(candidate),
     countedPairCount,
-    outOfRangePairCount: Number(outOfRange),
+    notCountedPairCount: Number(notCounted),
     sameEventSelfPairCountExcluded: Number(selfPairs),
+  };
+}
+
+export function deriveCorrelogramPairAccounting(
+  referenceEventCount: number,
+  targetEventCount: number,
+  kind: 'auto' | 'cross',
+  countedPairCount: number,
+): CorrelogramPairAccounting {
+  const accounting = deriveCorrelogramPairAccountingBase(
+    referenceEventCount,
+    targetEventCount,
+    kind,
+    countedPairCount,
+  );
+  return {
+    candidatePairCount: accounting.candidatePairCount,
+    countedPairCount: accounting.countedPairCount,
+    // The legacy raw-count kernel has no edge correction, so its entire
+    // non-self remainder is genuinely outside the published lag ladder.
+    outOfRangePairCount: accounting.notCountedPairCount,
+    sameEventSelfPairCountExcluded: accounting.sameEventSelfPairCountExcluded,
+  };
+}
+
+/** Derive only the pair-accounting facts aggregate input can actually establish. */
+export function derivePrebinnedCorrelogramPairAccounting(
+  referenceEventCount: number,
+  targetEventCount: number,
+  kind: 'auto' | 'cross',
+  countedPairCount: number,
+): PrebinnedCorrelogramPairAccounting {
+  const accounting = deriveCorrelogramPairAccountingBase(
+    referenceEventCount,
+    targetEventCount,
+    kind,
+    countedPairCount,
+  );
+  return {
+    ...accounting,
+    notCountedPairBreakdown: { kind: 'unavailable_from_prebinned_input' },
   };
 }
 
@@ -118,26 +198,43 @@ export interface CorrelogramTypedWindow {
   readonly boundary: CorrelogramWindowBoundary;
 }
 
-/**
- * Count reference events whose entire shifted half-open lag bin lies in the window.
- *
- * Unit-bearing sums are compared exactly from the received binary64 values. The
- * calculation never rounds `reference + edge` into an intermediate number that could
- * move a large-origin event across the window boundary.
- */
-export function deriveEligibleCorrelogramReferenceCounts(
+interface CorrelogramEligibilityInterval {
+  readonly lowerBin: number;
+  readonly upperBinExclusive: number;
+}
+
+function firstTrueEdge(
+  edges: readonly number[],
+  predicate: (edge: number) => boolean,
+): number {
+  let lower = 0;
+  let upper = edges.length;
+  while (lower < upper) {
+    const middle = lower + Math.floor((upper - lower) / 2);
+    if (predicate(edges[middle])) upper = middle;
+    else lower = middle + 1;
+  }
+  return lower;
+}
+
+function requireEligibilityInputs(
   referenceTimes: readonly number[],
-  referenceTimeUnit: string,
   binEdges: readonly number[],
-  binEdgeUnit: string,
   window: CorrelogramTypedWindow,
-): number[] {
+): void {
   if (
     !Number.isFinite(window.start) ||
     !Number.isFinite(window.stop) ||
     !(window.stop > window.start)
   ) {
     throw new RangeError('correlogram eligibility window must be finite and ordered');
+  }
+  if (
+    window.boundary !== '[start,stop)' &&
+    window.boundary !== '[start,stop]' &&
+    window.boundary !== '(start,stop]'
+  ) {
+    throw new RangeError('correlogram eligibility window has an unsupported boundary');
   }
   if (binEdges.length < 2) {
     throw new RangeError('correlogram eligibility requires at least two bin edges');
@@ -155,8 +252,63 @@ export function deriveEligibleCorrelogramReferenceCounts(
       throw new RangeError(`correlogram reference time ${index} must be finite`);
     }
   }
+}
 
+/** The exact contiguous lag-bin interval supported by one reference event. */
+function correlogramEligibilityInterval(
+  time: number,
+  referenceTimeUnit: string,
+  binEdges: readonly number[],
+  binEdgeUnit: string,
+  window: CorrelogramTypedWindow,
+): CorrelogramEligibilityInterval {
   const openStart = window.boundary === '(start,stop]';
+  const binCount = binEdges.length - 1;
+  const firstAdmissibleLowerEdge = firstTrueEdge(binEdges, (edge) => {
+    const comparison = compareExactUnitSumToValue(
+      [
+        { value: time, unit: referenceTimeUnit },
+        { value: edge, unit: binEdgeUnit },
+      ],
+      { value: window.start, unit: window.unit },
+    );
+    return openStart ? comparison > 0 : comparison >= 0;
+  });
+  const firstUpperEdgeBeyondStop = firstTrueEdge(binEdges, (edge) =>
+    compareExactUnitSumToValue(
+      [
+        { value: time, unit: referenceTimeUnit },
+        { value: edge, unit: binEdgeUnit },
+      ],
+      { value: window.stop, unit: window.unit },
+    ) > 0);
+
+  // If edge j is the final edge <= stop, every bin k with k+1 <= j has an
+  // admissible (excluded) upper endpoint. Thus j itself is the exclusive bin index.
+  return {
+    lowerBin: Math.min(firstAdmissibleLowerEdge, binCount),
+    upperBinExclusive: Math.max(
+      0,
+      Math.min(firstUpperEdgeBeyondStop - 1, binCount),
+    ),
+  };
+}
+
+/**
+ * Count reference events whose entire shifted half-open lag bin lies in the window.
+ *
+ * Unit-bearing sums are compared exactly from the received binary64 values. The
+ * calculation never rounds `reference + edge` into an intermediate number that could
+ * move a large-origin event across the window boundary.
+ */
+export function deriveEligibleCorrelogramReferenceCounts(
+  referenceTimes: readonly number[],
+  referenceTimeUnit: string,
+  binEdges: readonly number[],
+  binEdgeUnit: string,
+  window: CorrelogramTypedWindow,
+): number[] {
+  requireEligibilityInputs(referenceTimes, binEdges, window);
   const binCount = binEdges.length - 1;
   const deltas = new Array<number>(binCount + 1).fill(0);
 
@@ -164,43 +316,13 @@ export function deriveEligibleCorrelogramReferenceCounts(
   // both exact endpoint comparisons are monotone over strictly increasing edges. Two
   // binary searches plus a difference-array update therefore replace an O(events*bins)
   // scan without changing a single boundary comparison.
-  const firstTrue = (predicate: (edge: number) => boolean): number => {
-    let lower = 0;
-    let upper = binEdges.length;
-    while (lower < upper) {
-      const middle = lower + Math.floor((upper - lower) / 2);
-      if (predicate(binEdges[middle])) upper = middle;
-      else lower = middle + 1;
-    }
-    return lower;
-  };
-
   for (const time of referenceTimes) {
-    const firstAdmissibleLowerEdge = firstTrue((edge) => {
-      const comparison = compareExactUnitSumToValue(
-        [
-          { value: time, unit: referenceTimeUnit },
-          { value: edge, unit: binEdgeUnit },
-        ],
-        { value: window.start, unit: window.unit },
-      );
-      return openStart ? comparison > 0 : comparison >= 0;
-    });
-    const firstUpperEdgeBeyondStop = firstTrue((edge) =>
-      compareExactUnitSumToValue(
-        [
-          { value: time, unit: referenceTimeUnit },
-          { value: edge, unit: binEdgeUnit },
-        ],
-        { value: window.stop, unit: window.unit },
-      ) > 0);
-
-    // If edge j is the final edge <= stop, every bin k with k+1 <= j has an
-    // admissible (excluded) upper endpoint. Thus j itself is the exclusive bin index.
-    const lowerBin = Math.min(firstAdmissibleLowerEdge, binCount);
-    const upperBinExclusive = Math.max(
-      0,
-      Math.min(firstUpperEdgeBeyondStop - 1, binCount),
+    const { lowerBin, upperBinExclusive } = correlogramEligibilityInterval(
+      time,
+      referenceTimeUnit,
+      binEdges,
+      binEdgeUnit,
+      window,
     );
     if (lowerBin < upperBinExclusive) {
       deltas[lowerBin]++;
@@ -270,6 +392,557 @@ export function deriveCorrelogramTargetRates(
       status: 'defined' as const,
     };
   });
+}
+
+export interface CorrelogramTypedBins {
+  readonly edges: readonly number[];
+  readonly unit: string;
+  readonly finalEdgeInclusive: false;
+}
+
+interface TypedEventCorrelogramCommon {
+  readonly referenceTimes: readonly number[];
+  readonly referenceTimeUnit: string;
+  readonly bins: CorrelogramTypedBins;
+  readonly edgeCorrection: 'none' | 'eligible_reference_events';
+  readonly window?: CorrelogramTypedWindow;
+  readonly maximumPairwiseOperations?: number;
+}
+
+export type TypedEventCorrelogramInput =
+  | (TypedEventCorrelogramCommon & {
+      readonly kind: 'auto';
+      /** Auto role identity comes only from the one reference array and its ordinals. */
+      readonly targetTimes?: never;
+      readonly targetTimeUnit?: never;
+    })
+  | (TypedEventCorrelogramCommon & {
+      readonly kind: 'cross';
+      readonly targetTimes: readonly number[];
+      readonly targetTimeUnit: string;
+    });
+
+export interface TypedCorrelogramPairAccounting {
+  /** Full role Cartesian product, before every exclusion. */
+  readonly candidatePairCount: number;
+  /** Exact sum of the published, optionally edge-corrected bin numerators. */
+  readonly countedPairCount: number;
+  /** Non-self candidate pairs absent from the published numerator. */
+  readonly notCountedPairCount: number;
+  /** Exactly one role pair per source ordinal in auto mode, zero in cross mode. */
+  readonly sameEventSelfPairCountExcluded: number;
+  readonly notCountedPairBreakdown: {
+    readonly kind: 'raw_exact';
+    /** Non-self pairs outside the exact half-open lag axis. */
+    readonly lagOutOfRangePairCount: number;
+    /** In-range pairs whose reference ordinal cannot support the classified bin. */
+    readonly edgeIneligibleInRangePairCount: number;
+  };
+}
+
+export interface TypedEventCorrelogramResult {
+  readonly counts: readonly number[];
+  readonly eligibleReferenceEventCounts: readonly number[];
+  readonly kind: 'auto' | 'cross';
+  readonly totalPairs: number;
+  readonly selfPairsExcluded: number;
+  readonly zeroLagRetainedDistinctPairs: number;
+  readonly pairAccounting: TypedCorrelogramPairAccounting;
+  readonly receipt: {
+    readonly operation: 'correlogram.typed_pair_count';
+    readonly algorithmRevision: 2;
+    readonly lagConvention: 'target_time - reference_time';
+    readonly lagArithmetic: 'exact_typed_difference_classify_then_one_round';
+    readonly pairIteration: 'stable_time_then_source_ordinal_exact_target_slices';
+    readonly binBoundary: 'left_closed_right_open';
+    readonly positiveOuterEdge: 'excluded';
+    readonly edgeCorrection: 'none' | 'eligible_reference_events';
+    readonly kind: 'auto' | 'cross';
+    readonly selfPairPolicy: string;
+    readonly pairAccounting: TypedCorrelogramPairAccounting;
+  };
+}
+
+function correlogramFailure(
+  code: CorrelogramDerivationErrorCode,
+  instancePath: string,
+  message: string,
+): never {
+  throw new CorrelogramDerivationError(code, instancePath, message);
+}
+
+function requireTypedTimeUnit(unit: string, instancePath: string): void {
+  if (dimensionOf(unit) !== 'time') {
+    correlogramFailure(
+      'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+      instancePath,
+      `${instancePath} must name a registered physical time unit.`,
+    );
+  }
+}
+
+function requireFiniteTypedTimes(values: readonly number[], instancePath: string): void {
+  for (let index = 0; index < values.length; index++) {
+    if (!Number.isFinite(values[index])) {
+      correlogramFailure(
+        'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+        `${instancePath}/${index}`,
+        `correlogram event time ${index} must be finite.`,
+      );
+    }
+  }
+}
+
+function requireTypedCorrelogramBins(bins: CorrelogramTypedBins): void {
+  if (bins.finalEdgeInclusive !== false) {
+    correlogramFailure(
+      'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+      '/bins/finalEdgeInclusive',
+      'typed correlogram bins must be left-closed/right-open, including the final edge.',
+    );
+  }
+  requireTypedTimeUnit(bins.unit, '/bins/unit');
+  if (bins.edges.length < 2) {
+    correlogramFailure(
+      'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+      '/bins/edges',
+      'typed correlogram classification requires at least two bin edges.',
+    );
+  }
+  for (let index = 0; index < bins.edges.length; index++) {
+    if (!Number.isFinite(bins.edges[index])) {
+      correlogramFailure(
+        'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+        `/bins/edges/${index}`,
+        `typed correlogram bin edge ${index} must be finite.`,
+      );
+    }
+    if (index > 0 && !(bins.edges[index] > bins.edges[index - 1])) {
+      correlogramFailure(
+        'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+        '/bins/edges',
+        'typed correlogram bin edges must be strictly increasing.',
+      );
+    }
+  }
+}
+
+function exactTypedLagBinIndex(
+  terms: readonly { readonly value: number; readonly unit: string }[],
+  bins: CorrelogramTypedBins,
+): number {
+  const compare = (edge: number): -1 | 0 | 1 => compareExactUnitSumToValue(
+    terms,
+    { value: edge, unit: bins.unit },
+  );
+  const finalIndex = bins.edges.length - 1;
+  if (compare(bins.edges[0]) < 0 || compare(bins.edges[finalIndex]) >= 0) return -1;
+
+  let lower = 0;
+  let upper = finalIndex;
+  while (lower < upper) {
+    const middle = Math.floor((lower + upper + 1) / 2);
+    if (compare(bins.edges[middle]) >= 0) lower = middle;
+    else upper = middle - 1;
+  }
+  return lower;
+}
+
+interface IndexedCorrelogramEvent {
+  readonly time: number;
+  readonly sourceOrdinal: number;
+}
+
+function stableTimeOrderedEvents(values: readonly number[]): IndexedCorrelogramEvent[] {
+  return values
+    .map((time, sourceOrdinal) => ({ time, sourceOrdinal }))
+    .sort((left, right) => left.time < right.time
+      ? -1
+      : left.time > right.time
+        ? 1
+        : left.sourceOrdinal - right.sourceOrdinal);
+}
+
+/** First target whose exact typed `target - reference` is at least the given edge. */
+function firstTargetAtOrAboveLag(
+  target: readonly IndexedCorrelogramEvent[],
+  targetTimeUnit: string,
+  reference: number,
+  referenceTimeUnit: string,
+  edge: number,
+  edgeUnit: string,
+): number {
+  let lower = 0;
+  let upper = target.length;
+  while (lower < upper) {
+    const middle = lower + Math.floor((upper - lower) / 2);
+    const comparison = compareExactUnitSumToValue(
+      [
+        { value: target[middle].time, unit: targetTimeUnit },
+        { value: -reference, unit: referenceTimeUnit },
+      ],
+      { value: edge, unit: edgeUnit },
+    );
+    if (comparison >= 0) upper = middle;
+    else lower = middle + 1;
+  }
+  return lower;
+}
+
+interface CorrelogramTargetSlice {
+  readonly reference: IndexedCorrelogramEvent;
+  readonly lowerTarget: number;
+  readonly upperTargetExclusive: number;
+}
+
+function typedEligibility(
+  referenceTimes: readonly number[],
+  referenceTimeUnit: string,
+  bins: CorrelogramTypedBins,
+  edgeCorrection: TypedEventCorrelogramInput['edgeCorrection'],
+  window: CorrelogramTypedWindow | undefined,
+): {
+  readonly intervals: readonly CorrelogramEligibilityInterval[];
+  readonly counts: readonly number[];
+} {
+  const binCount = bins.edges.length - 1;
+  if (edgeCorrection === 'none') {
+    return {
+      intervals: referenceTimes.map(() => ({ lowerBin: 0, upperBinExclusive: binCount })),
+      counts: new Array<number>(binCount).fill(referenceTimes.length),
+    };
+  }
+  if (!window) {
+    correlogramFailure(
+      'INTERNAL_INVARIANT_VIOLATED',
+      '/window',
+      'eligible-reference edge correction requires one typed observation window.',
+    );
+  }
+
+  let intervals: CorrelogramEligibilityInterval[];
+  try {
+    requireEligibilityInputs(referenceTimes, bins.edges, window);
+    intervals = referenceTimes.map((time) => correlogramEligibilityInterval(
+      time,
+      referenceTimeUnit,
+      bins.edges,
+      bins.unit,
+      window,
+    ));
+  } catch (error) {
+    if (error instanceof CorrelogramDerivationError) throw error;
+    correlogramFailure(
+      'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+      '/window',
+      `typed correlogram eligibility cannot be represented exactly (${error instanceof Error ? error.message : 'unknown numeric failure'}).`,
+    );
+  }
+
+  const deltas = new Array<number>(binCount + 1).fill(0);
+  for (const interval of intervals) {
+    if (interval.lowerBin < interval.upperBinExclusive) {
+      deltas[interval.lowerBin]++;
+      deltas[interval.upperBinExclusive]--;
+    }
+  }
+  const counts = new Array<number>(binCount);
+  let active = 0;
+  for (let index = 0; index < binCount; index++) {
+    active += deltas[index];
+    counts[index] = active;
+  }
+  return { intervals, counts };
+}
+
+/**
+ * Derive an exact raw-event correlogram without converting either absolute clock first.
+ *
+ * Stable per-train ordering plus exact typed target searches preflight the numerator and
+ * enumerate only admitted pairs. Every admitted exact lag is classified before it is
+ * rounded once for representability; a rounded value that would enter a different bin is
+ * refused. In corrected mode, one reference-ordinal eligibility interval is the shared
+ * authority for both the numerator and its per-bin denominator.
+ */
+export function deriveTypedEventCorrelogram(
+  input: TypedEventCorrelogramInput,
+): TypedEventCorrelogramResult {
+  const maximumPairwiseOperations =
+    input.maximumPairwiseOperations ?? DEFAULT_MAX_PAIRWISE_OPERATIONS;
+  if (
+    !Number.isSafeInteger(maximumPairwiseOperations) ||
+    maximumPairwiseOperations < 0 ||
+    maximumPairwiseOperations >= Number.MAX_SAFE_INTEGER
+  ) {
+    correlogramFailure(
+      'INTERNAL_INVARIANT_VIOLATED',
+      '/maximumPairwiseOperations',
+      'correlogram pairwiseOperations must be a non-negative safe integer below Number.MAX_SAFE_INTEGER.',
+    );
+  }
+
+  requireTypedCorrelogramBins(input.bins);
+  requireTypedTimeUnit(input.referenceTimeUnit, '/referenceTimeUnit');
+  requireFiniteTypedTimes(input.referenceTimes, '/referenceTimes');
+  if (input.window) {
+    requireTypedTimeUnit(input.window.unit, '/window/unit');
+  }
+  const targetTimes = input.kind === 'auto' ? input.referenceTimes : input.targetTimes;
+  const targetTimeUnit = input.kind === 'auto'
+    ? input.referenceTimeUnit
+    : input.targetTimeUnit;
+  requireTypedTimeUnit(targetTimeUnit, '/targetTimeUnit');
+  requireFiniteTypedTimes(targetTimes, '/targetTimes');
+
+  const candidate = BigInt(input.referenceTimes.length) * BigInt(targetTimes.length);
+  if (candidate > BigInt(Number.MAX_SAFE_INTEGER)) {
+    correlogramFailure(
+      'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+      '/pairAccounting/candidatePairCount',
+      'the raw correlogram candidate role product exceeds the exact JSON safe-integer domain.',
+    );
+  }
+  const candidatePairCount = Number(candidate);
+  const eligibility = typedEligibility(
+    input.referenceTimes,
+    input.referenceTimeUnit,
+    input.bins,
+    input.edgeCorrection,
+    input.window,
+  );
+  const referenceEvents = stableTimeOrderedEvents(input.referenceTimes);
+  const targetEvents = input.kind === 'auto'
+    ? referenceEvents
+    : stableTimeOrderedEvents(targetTimes);
+  const lagLower = input.bins.edges[0];
+  const lagUpper = input.bins.edges[input.bins.edges.length - 1];
+  const slices: CorrelogramTargetSlice[] = [];
+  let countedPairCount = 0;
+  let inRangePairCount = 0;
+
+  try {
+    for (
+      let referenceSortedOrdinal = 0;
+      referenceSortedOrdinal < referenceEvents.length;
+      referenceSortedOrdinal++
+    ) {
+      const reference = referenceEvents[referenceSortedOrdinal];
+      const inRangeLower = firstTargetAtOrAboveLag(
+        targetEvents,
+        targetTimeUnit,
+        reference.time,
+        input.referenceTimeUnit,
+        lagLower,
+        input.bins.unit,
+      );
+      const inRangeUpper = firstTargetAtOrAboveLag(
+        targetEvents,
+        targetTimeUnit,
+        reference.time,
+        input.referenceTimeUnit,
+        lagUpper,
+        input.bins.unit,
+      );
+      const selfInRange = input.kind === 'auto' &&
+        referenceSortedOrdinal >= inRangeLower &&
+        referenceSortedOrdinal < inRangeUpper;
+      inRangePairCount += inRangeUpper - inRangeLower - (selfInRange ? 1 : 0);
+
+      const eligible = eligibility.intervals[reference.sourceOrdinal];
+      let lowerTarget: number;
+      let upperTargetExclusive: number;
+      if (eligible.lowerBin >= eligible.upperBinExclusive) {
+        lowerTarget = 0;
+        upperTargetExclusive = 0;
+      } else if (input.edgeCorrection === 'none') {
+        lowerTarget = inRangeLower;
+        upperTargetExclusive = inRangeUpper;
+      } else {
+        lowerTarget = firstTargetAtOrAboveLag(
+          targetEvents,
+          targetTimeUnit,
+          reference.time,
+          input.referenceTimeUnit,
+          input.bins.edges[eligible.lowerBin],
+          input.bins.unit,
+        );
+        upperTargetExclusive = firstTargetAtOrAboveLag(
+          targetEvents,
+          targetTimeUnit,
+          reference.time,
+          input.referenceTimeUnit,
+          input.bins.edges[eligible.upperBinExclusive],
+          input.bins.unit,
+        );
+      }
+      const selfInNumerator = input.kind === 'auto' &&
+        referenceSortedOrdinal >= lowerTarget &&
+        referenceSortedOrdinal < upperTargetExclusive;
+      const admitted = upperTargetExclusive - lowerTarget - (selfInNumerator ? 1 : 0);
+      if (admitted < 0) {
+        correlogramFailure(
+          'INTERNAL_INVARIANT_VIOLATED',
+          '/pairAccounting',
+          'the exact correlogram target slice produced a negative admitted-pair count.',
+        );
+      }
+      if (countedPairCount + admitted > maximumPairwiseOperations) {
+        throw new PairwiseBudgetExceededError(
+          maximumPairwiseOperations,
+          countedPairCount + admitted,
+        );
+      }
+      countedPairCount += admitted;
+      slices.push({
+        reference,
+        lowerTarget,
+        upperTargetExclusive,
+      });
+    }
+  } catch (error) {
+    if (error instanceof CorrelogramDerivationError) throw error;
+    correlogramFailure(
+      'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+      '/bins/edges',
+      `exact typed correlogram target bounds cannot be represented (${error instanceof Error ? error.message : 'unknown numeric failure'}).`,
+    );
+  }
+
+  const sameEventSelfPairCountExcluded = input.kind === 'auto'
+    ? input.referenceTimes.length
+    : 0;
+  const lagOutOfRangePairCount =
+    candidatePairCount - sameEventSelfPairCountExcluded - inRangePairCount;
+  const edgeIneligibleInRangePairCount = inRangePairCount - countedPairCount;
+  if (lagOutOfRangePairCount < 0 || edgeIneligibleInRangePairCount < 0) {
+    correlogramFailure(
+      'INTERNAL_INVARIANT_VIOLATED',
+      '/pairAccounting',
+      'exact typed target slices produced a negative pair-accounting remainder.',
+    );
+  }
+
+  const counts = new Array<number>(input.bins.edges.length - 1).fill(0);
+  let filledPairCount = 0;
+  let zeroLagRetainedDistinctPairs = 0;
+
+  for (const slice of slices) {
+    for (
+      let targetSortedOrdinal = slice.lowerTarget;
+      targetSortedOrdinal < slice.upperTargetExclusive;
+      targetSortedOrdinal++
+    ) {
+      const target = targetEvents[targetSortedOrdinal];
+      if (input.kind === 'auto' && slice.reference.sourceOrdinal === target.sourceOrdinal) {
+        continue;
+      }
+      const terms = [
+        { value: target.time, unit: targetTimeUnit },
+        { value: -slice.reference.time, unit: input.referenceTimeUnit },
+      ] as const;
+      let exactIndex: number;
+      let roundedLag: number;
+      try {
+        exactIndex = exactTypedLagBinIndex(terms, input.bins);
+        if (exactIndex < 0) {
+          correlogramFailure(
+            'INTERNAL_INVARIANT_VIOLATED',
+            '/pairAccounting',
+            `an exact target slice admitted an out-of-range pair at reference source ordinal ${slice.reference.sourceOrdinal} and target source ordinal ${target.sourceOrdinal}.`,
+          );
+        }
+        roundedLag = convertExactUnitSum(terms, input.bins.unit);
+      } catch (error) {
+        if (error instanceof CorrelogramDerivationError) throw error;
+        correlogramFailure(
+          'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+          `/targetTimes/${target.sourceOrdinal}`,
+          `typed lag for reference source ordinal ${slice.reference.sourceOrdinal} and target source ordinal ${target.sourceOrdinal} cannot be represented (${error instanceof Error ? error.message : 'unknown numeric failure'}).`,
+        );
+      }
+      const roundedIndex = binIndex(roundedLag, input.bins);
+      if (roundedIndex !== exactIndex) {
+        correlogramFailure(
+          'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+          `/targetTimes/${target.sourceOrdinal}`,
+          `the exact typed lag for reference source ordinal ${slice.reference.sourceOrdinal} and target source ordinal ${target.sourceOrdinal} classifies into bin ${exactIndex}, but its one rounded ${input.bins.unit} value classifies into bin ${roundedIndex}.`,
+        );
+      }
+      counts[exactIndex]++;
+      filledPairCount++;
+      try {
+        if (compareExactUnitSumToValue(terms, { value: 0, unit: input.bins.unit }) === 0) {
+          zeroLagRetainedDistinctPairs++;
+        }
+      } catch (error) {
+        correlogramFailure(
+          'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+          `/targetTimes/${target.sourceOrdinal}`,
+          `the exact typed zero-lag comparison failed (${error instanceof Error ? error.message : 'unknown numeric failure'}).`,
+        );
+      }
+    }
+  }
+
+  if (filledPairCount !== countedPairCount) {
+    correlogramFailure(
+      'INTERNAL_INVARIANT_VIOLATED',
+      '/pairAccounting/countedPairCount',
+      'the exact typed correlogram fill pass disagreed with its bounded target-slice preflight.',
+    );
+  }
+
+  const notCountedPairCount =
+    candidatePairCount - countedPairCount - sameEventSelfPairCountExcluded;
+  if (
+    countedPairCount +
+      lagOutOfRangePairCount +
+      edgeIneligibleInRangePairCount +
+      sameEventSelfPairCountExcluded !==
+    candidatePairCount
+  ) {
+    correlogramFailure(
+      'INTERNAL_INVARIANT_VIOLATED',
+      '/pairAccounting',
+      'typed correlogram pair accounting did not partition the candidate role product.',
+    );
+  }
+  const pairAccounting: TypedCorrelogramPairAccounting = {
+    candidatePairCount,
+    countedPairCount,
+    notCountedPairCount,
+    sameEventSelfPairCountExcluded,
+    notCountedPairBreakdown: {
+      kind: 'raw_exact',
+      lagOutOfRangePairCount,
+      edgeIneligibleInRangePairCount,
+    },
+  };
+  return {
+    counts,
+    eligibleReferenceEventCounts: eligibility.counts,
+    kind: input.kind,
+    totalPairs: countedPairCount,
+    selfPairsExcluded: sameEventSelfPairCountExcluded,
+    zeroLagRetainedDistinctPairs,
+    pairAccounting,
+    receipt: {
+      operation: 'correlogram.typed_pair_count',
+      algorithmRevision: 2,
+      lagConvention: 'target_time - reference_time',
+      lagArithmetic: 'exact_typed_difference_classify_then_one_round',
+      pairIteration: 'stable_time_then_source_ordinal_exact_target_slices',
+      binBoundary: 'left_closed_right_open',
+      positiveOuterEdge: 'excluded',
+      edgeCorrection: input.edgeCorrection,
+      kind: input.kind,
+      selfPairPolicy:
+        input.kind === 'auto'
+          ? 'same source ordinal excluded; distinct coincident source ordinals retained as ordered pairs'
+          : 'no self-pair exclusion (cross-correlogram of two declared roles)',
+      pairAccounting,
+    },
+  };
 }
 
 function sortedTrains(

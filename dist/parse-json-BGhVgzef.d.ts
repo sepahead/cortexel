@@ -1,5 +1,5 @@
-import { D as DisclosureId, R as Result } from './errors-DUbFUu6n.cjs';
-import { B as BudgetProfileId } from './request-BfsYJWaE.cjs';
+import { D as DisclosureId, R as Result } from './errors-DUbFUu6n.js';
+import { B as BudgetProfileId } from './request-BDtRhnDs.js';
 
 /**
  * Resource limits.
@@ -79,10 +79,9 @@ declare function restrictLimits(base: BudgetLimits, overrides: Partial<BudgetLim
  * boolean — because none of those change the facts these rules read.
  *
  * The exact same text is then written into four places — the artifact JSON, the
- * visible SVG footer, the SVG accessible description, and the table metadata — and a
- * test asserts all four agree. A disclosure that is visible but not accessible, or
- * accessible but not in the archive, would be a disclosure that some readers do not
- * get.
+ * visible SVG footer, the programmatically referenced SVG description, and the table
+ * metadata — and a test asserts all four agree. An omission from any one serialized
+ * surface would violate that structural parity.
  */
 
 interface Disclosure {

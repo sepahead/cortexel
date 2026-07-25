@@ -357,7 +357,14 @@ function emitMark(writer: SvgWriter, mark: Mark, colors: Record<string, string>)
   }
 }
 
-function emitText(writer: SvgWriter, mark: TextMark): void {
+interface RotatedTextLayout {
+  readonly angle: -90 | 90;
+  readonly pivotX: number;
+  readonly pivotY: number;
+  readonly textLength: number;
+}
+
+function emitText(writer: SvgWriter, mark: TextMark, rotation?: RotatedTextLayout): void {
   const attrs: [string, string | number][] = [
     ['x', formatCoordinate(mark.x)],
     ['y', formatCoordinate(mark.y)],
@@ -366,13 +373,41 @@ function emitText(writer: SvgWriter, mark: TextMark): void {
     ['fill', mark.fill],
     ['font-family', 'sans-serif'],
   ];
-  // Decorative text is hidden from assistive technology; the accessible summary and table
-  // carry the exact values instead.
+  // Decorative text is marked aria-hidden; the referenced description and returned
+  // table carry the exact values separately. This is structural, not AT evidence.
   if (mark.decorative) attrs.push(['aria-hidden', 'true']);
+  if (rotation) {
+    const pivot = `${formatCoordinate(rotation.pivotX)} ${formatCoordinate(rotation.pivotY)}`;
+    attrs.push(
+      ['transform', `rotate(${rotation.angle} ${pivot})`],
+      ['textLength', formatCoordinate(rotation.textLength)],
+      ['lengthAdjust', 'spacingAndGlyphs'],
+    );
+  }
   writer.text('text', mark.text, attrs);
 }
 
-function emitAxis(writer: SvgWriter, axis: Axis, panel: Panel, colors: Record<string, string>): void {
+const AXIS_LABEL_FONT_SIZE = 12;
+const AXIS_LABEL_VIEWPORT_INSET = AXIS_LABEL_FONT_SIZE;
+const AXIS_LABEL_APPROXIMATE_ADVANCE = AXIS_LABEL_FONT_SIZE * 0.6;
+
+function codePointCount(value: string): number {
+  let count = 0;
+  for (let index = 0; index < value.length; count++) {
+    const codePoint = value.codePointAt(index)!;
+    index += codePoint > 0xffff ? 2 : 1;
+  }
+  return count;
+}
+
+function emitAxis(
+  writer: SvgWriter,
+  axis: Axis,
+  panel: Panel,
+  colors: Record<string, string>,
+  viewportWidth: number,
+  viewportHeight: number,
+): void {
   writer.open('g', [['data-axis', axis.orientation], ['aria-hidden', 'true']]);
 
   const isBottom = axis.orientation === 'bottom';
@@ -459,26 +494,56 @@ function emitAxis(writer: SvgWriter, axis: Axis, panel: Panel, colors: Record<st
     }
   }
 
-  emitText(writer, {
-    type: 'text',
-    x:
-      isBottom || isTop
-        ? panel.x + panel.width / 2
-        : isLeft
-          ? panel.x - 44
-          : panel.x + panel.width + 44,
-    y:
-      isBottom
-        ? panel.y + panel.height + 38
-        : isTop
-          ? panel.y - 28
-          : panel.y + panel.height / 2,
-    text: axis.label,
-    anchor: 'middle',
-    fontSize: 12,
-    fill: colors.text,
-    decorative: true,
-  });
+  if (isBottom || isTop) {
+    emitText(writer, {
+      type: 'text',
+      x: panel.x + panel.width / 2,
+      y: isBottom ? panel.y + panel.height + 38 : panel.y - 28,
+      text: axis.label,
+      anchor: 'middle',
+      fontSize: AXIS_LABEL_FONT_SIZE,
+      fill: colors.text,
+      decorative: true,
+    });
+  } else {
+    const unclampedX = isLeft ? panel.x - 44 : panel.x + panel.width + 44;
+    const maximumX = Math.max(
+      AXIS_LABEL_VIEWPORT_INSET,
+      viewportWidth - AXIS_LABEL_VIEWPORT_INSET,
+    );
+    const x = Math.min(maximumX, Math.max(AXIS_LABEL_VIEWPORT_INSET, unclampedX));
+    const maximumY = Math.max(AXIS_LABEL_VIEWPORT_INSET, viewportHeight - AXIS_LABEL_VIEWPORT_INSET);
+    const y = Math.min(
+      maximumY,
+      Math.max(AXIS_LABEL_VIEWPORT_INSET, panel.y + panel.height / 2),
+    );
+    const centeredViewportSpan = 2 * Math.max(0, Math.min(
+      y - AXIS_LABEL_VIEWPORT_INSET,
+      viewportHeight - AXIS_LABEL_VIEWPORT_INSET - y,
+    ));
+    const availableLength = Math.max(1, Math.min(panel.height, centeredViewportSpan));
+    const intendedLength = Math.max(
+      1,
+      codePointCount(axis.label) * AXIS_LABEL_APPROXIMATE_ADVANCE,
+    );
+    const renderedLength = Math.min(intendedLength, availableLength);
+    const angle = isLeft ? -90 : 90;
+    emitText(writer, {
+      type: 'text',
+      x,
+      y,
+      text: axis.label,
+      anchor: 'middle',
+      fontSize: AXIS_LABEL_FONT_SIZE,
+      fill: colors.text,
+      decorative: true,
+    }, {
+      angle,
+      pivotX: x,
+      pivotY: y,
+      textLength: renderedLength,
+    });
+  }
 
   writer.close('g');
 }
@@ -584,10 +649,11 @@ export function renderSvg(
     ['width', plan.width],
     ['height', plan.height],
     ['role', 'img'],
-    ['aria-labelledby', `${plan.figureId}-title ${plan.figureId}-desc`],
+    ['aria-labelledby', `${plan.figureId}-title`],
+    ['aria-describedby', `${plan.figureId}-desc`],
   ]);
 
-  // Figure-level accessible name and description, referenced by aria-labelledby.
+  // Figure-level title and description use distinct ARIA references.
   writer.text('title', plan.title, [['id', `${plan.figureId}-title`]]);
   writer.text('desc', plan.accessibility.summary, [['id', `${plan.figureId}-desc`]]);
 
@@ -729,7 +795,9 @@ export function renderSvg(
         decorative: true,
       });
     } else {
-      for (const axis of panel.axes) emitAxis(writer, axis, panel, colors);
+      for (const axis of panel.axes) {
+        emitAxis(writer, axis, panel, colors, plan.width, plan.height);
+      }
       for (const mark of panel.marks) {
         emitMark(writer, mark, colors);
       }

@@ -203,14 +203,23 @@ Job Object/process-tree implementation. Release harnesses on macOS or Linux must
 keep the two phases explicit:
 
 The supervisor starts a trusted gated wrapper in a new process group. It publishes
-the group identifier before the wrapper can start reviewed code. Normal completion,
-failure, timeout, output overflow, and handled `TERM`, `INT`, or `HUP` cancellation
-each end with a terminal group sweep and a closure check. If the supervisor fails
-after publication while the outer caller survives, the outer caller closes the
-published group and rejects the command. This mechanism cleans descendants that
-stay in the group. It does not prevent a same-UID process from signaling its
-parents, deliberately creating another session or process group, or exploiting
-the fact that portable POSIX cleanup identifies a group by a reusable numeric PGID.
+the group identifier before the wrapper can start reviewed code. On ordinary target
+completion, the still-live wrapper publishes a canonical result over a private pipe
+and then sends `SIGKILL` to its own group while its leader identity still pins the
+PGID. Timeout, output overflow, and handled `TERM`, `INT`, or `HUP` cancellation are
+likewise signaled only while the supervisor still observes that direct leader as
+live. No layer probes or signals the PGID after the wrapper leader has been reaped:
+POSIX exposes no portable closure receipt for a now-reusable process-group number.
+These anchored sweeps cover group members that retain the caller's signal authority;
+`EPERM` means that authority was lost and the evidence fails closed.
+
+If the supervisor fails after publication while the outer caller survives and the
+wrapper may have started reviewed code, the caller attempts one abnormal-only
+terminal sweep and rejects the command. That fallback necessarily addresses a
+numeric PGID and retains a residual reuse race. The boundary does not prevent a
+same-UID process from signaling its parents, deliberately creating another session
+or process group, or changing credentials or a security label so group cleanup no
+longer reaches it.
 Simultaneous uncatchable death of both the outer caller and supervisor can also
 leave the detached group without a sweeper. Use an external OS sandbox/cgroup (or
 equivalent process-lifetime authority) when the release threat model includes

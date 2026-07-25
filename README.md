@@ -25,9 +25,10 @@
 **Cortexel** turns a strict request into a canonical, inspectable **figure artifact**
 for neural-simulation data. An agent, an adapter, or a person emits a declarative
 JSON request; Cortexel validates its shape and its *scientific meaning*, canonicalizes
-it, records honest provenance that **fails closed**, and renders a deterministic,
-accessible SVG. The development API also returns an exact-value in-memory table and a
-FigureArtifactV1 whose output inventory binds the SVG by SHA-256. A canonical,
+it, records honest provenance that **fails closed**, and renders deterministic SVG with
+distinct programmatic title and description references. The development API also
+returns an exact-value in-memory table and a FigureArtifactV1 whose output inventory
+binds the SVG by SHA-256. A canonical,
 digest-bound table sidecar and detached output verifier are not implemented yet; the
 render boundary refuses any result that would require an incomplete table excerpt.
 
@@ -83,8 +84,9 @@ FigureRequestV1 capabilities alongside them:
 
 - `cortexel/figure` — validation, canonicalization, identity, provenance, and migration;
 - `cortexel/render-svg` — deterministic headless SVG + complete returned table;
-- `cortexel/adapters/nest` — the narrow, revision-2-admitted plain-data NEST adapter
-  profile (not upstream certification);
+- `cortexel/adapters/nest` — narrow plain-data NEST adapter profiles that strict
+  validation resolves against the installed contract revision (not upstream
+  certification);
 - `cortexel/contract/manifest.json` and `cortexel/contract/*` — the exact normative
   registries, schemas, and skill sources copied once under `dist/contract`;
 - `cortexel` (bin) — the offline CLI.

@@ -497,8 +497,8 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
   "SCIENCE_DENOMINATOR_INVALID": {
     "stage": "science",
     "severity": "error",
-    "summary": "A rate denominator is missing, zero, or negative.",
-    "correctiveAction": "Supply a positive recorded-sender count. Cortexel does NOT infer population size from the number of senders that happened to spike — a silent neuron is still a recorded neuron."
+    "summary": "A declared or derived rate/normalization denominator is absent, non-exact, contradictory, or outside the selected skill's allowed domain.",
+    "correctiveAction": "Supply the denominator authority required by the skill and make it coherent with its source counts and scope (for example a recorded-sender, trial, event, or eligible-reference count). Zero is allowed only where that skill declares an explicit zero-exposure result; Cortexel never infers a missing universe from active observations."
   },
   "SCIENCE_POPULATION_UNIVERSE_REQUIRED": {
     "stage": "science",
@@ -623,8 +623,8 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
   "SCIENCE_CORRELATION_DENOMINATOR_INVALID": {
     "stage": "science",
     "severity": "error",
-    "summary": "A correlation coefficient was requested but its required statistics or a valid variance denominator are absent.",
-    "correctiveAction": "Supply the required statistics, or use `raw_count` or an explicitly named rate normalization. A scaled pair count is not a correlation coefficient."
+    "summary": "A correlogram statistic, edge-correction/denominator declaration, or exact pair-accounting identity is unsupported or incoherent.",
+    "correctiveAction": "Use `raw_pair_count` with edge correction `none`, or `target_rate_per_reference_event` with `none` or `eligible_reference_events`, and supply exact role, pair, and eligible-reference counts that satisfy the published bounds. Cortexel does not synthesize a correlation coefficient from scaled pair counts."
   },
   "SCIENCE_UNCERTAINTY_BOUNDS_INVALID": {
     "stage": "science",
@@ -708,7 +708,7 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "stage": "provenance",
     "severity": "error",
     "summary": "The request tried to set a field that only Cortexel may author.",
-    "correctiveAction": "Remove it. Validation results, reference-comparison status, accessibility conformance, completeness, output digests, and disclosure text are library-generated facts. A caller declares what its data IS, never what Cortexel concluded about it."
+    "correctiveAction": "Remove it. Validation results, reference-comparison status, completeness, output digests, and disclosure text are library-generated facts. Structural accessibility evidence is also library-authored, and FigureArtifactV1 deliberately contains no accessibility-conformance conclusion. A caller declares what its data IS, never what Cortexel concluded about it."
   },
   "PROVENANCE_NOTE_TOO_LONG": {
     "stage": "provenance",

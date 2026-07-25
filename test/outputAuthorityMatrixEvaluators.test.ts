@@ -42,7 +42,7 @@ function source(skillId: string): JsonRecord {
 
 function evaluator(skillId: string) {
   const found = MATRIX_AUTHORITY_EVALUATORS.find(
-    (candidate) => candidate.id === `${skillId}.output_authority.v3`,
+    (candidate) => candidate.id === `${skillId}.output_authority.v4`,
   );
   if (!found) throw new Error(`missing matrix authority evaluator ${skillId}`);
   return found;
@@ -666,13 +666,13 @@ describe('independent matrix OutputAuthority evaluators', () => {
     }
   });
 
-  it('pins matrix skills, evaluators, and the shared renderer at revision 3', () => {
+  it('pins matrix skill, renderer, and evaluator identities at coordinated revision 4', () => {
     for (const skillId of MATRIX_SKILLS) {
       const contract = source(skillId);
-      expect(contract.revision).toBe(3);
-      expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 3 });
+      expect(contract.revision).toBe(4);
+      expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 4 });
       expect(contract.outputAuthority.evaluator.id).toBe(
-        `${skillId}.output_authority.v3`,
+        `${skillId}.output_authority.v4`,
       );
       expect(contract.accessibility.tableColumns.map((column: JsonRecord) => column.key))
         .toContain('scopeSummary');
@@ -688,7 +688,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
       .map((column: JsonRecord) => column.key);
     expect(delayColumns).not.toContain('snapshotTime');
     expect(MATRIX_AUTHORITY_EVALUATORS.map((entry) => entry.id).sort()).toEqual(
-      MATRIX_SKILLS.map((skillId) => `${skillId}.output_authority.v3`).sort(),
+      MATRIX_SKILLS.map((skillId) => `${skillId}.output_authority.v4`).sort(),
     );
     const renderers = JSON.parse(readFileSync(
       path.join(ROOT, 'contract/registries/renderers.v1.json'),
@@ -697,7 +697,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
     const matrixRenderer = renderers.renderers.find(
       (renderer: JsonRecord) => renderer.id === 'figure.matrix',
     );
-    expect(matrixRenderer.revision).toBe(3);
+    expect(matrixRenderer.revision).toBe(4);
     expect(matrixRenderer.notes).toContain(
       'not_observed is distinct from observed absence and is never drawn as absent',
     );

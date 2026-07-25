@@ -25,7 +25,7 @@ A figure request has **two authors**, and they are kept structurally separate:
 | Author | Owns | Examples |
 |--------|------|----------|
 | **The caller** (an agent, adapter, or human) | *What the data is* — a declaration of origin and meaning | `source.kind`, units, analysis window, node universe, MPI scope, declared limitations, a free-text note |
-| **Cortexel** (the library) | *What Cortexel concluded* — machine-generated assurances | validation status, the assurance level reached, the disclosure list, output digests, reference-comparison status, completeness, accessibility conformance |
+| **Cortexel** (the library) | *What Cortexel concluded or structurally emitted* — machine-generated assurances and evidence | validation status, the assurance level reached, the disclosure list, output digests, reference-comparison status, completeness, structural accessibility evidence |
 
 This split is enforced by the schema itself: the thing a caller authors
 (`FigureRequestV1`) and the thing Cortexel emits (`FigureArtifactV1`) are **separate
@@ -144,8 +144,8 @@ The consequences of "facts, not text or flags" are precise and worth stating pla
   reordered below caller text, or covered by it.** Caller statements occupy separately
   reserved footer rows after every mandatory disclosure; the renderer refuses dimensions
   that would leave no valid plotting region.
-- The visible footer, in-memory table metadata, and accessible description carry the
-  same **complete** disclosure list. A
+- The visible footer, in-memory table metadata, and programmatically referenced SVG
+  `<desc>` carry the same **complete** disclosure list. A
   detached canonical data sidecar is not emitted in the current development tree. The artifact binds the
   exact ordered table-column keys, but not the table row bytes, so no row-integrity claim is
   made.
@@ -167,21 +167,22 @@ generated from the registry, in **four** locations, and a test asserts all four 
 
 1. **The artifact JSON** — the machine-readable record other tools consume.
 2. **The visible SVG footer** — what a sighted reader sees on the figure.
-3. **The SVG accessible description** — what a screen-reader user hears.
+3. **The programmatically referenced SVG description** — the serialized `<desc>` linked
+   from the SVG root by `aria-describedby`.
 4. **The table metadata** — what travels with the complete in-memory table returned by
    the development API.
 
-All four carry the full set; no surface gets a lower-priority subset. **Why four:** a
-figure is copied, embedded, screen-read, and re-parsed by
-different audiences through different surfaces. Honesty that is present for a sighted
-reader but absent for a screen reader, or present in the pixels but absent in the
-machine record, is not honesty — it is honesty theater. Agreement across all four is a
-tested invariant, not an aspiration.
+All four serialized surfaces carry the full set; no surface gets a lower-priority
+subset. **Why four:** a figure can be copied, embedded, or re-parsed through different
+surfaces. Omitting a disclosure from any one surface creates a structural inconsistency.
+Tests establish the generated content, ordering, and SVG reference linkage across those
+surfaces; they do not establish browser or assistive-technology behavior.
 
 Caller-authored statement bodies use a parallel but separate channel. Their original
 values remain in `canonicalRequest.source` and `provenance.source`; their exact
 renderer-attributed forms appear after the complete disclosure list in the visible SVG
-footer, SVG accessible summary, RenderPlan, and returned-table metadata. They never
+footer, programmatically referenced SVG description, RenderPlan, and returned-table
+metadata. They never
 become disclosure records. OutputAuthority independently derives this sequence from the
 validated canonical request and refuses an omission, reordering, changed attribution,
 or table-metadata mismatch before serialization.

@@ -1,6 +1,6 @@
 import {
   parseJsonStrict
-} from "../chunk-BRPKCEQZ.js";
+} from "../chunk-ZJLU6WRU.js";
 import {
   DistributionDerivationError,
   MatrixDerivationError,
@@ -13,7 +13,7 @@ import {
   deriveWeightMatrix,
   validateStructure,
   verifyHistogramValues
-} from "../chunk-SKDD7I5J.js";
+} from "../chunk-UU7RYO22.js";
 import {
   LEGACY_SKILL_MAP,
   MAX_MATERIALIZED_BINS,
@@ -49,10 +49,10 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "../chunk-ESH2QFML.js";
+} from "../chunk-DXJPMLTB.js";
 import {
   snapshotValue
-} from "../chunk-DGLTCWCT.js";
+} from "../chunk-QI535UGK.js";
 import {
   CONTRACT_DIGEST,
   DEFAULT_PROFILE,
@@ -66,7 +66,7 @@ import {
   pointer,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-4V63AFDR.js";
+} from "../chunk-OLQMLMTT.js";
 import {
   canonicalDigest
 } from "../chunk-ZYBCCIMH.js";
@@ -1888,7 +1888,7 @@ var correlogramStatisticDenominator = (context) => {
         stage: "science",
         instancePath: pointer("parameters", "statistic"),
         validatorId: "correlogram.statistic_denominator",
-        message: "revision 2 renders only raw_pair_count and target_rate_per_reference_event. An unknown statistic is refused even if a structural gate was skipped."
+        message: "revision 4 renders only raw_pair_count and target_rate_per_reference_event. An unknown statistic is refused even if a structural gate was skipped."
       })
     ];
   }
@@ -1974,18 +1974,18 @@ var correlogramStatisticDenominator = (context) => {
   }
   const eligible = asArray(data.eligibleReferenceEventCounts);
   if (statistic === "raw_pair_count" || edgeCorrection === "none") {
-    if (eligible === void 0) return [];
-    return [
-      makeError({
-        code: "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
-        stage: "science",
-        instancePath: pointer("data", "eligibleReferenceEventCounts"),
-        validatorId: "correlogram.statistic_denominator",
-        message: statistic === "raw_pair_count" ? "raw_pair_count has no per-bin denominator, so eligibleReferenceEventCounts is a meaningless second authority." : "edgeCorrection `none` uses referenceEventCount for every lag; a parallel eligible-reference array would create two denominator authorities."
-      })
-    ];
-  }
-  if (!eligible || !pairCounts || eligible.length !== pairCounts.length) {
+    if (eligible !== void 0) {
+      return [
+        makeError({
+          code: "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
+          stage: "science",
+          instancePath: pointer("data", "eligibleReferenceEventCounts"),
+          validatorId: "correlogram.statistic_denominator",
+          message: statistic === "raw_pair_count" ? "raw_pair_count has no per-bin denominator, so eligibleReferenceEventCounts is a meaningless second authority." : "edgeCorrection `none` uses referenceEventCount for every lag; a parallel eligible-reference array would create two denominator authorities."
+        })
+      ];
+    }
+  } else if (!eligible || !pairCounts || eligible.length !== pairCounts.length) {
     return [
       makeError({
         code: "SEMANTIC_LENGTH_MISMATCH",
@@ -1996,8 +1996,9 @@ var correlogramStatisticDenominator = (context) => {
       })
     ];
   }
-  for (let index = 0; index < eligible.length; index++) {
-    const eligibleCount = asNumber(eligible[index]);
+  if (!pairCounts || referenceCount === void 0 || targetCount === void 0) return [];
+  for (let index = 0; index < pairCounts.length; index++) {
+    const eligibleCount = edgeCorrection === "none" ? referenceCount : asNumber(eligible?.[index]);
     const pairCount = asNumber(pairCounts[index]);
     if (eligibleCount === void 0 || !Number.isSafeInteger(eligibleCount) || eligibleCount < 0) continue;
     if (referenceCount !== void 0 && eligibleCount > referenceCount) {
@@ -2019,6 +2020,21 @@ var correlogramStatisticDenominator = (context) => {
           instancePath: pointer("data", "pairCounts", index),
           validatorId: "correlogram.statistic_denominator",
           message: "a zero eligible-reference denominator can produce no eligible ordered pair. The bin is valid only with pairCount 0 and compiles to null with status undefined_zero_eligible_reference_events."
+        })
+      ];
+    }
+    if (pairCount === void 0 || !Number.isSafeInteger(pairCount) || pairCount < 0) continue;
+    const targetChoices = mode === "prebinned_auto" ? Math.max(0, targetCount - 1) : targetCount;
+    const maximumPairCount = BigInt(eligibleCount) * BigInt(targetChoices);
+    if (BigInt(pairCount) > maximumPairCount) {
+      const roleExplanation = mode === "prebinned_auto" ? `${targetChoices} distinct target ordinals after same-event self-pair exclusion` : `${targetChoices} target-role events`;
+      return [
+        makeError({
+          code: "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
+          stage: "science",
+          instancePath: pointer("data", "pairCounts", index),
+          validatorId: "correlogram.statistic_denominator",
+          message: `pre-binned pair count ${pairCount} exceeds the exact per-bin maximum ${maximumPairCount.toString()} = ${eligibleCount} eligible reference events multiplied by ${roleExplanation}. A pre-binned numerator cannot contain more ordered pairs than its declared role cardinalities permit.`
         })
       ];
     }

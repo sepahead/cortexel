@@ -757,7 +757,7 @@ export const correlogramPrebinnedAxisConsistent: SemanticValidator = (
   return errors;
 };
 
-/** Bind the closed revision-2 statistic product to exact denominator/accounting laws. */
+/** Bind the closed revision-4 statistic product to exact denominator/accounting laws. */
 export const correlogramStatisticDenominator: SemanticValidator = (
   context: SemanticContext,
 ): CortexelError[] => {
@@ -778,7 +778,7 @@ export const correlogramStatisticDenominator: SemanticValidator = (
         instancePath: pointer('parameters', 'statistic'),
         validatorId: 'correlogram.statistic_denominator',
         message:
-          'revision 2 renders only raw_pair_count and target_rate_per_reference_event. An unknown statistic is refused even if a structural gate was skipped.',
+          'revision 4 renders only raw_pair_count and target_rate_per_reference_event. An unknown statistic is refused even if a structural gate was skipped.',
       }),
     ];
   }
@@ -890,22 +890,21 @@ export const correlogramStatisticDenominator: SemanticValidator = (
 
   const eligible = asArray(data.eligibleReferenceEventCounts);
   if (statistic === 'raw_pair_count' || edgeCorrection === 'none') {
-    if (eligible === undefined) return [];
-    return [
-      makeError({
-        code: 'SCIENCE_CORRELATION_DENOMINATOR_INVALID',
-        stage: 'science',
-        instancePath: pointer('data', 'eligibleReferenceEventCounts'),
-        validatorId: 'correlogram.statistic_denominator',
-        message:
-          statistic === 'raw_pair_count'
-            ? 'raw_pair_count has no per-bin denominator, so eligibleReferenceEventCounts is a meaningless second authority.'
-            : 'edgeCorrection `none` uses referenceEventCount for every lag; a parallel eligible-reference array would create two denominator authorities.',
-      }),
-    ];
-  }
-
-  if (!eligible || !pairCounts || eligible.length !== pairCounts.length) {
+    if (eligible !== undefined) {
+      return [
+        makeError({
+          code: 'SCIENCE_CORRELATION_DENOMINATOR_INVALID',
+          stage: 'science',
+          instancePath: pointer('data', 'eligibleReferenceEventCounts'),
+          validatorId: 'correlogram.statistic_denominator',
+          message:
+            statistic === 'raw_pair_count'
+              ? 'raw_pair_count has no per-bin denominator, so eligibleReferenceEventCounts is a meaningless second authority.'
+              : 'edgeCorrection `none` uses referenceEventCount for every lag; a parallel eligible-reference array would create two denominator authorities.',
+        }),
+      ];
+    }
+  } else if (!eligible || !pairCounts || eligible.length !== pairCounts.length) {
     return [
       makeError({
         code: 'SEMANTIC_LENGTH_MISMATCH',
@@ -918,8 +917,11 @@ export const correlogramStatisticDenominator: SemanticValidator = (
     ];
   }
 
-  for (let index = 0; index < eligible.length; index++) {
-    const eligibleCount = asNumber(eligible[index]);
+  if (!pairCounts || referenceCount === undefined || targetCount === undefined) return [];
+  for (let index = 0; index < pairCounts.length; index++) {
+    const eligibleCount = edgeCorrection === 'none'
+      ? referenceCount
+      : asNumber(eligible?.[index]);
     const pairCount = asNumber(pairCounts[index]);
     if (
       eligibleCount === undefined ||
@@ -946,6 +948,31 @@ export const correlogramStatisticDenominator: SemanticValidator = (
           validatorId: 'correlogram.statistic_denominator',
           message:
             'a zero eligible-reference denominator can produce no eligible ordered pair. The bin is valid only with pairCount 0 and compiles to null with status undefined_zero_eligible_reference_events.',
+        }),
+      ];
+    }
+    if (
+      pairCount === undefined ||
+      !Number.isSafeInteger(pairCount) ||
+      pairCount < 0
+    ) continue;
+
+    const targetChoices = mode === 'prebinned_auto'
+      ? Math.max(0, targetCount - 1)
+      : targetCount;
+    const maximumPairCount = BigInt(eligibleCount) * BigInt(targetChoices);
+    if (BigInt(pairCount) > maximumPairCount) {
+      const roleExplanation = mode === 'prebinned_auto'
+        ? `${targetChoices} distinct target ordinals after same-event self-pair exclusion`
+        : `${targetChoices} target-role events`;
+      return [
+        makeError({
+          code: 'SCIENCE_CORRELATION_DENOMINATOR_INVALID',
+          stage: 'science',
+          instancePath: pointer('data', 'pairCounts', index),
+          validatorId: 'correlogram.statistic_denominator',
+          message:
+            `pre-binned pair count ${pairCount} exceeds the exact per-bin maximum ${maximumPairCount.toString()} = ${eligibleCount} eligible reference events multiplied by ${roleExplanation}. A pre-binned numerator cannot contain more ordered pairs than its declared role cardinalities permit.`,
         }),
       ];
     }

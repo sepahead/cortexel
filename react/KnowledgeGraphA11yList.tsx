@@ -1,7 +1,7 @@
-// Keyboard/screen-reader companion for KnowledgeGraph3DScene. WebGL meshes are
-// not part of the accessibility tree; hosts render this DOM list beside (or in
-// an accessible disclosure below) the Canvas so node identity and directed edge
-// semantics are never conveyed by pointer hover and color alone.
+// Paginated DOM companion for KnowledgeGraph3DScene. WebGL meshes do not expose
+// this exact textual record themselves; hosts render the list beside (or in a
+// disclosure below) the Canvas so node identity and directed-edge semantics are
+// present outside pointer-hover and colour encodings.
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import type {

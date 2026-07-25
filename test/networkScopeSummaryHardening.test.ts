@@ -164,13 +164,13 @@ function observedFromEvaluation(
 }
 
 describe('bounded NetworkScope authority summaries', () => {
-  it('pins all six skills/evaluators/renderers at revision 3 and closes arrow marks', () => {
+  it('pins skill, renderer, and evaluator identities at coordinated revision 4', () => {
     for (const skillId of SKILLS) {
       const contract = source(skillId);
-      expect(contract.revision, skillId).toBe(3);
-      expect(contract.renderer.revision, skillId).toBe(3);
+      expect(contract.revision, skillId).toBe(4);
+      expect(contract.renderer.revision, skillId).toBe(4);
       expect(contract.outputAuthority.evaluator.id, skillId)
-        .toBe(`${skillId}.output_authority.v3`);
+        .toBe(`${skillId}.output_authority.v4`);
       const contractText = JSON.stringify(contract);
       expect(contractText, `${skillId} shape-only wording`).toContain('shape_only');
       expect(contractText, `${skillId} unbound wording`).toContain('unbound');
@@ -199,7 +199,7 @@ describe('bounded NetworkScope authority summaries', () => {
       'figure.spatial_map_2d',
       'figure.synaptic_weight_trace',
     ]) {
-      expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.revision, id).toBe(3);
+      expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.revision, id).toBe(4);
     }
     for (const id of ['figure.connection_graph', 'figure.spatial_map_2d']) {
       expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.marks, id)
