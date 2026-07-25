@@ -26,6 +26,7 @@ import { linearScale, linearTicks } from './scale.js';
 import { SKILL_CATALOG, THEMES } from '../generated/catalog.js';
 import { unitLabel } from '../core/units.js';
 import type { Disclosure } from '../core/disclosures.js';
+import type { CallerSourceStatement } from '../core/source-statements.js';
 import { finiteExtent } from '../core/numeric.js';
 import { disclosureFooterHeight } from './layout.js';
 
@@ -37,6 +38,7 @@ export interface CompileContext {
   readonly title: string;
   readonly subtitle?: string;
   readonly disclosures: readonly Disclosure[];
+  readonly sourceStatements: readonly CallerSourceStatement[];
   readonly summary: string;
   readonly returnedTableRows: number;
 }
@@ -44,7 +46,10 @@ export interface CompileContext {
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
 
 function panelBox(context: CompileContext): { x: number; y: number; width: number; height: number } {
-  const disclosureSpace = disclosureFooterHeight(context.width, context.disclosures);
+  const disclosureSpace = disclosureFooterHeight(
+    context.width,
+    [...context.disclosures, ...context.sourceStatements],
+  );
   return {
     x: MARGIN.left,
     y: MARGIN.top,
@@ -79,7 +84,7 @@ function buildTable(
 
 function frame(context: CompileContext, disclosures: readonly Disclosure[]): Pick<
   RenderPlanV1,
-  'version' | 'figureId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceRequestDigest'
+  'version' | 'figureId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceStatements' | 'sourceRequestDigest'
 > & { subtitle?: string } {
   return {
     version: 1,
@@ -90,6 +95,7 @@ function frame(context: CompileContext, disclosures: readonly Disclosure[]): Pic
     ...(context.subtitle ? { subtitle: context.subtitle } : {}),
     themeId: context.themeId,
     disclosures: disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
+    sourceStatements: context.sourceStatements.map((statement) => ({ ...statement })),
     sourceRequestDigest: context.sourceRequestDigest,
   };
 }

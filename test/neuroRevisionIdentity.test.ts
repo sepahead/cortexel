@@ -46,37 +46,37 @@ const evaluatorIds = new Set([
   ...TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS,
 ].map((evaluator) => evaluator.id));
 
-describe('stable neuro revision-2 identity alignment', () => {
+describe('stable neuro revision-3 identity alignment', () => {
   it('keeps source, OutputAuthority evaluator, and renderer identities coordinated', () => {
     const renderers = rendererRegistry();
 
     for (const [skillId, rendererId] of NEURO_SKILLS) {
       const source = skillSource(skillId);
-      expect(source.revision, skillId).toBe(2);
-      expect(source.renderer, skillId).toEqual({ id: rendererId, revision: 2 });
+      expect(source.revision, skillId).toBe(3);
+      expect(source.renderer, skillId).toEqual({ id: rendererId, revision: 3 });
       expect(source.outputAuthority.evaluator.id, skillId).toBe(
-        `${skillId}.output_authority.v2`,
+        `${skillId}.output_authority.v3`,
       );
       expect(evaluatorIds.has(source.outputAuthority.evaluator.id), skillId).toBe(true);
 
       const matchingRenderers = renderers.filter((renderer) => renderer.id === rendererId);
       expect(matchingRenderers, rendererId).toHaveLength(1);
-      expect(matchingRenderers[0].revision, rendererId).toBe(2);
+      expect(matchingRenderers[0].revision, rendererId).toBe(3);
     }
 
     const phasePlane = renderers.find((renderer) => renderer.id === 'figure.phase_plane');
     expect(phasePlane?.marks).toContain('arrow');
   });
 
-  it('accepts current pins, emits renderer revision 2, and refuses every prior pin', () => {
+  it('accepts current pins, emits renderer revision 3, and refuses prior revision-2 pins', () => {
     for (const [skillId, rendererId] of NEURO_SKILLS) {
       const source = skillSource(skillId);
 
       const current = structuredClone(source.examples.valid[0]);
-      current.skill.revision = 2;
+      current.skill.revision = 3;
       const checked = validateRequestValue(current);
       expect(checked.ok, skillId).toBe(true);
-      if (checked.ok) expect(checked.request.skillRevision, skillId).toBe(2);
+      if (checked.ok) expect(checked.request.skillRevision, skillId).toBe(3);
 
       const figure = buildFigure(current);
       expect(figure.ok, figure.ok ? skillId : JSON.stringify(figure.errors)).toBe(true);
@@ -86,11 +86,11 @@ describe('stable neuro revision-2 identity alignment', () => {
           readonly rendererRevision: number;
         };
         expect(render.rendererId, skillId).toBe(rendererId);
-        expect(render.rendererRevision, skillId).toBe(2);
+        expect(render.rendererRevision, skillId).toBe(3);
       }
 
       const prior = structuredClone(source.examples.valid[0]);
-      prior.skill.revision = 1;
+      prior.skill.revision = 2;
       const refused = validateRequestValue(prior);
       expect(refused.ok, skillId).toBe(false);
       if (!refused.ok) {

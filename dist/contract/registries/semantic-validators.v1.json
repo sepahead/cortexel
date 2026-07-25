@@ -252,7 +252,7 @@
     },
     {
       "id": "provenance.note_safe_display", "revision": 1,
-      "description": "A caller's declared note is within its length limit and free of control, bidi-override, and zero-width characters — which could otherwise visually reorder or conceal a mandatory disclosure rendered beside it.",
+      "description": "Every caller-declared note and limitation is within its length limit and free of control, bidi-override, and zero-width characters — which could otherwise visually reorder or conceal a mandatory disclosure rendered beside it.",
       "errorCodes": ["PROVENANCE_NOTE_TOO_LONG", "PROVENANCE_NOTE_UNSAFE_DISPLAY"],
       "complexity": "O(n)", "tsSymbol": "provenanceNoteSafeDisplay", "pySymbol": "provenance_note_safe_display", "oracle": "hand"
     }

@@ -53,7 +53,10 @@ import {
 const MARGIN = { top: 60, right: 32, bottom: 56, left: 64 } as const;
 
 function panelBox(context: CompileContext): { x: number; y: number; width: number; height: number } {
-  const disclosureSpace = disclosureFooterHeight(context.width, context.disclosures);
+  const disclosureSpace = disclosureFooterHeight(
+    context.width,
+    [...context.disclosures, ...context.sourceStatements],
+  );
   return {
     x: MARGIN.left,
     y: MARGIN.top,
@@ -92,7 +95,7 @@ function categoricalStyle(index: number): {
 
 function frame(context: CompileContext, skillId: string): Pick<
   RenderPlanV1,
-  'version' | 'figureId' | 'skillId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceRequestDigest' | 'accessibility'
+  'version' | 'figureId' | 'skillId' | 'width' | 'height' | 'title' | 'themeId' | 'disclosures' | 'sourceStatements' | 'sourceRequestDigest' | 'accessibility'
 > & { subtitle?: string } {
   return {
     version: 1,
@@ -104,6 +107,7 @@ function frame(context: CompileContext, skillId: string): Pick<
     ...(context.subtitle ? { subtitle: context.subtitle } : {}),
     themeId: context.themeId,
     disclosures: context.disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
+    sourceStatements: context.sourceStatements.map((statement) => ({ ...statement })),
     sourceRequestDigest: context.sourceRequestDigest,
     accessibility: { summary: context.summary, panelSummaries: [] },
   };

@@ -27,6 +27,10 @@ import { validateArtifactStructure } from '../core/structural-validator.js';
 import { sha256Digest, utf8ByteLength } from '../core/sha256.js';
 import { deriveDisclosures, type Disclosure, type DisclosureFacts } from '../core/disclosures.js';
 import {
+  deriveCallerSourceStatements,
+  type CallerSourceStatement,
+} from '../core/source-statements.js';
+import {
   exactBinary64EmpiricalQuantileType7,
   exactBinary64SampleStandardDeviation,
 } from '../core/exact-binary64.js';
@@ -13155,6 +13159,7 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
       budgetProfileId: activeBudget.profile,
     });
     const disclosures = deriveDisclosures(facts, catalog.disclosures, forced);
+    const sourceStatements = deriveCallerSourceStatements(request);
     return {
       sourceRequestDigest: validated.requestDigest,
       width: num(presentation.width) ?? 720,
@@ -13162,6 +13167,7 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
       themeId: (presentation.themeId as string) ?? 'light',
       title: (presentation.title as string) ?? catalog.title,
       disclosures,
+      sourceStatements,
       summary: catalog.accessibility.summaryTemplate.replace(/\{[^}]+\}/g, '…'),
       returnedTableRows: returnedTableLimit,
     };
@@ -13242,7 +13248,7 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
           instancePath: '/presentation',
           skillId: validated.skillId,
           message:
-            `the requested dimensions leave no finite plotting region of at least ${MIN_PLOT_PANEL_HEIGHT} CSS pixels per data panel after axes, legends, and mandatory disclosures are reserved. Increase the height or reduce the panel count.`,
+            `the requested dimensions leave no finite plotting region of at least ${MIN_PLOT_PANEL_HEIGHT} CSS pixels per data panel after axes, legends, mandatory disclosures, and attributed caller source statements are reserved. Increase the height or reduce the panel count.`,
         }),
       ],
     };
@@ -13264,20 +13270,24 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
   const disclosureBoundPlan: RenderPlanV1 = {
     ...compiled.plan,
     disclosures: disclosureBlocks,
+    sourceStatements: context.sourceStatements.map((statement) => ({ ...statement })),
     table: {
       ...compiled.plan.table,
       metadata: {
         disclosures: disclosureBlocks.map((disclosure) => ({ ...disclosure })),
+        sourceStatements: context.sourceStatements.map((statement) => ({ ...statement })),
       },
     },
   };
 
   // Family compilers independently materialize the exact source-template body. This
-  // shared boundary adds only the mandatory registry-derived disclosure suffix; it
-  // never replaces that body with evaluator output or a generic summary fallback.
+  // shared boundary adds the mandatory registry-derived disclosure suffix and then
+  // the separately attributed caller source statements; it never replaces the body
+  // with evaluator output or a generic summary fallback.
   const summary = appendDisclosureSummarySuffix(
     disclosureBoundPlan.accessibility.summary,
     disclosureBlocks,
+    context.sourceStatements,
   );
   const closure = closePlainRenderPlanForAuthorityV1({
     ...disclosureBoundPlan,
@@ -13493,12 +13503,17 @@ export function buildFigureFromValidated(validated: ValidatedRequest): FigureRes
 function appendDisclosureSummarySuffix(
   compilerSummaryBody: string,
   disclosures: readonly Disclosure[],
+  sourceStatements: readonly CallerSourceStatement[] = [],
 ): string {
-  if (disclosures.length === 0) return compilerSummaryBody;
-  const count = disclosures.length;
-  return `${compilerSummaryBody} ${count} ${count === 1 ? 'disclosure applies' : 'disclosures apply'}: ${disclosures
-    .map((disclosure) => disclosure.text)
-    .join(' ')}`;
+  const disclosureSuffix = disclosures.length === 0
+    ? ''
+    : ` ${disclosures.length} ${disclosures.length === 1 ? 'disclosure applies' : 'disclosures apply'}: ${disclosures
+      .map((disclosure) => disclosure.text)
+      .join(' ')}`;
+  const sourceStatementSuffix = sourceStatements.length === 0
+    ? ''
+    : ` ${sourceStatements.map((statement) => statement.text).join(' ')}`;
+  return `${compilerSummaryBody}${disclosureSuffix}${sourceStatementSuffix}`;
 }
 
 /** Build a figure from raw JSON request text (the strong, duplicate-key-aware boundary). */

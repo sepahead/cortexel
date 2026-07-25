@@ -15,6 +15,8 @@ import {
   type OutputAuthorityV1,
 } from '../core/output-authority.js';
 import { deriveDisclosures } from '../core/disclosures.js';
+import { canonicalize } from '../core/canonicalize.js';
+import { deriveCallerSourceStatements } from '../core/source-statements.js';
 import {
   DEFAULT_PROFILE,
   tryGetBudgetLimits,
@@ -50,6 +52,14 @@ function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function canonicalEqual(left: unknown, right: unknown): boolean {
+  try {
+    return canonicalize(left as never) === canonicalize(right as never);
+  } catch {
+    return false;
+  }
 }
 
 function forcedDisclosureIds(skillId: string, request: Record<string, unknown>): string[] {
@@ -165,6 +175,18 @@ export function checkOutputAuthorityEmissionV1(
       };
     }
     const evaluation = evaluator.evaluateCanonicalRequest(validated.canonicalRequest as JsonValue);
+    const expectedSourceStatements = deriveCallerSourceStatements(validated.canonicalRequest);
+    if (
+      !canonicalEqual(plan.sourceStatements, expectedSourceStatements) ||
+      !canonicalEqual(plan.table.metadata?.sourceStatements, expectedSourceStatements)
+    ) {
+      return {
+        tag: 'refused',
+        messages: [
+          'actual plan and returned-table source statements do not equal the independently derived, attributed, bidi-isolated caller declarations',
+        ],
+      };
+    }
     const disclosureValue = evaluation.fields[authority.disclosures.expectedFacts.field];
     if (disclosureValue?.tag !== 'disclosure_fact_map') {
       return {
@@ -202,6 +224,7 @@ export function checkOutputAuthorityEmissionV1(
       validated.requestDigest,
       evaluation,
       extracted.observed,
+      expectedSourceStatements,
     );
     return interpreted.tag === 'valid'
       ? { tag: 'passed' }

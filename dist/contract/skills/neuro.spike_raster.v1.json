@@ -1,6 +1,6 @@
 {
   "id": "neuro.spike_raster",
-  "revision": 2,
+  "revision": 3,
   "status": "stable",
   "releaseReady": false,
   "title": "Spike raster: event times by identified sender and trial",
@@ -256,7 +256,7 @@
     { "id": "events.trial_universe_declared" }
   ],
 
-  "renderer": { "id": "figure.spike_raster", "revision": 2 },
+  "renderer": { "id": "figure.spike_raster", "revision": 3 },
 
   "budgets": {
     "maxObservations": 2000000,
@@ -287,7 +287,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.spike_raster.output_authority.v2"
+      "id": "neuro.spike_raster.output_authority.v3"
     },
     "requestPaths": [
       {

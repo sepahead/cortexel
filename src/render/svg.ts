@@ -547,7 +547,7 @@ export function countPlanResources(plan: RenderPlanV1): {
   let textCount =
     1 +
     (plan.subtitle ? 1 : 0) +
-    disclosureLineCount(plan.width, plan.disclosures);
+    disclosureLineCount(plan.width, [...plan.disclosures, ...plan.sourceStatements]);
 
   for (const panel of plan.panels) {
     if (panel.label) textCount++;
@@ -742,7 +742,10 @@ export function renderSvg(
   // data. Every line is an exact substring of the registry text, and the enclosing group
   // carries that complete text for deterministic extraction. `textLength` makes the
   // horizontal bound independent of host font metrics.
-  const footerLineCount = disclosureLineCount(plan.width, plan.disclosures);
+  const footerLineCount = disclosureLineCount(
+    plan.width,
+    [...plan.disclosures, ...plan.sourceStatements],
+  );
   let disclosureY =
     plan.height - footerLineCount * DISCLOSURE_LINE_HEIGHT - DISCLOSURE_BOTTOM_PADDING;
   writer.open('g', [['data-disclosures', 'true']]);
@@ -764,6 +767,41 @@ export function renderSvg(
         ['textLength', formatCoordinate(disclosureRenderedTextLength(line, plan.width))],
         ['lengthAdjust', 'spacingAndGlyphs'],
         ['data-disclosure-line', index],
+        ['aria-hidden', 'true'],
+      ]);
+      disclosureY += DISCLOSURE_LINE_HEIGHT;
+    }
+    writer.close('g');
+  }
+  writer.close('g');
+
+  // Caller-declared source statements are deliberately a separate footer channel. They
+  // follow every mandatory disclosure, retain renderer-owned attribution, and carry the
+  // helper-inserted FSI/PDI pair. `unicode-bidi=plaintext` makes each wrapped SVG text
+  // element an independent bidi paragraph; a continued RTL line cannot reorder a prior
+  // mandatory disclosure or the attribution on the first line.
+  writer.open('g', [['data-source-statements', 'true']]);
+  for (const statement of plan.sourceStatements) {
+    writer.open('g', [
+      ['data-source-statement-kind', statement.kind],
+      ['data-source-statement-attribution', statement.attribution],
+      ['data-source-statement-bidi-isolation', statement.bidiIsolation],
+      ['data-source-statement-text', statement.text],
+    ]);
+    const lines = wrapDisclosureText(statement.text, plan.width);
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      writer.text('text', line, [
+        ['x', DISCLOSURE_HORIZONTAL_INSET],
+        ['y', formatCoordinate(disclosureY)],
+        ['text-anchor', 'start'],
+        ['font-size', DISCLOSURE_FONT_SIZE],
+        ['fill', colors.mutedText],
+        ['font-family', 'sans-serif'],
+        ['textLength', formatCoordinate(disclosureRenderedTextLength(line, plan.width))],
+        ['lengthAdjust', 'spacingAndGlyphs'],
+        ['unicode-bidi', 'plaintext'],
+        ['data-source-statement-line', index],
         ['aria-hidden', 'true'],
       ]);
       disclosureY += DISCLOSURE_LINE_HEIGHT;

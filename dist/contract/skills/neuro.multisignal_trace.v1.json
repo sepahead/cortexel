@@ -1,6 +1,6 @@
 {
   "id": "neuro.multisignal_trace",
-  "revision": 2,
+  "revision": 3,
   "status": "stable",
   "releaseReady": false,
   "title": "Multiple biologically distinct signals on one declared clock",
@@ -795,7 +795,7 @@
   ],
   "renderer": {
     "id": "figure.multisignal_trace",
-    "revision": 2
+    "revision": 3
   },
   "budgets": {
     "maxObservations": 2000000,
@@ -830,7 +830,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.multisignal_trace.output_authority.v2"
+      "id": "neuro.multisignal_trace.output_authority.v3"
     },
     "requestPaths": [
       {

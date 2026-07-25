@@ -82,8 +82,8 @@ module.exports = __toCommonJS(figure_exports);
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:d0ef03da20000581d71e859310419444e7fb8c9dad4e39f60a97ad3070032fc9";
-var CATALOG_DIGEST = "sha256:801aa157a57212ca58b092319d57edd8ab8649a80202a8a577510ca9f7162c09";
+var CONTRACT_DIGEST = "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121";
+var CATALOG_DIGEST = "sha256:56f15211b76d250f9d1d2142bb735dd904d89222798a7ac2ed4c37b9ebd2534d";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
   return Object.freeze({
@@ -120,7 +120,7 @@ var CAPABILITY_AVAILABILITIES = freezeGenerated([
 var SKILL_CATALOG = freezeGenerated({
   "network.adjacency_matrix": {
     "id": "network.adjacency_matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -138,7 +138,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 2,
+      "revision": 3,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -352,7 +352,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.adjacency_matrix.output_authority.v2"
+        "id": "network.adjacency_matrix.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -522,7 +522,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.connection_graph": {
     "id": "network.connection_graph",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -539,7 +539,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -823,7 +823,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.connection_graph.output_authority.v2"
+        "id": "network.connection_graph.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -1020,7 +1020,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.degree_distribution": {
     "id": "network.degree_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -1039,7 +1039,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -1209,7 +1209,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.degree_distribution.output_authority.v2"
+        "id": "network.degree_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -1376,7 +1376,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_distribution": {
     "id": "network.delay_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -1396,7 +1396,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -1629,7 +1629,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_distribution.output_authority.v2"
+        "id": "network.delay_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -1813,7 +1813,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_matrix": {
     "id": "network.delay_matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -1832,7 +1832,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 2,
+      "revision": 3,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -2059,7 +2059,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_matrix.output_authority.v2"
+        "id": "network.delay_matrix.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -2236,7 +2236,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.spatial_map_2d": {
     "id": "network.spatial_map_2d",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -2257,7 +2257,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -2555,7 +2555,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.spatial_map_2d.output_authority.v2"
+        "id": "network.spatial_map_2d.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -2757,7 +2757,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.synaptic_weight_trace": {
     "id": "network.synaptic_weight_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -2778,7 +2778,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -3107,7 +3107,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.synaptic_weight_trace.output_authority.v2"
+        "id": "network.synaptic_weight_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -3338,7 +3338,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_distribution": {
     "id": "network.weight_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -3358,7 +3358,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -3553,7 +3553,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_distribution.output_authority.v2"
+        "id": "network.weight_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -3732,7 +3732,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_matrix": {
     "id": "network.weight_matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -3749,7 +3749,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 2,
+      "revision": 3,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -3989,7 +3989,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_matrix.output_authority.v2"
+        "id": "network.weight_matrix.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -4166,7 +4166,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.analog_trace": {
     "id": "neuro.analog_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -4184,7 +4184,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -4462,7 +4462,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.analog_trace.output_authority.v2"
+        "id": "neuro.analog_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -4649,7 +4649,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.compartment_trace": {
     "id": "neuro.compartment_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -4667,7 +4667,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -4890,7 +4890,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.compartment_trace.output_authority.v2"
+        "id": "neuro.compartment_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -5101,7 +5101,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.correlogram": {
     "id": "neuro.correlogram",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5120,7 +5120,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -5287,7 +5287,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.correlogram.output_authority.v2"
+        "id": "neuro.correlogram.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -5479,7 +5479,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.isi_distribution": {
     "id": "neuro.isi_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5496,7 +5496,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -5724,7 +5724,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.isi_distribution.output_authority.v2"
+        "id": "neuro.isi_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -5906,7 +5906,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.multisignal_trace": {
     "id": "neuro.multisignal_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5923,7 +5923,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -6330,7 +6330,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.multisignal_trace.output_authority.v2"
+        "id": "neuro.multisignal_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -6540,7 +6540,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.phase_plane": {
     "id": "neuro.phase_plane",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6561,7 +6561,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -6794,7 +6794,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.phase_plane.output_authority.v2"
+        "id": "neuro.phase_plane.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -7008,7 +7008,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.population_rate": {
     "id": "neuro.population_rate",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7022,7 +7022,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -7093,6 +7093,8 @@ var SKILL_CATALOG = freezeGenerated({
       "SOURCE_SIMULATION",
       "SOURCE_SYNTHETIC_FIXTURE",
       "SOURCE_KIND_UNKNOWN",
+      "SOURCE_LITERATURE_EXTRACTION",
+      "SOURCE_MANUAL_ENTRY",
       "SOURCE_AUTHENTICITY_UNVERIFIED",
       "REFERENCE_COMPARISON_NOT_RUN",
       "UNCERTAINTY_NOT_PROVIDED",
@@ -7176,7 +7178,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.population_rate.output_authority.v2"
+        "id": "neuro.population_rate.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -7330,7 +7332,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.psth": {
     "id": "neuro.psth",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7347,7 +7349,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -7690,7 +7692,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.psth.output_authority.v2"
+        "id": "neuro.psth.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -7898,7 +7900,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.response_curve": {
     "id": "neuro.response_curve",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7917,7 +7919,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -8242,7 +8244,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.response_curve.output_authority.v2"
+        "id": "neuro.response_curve.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -8464,7 +8466,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8482,7 +8484,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -8665,7 +8667,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.spike_raster.output_authority.v2"
+        "id": "neuro.spike_raster.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -9634,7 +9636,7 @@ var LEGACY_SKILL_MAP = freezeGenerated({
 var RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -9646,7 +9648,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -9658,7 +9660,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -9669,7 +9671,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rule",
@@ -9680,7 +9682,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "path",
@@ -9692,7 +9694,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rect",
@@ -9704,7 +9706,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rule",
@@ -9716,7 +9718,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rect",
@@ -9728,7 +9730,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "point",
@@ -9740,7 +9742,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -9753,7 +9755,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -9766,7 +9768,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rect",
@@ -9777,7 +9779,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "point",
@@ -9790,7 +9792,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "path",

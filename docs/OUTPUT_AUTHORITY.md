@@ -2,8 +2,9 @@
 
 OutputAuthority V1 is Cortexel's internal, fail-closed check of one narrow claim:
 for a validated canonical request, the final compiler-owned `RenderPlanV1` carries the
-exact alternative-table rows, source-template summary, mandatory disclosures, and
-ordered scientific-carrier identities independently derived for that request.
+exact alternative-table rows, source-template summary, mandatory disclosures,
+renderer-attributed caller source statements, and ordered scientific-carrier identities
+independently derived for that request.
 
 The check runs synchronously on a detached, deeply frozen plan immediately before the
 normative SVG serializer. A failure is an internal refusal; no partial SVG is returned.
@@ -25,6 +26,9 @@ Each of the nineteen stable skill sources owns a finite `outputAuthority` declar
   template;
 - disclosure facts from which the closed disclosure registry derives the exact ordered
   disclosure set and text;
+- the exact ordered caller limitations and note, with renderer-owned attribution and
+  FSI/PDI isolation, independently derived from the canonical request and repeated in
+  returned-table metadata;
 - an exact depth-first sequence of role-tagged scientific carriers, including class and
   stable request-derived provenance; and
 - paired finite influence witnesses with explicit affected and protected derivations.
@@ -70,7 +74,9 @@ Summary substitution is deliberately one pass. The source template is checked be
 substitution; every fact is bounded, well-formed, control-safe display text; and fact
 text is then treated literally. A caller string such as `Selection {nodeCount}` cannot
 be reparsed as a second template program. The complete summary, including the exact
-registry-derived disclosure suffix, is compared byte-for-byte with the frozen plan.
+registry-derived disclosure suffix followed by the separately attributed
+caller-statement suffix, is compared byte-for-byte with the frozen plan. Exact caller
+bodies remain outside `artifact.disclosures`.
 
 ## Carrier-only means carrier-only
 
@@ -99,6 +105,9 @@ change FigureArtifactV1 1.0:
 
 - reference comparison remains `not_run`;
 - `tableBinding` remains `shape_only`; table cells and row bytes are not artifact-bound;
+- caller statement bodies remain caller declarations in the canonical request and
+  provenance; their appearance in the artifact accessibility summary is not a
+  Cortexel-authored scientific conclusion;
 - no OutputAuthority verdict, evaluator result, plan digest, or assurance token is
   serialized; and
 - no detached verifier can infer that the gate ran merely from a schema-valid artifact.
@@ -117,7 +126,8 @@ includes:
   capability;
 - source-contract generation and the OutputAuthority meta/source laws;
 - shared exact-binary64, unit, deterministic-transcendental, canonical-JSON, disclosure,
-  and finite budget-registry primitives used by a family;
+  caller-statement attribution/isolation, and finite budget-registry primitives used by
+  a family;
 - the closed evaluator registry and the correctness of each family evaluator;
 - compiler-authored atomic roles and provenance;
 - plan closure, extraction, interpretation, and the synchronous gate-to-serializer call;

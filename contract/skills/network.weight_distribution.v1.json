@@ -1,6 +1,6 @@
 {
   "id": "network.weight_distribution",
-  "revision": 2,
+  "revision": 3,
   "status": "stable",
   "releaseReady": false,
   "title": "Synaptic weight distribution over a declared edge population",
@@ -622,7 +622,7 @@
   ],
   "renderer": {
     "id": "figure.distribution",
-    "revision": 2
+    "revision": 3
   },
   "budgets": {
     "maxObservations": 200000,
@@ -659,7 +659,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.weight_distribution.output_authority.v2"
+      "id": "network.weight_distribution.output_authority.v3"
     },
     "requestPaths": [
       {

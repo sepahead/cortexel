@@ -10,6 +10,7 @@ const context: CompileContext = {
   themeId: 'light',
   title: 'Matrix proof',
   disclosures: [],
+  sourceStatements: [],
   summary: 'placeholder',
   returnedTableRows: 500,
 };

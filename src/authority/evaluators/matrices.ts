@@ -803,17 +803,17 @@ function delayModel(requestValue: JsonValue): MatrixAuthorityModel {
 }
 
 const ADJACENCY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.adjacency_matrix', 2),
+  authorityEvaluatorId('network.adjacency_matrix', 3),
   (request) => modelFields(adjacencyModel(request)),
 );
 
 const WEIGHT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.weight_matrix', 2),
+  authorityEvaluatorId('network.weight_matrix', 3),
   (request) => modelFields(weightModel(request)),
 );
 
 const DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.delay_matrix', 2),
+  authorityEvaluatorId('network.delay_matrix', 3),
   (request) => modelFields(delayModel(request)),
 );
 

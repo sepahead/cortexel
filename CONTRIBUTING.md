@@ -139,9 +139,14 @@ the runtime executables before and after active work, then repeats runtime,
 wheelhouse, source, receipt, and result-parent checks after the durable write. It
 also rejects discretionary filesystem ACLs on the protected parent or receipt;
 exact 0700/0644 mode bits are not accepted as a substitute for that authority
-check. A pre-existing result is never overwritten. Treat a nonzero process exit,
-missing receipt, or receipt rejected by a duplicate-aware strict parser as failure;
-never recover evidence from stdout.
+check. The independent strict reader repeats that authority boundary: it opens the
+canonical 0700 parent first, pins its descriptor identity, opens the unique 0644 leaf
+relative to that descriptor without following links, and rechecks path, descriptor,
+owner, mode, link count, ACL, and identity before and after parsing. A parent rebind or
+leaf replacement therefore invalidates the receipt rather than blessing whichever path
+entry won a race. A pre-existing result is never overwritten. Treat a nonzero process
+exit, missing receipt, or receipt rejected by this duplicate-aware strict reader as
+failure; never recover evidence from stdout.
 
 The two aggregate seals use the script's `inventory_sha256` encoding: SHA-256 over
 the ASCII domain prefix `cortexel-named-byte-inventory-v1\0`, then the namespace's
@@ -173,11 +178,21 @@ the closed site-packages tree. `bun run test:python-package` invokes the same
 this authority at Engram's ordinary developer/test Python (which legitimately contains
 pytest, mypy, and ruff); give the integration a distinct package-build runtime.
 The bootstrap's empty environment intentionally drops ambient index, proxy, token, and
-pip configuration authority. CI also
-places a 300-second TERM/KILL bound around that network step; the smoke applies finite
-bounds to every build, install, and executable probe.
+pip configuration authority. The Python 3.14.6 CI lane first validates the exact
+setup-provided Python and uv paths, then root-owns their complete version roots and the
+relevant `/opt` ancestor chain, removes extended/default ACLs and group/world writes,
+and independently checks the resulting ownership, modes, ACL absence, containment, and
+entry types. This closes the hosted image's deliberately permissive `/opt` mutation
+authority; it still trusts the pinned setup actions and runner payload, and the receipt
+does not inventory the complete stdlib or `libpython` closure. CI also places a
+300-second TERM/KILL bound around the network step; the smoke applies finite bounds to
+every build, install, and executable probe.
 This release-evidence procedure is currently supported on macOS and Linux; the pinned
 CI realization runs on Ubuntu. It is not evidence for a Windows package-build boundary.
+Result mode additionally requires a filesystem whose path and open-descriptor ACL APIs
+are authoritative: `ENOTSUP`/`EOPNOTSUPP` fails closed. Cortexel does not yet classify
+network or stacked filesystems, so release evidence must keep the result parent on a
+locally administered filesystem with trustworthy ACL semantics.
 
 `bun run test:package` is the backwards-compatible local orchestration. The
 reviewed command supervisor currently requires POSIX process-group semantics and

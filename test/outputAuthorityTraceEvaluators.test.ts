@@ -15,6 +15,10 @@ import {
 } from '../src/core/output-authority.js';
 import type { JsonValue } from '../src/core/parse-json.js';
 import { validateRequestValue } from '../src/core/request.js';
+import {
+  deriveCallerSourceStatements,
+  type CallerSourceStatement,
+} from '../src/core/source-statements.js';
 import { buildFigure } from '../src/render/index.js';
 import { extractObservedOutputAuthorityV1 } from '../src/render/output-authority-extract.js';
 
@@ -48,6 +52,7 @@ function renderExpectedSummary(
   template: string,
   evaluation: AuthorityEvaluationV1,
   disclosures: readonly { readonly text: string }[],
+  sourceStatements: readonly CallerSourceStatement[],
 ): string {
   const value = evaluation.fields['summary.facts'];
   if (value?.tag !== 'summary_fact_map') throw new Error('missing summary fact map');
@@ -56,11 +61,15 @@ function renderExpectedSummary(
     if (typeof replacement !== 'string') throw new Error(`missing string summary fact ${key}`);
     return replacement;
   });
-  if (disclosures.length === 0) return body;
-  const count = disclosures.length;
-  return `${body} ${count} ${count === 1 ? 'disclosure applies' : 'disclosures apply'}: ${disclosures
-    .map((disclosure) => disclosure.text)
-    .join(' ')}`;
+  const disclosureSuffix = disclosures.length === 0
+    ? ''
+    : ` ${disclosures.length} ${disclosures.length === 1 ? 'disclosure applies' : 'disclosures apply'}: ${disclosures
+      .map((disclosure) => disclosure.text)
+      .join(' ')}`;
+  const sourceStatementSuffix = sourceStatements.length === 0
+    ? ''
+    : ` ${sourceStatements.map((statement) => statement.text).join(' ')}`;
+  return `${body}${disclosureSuffix}${sourceStatementSuffix}`;
 }
 
 function expectedDisclosureSet(contract: JsonRecord, evaluation: AuthorityEvaluationV1) {
@@ -75,6 +84,7 @@ function checkedModel(skillId: string, exampleIndex = 0): {
   readonly evaluation: AuthorityEvaluationV1;
   readonly observed: AuthorityObservedOutputV1;
   readonly digest: string;
+  readonly sourceStatements: readonly CallerSourceStatement[];
 } {
   const contract = source(skillId);
   const request = structuredClone(contract.examples.valid[exampleIndex]);
@@ -92,15 +102,22 @@ function checkedModel(skillId: string, exampleIndex = 0): {
     validated.request.canonicalRequest as JsonValue,
   );
   const disclosures = expectedDisclosureSet(contract, evaluation);
+  const sourceStatements = deriveCallerSourceStatements(validated.request.canonicalRequest);
   return {
     contract,
     authority: contract.outputAuthority,
     evaluation,
     digest: validated.request.requestDigest,
+    sourceStatements,
     observed: {
       ...extracted.observed,
       disclosures,
-      summary: renderExpectedSummary(contract.accessibility.summaryTemplate, evaluation, disclosures),
+      summary: renderExpectedSummary(
+        contract.accessibility.summaryTemplate,
+        evaluation,
+        disclosures,
+        sourceStatements,
+      ),
     },
   };
 }
@@ -114,6 +131,7 @@ function interpret(model: ReturnType<typeof checkedModel>, observed = model.obse
     model.digest,
     model.evaluation,
     observed,
+    model.sourceStatements,
   );
 }
 

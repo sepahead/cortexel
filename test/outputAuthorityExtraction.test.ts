@@ -35,6 +35,7 @@ function planWithMarks(marks: readonly Mark[]): RenderPlanV1 {
       marks,
     }],
     disclosures: [{ id: 'D', severity: 'informational', text: 'Disclosure.' }],
+    sourceStatements: [],
     table: {
       policy: 'complete_returned',
       columns: [{ key: 'id', header: 'ID' }],

@@ -16,6 +16,8 @@
  * scientific contract.
  */
 
+import type { CallerSourceStatement } from '../../core/source-statements.js';
+
 export interface RenderPlanV1 {
   readonly version: 1;
   readonly figureId: string;
@@ -28,6 +30,8 @@ export interface RenderPlanV1 {
   readonly panels: readonly Panel[];
   readonly legend?: LegendItem[];
   readonly disclosures: readonly DisclosureBlock[];
+  /** Attributed caller declarations, always rendered after every mandatory disclosure. */
+  readonly sourceStatements: readonly CallerSourceStatement[];
   readonly table: TableModel;
   readonly accessibility: AccessibilityModel;
   /** Binds the plan to the validated canonical request it was compiled from. */
@@ -244,6 +248,7 @@ export interface TableModel {
    */
   readonly metadata?: {
     readonly disclosures: readonly DisclosureBlock[];
+    readonly sourceStatements: readonly CallerSourceStatement[];
   };
 }
 

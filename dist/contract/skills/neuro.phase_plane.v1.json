@@ -1,6 +1,6 @@
 {
   "id": "neuro.phase_plane",
-  "revision": 2,
+  "revision": 3,
   "status": "stable",
   "releaseReady": false,
   "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
@@ -1072,7 +1072,7 @@
   ],
   "renderer": {
     "id": "figure.phase_plane",
-    "revision": 2
+    "revision": 3
   },
   "budgets": {
     "maxObservations": 250000,
@@ -1106,7 +1106,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.phase_plane.output_authority.v2"
+      "id": "neuro.phase_plane.output_authority.v3"
     },
     "requestPaths": [
       {

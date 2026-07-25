@@ -16,6 +16,10 @@ import {
 } from '../src/core/output-authority.js';
 import type { JsonValue } from '../src/core/parse-json.js';
 import { validateRequestValue } from '../src/core/request.js';
+import {
+  deriveCallerSourceStatements,
+  type CallerSourceStatement,
+} from '../src/core/source-statements.js';
 import { buildFigure } from '../src/render/index.js';
 import { extractObservedOutputAuthorityV1 } from '../src/render/output-authority-extract.js';
 
@@ -61,6 +65,7 @@ function checkedModel(skillId: string, exampleIndex: number): {
   readonly observed: AuthorityObservedOutputV1;
   readonly digest: string;
   readonly disclosures: readonly AuthorityDisclosureV1[];
+  readonly sourceStatements: readonly CallerSourceStatement[];
 } {
   const contract = source(skillId);
   const request = structuredClone(contract.examples.valid[exampleIndex]);
@@ -82,6 +87,7 @@ function checkedModel(skillId: string, exampleIndex: number): {
     observed: extracted.observed,
     digest: validated.request.requestDigest,
     disclosures: result.disclosures,
+    sourceStatements: deriveCallerSourceStatements(validated.request.canonicalRequest),
   };
 }
 
@@ -97,6 +103,7 @@ function interpret(
     model.digest,
     model.evaluation,
     observed,
+    model.sourceStatements,
   );
 }
 

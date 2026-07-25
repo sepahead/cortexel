@@ -86,4 +86,16 @@ describe('mandatory disclosures actually fire', () => {
     (request.source as Record<string, unknown>).kind = 'unknown';
     expect(disclosureIds(request)).toContain('SOURCE_KIND_UNKNOWN');
   });
+
+  it.each([
+    ['literature_extraction', 'SOURCE_LITERATURE_EXTRACTION'],
+    ['manual_entry', 'SOURCE_MANUAL_ENTRY'],
+  ] as const)(
+    'population-rate preserves the %s source-kind disclosure',
+    (kind, expectedDisclosure) => {
+      const request = structuredClone(example('neuro.population_rate'));
+      (request.source as Record<string, unknown>).kind = kind;
+      expect(disclosureIds(request)).toContain(expectedDisclosure);
+    },
+  );
 });

@@ -9,6 +9,7 @@ import io
 import importlib.util
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -688,7 +689,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             ):
                 smoke.isolated_environment(Path(temporary), python, uv)
 
-    def test_reviewed_python_rejects_a_different_uv_interpreter(self) -> None:
+    def test_reviewed_python_enforces_runtime_authority(self) -> None:
         with (
             patch.object(smoke.sys, "version_info", (3, 13, 9, "final", 0)),
             self.assertRaisesRegex(RuntimeError, "requires a dedicated Python 3.14"),
@@ -738,27 +739,57 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 encoding="utf-8",
             )
             reviewed_version = (3, 14, 0, "final", 0)
-            with (
-                patch.object(smoke.sys, "executable", str(executable)),
-                patch.object(smoke.sys, "prefix", str(runtime)),
-                patch.object(smoke.sys, "exec_prefix", str(runtime)),
-                patch.object(smoke.sys, "base_prefix", str(base)),
-                patch.object(smoke.sys, "base_exec_prefix", str(base)),
-                patch.object(smoke.sys, "_base_executable", str(base_alias)),
-                patch.object(smoke.sys, "version_info", reviewed_version),
-                patch.object(
-                    smoke.sys,
-                    "flags",
-                    SimpleNamespace(isolated=1, no_site=1, dont_write_bytecode=1),
-                ),
-                patch.object(
-                    smoke.sys,
-                    "path",
-                    reviewed_sys_path,
-                ),
-                patch.dict(os.environ, {}, clear=True),
-            ):
-                self.assertEqual(smoke.reviewed_python(), str(executable.resolve()))
+
+            def invoke_with_base(candidate: Path) -> str:
+                with (
+                    patch.object(smoke.sys, "executable", str(executable)),
+                    patch.object(smoke.sys, "prefix", str(runtime)),
+                    patch.object(smoke.sys, "exec_prefix", str(runtime)),
+                    patch.object(smoke.sys, "base_prefix", str(base)),
+                    patch.object(smoke.sys, "base_exec_prefix", str(base)),
+                    patch.object(smoke.sys, "_base_executable", str(candidate)),
+                    patch.object(smoke.sys, "version_info", reviewed_version),
+                    patch.object(
+                        smoke.sys,
+                        "flags",
+                        SimpleNamespace(
+                            isolated=1,
+                            no_site=1,
+                            dont_write_bytecode=1,
+                        ),
+                    ),
+                    patch.object(smoke.sys, "path", reviewed_sys_path),
+                    patch.dict(os.environ, {}, clear=True),
+                ):
+                    return smoke.reviewed_python()
+
+            self.assertEqual(invoke_with_base(base_alias), str(executable.resolve()))
+
+            escaped_base_executable = root / "escaped-python3.14"
+            escaped_base_executable.write_bytes(b"escaped base python")
+            escaped_base_executable.chmod(0o755)
+            with self.assertRaisesRegex(RuntimeError, "escapes its protected base prefix"):
+                invoke_with_base(escaped_base_executable)
+
+            directory_base_executable = base / "bin" / "python-directory"
+            directory_base_executable.mkdir()
+            with self.assertRaisesRegex(RuntimeError, "must be a regular file"):
+                invoke_with_base(directory_base_executable)
+
+            nonexecutable_base = base / "bin" / "python-nonexecutable"
+            nonexecutable_base.write_bytes(b"nonexecutable base python")
+            nonexecutable_base.chmod(0o644)
+            with self.assertRaisesRegex(RuntimeError, "is not executable"):
+                invoke_with_base(nonexecutable_base)
+
+            mutable_base = base / "bin" / "python-mutable"
+            mutable_base.write_bytes(b"mutable base python")
+            for mode in (0o775, 0o757):
+                with self.subTest(base_executable_mode=oct(mode)):
+                    mutable_base.chmod(mode)
+                    with self.assertRaisesRegex(RuntimeError, "group/world writable"):
+                        invoke_with_base(mutable_base)
+
             original_configuration = (runtime / "pyvenv.cfg").read_text(encoding="utf-8")
             (runtime / "pyvenv.cfg").write_text(
                 original_configuration + "  INCLUDE-SYSTEM-SITE-PACKAGES = true\n",
@@ -1246,6 +1277,19 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             "--find-links \"$wheelhouse\"",
             "--require-hashes",
             "--no-deps",
+            "command -v setfacl",
+            "command -v getfacl",
+            "Seal exact Python and uv runtime authority",
+            'expected_python_location="/opt/hostedtoolcache/Python/3.14.6/x64"',
+            'expected_uv_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uv"',
+            'sudo chown -R root:root -- "$python_version_root" "$uv_version_root"',
+            'sudo setfacl -R -b -k -- "$python_version_root" "$uv_version_root"',
+            'sudo chmod -R go-w -- "$python_version_root" "$uv_version_root"',
+            'sudo chown root:root -- "${authority_chain[@]}"',
+            'sudo setfacl -b -k -- "${authority_chain[@]}"',
+            'sudo chmod go-w -- "${authority_chain[@]}"',
+            'getfacl -R -c -p -P -- "$python_version_root" "$uv_version_root"',
+            "-perm /022",
             'result_parent="$temporary/cortexel-python-package-result"',
             'verify --result-file "$result"',
             "read_python_package_smoke_result",
@@ -1358,6 +1402,134 @@ class PythonPackageSmokeResultTest(unittest.TestCase):
             self.assertEqual(smoke.read_python_package_smoke_result(path), result)
             with self.assertRaisesRegex(RuntimeError, "must be absent"):
                 smoke.write_python_package_smoke_result(path, result)
+
+    def test_result_reader_requires_canonical_protected_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            parent = root / "reader-parent"
+            parent.mkdir(mode=0o700)
+            path = parent / "result.json"
+            payload = smoke.canonical_json_bytes(self._result(root))
+            self._write_raw(path, payload)
+
+            parent.chmod(0o755)
+            try:
+                with self.assertRaisesRegex(RuntimeError, "mode must be exactly 0700"):
+                    smoke.read_python_package_smoke_result(path)
+            finally:
+                parent.chmod(0o700)
+
+            with (
+                patch.object(smoke.os, "geteuid", return_value=os.geteuid() + 1),
+                self.assertRaisesRegex(
+                    RuntimeError,
+                    "effective-owner physical directory",
+                ),
+            ):
+                smoke.read_python_package_smoke_result(path)
+
+            noncanonical = parent / "unused" / ".." / path.name
+            with self.assertRaisesRegex(RuntimeError, "normalized absolute path"):
+                smoke.read_python_package_smoke_result(noncanonical)
+
+            linked_parent = root / "linked-reader-parent"
+            linked_parent.symlink_to(parent, target_is_directory=True)
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "parent must be one canonical.*physical directory",
+            ):
+                smoke.read_python_package_smoke_result(linked_parent / path.name)
+
+    def test_result_reader_opens_leaf_relative_to_pinned_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            path = root / "result.json"
+            result = self._result(root)
+            self._write_raw(path, smoke.canonical_json_bytes(result))
+            real_open = os.open
+            opens: list[tuple[object, int | None, int]] = []
+
+            def recording_open(
+                received: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                descriptor = real_open(received, flags, mode, dir_fd=dir_fd)
+                opens.append((received, dir_fd, descriptor))
+                return descriptor
+
+            with patch.object(smoke.os, "open", side_effect=recording_open):
+                self.assertEqual(smoke.read_python_package_smoke_result(path), result)
+
+            self.assertEqual(opens[0][0], path.parent)
+            self.assertIsNone(opens[0][1])
+            self.assertEqual(opens[1][0], path.name)
+            self.assertEqual(opens[1][1], opens[0][2])
+
+    def test_result_reader_rejects_leaf_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            path = root / "result.json"
+            displaced = root / "displaced-result.json"
+            payload = smoke.canonical_json_bytes(self._result(root))
+            self._write_raw(path, payload)
+            real_validate = smoke.validate_python_package_smoke_result
+            replaced = False
+
+            def racing_validate(value: object) -> dict[str, object]:
+                nonlocal replaced
+                result = real_validate(value)
+                if not replaced:
+                    replaced = True
+                    path.rename(displaced)
+                    self._write_raw(path, payload)
+                return result
+
+            with (
+                patch.object(
+                    smoke,
+                    "validate_python_package_smoke_result",
+                    side_effect=racing_validate,
+                ),
+                self.assertRaisesRegex(RuntimeError, "changed during strict validation"),
+            ):
+                smoke.read_python_package_smoke_result(path)
+            self.assertTrue(replaced)
+
+    def test_result_reader_rejects_parent_rebind(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            parent = root / "reader-parent"
+            parent.mkdir(mode=0o700)
+            path = parent / "result.json"
+            displaced_parent = root / "displaced-reader-parent"
+            payload = smoke.canonical_json_bytes(self._result(root))
+            self._write_raw(path, payload)
+            real_validate = smoke.validate_python_package_smoke_result
+            rebound = False
+
+            def racing_validate(value: object) -> dict[str, object]:
+                nonlocal rebound
+                result = real_validate(value)
+                if not rebound:
+                    rebound = True
+                    parent.rename(displaced_parent)
+                    parent.mkdir(mode=0o700)
+                    self._write_raw(path, payload)
+                return result
+
+            with (
+                patch.object(
+                    smoke,
+                    "validate_python_package_smoke_result",
+                    side_effect=racing_validate,
+                ),
+                self.assertRaisesRegex(RuntimeError, "parent changed during"),
+            ):
+                smoke.read_python_package_smoke_result(path)
+            self.assertTrue(rebound)
 
     def test_result_file_evidence_hashes_in_fixed_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1710,6 +1882,110 @@ class PythonPackageSmokeResultTest(unittest.TestCase):
             finally:
                 subprocess.run(["/bin/chmod", "-N", str(path)], check=True)
 
+    @unittest.skipUnless(
+        sys.platform.startswith("linux"),
+        "Linux POSIX ACL regression",
+    )
+    def test_linux_real_acls_reject_paths_and_open_descriptors(self) -> None:
+        setfacl = shutil.which("setfacl")
+        if setfacl is None:
+            self.fail("Linux POSIX ACL regression requires setfacl")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            parent = root / "acl-parent"
+            parent.mkdir(mode=0o700)
+            path = parent / "result.json"
+            result = self._result(root)
+            self._write_raw(path, smoke.canonical_json_bytes(result))
+            acl_uid = 1 if os.geteuid() != 1 else 2
+
+            try:
+                subprocess.run(
+                    [setfacl, "-m", f"d:u:{acl_uid}:rwx", str(parent)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o700)
+                with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                    smoke.require_no_extended_acl(
+                        parent,
+                        label="Python package smoke result parent",
+                    )
+                with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                    smoke.read_python_package_smoke_result(path)
+
+                parent_descriptor = os.open(
+                    parent,
+                    os.O_RDONLY
+                    | os.O_DIRECTORY
+                    | os.O_NOFOLLOW
+                    | os.O_CLOEXEC,
+                )
+                try:
+                    with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                        smoke.require_no_extended_acl(
+                            parent_descriptor,
+                            label="Python package smoke result parent",
+                        )
+                finally:
+                    os.close(parent_descriptor)
+            finally:
+                subprocess.run(
+                    [setfacl, "-k", str(parent)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+            try:
+                subprocess.run(
+                    [
+                        setfacl,
+                        "-m",
+                        f"u:{acl_uid}:r--,m::r--",
+                        str(path),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o644)
+                with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                    smoke.require_no_extended_acl(
+                        path,
+                        label="Python package smoke result",
+                    )
+                with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                    smoke.read_python_package_smoke_result(path)
+
+                file_descriptor = os.open(
+                    path,
+                    os.O_RDONLY
+                    | os.O_NONBLOCK
+                    | os.O_NOFOLLOW
+                    | os.O_CLOEXEC,
+                )
+                try:
+                    with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                        smoke.require_no_extended_acl(
+                            file_descriptor,
+                            label="Python package smoke result",
+                        )
+                finally:
+                    os.close(file_descriptor)
+            finally:
+                subprocess.run(
+                    [setfacl, "-b", str(path)],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o644)
+            self.assertEqual(smoke.read_python_package_smoke_result(path), result)
+
     def test_linux_acl_xattrs_are_rejected_for_paths_and_descriptors(self) -> None:
         inspected: list[tuple[Path | int, bool]] = []
 
@@ -1737,18 +2013,48 @@ class PythonPackageSmokeResultTest(unittest.TestCase):
 
         self.assertEqual(inspected, [(Path("/result.json"), False), (17, True)])
 
-        with (
-            patch.object(smoke.sys, "platform", "linux"),
-            patch.object(
-                smoke.os,
-                "listxattr",
-                create=True,
-                side_effect=OSError(errno.ENOTSUP, "unsupported"),
-            ),
-            patch.object(smoke.os, "getxattr", create=True),
-            self.assertRaisesRegex(RuntimeError, "cannot be inspected"),
-        ):
-            smoke.require_no_extended_acl(Path("/result.json"), label="test authority")
+        for error_number in (errno.ENOTSUP, errno.EOPNOTSUPP):
+            for value in (Path("/result.json"), 17):
+                with (
+                    self.subTest(
+                        operation="listxattr",
+                        error_number=error_number,
+                        value=value,
+                    ),
+                    patch.object(smoke.sys, "platform", "linux"),
+                    patch.object(
+                        smoke.os,
+                        "listxattr",
+                        create=True,
+                        side_effect=OSError(error_number, "unsupported"),
+                    ),
+                    patch.object(smoke.os, "getxattr", create=True),
+                    self.assertRaisesRegex(RuntimeError, "cannot be inspected"),
+                ):
+                    smoke.require_no_extended_acl(value, label="test authority")
+
+                with (
+                    self.subTest(
+                        operation="getxattr",
+                        error_number=error_number,
+                        value=value,
+                    ),
+                    patch.object(smoke.sys, "platform", "linux"),
+                    patch.object(
+                        smoke.os,
+                        "listxattr",
+                        create=True,
+                        return_value=[],
+                    ),
+                    patch.object(
+                        smoke.os,
+                        "getxattr",
+                        create=True,
+                        side_effect=OSError(error_number, "unsupported"),
+                    ),
+                    self.assertRaisesRegex(RuntimeError, "cannot be inspected"),
+                ):
+                    smoke.require_no_extended_acl(value, label="test authority")
 
         def hidden_acl(
             _value: Path | int,

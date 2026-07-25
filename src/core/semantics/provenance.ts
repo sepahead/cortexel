@@ -139,8 +139,8 @@ export const provenanceNoCallerAssurance: SemanticValidator = (
 const MAX_NOTE_LENGTH = 200;
 
 /**
- * A caller note is allowed — attributed, unverified, and unable to displace
- * anything.
+ * Caller source notes and limitations are allowed — attributed, unverified, and unable
+ * to displace anything.
  *
  * The characters banned here are not a style preference. A bidi override inside a
  * caption can make the rendered text read in a different order than the source
@@ -165,7 +165,7 @@ export const provenanceNoteSafeDisplay: SemanticValidator = (
           stage: 'provenance',
           instancePath: at,
           validatorId: 'provenance.note_safe_display',
-          message: `a declared note may be at most ${MAX_NOTE_LENGTH} characters; this one is ${value.length}.`,
+          message: `a declared source statement may be at most ${MAX_NOTE_LENGTH} characters; this one is ${value.length}.`,
         }),
       );
     }
@@ -177,7 +177,7 @@ export const provenanceNoteSafeDisplay: SemanticValidator = (
           instancePath: at,
           validatorId: 'provenance.note_safe_display',
           message:
-            'the note contains control, bidi-override, or zero-width characters. Rendered beside a mandatory disclosure, those can visually reorder or conceal it — so they are rejected rather than escaped.',
+            'the declared source statement contains control, bidi-override, or zero-width characters. Rendered beside a mandatory disclosure, those can visually reorder or conceal it — so it is rejected rather than escaped.',
         }),
       );
     }

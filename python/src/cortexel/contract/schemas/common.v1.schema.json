@@ -498,13 +498,13 @@
           "type": "array",
           "items": { "$ref": "#/$defs/displayString" },
           "maxItems": 16,
-          "description": "Limitations the caller knows about. These are ADDED to Cortexel's mandatory disclosures; they never replace or suppress one."
+          "description": "Limitations the caller knows about. Cortexel presents them in array order after every mandatory disclosure under the renderer-owned label \"Source limitation (declared by caller; not verified)\". Each caller body is bidi-isolated. Their exact text never enters artifact.disclosures and never replaces or suppresses a mandatory disclosure."
         },
         "declaredNote": {
           "$ref": "#/$defs/displayString",
           "type": "string",
           "maxLength": 200,
-          "description": "A free-text caller note. It is rendered under the label \"Source note (declared by caller; not verified)\", bidi-isolated, and can never precede, replace, suppress, or visually dominate a mandatory disclosure."
+          "description": "A free-text caller note. Its presence triggers the generic contract-owned CALLER_NOTE_UNVERIFIED disclosure. The exact note is then rendered after the declared limitations and every mandatory disclosure under the renderer-owned label \"Source note (declared by caller; not verified)\", bidi-isolated; its exact text can never enter artifact.disclosures, precede, replace, suppress, or cover a mandatory disclosure."
         }
       },
       "required": ["kind"],

@@ -87,7 +87,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.11', '3.12', '3.13', '3.14']
+        python: ['3.11', '3.12', '3.13', '3.14.6']
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -99,6 +99,144 @@ jobs:
         with:
           version: 0.11.16
           enable-cache: false
+      - name: Require Linux POSIX ACL tooling
+        run: |
+          command -v setfacl >/dev/null
+          command -v getfacl >/dev/null
+      - name: Seal exact Python and uv runtime authority
+        if: matrix.python == '3.14.6'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 022
+          python_version="$(python -I -S -B -c \
+            'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')"
+          python_base="$(python -I -S -B -c \
+            'import pathlib, sys; print(pathlib.Path(sys.base_prefix).resolve(strict=True))')"
+          python_executable="$(python -I -S -B -c \
+            'import pathlib, sys; print(pathlib.Path(sys.executable).resolve(strict=True))')"
+          python_location="$(realpath -e -- "$pythonLocation")"
+          expected_python_location="/opt/hostedtoolcache/Python/3.14.6/x64"
+          expected_python_executable="$expected_python_location/bin/python3.14"
+          if [[ "$python_version" != "3.14.6" \
+            || "$pythonLocation" != "$expected_python_location" \
+            || "$python_location" != "$expected_python_location" \
+            || "$python_base" != "$expected_python_location" \
+            || "$python_executable" != "$expected_python_executable" ]]; then
+            echo "::error::setup-python did not provide the exact canonical Python 3.14.6 authority"
+            exit 1
+          fi
+
+          uv_executable="$(python -I -S -B -c \
+            'import pathlib, shutil; executable = shutil.which("uv"); assert executable is not None; print(pathlib.Path(executable).resolve(strict=True))')"
+          expected_uv_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uv"
+          if [[ "$uv_executable" != "$expected_uv_executable" \
+            || "$("$uv_executable" --version)" != "uv 0.11.16" ]]; then
+            echo "::error::setup-uv did not provide the exact canonical uv 0.11.16 authority"
+            exit 1
+          fi
+
+          python_version_root="/opt/hostedtoolcache/Python/3.14.6"
+          uv_version_root="/opt/hostedtoolcache/uv/0.11.16"
+          authority_chain=(
+            /opt
+            /opt/hostedtoolcache
+            /opt/hostedtoolcache/Python
+            "$python_version_root"
+            /opt/hostedtoolcache/uv
+            "$uv_version_root"
+          )
+          for authority_directory in "${authority_chain[@]}"; do
+            if [[ ! -d "$authority_directory" \
+              || -L "$authority_directory" \
+              || "$(realpath -e -- "$authority_directory")" != "$authority_directory" ]]; then
+              echo "::error::runtime authority chain is not one canonical physical directory: $authority_directory"
+              exit 1
+            fi
+          done
+
+          for authority_root in "$python_version_root" "$uv_version_root"; do
+            unexpected_entry="$(find -P "$authority_root" \
+              ! -type d ! -type f ! -type l -print -quit)"
+            if [[ -n "$unexpected_entry" ]]; then
+              echo "::error::runtime authority contains a special filesystem entry: $unexpected_entry"
+              exit 1
+            fi
+            while IFS= read -r -d '' authority_link; do
+              authority_target="$(realpath -e -- "$authority_link")"
+              if [[ "$authority_target" != "$authority_root" \
+                && "$authority_target" != "$authority_root"/* ]]; then
+                echo "::error::runtime authority symlink escapes its version root: $authority_link"
+                exit 1
+              fi
+            done < <(find -P "$authority_root" -type l -print0)
+          done
+
+          sudo chown -R root:root -- "$python_version_root" "$uv_version_root"
+          sudo setfacl -R -b -k -- "$python_version_root" "$uv_version_root"
+          sudo chmod -R go-w -- "$python_version_root" "$uv_version_root"
+          sudo chown root:root -- "${authority_chain[@]}"
+          sudo setfacl -b -k -- "${authority_chain[@]}"
+          sudo chmod go-w -- "${authority_chain[@]}"
+
+          for authority_directory in "${authority_chain[@]}"; do
+            if [[ "$(stat -c '%u:%g' -- "$authority_directory")" != "0:0" \
+              || -n "$(find -P "$authority_directory" -maxdepth 0 -perm /022 -print -quit)" ]]; then
+              echo "::error::runtime authority chain remains mutable: $authority_directory"
+              exit 1
+            fi
+          done
+          for authority_root in "$python_version_root" "$uv_version_root"; do
+            unowned_entry="$(find -P "$authority_root" \
+              \( ! -user root -o ! -group root \) -print -quit)"
+            writable_entry="$(find -P "$authority_root" \
+              \( -type d -o -type f \) -perm /022 -print -quit)"
+            if [[ -n "$unowned_entry" || -n "$writable_entry" ]]; then
+              echo "::error::runtime version root remains mutable: ${unowned_entry:-$writable_entry}"
+              exit 1
+            fi
+          done
+          set +e
+          getfacl -R -c -p -P -- "$python_version_root" "$uv_version_root" \
+            | awk '
+              /^(default:|user:[^:]+:|group:[^:]+:|mask::)/ { extended = 1 }
+              END { exit extended ? 42 : 0 }
+            '
+          acl_status=("${PIPESTATUS[@]}")
+          set -e
+          if (( acl_status[0] != 0 )); then
+            echo "::error::runtime version-root ACL authority could not be inspected"
+            exit 1
+          fi
+          if (( acl_status[1] == 42 )); then
+            echo "::error::runtime version root retains extended ACL authority"
+            exit 1
+          elif (( acl_status[1] != 0 )); then
+            echo "::error::runtime version-root ACL inspection failed"
+            exit 1
+          fi
+
+          set +e
+          getfacl -c -p -P -- "${authority_chain[@]}" \
+            | awk '
+              /^(default:|user:[^:]+:|group:[^:]+:|mask::)/ { extended = 1 }
+              END { exit extended ? 42 : 0 }
+            '
+          acl_status=("${PIPESTATUS[@]}")
+          set -e
+          if (( acl_status[0] != 0 )); then
+            echo "::error::runtime authority-chain ACLs could not be inspected"
+            exit 1
+          fi
+          if (( acl_status[1] == 42 )); then
+            echo "::error::runtime authority chain retains extended ACL authority"
+            exit 1
+          elif (( acl_status[1] != 0 )); then
+            echo "::error::runtime authority-chain ACL inspection failed"
+            exit 1
+          fi
+          test -x "$expected_python_executable"
+          test -x "$expected_uv_executable"
       - name: Compile Python reader
         run: python -m compileall -q python/src python/tests scripts/smoke-python-package.py
       - name: Python tests (pure standard library)
@@ -108,7 +246,7 @@ jobs:
       - name: Python lint
         run: uvx --no-config --from ruff==0.15.18 ruff check python/src python/tests scripts/smoke-python-package.py
       - name: Provision exact hash-pinned Python build backend
-        if: matrix.python == '3.14'
+        if: matrix.python == '3.14.6'
         run: |
           umask 022
           temporary="$(python -I -S -B -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' "$RUNNER_TEMP")"
@@ -152,7 +290,7 @@ jobs:
             echo "CORTEXEL_BUILD_BACKEND_WHEELHOUSE=$wheelhouse"
           } >> "$GITHUB_ENV"
       - name: Reproducible wheel/sdist, clean install, and canonical result receipt
-        if: matrix.python == '3.14'
+        if: matrix.python == '3.14.6'
         run: |
           umask 022
           temporary="$("$CORTEXEL_PACKAGE_PYTHON" -I -S -B -c \

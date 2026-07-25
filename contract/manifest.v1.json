@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:d0ef03da20000581d71e859310419444e7fb8c9dad4e39f60a97ad3070032fc9",
-  "catalogDigest": "sha256:801aa157a57212ca58b092319d57edd8ab8649a80202a8a577510ca9f7162c09",
+  "contractDigest": "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121",
+  "catalogDigest": "sha256:56f15211b76d250f9d1d2142bb735dd904d89222798a7ac2ed4c37b9ebd2534d",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
     "packaged",
@@ -14,11 +14,11 @@
   "stableSkills": [
     {
       "id": "network.adjacency_matrix",
-      "revision": 2,
+      "revision": 3,
       "title": "Connection adjacency matrix (target rows, source columns)",
       "renderer": {
         "id": "figure.matrix",
-        "revision": 2,
+        "revision": 3,
         "axisOrder": "target_rows_source_columns"
       },
       "availability": "packaged",
@@ -200,7 +200,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.adjacency_matrix.output_authority.v2"
+          "id": "network.adjacency_matrix.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -351,11 +351,11 @@
     },
     {
       "id": "network.connection_graph",
-      "revision": 2,
+      "revision": 3,
       "title": "Directed connection graph of a declared network snapshot",
       "renderer": {
         "id": "figure.connection_graph",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -594,7 +594,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.connection_graph.output_authority.v2"
+          "id": "network.connection_graph.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -762,11 +762,11 @@
     },
     {
       "id": "network.degree_distribution",
-      "revision": 2,
+      "revision": 3,
       "title": "In- and out-degree distribution over a declared node universe",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -899,7 +899,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.degree_distribution.output_authority.v2"
+          "id": "network.degree_distribution.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -1044,11 +1044,11 @@
     },
     {
       "id": "network.delay_distribution",
-      "revision": 2,
+      "revision": 3,
       "title": "Synaptic delay distribution over a declared edge population",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -1247,7 +1247,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.delay_distribution.output_authority.v2"
+          "id": "network.delay_distribution.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -1408,11 +1408,11 @@
     },
     {
       "id": "network.delay_matrix",
-      "revision": 2,
+      "revision": 3,
       "title": "Transmission-delay matrix over a declared target-row / source-column node universe",
       "renderer": {
         "id": "figure.matrix",
-        "revision": 2,
+        "revision": 3,
         "axisOrder": "target_rows_source_columns"
       },
       "availability": "packaged",
@@ -1608,7 +1608,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.delay_matrix.output_authority.v2"
+          "id": "network.delay_matrix.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -1763,11 +1763,11 @@
     },
     {
       "id": "network.spatial_map_2d",
-      "revision": 2,
+      "revision": 3,
       "title": "Two-dimensional spatial map of declared node positions",
       "renderer": {
         "id": "figure.spatial_map_2d",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -2014,7 +2014,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.spatial_map_2d.output_authority.v2"
+          "id": "network.spatial_map_2d.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -2190,11 +2190,11 @@
     },
     {
       "id": "network.synaptic_weight_trace",
-      "revision": 2,
+      "revision": 3,
       "title": "Synaptic weight over time, for identified synapses or a declared group",
       "renderer": {
         "id": "figure.synaptic_weight_trace",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -2487,7 +2487,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.synaptic_weight_trace.output_authority.v2"
+          "id": "network.synaptic_weight_trace.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -2695,11 +2695,11 @@
     },
     {
       "id": "network.weight_distribution",
-      "revision": 2,
+      "revision": 3,
       "title": "Synaptic weight distribution over a declared edge population",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -2857,7 +2857,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.weight_distribution.output_authority.v2"
+          "id": "network.weight_distribution.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -3015,11 +3015,11 @@
     },
     {
       "id": "network.weight_matrix",
-      "revision": 2,
+      "revision": 3,
       "title": "Synaptic weight matrix (target rows, source columns)",
       "renderer": {
         "id": "figure.matrix",
-        "revision": 2,
+        "revision": 3,
         "axisOrder": "target_rows_source_columns"
       },
       "availability": "packaged",
@@ -3221,7 +3221,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.weight_matrix.output_authority.v2"
+          "id": "network.weight_matrix.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -3377,11 +3377,11 @@
     },
     {
       "id": "neuro.analog_trace",
-      "revision": 2,
+      "revision": 3,
       "title": "Analog quantities over a declared time axis",
       "renderer": {
         "id": "figure.analog_trace",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -3569,7 +3569,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.analog_trace.output_authority.v2"
+          "id": "neuro.analog_trace.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -3736,11 +3736,11 @@
     },
     {
       "id": "neuro.compartment_trace",
-      "revision": 2,
+      "revision": 3,
       "title": "Signal traces across the identified compartments of one cell",
       "renderer": {
         "id": "figure.compartment_trace",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -3925,7 +3925,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.compartment_trace.output_authority.v2"
+          "id": "neuro.compartment_trace.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -4117,11 +4117,11 @@
     },
     {
       "id": "neuro.correlogram",
-      "revision": 2,
+      "revision": 3,
       "title": "Oriented lag correlogram between two event trains",
       "renderer": {
         "id": "figure.correlogram",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -4273,7 +4273,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.correlogram.output_authority.v2"
+          "id": "neuro.correlogram.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -4443,11 +4443,11 @@
     },
     {
       "id": "neuro.isi_distribution",
-      "revision": 2,
+      "revision": 3,
       "title": "Inter-spike interval distribution",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -4634,7 +4634,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.isi_distribution.output_authority.v2"
+          "id": "neuro.isi_distribution.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -4794,11 +4794,11 @@
     },
     {
       "id": "neuro.multisignal_trace",
-      "revision": 2,
+      "revision": 3,
       "title": "Multiple biologically distinct signals on one declared clock",
       "renderer": {
         "id": "figure.multisignal_trace",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -5090,7 +5090,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.multisignal_trace.output_authority.v2"
+          "id": "neuro.multisignal_trace.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -5277,11 +5277,11 @@
     },
     {
       "id": "neuro.phase_plane",
-      "revision": 2,
+      "revision": 3,
       "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
       "renderer": {
         "id": "figure.phase_plane",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -5447,7 +5447,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.phase_plane.output_authority.v2"
+          "id": "neuro.phase_plane.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -5637,11 +5637,11 @@
     },
     {
       "id": "neuro.population_rate",
-      "revision": 2,
+      "revision": 3,
       "title": "Population firing rate over time",
       "renderer": {
         "id": "figure.population_rate",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -5663,6 +5663,8 @@
         "SOURCE_SIMULATION",
         "SOURCE_SYNTHETIC_FIXTURE",
         "SOURCE_KIND_UNKNOWN",
+        "SOURCE_LITERATURE_EXTRACTION",
+        "SOURCE_MANUAL_ENTRY",
         "SOURCE_AUTHENTICITY_UNVERIFIED",
         "REFERENCE_COMPARISON_NOT_RUN",
         "UNCERTAINTY_NOT_PROVIDED",
@@ -5759,7 +5761,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.population_rate.output_authority.v2"
+          "id": "neuro.population_rate.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -5899,11 +5901,11 @@
     },
     {
       "id": "neuro.psth",
-      "revision": 2,
+      "revision": 3,
       "title": "Peri-event time histogram (trial-aligned event counts)",
       "renderer": {
         "id": "figure.psth",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -6203,7 +6205,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.psth.output_authority.v2"
+          "id": "neuro.psth.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -6385,11 +6387,11 @@
     },
     {
       "id": "neuro.response_curve",
-      "revision": 2,
+      "revision": 3,
       "title": "Input-response curve across declared conditions",
       "renderer": {
         "id": "figure.response_curve",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -6673,7 +6675,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.response_curve.output_authority.v2"
+          "id": "neuro.response_curve.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -6869,11 +6871,11 @@
     },
     {
       "id": "neuro.spike_raster",
-      "revision": 2,
+      "revision": 3,
       "title": "Spike raster: event times by identified sender and trial",
       "renderer": {
         "id": "figure.spike_raster",
-        "revision": 2
+        "revision": 3
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -7022,7 +7024,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.spike_raster.output_authority.v2"
+          "id": "neuro.spike_raster.output_authority.v3"
         },
         "requestPaths": [
           {
@@ -8284,7 +8286,7 @@
     },
     {
       "path": "contract/registries/disclosures.v1.json",
-      "digest": "sha256:5cbc15309a6ba607aa753e279e9a9a67a72d5f089f47296ec07aca13816eb6e6"
+      "digest": "sha256:dcc1955707db08db5dc0a98071a40ecb7acb3e1f72431408990596a796e765d7"
     },
     {
       "path": "contract/registries/error-codes.v1.json",
@@ -8308,11 +8310,11 @@
     },
     {
       "path": "contract/registries/renderers.v1.json",
-      "digest": "sha256:60dec6825b4c18ccd106d2f6d5f968ebee88200df181fea104e3ab7fc211327d"
+      "digest": "sha256:881c3815d93d36a497e1a8570a400b733519292b06c21563e6d7d6cb1194ef9c"
     },
     {
       "path": "contract/registries/semantic-validators.v1.json",
-      "digest": "sha256:d15d42cbb89d90df599ae3705beec657512a0d764dc9fc905c32ee3ce738cb1a"
+      "digest": "sha256:f186e8e3cac03369ca6691964ac28e28abaee09c80810fb50db2f46a619d8e52"
     },
     {
       "path": "contract/registries/units.v1.json",
@@ -8320,11 +8322,11 @@
     },
     {
       "path": "contract/schemas/common.v1.schema.json",
-      "digest": "sha256:796f4bda164332110a45d9476dc580f0b4fb57e314191ce3a6303ef15d96d799"
+      "digest": "sha256:c9c53266ca3adc956b41441fae4290877a4d3c16f3d3d4f2b2bd964b7f92228e"
     },
     {
       "path": "contract/schemas/figure-artifact.v1.schema.json",
-      "digest": "sha256:ab02f67dfdcfacd41c4e9148de71ca758c729496a9f8b05d329fad2ccb9bc30a"
+      "digest": "sha256:6e2e9df96e87f9f8438e8100aefd11543d4d8fb40fddfbf41589771499733718"
     },
     {
       "path": "contract/schemas/figure-request.v1.schema.json",
@@ -8332,7 +8334,7 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:cda976f634f107186b3344ffe8cda3040b137870b0ff965da0c2988dc0fe63fb"
+      "digest": "sha256:ffd89ef37c233994ed75fa7f6f0ecc2adbec60ba9e911ee4ec859b461738567d"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
@@ -8420,79 +8422,79 @@
     },
     {
       "path": "contract/skills/network.adjacency_matrix.v1.json",
-      "digest": "sha256:3961b5bf1e4256591d8228aa4165357f4d71a5b2165d393077586b7f80b85916"
+      "digest": "sha256:11ddaa8e4c836672a3cca7baffdf459614e5216d2f6f7c451048aaa57043d691"
     },
     {
       "path": "contract/skills/network.connection_graph.v1.json",
-      "digest": "sha256:06c8fe4f969b11ce131b881a343af3dda4d43bd4cb6b425507ff85e89b60bd22"
+      "digest": "sha256:86c0b1da1f225c2a041d2524ce08f7104b19d6a4911302d3a177cc97885b3dcf"
     },
     {
       "path": "contract/skills/network.degree_distribution.v1.json",
-      "digest": "sha256:9313013a3d8e2737c492c760ccfb404032c8551a250ccd6a16a88a05cf9e855a"
+      "digest": "sha256:bcc059db8f68fc3cf7cc9625c88a95cefd9b758e472fe1b034550a0187e85cd0"
     },
     {
       "path": "contract/skills/network.delay_distribution.v1.json",
-      "digest": "sha256:1196c84e10c88583147bb720972744ea5f4473f26f1163763a258d435f61e760"
+      "digest": "sha256:38b43c76aed4a445fda4389ef67f9772634f5da37f302c37ca054e386763db8c"
     },
     {
       "path": "contract/skills/network.delay_matrix.v1.json",
-      "digest": "sha256:4f8db715a708c489d10388c0517ed846ad105da710a2d3ae25ce31300cfbdc6f"
+      "digest": "sha256:31c932754aa2a04f63abd592cbf8a5bc8cac9b96a6727574676398a6cd776224"
     },
     {
       "path": "contract/skills/network.spatial_map_2d.v1.json",
-      "digest": "sha256:bf26a85cb58d147b6e18c7565169c2e95bd3f39d2e8a77676ca605e296c5ebab"
+      "digest": "sha256:f7ce0125b83c6dc9e73c224def6aac7c4317ec8b55fc8b3c7cd232c0c0ca8a7c"
     },
     {
       "path": "contract/skills/network.synaptic_weight_trace.v1.json",
-      "digest": "sha256:20e3b9fac38355b85703d866407abd2f939b379a37ddded9ee5cd6e3c62e466e"
+      "digest": "sha256:0062434276f59eaf3773bf0c2db32cff9539fa7c658fcbb8167343f46a6fe138"
     },
     {
       "path": "contract/skills/network.weight_distribution.v1.json",
-      "digest": "sha256:c2c47fa6185ab033dcaa7ff0e9cf1e25f85bcffbe6681d883c9b81fd81ff86a7"
+      "digest": "sha256:d1499a985113a0e6c2f97b4269c55a8ae9fef02e39342f9e6a89fbe69790ab2a"
     },
     {
       "path": "contract/skills/network.weight_matrix.v1.json",
-      "digest": "sha256:71c4fa91dd95fa1ddfb01a7b3a228c70d9839dce6fa8057ec557ff0aabb5af4f"
+      "digest": "sha256:983a5a9839b2e8ee8e1942d94f76461564d95d2b8d907dd0ce1923cb603bdab2"
     },
     {
       "path": "contract/skills/neuro.analog_trace.v1.json",
-      "digest": "sha256:53320aae5595793749058e5418c8eca40ed3cedec366da328e793bcda515f872"
+      "digest": "sha256:80c48683250451b00b28662cd9ab3641f82a6628d06ad60a7f9cf9be6733276b"
     },
     {
       "path": "contract/skills/neuro.compartment_trace.v1.json",
-      "digest": "sha256:bcf1e103676b128eb821619d848b9e0d8a4d83937a06793f0897ed81a0f9beb0"
+      "digest": "sha256:2924c11e7aed53f41904ade6bf052cd801cecdd7d142b52e61b574b905cac3de"
     },
     {
       "path": "contract/skills/neuro.correlogram.v1.json",
-      "digest": "sha256:21099c413471c4702206d5a2e1012bec2d917a678f6c5ea96487bc9f888c4ba2"
+      "digest": "sha256:97b7eca46d1e0c6c9810739f13c29c39162225d3fa3934f9ed32c06780927fba"
     },
     {
       "path": "contract/skills/neuro.isi_distribution.v1.json",
-      "digest": "sha256:a73971a0c4dbb43dfdd5b55e5a80b0bdf51748094d6a9118b2cb71f1b8e95ad1"
+      "digest": "sha256:66cf3e06171186bd4de5e619e2affa9a2850f6cd3e5474b213ab77b6c5eb6ed7"
     },
     {
       "path": "contract/skills/neuro.multisignal_trace.v1.json",
-      "digest": "sha256:bb4d72b826f02358eeff61ff34ee4f34436ed49cc9a759e873ab1366a81e36d5"
+      "digest": "sha256:7559f20ec3482cd4b1cc2fdd2ed491a304b9553096f7d5b7b9041093d9deb384"
     },
     {
       "path": "contract/skills/neuro.phase_plane.v1.json",
-      "digest": "sha256:7e9fd0139afb5e50eb2bbd1b3a8290b3206ee51fd58787d0498a3814c8a6ba18"
+      "digest": "sha256:e630665e979277a2ab7138be3188e62a667743ab754c48325665c2b4c3ee9721"
     },
     {
       "path": "contract/skills/neuro.population_rate.v1.json",
-      "digest": "sha256:cdbb1b31b423b3579f9b94bf20ff11771a17cde58a9e723d6f377adbd00977f5"
+      "digest": "sha256:2d7d70707ed42c32768ccfee267689ba3d74f544e86c985a08fb555d59daa46c"
     },
     {
       "path": "contract/skills/neuro.psth.v1.json",
-      "digest": "sha256:19ccfd6c4949d02ef6d29d91206366a925477101b2ea0f00e4b6db8240198290"
+      "digest": "sha256:ece07af0c2e2ae3f660840721ef8fa70e009ecf422e70a084544b65cdecb6f0a"
     },
     {
       "path": "contract/skills/neuro.response_curve.v1.json",
-      "digest": "sha256:a638084255e4c706de3ce8b940ef41c9a58fcd2d1a3e02492530fee2f09d3ad5"
+      "digest": "sha256:88d4ee453d041ec61a14aa766aaed6f8032cd4ba09d866b5cf63de79d6fa8436"
     },
     {
       "path": "contract/skills/neuro.spike_raster.v1.json",
-      "digest": "sha256:044899aeec5b58bfa535afdeb0c3f718e45aa31370097b5d2c866a86213050a5"
+      "digest": "sha256:be455a3bd0a4862331df2e74c7d6fb5b2cb8974b0212e0a452bafd87493f7be8"
     }
   ],
   "notes": [

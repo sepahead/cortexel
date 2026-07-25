@@ -106,7 +106,7 @@ function exactFloorBinary64ProductOracle(value: number, factor: number): number 
 }
 
 describe('response-curve derivation and rendering', () => {
-  it('publishes and enforces the revision-2 skill and renderer identities', () => {
+  it('publishes and enforces skill and renderer revision 3 identities', () => {
     const contract = JSON.parse(readFileSync(
       path.resolve(import.meta.dirname, '../contract/skills/neuro.response_curve.v1.json'),
       'utf8',
@@ -119,22 +119,22 @@ describe('response-curve derivation and rendering', () => {
       (renderer) => renderer.id === contract.renderer.id,
     );
 
-    expect(contract.revision).toBe(2);
-    expect(contract.renderer).toEqual({ id: 'figure.response_curve', revision: 2 });
+    expect(contract.revision).toBe(3);
+    expect(contract.renderer).toEqual({ id: 'figure.response_curve', revision: 3 });
     expect(registeredRenderer?.revision).toBe(contract.renderer.revision);
 
     const unpinned = validateRequestValue(examples()[0]);
     expect(unpinned.ok).toBe(true);
-    if (unpinned.ok) expect(unpinned.request.skillRevision).toBe(2);
+    if (unpinned.ok) expect(unpinned.request.skillRevision).toBe(3);
 
     const pinnedCurrent = structuredClone(examples()[0]);
-    pinnedCurrent.skill.revision = 2;
+    pinnedCurrent.skill.revision = 3;
     expect(validateRequestValue(pinnedCurrent).ok).toBe(true);
     expect((built(pinnedCurrent).artifact.render as { rendererRevision: number }).rendererRevision)
-      .toBe(2);
+      .toBe(3);
 
     const pinnedPrior = structuredClone(examples()[0]);
-    pinnedPrior.skill.revision = 1;
+    pinnedPrior.skill.revision = 2;
     const refused = validateRequestValue(pinnedPrior);
     expect(refused.ok).toBe(false);
     if (!refused.ok) {

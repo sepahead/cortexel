@@ -142,11 +142,24 @@ describe('independent distribution OutputAuthority evaluators', () => {
         expect(result.ok, `${skillId} exact summary example ${exampleIndex} builds`).toBe(true);
         if (!result.ok) continue;
         const disclosureCount = result.disclosures.length;
-        const expectedGlobalSummary = disclosureCount === 0
+        const disclosureBoundSummary = disclosureCount === 0
           ? templateBody
           : `${templateBody} ${disclosureCount} ${disclosureCount === 1 ? 'disclosure applies' : 'disclosures apply'}: ${result.disclosures
             .map((disclosure) => disclosure.text)
             .join(' ')}`;
+        const source = request.source as JsonRecord;
+        const expectedSourceStatements = [
+          ...(Array.isArray(source.declaredLimitations)
+            ? source.declaredLimitations.map((text: string) =>
+              `Source limitation (declared by caller; not verified): \u2068${text}\u2069`)
+            : []),
+          ...(typeof source.declaredNote === 'string'
+            ? [`Source note (declared by caller; not verified): \u2068${source.declaredNote}\u2069`]
+            : []),
+        ];
+        const expectedGlobalSummary = expectedSourceStatements.length === 0
+          ? disclosureBoundSummary
+          : `${disclosureBoundSummary} ${expectedSourceStatements.join(' ')}`;
         expect(result.plan.accessibility.summary).toBe(expectedGlobalSummary);
         expect(result.plan.accessibility.panelSummaries.some(
           (statement) => /conservation/iu.test(statement),
@@ -312,6 +325,7 @@ describe('independent distribution OutputAuthority evaluators', () => {
         themeId: 'light',
         title: 'PSTH closure test',
         disclosures: [],
+        sourceStatements: [],
         summary: 'Independent test summary.',
         returnedTableRows: 3,
       },

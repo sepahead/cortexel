@@ -16,6 +16,7 @@
 import { canonicalDigest, canonicalize } from './canonicalize.js';
 import type { DisclosureFacts } from './disclosures.js';
 import type { JsonValue } from './parse-json.js';
+import type { CallerSourceStatement } from './source-statements.js';
 
 export type AuthorityCellV1 = string | number | null;
 /** Final language-neutral placeholder text; no host-language scalar coercion occurs. */
@@ -456,6 +457,7 @@ function expectedSummary(
   requiredPlaceholders: readonly string[],
   facts: Readonly<Record<string, AuthoritySummaryScalarV1>>,
   disclosures: readonly AuthorityDisclosureV1[],
+  sourceStatements: readonly CallerSourceStatement[],
 ): string | null {
   if (
     !isOutputAuthoritySummarySafeV1(template)
@@ -487,11 +489,15 @@ function expectedSummary(
   if (missing || rendered.length > MAX_AUTHORITY_SUMMARY_CODE_UNITS) return null;
   if (disclosures.some((disclosure) =>
     !isOutputAuthoritySummaryFactSafeV1(disclosure.text))) return null;
-  if (disclosures.length === 0) return rendered;
-  const count = disclosures.length;
-  const complete = `${rendered} ${count} ${count === 1 ? 'disclosure applies' : 'disclosures apply'}: ${disclosures
-    .map((disclosure) => disclosure.text)
-    .join(' ')}`;
+  const disclosureSuffix = disclosures.length === 0
+    ? ''
+    : ` ${disclosures.length} ${disclosures.length === 1 ? 'disclosure applies' : 'disclosures apply'}: ${disclosures
+      .map((disclosure) => disclosure.text)
+      .join(' ')}`;
+  const sourceStatementSuffix = sourceStatements.length === 0
+    ? ''
+    : ` ${sourceStatements.map((statement) => statement.text).join(' ')}`;
+  const complete = `${rendered}${disclosureSuffix}${sourceStatementSuffix}`;
   return complete.length <= MAX_AUTHORITY_SUMMARY_CODE_UNITS ? complete : null;
 }
 
@@ -586,6 +592,7 @@ export function interpretOutputAuthorityModelV1(
   canonicalRequestDigest: string,
   evaluation: AuthorityEvaluationV1,
   observed: AuthorityObservedOutputV1,
+  expectedSourceStatements: readonly CallerSourceStatement[],
 ): AuthorityVerificationResultV1 {
   const violations: AuthorityViolationV1[] = [];
   if (evaluation.evaluatorId !== authority.evaluator.id) {
@@ -773,6 +780,7 @@ export function interpretOutputAuthorityModelV1(
       authority.summary.requiredPlaceholders,
       factValue.facts,
       expectedDisclosures,
+      expectedSourceStatements,
     );
     if (rendered === null) {
       recordViolation(violations, violation(

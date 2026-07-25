@@ -36,6 +36,7 @@ function plan(): RenderPlanV1 {
       }],
     }],
     disclosures: [],
+    sourceStatements: [],
     table: {
       policy: 'complete_returned',
       columns: [{ key: 'id', header: 'ID' }],

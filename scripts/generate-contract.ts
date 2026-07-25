@@ -44,6 +44,7 @@ import {
 } from './lib/capability-source.js';
 import { numericPolicySourceProblems } from './lib/numeric-policy-source.js';
 import { outputAuthoritySourceProblems } from './lib/output-authority-source.js';
+import { sourceKindDisclosureSourceProblems } from './lib/disclosure-source.js';
 import {
   contractIdentitySourceProblems,
   resolveContractIdentitySource,
@@ -155,6 +156,12 @@ const stableSkills = skills.filter((s) => s.status === 'stable');
 // ---------------------------------------------------------------------------
 
 const problems: string[] = [];
+
+problems.push(...sourceKindDisclosureSourceProblems(
+  disclosures,
+  stableSkills,
+  commonSchema.$defs?.sourceDeclaration?.properties?.kind?.enum ?? [],
+));
 
 problems.push(...packageDistributionIdentityProblems({
   packageName: packageJson.name,

@@ -1286,10 +1286,10 @@ class TestValidation(unittest.TestCase):
     def test_explicit_skill_revision_is_checked_before_structure_and_semantics(self):
         request = json.loads(json.dumps(self._response_contract()["examples"]["valid"][0]))
 
-        request["skill"]["revision"] = 2
+        request["skill"]["revision"] = 3
         self.assertEqual(cortexel.validate_request_partial(request), [])
 
-        request["skill"]["revision"] = 1
+        request["skill"]["revision"] = 2
         errors = cortexel.validate_request_partial(request)
         self.assertEqual(
             [error.code for error in errors],

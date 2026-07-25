@@ -204,7 +204,7 @@ The machine-readable state of every release gate is in
   it snapshots an exported NEST spike-recorder object, requires the recorded sender universe
   (never inferring it), requires the top-level device-status `n_events` field to be a
   non-negative safe integer exactly equal to both event-array lengths, does not assume
-  chronological events, and produces a revision-2 `neuro.spike_raster` request for
+  chronological events, and produces a revision-3 `neuro.spike_raster` request for
   explicit NEST 3.9/3.10 memory output with
   `time_in_steps: false`. The request retains `(origin + start, origin + stop]`, native
   binary64 milliseconds, multiplicity, and a digest of the detached export. Step/offset,

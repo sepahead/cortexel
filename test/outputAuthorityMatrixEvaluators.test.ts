@@ -17,6 +17,10 @@ import {
 } from '../src/core/output-authority.js';
 import type { JsonValue } from '../src/core/parse-json.js';
 import { validateRequestValue } from '../src/core/request.js';
+import {
+  deriveCallerSourceStatements,
+  type CallerSourceStatement,
+} from '../src/core/source-statements.js';
 import { buildFigure } from '../src/render/index.js';
 import { extractObservedOutputAuthorityV1 } from '../src/render/output-authority-extract.js';
 
@@ -38,7 +42,7 @@ function source(skillId: string): JsonRecord {
 
 function evaluator(skillId: string) {
   const found = MATRIX_AUTHORITY_EVALUATORS.find(
-    (candidate) => candidate.id === `${skillId}.output_authority.v2`,
+    (candidate) => candidate.id === `${skillId}.output_authority.v3`,
   );
   if (!found) throw new Error(`missing matrix authority evaluator ${skillId}`);
   return found;
@@ -56,6 +60,7 @@ function checkedModel(skillId: string, exampleIndex: number): {
   readonly evaluation: AuthorityEvaluationV1;
   readonly observed: AuthorityObservedOutputV1;
   readonly digest: string;
+  readonly sourceStatements: readonly CallerSourceStatement[];
 } {
   const contract = source(skillId);
   const request = structuredClone(contract.examples.valid[exampleIndex]);
@@ -76,6 +81,7 @@ function checkedModel(skillId: string, exampleIndex: number): {
     ),
     observed: extracted.observed,
     digest: validated.request.requestDigest,
+    sourceStatements: deriveCallerSourceStatements(validated.request.canonicalRequest),
   };
 }
 
@@ -91,6 +97,7 @@ function interpret(
     model.digest,
     model.evaluation,
     observed,
+    model.sourceStatements,
   );
 }
 
@@ -250,6 +257,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
         evaluation,
         observed: extracted.observed,
         digest: validated.request.requestDigest,
+        sourceStatements: deriveCallerSourceStatements(validated.request.canonicalRequest),
       };
       expect(interpret(model)).toEqual({
         tag: 'valid',
@@ -412,6 +420,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
       evaluation,
       observed: extracted.observed,
       digest: validated.request.requestDigest,
+      sourceStatements: deriveCallerSourceStatements(validated.request.canonicalRequest),
     };
     expect(interpret(model).tag).toBe('valid');
 
@@ -528,6 +537,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
           evaluation: canonicalEvaluation,
           observed: extracted.observed,
           digest: validated.request.requestDigest,
+          sourceStatements: deriveCallerSourceStatements(validated.request.canonicalRequest),
         };
         const rows = extracted.observed.table.rows.map((row) => [...row]);
         rows[0][scopeColumn] = canonicalize({
@@ -656,13 +666,13 @@ describe('independent matrix OutputAuthority evaluators', () => {
     }
   });
 
-  it('pins all matrix skills, evaluators, and the shared renderer to revision 2', () => {
+  it('pins matrix skills, evaluators, and the shared renderer at revision 3', () => {
     for (const skillId of MATRIX_SKILLS) {
       const contract = source(skillId);
-      expect(contract.revision).toBe(2);
-      expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 2 });
+      expect(contract.revision).toBe(3);
+      expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 3 });
       expect(contract.outputAuthority.evaluator.id).toBe(
-        `${skillId}.output_authority.v2`,
+        `${skillId}.output_authority.v3`,
       );
       expect(contract.accessibility.tableColumns.map((column: JsonRecord) => column.key))
         .toContain('scopeSummary');
@@ -678,7 +688,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
       .map((column: JsonRecord) => column.key);
     expect(delayColumns).not.toContain('snapshotTime');
     expect(MATRIX_AUTHORITY_EVALUATORS.map((entry) => entry.id).sort()).toEqual(
-      MATRIX_SKILLS.map((skillId) => `${skillId}.output_authority.v2`).sort(),
+      MATRIX_SKILLS.map((skillId) => `${skillId}.output_authority.v3`).sort(),
     );
     const renderers = JSON.parse(readFileSync(
       path.join(ROOT, 'contract/registries/renderers.v1.json'),
@@ -687,7 +697,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
     const matrixRenderer = renderers.renderers.find(
       (renderer: JsonRecord) => renderer.id === 'figure.matrix',
     );
-    expect(matrixRenderer.revision).toBe(2);
+    expect(matrixRenderer.revision).toBe(3);
     expect(matrixRenderer.notes).toContain(
       'not_observed is distinct from observed absence and is never drawn as absent',
     );

@@ -1,6 +1,6 @@
 {
   "id": "network.adjacency_matrix",
-  "revision": 2,
+  "revision": 3,
   "status": "stable",
   "releaseReady": false,
   "title": "Connection adjacency matrix (target rows, source columns)",
@@ -238,7 +238,7 @@
     { "id": "topology.delay_positive" }
   ],
 
-  "renderer": { "id": "figure.matrix", "revision": 2, "axisOrder": "target_rows_source_columns" },
+  "renderer": { "id": "figure.matrix", "revision": 3, "axisOrder": "target_rows_source_columns" },
 
   "budgets": {
     "maxObservations": 200000,
@@ -273,7 +273,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.adjacency_matrix.output_authority.v2"
+      "id": "network.adjacency_matrix.output_authority.v3"
     },
     "requestPaths": [
       {

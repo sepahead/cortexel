@@ -193,6 +193,7 @@ function verify(
     digest,
     nextEvaluation,
     nextObserved,
+    [],
   );
 }
 

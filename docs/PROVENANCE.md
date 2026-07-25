@@ -24,7 +24,7 @@ A figure request has **two authors**, and they are kept structurally separate:
 
 | Author | Owns | Examples |
 |--------|------|----------|
-| **The caller** (an agent, adapter, or human) | *What the data is* — a declaration of origin and meaning | `source.kind`, units, analysis window, node universe, MPI scope, a free-text note |
+| **The caller** (an agent, adapter, or human) | *What the data is* — a declaration of origin and meaning | `source.kind`, units, analysis window, node universe, MPI scope, declared limitations, a free-text note |
 | **Cortexel** (the library) | *What Cortexel concluded* — machine-generated assurances | validation status, the assurance level reached, the disclosure list, output digests, reference-comparison status, completeness, accessibility conformance |
 
 This split is enforced by the schema itself: the thing a caller authors
@@ -68,6 +68,8 @@ picks one of a fixed set of honest answers and cannot invent a new one:
 | `source.kind` | Meaning | Disclosure fired | Severity |
 |---------------|---------|------------------|----------|
 | `simulation` | Produced by a model, not measured from biology | *"Simulation output. These values were produced by a model, not measured from a biological system."* | important |
+| `experimental_recording` | Declared by the caller as experimental recording data | No kind-specific disclosure; the universal source-authenticity and reference-comparison disclosures still apply | — |
+| `derived_dataset` | Declared by the caller as a dataset derived from other data | No kind-specific disclosure; the universal source-authenticity and reference-comparison disclosures still apply | — |
 | `synthetic_fixture` | Fabricated to exercise the software | *"Synthetic fixture. This data was fabricated to exercise the software and carries no scientific meaning whatsoever."* | **critical** |
 | `literature_extraction` | Transcribed from a publication | *"Extracted from published material … have not been re-derived from primary data."* | important |
 | `manual_entry` | Typed in by hand | *"Manually entered … rather than exported from an instrument or simulator."* | important |
@@ -82,9 +84,17 @@ Two design choices are deliberate:
   specificity. The contract rewards candor over confidence.
 - **The union is closed so a new label cannot smuggle in a missing disclosure.** If
   callers could coin arbitrary source kinds, a kind with no matching rule in the
-  registry would render with no disclosure at all. Closing the enumeration means every
-  legal source kind has a known honesty consequence, decided in the contract, not by
-  the caller.
+  registry would render with no disclosure at all. The disclosure policy partitions
+  the complete enum between `sourceKindRuleIds` and the explicit
+  `sourceKindsWithoutSpecificRule` inventory; generation rejects a missing, unknown,
+  duplicate, or contradictory entry. Every legal source kind therefore has a known
+  honesty consequence decided in the contract, not by the caller.
+
+`experimental_recording` and `derived_dataset` deliberately have no *kind-specific*
+warning. That absence is not authentication. Artifact 1.0 always adds *"Source
+authenticity not verified"*, and every current stable skill adds *"No independent
+reference comparison was run"*. The caller's label therefore never becomes a claim
+that Cortexel inspected the recording, the upstream dataset, or their bytes.
 
 ---
 
@@ -130,8 +140,10 @@ The consequences of "facts, not text or flags" are precise and worth stating pla
 - Disclosures are ordered **by severity** — `critical`, then `important`, then
   `informational` — and within a severity by rule id, so ordering is deterministic and
   never a function of caller input.
-- In the semantically stable development renderer **no disclosure can be suppressed, reordered below a caller note, or
-  visually dominated by one.**
+- In the semantically stable development renderer **no disclosure can be suppressed,
+  reordered below caller text, or covered by it.** Caller statements occupy separately
+  reserved footer rows after every mandatory disclosure; the renderer refuses dimensions
+  that would leave no valid plotting region.
 - The visible footer, in-memory table metadata, and accessible description carry the
   same **complete** disclosure list. A
   detached canonical data sidecar is not emitted in the current development tree. The artifact binds the
@@ -166,27 +178,39 @@ reader but absent for a screen reader, or present in the pixels but absent in th
 machine record, is not honesty — it is honesty theater. Agreement across all four is a
 tested invariant, not an aspiration.
 
+Caller-authored statement bodies use a parallel but separate channel. Their original
+values remain in `canonicalRequest.source` and `provenance.source`; their exact
+renderer-attributed forms appear after the complete disclosure list in the visible SVG
+footer, SVG accessible summary, RenderPlan, and returned-table metadata. They never
+become disclosure records. OutputAuthority independently derives this sequence from the
+validated canonical request and refuses an omission, reordering, changed attribution,
+or table-metadata mismatch before serialization.
+
 ---
 
-## 5. Caller notes — attributed, unverified, isolated
+## 5. Caller limitations and notes — attributed, unverified, isolated
 
 Callers legitimately want to attach context ("recorded from layer 4 of the Brunel
 network"). Cortexel supports this, but under strict rules so a note can never become a
 counterfeit conclusion:
 
-- **A caller note is not a disclosure.** It is rendered *separately*, under an
-  attribution that marks it as the caller's unverified statement — the presence of a
-  declared note itself fires the informational disclosure *"The figure carries a note
-  declared by the caller. Cortexel has not verified it."*
-- **It is never merged into mandatory disclosure text.** It cannot replace, reorder,
-  or visually displace a mandatory disclosure. A caller note always renders after the
-  contract-owned disclosures.
-- **It is length-bounded.** An over-long note is rejected (`PROVENANCE_NOTE_TOO_LONG`)
-  rather than truncated silently.
+- **Exact caller text is not a disclosure.** Each `declaredLimitations` entry renders
+  under *"Source limitation (declared by caller; not verified)"*, in caller array order;
+  `declaredNote` follows under the corresponding *"Source note"* attribution. The
+  presence of a note also fires the generic contract-owned informational disclosure
+  *"The figure carries a note declared by the caller. Cortexel has not verified it."*
+- **It is never merged into mandatory disclosure text.** Exact caller text cannot
+  replace, reorder, cover, or precede a mandatory disclosure. All limitation rows come
+  after the contract-owned disclosures, and the general note comes after the
+  limitations.
+- **It is bounded.** At most 16 limitations are accepted, and every limitation or note
+  is at most 200 UTF-16 code units. Over-long text is rejected
+  (`PROVENANCE_NOTE_TOO_LONG`) rather than truncated silently.
 - **It is display-sanitized.** Control characters, bidirectional-override characters,
   and zero-width characters are rejected (`PROVENANCE_NOTE_UNSAFE_DISPLAY`) and the
-  note is rendered bidi-isolated. Such characters can visually spoof an axis label, a
-  caption, or a mandatory disclosure — reordering glyphs so a note *appears* to say
+  caller body is rendered between FSI/PDI isolation marks in its own SVG bidi paragraph.
+  Such characters can visually spoof an axis label, a caption, or a mandatory disclosure
+  — reordering glyphs so a note *appears* to say
   something a mandatory disclosure denies. Cortexel refuses the input rather than
   render a caption whose displayed order it cannot vouch for.
 

@@ -725,7 +725,7 @@ describe('cross-language parity — TypeScript vs Python', () => {
 
     const contract = contracts.find(({ id }) => id === 'neuro.response_curve');
     if (!contract) throw new Error('neuro.response_curve contract not found');
-    expect(contract.revision).toBe(2);
+    expect(contract.revision).toBe(3);
 
     const current = structuredClone(contract.examples.valid[0]);
     current.skill = { ...(current.skill as Record<string, unknown>), revision: contract.revision };

@@ -5375,6 +5375,39 @@ function deriveDisclosures(facts, allowedIds, forced = []) {
   return out;
 }
 
+// src/core/source-statements.ts
+var FIRST_STRONG_ISOLATE = "\u2068";
+var POP_DIRECTIONAL_ISOLATE = "\u2069";
+var LABELS = Object.freeze({
+  declared_limitation: "Source limitation (declared by caller; not verified)",
+  declared_note: "Source note (declared by caller; not verified)"
+});
+function statement(kind, declaredText) {
+  return {
+    kind,
+    attribution: "declared_by_caller_not_verified",
+    bidiIsolation: "unicode_fsi_pdi",
+    text: `${LABELS[kind]}: ${FIRST_STRONG_ISOLATE}${declaredText}${POP_DIRECTIONAL_ISOLATE}`
+  };
+}
+function deriveCallerSourceStatements(request) {
+  const sourceValue = request.source;
+  if (sourceValue === null || typeof sourceValue !== "object" || Array.isArray(sourceValue)) return [];
+  const source = sourceValue;
+  const output = [];
+  if (Array.isArray(source.declaredLimitations)) {
+    for (const limitation of source.declaredLimitations) {
+      if (typeof limitation === "string") {
+        output.push(statement("declared_limitation", limitation));
+      }
+    }
+  }
+  if (typeof source.declaredNote === "string") {
+    output.push(statement("declared_note", source.declaredNote));
+  }
+  return output;
+}
+
 // src/generated/catalog.ts
 var CAPABILITY_AVAILABILITIES = freezeGenerated([
   "packaged",
@@ -5384,7 +5417,7 @@ var CAPABILITY_AVAILABILITIES = freezeGenerated([
 var SKILL_CATALOG = freezeGenerated({
   "network.adjacency_matrix": {
     "id": "network.adjacency_matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5402,7 +5435,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 2,
+      "revision": 3,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -5616,7 +5649,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.adjacency_matrix.output_authority.v2"
+        "id": "network.adjacency_matrix.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -5786,7 +5819,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.connection_graph": {
     "id": "network.connection_graph",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -5803,7 +5836,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -6087,7 +6120,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.connection_graph.output_authority.v2"
+        "id": "network.connection_graph.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -6284,7 +6317,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.degree_distribution": {
     "id": "network.degree_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6303,7 +6336,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -6473,7 +6506,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.degree_distribution.output_authority.v2"
+        "id": "network.degree_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -6640,7 +6673,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_distribution": {
     "id": "network.delay_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6660,7 +6693,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -6893,7 +6926,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_distribution.output_authority.v2"
+        "id": "network.delay_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -7077,7 +7110,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_matrix": {
     "id": "network.delay_matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7096,7 +7129,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 2,
+      "revision": 3,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -7323,7 +7356,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_matrix.output_authority.v2"
+        "id": "network.delay_matrix.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -7500,7 +7533,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.spatial_map_2d": {
     "id": "network.spatial_map_2d",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -7521,7 +7554,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -7819,7 +7852,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.spatial_map_2d.output_authority.v2"
+        "id": "network.spatial_map_2d.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -8021,7 +8054,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.synaptic_weight_trace": {
     "id": "network.synaptic_weight_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8042,7 +8075,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -8371,7 +8404,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.synaptic_weight_trace.output_authority.v2"
+        "id": "network.synaptic_weight_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -8602,7 +8635,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_distribution": {
     "id": "network.weight_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -8622,7 +8655,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -8817,7 +8850,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_distribution.output_authority.v2"
+        "id": "network.weight_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -8996,7 +9029,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.weight_matrix": {
     "id": "network.weight_matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9013,7 +9046,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 2,
+      "revision": 3,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -9253,7 +9286,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.weight_matrix.output_authority.v2"
+        "id": "network.weight_matrix.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -9430,7 +9463,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.analog_trace": {
     "id": "neuro.analog_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9448,7 +9481,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -9726,7 +9759,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.analog_trace.output_authority.v2"
+        "id": "neuro.analog_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -9913,7 +9946,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.compartment_trace": {
     "id": "neuro.compartment_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -9931,7 +9964,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -10154,7 +10187,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.compartment_trace.output_authority.v2"
+        "id": "neuro.compartment_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -10365,7 +10398,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.correlogram": {
     "id": "neuro.correlogram",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10384,7 +10417,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -10551,7 +10584,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.correlogram.output_authority.v2"
+        "id": "neuro.correlogram.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -10743,7 +10776,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.isi_distribution": {
     "id": "neuro.isi_distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10760,7 +10793,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -10988,7 +11021,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.isi_distribution.output_authority.v2"
+        "id": "neuro.isi_distribution.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -11170,7 +11203,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.multisignal_trace": {
     "id": "neuro.multisignal_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -11187,7 +11220,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -11594,7 +11627,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.multisignal_trace.output_authority.v2"
+        "id": "neuro.multisignal_trace.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -11804,7 +11837,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.phase_plane": {
     "id": "neuro.phase_plane",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -11825,7 +11858,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -12058,7 +12091,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.phase_plane.output_authority.v2"
+        "id": "neuro.phase_plane.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -12272,7 +12305,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.population_rate": {
     "id": "neuro.population_rate",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -12286,7 +12319,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -12357,6 +12390,8 @@ var SKILL_CATALOG = freezeGenerated({
       "SOURCE_SIMULATION",
       "SOURCE_SYNTHETIC_FIXTURE",
       "SOURCE_KIND_UNKNOWN",
+      "SOURCE_LITERATURE_EXTRACTION",
+      "SOURCE_MANUAL_ENTRY",
       "SOURCE_AUTHENTICITY_UNVERIFIED",
       "REFERENCE_COMPARISON_NOT_RUN",
       "UNCERTAINTY_NOT_PROVIDED",
@@ -12440,7 +12475,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.population_rate.output_authority.v2"
+        "id": "neuro.population_rate.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -12594,7 +12629,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.psth": {
     "id": "neuro.psth",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -12611,7 +12646,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -12954,7 +12989,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.psth.output_authority.v2"
+        "id": "neuro.psth.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -13162,7 +13197,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.response_curve": {
     "id": "neuro.response_curve",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -13181,7 +13216,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -13506,7 +13541,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.response_curve.output_authority.v2"
+        "id": "neuro.response_curve.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -13728,7 +13763,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -13746,7 +13781,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 2
+      "revision": 3
     },
     "semanticValidators": [
       {
@@ -13929,7 +13964,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.spike_raster.output_authority.v2"
+        "id": "neuro.spike_raster.output_authority.v3"
       },
       "requestPaths": [
         {
@@ -14898,7 +14933,7 @@ var LEGACY_SKILL_MAP = freezeGenerated({
 var RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -14910,7 +14945,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -14922,7 +14957,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -14933,7 +14968,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rule",
@@ -14944,7 +14979,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "path",
@@ -14956,7 +14991,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rect",
@@ -14968,7 +15003,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rule",
@@ -14980,7 +15015,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rect",
@@ -14992,7 +15027,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "point",
@@ -15004,7 +15039,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -15017,7 +15052,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "line",
@@ -15030,7 +15065,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "rect",
@@ -15041,7 +15076,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "point",
@@ -15054,7 +15089,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 2,
+    "revision": 3,
     "status": "stable",
     "marks": [
       "path",
@@ -20045,8 +20080,8 @@ function formatCoordinate(value) {
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:d0ef03da20000581d71e859310419444e7fb8c9dad4e39f60a97ad3070032fc9";
-var CATALOG_DIGEST = "sha256:801aa157a57212ca58b092319d57edd8ab8649a80202a8a577510ca9f7162c09";
+var CONTRACT_DIGEST = "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121";
+var CATALOG_DIGEST = "sha256:56f15211b76d250f9d1d2142bb735dd904d89222798a7ac2ed4c37b9ebd2534d";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
   return Object.freeze({
@@ -20532,7 +20567,7 @@ function countMarks(marks) {
 function countPlanResources(plan) {
   assertRenderPlanGeometry(plan);
   let markCount = 0;
-  let textCount = 1 + (plan.subtitle ? 1 : 0) + disclosureLineCount(plan.width, plan.disclosures);
+  let textCount = 1 + (plan.subtitle ? 1 : 0) + disclosureLineCount(plan.width, [...plan.disclosures, ...plan.sourceStatements]);
   for (const panel of plan.panels) {
     if (panel.label) textCount++;
     if (panel.noData) {
@@ -20707,7 +20742,10 @@ function renderSvg(plan, digestOf) {
     }
     writer.close("g");
   }
-  const footerLineCount = disclosureLineCount(plan.width, plan.disclosures);
+  const footerLineCount = disclosureLineCount(
+    plan.width,
+    [...plan.disclosures, ...plan.sourceStatements]
+  );
   let disclosureY = plan.height - footerLineCount * DISCLOSURE_LINE_HEIGHT - DISCLOSURE_BOTTOM_PADDING;
   writer.open("g", [["data-disclosures", "true"]]);
   for (const disclosure of plan.disclosures) {
@@ -20728,6 +20766,35 @@ function renderSvg(plan, digestOf) {
         ["textLength", formatCoordinate(disclosureRenderedTextLength(line, plan.width))],
         ["lengthAdjust", "spacingAndGlyphs"],
         ["data-disclosure-line", index],
+        ["aria-hidden", "true"]
+      ]);
+      disclosureY += DISCLOSURE_LINE_HEIGHT;
+    }
+    writer.close("g");
+  }
+  writer.close("g");
+  writer.open("g", [["data-source-statements", "true"]]);
+  for (const statement2 of plan.sourceStatements) {
+    writer.open("g", [
+      ["data-source-statement-kind", statement2.kind],
+      ["data-source-statement-attribution", statement2.attribution],
+      ["data-source-statement-bidi-isolation", statement2.bidiIsolation],
+      ["data-source-statement-text", statement2.text]
+    ]);
+    const lines = wrapDisclosureText(statement2.text, plan.width);
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      writer.text("text", line, [
+        ["x", DISCLOSURE_HORIZONTAL_INSET],
+        ["y", formatCoordinate(disclosureY)],
+        ["text-anchor", "start"],
+        ["font-size", DISCLOSURE_FONT_SIZE],
+        ["fill", colors.mutedText],
+        ["font-family", "sans-serif"],
+        ["textLength", formatCoordinate(disclosureRenderedTextLength(line, plan.width))],
+        ["lengthAdjust", "spacingAndGlyphs"],
+        ["unicode-bidi", "plaintext"],
+        ["data-source-statement-line", index],
         ["aria-hidden", "true"]
       ]);
       disclosureY += DISCLOSURE_LINE_HEIGHT;
@@ -21179,7 +21246,10 @@ function finiteExtentBy(values, project) {
 // src/render/compile.ts
 var MARGIN = { top: 60, right: 32, bottom: 56, left: 64 };
 function panelBox(context) {
-  const disclosureSpace = disclosureFooterHeight(context.width, context.disclosures);
+  const disclosureSpace = disclosureFooterHeight(
+    context.width,
+    [...context.disclosures, ...context.sourceStatements]
+  );
   return {
     x: MARGIN.left,
     y: MARGIN.top,
@@ -21211,6 +21281,7 @@ function frame(context, disclosures) {
     ...context.subtitle ? { subtitle: context.subtitle } : {},
     themeId: context.themeId,
     disclosures: disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
+    sourceStatements: context.sourceStatements.map((statement2) => ({ ...statement2 })),
     sourceRequestDigest: context.sourceRequestDigest
   };
 }
@@ -21289,7 +21360,10 @@ function compileStepFigure(context, binStart, binEnd, values, xLabel, yLabel, sk
 // src/render/compileFamilies.ts
 var MARGIN2 = { top: 60, right: 32, bottom: 56, left: 64 };
 function panelBox2(context) {
-  const disclosureSpace = disclosureFooterHeight(context.width, context.disclosures);
+  const disclosureSpace = disclosureFooterHeight(
+    context.width,
+    [...context.disclosures, ...context.sourceStatements]
+  );
   return {
     x: MARGIN2.left,
     y: MARGIN2.top,
@@ -21328,6 +21402,7 @@ function frame2(context, skillId) {
     ...context.subtitle ? { subtitle: context.subtitle } : {},
     themeId: context.themeId,
     disclosures: context.disclosures.map((d) => ({ id: d.id, severity: d.severity, text: d.text })),
+    sourceStatements: context.sourceStatements.map((statement2) => ({ ...statement2 })),
     sourceRequestDigest: context.sourceRequestDigest,
     accessibility: { summary: context.summary, panelSummaries: [] }
   };
@@ -24112,7 +24187,7 @@ function canonicalEqual(left, right) {
   const rightCanonical = canonicalValue(right);
   return leftCanonical !== null && rightCanonical !== null && leftCanonical === rightCanonical;
 }
-function expectedSummary(template, requiredPlaceholders, facts, disclosures) {
+function expectedSummary(template, requiredPlaceholders, facts, disclosures, sourceStatements) {
   if (!isOutputAuthoritySummarySafeV1(template)) return null;
   const withoutRecognizedTokens = template.replace(/\{[A-Za-z][A-Za-z0-9]*\}/gu, "");
   if (withoutRecognizedTokens.includes("{") || withoutRecognizedTokens.includes("}")) return null;
@@ -24133,9 +24208,9 @@ function expectedSummary(template, requiredPlaceholders, facts, disclosures) {
   });
   if (missing || rendered.length > MAX_AUTHORITY_SUMMARY_CODE_UNITS) return null;
   if (disclosures.some((disclosure) => !isOutputAuthoritySummaryFactSafeV1(disclosure.text))) return null;
-  if (disclosures.length === 0) return rendered;
-  const count = disclosures.length;
-  const complete = `${rendered} ${count} ${count === 1 ? "disclosure applies" : "disclosures apply"}: ${disclosures.map((disclosure) => disclosure.text).join(" ")}`;
+  const disclosureSuffix = disclosures.length === 0 ? "" : ` ${disclosures.length} ${disclosures.length === 1 ? "disclosure applies" : "disclosures apply"}: ${disclosures.map((disclosure) => disclosure.text).join(" ")}`;
+  const sourceStatementSuffix = sourceStatements.length === 0 ? "" : ` ${sourceStatements.map((statement2) => statement2.text).join(" ")}`;
+  const complete = `${rendered}${disclosureSuffix}${sourceStatementSuffix}`;
   return complete.length <= MAX_AUTHORITY_SUMMARY_CODE_UNITS ? complete : null;
 }
 function collectObservedGeometry(roots, violations) {
@@ -24208,7 +24283,7 @@ function collectObservedGeometry(roots, violations) {
   }
   return sequence;
 }
-function interpretOutputAuthorityModelV1(authority, summaryTemplate, tableColumnContracts, expectedDisclosures, canonicalRequestDigest, evaluation, observed) {
+function interpretOutputAuthorityModelV1(authority, summaryTemplate, tableColumnContracts, expectedDisclosures, canonicalRequestDigest, evaluation, observed, expectedSourceStatements) {
   const violations = [];
   if (evaluation.evaluatorId !== authority.evaluator.id) {
     recordViolation(violations, violation(
@@ -24375,7 +24450,8 @@ function interpretOutputAuthorityModelV1(authority, summaryTemplate, tableColumn
       summaryTemplate,
       authority.summary.requiredPlaceholders,
       factValue.facts,
-      expectedDisclosures
+      expectedDisclosures,
+      expectedSourceStatements
     );
     if (rendered === null) {
       recordViolation(violations, violation(
@@ -24817,7 +24893,7 @@ function degreeModel(requestValue) {
   };
 }
 var DEGREE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.degree_distribution", 2),
+  authorityEvaluatorId("network.degree_distribution", 3),
   (request) => modelFields(degreeModel(request))
 );
 function populationRateModel(requestValue) {
@@ -24920,7 +24996,7 @@ function populationRateModel(requestValue) {
   };
 }
 var POPULATION_RATE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.population_rate", 2),
+  authorityEvaluatorId("neuro.population_rate", 3),
   (request) => modelFields(populationRateModel(request))
 );
 function rasterPartition(data) {
@@ -25064,7 +25140,7 @@ function rasterModel(requestValue) {
   };
 }
 var RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.spike_raster", 2),
+  authorityEvaluatorId("neuro.spike_raster", 3),
   (request) => modelFields(rasterModel(request))
 );
 function aggregate3(values, method) {
@@ -25275,7 +25351,7 @@ function delayModel(requestValue) {
   };
 }
 DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.delay_distribution", 2),
+  authorityEvaluatorId("network.delay_distribution", 3),
   (request) => modelFields(delayModel(request))
 );
 function weightGroups(data, parameters, bins) {
@@ -25444,7 +25520,7 @@ function weightModel(requestValue) {
   };
 }
 WEIGHT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.weight_distribution", 2),
+  authorityEvaluatorId("network.weight_distribution", 3),
   (request) => modelFields(weightModel(request))
 );
 function isiTrainKey(sender, trial) {
@@ -25601,7 +25677,7 @@ function isiModel(requestValue) {
   };
 }
 ISI_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.isi_distribution", 2),
+  authorityEvaluatorId("neuro.isi_distribution", 3),
   (request) => modelFields(isiModel(request))
 );
 function correlogramAxis(parameters) {
@@ -25858,7 +25934,7 @@ function correlogramModel(requestValue) {
   };
 }
 CORRELOGRAM_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.correlogram", 2),
+  authorityEvaluatorId("neuro.correlogram", 3),
   (request) => modelFields(correlogramModel(request))
 );
 function psthNormalizedValues(counts, denominators, bins, selectedSenderCount, normalization, valueUnit) {
@@ -26146,7 +26222,7 @@ function psthModel(requestValue) {
   };
 }
 PSTH_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.psth", 2),
+  authorityEvaluatorId("neuro.psth", 3),
   (request) => modelFields(psthModel(request))
 );
 var DISTRIBUTION_AUTHORITY_EVALUATORS = [
@@ -26162,25 +26238,25 @@ var DISTRIBUTION_AUTHORITY_EVALUATORS = [
 
 // src/authority/evaluators/implementation-ids.ts
 var OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
-  "network.adjacency_matrix.output_authority.v2",
-  "network.connection_graph.output_authority.v2",
-  "network.degree_distribution.output_authority.v2",
-  "network.delay_distribution.output_authority.v2",
-  "network.delay_matrix.output_authority.v2",
-  "network.spatial_map_2d.output_authority.v2",
-  "network.synaptic_weight_trace.output_authority.v2",
-  "network.weight_distribution.output_authority.v2",
-  "network.weight_matrix.output_authority.v2",
-  "neuro.analog_trace.output_authority.v2",
-  "neuro.compartment_trace.output_authority.v2",
-  "neuro.correlogram.output_authority.v2",
-  "neuro.isi_distribution.output_authority.v2",
-  "neuro.multisignal_trace.output_authority.v2",
-  "neuro.phase_plane.output_authority.v2",
-  "neuro.population_rate.output_authority.v2",
-  "neuro.psth.output_authority.v2",
-  "neuro.response_curve.output_authority.v2",
-  "neuro.spike_raster.output_authority.v2"
+  "network.adjacency_matrix.output_authority.v3",
+  "network.connection_graph.output_authority.v3",
+  "network.degree_distribution.output_authority.v3",
+  "network.delay_distribution.output_authority.v3",
+  "network.delay_matrix.output_authority.v3",
+  "network.spatial_map_2d.output_authority.v3",
+  "network.synaptic_weight_trace.output_authority.v3",
+  "network.weight_distribution.output_authority.v3",
+  "network.weight_matrix.output_authority.v3",
+  "neuro.analog_trace.output_authority.v3",
+  "neuro.compartment_trace.output_authority.v3",
+  "neuro.correlogram.output_authority.v3",
+  "neuro.isi_distribution.output_authority.v3",
+  "neuro.multisignal_trace.output_authority.v3",
+  "neuro.phase_plane.output_authority.v3",
+  "neuro.population_rate.output_authority.v3",
+  "neuro.psth.output_authority.v3",
+  "neuro.response_curve.output_authority.v3",
+  "neuro.spike_raster.output_authority.v3"
 ]);
 var IMPLEMENTATION_ID = /^[a-z][a-z0-9_.-]*$/u;
 var DANGEROUS_MAP_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
@@ -26799,15 +26875,15 @@ function delayModel2(requestValue) {
   };
 }
 var ADJACENCY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.adjacency_matrix", 2),
+  authorityEvaluatorId("network.adjacency_matrix", 3),
   (request) => modelFields2(adjacencyModel(request))
 );
 var WEIGHT_AUTHORITY2 = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.weight_matrix", 2),
+  authorityEvaluatorId("network.weight_matrix", 3),
   (request) => modelFields2(weightModel2(request))
 );
 var DELAY_AUTHORITY2 = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.delay_matrix", 2),
+  authorityEvaluatorId("network.delay_matrix", 3),
   (request) => modelFields2(delayModel2(request))
 );
 var MATRIX_AUTHORITY_EVALUATORS = [
@@ -27195,7 +27271,7 @@ function graphModel(requestValue) {
   };
 }
 var GRAPH_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.connection_graph", 2),
+  authorityEvaluatorId("network.connection_graph", 3),
   (request) => modelFields3(graphModel(request))
 );
 function spatialModel(requestValue) {
@@ -27440,7 +27516,7 @@ function spatialModel(requestValue) {
   };
 }
 var SPATIAL_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.spatial_map_2d", 2),
+  authorityEvaluatorId("network.spatial_map_2d", 3),
   (request) => modelFields3(spatialModel(request))
 );
 function convertedCarrier(value, targetUnit) {
@@ -27798,7 +27874,7 @@ function phaseModel(requestValue) {
   };
 }
 var PHASE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.phase_plane", 2),
+  authorityEvaluatorId("neuro.phase_plane", 3),
   (request) => modelFields3(phaseModel(request))
 );
 function responseEstimate(values, estimator, trimFraction) {
@@ -28240,7 +28316,7 @@ function responseModel(requestValue) {
   };
 }
 var RESPONSE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.response_curve", 2),
+  authorityEvaluatorId("neuro.response_curve", 3),
   (request) => modelFields3(responseModel(request))
 );
 var TOPOLOGY_DYNAMICS_AUTHORITY_EVALUATORS = [
@@ -29163,7 +29239,7 @@ function analogModel(requestValue) {
   };
 }
 var ANALOG_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.analog_trace", 2),
+  authorityEvaluatorId("neuro.analog_trace", 3),
   (request) => {
     const model = analogModel(request);
     return {
@@ -29334,7 +29410,7 @@ function multisignalModel(requestValue) {
   };
 }
 var MULTISIGNAL_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.multisignal_trace", 2),
+  authorityEvaluatorId("neuro.multisignal_trace", 3),
   (request) => {
     const model = multisignalModel(request);
     return {
@@ -29637,7 +29713,7 @@ function compartmentModel(requestValue) {
   };
 }
 var COMPARTMENT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.compartment_trace", 2),
+  authorityEvaluatorId("neuro.compartment_trace", 3),
   (request) => {
     const model = compartmentModel(request);
     return {
@@ -30869,7 +30945,7 @@ function weightModel3(requestValue) {
   };
 }
 var WEIGHT_AUTHORITY3 = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.synaptic_weight_trace", 2),
+  authorityEvaluatorId("network.synaptic_weight_trace", 3),
   (request) => {
     const model = weightModel3(request);
     return {
@@ -31274,6 +31350,13 @@ var ENVIRONMENT_DISCLOSURE_FACT_KEYS = Object.freeze([
 function record6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
+function canonicalEqual2(left, right) {
+  try {
+    return canonicalize(left) === canonicalize(right);
+  } catch {
+    return false;
+  }
+}
 function forcedDisclosureIds(skillId, request) {
   const data = record6(request.data) ?? {};
   const parameters = record6(request.parameters) ?? {};
@@ -31349,6 +31432,15 @@ function checkOutputAuthorityEmissionV1(validated, plan) {
       };
     }
     const evaluation = evaluator.evaluateCanonicalRequest(validated.canonicalRequest);
+    const expectedSourceStatements = deriveCallerSourceStatements(validated.canonicalRequest);
+    if (!canonicalEqual2(plan.sourceStatements, expectedSourceStatements) || !canonicalEqual2(plan.table.metadata?.sourceStatements, expectedSourceStatements)) {
+      return {
+        tag: "refused",
+        messages: [
+          "actual plan and returned-table source statements do not equal the independently derived, attributed, bidi-isolated caller declarations"
+        ]
+      };
+    }
     const disclosureValue = evaluation.fields[authority.disclosures.expectedFacts.field];
     if (disclosureValue?.tag !== "disclosure_fact_map") {
       return {
@@ -31384,7 +31476,8 @@ function checkOutputAuthorityEmissionV1(validated, plan) {
       expectedDisclosures,
       validated.requestDigest,
       evaluation,
-      extracted.observed
+      extracted.observed,
+      expectedSourceStatements
     );
     return interpreted.tag === "valid" ? { tag: "passed" } : {
       tag: "refused",
@@ -41417,6 +41510,7 @@ function buildFigureFromValidated(validated) {
       budgetProfileId: activeBudget.profile
     });
     const disclosures = deriveDisclosures(facts, catalog.disclosures, forced);
+    const sourceStatements = deriveCallerSourceStatements(request);
     return {
       sourceRequestDigest: validated.requestDigest,
       width: num(presentation.width) ?? 720,
@@ -41424,6 +41518,7 @@ function buildFigureFromValidated(validated) {
       themeId: presentation.themeId ?? "light",
       title: presentation.title ?? catalog.title,
       disclosures,
+      sourceStatements,
       summary: catalog.accessibility.summaryTemplate.replace(/\{[^}]+\}/g, "\u2026"),
       returnedTableRows: returnedTableLimit
     };
@@ -41487,7 +41582,7 @@ function buildFigureFromValidated(validated) {
           stage: "render",
           instancePath: "/presentation",
           skillId: validated.skillId,
-          message: `the requested dimensions leave no finite plotting region of at least ${MIN_PLOT_PANEL_HEIGHT} CSS pixels per data panel after axes, legends, and mandatory disclosures are reserved. Increase the height or reduce the panel count.`
+          message: `the requested dimensions leave no finite plotting region of at least ${MIN_PLOT_PANEL_HEIGHT} CSS pixels per data panel after axes, legends, mandatory disclosures, and attributed caller source statements are reserved. Increase the height or reduce the panel count.`
         })
       ]
     };
@@ -41504,16 +41599,19 @@ function buildFigureFromValidated(validated) {
   const disclosureBoundPlan = {
     ...compiled.plan,
     disclosures: disclosureBlocks,
+    sourceStatements: context.sourceStatements.map((statement2) => ({ ...statement2 })),
     table: {
       ...compiled.plan.table,
       metadata: {
-        disclosures: disclosureBlocks.map((disclosure) => ({ ...disclosure }))
+        disclosures: disclosureBlocks.map((disclosure) => ({ ...disclosure })),
+        sourceStatements: context.sourceStatements.map((statement2) => ({ ...statement2 }))
       }
     }
   };
   const summary = appendDisclosureSummarySuffix(
     disclosureBoundPlan.accessibility.summary,
-    disclosureBlocks
+    disclosureBlocks,
+    context.sourceStatements
   );
   const closure = closePlainRenderPlanForAuthorityV1({
     ...disclosureBoundPlan,
@@ -41691,10 +41789,10 @@ function buildFigureFromValidated(validated) {
   if (!artifactStructure.ok) return { ok: false, errors: artifactStructure.errors };
   return { ok: true, artifact, svg: report.svg, plan, table: plan.table, disclosures: context.disclosures };
 }
-function appendDisclosureSummarySuffix(compilerSummaryBody, disclosures) {
-  if (disclosures.length === 0) return compilerSummaryBody;
-  const count = disclosures.length;
-  return `${compilerSummaryBody} ${count} ${count === 1 ? "disclosure applies" : "disclosures apply"}: ${disclosures.map((disclosure) => disclosure.text).join(" ")}`;
+function appendDisclosureSummarySuffix(compilerSummaryBody, disclosures, sourceStatements = []) {
+  const disclosureSuffix = disclosures.length === 0 ? "" : ` ${disclosures.length} ${disclosures.length === 1 ? "disclosure applies" : "disclosures apply"}: ${disclosures.map((disclosure) => disclosure.text).join(" ")}`;
+  const sourceStatementSuffix = sourceStatements.length === 0 ? "" : ` ${sourceStatements.map((statement2) => statement2.text).join(" ")}`;
+  return `${compilerSummaryBody}${disclosureSuffix}${sourceStatementSuffix}`;
 }
 function buildFigureFromJson(text, options = {}) {
   const outcome = (0, import_request2.parseAndValidateRequest)(text, options);

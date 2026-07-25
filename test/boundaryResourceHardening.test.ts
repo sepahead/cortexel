@@ -274,6 +274,7 @@ describe('render resource accounting', () => {
       themeId: 'light',
       sourceRequestDigest: `sha256:${'0'.repeat(64)}`,
       disclosures: [],
+      sourceStatements: [],
       panels: [
         {
           id: 'main',

@@ -1,6 +1,6 @@
 {
   "id": "network.degree_distribution",
-  "revision": 2,
+  "revision": 3,
   "status": "stable",
   "releaseReady": false,
   "title": "In- and out-degree distribution over a declared node universe",
@@ -251,7 +251,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.distribution", "revision": 2 },
+  "renderer": { "id": "figure.distribution", "revision": 3 },
 
   "budgets": {
     "maxObservations": 200000,
@@ -275,7 +275,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "network.degree_distribution.output_authority.v2"
+      "id": "network.degree_distribution.output_authority.v3"
     },
     "requestPaths": [
       {

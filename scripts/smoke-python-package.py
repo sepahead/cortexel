@@ -819,44 +819,176 @@ def read_python_package_smoke_result(path: Path) -> dict[str, object]:
 
     if os.name != "posix":
         fail("the strict Python package smoke result reader currently requires POSIX")
-    if not path.is_absolute():
-        fail("Python package smoke result path must be absolute")
-    try:
-        resolved = path.resolve(strict=True)
-        status = path.stat(follow_symlinks=False)
-    except OSError as exc:
-        raise RuntimeError("Python package smoke result is unreadable") from exc
     if (
-        resolved != path
-        or not stat.S_ISREG(status.st_mode)
-        or status.st_uid != os.geteuid()
+        not path.is_absolute()
+        or Path(os.path.abspath(path)) != path
+        or str(path).startswith("//")
+    ):
+        fail("Python package smoke result path must be one normalized absolute path")
+    parent = path.parent
+    try:
+        resolved_parent = parent.resolve(strict=True)
+        parent_initial = parent.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result parent is unreadable") from exc
+    if (
+        resolved_parent != parent
+        or not stat.S_ISDIR(parent_initial.st_mode)
+        or parent_initial.st_nlink < 1
+        or parent_initial.st_uid != os.geteuid()
     ):
         fail(
-            "Python package smoke result must be one canonical, effective-owner "
-            "physical regular file"
+            "Python package smoke result parent must be one canonical, "
+            "effective-owner physical directory"
         )
-    if stat.S_IMODE(status.st_mode) != 0o644:
-        fail("Python package smoke result mode must be exactly 0644")
-    require_no_extended_acl(path, label="Python package smoke result")
-    payload = bounded_regular_file_bytes(
-        path,
-        maximum=MAX_RESULT_BYTES,
-        label="Python package smoke result",
-    )
-    require_no_extended_acl(path, label="Python package smoke result")
+    if stat.S_IMODE(parent_initial.st_mode) != 0o700:
+        fail("Python package smoke result parent mode must be exactly 0700")
+    require_no_extended_acl(parent, label="Python package smoke result parent")
+
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    file_flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW | os.O_CLOEXEC
+    parent_descriptor: int | None = None
+    file_descriptor: int | None = None
     try:
-        text = payload.decode("utf-8", "strict")
-        _require_bounded_result_json_depth(text)
-        decoded = json.loads(
-            text,
-            object_pairs_hook=_reject_duplicate_json_members,
-            parse_constant=_reject_nonfinite_json_constant,
+        parent_descriptor = os.open(parent, directory_flags)
+        parent_opened = os.fstat(parent_descriptor)
+        parent_rebound = parent.stat(follow_symlinks=False)
+        expected_parent_identity = _stat_identity(parent_initial)
+        if (
+            _stat_identity(parent_opened) != expected_parent_identity
+            or _stat_identity(parent_rebound) != expected_parent_identity
+        ):
+            fail("Python package smoke result parent changed before its strict read")
+        if (
+            not stat.S_ISDIR(parent_opened.st_mode)
+            or parent_opened.st_nlink < 1
+            or parent_opened.st_uid != os.geteuid()
+            or stat.S_IMODE(parent_opened.st_mode) != 0o700
+        ):
+            fail("Python package smoke result parent authority is invalid")
+        require_no_extended_acl(
+            parent_descriptor,
+            label="Python package smoke result parent",
         )
-    except (RecursionError, UnicodeDecodeError, ValueError) as exc:
-        raise RuntimeError("Python package smoke result is not strict UTF-8 JSON") from exc
-    result = validate_python_package_smoke_result(decoded)
-    if canonical_json_bytes(result) != payload:
-        fail("Python package smoke result bytes are not canonical JSON with one LF")
+
+        leaf_initial = os.stat(
+            path.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            not stat.S_ISREG(leaf_initial.st_mode)
+            or leaf_initial.st_uid != os.geteuid()
+        ):
+            fail(
+                "Python package smoke result must be one canonical, "
+                "effective-owner physical regular file"
+            )
+        if stat.S_IMODE(leaf_initial.st_mode) != 0o644:
+            fail("Python package smoke result mode must be exactly 0644")
+        if leaf_initial.st_nlink != 1:
+            fail("Python package smoke result must have exactly one filesystem link")
+        if leaf_initial.st_size > MAX_RESULT_BYTES:
+            fail(
+                "Python package smoke result exceeds its "
+                f"{MAX_RESULT_BYTES}-byte budget"
+            )
+
+        file_descriptor = os.open(
+            path.name,
+            file_flags,
+            dir_fd=parent_descriptor,
+        )
+        leaf_opened = os.fstat(file_descriptor)
+        expected_leaf_identity = _stat_identity(leaf_initial)
+        if _stat_identity(leaf_opened) != expected_leaf_identity:
+            fail("Python package smoke result changed while being opened")
+        require_no_extended_acl(
+            file_descriptor,
+            label="Python package smoke result",
+        )
+
+        chunks = bytearray()
+        while len(chunks) <= MAX_RESULT_BYTES:
+            chunk = os.read(
+                file_descriptor,
+                min(IO_CHUNK_BYTES, MAX_RESULT_BYTES + 1 - len(chunks)),
+            )
+            if not chunk:
+                break
+            chunks.extend(chunk)
+        require_no_extended_acl(
+            file_descriptor,
+            label="Python package smoke result",
+        )
+        leaf_final = os.fstat(file_descriptor)
+        leaf_rebound = os.stat(
+            path.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            len(chunks) > MAX_RESULT_BYTES
+            or len(chunks) != leaf_opened.st_size
+            or _stat_identity(leaf_final) != expected_leaf_identity
+            or _stat_identity(leaf_rebound) != expected_leaf_identity
+        ):
+            fail("Python package smoke result changed during or after its strict read")
+
+        payload = bytes(chunks)
+        try:
+            text = payload.decode("utf-8", "strict")
+            _require_bounded_result_json_depth(text)
+            decoded = json.loads(
+                text,
+                object_pairs_hook=_reject_duplicate_json_members,
+                parse_constant=_reject_nonfinite_json_constant,
+            )
+        except (RecursionError, UnicodeDecodeError, ValueError) as exc:
+            raise RuntimeError(
+                "Python package smoke result is not strict UTF-8 JSON"
+            ) from exc
+        result = validate_python_package_smoke_result(decoded)
+        if canonical_json_bytes(result) != payload:
+            fail("Python package smoke result bytes are not canonical JSON with one LF")
+
+        require_no_extended_acl(
+            file_descriptor,
+            label="Python package smoke result",
+        )
+        leaf_validated = os.fstat(file_descriptor)
+        leaf_path_validated = os.stat(
+            path.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            _stat_identity(leaf_validated) != expected_leaf_identity
+            or _stat_identity(leaf_path_validated) != expected_leaf_identity
+        ):
+            fail("Python package smoke result changed during strict validation")
+
+        require_no_extended_acl(
+            parent_descriptor,
+            label="Python package smoke result parent",
+        )
+        parent_final = os.fstat(parent_descriptor)
+        require_no_extended_acl(parent, label="Python package smoke result parent")
+        parent_path_final = parent.stat(follow_symlinks=False)
+        resolved_parent_final = parent.resolve(strict=True)
+        if (
+            _stat_identity(parent_final) != expected_parent_identity
+            or _stat_identity(parent_path_final) != expected_parent_identity
+            or resolved_parent_final != parent
+        ):
+            fail("Python package smoke result parent changed during its strict read")
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result strict read failed") from exc
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+        if parent_descriptor is not None:
+            os.close(parent_descriptor)
     return result
 
 
@@ -2956,13 +3088,14 @@ def reviewed_python() -> str:
         base_executable_status = resolved_base_executable.stat(follow_symlinks=False)
     except OSError as exc:
         raise RuntimeError("the reviewed Python base executable cannot be resolved") from exc
-    if (
-        not resolved_base_executable.is_relative_to(base_root)
-        or not stat.S_ISREG(base_executable_status.st_mode)
-        or not os.access(resolved_base_executable, os.X_OK)
-        or base_executable_status.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
-    ):
+    if not resolved_base_executable.is_relative_to(base_root):
         fail("the reviewed Python base executable escapes its protected base prefix")
+    if not stat.S_ISREG(base_executable_status.st_mode):
+        fail("the reviewed Python base executable must be a regular file")
+    if not os.access(resolved_base_executable, os.X_OK):
+        fail("the reviewed Python base executable is not executable")
+    if base_executable_status.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        fail("the reviewed Python base executable is group/world writable")
     configuration = bounded_regular_file_bytes(
         Path(sys.prefix) / "pyvenv.cfg",
         maximum=MAX_REQUIREMENTS_BYTES,

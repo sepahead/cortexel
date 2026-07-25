@@ -527,7 +527,7 @@ function degreeModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const DEGREE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.degree_distribution', 2),
+  authorityEvaluatorId('network.degree_distribution', 3),
   (request) => modelFields(degreeModel(request)),
 );
 
@@ -638,7 +638,7 @@ function populationRateModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const POPULATION_RATE_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.population_rate', 2),
+  authorityEvaluatorId('neuro.population_rate', 3),
   (request) => modelFields(populationRateModel(request)),
 );
 
@@ -809,7 +809,7 @@ function rasterModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.spike_raster', 2),
+  authorityEvaluatorId('neuro.spike_raster', 3),
   (request) => modelFields(rasterModel(request)),
 );
 
@@ -1061,7 +1061,7 @@ function delayModel(requestValue: JsonValue): AuthorityModel {
 }
 
 DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.delay_distribution', 2),
+  authorityEvaluatorId('network.delay_distribution', 3),
   (request) => modelFields(delayModel(request)),
 );
 
@@ -1252,7 +1252,7 @@ function weightModel(requestValue: JsonValue): AuthorityModel {
 }
 
 WEIGHT_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.weight_distribution', 2),
+  authorityEvaluatorId('network.weight_distribution', 3),
   (request) => modelFields(weightModel(request)),
 );
 
@@ -1434,7 +1434,7 @@ function isiModel(requestValue: JsonValue): AuthorityModel {
 }
 
 ISI_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.isi_distribution', 2),
+  authorityEvaluatorId('neuro.isi_distribution', 3),
   (request) => modelFields(isiModel(request)),
 );
 
@@ -1756,7 +1756,7 @@ function correlogramModel(requestValue: JsonValue): AuthorityModel {
 }
 
 CORRELOGRAM_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.correlogram', 2),
+  authorityEvaluatorId('neuro.correlogram', 3),
   (request) => modelFields(correlogramModel(request)),
 );
 
@@ -2127,7 +2127,7 @@ function psthModel(requestValue: JsonValue): AuthorityModel {
 }
 
 PSTH_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.psth', 2),
+  authorityEvaluatorId('neuro.psth', 3),
   (request) => modelFields(psthModel(request)),
 );
 

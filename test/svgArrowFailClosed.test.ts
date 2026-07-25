@@ -34,6 +34,7 @@ function planWithArrow(
       }],
     }],
     disclosures: [],
+    sourceStatements: [],
     table: {
       policy: 'complete_returned',
       columns: [],

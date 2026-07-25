@@ -1,6 +1,6 @@
 import {
   parseJsonStrict
-} from "../chunk-RK555DMJ.js";
+} from "../chunk-BRPKCEQZ.js";
 import {
   DistributionDerivationError,
   MatrixDerivationError,
@@ -13,7 +13,7 @@ import {
   deriveWeightMatrix,
   validateStructure,
   verifyHistogramValues
-} from "../chunk-45B2O2EE.js";
+} from "../chunk-SKDD7I5J.js";
 import {
   LEGACY_SKILL_MAP,
   MAX_MATERIALIZED_BINS,
@@ -49,10 +49,10 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "../chunk-UF4PAGNO.js";
+} from "../chunk-ESH2QFML.js";
 import {
   snapshotValue
-} from "../chunk-LWMLQZWM.js";
+} from "../chunk-DGLTCWCT.js";
 import {
   CONTRACT_DIGEST,
   DEFAULT_PROFILE,
@@ -66,7 +66,7 @@ import {
   pointer,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-D2XLGVGS.js";
+} from "../chunk-4V63AFDR.js";
 import {
   canonicalDigest
 } from "../chunk-ZYBCCIMH.js";
@@ -168,7 +168,7 @@ var provenanceNoteSafeDisplay = (context) => {
           stage: "provenance",
           instancePath: at,
           validatorId: "provenance.note_safe_display",
-          message: `a declared note may be at most ${MAX_NOTE_LENGTH} characters; this one is ${value.length}.`
+          message: `a declared source statement may be at most ${MAX_NOTE_LENGTH} characters; this one is ${value.length}.`
         })
       );
     }
@@ -179,7 +179,7 @@ var provenanceNoteSafeDisplay = (context) => {
           stage: "provenance",
           instancePath: at,
           validatorId: "provenance.note_safe_display",
-          message: "the note contains control, bidi-override, or zero-width characters. Rendered beside a mandatory disclosure, those can visually reorder or conceal it \u2014 so they are rejected rather than escaped."
+          message: "the declared source statement contains control, bidi-override, or zero-width characters. Rendered beside a mandatory disclosure, those can visually reorder or conceal it \u2014 so it is rejected rather than escaped."
         })
       );
     }

@@ -4,9 +4,20 @@
   "description": "Closed registry of disclosure rules. This is where honesty is MECHANIZED.\n\nEvery rule fires from a machine-checkable fact in the artifact — never from caller text, and never from a caller flag. That is the whole design: a caller cannot suppress a disclosure by omitting a field, cannot weaken one by rewording it, and cannot promote its data by setting a boolean. The only way to remove a disclosure is to remove the fact that causes it.\n\nThe rendered text is generated from `text` here. It appears identically in four places — the artifact JSON, the visible SVG footer, the SVG accessible description, and the table metadata — and a test asserts all four agree.",
 
   "policy": {
-    "orderingBySeverity": "critical, then important, then informational; within a severity, by rule id. A compact footer may show the highest-priority disclosures and an overflow count; the complete in-memory table metadata and accessible description always contain ALL of them. Artifact 1.0 emits no sidecar.",
-    "neverSuppressible": "In stable mode no disclosure can be suppressed, reordered below a caller note, or visually dominated by one.",
-    "callerNoteIsNotADisclosure": "A caller's declared note is rendered separately, bidi-isolated, under an attribution that marks it unverified. It is never merged into the mandatory disclosure text."
+    "orderingBySeverity": "critical, then important, then informational; within a severity, by rule id. The visible footer, in-memory table metadata, and accessible description contain the complete ordered set. Artifact 1.0 emits no compact/excerpt branch or sidecar.",
+    "neverSuppressible": "In stable mode no disclosure can be suppressed, reordered below caller text, or covered by it. The renderer reserves separate footer rows and refuses dimensions that leave no valid plot region.",
+    "callerStatementsAreNotDisclosures": "The generic CALLER_NOTE_UNVERIFIED warning is a contract-owned disclosure derived from note presence. The caller's exact declared limitations and note are rendered separately after every mandatory disclosure, bidi-isolated, under renderer-owned attribution that marks them unverified. Their exact bodies never enter artifact.disclosures or merge into mandatory disclosure text.",
+    "sourceKindRuleIds": [
+      "SOURCE_SIMULATION",
+      "SOURCE_SYNTHETIC_FIXTURE",
+      "SOURCE_KIND_UNKNOWN",
+      "SOURCE_LITERATURE_EXTRACTION",
+      "SOURCE_MANUAL_ENTRY"
+    ],
+    "sourceKindsWithoutSpecificRule": [
+      "experimental_recording",
+      "derived_dataset"
+    ]
   },
 
   "rules": [

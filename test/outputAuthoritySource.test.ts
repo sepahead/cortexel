@@ -175,7 +175,7 @@ describe('source-owned OutputAuthority V1', () => {
     const wrongEvaluator = analogSource();
     wrongEvaluator.outputAuthority.evaluator.id = 'neuro.analog_trace.compiler_receipt.v1';
     expect(outputAuthoritySourceProblems(wrongEvaluator).join('\n')).toContain(
-      'neuro.analog_trace.output_authority.v2',
+      'neuro.analog_trace.output_authority.v3',
     );
   });
 });

@@ -21,8 +21,8 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:d0ef03da20000581d71e859310419444e7fb8c9dad4e39f60a97ad3070032fc9"
-CATALOG_DIGEST: str = "sha256:801aa157a57212ca58b092319d57edd8ab8649a80202a8a577510ca9f7162c09"
+CONTRACT_DIGEST: str = "sha256:8ad8a03817668696641f60dcfa62d0735096d52b6b43ad047722f3e0ba857121"
+CATALOG_DIGEST: str = "sha256:56f15211b76d250f9d1d2142bb735dd904d89222798a7ac2ed4c37b9ebd2534d"
 
 STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([
     "network.adjacency_matrix",
@@ -47,25 +47,25 @@ STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([
 ])
 
 SKILL_REVISIONS: Final[Mapping[str, int]] = _freeze({
-    "network.adjacency_matrix": 2,
-    "network.connection_graph": 2,
-    "network.degree_distribution": 2,
-    "network.delay_distribution": 2,
-    "network.delay_matrix": 2,
-    "network.spatial_map_2d": 2,
-    "network.synaptic_weight_trace": 2,
-    "network.weight_distribution": 2,
-    "network.weight_matrix": 2,
-    "neuro.analog_trace": 2,
-    "neuro.compartment_trace": 2,
-    "neuro.correlogram": 2,
-    "neuro.isi_distribution": 2,
-    "neuro.multisignal_trace": 2,
-    "neuro.phase_plane": 2,
-    "neuro.population_rate": 2,
-    "neuro.psth": 2,
-    "neuro.response_curve": 2,
-    "neuro.spike_raster": 2
+    "network.adjacency_matrix": 3,
+    "network.connection_graph": 3,
+    "network.degree_distribution": 3,
+    "network.delay_distribution": 3,
+    "network.delay_matrix": 3,
+    "network.spatial_map_2d": 3,
+    "network.synaptic_weight_trace": 3,
+    "network.weight_distribution": 3,
+    "network.weight_matrix": 3,
+    "neuro.analog_trace": 3,
+    "neuro.compartment_trace": 3,
+    "neuro.correlogram": 3,
+    "neuro.isi_distribution": 3,
+    "neuro.multisignal_trace": 3,
+    "neuro.phase_plane": 3,
+    "neuro.population_rate": 3,
+    "neuro.psth": 3,
+    "neuro.response_curve": 3,
+    "neuro.spike_raster": 3
 })
 
 CAPABILITY_AVAILABILITY: Final[Mapping[str, str]] = _freeze({

@@ -3,22 +3,23 @@ import { J as JsonValue, D as Disclosure } from '../parse-json-bVQD5dC-.js';
 import { C as CortexelError } from '../errors-DUbFUu6n.js';
 
 /**
- * RenderPlanV1 — the framework-neutral description of a figure.
+ * Caller-declared source statements are presentation content, not disclosures.
  *
- * A render plan is the complete, bounded, semantic description of a figure AFTER
- * validation and derivation, and BEFORE any drawing. It is not "drawing instructions":
- * it is a closed data structure with no JSX, no DOM node, no callback, no random number,
- * no clock read, and no unresolved data handle.
- *
- * This is what lets the CLI and React produce provably identical figures. Both consume
- * the same plan; a test compares their text, disclosures, scale domains, and table rows.
- * A renderer that computed a value the plan did not carry could diverge — so it cannot.
- *
- * The mark union is CLOSED. There is deliberately no raw-SVG-attribute escape hatch: a
- * mark that could carry an arbitrary attribute could carry an event handler or an
- * external URL, and the plan would become an unsafe visualization grammar rather than a
- * scientific contract.
+ * Cortexel owns the attribution and the Unicode isolation marks. The caller supplies
+ * only the already-validated statement body, so it cannot move its text ahead of a
+ * mandatory disclosure, remove the unverified attribution, or inject its own bidi
+ * controls. The complete rendered string is carried unchanged by the SVG, accessible
+ * summary, and returned-table metadata.
  */
+type CallerSourceStatementKind = 'declared_limitation' | 'declared_note';
+interface CallerSourceStatement {
+    readonly kind: CallerSourceStatementKind;
+    readonly attribution: 'declared_by_caller_not_verified';
+    readonly bidiIsolation: 'unicode_fsi_pdi';
+    /** Renderer-owned attribution plus the caller body enclosed by FSI/PDI. */
+    readonly text: string;
+}
+
 interface RenderPlanV1 {
     readonly version: 1;
     readonly figureId: string;
@@ -31,6 +32,8 @@ interface RenderPlanV1 {
     readonly panels: readonly Panel[];
     readonly legend?: LegendItem[];
     readonly disclosures: readonly DisclosureBlock[];
+    /** Attributed caller declarations, always rendered after every mandatory disclosure. */
+    readonly sourceStatements: readonly CallerSourceStatement[];
     readonly table: TableModel;
     readonly accessibility: AccessibilityModel;
     /** Binds the plan to the validated canonical request it was compiled from. */
@@ -230,6 +233,7 @@ interface TableModel {
      */
     readonly metadata?: {
         readonly disclosures: readonly DisclosureBlock[];
+        readonly sourceStatements: readonly CallerSourceStatement[];
     };
 }
 interface AccessibilityModel {

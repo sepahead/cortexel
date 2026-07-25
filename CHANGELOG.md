@@ -77,6 +77,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   checks after the durable write. Output parents and receipts must have no
   discretionary ACL authority beyond their exact Unix modes. The Python 3.14 CI
   lane now exercises this complete result-mode path and strict reader end to end.
+- The independent receipt reader now pins the canonical 0700 parent directory before
+  opening the unique 0644 result leaf relative to that descriptor, then rechecks both
+  identities and their path/descriptor ACL authority around strict semantic parsing.
+  Parent rebinds, leaf replacements, and unsupported ACL APIs fail closed; CI exercises
+  real Linux access and default ACLs with `setfacl`.
+- The CI evidence lane is pinned to Python 3.14.6 and seals the complete setup-provided
+  Python/uv version roots plus their `/opt` ancestor chain against hosted-image
+  group/world-write and ACL authority before creating the reviewed venv. This is a
+  mutable-filesystem boundary, not an inventory of the complete stdlib/native runtime.
+
+### Fixed — FigureRequestV1 caller-source honesty
+
+- Accepted `source.declaredLimitations` and `source.declaredNote` are now emitted after
+  every mandatory disclosure in deterministic order across the visible SVG footer,
+  accessible summary, RenderPlan, and returned-table metadata. Renderer-owned
+  attribution and FSI/PDI isolation remain separate from `artifact.disclosures`, and
+  OutputAuthority independently refuses omissions, reordering, or changed attribution.
+- The source-kind policy is now total over the closed seven-kind enum: five kinds map
+  to contract-owned rules and `experimental_recording`/`derived_dataset` are explicitly
+  recorded as having no kind-specific warning while retaining universal authenticity
+  and reference-comparison disclosures. `neuro.population_rate` can no longer omit the
+  literature-extraction or manual-entry rule.
+- Because this changes accepted visible output, all 19 stable skills and 14 renderers
+  now publish revision 3, with coordinated v3 OutputAuthority evaluator identities;
+  explicit revision-2 request pins fail closed.
 
 ### Fixed — read-only source builds
 

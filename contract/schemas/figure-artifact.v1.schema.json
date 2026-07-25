@@ -452,7 +452,7 @@
         "summary": {
           "type": "string",
           "maxLength": 12000,
-          "description": "Deterministic non-interpretive description. It contains every mandatory disclosure verbatim so the SVG description and visible footer carry the same honesty statements."
+          "description": "Deterministic non-interpretive description. It contains every mandatory disclosure verbatim, followed by any renderer-attributed, bidi-isolated caller-declared limitations and note, so the SVG description and visible footer carry the same ordered honesty statements. Caller statements remain distinct from artifact.disclosures."
         },
         "tablePolicy": {
           "const": "complete_returned",
@@ -478,7 +478,7 @@
 
     "disclosures": {
       "type": "array",
-      "description": "Derived ONLY from machine-checkable artifact facts through the closed disclosure-rule registry. A caller cannot add, remove, reorder, or reword one. The exact same text appears in the artifact, in the visible SVG footer, in the SVG accessible description, and in the table metadata — a test asserts all four agree.",
+      "description": "Derived ONLY from machine-checkable artifact facts through the closed disclosure-rule registry. A caller cannot add, remove, reorder, or reword one. Exact caller-authored note and limitation bodies are excluded; the generic CALLER_NOTE_UNVERIFIED disclosure may be derived from note presence. The exact same disclosure text appears in the artifact, in the visible SVG footer, in the SVG accessible description, and in the table metadata — a test asserts all four agree.",
       "maxItems": 24,
       "items": {
         "$ref": "https://sepahead.github.io/cortexel/schemas/v1/generated/registry-enums.v1.schema.json#/$defs/disclosureRecord"
