@@ -1285,6 +1285,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             'expected_uvx_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uvx"',
             "SETUP_UV_PATH: ${{ steps.setup_uv.outputs['uv-path'] }}",
             "SETUP_UVX_PATH: ${{ steps.setup_uv.outputs['uvx-path'] }}",
+            "uv_version_pattern='^uv 0[.]11[.]16( [(][ -~]+[)])?$'",
             'uv_path="$CORTEXEL_CI_UV"',
             'sudo chown -R root:root -- "$python_version_root" "$uv_version_root"',
             'sudo setfacl -R -b -k -- "$python_version_root" "$uv_version_root"',

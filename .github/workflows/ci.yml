@@ -112,6 +112,7 @@ jobs:
           SETUP_UVX_PATH: ${{ steps.setup_uv.outputs['uvx-path'] }}
         run: |
           set -euo pipefail
+          export LC_ALL=C
           umask 022
           python_version="$(python -I -S -B -c \
             'import sys; print(".".join(str(value) for value in sys.version_info[:3]))')"
@@ -142,9 +143,14 @@ jobs:
             || -L "$uv_executable" \
             || -L "$uvx_executable" \
             || "$(realpath -e -- "$uv_executable")" != "$expected_uv_executable" \
-            || "$(realpath -e -- "$uvx_executable")" != "$expected_uvx_executable" \
-            || "$("$uv_executable" --version)" != "uv 0.11.16" ]]; then
+            || "$(realpath -e -- "$uvx_executable")" != "$expected_uvx_executable" ]]; then
             echo "::error::setup-uv did not provide the exact canonical uv 0.11.16 authority"
+            exit 1
+          fi
+          uv_version_output="$("$uv_executable" --version)"
+          uv_version_pattern='^uv 0[.]11[.]16( [(][ -~]+[)])?$'
+          if [[ ! $uv_version_output =~ $uv_version_pattern ]]; then
+            echo "::error::setup-uv executable did not report exact uv 0.11.16"
             exit 1
           fi
 
