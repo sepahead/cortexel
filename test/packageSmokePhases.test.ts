@@ -1,10 +1,13 @@
 import {
   chmodSync,
   existsSync,
+  linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
   truncateSync,
@@ -13,7 +16,7 @@ import {
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,12 +24,24 @@ import {
   assertFinalizedHostFile,
   assertInstalledRecursivePackageClosure,
   assertInstalledTopLevelPackageInventory,
+  closePackageSmokeStateFile,
+  executePackageSmokeWorkspace,
+  fingerprintNpmPackageTree,
   fingerprintPackageSmokeWorkspace,
+  inspectNodeExecutableAuthority,
+  inspectNpmPackageAuthority,
   inspectNpmPackageTarball,
+  inspectPreparedStateFileAuthority,
   installedArtifactMode,
   packageSmokeEnvironment,
+  NPM_AUTHORITY_LIMITS,
+  PACKAGE_SMOKE_PHASE_SCHEMA,
+  PACKAGE_SMOKE_PREPARED_SCHEMA,
+  PACKAGE_SMOKE_STATE_FILENAME,
   parsePackageSmokeInvocation,
+  publishPackageSmokeStateFile,
   readDirectoryNamesBounded,
+  reservePackageSmokeStateFile,
   runReviewedNodeCommand,
   scrubbedEnvironment,
   type ExpectedPackageFile,
@@ -141,6 +156,40 @@ function fixtureValues(): {
   };
 }
 
+function fakeRuntimeAuthorityTree(): {
+  readonly workspace: string;
+  readonly node: string;
+  readonly npmRoot: string;
+  readonly npmCli: string;
+  readonly npmTarget: string;
+} {
+  const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-runtime-authority-')));
+  cleanups.push(workspace);
+  const node = join(workspace, 'node');
+  writeFileSync(node, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  chmodSync(node, 0o755);
+  const npmRoot = join(workspace, 'npm');
+  const npmCli = join(npmRoot, 'bin', 'npm-cli.js');
+  const npmTarget = join(npmRoot, 'node_modules', 'tool', 'bin.js');
+  mkdirSync(dirname(npmCli), { recursive: true });
+  mkdirSync(dirname(npmTarget), { recursive: true });
+  mkdirSync(join(npmRoot, 'node_modules', '.bin'));
+  writeFileSync(
+    join(npmRoot, 'package.json'),
+    `${JSON.stringify({
+      name: 'npm',
+      version: '11.0.0',
+      bin: { npm: 'bin/npm-cli.js', npx: 'bin/npx-cli.js' },
+    })}\n`,
+    { mode: 0o644 },
+  );
+  writeFileSync(npmCli, '#!/usr/bin/env node\n', { mode: 0o755 });
+  chmodSync(npmCli, 0o755);
+  writeFileSync(npmTarget, 'module.exports=1\n', { mode: 0o644 });
+  symlinkSync('../tool/bin.js', join(npmRoot, 'node_modules', '.bin', 'tool'));
+  return { workspace, node, npmRoot, npmCli, npmTarget };
+}
+
 afterEach(() => {
   for (const path of cleanups.splice(0)) {
     try {
@@ -153,6 +202,162 @@ afterEach(() => {
 });
 
 describe('two-phase package smoke contract', () => {
+  it('publishes only the fresh v2 state and phase identities', () => {
+    expect(PACKAGE_SMOKE_PREPARED_SCHEMA).toBe('cortexel-package-smoke-prepared.v2');
+    expect(PACKAGE_SMOKE_PHASE_SCHEMA).toBe('cortexel-package-smoke-phase.v2');
+    expect(PACKAGE_SMOKE_STATE_FILENAME).toBe('package-smoke-state.v2.json');
+
+    if (process.platform === 'win32') return;
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-v1-state-rejection-')));
+    cleanups.push(workspace);
+    const staleState = '{"schema":"cortexel-package-smoke-prepared.v1"}\n';
+    writeFileSync(join(workspace, PACKAGE_SMOKE_STATE_FILENAME), staleState, { mode: 0o444 });
+    const expectedStateDigest = `sha256:${createHash('sha256').update(staleState).digest('hex')}`;
+    expect(() => executePackageSmokeWorkspace({ workspace, expectedStateDigest })).toThrow(
+      /prepared package-smoke state/u,
+    );
+  });
+
+  it('binds Node bytes and exact npm manifest, CLI, topology, metadata, and bytes', () => {
+    if (process.platform === 'win32') return;
+    const fixture = fakeRuntimeAuthorityTree();
+    const firstNode = inspectNodeExecutableAuthority(fixture.node);
+    const firstNpm = inspectNpmPackageAuthority(fixture.npmCli);
+    expect(firstNode.file.sha256).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(firstNpm).toMatchObject({
+      root: fixture.npmRoot,
+      cli: fixture.npmCli,
+      version: '11.0.0',
+      tree: {
+        schema: 'cortexel-package-smoke-npm-tree.v1',
+        directoryCount: 5,
+        fileCount: 3,
+        symlinkCount: 1,
+      },
+    });
+
+    writeFileSync(fixture.npmTarget, 'module.exports=2\n', { mode: 0o644 });
+    const changedNpm = inspectNpmPackageAuthority(fixture.npmCli);
+    expect(changedNpm.tree.sha256).not.toBe(firstNpm.tree.sha256);
+
+    const originalNode = readFileSync(fixture.node);
+    rmSync(fixture.node);
+    writeFileSync(fixture.node, originalNode, { mode: 0o755 });
+    chmodSync(fixture.node, 0o755);
+    const replacedNode = inspectNodeExecutableAuthority(fixture.node);
+    expect(replacedNode.file.sha256).toBe(firstNode.file.sha256);
+    expect(replacedNode.file.inode).not.toBe(firstNode.file.inode);
+
+    const launchMarker = join(fixture.workspace, 'stale-runtime-launched');
+    writeFileSync(
+      fixture.node,
+      `#!/bin/sh\ntouch ${JSON.stringify(launchMarker)}\n`,
+      { mode: 0o755 },
+    );
+    chmodSync(fixture.node, 0o755);
+    expect(() => runReviewedNodeCommand(
+      fixture.node,
+      [],
+      fixture.workspace,
+      {
+        environment: packageSmokeEnvironment(fixture.node, fixture.workspace, {}),
+        nodeAuthority: firstNode,
+        timeoutMs: 1_000,
+        outputLimitBytes: 1_024,
+      },
+    )).toThrow(/pre-command Node executable authority changed/u);
+    expect(existsSync(launchMarker)).toBe(false);
+
+    const manifestPath = join(fixture.npmRoot, 'package.json');
+    writeFileSync(
+      manifestPath,
+      `${JSON.stringify({ name: 'npm', version: '11.0.0', bin: { npm: 'bin/other.js' } })}\n`,
+    );
+    expect(() => inspectNpmPackageAuthority(fixture.npmCli)).toThrow(/manifest.*CLI identity/u);
+  });
+
+  it('rejects npm hard links, unsafe symlinks, writable authority, and resource overflow', () => {
+    if (process.platform === 'win32') return;
+    const hardLinkFixture = fakeRuntimeAuthorityTree();
+    linkSync(
+      hardLinkFixture.npmTarget,
+      join(hardLinkFixture.npmRoot, 'node_modules', 'tool', 'hard-link.js'),
+    );
+    expect(() => fingerprintNpmPackageTree(hardLinkFixture.npmRoot)).toThrow(/unique real regular|hard-linked/u);
+
+    const escapeFixture = fakeRuntimeAuthorityTree();
+    symlinkSync(
+      escapeFixture.node,
+      join(escapeFixture.npmRoot, 'node_modules', '.bin', 'escape'),
+    );
+    expect(() => fingerprintNpmPackageTree(escapeFixture.npmRoot)).toThrow(/symlink.*unsafe|escapes/u);
+
+    const chainFixture = fakeRuntimeAuthorityTree();
+    symlinkSync(
+      'tool',
+      join(chainFixture.npmRoot, 'node_modules', '.bin', 'chain'),
+    );
+    expect(() => fingerprintNpmPackageTree(chainFixture.npmRoot)).toThrow(/directly target/u);
+
+    const writableFixture = fakeRuntimeAuthorityTree();
+    chmodSync(writableFixture.npmTarget, 0o666);
+    expect(() => fingerprintNpmPackageTree(writableFixture.npmRoot)).toThrow(
+      /group\/world-write/u,
+    );
+
+    const budgetFixture = fakeRuntimeAuthorityTree();
+    expect(() => fingerprintNpmPackageTree(budgetFixture.npmRoot, {
+      ...NPM_AUTHORITY_LIMITS,
+      entries: 2,
+    })).toThrow(/entry budget/u);
+
+    const depthFixture = fakeRuntimeAuthorityTree();
+    const ancestryDepth = (path: string): number => {
+      let count = 0;
+      let cursor = dirname(path);
+      while (true) {
+        count++;
+        const parent = dirname(cursor);
+        if (parent === cursor) return count;
+        cursor = parent;
+      }
+    };
+    let exactDirectory = depthFixture.workspace;
+    while (ancestryDepth(join(exactDirectory, 'node')) < NPM_AUTHORITY_LIMITS.depth) {
+      exactDirectory = join(exactDirectory, 'd');
+      mkdirSync(exactDirectory);
+    }
+    const exactDepthNode = join(exactDirectory, 'node');
+    writeFileSync(exactDepthNode, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    chmodSync(exactDepthNode, 0o755);
+    expect(inspectNodeExecutableAuthority(exactDepthNode).ancestry.entryCount)
+      .toBe(NPM_AUTHORITY_LIMITS.depth);
+    const overDepthDirectory = join(exactDirectory, 'd');
+    mkdirSync(overDepthDirectory);
+    const overDepthNode = join(overDepthDirectory, 'node');
+    writeFileSync(overDepthNode, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    chmodSync(overDepthNode, 0o755);
+    expect(() => inspectNodeExecutableAuthority(overDepthNode)).toThrow(/ancestry exceeds/u);
+  });
+
+  it('authorizes runtime bytes before execute can launch Node', () => {
+    const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    const executeReader = source.slice(
+      source.indexOf('function readAndVerifyPreparedState('),
+      source.indexOf('export function parsePackageSmokeInvocation('),
+    );
+    expect(executeReader.indexOf("assertPackageRuntimeAuthority(state.runtimeAuthority, 'pre-execute')"))
+      .toBeGreaterThan(-1);
+    expect(executeReader.indexOf("assertPackageRuntimeAuthority(state.runtimeAuthority, 'pre-execute')"))
+      .toBeLessThan(executeReader.indexOf("executableVersion(canonicalNode, 'Node')"));
+    const workspaceSealIndex = executeReader.indexOf(
+      'fingerprintPackageSmokeWorkspace(workspace, true)',
+    );
+    expect(workspaceSealIndex).toBeGreaterThan(-1);
+    expect(workspaceSealIndex)
+      .toBeLessThan(executeReader.indexOf("executableVersion(canonicalNode, 'Node')"));
+  });
+
   it('binds finalized host-authored guard and probe inputs to exact bytes and mode', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-host-intent-')));
     cleanups.push(workspace);
@@ -307,6 +512,24 @@ describe('two-phase package smoke contract', () => {
     expect(largeOutput.stdout.length).toBe(largeOutputBytes);
     expect(largeOutput.groupKillCount).toBe(1);
 
+    const exactSplitOutput = runReviewedNodeCommand(
+      reviewedNode,
+      [
+        '-e',
+        'process.stdout.write("o".repeat(512)); process.stderr.write("e".repeat(512));',
+      ],
+      workspace,
+      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+    );
+    expect(exactSplitOutput).toMatchObject({
+      status: 0,
+      signal: null,
+      stdout: 'o'.repeat(512),
+      stderr: 'e'.repeat(512),
+      timedOut: false,
+      outputOverflow: false,
+    });
+
     const nonzero = runReviewedNodeCommand(
       reviewedNode,
       ['-e', 'process.stderr.write("bounded-error"); process.exit(7)'],
@@ -392,13 +615,50 @@ describe('two-phase package smoke contract', () => {
     expect(overflow.processGroupId).toBeGreaterThan(0);
     expect(overflow.groupKillCount).toBe(1);
 
+    const stderrOverflow = runReviewedNodeCommand(
+      reviewedNode,
+      ['-e', 'process.stderr.write("e".repeat(2048)); setInterval(() => {}, 1000);'],
+      workspace,
+      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+    );
+    expect(stderrOverflow).toMatchObject({
+      signal: 'SIGKILL',
+      stdout: '',
+      stderr: 'e'.repeat(1_024),
+      timedOut: false,
+      outputOverflow: true,
+      groupKillCount: 1,
+    });
+
+    const combinedOverflow = runReviewedNodeCommand(
+      reviewedNode,
+      [
+        '-e',
+        'process.stdout.write("o".repeat(700)); process.stderr.write("e".repeat(700)); ' +
+          'setInterval(() => {}, 1000);',
+      ],
+      workspace,
+      { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
+    );
+    expect(combinedOverflow).toMatchObject({
+      signal: 'SIGKILL',
+      timedOut: false,
+      outputOverflow: true,
+      groupKillCount: 1,
+    });
+    expect(Buffer.byteLength(combinedOverflow.stdout) + Buffer.byteLength(combinedOverflow.stderr))
+      .toBe(1_024);
+
     const waitForGone = (pid: number, processGroup: boolean): boolean => {
       const deadline = Date.now() + 2_000;
       while (Date.now() < deadline) {
         try {
           process.kill(processGroup ? -pid : pid, 0);
         } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true;
+          const code = (error as NodeJS.ErrnoException).code;
+          // EPERM means this numeric PID/PGID has already ceased to identify
+          // our same-UID child and may have been reused by another authority.
+          if (code === 'ESRCH' || code === 'EPERM') return true;
           throw error;
         }
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
@@ -489,6 +749,9 @@ describe('two-phase package smoke contract', () => {
       expect(waitForGone(result.processGroupId!, true)).toBe(true);
       expect(waitForGone(Number(readFileSync(pidFile, 'utf8')), false)).toBe(true);
     }
+    for (const result of [exactSplitOutput, stderrOverflow, combinedOverflow]) {
+      expect(waitForGone(result.processGroupId!, true)).toBe(true);
+    }
 
     expect(() => runReviewedNodeCommand(
       reviewedNode,
@@ -502,6 +765,19 @@ describe('two-phase package smoke contract', () => {
       workspace,
       { environment, timeoutMs: 1_000, outputLimitBytes: 1_024 },
     )).toThrow(/argument 2/u);
+    expect(() => runReviewedNodeCommand(
+      reviewedNode,
+      ['-e', 'process.exit(0)'],
+      workspace,
+      {
+        environment: {
+          ...environment,
+          CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK: '{}',
+        },
+        timeoutMs: 1_000,
+        outputLimitBytes: 1_024,
+      },
+    )).toThrow(/reserved entry/u);
 
     const sentinelDirectory = join(workspace, 'unreviewed-sibling');
     const sentinelMarker = join(workspace, 'sibling-ran');
@@ -520,7 +796,7 @@ describe('two-phase package smoke contract', () => {
     );
     expect(realpathSync(exactRuntime.stdout)).toBe(reviewedNode);
     expect(() => realpathSync(sentinelMarker)).toThrow();
-  });
+  }, 15_000);
 
   it('kills the detached target group when its outer supervisor group is cancelled', () => {
     if (process.platform === 'win32') return;
@@ -552,7 +828,10 @@ describe('two-phase package smoke contract', () => {
         process.kill(group ? -pid : pid, 0);
         return false;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true;
+        const code = (error as NodeJS.ErrnoException).code;
+        // A surviving child created by this test is same-UID and signalable.
+        // EPERM therefore proves the number has rebound to another authority.
+        if (code === 'ESRCH' || code === 'EPERM') return true;
         throw error;
       }
     };
@@ -628,6 +907,171 @@ describe('two-phase package smoke contract', () => {
       }
     }
   });
+
+  it('keeps reviewed code gated across pre-handshake and pre-GO wrapper/supervisor death', () => {
+    if (process.platform === 'win32') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    const bunProbe = spawnSync('bun', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    if (nodeProbe.status !== 0 || bunProbe.status !== 0) {
+      throw new Error('the killpoint regression requires exact Node and Bun executables');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    const reviewedBun = realpathSync(bunProbe.stdout.trim());
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-supervisor-killpoint-')));
+    cleanups.push(workspace);
+    const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
+
+    const waitFor = (predicate: () => boolean, timeoutMs = 4_000): boolean => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (predicate()) return true;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+      return predicate();
+    };
+    const processIsGone = (pid: number, group: boolean): boolean => {
+      try {
+        process.kill(group ? -pid : pid, 0);
+        return false;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ESRCH' || code === 'EPERM') return true;
+        throw error;
+      }
+    };
+
+    for (const scenario of [
+      {
+        phase: 'wrapper-spawned-before-handshake',
+        victim: 'wrapper',
+        expectedKind: 'threw',
+      },
+      {
+        phase: 'handshake-published-before-go',
+        victim: 'wrapper',
+        expectedKind: 'returned',
+      },
+      {
+        phase: 'handshake-published-before-go',
+        victim: 'supervisor',
+        expectedKind: 'threw',
+      },
+    ] as const) {
+      const { phase, victim, expectedKind } = scenario;
+      const prefix = phase === 'wrapper-spawned-before-handshake'
+        ? 'pre-handshake-wrapper'
+        : `pre-go-${victim}`;
+      const readyPath = join(workspace, `${prefix}-ready.json`);
+      const targetMarker = join(workspace, `${prefix}-target-ran`);
+      const outcomePath = join(workspace, `${prefix}-outcome.json`);
+      const runner = join(workspace, `${prefix}-runner.ts`);
+      const targetProgram = `
+        require('node:fs').writeFileSync(${JSON.stringify(targetMarker)}, 'ran\\n');
+        setInterval(() => {}, 1000);
+      `;
+      writeFileSync(
+        runner,
+        `
+          import { writeFileSync } from 'node:fs';
+          import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
+          try {
+            const result = runReviewedNodeCommand(
+              ${JSON.stringify(reviewedNode)},
+              ['-e', ${JSON.stringify(targetProgram)}],
+              ${JSON.stringify(workspace)},
+              {
+                environment: { PATH: '/usr/bin:/bin' },
+                timeoutMs: 10_000,
+                outputLimitBytes: 1_024,
+                trustedTestHook: {
+                  phase: ${JSON.stringify(phase)},
+                  readyPath: ${JSON.stringify(readyPath)},
+                },
+              },
+            );
+            writeFileSync(
+              ${JSON.stringify(outcomePath)},
+              JSON.stringify({ kind: 'returned', signal: result.signal, status: result.status }) + '\\n',
+              { flag: 'wx' },
+            );
+          } catch (error) {
+            writeFileSync(
+              ${JSON.stringify(outcomePath)},
+              JSON.stringify({
+                kind: 'threw',
+                message: error instanceof Error ? error.message : String(error),
+              }) + '\\n',
+              { flag: 'wx' },
+            );
+          }
+        `,
+      );
+      const outer = spawn(reviewedBun, [runner], {
+        cwd: root,
+        detached: true,
+        stdio: 'ignore',
+      });
+      outer.unref();
+      let supervisorPid: number | undefined;
+      let wrapperPid: number | undefined;
+      try {
+        expect(waitFor(() => existsSync(readyPath))).toBe(true);
+        const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
+          phase: string;
+          processGroupId: number;
+          schema: string;
+          supervisorPid: number;
+        };
+        expect(ready.schema).toBe('cortexel-package-smoke-command-test-hook.v1');
+        expect(ready.phase).toBe(phase);
+        supervisorPid = ready.supervisorPid;
+        wrapperPid = ready.processGroupId;
+        expect(Number.isSafeInteger(supervisorPid) && supervisorPid > 1).toBe(true);
+        expect(Number.isSafeInteger(wrapperPid) && wrapperPid > 1).toBe(true);
+
+        process.kill(victim === 'wrapper' ? wrapperPid : supervisorPid, 'SIGKILL');
+        expect(waitFor(() => existsSync(outcomePath))).toBe(true);
+        const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
+          kind: string;
+          message?: string;
+          signal?: string | null;
+          status?: number;
+        };
+        expect(outcome.kind).toBe(expectedKind);
+        if (expectedKind === 'threw') {
+          expect(outcome.message).toMatch(
+            phase === 'wrapper-spawned-before-handshake'
+              ? /handshake/u
+              : /outer SIGKILL boundary/u,
+          );
+        } else {
+          expect(outcome).toMatchObject({ signal: 'SIGKILL', status: -1 });
+        }
+        expect(existsSync(targetMarker)).toBe(false);
+        expect(waitFor(() => processIsGone(wrapperPid!, true))).toBe(true);
+        expect(waitFor(() => processIsGone(wrapperPid!, false))).toBe(true);
+        expect(waitFor(() => processIsGone(supervisorPid!, false))).toBe(true);
+      } finally {
+        for (const [pid, group] of [
+          [outer.pid, true],
+          [supervisorPid, false],
+          [wrapperPid, true],
+        ] as const) {
+          if (pid === undefined) continue;
+          try {
+            process.kill(group ? -pid : pid, 'SIGKILL');
+          } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code !== 'ESRCH' && code !== 'EPERM') throw error;
+          }
+        }
+      }
+    }
+  }, 15_000);
 
   it('requires an absolute persistent workspace and a carried state digest', () => {
     const workspace = resolve('package-smoke-test-workspace');
@@ -764,6 +1208,79 @@ describe('two-phase package smoke contract', () => {
     writeFileSync(oversized, '');
     truncateSync(oversized, 128 * 1024 * 1024 + 1);
     expect(() => fingerprintPackageSmokeWorkspace(workspace)).toThrow(/per-file byte budget/u);
+  });
+
+  it('binds the workspace root identity and every controlling parent directory', () => {
+    if (process.platform === 'win32') return;
+    const container = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-workspace-authority-')));
+    cleanups.push(container);
+    const parent = join(container, 'parent');
+    const workspace = join(parent, 'workspace');
+    mkdirSync(workspace, { recursive: true });
+    writeFileSync(join(workspace, 'evidence'), 'stable\n');
+    const first = fingerprintPackageSmokeWorkspace(workspace);
+    expect(first.root.path).toBe(workspace);
+    expect(first.root.inode).toMatch(/^(?:0|[1-9][0-9]*)$/u);
+    expect(() => fingerprintPackageSmokeWorkspace(workspace, true)).toThrow(
+      /finalized read-only mode/u,
+    );
+    chmodSync(workspace, 0o555);
+    expect(fingerprintPackageSmokeWorkspace(workspace, true).root.mode).toBe(0o555);
+    chmodSync(workspace, 0o755);
+
+    const oldParent = join(container, 'old-parent');
+    renameSync(parent, oldParent);
+    mkdirSync(parent);
+    renameSync(join(oldParent, 'workspace'), workspace);
+    const reboundParent = fingerprintPackageSmokeWorkspace(workspace);
+    expect(reboundParent.root.inode).toBe(first.root.inode);
+    expect(reboundParent.parentAncestry.sha256).not.toBe(first.parentAncestry.sha256);
+    expect(reboundParent.digest).not.toBe(first.digest);
+
+    const replaced = join(parent, 'replacement');
+    mkdirSync(replaced);
+    writeFileSync(join(replaced, 'evidence'), 'stable\n');
+    rmSync(workspace, { recursive: true });
+    renameSync(replaced, workspace);
+    const replacedRoot = fingerprintPackageSmokeWorkspace(workspace);
+    expect(replacedRoot.root.inode).not.toBe(first.root.inode);
+    expect(replacedRoot.digest).not.toBe(first.digest);
+  });
+
+  it('reserves the excluded state leaf before sealing and preserves root authority on publication', () => {
+    if (process.platform === 'win32') return;
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-state-reservation-')));
+    cleanups.push(workspace);
+    const evidence = join(workspace, 'evidence');
+    writeFileSync(evidence, 'stable\n', { mode: 0o644 });
+    const reservation = reservePackageSmokeStateFile(workspace);
+    try {
+      chmodSync(evidence, 0o444);
+      chmodSync(join(workspace, PACKAGE_SMOKE_STATE_FILENAME), 0o444);
+      chmodSync(workspace, 0o555);
+      const before = fingerprintPackageSmokeWorkspace(workspace, true);
+      const raw = publishPackageSmokeStateFile(reservation, {
+        schema: PACKAGE_SMOKE_PREPARED_SCHEMA,
+        proof: 'excluded-state-publication',
+      });
+      const after = fingerprintPackageSmokeWorkspace(workspace, true);
+      expect(after).toEqual(before);
+      expect(after.root.linkCount).toBe(before.root.linkCount);
+      expect(lstatSync(join(workspace, PACKAGE_SMOKE_STATE_FILENAME)).mode & 0o7777)
+        .toBe(0o444);
+      expect(readFileSync(join(workspace, PACKAGE_SMOKE_STATE_FILENAME), 'utf8')).toBe(raw);
+      const digest = `sha256:${createHash('sha256').update(raw).digest('hex')}`;
+      const authority = inspectPreparedStateFileAuthority(workspace, digest);
+      expect(authority).toMatchObject({ mode: 0o444, sha256: digest });
+      chmodSync(join(workspace, PACKAGE_SMOKE_STATE_FILENAME), 0o400);
+      expect(() => inspectPreparedStateFileAuthority(workspace, digest)).toThrow(
+        /exact 0444 workspace-owner authority/u,
+      );
+      chmodSync(join(workspace, PACKAGE_SMOKE_STATE_FILENAME), 0o444);
+    } finally {
+      closePackageSmokeStateFile(reservation);
+      chmodSync(workspace, 0o755);
+    }
   });
 
   it('bounds directory allocation and closes each installed top-level package inventory', () => {

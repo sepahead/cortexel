@@ -1275,6 +1275,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             "/usr/bin/timeout --signal=TERM --kill-after=10s 300s",
             "bootstrap-backend-wheelhouse",
             "UV_OFFLINE=1",
+            "UV_LINK_MODE=copy",
+            "--link-mode copy",
             "--no-index",
             "--find-links \"$wheelhouse\"",
             "--require-hashes",
@@ -1313,6 +1315,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
         self.assertIn("Run the complete block in that one subshell", contributing)
         self.assertIn("umask 022", contributing)
+        self.assertIn("UV_LINK_MODE=copy", contributing)
+        self.assertIn("--link-mode copy", contributing)
         smoke_source = (ROOT / "scripts" / "smoke-python-package.py").read_text(
             encoding="utf-8"
         )

@@ -24,13 +24,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   injection controls, npm configuration, and OpenSSL configuration cannot cross
   the package-smoke process boundary.
 - Every executable entry point now runs through the exact reviewed Node binary.
+  Prepared-state v2 additionally binds that executable's stable bytes, metadata,
+  and path ancestry and the exact npm 10/11 manifest, CLI, and bounded recursive
+  package tree. Its deliberately narrow authority scope does not claim Node's
+  dynamic-library/OS closure or the TypeScript harness runtime. The workspace seal
+  now includes the finalized root identity and mode plus every controlling parent
+  identity; the externally carried state digest separately binds the state leaf.
+  That excluded leaf is exclusively reserved before sealing and durably published
+  through its pinned descriptor, avoiding filesystem-specific root-link-count
+  changes and state/seal circularity. Execute retains its first exact file
+  authority and revalidates the leaf's digest, identity, ownership, and `0444`
+  mode after active work.
   A trusted gated wrapper enters a fresh POSIX process group. The supervisor
   publishes that group before it permits reviewed code to execute. It applies one
   terminal SIGKILL sweep and proves group closure. If the supervisor fails, the
   outer caller closes the published group and rejects the command. This boundary
   cleans descendants that remain in the group. It is not a sandbox against
-  same-UID signaling or a descendant that starts another session or process group.
+  same-UID signaling, reusable numeric PGIDs, a descendant that starts another
+  session or process group, or simultaneous uncatchable death of both outer caller
+  and supervisor. Handled `TERM`, `INT`, and `HUP` cancellation is covered;
+  stronger lifetime containment requires an external sandbox/cgroup.
   Windows fails closed until an equivalent reviewed Job Object boundary exists.
+  Supervisor-only, one-way regression rendezvous now prove that killing the
+  wrapper before or after handshake publication, or the supervisor after
+  publication but before `GO`, cannot start target code and still closes the
+  published group.
   Protocol-size limits account for base64 expansion without giant regular
   expressions. Directory reads and file hashes are allocation-bounded. Every
   installed package container, scope, package identity,
@@ -62,6 +80,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Backend provisioning and the smoke run now share an explicit `umask 022`; the
   gate rejects any different ambient umask before work begins instead of letting
   caller-specific 0600/0700 modes make the exact installed closure irreproducible.
+- Offline backend installation now explicitly selects uv's `copy` link mode in
+  both CI and the documented recipe, so unique-file authority cannot vary with
+  whether the wheelhouse and runtime happen to share a filesystem.
 - Release harnesses can request a durable, canonical
   `cortexel-python-package-smoke-result.v1` JSON receipt with
   `verify --result-file ABS`. The exclusive 0644 result binds the final wheel and

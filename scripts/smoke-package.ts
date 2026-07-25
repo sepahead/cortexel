@@ -11,7 +11,9 @@ import {
   constants as fsConstants,
   copyFileSync,
   existsSync,
+  fchmodSync,
   fstatSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -25,7 +27,9 @@ import {
   rmSync,
   statSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
+import type { BigIntStats } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
   basename,
@@ -57,9 +61,12 @@ const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
 const fixtureManifestPath = join(fixtureRoot, 'package.json');
 const fixtureLockPath = join(fixtureRoot, 'package-lock.json');
-const PREPARED_STATE_SCHEMA = 'cortexel-package-smoke-prepared.v1' as const;
-const PHASE_OUTPUT_SCHEMA = 'cortexel-package-smoke-phase.v1' as const;
-const STATE_FILENAME = 'package-smoke-state.v1.json';
+export const PACKAGE_SMOKE_PREPARED_SCHEMA = 'cortexel-package-smoke-prepared.v2' as const;
+export const PACKAGE_SMOKE_PHASE_SCHEMA = 'cortexel-package-smoke-phase.v2' as const;
+export const PACKAGE_SMOKE_STATE_FILENAME = 'package-smoke-state.v2.json';
+const PREPARED_STATE_SCHEMA = PACKAGE_SMOKE_PREPARED_SCHEMA;
+const PHASE_OUTPUT_SCHEMA = PACKAGE_SMOKE_PHASE_SCHEMA;
+const STATE_FILENAME = PACKAGE_SMOKE_STATE_FILENAME;
 const PACK_RESULT_FILENAME = 'pack-result.v1.json';
 const NETWORK_GUARD_FILENAME = 'network-and-write-guard.cjs';
 const LOCAL_TARBALL_FILENAME = 'cortexel-smoke.tgz';
@@ -68,8 +75,15 @@ const MAX_TREE_ENTRIES = 200_000;
 const MAX_TREE_BYTES = 4 * 1024 * 1024 * 1024;
 const MAX_WORKSPACE_FILE_BYTES = 128 * 1024 * 1024;
 const WORKSPACE_HASH_CHUNK_BYTES = 1024 * 1024;
+const RUNTIME_AUTHORITY_SCOPE = 'node-executable-and-npm-package-tree.v1' as const;
+const NPM_TREE_SCHEMA = 'cortexel-package-smoke-npm-tree.v1' as const;
+const RUNTIME_TREE_HASH_DOMAIN = 'cortexel-package-smoke-npm-tree-v1\0';
+const RUNTIME_ANCESTRY_HASH_DOMAIN = 'cortexel-package-smoke-path-ancestry-v1\0';
+const MAX_RUNTIME_EXECUTABLE_BYTES = 256 * 1024 * 1024;
 const COMMAND_RESULT_SCHEMA = 'cortexel-package-smoke-command.v1' as const;
 const COMMAND_HANDSHAKE_SCHEMA = 'cortexel-package-smoke-command-handshake.v1' as const;
+const COMMAND_TEST_HOOK_SCHEMA = 'cortexel-package-smoke-command-test-hook.v1' as const;
+const COMMAND_TEST_HOOK_ENVIRONMENT = 'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK';
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60_000;
 const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
 const MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES = 4_096;
@@ -88,10 +102,33 @@ export const PACKAGE_TARBALL_LIMITS = Object.freeze({
   sourceDepth: 32,
   directoryEntries: 10_000,
 });
+export interface NpmAuthorityLimits {
+  readonly entries: number;
+  readonly totalBytes: number;
+  readonly fileBytes: number;
+  readonly depth: number;
+  readonly directoryEntries: number;
+  readonly pathBytes: number;
+  readonly segmentBytes: number;
+  readonly symlinkTargetBytes: number;
+}
+
+export const NPM_AUTHORITY_LIMITS: NpmAuthorityLimits = Object.freeze({
+  entries: 50_000,
+  totalBytes: 512 * 1024 * 1024,
+  fileBytes: 128 * 1024 * 1024,
+  depth: 64,
+  directoryEntries: 10_000,
+  pathBytes: 4_096,
+  segmentBytes: 255,
+  symlinkTargetBytes: 4_096,
+});
 const NPM_PORTABLE_MTIME_SECONDS = 499_162_500;
 const NPM_GZIP_HEADER = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff]);
 
 let commandEnvironment: NodeJS.ProcessEnv | undefined;
+let commandNodeAuthority: NodeExecutableFileAuthority | undefined;
+let commandRuntimeAuthority: PackageRuntimeAuthority | undefined;
 
 export interface ReviewedNodeCommandResult {
   readonly groupKillCount: number;
@@ -102,6 +139,11 @@ export interface ReviewedNodeCommandResult {
   readonly stderr: string;
   readonly timedOut: boolean;
   readonly outputOverflow: boolean;
+}
+
+export interface ReviewedNodeCommandTestHook {
+  readonly phase: 'wrapper-spawned-before-handshake' | 'handshake-published-before-go';
+  readonly readyPath: string;
 }
 
 /*
@@ -165,10 +207,27 @@ const childProcess = require('node:child_process');
 const fs = require('node:fs');
 const payloadName = 'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD';
 const wrapperPayloadName = 'CORTEXEL_PACKAGE_SMOKE_WRAPPER_PAYLOAD';
+const testHookPayloadName = 'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK';
 const wrapperSource = ${JSON.stringify(REVIEWED_NODE_TARGET_WRAPPER)};
 let payload;
+let trustedTestHook = null;
 try {
   payload = JSON.parse(process.env[payloadName] || 'null');
+  const rawTestHook = process.env[testHookPayloadName];
+  if (rawTestHook !== undefined) {
+    trustedTestHook = JSON.parse(rawTestHook);
+    const keys = trustedTestHook && typeof trustedTestHook === 'object' &&
+      !Array.isArray(trustedTestHook) ? Object.keys(trustedTestHook).sort() : [];
+    if (
+      JSON.stringify(keys) !== '["phase","readyPath","schema"]' ||
+      trustedTestHook.schema !== 'cortexel-package-smoke-command-test-hook.v1' ||
+      !['wrapper-spawned-before-handshake', 'handshake-published-before-go']
+        .includes(trustedTestHook.phase) ||
+      typeof trustedTestHook.readyPath !== 'string'
+    ) {
+      throw new Error('invalid trusted command test hook');
+    }
+  }
 } catch (error) {
   fs.writeSync(1, JSON.stringify({
     groupKillCount: 0,
@@ -185,6 +244,7 @@ try {
   process.exit(0);
 }
 delete process.env[payloadName];
+delete process.env[testHookPayloadName];
 const chunks = { stdout: [], stderr: [] };
 let capturedBytes = 0;
 let outputOverflow = false;
@@ -194,10 +254,12 @@ let child;
 let groupKillStarted = false;
 let cancellationStarted = false;
 let timer;
+let testHookTimer;
 const finish = (status, signal, spawnError) => {
   if (settled) return;
   settled = true;
   clearTimeout(timer);
+  clearTimeout(testHookTimer);
   const stdoutBase64 = Buffer.concat(chunks.stdout).toString('base64');
   const stderrBase64 = Buffer.concat(chunks.stderr).toString('base64');
   fs.writeSync(1, JSON.stringify({
@@ -231,6 +293,7 @@ const cancelSupervisor = (exitCode) => {
   cancellationStarted = true;
   settled = true;
   if (timer) clearTimeout(timer);
+  if (testHookTimer) clearTimeout(testHookTimer);
   try {
     hardKill();
   } catch {
@@ -262,6 +325,18 @@ const cancelSupervisor = (exitCode) => {
     setTimeout(probe, 10);
   };
   probe();
+};
+const stopAtTrustedTestHook = (phase) => {
+  if (!trustedTestHook || trustedTestHook.phase !== phase) return false;
+  const ready = JSON.stringify({
+    phase,
+    processGroupId: child.pid,
+    schema: 'cortexel-package-smoke-command-test-hook.v1',
+    supervisorPid: process.pid,
+  }) + '\n';
+  fs.writeFileSync(trustedTestHook.readyPath, ready, { flag: 'wx', mode: 0o600 });
+  testHookTimer = setTimeout(() => cancelSupervisor(70), 4000);
+  return true;
 };
 for (const [signal, exitCode] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) {
   process.on(signal, () => cancelSupervisor(exitCode));
@@ -327,6 +402,7 @@ if (!child) {
   child.stdout.on('data', capture('stdout'));
   child.stderr.on('data', capture('stderr'));
   child.once('spawn', () => {
+    if (stopAtTrustedTestHook('wrapper-spawned-before-handshake')) return;
     const handshake = Buffer.from(JSON.stringify({
       processGroupId: child.pid,
       schema: 'cortexel-package-smoke-command-handshake.v1',
@@ -334,6 +410,7 @@ if (!child) {
     if (fs.writeSync(1, handshake) !== handshake.length) {
       throw new Error('process-group handshake was not published atomically');
     }
+    if (stopAtTrustedTestHook('handshake-published-before-go')) return;
     child.stdin.end('GO\n');
   });
   child.once('error', (error) => finish(null, null, String(error)));
@@ -350,6 +427,178 @@ function activeCommandEnvironment(): NodeJS.ProcessEnv {
   return commandEnvironment;
 }
 
+function runtimeStatIdentity(stats: BigIntStats): readonly bigint[] {
+  return [
+    stats.dev,
+    stats.ino,
+    stats.mode,
+    stats.size,
+    stats.nlink,
+    stats.uid,
+    stats.gid,
+    stats.mtimeNs,
+    stats.ctimeNs,
+    stats.birthtimeNs,
+  ];
+}
+
+function sameRuntimeStat(left: BigIntStats, right: BigIntStats): boolean {
+  const leftIdentity = runtimeStatIdentity(left);
+  const rightIdentity = runtimeStatIdentity(right);
+  return leftIdentity.every((value, index) => value === rightIdentity[index]);
+}
+
+function boundedBigIntNumber(value: bigint, maximum: number, label: string): number {
+  if (value < 0n || value > BigInt(maximum)) fail(`${label} is outside its byte budget`);
+  return Number(value);
+}
+
+function portableUnsignedBigInt(value: bigint, label: string, minimum = 0n): number {
+  if (value < minimum || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    fail(`${label} is outside the portable integer domain`);
+  }
+  return Number(value);
+}
+
+function portableRuntimeFileAuthority(
+  path: string,
+  stats: BigIntStats,
+  digest: string,
+  size: number,
+): RuntimeFileAuthority {
+  const mode = Number(stats.mode & 0o7777n);
+  const uid = portableUnsignedBigInt(stats.uid, `runtime authority uid: ${path}`);
+  const gid = portableUnsignedBigInt(stats.gid, `runtime authority gid: ${path}`);
+  return {
+    path,
+    sha256: digest,
+    size,
+    mode,
+    uid,
+    gid,
+    linkCount: 1,
+    device: stats.dev.toString(10),
+    inode: stats.ino.toString(10),
+    mtimeNs: stats.mtimeNs.toString(10),
+    ctimeNs: stats.ctimeNs.toString(10),
+    birthtimeNs: stats.birthtimeNs.toString(10),
+  };
+}
+
+function inspectRuntimeRegularFile(
+  path: string,
+  maximumBytes: number,
+  label: string,
+  executable = false,
+): RuntimeFileAuthority {
+  if (!isAbsolute(path) || Buffer.byteLength(path, 'utf8') > NPM_AUTHORITY_LIMITS.pathBytes ||
+      realpathSync(path) !== path) {
+    fail(`${label} must be one bounded canonical physical absolute path`);
+  }
+  const initial = lstatSync(path, { bigint: true });
+  if (!initial.isFile() || initial.isSymbolicLink() || initial.nlink !== 1n) {
+    fail(`${label} must be a unique real regular file`);
+  }
+  const mode = initial.mode & 0o7777n;
+  if ((mode & 0o7022n) !== 0n) {
+    fail(`${label} must not carry special or group/world-write mode authority`);
+  }
+  if (executable && (mode & 0o111n) === 0n) fail(`${label} is not executable`);
+  if (executable) accessSync(path, fsConstants.X_OK);
+  const size = boundedBigIntNumber(initial.size, maximumBytes, label);
+  const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || !sameRuntimeStat(opened, initial)) {
+      fail(`${label} changed before it could be hashed`);
+    }
+    const digest = createHash('sha256');
+    const chunk = Buffer.allocUnsafe(WORKSPACE_HASH_CHUNK_BYTES);
+    let offset = 0;
+    while (offset < size) {
+      const length = Math.min(chunk.byteLength, size - offset);
+      const count = readSync(descriptor, chunk, 0, length, offset);
+      if (count <= 0) fail(`${label} ended before its declared size`);
+      digest.update(chunk.subarray(0, count));
+      offset += count;
+    }
+    const finalDescriptor = fstatSync(descriptor, { bigint: true });
+    const rebound = lstatSync(path, { bigint: true });
+    if (!sameRuntimeStat(opened, finalDescriptor) || !sameRuntimeStat(opened, rebound)) {
+      fail(`${label} changed while it was being hashed`);
+    }
+    return portableRuntimeFileAuthority(
+      path,
+      opened,
+      `sha256:${digest.digest('hex')}`,
+      size,
+    );
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function inspectRuntimePathAncestry(path: string, label: string): RuntimePathAncestry {
+  const components: string[] = [];
+  let cursor = dirname(path);
+  while (true) {
+    components.push(cursor);
+    if (components.length > NPM_AUTHORITY_LIMITS.depth) {
+      fail(`${label} ancestry exceeds its depth budget`);
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  components.reverse();
+  const inspect = (): Array<Record<string, JsonValue>> => components.map((component) => {
+    if (realpathSync(component) !== component) {
+      fail(`${label} ancestry contains a symbolic or noncanonical directory`);
+    }
+    const stats = lstatSync(component, { bigint: true });
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      fail(`${label} ancestry contains a non-directory component`);
+    }
+    const uid = portableUnsignedBigInt(stats.uid, `${label} ancestry uid`);
+    const gid = portableUnsignedBigInt(stats.gid, `${label} ancestry gid`);
+    return {
+      path: component,
+      device: stats.dev.toString(10),
+      inode: stats.ino.toString(10),
+      mode: Number(stats.mode & 0o7777n),
+      uid,
+      gid,
+    };
+  });
+  const records = inspect();
+  if (!exactJsonEqual(records, inspect())) fail(`${label} ancestry changed while it was sealed`);
+  return {
+    sha256: sha256(`${RUNTIME_ANCESTRY_HASH_DOMAIN}${canonicalize(records)}`),
+    entryCount: records.length,
+  };
+}
+
+export function inspectNodeExecutableAuthority(executable: string): NodeExecutableFileAuthority {
+  return {
+    executable,
+    file: inspectRuntimeRegularFile(
+      executable,
+      MAX_RUNTIME_EXECUTABLE_BYTES,
+      'reviewed Node executable authority',
+      true,
+    ),
+    ancestry: inspectRuntimePathAncestry(executable, 'reviewed Node executable'),
+  };
+}
+
+function assertNodeExecutableAuthority(
+  expected: NodeExecutableFileAuthority,
+  label: string,
+): void {
+  const observed = inspectNodeExecutableAuthority(expected.executable);
+  if (!exactJsonEqual(observed, expected)) fail(`${label} Node executable authority changed`);
+}
+
 export function runReviewedNodeCommand(
   reviewedNodeExecutable: string,
   args: readonly string[],
@@ -358,6 +607,9 @@ export function runReviewedNodeCommand(
     readonly environment?: NodeJS.ProcessEnv;
     readonly timeoutMs?: number;
     readonly outputLimitBytes?: number;
+    readonly nodeAuthority?: NodeExecutableFileAuthority;
+    /** Host-controlled regression rendezvous; never copied into the wrapper or target environment. */
+    readonly trustedTestHook?: ReviewedNodeCommandTestHook;
   } = {},
 ): ReviewedNodeCommandResult {
   if (process.platform === 'win32') {
@@ -368,14 +620,49 @@ export function runReviewedNodeCommand(
   if (!isAbsolute(reviewedNodeExecutable) || realpathSync(reviewedNodeExecutable) !== reviewedNodeExecutable) {
     fail('reviewed Node command executable must be a canonical absolute path');
   }
-  const reviewedNodeStats = lstatSync(reviewedNodeExecutable);
-  if (!reviewedNodeStats.isFile() || reviewedNodeStats.isSymbolicLink() ||
-      reviewedNodeStats.nlink !== 1) {
-    fail('reviewed Node command executable must be a unique real regular file');
+  const expectedNodeAuthority = options.nodeAuthority ??
+    commandNodeAuthority ?? inspectNodeExecutableAuthority(reviewedNodeExecutable);
+  if (expectedNodeAuthority.executable !== reviewedNodeExecutable) {
+    fail('reviewed Node command executable differs from its byte authority');
   }
-  accessSync(reviewedNodeExecutable, fsConstants.X_OK);
+  assertNodeExecutableAuthority(expectedNodeAuthority, 'pre-command');
   if (!isAbsolute(cwd) || realpathSync(cwd) !== cwd || !lstatSync(cwd).isDirectory()) {
     fail('reviewed Node command working directory must be a canonical absolute directory');
+  }
+  let trustedTestHookPayload: string | undefined;
+  if (options.trustedTestHook !== undefined) {
+    const hook = options.trustedTestHook;
+    if (
+      hook.phase !== 'wrapper-spawned-before-handshake' &&
+      hook.phase !== 'handshake-published-before-go'
+    ) {
+      fail('reviewed Node command test hook has an invalid phase');
+    }
+    const readyPath = hook.readyPath;
+    if (
+      !isAbsolute(readyPath) ||
+      resolve(readyPath) !== readyPath ||
+      readyPath.includes('\0') ||
+      Buffer.byteLength(readyPath, 'utf8') > NPM_AUTHORITY_LIMITS.pathBytes ||
+      !isInside(cwd, readyPath)
+    ) {
+      fail('reviewed Node command test hook ready path is not bounded inside its working directory');
+    }
+    const readyParent = dirname(readyPath);
+    const readyParentStats = lstatSync(readyParent);
+    if (
+      realpathSync(readyParent) !== readyParent ||
+      !readyParentStats.isDirectory() ||
+      readyParentStats.isSymbolicLink()
+    ) {
+      fail('reviewed Node command test hook ready parent is not one canonical directory');
+    }
+    if (existsSync(readyPath)) fail('reviewed Node command test hook ready path already exists');
+    trustedTestHookPayload = canonicalize({
+      phase: hook.phase,
+      readyPath: hook.readyPath,
+      schema: COMMAND_TEST_HOOK_SCHEMA,
+    });
   }
   let payloadInputBytes = Buffer.byteLength(cwd, 'utf8');
   if (args.length > MAX_COMMAND_ARGUMENTS) fail('reviewed Node command has too many arguments');
@@ -403,6 +690,7 @@ export function runReviewedNodeCommand(
   for (const reserved of [
     'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD',
     'CORTEXEL_PACKAGE_SMOKE_WRAPPER_PAYLOAD',
+    COMMAND_TEST_HOOK_ENVIRONMENT,
   ]) {
     if (Object.hasOwn(targetEnvironment, reserved)) {
       fail(`reviewed Node command environment contains reserved entry ${reserved}`);
@@ -430,6 +718,9 @@ export function runReviewedNodeCommand(
   const supervisorEnvironment = { ...targetEnvironment };
   delete supervisorEnvironment.NODE_OPTIONS;
   supervisorEnvironment.CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD = payload;
+  if (trustedTestHookPayload !== undefined) {
+    supervisorEnvironment[COMMAND_TEST_HOOK_ENVIRONMENT] = trustedTestHookPayload;
+  }
   const maximumEnvelopeBytes = 4 * Math.ceil(outputLimitBytes / 3) +
     MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES;
   const outer = spawnSync(reviewedNodeExecutable, ['-e', REVIEWED_NODE_SUPERVISOR], {
@@ -501,22 +792,7 @@ export function runReviewedNodeCommand(
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
     }
   }
-  const reviewedNodeAfter = lstatSync(reviewedNodeExecutable);
-  if (
-    !reviewedNodeAfter.isFile() ||
-    reviewedNodeAfter.nlink !== 1 ||
-    reviewedNodeAfter.dev !== reviewedNodeStats.dev ||
-    reviewedNodeAfter.ino !== reviewedNodeStats.ino ||
-    reviewedNodeAfter.size !== reviewedNodeStats.size ||
-    reviewedNodeAfter.mode !== reviewedNodeStats.mode ||
-    reviewedNodeAfter.uid !== reviewedNodeStats.uid ||
-    reviewedNodeAfter.gid !== reviewedNodeStats.gid ||
-    reviewedNodeAfter.mtimeMs !== reviewedNodeStats.mtimeMs ||
-    reviewedNodeAfter.ctimeMs !== reviewedNodeStats.ctimeMs ||
-    reviewedNodeAfter.birthtimeMs !== reviewedNodeStats.birthtimeMs
-  ) {
-    fail('reviewed Node executable changed across command supervision');
-  }
+  assertNodeExecutableAuthority(expectedNodeAuthority, 'post-command');
   if (outer.error !== undefined) {
     const code = (outer.error as NodeJS.ErrnoException).code;
     if (code === 'ENOBUFS') fail('reviewed Node command supervisor crossed its outer output bound');
@@ -778,6 +1054,74 @@ interface WorkspaceSeal {
   readonly entryCount: number;
   readonly fileCount: number;
   readonly byteCount: number;
+  readonly root: WorkspaceRootAuthority;
+  readonly parentAncestry: RuntimePathAncestry;
+}
+
+interface WorkspaceRootAuthority {
+  readonly path: string;
+  readonly device: string;
+  readonly inode: string;
+  readonly mode: number;
+  readonly uid: number;
+  readonly gid: number;
+  readonly linkCount: number;
+}
+
+export interface RuntimeFileAuthority {
+  readonly path: string;
+  readonly sha256: string;
+  readonly size: number;
+  readonly mode: number;
+  readonly uid: number;
+  readonly gid: number;
+  readonly linkCount: 1;
+  readonly device: string;
+  readonly inode: string;
+  readonly mtimeNs: string;
+  readonly ctimeNs: string;
+  readonly birthtimeNs: string;
+}
+
+export interface RuntimePathAncestry {
+  readonly sha256: string;
+  readonly entryCount: number;
+}
+
+export interface NodeExecutableFileAuthority {
+  readonly executable: string;
+  readonly file: RuntimeFileAuthority;
+  readonly ancestry: RuntimePathAncestry;
+}
+
+export interface NodeExecutableAuthority extends NodeExecutableFileAuthority {
+  readonly version: string;
+}
+
+export interface NpmPackageTreeAuthority {
+  readonly schema: typeof NPM_TREE_SCHEMA;
+  readonly sha256: string;
+  readonly entryCount: number;
+  readonly directoryCount: number;
+  readonly fileCount: number;
+  readonly symlinkCount: number;
+  readonly byteCount: number;
+}
+
+export interface NpmPackageAuthority {
+  readonly root: string;
+  readonly cli: string;
+  readonly version: string;
+  readonly packageJsonSha256: string;
+  readonly cliFile: RuntimeFileAuthority;
+  readonly ancestry: RuntimePathAncestry;
+  readonly tree: NpmPackageTreeAuthority;
+}
+
+export interface PackageRuntimeAuthority {
+  readonly scope: typeof RUNTIME_AUTHORITY_SCOPE;
+  readonly node: NodeExecutableAuthority;
+  readonly npm: NpmPackageAuthority;
 }
 
 interface PreparedState {
@@ -791,10 +1135,7 @@ interface PreparedState {
   readonly fixtureManifestSha256: string;
   readonly fixtureLockSha256: string;
   readonly packResultSha256: string;
-  readonly nodeExecutable: string;
-  readonly nodeVersion: string;
-  readonly npmExecutable: string;
-  readonly npmVersion: string;
+  readonly runtimeAuthority: PackageRuntimeAuthority;
   readonly coreConsumer: string;
   readonly chartsConsumer: string;
   readonly consumer: string;
@@ -813,7 +1154,7 @@ export interface PackageSmokePhaseOutput {
   readonly stateDigest: string;
   readonly packageVersion: string;
   readonly artifactIntegrity: string;
-  readonly nodeExecutable: string;
+  readonly runtimeAuthority: PackageRuntimeAuthority;
   readonly nodeModules: readonly [string, string, string];
   readonly workspaceSeal: string;
 }
@@ -1529,7 +1870,7 @@ function resolveExecutable(explicit: string | undefined, command: string, label:
 
 function resolveNpmCli(explicit: string | undefined): string {
   const resolved = resolveExecutable(explicit, 'npm', 'npm executable');
-  if (basename(resolved).toLowerCase() === 'npm-cli.js') return resolved;
+  if (basename(resolved) === 'npm-cli.js' && basename(dirname(resolved)) === 'bin') return resolved;
   fail('npm executable must resolve to the exact npm-cli.js entry point');
 }
 
@@ -1668,11 +2009,36 @@ function executableVersion(executable: string, label: string): string {
 }
 
 function nodeCliVersion(nodeExecutable: string, cli: string, label: string): string {
-  const value = run(nodeExecutable, [cli, '--version'], root);
+  const value = runNpmCommand(nodeExecutable, cli, ['--version'], root);
   if (!/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(value)) {
     fail(`${label} returned an invalid version`);
   }
   return value;
+}
+
+function runNpmCommand(
+  nodeExecutable: string,
+  npmExecutable: string,
+  args: string[],
+  cwd: string,
+): string {
+  const expected = commandRuntimeAuthority;
+  if (expected === undefined) fail('npm command runtime authority is not initialized');
+  if (expected.node.executable !== nodeExecutable || expected.npm.cli !== npmExecutable) {
+    fail('npm command differs from its reviewed runtime authority');
+  }
+  const assertNpm = (phase: string): void => {
+    const observed = inspectNpmPackageAuthority(npmExecutable);
+    if (!exactJsonEqual(observed, expected.npm)) {
+      fail(`${phase} npm package authority changed`);
+    }
+  };
+  assertNpm('pre-command');
+  try {
+    return run(nodeExecutable, [npmExecutable, ...args], cwd);
+  } finally {
+    assertNpm('post-command');
+  }
 }
 
 function assertSupportedNodeVersion(version: string): void {
@@ -1781,6 +2147,209 @@ function writeCanonicalJson(path: string, value: unknown, mode = 0o644): string 
   const raw = `${canonicalize(value)}\n`;
   writeFileSync(path, raw, { encoding: 'utf8', flag: 'wx', mode });
   return raw;
+}
+
+interface PackageSmokeStateReservation {
+  readonly path: string;
+  readonly descriptor: number;
+  readonly initial: BigIntStats;
+  closed: boolean;
+}
+
+function samePinnedFileIdentity(initial: BigIntStats, observed: BigIntStats): boolean {
+  return (
+    initial.dev === observed.dev &&
+    initial.ino === observed.ino &&
+    initial.nlink === observed.nlink &&
+    initial.uid === observed.uid &&
+    initial.gid === observed.gid &&
+    initial.birthtimeNs === observed.birthtimeNs
+  );
+}
+
+function assertPinnedStateFile(
+  reservation: PackageSmokeStateReservation,
+  expectedSize: number,
+  expectedMode: 0o444 | 0o600,
+  label: string,
+): void {
+  if (reservation.closed) fail(`${label} descriptor is already closed`);
+  if (realpathSync(reservation.path) !== reservation.path) {
+    fail(`${label} path is no longer canonical and physical`);
+  }
+  const before = fstatSync(reservation.descriptor, { bigint: true });
+  const pathStats = lstatSync(reservation.path, { bigint: true });
+  const after = fstatSync(reservation.descriptor, { bigint: true });
+  if (
+    !before.isFile() || before.isSymbolicLink() || before.nlink !== 1n ||
+    !pathStats.isFile() || pathStats.isSymbolicLink() || pathStats.nlink !== 1n ||
+    !sameRuntimeStat(before, pathStats) || !sameRuntimeStat(before, after) ||
+    !samePinnedFileIdentity(reservation.initial, before) ||
+    before.size !== BigInt(expectedSize) || Number(before.mode & 0o7777n) !== expectedMode
+  ) {
+    fail(`${label} descriptor or pathname authority changed`);
+  }
+}
+
+function fsyncDirectoryStable(path: string, label: string): void {
+  if (realpathSync(path) !== path) fail(`${label} must be one canonical physical directory`);
+  const initial = lstatSync(path, { bigint: true });
+  if (!initial.isDirectory() || initial.isSymbolicLink()) {
+    fail(`${label} must be one physical directory`);
+  }
+  const descriptor = openSync(
+    path,
+    fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+  );
+  try {
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!opened.isDirectory() || !sameRuntimeStat(initial, opened)) {
+      fail(`${label} changed before its directory entry could be synchronized`);
+    }
+    fsyncSync(descriptor);
+    const after = fstatSync(descriptor, { bigint: true });
+    const rebound = lstatSync(path, { bigint: true });
+    if (!sameRuntimeStat(opened, after) || !sameRuntimeStat(opened, rebound)) {
+      fail(`${label} changed while its directory entry was synchronized`);
+    }
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+export function reservePackageSmokeStateFile(workspace: string): PackageSmokeStateReservation {
+  if (process.platform === 'win32') {
+    fail('package-smoke state reservation currently requires POSIX descriptor semantics');
+  }
+  if (!isAbsolute(workspace) || realpathSync(workspace) !== workspace) {
+    fail('package-smoke state workspace must be one canonical physical absolute directory');
+  }
+  const statePath = join(workspace, STATE_FILENAME);
+  const descriptor = openSync(
+    statePath,
+    fsConstants.O_RDWR | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+    0o600,
+  );
+  try {
+    fchmodSync(descriptor, 0o600);
+    const initial = fstatSync(descriptor, { bigint: true });
+    const reservation: PackageSmokeStateReservation = {
+      path: statePath,
+      descriptor,
+      initial,
+      closed: false,
+    };
+    assertPinnedStateFile(reservation, 0, 0o600, 'reserved package-smoke state');
+    fsyncSync(descriptor);
+    fsyncDirectoryStable(workspace, 'package-smoke state parent');
+    assertPinnedStateFile(reservation, 0, 0o600, 'reserved package-smoke state');
+    return reservation;
+  } catch (error) {
+    closeSync(descriptor);
+    throw error;
+  }
+}
+
+export function publishPackageSmokeStateFile(
+  reservation: PackageSmokeStateReservation,
+  value: unknown,
+): string {
+  const raw = `${canonicalize(value)}\n`;
+  const intended = Buffer.from(raw, 'utf8');
+  if (intended.byteLength < 1 || intended.byteLength > MAX_JSON_BYTES) {
+    fail('canonical package-smoke state exceeds its byte budget');
+  }
+  assertPinnedStateFile(reservation, 0, 0o444, 'reserved package-smoke state');
+  let offset = 0;
+  while (offset < intended.byteLength) {
+    const written = writeSync(
+      reservation.descriptor,
+      intended,
+      offset,
+      intended.byteLength - offset,
+      offset,
+    );
+    if (written <= 0) fail('canonical package-smoke state ended before publication completed');
+    offset += written;
+  }
+  fchmodSync(reservation.descriptor, 0o444);
+  fsyncSync(reservation.descriptor);
+  assertPinnedStateFile(
+    reservation,
+    intended.byteLength,
+    0o444,
+    'published package-smoke state',
+  );
+  const observed = Buffer.allocUnsafe(intended.byteLength);
+  offset = 0;
+  while (offset < observed.byteLength) {
+    const count = readSync(
+      reservation.descriptor,
+      observed,
+      offset,
+      observed.byteLength - offset,
+      offset,
+    );
+    if (count <= 0) fail('published package-smoke state ended before its declared size');
+    offset += count;
+  }
+  if (!observed.equals(intended)) fail('published package-smoke state bytes differ from intent');
+  readExactIntentFile(
+    reservation.path,
+    intended,
+    0o444,
+    'published package-smoke state',
+  );
+  fsyncDirectoryStable(dirname(reservation.path), 'package-smoke state parent');
+  assertPinnedStateFile(
+    reservation,
+    intended.byteLength,
+    0o444,
+    'published package-smoke state',
+  );
+  return raw;
+}
+
+export function closePackageSmokeStateFile(reservation: PackageSmokeStateReservation): void {
+  if (reservation.closed) return;
+  closeSync(reservation.descriptor);
+  reservation.closed = true;
+}
+
+export function inspectPreparedStateFileAuthority(
+  workspace: string,
+  expectedStateDigest: string,
+): RuntimeFileAuthority {
+  const statePath = join(workspace, STATE_FILENAME);
+  const authority = inspectRuntimeRegularFile(
+    statePath,
+    MAX_JSON_BYTES,
+    'prepared package-smoke state authority',
+  );
+  const workspaceStats = lstatSync(workspace, { bigint: true });
+  if (
+    authority.mode !== 0o444 ||
+    authority.uid !== portableUnsignedBigInt(workspaceStats.uid, 'workspace root uid') ||
+    authority.gid !== portableUnsignedBigInt(workspaceStats.gid, 'workspace root gid')
+  ) {
+    fail('prepared package-smoke state must retain exact 0444 workspace-owner authority');
+  }
+  if (authority.sha256 !== expectedStateDigest) {
+    fail('prepared-state authority digest differs from the prepare output');
+  }
+  return authority;
+}
+
+function assertPreparedStateFileAuthority(
+  workspace: string,
+  expectedStateDigest: string,
+  expectedAuthority: RuntimeFileAuthority,
+  label: string,
+): void {
+  const observed = inspectPreparedStateFileAuthority(workspace, expectedStateDigest);
+  if (!exactJsonEqual(observed, expectedAuthority)) {
+    fail(`${label} prepared-state file authority changed`);
+  }
 }
 
 function readRegularFileStable(
@@ -1970,6 +2539,320 @@ function digestRegularFileStable(
 
 function readUtf8RegularFileStable(path: string, label: string, maxBytes: number): string {
   return decodeUtf8Fatal(readRegularFileStable(path, undefined, label, maxBytes), label);
+}
+
+function validateNpmAuthorityLimits(limits: NpmAuthorityLimits): void {
+  const maxima = NPM_AUTHORITY_LIMITS;
+  for (const key of Object.keys(maxima) as Array<keyof NpmAuthorityLimits>) {
+    const value = limits[key];
+    if (!Number.isSafeInteger(value) || value < 1 || value > maxima[key]) {
+      fail(`npm package authority ${key} limit is invalid`);
+    }
+  }
+}
+
+function assertPortableRuntimeSegment(name: string, label: string, limits: NpmAuthorityLimits): void {
+  const bytes = Buffer.byteLength(name, 'utf8');
+  if (
+    name === '' || name === '.' || name === '..' || name.includes('\\') ||
+    bytes > limits.segmentBytes ||
+    [...name].some((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return code < 0x20 || code > 0x7e;
+    })
+  ) {
+    fail(`${label} has a nonportable filesystem segment`);
+  }
+}
+
+function runtimeDirectoryRecord(
+  path: string,
+  relativePath: string,
+  expectedUid: bigint,
+  expectedGid: bigint,
+  label: string,
+  discovered?: BigIntStats,
+): Record<string, JsonValue> {
+  const stats = lstatSync(path, { bigint: true });
+  const mode = stats.mode & 0o7777n;
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    fail(`${label} must be a physical directory`);
+  }
+  if (discovered !== undefined && !sameRuntimeStat(stats, discovered)) {
+    fail(`${label} changed after it was discovered`);
+  }
+  if ((mode & 0o7022n) !== 0n) {
+    fail(`${label} must not carry special or group/world-write mode authority`);
+  }
+  if (stats.uid !== expectedUid || stats.gid !== expectedGid) {
+    fail(`${label} ownership differs from the npm package root`);
+  }
+  return {
+    path: relativePath,
+    type: 'directory',
+    device: stats.dev.toString(10),
+    inode: stats.ino.toString(10),
+    mode: Number(mode),
+    uid: portableUnsignedBigInt(stats.uid, `${label} uid`),
+    gid: portableUnsignedBigInt(stats.gid, `${label} gid`),
+    linkCount: portableUnsignedBigInt(stats.nlink, `${label} link count`, 1n),
+    mtimeNs: stats.mtimeNs.toString(10),
+    ctimeNs: stats.ctimeNs.toString(10),
+    birthtimeNs: stats.birthtimeNs.toString(10),
+  };
+}
+
+function npmTreeOnce(rootPath: string, limits: NpmAuthorityLimits): NpmPackageTreeAuthority {
+  if (!isAbsolute(rootPath) || realpathSync(rootPath) !== rootPath) {
+    fail('npm package root must be one canonical physical absolute directory');
+  }
+  const rootInitial = lstatSync(rootPath, { bigint: true });
+  if (!rootInitial.isDirectory() || rootInitial.isSymbolicLink()) {
+    fail('npm package root must be a physical directory');
+  }
+  const records: Array<Record<string, JsonValue>> = [
+    runtimeDirectoryRecord(
+      rootPath,
+      '',
+      rootInitial.uid,
+      rootInitial.gid,
+      'npm package root',
+      rootInitial,
+    ),
+  ];
+  const pending: Array<{
+    readonly absolute: string;
+    readonly relative: string;
+    readonly depth: number;
+    readonly discovered: BigIntStats;
+  }> = [
+    { absolute: rootPath, relative: '', depth: 0, discovered: rootInitial },
+  ];
+  let entryCount = 1;
+  let directoryCount = 1;
+  let fileCount = 0;
+  let symlinkCount = 0;
+  let byteCount = 0;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    const directoryBefore = lstatSync(current.absolute, { bigint: true });
+    if (
+      !sameRuntimeStat(directoryBefore, current.discovered) ||
+      !directoryBefore.isDirectory() || directoryBefore.isSymbolicLink() ||
+      realpathSync(current.absolute) !== current.absolute ||
+      !isInside(rootPath, current.absolute)
+    ) {
+      fail(`npm package directory changed after discovery: ${current.relative || '<root>'}`);
+    }
+    const names = readDirectoryNamesBounded(
+      current.absolute,
+      `npm package directory ${current.relative || '<root>'}`,
+      limits.directoryEntries,
+    ).sort();
+    for (const name of names) {
+      assertPortableRuntimeSegment(name, 'npm package path', limits);
+      const relativePath = current.relative ? `${current.relative}/${name}` : name;
+      if (Buffer.byteLength(relativePath, 'utf8') > limits.pathBytes) {
+        fail(`npm package path exceeds its byte budget: ${relativePath}`);
+      }
+      const depth = current.depth + 1;
+      if (depth > limits.depth) fail(`npm package path exceeds its depth budget: ${relativePath}`);
+      entryCount++;
+      if (entryCount > limits.entries) fail('npm package tree exceeds its entry budget');
+      const absolutePath = join(current.absolute, name);
+      const stats = lstatSync(absolutePath, { bigint: true });
+      if (stats.uid !== rootInitial.uid || stats.gid !== rootInitial.gid) {
+        fail(`npm package entry ownership differs from its root: ${relativePath}`);
+      }
+      if (stats.isDirectory() && !stats.isSymbolicLink()) {
+        records.push(runtimeDirectoryRecord(
+          absolutePath,
+          relativePath,
+          rootInitial.uid,
+          rootInitial.gid,
+          `npm package directory ${relativePath}`,
+          stats,
+        ));
+        directoryCount++;
+        pending.push({ absolute: absolutePath, relative: relativePath, depth, discovered: stats });
+        continue;
+      }
+      if (stats.isFile() && !stats.isSymbolicLink()) {
+        const authority = inspectRuntimeRegularFile(
+          absolutePath,
+          limits.fileBytes,
+          `npm package file ${relativePath}`,
+        );
+        byteCount += authority.size;
+        if (byteCount > limits.totalBytes) fail('npm package tree exceeds its byte budget');
+        fileCount++;
+        records.push({
+          path: relativePath,
+          type: 'file',
+          sha256: authority.sha256,
+          size: authority.size,
+          mode: authority.mode,
+          uid: authority.uid,
+          gid: authority.gid,
+          linkCount: authority.linkCount,
+          device: authority.device,
+          inode: authority.inode,
+          mtimeNs: authority.mtimeNs,
+          ctimeNs: authority.ctimeNs,
+          birthtimeNs: authority.birthtimeNs,
+        });
+        continue;
+      }
+      if (stats.isSymbolicLink()) {
+        if (stats.nlink !== 1n) fail(`npm package symlink is hard-linked: ${relativePath}`);
+        const target = readlinkSync(absolutePath);
+        if (
+          target.length === 0 || isAbsolute(target) || target.includes('\\') || target.includes('\0') ||
+          Buffer.byteLength(target, 'utf8') > limits.symlinkTargetBytes ||
+          [...target].some((character) => {
+            const code = character.codePointAt(0) ?? 0;
+            return code < 0x20 || code > 0x7e;
+          })
+        ) {
+          fail(`npm package symlink target is unsafe: ${relativePath}`);
+        }
+        const resolvedTarget = resolve(dirname(absolutePath), target);
+        if (!isInside(rootPath, resolvedTarget) || resolvedTarget === rootPath) {
+          fail(`npm package symlink escapes its root: ${relativePath}`);
+        }
+        const targetStats = lstatSync(resolvedTarget, { bigint: true });
+        if (!targetStats.isFile() || targetStats.isSymbolicLink() ||
+            realpathSync(absolutePath) !== resolvedTarget) {
+          fail(`npm package symlink must directly target one internal regular file: ${relativePath}`);
+        }
+        symlinkCount++;
+        records.push({
+          path: relativePath,
+          type: 'symlink',
+          target,
+          resolvedTarget: relative(rootPath, resolvedTarget).split(sep).join('/'),
+          device: stats.dev.toString(10),
+          inode: stats.ino.toString(10),
+          mode: Number(stats.mode & 0o7777n),
+          uid: portableUnsignedBigInt(stats.uid, `npm package symlink uid: ${relativePath}`),
+          gid: portableUnsignedBigInt(stats.gid, `npm package symlink gid: ${relativePath}`),
+          linkCount: 1,
+          mtimeNs: stats.mtimeNs.toString(10),
+          ctimeNs: stats.ctimeNs.toString(10),
+          birthtimeNs: stats.birthtimeNs.toString(10),
+        });
+        continue;
+      }
+      fail(`npm package tree contains a special filesystem node: ${relativePath}`);
+    }
+    const directoryAfter = lstatSync(current.absolute, { bigint: true });
+    const namesAfter = readDirectoryNamesBounded(
+      current.absolute,
+      `npm package directory ${current.relative || '<root>'}`,
+      limits.directoryEntries,
+    ).sort();
+    if (!sameRuntimeStat(directoryBefore, directoryAfter) ||
+        JSON.stringify(namesAfter) !== JSON.stringify(names)) {
+      fail(`npm package directory changed while it was sealed: ${current.relative || '<root>'}`);
+    }
+  }
+  const rootFinal = lstatSync(rootPath, { bigint: true });
+  if (!sameRuntimeStat(rootInitial, rootFinal)) fail('npm package root changed while it was sealed');
+  records.sort((left, right) => {
+    const leftPath = String(left.path);
+    const rightPath = String(right.path);
+    return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0;
+  });
+  return {
+    schema: NPM_TREE_SCHEMA,
+    sha256: sha256(`${RUNTIME_TREE_HASH_DOMAIN}${canonicalize(records)}`),
+    entryCount,
+    directoryCount,
+    fileCount,
+    symlinkCount,
+    byteCount,
+  };
+}
+
+export function fingerprintNpmPackageTree(
+  rootPath: string,
+  limits: NpmAuthorityLimits = NPM_AUTHORITY_LIMITS,
+): NpmPackageTreeAuthority {
+  validateNpmAuthorityLimits(limits);
+  const first = npmTreeOnce(rootPath, limits);
+  const second = npmTreeOnce(rootPath, limits);
+  if (!exactJsonEqual(first, second)) fail('npm package tree changed across its stable seal');
+  return first;
+}
+
+function npmManifestIdentity(cli: string): {
+  readonly root: string;
+  readonly version: string;
+  readonly packageJson: string;
+} {
+  if (basename(cli) !== 'npm-cli.js' || basename(dirname(cli)) !== 'bin') {
+    fail('npm executable must be the exact npm package bin/npm-cli.js entry point');
+  }
+  const rootPath = dirname(dirname(cli));
+  if (realpathSync(rootPath) !== rootPath || !lstatSync(rootPath).isDirectory()) {
+    fail('npm package root must be one canonical physical directory');
+  }
+  const packageJsonPath = join(rootPath, 'package.json');
+  const manifest = expectRecord(readStrictJson(packageJsonPath, 'npm package manifest'), 'npm package manifest');
+  const bin = expectRecord(manifest.bin, 'npm package manifest bin');
+  const version = expectString(manifest.version, 'npm package manifest version');
+  if (manifest.name !== 'npm' || bin.npm !== 'bin/npm-cli.js') {
+    fail('npm package manifest does not bind the exact npm CLI identity');
+  }
+  reviewedNpmMajor(version);
+  return { root: rootPath, version, packageJson: packageJsonPath };
+}
+
+export function inspectNpmPackageAuthority(cli: string): NpmPackageAuthority {
+  if (!isAbsolute(cli) || realpathSync(cli) !== cli) {
+    fail('npm CLI must be one canonical physical absolute path');
+  }
+  const firstIdentity = npmManifestIdentity(cli);
+  const firstTree = fingerprintNpmPackageTree(firstIdentity.root);
+  const cliFile = inspectRuntimeRegularFile(
+    cli,
+    NPM_AUTHORITY_LIMITS.fileBytes,
+    'reviewed npm CLI authority',
+    true,
+  );
+  const packageJsonFile = inspectRuntimeRegularFile(
+    firstIdentity.packageJson,
+    MAX_JSON_BYTES,
+    'reviewed npm package manifest authority',
+  );
+  const secondIdentity = npmManifestIdentity(cli);
+  const secondTree = fingerprintNpmPackageTree(secondIdentity.root);
+  if (
+    !exactJsonEqual(firstIdentity, secondIdentity) ||
+    !exactJsonEqual(firstTree, secondTree)
+  ) {
+    fail('npm package authority changed across semantic inspection');
+  }
+  return {
+    root: firstIdentity.root,
+    cli,
+    version: firstIdentity.version,
+    packageJsonSha256: packageJsonFile.sha256,
+    cliFile,
+    ancestry: inspectRuntimePathAncestry(firstIdentity.root, 'reviewed npm package root'),
+    tree: firstTree,
+  };
+}
+
+export function assertPackageRuntimeAuthority(expected: PackageRuntimeAuthority, label: string): void {
+  const nodeFile = inspectNodeExecutableAuthority(expected.node.executable);
+  const npm = inspectNpmPackageAuthority(expected.npm.cli);
+  const observed: PackageRuntimeAuthority = {
+    scope: RUNTIME_AUTHORITY_SCOPE,
+    node: { ...nodeFile, version: expected.node.version },
+    npm,
+  };
+  if (!exactJsonEqual(observed, expected)) fail(`${label} package runtime authority changed`);
 }
 
 function expectedPackageClosure(packageJsonValue: JsonValue): ExpectedPackageFile[] {
@@ -2529,9 +3412,21 @@ export function assertInstalledRecursivePackageClosure(
 }
 
 /** Byte-, topology-, ownership-, and mode-bound seal used on both sides of inspection. */
-export function fingerprintPackageSmokeWorkspace(workspace: string): WorkspaceSeal {
+export function fingerprintPackageSmokeWorkspace(
+  workspace: string,
+  requireFinalizedRoot = false,
+): WorkspaceSeal {
   const canonicalRoot = realpathSync(workspace);
   if (canonicalRoot !== workspace) fail('workspace root is not canonical while sealing');
+  const rootInitial = lstatSync(workspace, { bigint: true });
+  if (!rootInitial.isDirectory() || rootInitial.isSymbolicLink()) {
+    fail('workspace root must be one physical directory while sealing');
+  }
+  const initialRootMode = Number(rootInitial.mode & 0o7777n);
+  if (requireFinalizedRoot && initialRootMode !== 0o555) {
+    fail('workspace root does not have its finalized read-only mode while sealing');
+  }
+  const parentAncestry = inspectRuntimePathAncestry(workspace, 'package-smoke workspace');
   const pending = [''];
   const records: Array<Record<string, JsonValue>> = [];
   let entryCount = 0;
@@ -2591,11 +3486,28 @@ export function fingerprintPackageSmokeWorkspace(workspace: string): WorkspaceSe
     const rightPath = String(right.path);
     return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0;
   });
+  const rootFinal = lstatSync(workspace, { bigint: true });
+  const finalParentAncestry = inspectRuntimePathAncestry(workspace, 'package-smoke workspace');
+  if (!sameRuntimeStat(rootInitial, rootFinal) ||
+      !exactJsonEqual(parentAncestry, finalParentAncestry)) {
+    fail('workspace root or parent ancestry changed while sealing');
+  }
+  const root: WorkspaceRootAuthority = {
+    path: workspace,
+    device: rootInitial.dev.toString(10),
+    inode: rootInitial.ino.toString(10),
+    mode: initialRootMode,
+    uid: portableUnsignedBigInt(rootInitial.uid, 'workspace root uid'),
+    gid: portableUnsignedBigInt(rootInitial.gid, 'workspace root gid'),
+    linkCount: portableUnsignedBigInt(rootInitial.nlink, 'workspace root link count', 1n),
+  };
   return {
-    digest: sha256(canonicalize(records)),
+    digest: sha256(canonicalize({ parentAncestry, records, root })),
     entryCount,
     fileCount,
     byteCount,
+    root,
+    parentAncestry,
   };
 }
 
@@ -2620,12 +3532,6 @@ function makeWorkspaceReadOnly(workspace: string): boolean {
     if (directory !== workspace) chmodSync(directory, 0o555);
   }
   return true;
-}
-
-function finalizeWorkspacePermissions(workspace: string, statePath: string): void {
-  if (process.platform === 'win32') return;
-  chmodSync(statePath, 0o444);
-  chmodSync(workspace, 0o555);
 }
 
 function assertWorkspaceReadOnly(workspace: string, expected: boolean): void {
@@ -2820,10 +3726,10 @@ function prepareConsumer(
   });
   const derivedLockDigest = sourceDigest(consumerLockPath);
   copyFileSync(tarballPath, join(consumer, LOCAL_TARBALL_FILENAME), fsConstants.COPYFILE_EXCL);
-  run(
+  runNpmCommand(
     nodeExecutable,
+    npmExecutable,
     [
-      npmExecutable,
       ...NPM_CI_FLAGS,
       ...omittedDependencyClasses.map((dependencyClass) => `--omit=${dependencyClass}`),
     ],
@@ -2969,6 +3875,208 @@ function readPackedResultStable(path: string): { readonly packed: PackedResult; 
   };
 }
 
+function expectBoundedInteger(
+  value: JsonValue | undefined,
+  label: string,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = expectInteger(value, label);
+  if (parsed < minimum || parsed > maximum) fail(`${label} is outside its bound`);
+  return parsed;
+}
+
+function expectSha256(value: JsonValue | undefined, label: string): string {
+  const parsed = expectString(value, label);
+  if (!/^sha256:[0-9a-f]{64}$/u.test(parsed)) fail(`${label} is not canonical SHA-256`);
+  return parsed;
+}
+
+function expectUnsignedDecimal(value: JsonValue | undefined, label: string): string {
+  const parsed = expectString(value, label);
+  if (!/^(?:0|[1-9][0-9]{0,39})$/u.test(parsed)) {
+    fail(`${label} is not one bounded canonical unsigned decimal`);
+  }
+  return parsed;
+}
+
+function parseRuntimeFileAuthority(value: JsonValue | undefined, label: string): RuntimeFileAuthority {
+  const record = expectRecord(value, label);
+  exactKeys(record, [
+    'path',
+    'sha256',
+    'size',
+    'mode',
+    'uid',
+    'gid',
+    'linkCount',
+    'device',
+    'inode',
+    'mtimeNs',
+    'ctimeNs',
+    'birthtimeNs',
+  ], label);
+  const path = expectString(record.path, `${label} path`);
+  if (!isAbsolute(path) || resolve(path) !== path || Buffer.byteLength(path, 'utf8') >
+      NPM_AUTHORITY_LIMITS.pathBytes) {
+    fail(`${label} path is not one bounded normalized absolute path`);
+  }
+  const linkCount = expectBoundedInteger(record.linkCount, `${label} linkCount`, 1, 1);
+  return {
+    path,
+    sha256: expectSha256(record.sha256, `${label} sha256`),
+    size: expectBoundedInteger(record.size, `${label} size`, 1, MAX_RUNTIME_EXECUTABLE_BYTES),
+    mode: expectBoundedInteger(record.mode, `${label} mode`, 0, 0o7777),
+    uid: expectBoundedInteger(record.uid, `${label} uid`, 0, Number.MAX_SAFE_INTEGER),
+    gid: expectBoundedInteger(record.gid, `${label} gid`, 0, Number.MAX_SAFE_INTEGER),
+    linkCount: linkCount as 1,
+    device: expectUnsignedDecimal(record.device, `${label} device`),
+    inode: expectUnsignedDecimal(record.inode, `${label} inode`),
+    mtimeNs: expectUnsignedDecimal(record.mtimeNs, `${label} mtimeNs`),
+    ctimeNs: expectUnsignedDecimal(record.ctimeNs, `${label} ctimeNs`),
+    birthtimeNs: expectUnsignedDecimal(record.birthtimeNs, `${label} birthtimeNs`),
+  };
+}
+
+function parseRuntimeAncestry(value: JsonValue | undefined, label: string): RuntimePathAncestry {
+  const record = expectRecord(value, label);
+  exactKeys(record, ['sha256', 'entryCount'], label);
+  return {
+    sha256: expectSha256(record.sha256, `${label} sha256`),
+    entryCount: expectBoundedInteger(
+      record.entryCount,
+      `${label} entryCount`,
+      1,
+      NPM_AUTHORITY_LIMITS.depth,
+    ),
+  };
+}
+
+function parseNpmTreeAuthority(value: JsonValue | undefined): NpmPackageTreeAuthority {
+  const label = 'prepared npm package tree authority';
+  const record = expectRecord(value, label);
+  exactKeys(record, [
+    'schema',
+    'sha256',
+    'entryCount',
+    'directoryCount',
+    'fileCount',
+    'symlinkCount',
+    'byteCount',
+  ], label);
+  if (record.schema !== NPM_TREE_SCHEMA) fail('prepared npm package tree schema is unsupported');
+  const entryCount = expectBoundedInteger(record.entryCount, `${label} entryCount`, 1,
+    NPM_AUTHORITY_LIMITS.entries);
+  const directoryCount = expectBoundedInteger(record.directoryCount, `${label} directoryCount`, 1,
+    entryCount);
+  const fileCount = expectBoundedInteger(record.fileCount, `${label} fileCount`, 1, entryCount);
+  const symlinkCount = expectBoundedInteger(record.symlinkCount, `${label} symlinkCount`, 0,
+    entryCount);
+  if (directoryCount + fileCount + symlinkCount !== entryCount) {
+    fail('prepared npm package tree counts are inconsistent');
+  }
+  return {
+    schema: NPM_TREE_SCHEMA,
+    sha256: expectSha256(record.sha256, `${label} sha256`),
+    entryCount,
+    directoryCount,
+    fileCount,
+    symlinkCount,
+    byteCount: expectBoundedInteger(record.byteCount, `${label} byteCount`, 1,
+      NPM_AUTHORITY_LIMITS.totalBytes),
+  };
+}
+
+function parsePackageRuntimeAuthority(value: JsonValue | undefined): PackageRuntimeAuthority {
+  const record = expectRecord(value, 'prepared package runtime authority');
+  exactKeys(record, ['scope', 'node', 'npm'], 'prepared package runtime authority');
+  if (record.scope !== RUNTIME_AUTHORITY_SCOPE) fail('prepared runtime authority scope is unsupported');
+  const nodeRecord = expectRecord(record.node, 'prepared Node executable authority');
+  exactKeys(nodeRecord, ['executable', 'version', 'file', 'ancestry'],
+    'prepared Node executable authority');
+  const nodeExecutable = expectString(nodeRecord.executable, 'prepared Node executable');
+  const nodeFile = parseRuntimeFileAuthority(nodeRecord.file, 'prepared Node executable file');
+  const nodeVersion = expectString(nodeRecord.version, 'prepared Node version');
+  if (nodeFile.path !== nodeExecutable || !/^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(
+    nodeVersion,
+  )) {
+    fail('prepared Node executable authority is internally inconsistent');
+  }
+  assertSupportedNodeVersion(nodeVersion);
+  const npmRecord = expectRecord(record.npm, 'prepared npm package authority');
+  exactKeys(npmRecord, [
+    'root',
+    'cli',
+    'version',
+    'packageJsonSha256',
+    'cliFile',
+    'ancestry',
+    'tree',
+  ], 'prepared npm package authority');
+  const npmRoot = expectString(npmRecord.root, 'prepared npm root');
+  const npmCli = expectString(npmRecord.cli, 'prepared npm CLI');
+  const npmCliFile = parseRuntimeFileAuthority(npmRecord.cliFile, 'prepared npm CLI file');
+  const npmVersion = expectString(npmRecord.version, 'prepared npm version');
+  if (
+    !isAbsolute(npmRoot) || resolve(npmRoot) !== npmRoot ||
+    npmCli !== join(npmRoot, 'bin', 'npm-cli.js') || npmCliFile.path !== npmCli
+  ) {
+    fail('prepared npm package authority paths are inconsistent');
+  }
+  reviewedNpmMajor(npmVersion);
+  return {
+    scope: RUNTIME_AUTHORITY_SCOPE,
+    node: {
+      executable: nodeExecutable,
+      version: nodeVersion,
+      file: nodeFile,
+      ancestry: parseRuntimeAncestry(nodeRecord.ancestry, 'prepared Node ancestry'),
+    },
+    npm: {
+      root: npmRoot,
+      cli: npmCli,
+      version: npmVersion,
+      packageJsonSha256: expectSha256(
+        npmRecord.packageJsonSha256,
+        'prepared npm packageJsonSha256',
+      ),
+      cliFile: npmCliFile,
+      ancestry: parseRuntimeAncestry(npmRecord.ancestry, 'prepared npm ancestry'),
+      tree: parseNpmTreeAuthority(npmRecord.tree),
+    },
+  };
+}
+
+function parseWorkspaceRootAuthority(
+  value: JsonValue | undefined,
+  workspace: string,
+): WorkspaceRootAuthority {
+  const label = 'prepared workspace root authority';
+  const record = expectRecord(value, label);
+  exactKeys(record, [
+    'path',
+    'device',
+    'inode',
+    'mode',
+    'uid',
+    'gid',
+    'linkCount',
+  ], label);
+  if (record.path !== workspace || record.mode !== 0o555) {
+    fail('prepared workspace root authority path or finalized mode is invalid');
+  }
+  return {
+    path: workspace,
+    device: expectUnsignedDecimal(record.device, `${label} device`),
+    inode: expectUnsignedDecimal(record.inode, `${label} inode`),
+    mode: 0o555,
+    uid: expectBoundedInteger(record.uid, `${label} uid`, 0, Number.MAX_SAFE_INTEGER),
+    gid: expectBoundedInteger(record.gid, `${label} gid`, 0, Number.MAX_SAFE_INTEGER),
+    linkCount: expectBoundedInteger(record.linkCount, `${label} linkCount`, 1,
+      Number.MAX_SAFE_INTEGER),
+  };
+}
+
 function validatePreparedState(value: JsonValue, workspace: string): PreparedState {
   const record = expectRecord(value, 'prepared package-smoke state');
   exactKeys(
@@ -2984,10 +4092,7 @@ function validatePreparedState(value: JsonValue, workspace: string): PreparedSta
       'fixtureManifestSha256',
       'fixtureLockSha256',
       'packResultSha256',
-      'nodeExecutable',
-      'nodeVersion',
-      'npmExecutable',
-      'npmVersion',
+      'runtimeAuthority',
       'coreConsumer',
       'chartsConsumer',
       'consumer',
@@ -3028,7 +4133,11 @@ function validatePreparedState(value: JsonValue, workspace: string): PreparedSta
     fail('prepared package-smoke state paths are invalid');
   }
   const sealValue = expectRecord(record.workspaceSeal, 'prepared workspace seal');
-  exactKeys(sealValue, ['digest', 'entryCount', 'fileCount', 'byteCount'], 'prepared workspace seal');
+  exactKeys(
+    sealValue,
+    ['digest', 'entryCount', 'fileCount', 'byteCount', 'root', 'parentAncestry'],
+    'prepared workspace seal',
+  );
   const digest = expectString(sealValue.digest, 'prepared workspace digest');
   if (!/^sha256:[0-9a-f]{64}$/u.test(digest)) fail('prepared workspace digest is invalid');
   const state: PreparedState = {
@@ -3042,10 +4151,7 @@ function validatePreparedState(value: JsonValue, workspace: string): PreparedSta
     fixtureManifestSha256: EXPECTED_FIXTURE_MANIFEST_SHA256,
     fixtureLockSha256: EXPECTED_FIXTURE_LOCK_SHA256,
     packResultSha256: expectString(record.packResultSha256, 'prepared pack result SHA-256'),
-    nodeExecutable: expectString(record.nodeExecutable, 'prepared Node executable'),
-    nodeVersion: expectString(record.nodeVersion, 'prepared Node version'),
-    npmExecutable: expectString(record.npmExecutable, 'prepared npm executable'),
-    npmVersion: expectString(record.npmVersion, 'prepared npm version'),
+    runtimeAuthority: parsePackageRuntimeAuthority(record.runtimeAuthority),
     coreConsumer: expectedCore,
     chartsConsumer: expectedCharts,
     consumer: expectedConsumer,
@@ -3060,6 +4166,11 @@ function validatePreparedState(value: JsonValue, workspace: string): PreparedSta
       entryCount: expectInteger(sealValue.entryCount, 'prepared workspace entry count'),
       fileCount: expectInteger(sealValue.fileCount, 'prepared workspace file count'),
       byteCount: expectInteger(sealValue.byteCount, 'prepared workspace byte count'),
+      root: parseWorkspaceRootAuthority(sealValue.root, workspace),
+      parentAncestry: parseRuntimeAncestry(
+        sealValue.parentAncestry,
+        'prepared workspace parent ancestry',
+      ),
     },
     readOnlyWorkspace: record.readOnlyWorkspace,
   };
@@ -3074,7 +4185,13 @@ function readAndVerifyPreparedState(
   workspace: string,
   expectedStateDigest: string,
   requestedNodeExecutable?: string,
-): { readonly state: PreparedState; readonly packed: PackedResult } {
+): {
+  readonly state: PreparedState;
+  readonly packed: PackedResult;
+  readonly stateFileAuthority: RuntimeFileAuthority;
+} {
+  commandNodeAuthority = undefined;
+  commandRuntimeAuthority = undefined;
   if (!isAbsolute(workspace) || realpathSync(workspace) !== workspace) {
     fail('execute workspace must be an existing canonical absolute directory');
   }
@@ -3083,6 +4200,10 @@ function readAndVerifyPreparedState(
   if (!/^sha256:[0-9a-f]{64}$/u.test(expectedStateDigest)) {
     fail('expected prepared-state digest is invalid');
   }
+  const stateFileAuthority = inspectPreparedStateFileAuthority(
+    workspace,
+    expectedStateDigest,
+  );
   const stateRaw = readRegularFileStable(
     statePath,
     undefined,
@@ -3096,13 +4217,21 @@ function readAndVerifyPreparedState(
     parseCanonicalJsonBuffer(stateRaw, 'prepared package-smoke state'),
     workspace,
   );
-  assertWorkspaceReadOnly(workspace, state.readOnlyWorkspace);
+  const preparedNode = state.runtimeAuthority.node;
   const canonicalNode = resolveExecutable(
-    requestedNodeExecutable ?? state.nodeExecutable,
+    requestedNodeExecutable ?? preparedNode.executable,
     'node',
     'Node executable',
   );
-  if (canonicalNode !== state.nodeExecutable) fail('execute Node differs from prepared Node');
+  if (canonicalNode !== preparedNode.executable) fail('execute Node differs from prepared Node');
+  assertPackageRuntimeAuthority(state.runtimeAuthority, 'pre-execute');
+  commandNodeAuthority = {
+    executable: preparedNode.executable,
+    file: preparedNode.file,
+    ancestry: preparedNode.ancestry,
+  };
+  commandRuntimeAuthority = state.runtimeAuthority;
+  assertWorkspaceReadOnly(workspace, state.readOnlyWorkspace);
   assertPackageSmokeOperationalDirectories(workspace);
   commandEnvironment = packageSmokeEnvironment(
     canonicalNode,
@@ -3111,8 +4240,6 @@ function readAndVerifyPreparedState(
     process.platform,
     'execute',
   );
-  const observedNodeVersion = executableVersion(canonicalNode, 'Node');
-  if (observedNodeVersion !== state.nodeVersion) fail('execute Node version differs from prepared Node');
   const artifactPath = join(workspace, 'artifact', LOCAL_TARBALL_FILENAME);
   const artifactStats = lstatSync(artifactPath);
   const artifact = readRegularFileStable(
@@ -3138,7 +4265,7 @@ function readAndVerifyPreparedState(
   }
   const expectedFiles = expectedPackageClosure(fixture.packageJson);
   inspectNpmPackageTarball(artifact, packed, expectedFiles);
-  const observedSeal = fingerprintPackageSmokeWorkspace(workspace);
+  const observedSeal = fingerprintPackageSmokeWorkspace(workspace, true);
   if (!exactJsonEqual(observedSeal, state.workspaceSeal)) fail('prepared workspace seal mismatch');
   assertPreparedConsumerClosures({
     artifact,
@@ -3149,10 +4276,10 @@ function readAndVerifyPreparedState(
     exactFixtureLockValue: fixture.lock,
     exactFixtureManifestRaw: fixture.manifestRaw,
     expectedFiles,
-    npmVersion: state.npmVersion,
+    npmVersion: state.runtimeAuthority.npm.version,
     permissionPhase: 'finalized-read-only',
   });
-  const postSemanticSeal = fingerprintPackageSmokeWorkspace(workspace);
+  const postSemanticSeal = fingerprintPackageSmokeWorkspace(workspace, true);
   if (!exactJsonEqual(postSemanticSeal, state.workspaceSeal)) {
     fail('prepared workspace changed across execute semantic revalidation');
   }
@@ -3165,7 +4292,18 @@ function readAndVerifyPreparedState(
   commandEnvironment.NODE_OPTIONS = `--require=${JSON.stringify(guardPath)}`;
   commandEnvironment.CORTEXEL_PACKAGE_SMOKE_PHASE = 'execute';
   commandEnvironment.npm_config_offline = 'true';
-  return { state, packed };
+  const observedNodeVersion = executableVersion(canonicalNode, 'Node');
+  if (observedNodeVersion !== preparedNode.version) {
+    fail('execute Node version differs from prepared Node');
+  }
+  assertPackageRuntimeAuthority(state.runtimeAuthority, 'post-execute preparation');
+  assertPreparedStateFileAuthority(
+    workspace,
+    expectedStateDigest,
+    stateFileAuthority,
+    'post-execute preparation',
+  );
+  return { state, packed, stateFileAuthority };
 }
 
 export function parsePackageSmokeInvocation(argv: readonly string[]): SmokeInvocation {
@@ -3233,7 +4371,7 @@ function phaseOutput(
     stateDigest,
     packageVersion: state.packageVersion,
     artifactIntegrity: state.artifactIntegrity,
-    nodeExecutable: state.nodeExecutable,
+    runtimeAuthority: state.runtimeAuthority,
     nodeModules: state.nodeModules,
     workspaceSeal: state.workspaceSeal.digest,
   };
@@ -4479,6 +5617,8 @@ export function preparePackageSmokeWorkspace(options: {
   if (process.platform === 'win32') {
     fail('package smoke currently requires POSIX process-group semantics');
   }
+  commandNodeAuthority = undefined;
+  commandRuntimeAuthority = undefined;
   const workspace = canonicalWorkspacePath(options.workspace);
   const fixture = validateFixtureSources();
   if (existsSync(join(root, '.npmrc'))) {
@@ -4486,13 +5626,25 @@ export function preparePackageSmokeWorkspace(options: {
   }
   assertEmptyWorkspace(workspace);
   const nodeExecutable = resolveExecutable(options.nodeExecutable, 'node', 'Node executable');
+  const nodeFileAuthority = inspectNodeExecutableAuthority(nodeExecutable);
+  commandNodeAuthority = nodeFileAuthority;
   createPackageSmokeOperationalDirectories(workspace);
   assertPackageSmokeOperationalDirectories(workspace);
   commandEnvironment = packageSmokeEnvironment(nodeExecutable, workspace);
   const nodeVersion = executableVersion(nodeExecutable, 'Node');
   assertSupportedNodeVersion(nodeVersion);
   const npmExecutable = resolveNpmCli(options.npmExecutable);
+  const npmAuthority = inspectNpmPackageAuthority(npmExecutable);
+  const runtimeAuthority: PackageRuntimeAuthority = {
+    scope: RUNTIME_AUTHORITY_SCOPE,
+    node: { ...nodeFileAuthority, version: nodeVersion },
+    npm: npmAuthority,
+  };
+  commandRuntimeAuthority = runtimeAuthority;
   const npmVersion = nodeCliVersion(nodeExecutable, npmExecutable, 'npm');
+  if (npmVersion !== npmAuthority.version) {
+    fail('npm CLI version differs from its package manifest authority');
+  }
   const npmMajor = reviewedNpmMajor(npmVersion);
   commandEnvironment.CORTEXEL_PACKAGE_SMOKE_PHASE = 'prepare';
   commandEnvironment.npm_config_ignore_scripts = 'true';
@@ -4520,9 +5672,10 @@ export function preparePackageSmokeWorkspace(options: {
   commandEnvironment.npm_config_loglevel = 'error';
   mkdirSync(artifactDirectory, { mode: 0o755 });
   mkdirSync(unrelated, { mode: 0o755 });
-  const packText = run(
+  const packText = runNpmCommand(
     nodeExecutable,
-    [npmExecutable, 'pack', '--ignore-scripts', '--json', '--pack-destination', artifactDirectory],
+    npmExecutable,
+    ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactDirectory],
     root,
   );
   const rawPackValue = strictJson(packText, 'npm pack output');
@@ -4620,51 +5773,59 @@ export function preparePackageSmokeWorkspace(options: {
     ...consumerClosureOptions,
     permissionPhase: 'prepared-writable',
   });
-  const readOnlyWorkspace = makeWorkspaceReadOnly(workspace);
-  assertPreparedConsumerClosures({
-    ...consumerClosureOptions,
-    permissionPhase: 'finalized-read-only',
-  });
-  const firstFinalizedSeal = fingerprintPackageSmokeWorkspace(workspace);
-  assertPreparedConsumerClosures({
-    ...consumerClosureOptions,
-    permissionPhase: 'finalized-read-only',
-  });
-  const workspaceSeal = fingerprintPackageSmokeWorkspace(workspace);
-  if (!exactJsonEqual(firstFinalizedSeal, workspaceSeal)) {
-    fail('package-smoke workspace changed across finalized semantic revalidation');
+  const stateReservation = reservePackageSmokeStateFile(workspace);
+  try {
+    const readOnlyWorkspace = makeWorkspaceReadOnly(workspace);
+    if (readOnlyWorkspace) chmodSync(workspace, 0o555);
+    assertPreparedConsumerClosures({
+      ...consumerClosureOptions,
+      permissionPhase: 'finalized-read-only',
+    });
+    const firstFinalizedSeal = fingerprintPackageSmokeWorkspace(workspace, true);
+    assertPreparedConsumerClosures({
+      ...consumerClosureOptions,
+      permissionPhase: 'finalized-read-only',
+    });
+    const workspaceSeal = fingerprintPackageSmokeWorkspace(workspace, true);
+    if (!exactJsonEqual(firstFinalizedSeal, workspaceSeal)) {
+      fail('package-smoke workspace changed across finalized semantic revalidation');
+    }
+    assertPackageRuntimeAuthority(runtimeAuthority, 'pre-publication');
+    const state: PreparedState = {
+      schema: PREPARED_STATE_SCHEMA,
+      workspace,
+      platform: process.platform,
+      arch: process.arch,
+      packageVersion,
+      artifactIntegrity: packed.integrity,
+      artifactSha256: sha256(tarball),
+      fixtureManifestSha256: EXPECTED_FIXTURE_MANIFEST_SHA256,
+      fixtureLockSha256: EXPECTED_FIXTURE_LOCK_SHA256,
+      packResultSha256: sha256(packResultRaw),
+      runtimeAuthority,
+      coreConsumer,
+      chartsConsumer,
+      consumer,
+      unrelatedDirectory: unrelated,
+      nodeModules: [
+        join(coreConsumer, 'node_modules'),
+        join(chartsConsumer, 'node_modules'),
+        join(consumer, 'node_modules'),
+      ],
+      workspaceSeal,
+      readOnlyWorkspace,
+    };
+    const stateRaw = publishPackageSmokeStateFile(stateReservation, state);
+    assertWorkspaceReadOnly(workspace, readOnlyWorkspace);
+    const publishedWorkspaceSeal = fingerprintPackageSmokeWorkspace(workspace, true);
+    if (!exactJsonEqual(publishedWorkspaceSeal, workspaceSeal)) {
+      fail('package-smoke workspace authority changed during state publication');
+    }
+    assertPackageRuntimeAuthority(runtimeAuthority, 'post-publication');
+    return phaseOutput('prepare', 'prepared', state, sha256(stateRaw));
+  } finally {
+    closePackageSmokeStateFile(stateReservation);
   }
-  const state: PreparedState = {
-    schema: PREPARED_STATE_SCHEMA,
-    workspace,
-    platform: process.platform,
-    arch: process.arch,
-    packageVersion,
-    artifactIntegrity: packed.integrity,
-    artifactSha256: sha256(tarball),
-    fixtureManifestSha256: EXPECTED_FIXTURE_MANIFEST_SHA256,
-    fixtureLockSha256: EXPECTED_FIXTURE_LOCK_SHA256,
-    packResultSha256: sha256(packResultRaw),
-    nodeExecutable,
-    nodeVersion,
-    npmExecutable,
-    npmVersion,
-    coreConsumer,
-    chartsConsumer,
-    consumer,
-    unrelatedDirectory: unrelated,
-    nodeModules: [
-      join(coreConsumer, 'node_modules'),
-      join(chartsConsumer, 'node_modules'),
-      join(consumer, 'node_modules'),
-    ],
-    workspaceSeal,
-    readOnlyWorkspace,
-  };
-  const statePath = join(workspace, STATE_FILENAME);
-  const stateRaw = writeCanonicalJson(statePath, state, 0o444);
-  finalizeWorkspacePermissions(workspace, statePath);
-  return phaseOutput('prepare', 'prepared', state, sha256(stateRaw));
 }
 
 export function executePackageSmokeWorkspace(options: {
@@ -4676,7 +5837,7 @@ export function executePackageSmokeWorkspace(options: {
     fail('package smoke currently requires POSIX process-group semantics');
   }
   const workspace = canonicalWorkspacePath(options.workspace);
-  const { state, packed } = readAndVerifyPreparedState(
+  const { state, packed, stateFileAuthority } = readAndVerifyPreparedState(
     workspace,
     options.expectedStateDigest,
     options.nodeExecutable,
@@ -4687,16 +5848,45 @@ export function executePackageSmokeWorkspace(options: {
     chartsConsumer: state.chartsConsumer,
     consumer: state.consumer,
     unrelated: state.unrelatedDirectory,
-    nodeExecutable: state.nodeExecutable,
+    nodeExecutable: state.runtimeAuthority.node.executable,
     packed,
   };
-  const packageVersion = runPackageSmokeBody('execute', context);
-  if (packageVersion !== state.packageVersion) fail('executed consumer package version changed');
-  const finalSeal = fingerprintPackageSmokeWorkspace(workspace);
-  if (!exactJsonEqual(finalSeal, state.workspaceSeal)) {
-    fail('execute phase mutated the prepared workspace');
+  const failures: unknown[] = [];
+  try {
+    const packageVersion = runPackageSmokeBody('execute', context);
+    if (packageVersion !== state.packageVersion) fail('executed consumer package version changed');
+  } catch (error) {
+    failures.push(error);
   }
-  assertWorkspaceReadOnly(workspace, state.readOnlyWorkspace);
+  const recheck = (check: () => void): void => {
+    try {
+      check();
+    } catch (error) {
+      failures.push(error);
+    }
+  };
+  recheck(() => assertPackageRuntimeAuthority(state.runtimeAuthority, 'post-execute command'));
+  recheck(() => {
+    const finalSeal = fingerprintPackageSmokeWorkspace(workspace, true);
+    if (!exactJsonEqual(finalSeal, state.workspaceSeal)) {
+      fail('execute phase mutated the prepared workspace');
+    }
+  });
+  recheck(() => assertWorkspaceReadOnly(workspace, state.readOnlyWorkspace));
+  recheck(() => assertPreparedStateFileAuthority(
+    workspace,
+    options.expectedStateDigest,
+    stateFileAuthority,
+    'final execute',
+  ));
+  recheck(() => assertPackageRuntimeAuthority(state.runtimeAuthority, 'final execute'));
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(
+      failures,
+      'package-smoke execute failed with one or more final authority revalidation failures',
+    );
+  }
   return phaseOutput('execute', 'passed', state, options.expectedStateDigest);
 }
 

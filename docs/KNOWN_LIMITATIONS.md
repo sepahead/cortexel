@@ -19,6 +19,14 @@ The machine-readable state of every release gate is in
   binning, population-rate, ISI, correlogram, and topology rules. That is useful unit
   evidence, but it is not an independent golden corpus for every stable contract.
   *Gates: R031–R059.*
+- **Raw-event correlogram release evidence is blocked by two known defects.** The
+  current edge-corrected rate path can count a pair from a boundary reference that
+  its `eligible_reference_events` denominator excludes, and converting two large
+  absolute event times separately can round away a small nonzero lag before bin
+  assignment. Hand-authored histogram input is not affected by those two raw-event
+  derivation defects. Release certification for `neuro.correlogram` remains blocked
+  until numerator eligibility and difference-before-conversion regressions pass.
+  *Gates: R034, R036–R038, R053.*
 - **Multi-rank NEST topology is not certified.** The MPI scope rules are validated
   against hand vectors and the scope validator; they have not been run against a real
   multi-rank NEST simulation. *Gates: R040–R045, R050–R051.*
@@ -32,6 +40,16 @@ The machine-readable state of every release gate is in
 
 ## Rendering
 
+- **Accessibility conformance is not established and the current renderers have
+  known defects.** Both SVG paths currently concatenate `<title>` and `<desc>` as
+  one accessible name instead of exposing a separate description. The normative
+  left-axis label is horizontal and can leave the viewBox; registered/legacy
+  palettes contain role/surface pairs below their stated contrast target; several
+  multi-series, matrix-sign, and phase-plane distinctions remain color-only; and
+  the legacy React surface lacks exact paginated DOM rows for ten of nineteen
+  supported skills. The new FigureRequest tables and mandatory disclosure footer
+  remain complete, but neither they nor existing unit tests establish WCAG
+  conformance. *Gates: R074–R079.*
 - **Digest-bound complete sidecars are not implemented.** The library returns an exact
   table for accepted figures, but the artifact currently binds only the SVG output; a
   CLI-written CSV was not a substitute for a library-owned canonical sidecar and has
@@ -243,6 +261,16 @@ The machine-readable state of every release gate is in
   clean-room reproducible release receipt exists. `dist/` also remains committed for
   git-dependency consumers rather than being untracked in this change. *Gates:
   R099–R107 remain governed by their evidence-ledger receipts.*
+- **Package-smoke authority is not a hostile process sandbox.** Prepared-state v2
+  seals the exact Node executable and npm package tree, but not Node's dynamic
+  libraries, operating-system services, or the TypeScript harness runtime. POSIX
+  descendant cleanup uses a reusable numeric process-group id and covers handled
+  `TERM`/`INT`/`HUP` cancellation while a sweeper survives; same-UID signaling,
+  deliberate re-grouping, or simultaneous uncatchable death of the outer caller
+  and supervisor require external sandbox/cgroup containment. The prepared
+  workspace's root, parent ancestry, modes, topology, and bytes are change-bound,
+  but mode hardening is not a substitute for an externally enforced read-only
+  mount against a hostile same-UID actor.
 - **No package is published.** Nothing has been pushed to npm or PyPI, and no DOI has been
   minted. The npm/PyPI/CI badges in the README are inactive by design. *Gate:
   R108, R134–R155.*

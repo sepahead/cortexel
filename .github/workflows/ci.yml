@@ -303,12 +303,14 @@ jobs:
             UV_NO_ENV_FILE=1 \
             UV_PYTHON_DOWNLOADS=never \
             UV_OFFLINE=1 \
+            UV_LINK_MODE=copy \
             /usr/bin/timeout --signal=TERM --kill-after=10s 300s \
             "$uv_path" pip install \
               --no-config \
               --no-cache \
               --python "$runtime/bin/python" \
               --no-deps \
+              --link-mode copy \
               --require-hashes \
               --only-binary :all: \
               --no-index \

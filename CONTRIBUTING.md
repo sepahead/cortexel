@@ -93,8 +93,10 @@ env -i \
   UV_NO_ENV_FILE=1 \
   UV_PYTHON_DOWNLOADS=never \
   UV_OFFLINE=1 \
+  UV_LINK_MODE=copy \
   "$uv_path" pip install \
     --no-config --no-cache --python "$runtime/bin/python" --no-deps \
+    --link-mode copy \
     --require-hashes --only-binary :all: \
     --no-index --find-links "$wheelhouse" \
     --requirements .github/requirements/python-package-build.txt
@@ -202,12 +204,17 @@ keep the two phases explicit:
 
 The supervisor starts a trusted gated wrapper in a new process group. It publishes
 the group identifier before the wrapper can start reviewed code. Normal completion,
-failure, timeout, output overflow, and cancellation each end with a terminal group
-sweep and a closure check. If the supervisor fails after publication, the outer
-caller closes the published group and rejects the command. This mechanism cleans
-descendants that stay in the group. It does not prevent a same-UID process from
-signaling its parents or deliberately creating another session or process group.
-Use an OS sandbox when the release threat model includes those capabilities.
+failure, timeout, output overflow, and handled `TERM`, `INT`, or `HUP` cancellation
+each end with a terminal group sweep and a closure check. If the supervisor fails
+after publication while the outer caller survives, the outer caller closes the
+published group and rejects the command. This mechanism cleans descendants that
+stay in the group. It does not prevent a same-UID process from signaling its
+parents, deliberately creating another session or process group, or exploiting
+the fact that portable POSIX cleanup identifies a group by a reusable numeric PGID.
+Simultaneous uncatchable death of both the outer caller and supervisor can also
+leave the detached group without a sweeper. Use an external OS sandbox/cgroup (or
+equivalent process-lifetime authority) when the release threat model includes
+those capabilities.
 
 ```bash
 bun scripts/smoke-package.ts prepare \
@@ -215,8 +222,9 @@ bun scripts/smoke-package.ts prepare \
   --node-executable /absolute/reviewed/node \
   --npm-executable /absolute/reviewed/npm-cli.js
 
-# Capture the canonical JSON. Inspect every path in `nodeModules`, retain
-# `stateDigest`, deny network access, and mount/retain the workspace read-only.
+# Capture the canonical `cortexel-package-smoke-phase.v2` JSON. Inspect every
+# path in `nodeModules`, retain `stateDigest`, deny network access, and
+# mount/retain the workspace read-only.
 
 bun scripts/smoke-package.ts execute \
   --workspace /absolute/persistent/workspace \
@@ -233,6 +241,24 @@ harness remains responsible for OS-level network denial and for inspecting all
 three reported `nodeModules` trees. Every executable JavaScript entry point is
 invoked through the exact reviewed Node path; package-local shebang shims are
 validated but never trusted for runtime selection.
+
+The v2 prepared state is `cortexel-package-smoke-prepared.v2` in
+`package-smoke-state.v2.json`. Its `runtimeAuthority` binds the canonical Node
+executable's stable bytes, metadata, and path ancestry and the canonical npm 10 or
+11 package root's exact manifest/CLI identity plus a bounded recursive seal of
+every directory, ordinary file, and permitted internal direct-file symlink. This
+scope is deliberately named `node-executable-and-npm-package-tree.v1`: it does not
+claim to close Node's dynamic libraries, operating-system services, or the
+TypeScript harness runtime. A release harness must authenticate those external
+authorities independently. The workspace seal binds the finalized root's physical
+identity and exact `0555` mode, every controlling parent-directory identity, and
+all non-state contents; the caller-supplied state digest separately binds the
+excluded state file. Prepare exclusively reserves that leaf before sealing, then
+publishes canonical bytes through the retained descriptor with exact mode,
+descriptor/path identity, stable readback, and file/directory synchronization.
+Execute also retains the first inspected state-file authority and revalidates its
+digest, identity, workspace ownership, and exact `0444` mode after active work.
+These are change detectors, not hostile same-UID containment.
 
 Before `npm ci`, prepare independently accepts only one canonical npm-portable
 gzip member containing regular-file USTAR entries and exactly two end blocks.
