@@ -369,4 +369,61 @@ jobs:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run test:package
+      - name: Package smoke under private copied runtime authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          umask 077
+
+          source_node="$(realpath -e -- "$(command -v node)")"
+          source_npm_cli="$(realpath -e -- "$(command -v npm)")"
+          if [[ "$(basename -- "$source_npm_cli")" != npm-cli.js \
+            || "$(basename -- "$(dirname -- "$source_npm_cli")")" != bin ]]; then
+            echo "::error::setup-node npm did not resolve to an npm package bin/npm-cli.js"
+            exit 1
+          fi
+          source_npm_root="$(dirname -- "$(dirname -- "$source_npm_cli")")"
+
+          runtime_root="$RUNNER_TEMP/cortexel-package-runtime-node-${{ matrix.node }}"
+          if [[ -e "$runtime_root" || -L "$runtime_root" ]]; then
+            echo "::error::private package runtime path already exists"
+            exit 1
+          fi
+          mkdir -m 0700 -- "$runtime_root"
+          mkdir -m 0700 -- "$runtime_root/bin"
+          install -m 0500 -- "$source_node" "$runtime_root/bin/node"
+          cp -R -P -- "$source_npm_root" "$runtime_root/npm"
+
+          # Hosted toolcache modes and hard links are not package-smoke authority.
+          # The recursive copy gives every regular file a distinct inode; normalize
+          # the copied tree while retaining npm's internal relative symlinks.
+          find -P "$runtime_root/npm" -type d -exec chmod 0755 -- {} +
+          find -P "$runtime_root/npm" -type f -perm /111 -exec chmod 0755 -- {} +
+          find -P "$runtime_root/npm" -type f ! -perm /111 -exec chmod 0644 -- {} +
+          ln -s -- ../npm/bin/npm-cli.js "$runtime_root/bin/npm"
+
+          unexpected_entry="$(find -P "$runtime_root" \
+            ! -type d ! -type f ! -type l -print -quit)"
+          linked_file="$(find -P "$runtime_root" -type f -links +1 -print -quit)"
+          writable_entry="$(find -P "$runtime_root" \
+            \( -type d -o -type f \) -perm /7022 -print -quit)"
+          if [[ -n "$unexpected_entry" || -n "$linked_file" || -n "$writable_entry" ]]; then
+            echo "::error::copied package runtime retains unsupported filesystem authority"
+            exit 1
+          fi
+          if [[ "$(realpath -e -- "$runtime_root/bin/node")" != "$runtime_root/bin/node" \
+            || "$(realpath -e -- "$runtime_root/bin/npm")" != "$runtime_root/npm/bin/npm-cli.js" ]]; then
+            echo "::error::copied package runtime paths are not canonical"
+            exit 1
+          fi
+
+          node_major="$("$runtime_root/bin/node" -p 'process.versions.node.split(".")[0]')"
+          npm_version="$("$runtime_root/bin/node" "$runtime_root/npm/bin/npm-cli.js" --version)"
+          if [[ "$node_major" != "${{ matrix.node }}" \
+            || ! "$npm_version" =~ ^(10|11)[.] ]]; then
+            echo "::error::copied package runtime versions are outside the reviewed matrix"
+            exit 1
+          fi
+
+          PATH="$runtime_root/bin:$PATH" bun run test:package
