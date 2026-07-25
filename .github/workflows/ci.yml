@@ -95,7 +95,8 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: ${{ matrix.python }}
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+      - id: setup_uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           version: 0.11.16
           enable-cache: false
@@ -106,6 +107,9 @@ jobs:
       - name: Seal exact Python and uv runtime authority
         if: matrix.python == '3.14.6'
         shell: bash
+        env:
+          SETUP_UV_PATH: ${{ steps.setup_uv.outputs['uv-path'] }}
+          SETUP_UVX_PATH: ${{ steps.setup_uv.outputs['uvx-path'] }}
         run: |
           set -euo pipefail
           umask 022
@@ -127,10 +131,18 @@ jobs:
             exit 1
           fi
 
-          uv_executable="$(python -I -S -B -c \
-            'import pathlib, shutil; executable = shutil.which("uv"); assert executable is not None; print(pathlib.Path(executable).resolve(strict=True))')"
+          uv_executable="$SETUP_UV_PATH"
+          uvx_executable="$SETUP_UVX_PATH"
           expected_uv_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uv"
+          expected_uvx_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uvx"
           if [[ "$uv_executable" != "$expected_uv_executable" \
+            || "$uvx_executable" != "$expected_uvx_executable" \
+            || ! -f "$uv_executable" \
+            || ! -f "$uvx_executable" \
+            || -L "$uv_executable" \
+            || -L "$uvx_executable" \
+            || "$(realpath -e -- "$uv_executable")" != "$expected_uv_executable" \
+            || "$(realpath -e -- "$uvx_executable")" != "$expected_uvx_executable" \
             || "$("$uv_executable" --version)" != "uv 0.11.16" ]]; then
             echo "::error::setup-uv did not provide the exact canonical uv 0.11.16 authority"
             exit 1
@@ -237,14 +249,26 @@ jobs:
           fi
           test -x "$expected_python_executable"
           test -x "$expected_uv_executable"
+          test -x "$expected_uvx_executable"
+          printf '%s\n' "$(dirname "$expected_uv_executable")" >> "$GITHUB_PATH"
+          {
+            printf 'CORTEXEL_CI_UV=%s\n' "$expected_uv_executable"
+            printf 'CORTEXEL_CI_UVX=%s\n' "$expected_uvx_executable"
+          } >> "$GITHUB_ENV"
       - name: Compile Python reader
         run: python -m compileall -q python/src python/tests scripts/smoke-python-package.py
       - name: Python tests (pure standard library)
         run: python -m unittest discover -s python/tests -v
       - name: Strict Python typing
-        run: uvx --no-config --from mypy==1.19.1 mypy --config-file python/pyproject.toml python/src/cortexel
+        env:
+          UVX_EXECUTABLE: ${{ steps.setup_uv.outputs['uvx-path'] }}
+        run: |
+          "$UVX_EXECUTABLE" --no-config --from mypy==1.19.1 mypy --config-file python/pyproject.toml python/src/cortexel
       - name: Python lint
-        run: uvx --no-config --from ruff==0.15.18 ruff check python/src python/tests scripts/smoke-python-package.py
+        env:
+          UVX_EXECUTABLE: ${{ steps.setup_uv.outputs['uvx-path'] }}
+        run: |
+          "$UVX_EXECUTABLE" --no-config --from ruff==0.15.18 ruff check python/src python/tests scripts/smoke-python-package.py
       - name: Provision exact hash-pinned Python build backend
         if: matrix.python == '3.14.6'
         run: |
@@ -255,7 +279,7 @@ jobs:
           wheelhouse="$temporary/cortexel-python-package-backend-wheelhouse"
           python -m venv --copies --without-pip "$runtime"
           mkdir -p "$bootstrap_home"
-          uv_path="$(python -c 'import pathlib, shutil; print(pathlib.Path(shutil.which("uv")).resolve(strict=True))')"
+          uv_path="$CORTEXEL_CI_UV"
           env -i \
             HOME="$bootstrap_home" \
             PATH="$(dirname "$runtime/bin/python"):/usr/bin:/bin" \

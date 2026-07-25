@@ -1282,6 +1282,10 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             "Seal exact Python and uv runtime authority",
             'expected_python_location="/opt/hostedtoolcache/Python/3.14.6/x64"',
             'expected_uv_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uv"',
+            'expected_uvx_executable="/opt/hostedtoolcache/uv/0.11.16/x86_64/uvx"',
+            "SETUP_UV_PATH: ${{ steps.setup_uv.outputs['uv-path'] }}",
+            "SETUP_UVX_PATH: ${{ steps.setup_uv.outputs['uvx-path'] }}",
+            'uv_path="$CORTEXEL_CI_UV"',
             'sudo chown -R root:root -- "$python_version_root" "$uv_version_root"',
             'sudo setfacl -R -b -k -- "$python_version_root" "$uv_version_root"',
             'sudo chmod -R go-w -- "$python_version_root" "$uv_version_root"',
@@ -1296,6 +1300,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         ):
             self.assertIn(required, workflow)
         self.assertGreaterEqual(workflow.count("umask 022"), 2)
+        self.assertNotIn('shutil.which("uv")', workflow)
         self.assertIn(
             "read_python_package_smoke_result(\n"
             "              pathlib.Path(sys.argv[2])\n",
