@@ -151,11 +151,34 @@ jobs:
             echo "CORTEXEL_UV=$uv_path"
             echo "CORTEXEL_BUILD_BACKEND_WHEELHOUSE=$wheelhouse"
           } >> "$GITHUB_ENV"
-      - name: Reproducible wheel/sdist and clean-install smoke
+      - name: Reproducible wheel/sdist, clean install, and canonical result receipt
         if: matrix.python == '3.14'
         run: |
           umask 022
-          "$CORTEXEL_PACKAGE_PYTHON" -I -S -B scripts/smoke-python-package.py
+          temporary="$("$CORTEXEL_PACKAGE_PYTHON" -I -S -B -c \
+            'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve(strict=True))' \
+            "$RUNNER_TEMP")"
+          result_parent="$temporary/cortexel-python-package-result"
+          mkdir -m 0700 "$result_parent"
+          result="$result_parent/result.v1.json"
+          "$CORTEXEL_PACKAGE_PYTHON" -I -S -B scripts/smoke-python-package.py \
+            verify --result-file "$result"
+          "$CORTEXEL_PACKAGE_PYTHON" -I -S -B -c '
+          import importlib.util
+          import pathlib
+          import sys
+          script = pathlib.Path(sys.argv[1]).resolve(strict=True)
+          spec = importlib.util.spec_from_file_location("cortexel_package_smoke", script)
+          if spec is None or spec.loader is None:
+              raise RuntimeError("cannot load the package-smoke result reader")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          result = module.read_python_package_smoke_result(
+              pathlib.Path(sys.argv[2])
+          )
+          if result["contract"] != "cortexel-python-package-smoke-result.v1":
+              raise RuntimeError("unexpected package-smoke result contract")
+          ' scripts/smoke-python-package.py "$result"
 
   package-smoke:
     runs-on: ubuntu-latest

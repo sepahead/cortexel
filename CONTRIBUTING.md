@@ -105,6 +105,54 @@ CORTEXEL_BUILD_BACKEND_WHEELHOUSE="$wheelhouse" \
 )
 ```
 
+The no-argument form above keeps the human-readable developer behavior. For a
+release run, stay inside that same subshell and replace its final no-argument call
+with the block below. The result scratch is a sibling of—not inside—the reviewed
+runtime, retained wheelhouse, uv directory, or Cortexel source authority; the
+result leaf must be a canonical absolute path that does not yet exist:
+
+```bash
+protected_scratch="$temporary/cortexel-python-package-results"
+mkdir -m 0700 "$protected_scratch"
+result="$protected_scratch/cortexel-python-package-result.json"
+CORTEXEL_UV="$uv_path" \
+CORTEXEL_BUILD_BACKEND_WHEELHOUSE="$wheelhouse" \
+  "$runtime/bin/python" -I -S -B scripts/smoke-python-package.py \
+    verify --result-file "$result"
+```
+
+`cortexel-python-package-smoke-result.v1` is canonical duplicate-free JSON with one
+terminal LF and the exact top-level keys `artifacts`, `backendWheelhouse`,
+`contract`, `packageVersion`, `python`, `resources`, `sourceAuthority`, `status`,
+and `uv`. Every digest is `sha256:` followed by 64 lowercase hexadecimal digits.
+The receipt binds the final stable wheel/sdist filename, size, and digest; the
+canonical reviewed Python/base-Python and uv paths plus executable bytes; exact uv
+version; the canonical retained wheelhouse path, exact-five inventory, sizes,
+digests, and inventory seal; package version; the v1-exact 21-resource and
+19-skill-schema counts; and a domain-separated digest of the complete Python
+build-input/source authority and backend requirements lock. It is created with
+exclusive/no-follow semantics, exact 0644 mode, file and parent-directory `fsync`,
+and a stable readback only after the clean install, final artifact comparison,
+source reinspection, backend reinspection, and temporary-workspace cleanup have all
+succeeded. The gate rejects a result path overlapping any attested authority, binds
+the runtime executables before and after active work, then repeats runtime,
+wheelhouse, source, receipt, and result-parent checks after the durable write. It
+also rejects discretionary filesystem ACLs on the protected parent or receipt;
+exact 0700/0644 mode bits are not accepted as a substitute for that authority
+check. A pre-existing result is never overwritten. Treat a nonzero process exit,
+missing receipt, or receipt rejected by a duplicate-aware strict parser as failure;
+never recover evidence from stdout.
+
+The two aggregate seals use the script's `inventory_sha256` encoding: SHA-256 over
+the ASCII domain prefix `cortexel-named-byte-inventory-v1\0`, then the namespace's
+unsigned 64-bit big-endian byte length and ASCII bytes, followed by each
+lexicographically sorted entry's unsigned 64-bit big-endian UTF-8 name length, name
+bytes, unsigned 64-bit big-endian payload length, and payload bytes. The source seal
+names the root `LICENSE`, every exact `python/` build-input path, and the backend
+requirements lock. The wheelhouse seal applies the same encoding to one
+`value.json` entry containing the canonical inventory-array JSON plus its LF. This
+definition is part of result contract v1; changing it requires a new contract id.
+
 Run the complete block in that one subshell. The explicit `umask 022` is part of the
 evidence protocol: it deterministically creates the reviewed 0644 backend files and
 0755 directories even when the parent shell uses a restrictive umask. The smoke checks
@@ -131,8 +179,20 @@ bounds to every build, install, and executable probe.
 This release-evidence procedure is currently supported on macOS and Linux; the pinned
 CI realization runs on Ubuntu. It is not evidence for a Windows package-build boundary.
 
-`bun run test:package` is the backwards-compatible local orchestration. Release
-harnesses must keep the two phases explicit:
+`bun run test:package` is the backwards-compatible local orchestration. The
+reviewed command supervisor currently requires POSIX process-group semantics and
+therefore fails closed on Windows; a Windows boundary needs a separately reviewed
+Job Object/process-tree implementation. Release harnesses on macOS or Linux must
+keep the two phases explicit:
+
+The supervisor starts a trusted gated wrapper in a new process group. It publishes
+the group identifier before the wrapper can start reviewed code. Normal completion,
+failure, timeout, output overflow, and cancellation each end with a terminal group
+sweep and a closure check. If the supervisor fails after publication, the outer
+caller closes the published group and rejects the command. This mechanism cleans
+descendants that stay in the group. It does not prevent a same-UID process from
+signaling its parents or deliberately creating another session or process group.
+Use an OS sandbox when the release threat model includes those capabilities.
 
 ```bash
 bun scripts/smoke-package.ts prepare \
@@ -152,13 +212,12 @@ bun scripts/smoke-package.ts execute \
 The execute phase never installs or materializes files. It fails if the prepared
 state, package artifact, lock-bound consumer trees, filesystem topology, modes, or
 bytes changed across the inspection gap. Preparation makes the workspace
-mode-read-only on POSIX; on every platform the release harness must mount or
-otherwise retain it read-only. The in-process network/write guard is defense in
-depth; the release harness remains responsible for OS-level network denial and
-for inspecting all three reported `nodeModules` trees. A Windows `npm.cmd` path is
-accepted when its adjacent `node_modules/npm/bin/npm-cli.js` can be resolved, but
-the canonical prepared state records and invokes the JavaScript CLI through the
-reviewed Node executable.
+mode-read-only; the release harness must additionally mount or otherwise retain it
+read-only. The in-process network/write guard is defense in depth; the release
+harness remains responsible for OS-level network denial and for inspecting all
+three reported `nodeModules` trees. Every executable JavaScript entry point is
+invoked through the exact reviewed Node path; package-local shebang shims are
+validated but never trusted for runtime selection.
 
 Before `npm ci`, prepare independently accepts only one canonical npm-portable
 gzip member containing regular-file USTAR entries and exactly two end blocks.
@@ -169,7 +228,14 @@ reviewed source closure. Bounds are 128 MiB compressed, 512 MiB inflated,
 128 MiB per file, 10,000 archive entries, 99 bytes per `package/...` tar path,
 20,000 source filesystem nodes, depth 32, and 10,000 children per directory.
 After each install, the same closure is checked against every tar-owned file;
-the nested `cortexel/node_modules` dependency graft remains lock- and seal-owned.
+the exact omit-filtered prepared lock additionally derives every installed package
+container, scope membership, package name/version, `.bin` inventory and target,
+and the complete top-level hidden lock across every nested package path. A bounded
+whole-tree walk
+rejects concealed `node_modules`, `.bin`, or `.package-lock.json` management paths.
+npm 10 may retain only the exact empty scope directories implied by omitted scoped
+lock siblings; npm 11 must not retain them. The workspace seal independently binds
+all remaining registry-package bytes and topology across the inspection gap.
 
 ## Design laws (non-negotiable)
 

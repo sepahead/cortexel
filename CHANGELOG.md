@@ -23,6 +23,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   search path. Ambient API keys, package tokens, proxy credentials, Node/loader
   injection controls, npm configuration, and OpenSSL configuration cannot cross
   the package-smoke process boundary.
+- Every executable entry point now runs through the exact reviewed Node binary.
+  A trusted gated wrapper enters a fresh POSIX process group. The supervisor
+  publishes that group before it permits reviewed code to execute. It applies one
+  terminal SIGKILL sweep and proves group closure. If the supervisor fails, the
+  outer caller closes the published group and rejects the command. This boundary
+  cleans descendants that remain in the group. It is not a sandbox against
+  same-UID signaling or a descendant that starts another session or process group.
+  Windows fails closed until an equivalent reviewed Job Object boundary exists.
+  Protocol-size limits account for base64 expansion without giant regular
+  expressions. Directory reads and file hashes are allocation-bounded. Every
+  installed package container, scope, package identity,
+  `.bin` inventory/shim, and hidden lock entry is derived from the exact
+  omit-filtered prepared lock at every nested depth; concealed package-management
+  subtrees are rejected. npm 10's exact empty omitted-scope residue is modeled
+  separately, while npm 11 admits no such residue.
 - The prepare boundary now independently decodes the produced gzip/USTAR bytes
   before any install. It rejects extension/link/special entries and archive
   ambiguity, proves exact path/size/mode/content parity with both npm's JSON and
@@ -47,6 +62,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Backend provisioning and the smoke run now share an explicit `umask 022`; the
   gate rejects any different ambient umask before work begins instead of letting
   caller-specific 0600/0700 modes make the exact installed closure irreproducible.
+- Release harnesses can request a durable, canonical
+  `cortexel-python-package-smoke-result.v1` JSON receipt with
+  `verify --result-file ABS`. The exclusive 0644 result binds the final wheel and
+  sdist bytes, package/source authority, exact schema counts, reviewed Python and
+  uv executable bytes, and the complete retained backend-wheelhouse inventory;
+  duplicate members, noncanonical JSON, path ambiguity, permission drift, and
+  cross-field tampering fail closed.
+- Receipt parsing has an implementation-independent JSON depth bound and stable
+  readers rebind every pathname after close. The producer rejects output beneath
+  any attested source, runtime, uv, or wheelhouse authority; binds Python/base/uv
+  bytes and the already-validated backend-requirements lock before and after active
+  work; and repeats source, runtime, wheelhouse, receipt, and parent-authority
+  checks after the durable write. Output parents and receipts must have no
+  discretionary ACL authority beyond their exact Unix modes. The Python 3.14 CI
+  lane now exercises this complete result-mode path and strict reader end to end.
 
 ### Fixed — read-only source builds
 

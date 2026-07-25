@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import base64
 import csv
+import ctypes
+import errno
 import hashlib
 import importlib.metadata
 import io
@@ -48,6 +50,8 @@ MAX_SOURCE_DEPTH = 32
 MAX_DIRECTORY_CHILDREN = 10_000
 MAX_BUILD_OUTPUT_ENTRIES = 16
 MAX_SUBPROCESS_OUTPUT_BYTES = 64 * 1024
+MAX_RESULT_BYTES = 64 * 1024
+MAX_RESULT_JSON_DEPTH = 32
 UV_POSIX_SHEBANG_LIMIT_BYTES = 127
 PROCESS_TERM_GRACE_SECONDS = 0.25
 BUILD_TIMEOUT_SECONDS = 300
@@ -99,6 +103,13 @@ EXACT_BUILD_BACKEND_WHEEL_HASHES = {
     "pluggy": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746",
     "trove-classifiers": "ab4c4ec93cc4a4e7815fa759906e05e6bb3f2fbd92ea0f897288c6a43efd15b3",
 }
+EXACT_BUILD_BACKEND_WHEEL_SIZES = {
+    "hatchling": 77_747,
+    "packaging": 100_195,
+    "pathspec": 57_328,
+    "pluggy": 20_538,
+    "trove-classifiers": 14_211,
+}
 EXACT_BUILD_BACKEND_WHEEL_FILENAMES = {
     "hatchling": "hatchling-1.31.0-py3-none-any.whl",
     "packaging": "packaging-26.2-py3-none-any.whl",
@@ -122,6 +133,9 @@ EXACT_BUILD_BACKEND_ENTRY_POINTS = {
     ),
 }
 BUILD_BACKEND_REQUIREMENTS = ROOT / ".github" / "requirements" / "python-package-build.txt"
+PYTHON_PACKAGE_SMOKE_RESULT_CONTRACT = "cortexel-python-package-smoke-result.v1"
+PYTHON_PACKAGE_SMOKE_RESOURCE_COUNT = 21
+PYTHON_PACKAGE_SMOKE_SKILL_SCHEMA_COUNT = 19
 
 
 def fail(message: str) -> NoReturn:
@@ -179,6 +193,82 @@ def _stat_identity(value: os.stat_result) -> tuple[object, ...]:
     )
 
 
+def require_no_extended_acl(path_or_descriptor: Path | int, *, label: str) -> None:
+    """Reject discretionary ACL authority that Unix mode bits do not represent."""
+
+    if sys.platform == "darwin":
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.acl_get_file.argtypes = [ctypes.c_char_p, ctypes.c_int]
+        libc.acl_get_file.restype = ctypes.c_void_p
+        libc.acl_get_fd_np.argtypes = [ctypes.c_int, ctypes.c_int]
+        libc.acl_get_fd_np.restype = ctypes.c_void_p
+        libc.acl_free.argtypes = [ctypes.c_void_p]
+        libc.acl_free.restype = ctypes.c_int
+        ctypes.set_errno(0)
+        if isinstance(path_or_descriptor, int):
+            acl = libc.acl_get_fd_np(path_or_descriptor, 0x00000100)
+        else:
+            acl = libc.acl_get_file(os.fsencode(path_or_descriptor), 0x00000100)
+        if acl:
+            libc.acl_free(acl)
+            fail(f"{label} carries an extended ACL")
+        error = ctypes.get_errno()
+        if error != errno.ENOENT:
+            raise RuntimeError(f"{label} ACL authority cannot be inspected") from OSError(
+                error,
+                os.strerror(error),
+            )
+        return
+
+    listxattr = getattr(os, "listxattr", None)
+    getxattr = getattr(os, "getxattr", None)
+    if sys.platform.startswith("linux") and callable(listxattr) and callable(getxattr):
+        try:
+            attributes = (
+                listxattr(path_or_descriptor)
+                if isinstance(path_or_descriptor, int)
+                else listxattr(path_or_descriptor, follow_symlinks=False)
+            )
+        except OSError as exc:
+            raise RuntimeError(f"{label} ACL authority cannot be inspected") from exc
+        acl_attributes = {
+            "system.nfs4_acl",
+            "system.posix_acl_access",
+            "system.posix_acl_default",
+            "system.richacl",
+            "trusted.SGI_ACL_DEFAULT",
+            "trusted.SGI_ACL_FILE",
+        }
+        if any(os.fsdecode(attribute) in acl_attributes for attribute in attributes):
+            fail(f"{label} carries an extended ACL")
+        absent_errors = {errno.ENODATA}
+        if hasattr(errno, "ENOATTR"):
+            absent_errors.add(errno.ENOATTR)
+        for attribute in (
+            "system.posix_acl_access",
+            "system.posix_acl_default",
+        ):
+            try:
+                if isinstance(path_or_descriptor, int):
+                    getxattr(path_or_descriptor, attribute)
+                else:
+                    getxattr(
+                        path_or_descriptor,
+                        attribute,
+                        follow_symlinks=False,
+                    )
+            except OSError as exc:
+                if exc.errno in absent_errors:
+                    continue
+                raise RuntimeError(
+                    f"{label} ACL authority cannot be inspected"
+                ) from exc
+            fail(f"{label} carries an extended ACL")
+        return
+
+    fail(f"{label} ACL inspection is unsupported on this platform")
+
+
 def bounded_regular_file_bytes(path: Path, *, maximum: int, label: str) -> bytes:
     """Read one stable regular file only after enforcing its allocation bound."""
 
@@ -199,6 +289,7 @@ def bounded_regular_file_bytes(path: Path, *, maximum: int, label: str) -> bytes
                 fail(f"{label} changed identity before it could be read: {path}")
             payload = stream.read(maximum + 1)
             final = os.fstat(stream.fileno())
+        rebound = path.stat(follow_symlinks=False)
     except OSError as exc:
         raise RuntimeError(f"{label} could not be read: {path}") from exc
     if (
@@ -207,6 +298,8 @@ def bounded_regular_file_bytes(path: Path, *, maximum: int, label: str) -> bytes
         or _stat_identity(final) != _stat_identity(opened)
     ):
         fail(f"{label} changed size or exceeded its byte budget while being read: {path}")
+    if _stat_identity(rebound) != _stat_identity(opened):
+        fail(f"{label} changed identity during or after its stable read: {path}")
     return payload
 
 
@@ -251,13 +344,17 @@ def assert_regular_files_equal(
                     break
             left_final = os.fstat(left_stream.fileno())
             right_final = os.fstat(right_stream.fileno())
+        left_rebound = left.stat(follow_symlinks=False)
+        right_rebound = right.stat(follow_symlinks=False)
     except OSError as exc:
         raise RuntimeError(f"{label} artifacts could not be compared") from exc
     if (
         _stat_identity(left_final) != _stat_identity(left_opened)
         or _stat_identity(right_final) != _stat_identity(right_opened)
+        or _stat_identity(left_rebound) != _stat_identity(left_initial)
+        or _stat_identity(right_rebound) != _stat_identity(right_initial)
     ):
-        fail(f"{label} artifact changed during comparison")
+        fail(f"{label} artifact changed during or after comparison")
 
 
 def sha256_regular_file(path: Path, *, maximum: int, label: str) -> str:
@@ -266,6 +363,751 @@ def sha256_regular_file(path: Path, *, maximum: int, label: str) -> str:
     for offset in range(0, len(payload), IO_CHUNK_BYTES):
         digest.update(payload[offset : offset + IO_CHUNK_BYTES])
     return digest.hexdigest()
+
+
+def regular_file_sha256_evidence(
+    path: Path,
+    *,
+    maximum: int,
+    label: str,
+) -> dict[str, object]:
+    """Return one stable file's size and uniformly prefixed SHA-256 identity."""
+
+    try:
+        initial = path.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError(f"{label} is unreadable: {path}") from exc
+    if not stat.S_ISREG(initial.st_mode):
+        fail(f"{label} must be a regular non-symlink file: {path}")
+    if initial.st_nlink != 1:
+        fail(f"{label} must have exactly one filesystem link: {path}")
+    if initial.st_size > maximum:
+        fail(f"{label} exceeds its {maximum}-byte budget: {path}")
+    digest = hashlib.sha256()
+    total = 0
+    file_descriptor: int | None = None
+    try:
+        file_descriptor = os.open(
+            path,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        )
+        opened = os.fstat(file_descriptor)
+        if _stat_identity(opened) != _stat_identity(initial):
+            fail(f"{label} changed identity before it could be hashed: {path}")
+        while chunk := os.read(file_descriptor, IO_CHUNK_BYTES):
+            total += len(chunk)
+            if total > maximum:
+                fail(f"{label} exceeded its byte budget while being hashed: {path}")
+            digest.update(chunk)
+        final = os.fstat(file_descriptor)
+        os.close(file_descriptor)
+        file_descriptor = None
+        rebound = path.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError(f"{label} could not be hashed: {path}") from exc
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+    if (
+        total != opened.st_size
+        or _stat_identity(final) != _stat_identity(opened)
+        or _stat_identity(rebound) != _stat_identity(initial)
+    ):
+        fail(f"{label} changed during or after its stable hash: {path}")
+    return {
+        "sha256": f"sha256:{digest.hexdigest()}",
+        "size": total,
+    }
+
+
+def canonical_json_bytes(value: object) -> bytes:
+    """Encode protocol JSON with one byte representation and one terminal LF."""
+
+    try:
+        encoded = json.dumps(
+            value,
+            allow_nan=False,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii") + b"\n"
+    except (RecursionError, TypeError, ValueError) as exc:
+        raise RuntimeError("Python package smoke result is not canonical JSON") from exc
+    if len(encoded) > MAX_RESULT_BYTES:
+        fail("Python package smoke result exceeds its byte budget")
+    return encoded
+
+
+def inventory_sha256(namespace: str, inventory: dict[str, bytes]) -> str:
+    """Hash an exact named-byte inventory without concatenation ambiguity."""
+
+    if (
+        not namespace
+        or not namespace.isascii()
+        or any(ord(character) < 0x21 or ord(character) > 0x7E for character in namespace)
+    ):
+        fail("inventory hash namespace must be printable nonblank ASCII")
+    digest = hashlib.sha256()
+    digest.update(b"cortexel-named-byte-inventory-v1\0")
+    digest.update(len(namespace).to_bytes(8, "big"))
+    digest.update(namespace.encode("ascii"))
+    for name, payload in sorted(inventory.items()):
+        try:
+            encoded_name = name.encode("utf-8", "strict")
+        except UnicodeEncodeError as exc:
+            raise RuntimeError("inventory name is not valid Unicode") from exc
+        digest.update(len(encoded_name).to_bytes(8, "big"))
+        digest.update(encoded_name)
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+    return f"sha256:{digest.hexdigest()}"
+
+
+def canonical_value_sha256(namespace: str, value: object) -> str:
+    """Domain-separate a canonical-JSON value seal from file-byte digests."""
+
+    payload = canonical_json_bytes(value)
+    return inventory_sha256(namespace, {"value.json": payload})
+
+
+def _require_exact_object(
+    value: object,
+    *,
+    keys: frozenset[str],
+    label: str,
+) -> dict[str, object]:
+    if not isinstance(value, dict):
+        received: object = type(value).__name__
+        fail(f"{label} key inventory is not exact: received={received}")
+    if any(not isinstance(key, str) for key in value):
+        fail(f"{label} contains a non-string key")
+    if set(value) != keys:
+        received = sorted(value)
+        fail(f"{label} key inventory is not exact: received={received}")
+    return value
+
+
+def _require_string(value: object, *, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        fail(f"{label} must be one nonempty string")
+    return value
+
+
+def _require_sha256(value: object, *, label: str) -> str:
+    received = _require_string(value, label=label)
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", received) is None:
+        fail(f"{label} must be one canonical prefixed SHA-256 digest")
+    return received
+
+
+def _require_integer(
+    value: object,
+    *,
+    minimum: int,
+    maximum: int,
+    label: str,
+) -> int:
+    if type(value) is not int or not minimum <= value <= maximum:
+        fail(f"{label} must be an integer in [{minimum}, {maximum}]")
+    return value
+
+
+def _require_canonical_absolute_path(value: object, *, label: str) -> str:
+    received = _require_string(value, label=label)
+    if any(
+        ord(character) < 0x20
+        or 0x7F <= ord(character) <= 0x9F
+        or 0xD800 <= ord(character) <= 0xDFFF
+        for character in received
+    ):
+        fail(f"{label} contains an unsupported control or surrogate character")
+    path = Path(received)
+    if (
+        not path.is_absolute()
+        or str(path) != received
+        or Path(os.path.abspath(received)) != path
+        or (os.name == "posix" and received.startswith("//"))
+    ):
+        fail(f"{label} must be one normalized absolute path")
+    return received
+
+
+def validate_python_package_smoke_result(value: object) -> dict[str, object]:
+    """Validate the closed, versioned Python package evidence receipt."""
+
+    result = _require_exact_object(
+        value,
+        keys=frozenset(
+            {
+                "artifacts",
+                "backendWheelhouse",
+                "contract",
+                "packageVersion",
+                "python",
+                "resources",
+                "sourceAuthority",
+                "status",
+                "uv",
+            }
+        ),
+        label="Python package smoke result",
+    )
+    if result["contract"] != PYTHON_PACKAGE_SMOKE_RESULT_CONTRACT:
+        fail("Python package smoke result contract is unsupported")
+    if result["status"] != "passed":
+        fail("Python package smoke result status must be exactly 'passed'")
+
+    package_version = _require_string(
+        result["packageVersion"],
+        label="Python package smoke packageVersion",
+    )
+    if re.fullmatch(r"[0-9a-z]+(?:[._][0-9a-z]+)*", package_version) is None:
+        fail("Python package smoke packageVersion is not one canonical package token")
+
+    artifacts = _require_exact_object(
+        result["artifacts"],
+        keys=frozenset({"sdist", "wheel"}),
+        label="Python package smoke artifacts",
+    )
+    expected_artifact_names = {
+        "wheel": f"cortexel-{package_version}-py3-none-any.whl",
+        "sdist": f"cortexel-{package_version}.tar.gz",
+    }
+    artifact_limits = {
+        "wheel": MAX_WHEEL_ARCHIVE_BYTES,
+        "sdist": MAX_SDIST_COMPRESSED_BYTES,
+    }
+    for kind in ("sdist", "wheel"):
+        artifact = _require_exact_object(
+            artifacts[kind],
+            keys=frozenset({"filename", "sha256", "size"}),
+            label=f"Python package smoke {kind} artifact",
+        )
+        if artifact["filename"] != expected_artifact_names[kind]:
+            fail(f"Python package smoke {kind} filename differs from packageVersion")
+        _require_sha256(
+            artifact["sha256"],
+            label=f"Python package smoke {kind} sha256",
+        )
+        _require_integer(
+            artifact["size"],
+            minimum=1,
+            maximum=artifact_limits[kind],
+            label=f"Python package smoke {kind} size",
+        )
+
+    backend = _require_exact_object(
+        result["backendWheelhouse"],
+        keys=frozenset({"inventory", "path", "sha256"}),
+        label="Python package smoke backendWheelhouse",
+    )
+    _require_canonical_absolute_path(
+        backend["path"],
+        label="Python package smoke backendWheelhouse path",
+    )
+    _require_sha256(
+        backend["sha256"],
+        label="Python package smoke backendWheelhouse sha256",
+    )
+    inventory = backend["inventory"]
+    if not isinstance(inventory, list):
+        fail("Python package smoke backendWheelhouse inventory must be one array")
+    expected_distributions = sorted(EXACT_BUILD_BACKEND_DISTRIBUTIONS)
+    if len(inventory) != len(expected_distributions):
+        fail("Python package smoke backendWheelhouse inventory length is not exact")
+    for record, distribution in zip(inventory, expected_distributions, strict=True):
+        item = _require_exact_object(
+            record,
+            keys=frozenset(
+                {"distribution", "filename", "sha256", "size", "version"}
+            ),
+            label=f"Python package smoke backend wheel {distribution}",
+        )
+        expected_values = {
+            "distribution": distribution,
+            "filename": EXACT_BUILD_BACKEND_WHEEL_FILENAMES[distribution],
+            "sha256": f"sha256:{EXACT_BUILD_BACKEND_WHEEL_HASHES[distribution]}",
+            "version": EXACT_BUILD_BACKEND_DISTRIBUTIONS[distribution],
+        }
+        for name, expected in expected_values.items():
+            if item[name] != expected:
+                fail(
+                    "Python package smoke backend wheel authority differs for "
+                    f"{distribution}.{name}"
+                )
+        size = _require_integer(
+            item["size"],
+            minimum=1,
+            maximum=MAX_WHEEL_ARCHIVE_BYTES,
+            label=f"Python package smoke backend wheel {distribution} size",
+        )
+        if size != EXACT_BUILD_BACKEND_WHEEL_SIZES[distribution]:
+            fail(
+                "Python package smoke backend wheel authority differs for "
+                f"{distribution}.size"
+            )
+    if backend["sha256"] != canonical_value_sha256(
+        "cortexel-python-package-backend-wheelhouse-v1",
+        inventory,
+    ):
+        fail("Python package smoke backendWheelhouse seal differs from its inventory")
+
+    python_identity = _require_exact_object(
+        result["python"],
+        keys=frozenset(
+            {
+                "baseExecutable",
+                "baseExecutableSha256",
+                "baseExecutableSize",
+                "executable",
+                "executableSha256",
+                "executableSize",
+                "implementation",
+                "prefix",
+                "version",
+            }
+        ),
+        label="Python package smoke python identity",
+    )
+    if python_identity["implementation"] != "cpython":
+        fail("Python package smoke python implementation must be exactly cpython")
+    if not isinstance(python_identity["version"], str) or re.fullmatch(
+        r"3\.14\.(?:0|[1-9][0-9]*)",
+        python_identity["version"],
+    ) is None:
+        fail("Python package smoke python version must be one canonical 3.14.x version")
+    prefix = Path(
+        _require_canonical_absolute_path(
+            python_identity["prefix"],
+            label="Python package smoke python prefix",
+        )
+    )
+    executable = Path(
+        _require_canonical_absolute_path(
+            python_identity["executable"],
+            label="Python package smoke python executable",
+        )
+    )
+    base_executable = Path(
+        _require_canonical_absolute_path(
+            python_identity["baseExecutable"],
+            label="Python package smoke python baseExecutable",
+        )
+    )
+    if executable == prefix:
+        fail("Python package smoke python executable must be below its prefix")
+    if not executable.is_relative_to(prefix):
+        fail("Python package smoke python executable escapes its prefix")
+    if base_executable in {executable, prefix}:
+        fail("Python package smoke Python authorities must name distinct paths")
+    for field in ("baseExecutableSha256", "executableSha256"):
+        _require_sha256(
+            python_identity[field],
+            label=f"Python package smoke python {field}",
+        )
+    for field in ("baseExecutableSize", "executableSize"):
+        _require_integer(
+            python_identity[field],
+            minimum=1,
+            maximum=MAX_RUNTIME_TOTAL_BYTES,
+            label=f"Python package smoke python {field}",
+        )
+
+    uv_identity = _require_exact_object(
+        result["uv"],
+        keys=frozenset({"executable", "sha256", "size", "version"}),
+        label="Python package smoke uv identity",
+    )
+    uv_executable = Path(
+        _require_canonical_absolute_path(
+            uv_identity["executable"],
+            label="Python package smoke uv executable",
+        )
+    )
+    if uv_executable in {base_executable, executable, prefix}:
+        fail("Python package smoke runtime roles must name distinct paths")
+    if uv_identity["version"] != EXPECTED_UV_VERSION:
+        fail(f"Python package smoke uv version must be exactly {EXPECTED_UV_VERSION}")
+    _require_sha256(uv_identity["sha256"], label="Python package smoke uv sha256")
+    _require_integer(
+        uv_identity["size"],
+        minimum=1,
+        maximum=MAX_RUNTIME_TOTAL_BYTES,
+        label="Python package smoke uv size",
+    )
+
+    resources = _require_exact_object(
+        result["resources"],
+        keys=frozenset({"resourceCount", "skillSchemaCount"}),
+        label="Python package smoke resources",
+    )
+    resource_count = _require_integer(
+        resources["resourceCount"],
+        minimum=1,
+        maximum=MAX_SOURCE_NODES,
+        label="Python package smoke resourceCount",
+    )
+    skill_schema_count = _require_integer(
+        resources["skillSchemaCount"],
+        minimum=1,
+        maximum=MAX_SOURCE_NODES,
+        label="Python package smoke skillSchemaCount",
+    )
+    if skill_schema_count > resource_count:
+        fail("Python package smoke skillSchemaCount exceeds resourceCount")
+    if (
+        resource_count != PYTHON_PACKAGE_SMOKE_RESOURCE_COUNT
+        or skill_schema_count != PYTHON_PACKAGE_SMOKE_SKILL_SCHEMA_COUNT
+    ):
+        fail("Python package smoke resource counts differ from the v1 contract")
+    source_authority = _require_exact_object(
+        result["sourceAuthority"],
+        keys=frozenset({"sha256"}),
+        label="Python package smoke sourceAuthority",
+    )
+    _require_sha256(
+        source_authority["sha256"],
+        label="Python package smoke sourceAuthority sha256",
+    )
+    return result
+
+
+def _reject_duplicate_json_members(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            fail(f"Python package smoke result repeats JSON member {key!r}")
+        result[key] = value
+    return result
+
+
+def _reject_nonfinite_json_constant(value: str) -> NoReturn:
+    fail(f"Python package smoke result contains invalid JSON constant {value!r}")
+
+
+def _require_bounded_result_json_depth(text: str) -> None:
+    """Reject structural amplification independently of CPython recursion policy."""
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            if depth > MAX_RESULT_JSON_DEPTH:
+                raise ValueError("Python package smoke result exceeds its JSON depth budget")
+        elif character in "]}":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("Python package smoke result has unbalanced JSON structure")
+
+
+def read_python_package_smoke_result(path: Path) -> dict[str, object]:
+    """Read one stable, canonical, duplicate-free result receipt fail-closed."""
+
+    if os.name != "posix":
+        fail("the strict Python package smoke result reader currently requires POSIX")
+    if not path.is_absolute():
+        fail("Python package smoke result path must be absolute")
+    try:
+        resolved = path.resolve(strict=True)
+        status = path.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result is unreadable") from exc
+    if (
+        resolved != path
+        or not stat.S_ISREG(status.st_mode)
+        or status.st_uid != os.geteuid()
+    ):
+        fail(
+            "Python package smoke result must be one canonical, effective-owner "
+            "physical regular file"
+        )
+    if stat.S_IMODE(status.st_mode) != 0o644:
+        fail("Python package smoke result mode must be exactly 0644")
+    require_no_extended_acl(path, label="Python package smoke result")
+    payload = bounded_regular_file_bytes(
+        path,
+        maximum=MAX_RESULT_BYTES,
+        label="Python package smoke result",
+    )
+    require_no_extended_acl(path, label="Python package smoke result")
+    try:
+        text = payload.decode("utf-8", "strict")
+        _require_bounded_result_json_depth(text)
+        decoded = json.loads(
+            text,
+            object_pairs_hook=_reject_duplicate_json_members,
+            parse_constant=_reject_nonfinite_json_constant,
+        )
+    except (RecursionError, UnicodeDecodeError, ValueError) as exc:
+        raise RuntimeError("Python package smoke result is not strict UTF-8 JSON") from exc
+    result = validate_python_package_smoke_result(decoded)
+    if canonical_json_bytes(result) != payload:
+        fail("Python package smoke result bytes are not canonical JSON with one LF")
+    return result
+
+
+def _directory_authority_identity(value: os.stat_result) -> tuple[object, ...]:
+    """Exclude timestamps that this protocol's own directory entry creation changes."""
+
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        getattr(value, "st_uid", None),
+        getattr(value, "st_gid", None),
+        getattr(value, "st_flags", None),
+        getattr(value, "st_birthtime", None),
+    )
+
+
+def _new_result_parent(path: Path) -> tuple[Path, tuple[object, ...]]:
+    if os.name != "posix":
+        fail("the durable Python package smoke result currently requires POSIX")
+    if not path.is_absolute() or str(path) != str(path.resolve(strict=False)):
+        fail("Python package smoke result output must be a canonical absolute path")
+    parent = path.parent
+    try:
+        resolved_parent = parent.resolve(strict=True)
+        parent_status = parent.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result parent is unreadable") from exc
+    if (
+        resolved_parent != parent
+        or not stat.S_ISDIR(parent_status.st_mode)
+        or stat.S_IMODE(parent_status.st_mode) != 0o700
+        or parent_status.st_uid != os.geteuid()
+    ):
+        fail(
+            "Python package smoke result parent must be one protected, "
+            "effective-owner physical directory with exact 0700 mode"
+        )
+    require_no_extended_acl(parent, label="Python package smoke result parent")
+    try:
+        path.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return parent, _directory_authority_identity(parent_status)
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result output cannot be inspected") from exc
+    fail("Python package smoke result output must be absent")
+
+
+def _require_result_parent_authority_unchanged(
+    authority: tuple[Path, tuple[object, ...]],
+) -> None:
+    parent, expected_identity = authority
+    try:
+        resolved = parent.resolve(strict=True)
+        status = parent.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result parent became unreadable") from exc
+    if (
+        resolved != parent
+        or not stat.S_ISDIR(status.st_mode)
+        or _directory_authority_identity(status) != expected_identity
+    ):
+        fail("Python package smoke result parent changed after initial authorization")
+    require_no_extended_acl(parent, label="Python package smoke result parent")
+
+
+def _authorize_new_result_path(
+    argument: str,
+) -> tuple[Path, tuple[Path, tuple[object, ...]]]:
+    """Retain raw CLI spelling long enough to reject normalized path aliases."""
+
+    path = Path(
+        _require_canonical_absolute_path(
+            argument,
+            label="Python package smoke result output argument",
+        )
+    )
+    return path, _new_result_parent(path)
+
+
+def _require_result_path_outside_authorities(
+    path: Path,
+    authorities: dict[str, Path],
+) -> None:
+    """Prevent the receipt write from invalidating any authority it attests."""
+
+    for label, authority in authorities.items():
+        try:
+            resolved = authority.resolve(strict=True)
+            status = authority.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise RuntimeError(f"{label} cannot be resolved for result isolation") from exc
+        if resolved != authority or not stat.S_ISDIR(status.st_mode):
+            fail(f"{label} must be one canonical physical directory")
+        if path.is_relative_to(resolved):
+            fail(f"Python package smoke result output overlaps {label}")
+
+
+def _require_result_path_disjoint_from_evidence(
+    path: Path,
+    *,
+    uv: str,
+) -> None:
+    declared_wheelhouse = os.environ.get("CORTEXEL_BUILD_BACKEND_WHEELHOUSE")
+    if declared_wheelhouse is None:
+        fail("the retained build-backend wheelhouse is not declared")
+    _require_result_path_outside_authorities(
+        path,
+        {
+            "the Cortexel source authority": ROOT,
+            "the retained build-backend wheelhouse": Path(declared_wheelhouse),
+            "the reviewed Python runtime prefix": Path(sys.prefix),
+            "the reviewed Python base prefix": Path(sys.base_prefix),
+            "the reviewed uv executable parent": Path(uv).parent,
+        },
+    )
+
+
+def write_python_package_smoke_result(
+    path: Path,
+    value: object,
+    *,
+    expected_parent_authority: tuple[Path, tuple[object, ...]] | None = None,
+) -> None:
+    """Durably create one validated receipt without replacing any filesystem object."""
+
+    result = validate_python_package_smoke_result(value)
+    payload = canonical_json_bytes(result)
+    parent, expected_parent_identity = _new_result_parent(path)
+    if expected_parent_authority is not None and expected_parent_authority != (
+        parent,
+        expected_parent_identity,
+    ):
+        fail("Python package smoke result parent changed after initial authorization")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    file_flags = (
+        os.O_RDWR
+        | os.O_CREAT
+        | os.O_EXCL
+        | os.O_NOFOLLOW
+        | os.O_CLOEXEC
+    )
+    try:
+        parent_descriptor = os.open(parent, directory_flags)
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result parent cannot be opened") from exc
+    file_descriptor: int | None = None
+    try:
+        parent_opened = os.fstat(parent_descriptor)
+        parent_path_status = parent.stat(follow_symlinks=False)
+        if (
+            _directory_authority_identity(parent_opened) != expected_parent_identity
+            or _directory_authority_identity(parent_path_status)
+            != expected_parent_identity
+        ):
+            fail("Python package smoke result parent changed before creation")
+        require_no_extended_acl(
+            parent_descriptor,
+            label="Python package smoke result parent",
+        )
+        try:
+            file_descriptor = os.open(
+                path.name,
+                file_flags,
+                0o600,
+                dir_fd=parent_descriptor,
+            )
+        except OSError as exc:
+            raise RuntimeError(
+                "Python package smoke result could not be created exclusively"
+            ) from exc
+        os.fchmod(file_descriptor, 0o644)
+        require_no_extended_acl(
+            file_descriptor,
+            label="Python package smoke result",
+        )
+        offset = 0
+        while offset < len(payload):
+            written = os.write(file_descriptor, payload[offset:])
+            if written <= 0:
+                fail("Python package smoke result write made no progress")
+            offset += written
+        os.fsync(file_descriptor)
+        written_status = os.fstat(file_descriptor)
+        if (
+            not stat.S_ISREG(written_status.st_mode)
+            or stat.S_IMODE(written_status.st_mode) != 0o644
+            or written_status.st_nlink != 1
+            or written_status.st_size != len(payload)
+        ):
+            fail("Python package smoke result identity differs after its durable write")
+        os.lseek(file_descriptor, 0, os.SEEK_SET)
+        reread = bytearray()
+        while len(reread) <= len(payload):
+            chunk = os.read(file_descriptor, len(payload) + 1 - len(reread))
+            if not chunk:
+                break
+            reread.extend(chunk)
+        final_status = os.fstat(file_descriptor)
+        require_no_extended_acl(
+            file_descriptor,
+            label="Python package smoke result",
+        )
+        if bytes(reread) != payload or _stat_identity(final_status) != _stat_identity(
+            written_status
+        ):
+            fail("Python package smoke result changed during its durable reinspection")
+        os.close(file_descriptor)
+        file_descriptor = None
+        os.fsync(parent_descriptor)
+        parent_final = os.fstat(parent_descriptor)
+        parent_path_final = parent.stat(follow_symlinks=False)
+        require_no_extended_acl(
+            parent_descriptor,
+            label="Python package smoke result parent",
+        )
+        if (
+            _directory_authority_identity(parent_final) != expected_parent_identity
+            or _directory_authority_identity(parent_path_final)
+            != expected_parent_identity
+        ):
+            fail("Python package smoke result parent changed during creation")
+        linked_status = os.stat(
+            path.name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            linked_status.st_dev != final_status.st_dev
+            or linked_status.st_ino != final_status.st_ino
+        ):
+            fail("Python package smoke result directory entry changed after creation")
+        require_no_extended_acl(path, label="Python package smoke result")
+    except OSError as exc:
+        raise RuntimeError("Python package smoke result durable write failed") from exc
+    finally:
+        if file_descriptor is not None:
+            os.close(file_descriptor)
+        os.close(parent_descriptor)
+    if read_python_package_smoke_result(path) != result:
+        fail("Python package smoke result differs after path-level reinspection")
+    parent_after = parent.stat(follow_symlinks=False)
+    linked_after = path.stat(follow_symlinks=False)
+    require_no_extended_acl(parent, label="Python package smoke result parent")
+    require_no_extended_acl(path, label="Python package smoke result")
+    if (
+        _directory_authority_identity(parent_after) != expected_parent_identity
+        or linked_after.st_dev != final_status.st_dev
+        or linked_after.st_ino != final_status.st_ino
+    ):
+        fail("Python package smoke result authority changed after path-level reinspection")
 
 
 def bounded_tree_entries(
@@ -560,12 +1402,13 @@ def run_checked(
 
 def verify_build_backend_requirements(
     path: Path = BUILD_BACKEND_REQUIREMENTS,
-) -> None:
+) -> bytes:
     """Bind the bootstrap lock to the exact universal wheels reviewed here."""
 
     inventories = (
         set(EXACT_BUILD_BACKEND_DISTRIBUTIONS),
         set(EXACT_BUILD_BACKEND_WHEEL_HASHES),
+        set(EXACT_BUILD_BACKEND_WHEEL_SIZES),
         set(EXACT_BUILD_BACKEND_WHEEL_FILENAMES),
         set(EXACT_BUILD_BACKEND_WHEEL_URLS),
     )
@@ -595,6 +1438,17 @@ def verify_build_backend_requirements(
         raise RuntimeError("the exact build-backend requirements lock is unreadable") from exc
     if actual != expected:
         fail("the exact wheel-only build-backend requirements lock has drifted")
+    return actual
+
+
+def require_build_backend_requirements_unchanged(
+    expected: bytes,
+    path: Path = BUILD_BACKEND_REQUIREMENTS,
+) -> None:
+    """Compare each exact-policy validation with the initially retained bytes."""
+
+    if verify_build_backend_requirements(path) != expected:
+        fail("the exact build-backend requirements authority changed")
 
 
 def download_build_backend_wheelhouse(destination: Path) -> None:
@@ -639,7 +1493,7 @@ def download_build_backend_wheelhouse(destination: Path) -> None:
                     declared_length is None
                     or not declared_length.isascii()
                     or not declared_length.isdecimal()
-                    or int(declared_length) > MAX_WHEEL_ARCHIVE_BYTES
+                    or int(declared_length) != EXACT_BUILD_BACKEND_WHEEL_SIZES[name]
                 ):
                     fail(f"the reviewed build-backend download length is invalid: {name}")
                 total = 0
@@ -650,7 +1504,7 @@ def download_build_backend_wheelhouse(destination: Path) -> None:
                         fail(f"the reviewed build-backend wheel is oversized: {name}")
                     digest.update(chunk)
                     stream.write(chunk)
-                if total != int(declared_length):
+                if total != EXACT_BUILD_BACKEND_WHEEL_SIZES[name]:
                     fail(f"the reviewed build-backend download is truncated: {name}")
                 os.fchmod(stream.fileno(), 0o644)
                 stream.flush()
@@ -825,6 +1679,96 @@ def reviewed_build_backend_evidence() -> tuple[
         projections[name] = projection
         dist_infos[name] = dist_info
     return projections, dist_infos
+
+
+def build_backend_wheelhouse_result() -> dict[str, object]:
+    """Re-read the retained exact-five inventory as a portable content receipt."""
+
+    declared = os.environ.get("CORTEXEL_BUILD_BACKEND_WHEELHOUSE")
+    if declared is None:
+        fail("the retained build-backend wheelhouse is not declared")
+    wheelhouse = Path(declared)
+    try:
+        resolved = wheelhouse.resolve(strict=True)
+        status = wheelhouse.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError("the retained build-backend wheelhouse cannot be sealed") from exc
+    if (
+        wheelhouse != resolved
+        or not stat.S_ISDIR(status.st_mode)
+        or status.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+    ):
+        fail("the retained build-backend wheelhouse identity changed before sealing")
+    initial_root_identity = _stat_identity(status)
+    files, directories = bounded_tree_entries(
+        wheelhouse,
+        label="result build-backend wheelhouse",
+    )
+    if directories or {path.name for path in files} != set(
+        EXACT_BUILD_BACKEND_WHEEL_FILENAMES.values()
+    ):
+        fail("the retained build-backend wheelhouse inventory changed before sealing")
+    initial_file_identities = {
+        path.name: _stat_identity(path.stat(follow_symlinks=False)) for path in files
+    }
+    if _stat_identity(wheelhouse.stat(follow_symlinks=False)) != initial_root_identity:
+        fail("the retained build-backend wheelhouse changed during initial enumeration")
+    inventory: list[dict[str, object]] = []
+    for distribution in sorted(EXACT_BUILD_BACKEND_DISTRIBUTIONS):
+        filename = EXACT_BUILD_BACKEND_WHEEL_FILENAMES[distribution]
+        path = wheelhouse / filename
+        if stat.S_IMODE(path.stat(follow_symlinks=False).st_mode) != 0o644:
+            fail(f"result backend wheel mode is not exact 0644: {filename}")
+        evidence = regular_file_sha256_evidence(
+            path,
+            maximum=MAX_WHEEL_ARCHIVE_BYTES,
+            label=f"result backend wheel {distribution}",
+        )
+        expected_digest = f"sha256:{EXACT_BUILD_BACKEND_WHEEL_HASHES[distribution]}"
+        if evidence["sha256"] != expected_digest:
+            fail(f"result backend wheel digest changed: {distribution}")
+        if _stat_identity(path.stat(follow_symlinks=False)) != initial_file_identities[
+            filename
+        ]:
+            fail(f"result backend wheel identity changed: {distribution}")
+        inventory.append(
+            {
+                "distribution": distribution,
+                "filename": filename,
+                "sha256": expected_digest,
+                "size": evidence["size"],
+                "version": EXACT_BUILD_BACKEND_DISTRIBUTIONS[distribution],
+            }
+        )
+    final_files, final_directories = bounded_tree_entries(
+        wheelhouse,
+        label="final result build-backend wheelhouse",
+    )
+    final_filenames = {path.name for path in final_files}
+    if final_directories or final_filenames != set(initial_file_identities):
+        fail("the retained build-backend wheelhouse inventory changed while sealing")
+    try:
+        final_resolved = wheelhouse.resolve(strict=True)
+        final_root_status = wheelhouse.stat(follow_symlinks=False)
+    except OSError as exc:
+        raise RuntimeError(
+            "the retained build-backend wheelhouse disappeared while sealing"
+        ) from exc
+    if final_resolved != resolved or _stat_identity(final_root_status) != initial_root_identity:
+        fail("the retained build-backend wheelhouse root changed while sealing")
+    for path in final_files:
+        if _stat_identity(path.stat(follow_symlinks=False)) != initial_file_identities[
+            path.name
+        ]:
+            fail(f"result backend wheel changed after hashing: {path.name}")
+    return {
+        "inventory": inventory,
+        "path": str(resolved),
+        "sha256": canonical_value_sha256(
+            "cortexel-python-package-backend-wheelhouse-v1",
+            inventory,
+        ),
+    }
 
 
 def resource_bytes() -> dict[str, bytes]:
@@ -1118,6 +2062,7 @@ def verify_source_authority_unchanged(
     expected_resources: dict[str, bytes],
     expected_sources: dict[str, bytes],
     expected_license: bytes,
+    expected_backend_requirements: bytes,
 ) -> None:
     """Re-read every build input so a backend cannot persist source mutations."""
 
@@ -1132,7 +2077,7 @@ def verify_source_authority_unchanged(
     )
     if current_license != expected_license:
         fail("root project license authority changed during the package smoke")
-    verify_build_backend_requirements()
+    require_build_backend_requirements_unchanged(expected_backend_requirements)
 
 
 def wheel_package_bytes(expected_sources: dict[str, bytes]) -> dict[str, bytes]:
@@ -2169,6 +3114,118 @@ def reviewed_uv(python: str) -> str:
     return str(resolved)
 
 
+def build_python_runtime_results(
+    python: str,
+    uv: str,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Bind canonical runtime paths to the exact executable bytes observed last."""
+
+    python_path = Path(python)
+    uv_path = Path(uv)
+    raw_base_executable = getattr(sys, "_base_executable", None)
+    if not isinstance(raw_base_executable, str):
+        fail("reviewed Python base executable is unavailable")
+    try:
+        base_executable = Path(raw_base_executable).resolve(strict=True)
+        prefix = Path(sys.prefix).resolve(strict=True)
+    except (AttributeError, OSError) as exc:
+        raise RuntimeError("reviewed Python identity cannot be sealed") from exc
+    python_evidence = regular_file_sha256_evidence(
+        python_path,
+        maximum=MAX_RUNTIME_TOTAL_BYTES,
+        label="result reviewed Python executable",
+    )
+    base_evidence = regular_file_sha256_evidence(
+        base_executable,
+        maximum=MAX_RUNTIME_TOTAL_BYTES,
+        label="result reviewed Python base executable",
+    )
+    uv_evidence = regular_file_sha256_evidence(
+        uv_path,
+        maximum=MAX_RUNTIME_TOTAL_BYTES,
+        label="result reviewed uv executable",
+    )
+    python_result = {
+        "baseExecutable": str(base_executable),
+        "baseExecutableSha256": base_evidence["sha256"],
+        "baseExecutableSize": base_evidence["size"],
+        "executable": str(python_path),
+        "executableSha256": python_evidence["sha256"],
+        "executableSize": python_evidence["size"],
+        "implementation": sys.implementation.name,
+        "prefix": str(prefix),
+        "version": ".".join(str(value) for value in sys.version_info[:3]),
+    }
+    uv_result = {
+        "executable": str(uv_path),
+        "sha256": uv_evidence["sha256"],
+        "size": uv_evidence["size"],
+        "version": EXPECTED_UV_VERSION,
+    }
+    return python_result, uv_result
+
+
+def build_python_package_smoke_result(
+    *,
+    version: str,
+    python: str,
+    uv: str,
+    expected_resources: dict[str, bytes],
+    expected_sources: dict[str, bytes],
+    license_bytes: bytes,
+    backend_requirements: bytes,
+    wheel_evidence: dict[str, object],
+    sdist_evidence: dict[str, object],
+) -> dict[str, object]:
+    """Construct the receipt only from evidence re-read after every active probe."""
+
+    python_result, uv_result = build_python_runtime_results(python, uv)
+    backend_result = build_backend_wheelhouse_result()
+    require_build_backend_requirements_unchanged(backend_requirements)
+    source_inventory = {
+        ".github/requirements/python-package-build.txt": backend_requirements,
+        "LICENSE": license_bytes,
+        **{
+            f"python/{relative}": payload
+            for relative, payload in expected_sources.items()
+        },
+    }
+    skill_schema_count = sum(
+        relative.startswith("schemas/skills/")
+        and relative.endswith(".request.v1.schema.json")
+        for relative in expected_resources
+    )
+    result = {
+        "artifacts": {
+            "sdist": {
+                "filename": f"cortexel-{version}.tar.gz",
+                **sdist_evidence,
+            },
+            "wheel": {
+                "filename": f"cortexel-{version}-py3-none-any.whl",
+                **wheel_evidence,
+            },
+        },
+        "backendWheelhouse": backend_result,
+        "contract": PYTHON_PACKAGE_SMOKE_RESULT_CONTRACT,
+        "packageVersion": version,
+        "python": python_result,
+        "resources": {
+            "resourceCount": len(expected_resources),
+            "skillSchemaCount": skill_schema_count,
+        },
+        "sourceAuthority": {
+            "sha256": inventory_sha256(
+                "cortexel-python-package-source-authority-v1",
+                source_inventory,
+            )
+        },
+        "status": "passed",
+        "uv": uv_result,
+    }
+    return validate_python_package_smoke_result(result)
+
+
 def exact_hatchling_version(project: object) -> str:
     if not isinstance(project, dict):
         fail("python/pyproject.toml must decode to a table")
@@ -2456,14 +3513,31 @@ def venv_python(environment: Path) -> Path:
 
 def main() -> int:
     require_exact_process_umask()
+    result_path: Path | None = None
+    result_parent_authority: tuple[Path, tuple[object, ...]] | None = None
     if sys.argv[1:]:
         if len(sys.argv) == 3 and sys.argv[1] == "bootstrap-backend-wheelhouse":
             download_build_backend_wheelhouse(Path(sys.argv[2]))
             print(f"retained exact build-backend wheelhouse: {sys.argv[2]}")
             return 0
-        fail("unsupported Python package smoke arguments")
+        if (
+            len(sys.argv) == 4
+            and sys.argv[1] == "verify"
+            and sys.argv[2] == "--result-file"
+        ):
+            result_path, result_parent_authority = _authorize_new_result_path(
+                sys.argv[3]
+            )
+        else:
+            fail("unsupported Python package smoke arguments")
     python = reviewed_python()
     uv = reviewed_uv(python)
+    initial_python_identity, initial_uv_identity = build_python_runtime_results(
+        python,
+        uv,
+    )
+    if result_path is not None:
+        _require_result_path_disjoint_from_evidence(result_path, uv=uv)
     expected = resource_bytes()
     expected_sources = sdist_source_bytes()
     license_bytes = bounded_regular_file_bytes(
@@ -2481,7 +3555,7 @@ def main() -> int:
     validate_python_project_configuration(project)
     hatchling_version = exact_hatchling_version(project)
     expected_metadata = expected_core_metadata(project, expected_sources["README.md"])
-    verify_build_backend_requirements()
+    backend_requirements = verify_build_backend_requirements()
     backend_projections, backend_dist_infos = reviewed_build_backend_evidence()
     require_preinstalled_hatchling(
         hatchling_version,
@@ -2533,6 +3607,7 @@ def main() -> int:
                 expected,
                 expected_sources,
                 license_bytes,
+                backend_requirements,
             )
             verify_detached_project(detached_project, expected_sources)
             output_entries = bounded_directory_entries(
@@ -2719,6 +3794,7 @@ print(f"standalone Python package: {len(STABLE_SKILL_IDS)} schemas load and vali
             expected,
             expected_sources,
             license_bytes,
+            backend_requirements,
         )
         verify_detached_project(detached_project, expected_sources)
         assert_regular_files_equal(
@@ -2733,28 +3809,131 @@ print(f"standalone Python package: {len(STABLE_SKILL_IDS)} schemas load and vali
             maximum=MAX_SDIST_COMPRESSED_BYTES,
             label="final repository-context and detached-source sdists",
         )
-        final_wheel_digest = sha256_regular_file(
+        final_wheel_evidence = regular_file_sha256_evidence(
             first_wheel,
             maximum=MAX_WHEEL_ARCHIVE_BYTES,
             label="final wheel archive",
         )
-        final_sdist_digest = sha256_regular_file(
+        final_sdist_evidence = regular_file_sha256_evidence(
             first_sdist,
             maximum=MAX_SDIST_COMPRESSED_BYTES,
             label="final sdist archive",
         )
         if (
-            final_wheel_digest != initial_wheel_digest
-            or final_sdist_digest != initial_sdist_digest
+            final_wheel_evidence["sha256"] != f"sha256:{initial_wheel_digest}"
+            or final_sdist_evidence["sha256"] != f"sha256:{initial_sdist_digest}"
         ):
             fail("validated Python artifacts changed after their initial inspection")
 
+    final_python = reviewed_python()
+    final_uv = reviewed_uv(final_python)
+    if final_python != python or final_uv != uv:
+        fail("reviewed Python or uv identity changed after package verification")
+    final_backend_projections, final_backend_dist_infos = (
+        reviewed_build_backend_evidence()
+    )
+    if (
+        final_backend_projections != backend_projections
+        or final_backend_dist_infos != backend_dist_infos
+    ):
+        fail("reviewed build-backend authority changed after package verification")
+    require_preinstalled_hatchling(
+        hatchling_version,
+        final_backend_projections,
+        final_backend_dist_infos,
+        final_python,
+    )
+    verify_source_authority_unchanged(
+        expected,
+        expected_sources,
+        license_bytes,
+        backend_requirements,
+    )
+    result = build_python_package_smoke_result(
+        version=version,
+        python=final_python,
+        uv=final_uv,
+        expected_resources=expected,
+        expected_sources=expected_sources,
+        license_bytes=license_bytes,
+        backend_requirements=backend_requirements,
+        wheel_evidence=final_wheel_evidence,
+        sdist_evidence=final_sdist_evidence,
+    )
+    post_result_python = reviewed_python()
+    post_result_uv = reviewed_uv(post_result_python)
+    if post_result_python != final_python or post_result_uv != final_uv:
+        fail("reviewed runtime identity changed while constructing the result")
+    post_python_identity, post_uv_identity = build_python_runtime_results(
+        post_result_python,
+        post_result_uv,
+    )
+    if (
+        result["python"] != initial_python_identity
+        or result["uv"] != initial_uv_identity
+        or result["python"] != post_python_identity
+        or result["uv"] != post_uv_identity
+        or result["backendWheelhouse"] != build_backend_wheelhouse_result()
+    ):
+        fail(
+            "reviewed runtime or wheelhouse evidence changed across package verification"
+        )
+    verify_source_authority_unchanged(
+        expected,
+        expected_sources,
+        license_bytes,
+        backend_requirements,
+    )
+    if result_path is None:
         print(
             f"Python package smoke passed for {version}: "
-            f"wheel sha256:{final_wheel_digest}, "
-            f"sdist sha256:{final_sdist_digest}, "
+            f"wheel {final_wheel_evidence['sha256']}, "
+            f"sdist {final_sdist_evidence['sha256']}, "
             f"{len(expected)} exact schema resources"
         )
+    else:
+        _require_result_path_disjoint_from_evidence(
+            result_path,
+            uv=post_result_uv,
+        )
+        write_python_package_smoke_result(
+            result_path,
+            result,
+            expected_parent_authority=result_parent_authority,
+        )
+        if read_python_package_smoke_result(result_path) != result:
+            fail("durable Python package smoke result differs after creation")
+        written_python = reviewed_python()
+        written_uv = reviewed_uv(written_python)
+        written_python_identity, written_uv_identity = build_python_runtime_results(
+            written_python,
+            written_uv,
+        )
+        if (
+            written_python != final_python
+            or written_uv != final_uv
+            or written_python_identity != result["python"]
+            or written_uv_identity != result["uv"]
+            or build_backend_wheelhouse_result() != result["backendWheelhouse"]
+        ):
+            fail("reviewed runtime or wheelhouse evidence changed after result creation")
+        require_preinstalled_hatchling(
+            hatchling_version,
+            final_backend_projections,
+            final_backend_dist_infos,
+            written_python,
+        )
+        verify_source_authority_unchanged(
+            expected,
+            expected_sources,
+            license_bytes,
+            backend_requirements,
+        )
+        if read_python_package_smoke_result(result_path) != result:
+            fail("durable Python package smoke result changed after final verification")
+        if result_parent_authority is None:
+            fail("Python package smoke result parent authority was not retained")
+        _require_result_parent_authority_unchanged(result_parent_authority)
     return 0
 
 

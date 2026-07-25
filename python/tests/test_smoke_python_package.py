@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import base64
+import copy
+import errno
 import gzip
 import hashlib
 import io
 import importlib.util
+import json
 import os
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -17,6 +21,7 @@ import zlib
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 
@@ -315,6 +320,40 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     maximum=64,
                     label="mutation fixture",
                 )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            old = root / "old-source"
+            source.write_bytes(b"original")
+            real_fstat = os.fstat
+            calls = 0
+
+            def replace_after_final_descriptor_observation(
+                file_descriptor: int,
+            ) -> os.stat_result:
+                nonlocal calls
+                status = real_fstat(file_descriptor)
+                calls += 1
+                if calls == 2:
+                    source.rename(old)
+                    source.write_bytes(b"replaced")
+                return status
+
+            with (
+                patch.object(
+                    smoke.os,
+                    "fstat",
+                    side_effect=replace_after_final_descriptor_observation,
+                ),
+                self.assertRaisesRegex(RuntimeError, "changed identity during or after"),
+            ):
+                smoke.bounded_regular_file_bytes(
+                    source,
+                    maximum=64,
+                    label="pathname-rebind fixture",
+                )
+            self.assertEqual(source.read_bytes(), b"replaced")
 
     def test_tree_and_subprocess_resource_bounds_are_finite(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1089,7 +1128,17 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 )
 
     def test_build_backend_lock_is_exact_and_wheel_only(self) -> None:
-        smoke.verify_build_backend_requirements()
+        expected = smoke.verify_build_backend_requirements()
+        self.assertEqual(expected, smoke.BUILD_BACKEND_REQUIREMENTS.read_bytes())
+        with (
+            patch.object(
+                smoke,
+                "verify_build_backend_requirements",
+                return_value=expected + b"transient",
+            ),
+            self.assertRaisesRegex(RuntimeError, "requirements authority changed"),
+        ):
+            smoke.require_build_backend_requirements_unchanged(expected)
         with tempfile.TemporaryDirectory() as temporary:
             changed = Path(temporary) / "requirements.txt"
             changed.write_bytes(smoke.BUILD_BACKEND_REQUIREMENTS.read_bytes() + b"\n")
@@ -1197,9 +1246,18 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             "--find-links \"$wheelhouse\"",
             "--require-hashes",
             "--no-deps",
+            'result_parent="$temporary/cortexel-python-package-result"',
+            'verify --result-file "$result"',
+            "read_python_package_smoke_result",
         ):
             self.assertIn(required, workflow)
         self.assertGreaterEqual(workflow.count("umask 022"), 2)
+        self.assertIn(
+            "read_python_package_smoke_result(\n"
+            "              pathlib.Path(sys.argv[2])\n",
+            workflow,
+        )
+        self.assertNotIn("pathlib.Path(sys.argv[2]).resolve", workflow)
         contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
         self.assertIn("Run the complete block in that one subshell", contributing)
         self.assertIn("umask 022", contributing)
@@ -1211,6 +1269,644 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             '[str(interpreter), "-I", "-S", "-B", "-c", probe]',
             smoke_source,
         )
+
+
+@unittest.skipUnless(os.name == "posix", "durable result contract requires POSIX")
+class PythonPackageSmokeResultTest(unittest.TestCase):
+    VERSION = "0.10.0.dev0"
+
+    def _result(self, root: Path) -> dict[str, Any]:
+        inventory = [
+            {
+                "distribution": distribution,
+                "filename": smoke.EXACT_BUILD_BACKEND_WHEEL_FILENAMES[distribution],
+                "sha256": (
+                    "sha256:"
+                    + smoke.EXACT_BUILD_BACKEND_WHEEL_HASHES[distribution]
+                ),
+                "size": smoke.EXACT_BUILD_BACKEND_WHEEL_SIZES[distribution],
+                "version": smoke.EXACT_BUILD_BACKEND_DISTRIBUTIONS[distribution],
+            }
+            for distribution in sorted(smoke.EXACT_BUILD_BACKEND_DISTRIBUTIONS)
+        ]
+        prefix = root / "package-python-runtime"
+        return {
+            "artifacts": {
+                "sdist": {
+                    "filename": f"cortexel-{self.VERSION}.tar.gz",
+                    "sha256": "sha256:" + "1" * 64,
+                    "size": 456,
+                },
+                "wheel": {
+                    "filename": f"cortexel-{self.VERSION}-py3-none-any.whl",
+                    "sha256": "sha256:" + "2" * 64,
+                    "size": 123,
+                },
+            },
+            "backendWheelhouse": {
+                "inventory": inventory,
+                "path": str(root / "backend-wheelhouse"),
+                "sha256": smoke.canonical_value_sha256(
+                    "cortexel-python-package-backend-wheelhouse-v1",
+                    inventory,
+                ),
+            },
+            "contract": smoke.PYTHON_PACKAGE_SMOKE_RESULT_CONTRACT,
+            "packageVersion": self.VERSION,
+            "python": {
+                "baseExecutable": str(root / "base" / "bin" / "python3.14"),
+                "baseExecutableSha256": "sha256:" + "3" * 64,
+                "baseExecutableSize": 789,
+                "executable": str(prefix / "bin" / "python"),
+                "executableSha256": "sha256:" + "4" * 64,
+                "executableSize": 321,
+                "implementation": "cpython",
+                "prefix": str(prefix),
+                "version": "3.14.6",
+            },
+            "resources": {
+                "resourceCount": 21,
+                "skillSchemaCount": 19,
+            },
+            "sourceAuthority": {"sha256": "sha256:" + "5" * 64},
+            "status": "passed",
+            "uv": {
+                "executable": str(root / "uv"),
+                "sha256": "sha256:" + "6" * 64,
+                "size": 654,
+                "version": smoke.EXPECTED_UV_VERSION,
+            },
+        }
+
+    def _write_raw(self, path: Path, payload: bytes, mode: int = 0o644) -> None:
+        path.write_bytes(payload)
+        path.chmod(mode)
+
+    def test_result_writer_is_exclusive_durable_and_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            path = root / "python-package-result.json"
+            result = self._result(root)
+            previous_umask = os.umask(0o077)
+            try:
+                smoke.write_python_package_smoke_result(path, result)
+            finally:
+                os.umask(previous_umask)
+            self.assertEqual(path.read_bytes(), smoke.canonical_json_bytes(result))
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o644)
+            self.assertEqual(path.stat().st_nlink, 1)
+            self.assertEqual(smoke.read_python_package_smoke_result(path), result)
+            with self.assertRaisesRegex(RuntimeError, "must be absent"):
+                smoke.write_python_package_smoke_result(path, result)
+
+    def test_result_file_evidence_hashes_in_fixed_chunks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            path = root / "streamed.bin"
+            payload = b"fixed-chunk-streaming-evidence"
+            path.write_bytes(payload)
+            with (
+                patch.object(smoke, "IO_CHUNK_BYTES", 3),
+                patch.object(
+                    smoke,
+                    "bounded_regular_file_bytes",
+                    side_effect=AssertionError("must not materialize the file"),
+                ),
+            ):
+                evidence = smoke.regular_file_sha256_evidence(
+                    path,
+                    maximum=len(payload),
+                    label="streaming result fixture",
+                )
+            self.assertEqual(
+                evidence,
+                {
+                    "sha256": f"sha256:{hashlib.sha256(payload).hexdigest()}",
+                    "size": len(payload),
+                },
+            )
+
+    def test_result_file_evidence_rejects_rename_and_replace_race(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            path = root / "authority.bin"
+            old = root / "old-authority.bin"
+            payload = b"same bytes do not preserve inode authority"
+            path.write_bytes(payload)
+            real_read = os.read
+            replaced = False
+
+            def racing_read(file_descriptor: int, maximum: int) -> bytes:
+                nonlocal replaced
+                chunk = real_read(file_descriptor, maximum)
+                if not replaced:
+                    replaced = True
+                    path.rename(old)
+                    path.write_bytes(payload)
+                return chunk
+
+            with (
+                patch.object(smoke.os, "read", side_effect=racing_read),
+                self.assertRaisesRegex(RuntimeError, "changed during or after"),
+            ):
+                smoke.regular_file_sha256_evidence(
+                    path,
+                    maximum=len(payload),
+                    label="raced result fixture",
+                )
+            self.assertTrue(replaced)
+
+    def test_backend_wheelhouse_result_is_one_stable_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            wheelhouse = root / "wheelhouse"
+            wheelhouse.mkdir(mode=0o700)
+            for filename in smoke.EXACT_BUILD_BACKEND_WHEEL_FILENAMES.values():
+                path = wheelhouse / filename
+                path.write_bytes(b"fixture")
+                path.chmod(0o644)
+            calls = 0
+
+            def raced_evidence(
+                path: Path,
+                *,
+                maximum: int,
+                label: str,
+            ) -> dict[str, object]:
+                del maximum, label
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    first_name = smoke.EXACT_BUILD_BACKEND_WHEEL_FILENAMES["hatchling"]
+                    first = wheelhouse / first_name
+                    replacement = wheelhouse / "replacement"
+                    replacement.write_bytes(first.read_bytes())
+                    replacement.chmod(0o644)
+                    os.replace(replacement, first)
+                distribution = next(
+                    name
+                    for name, filename in smoke.EXACT_BUILD_BACKEND_WHEEL_FILENAMES.items()
+                    if filename == path.name
+                )
+                return {
+                    "sha256": (
+                        "sha256:"
+                        + smoke.EXACT_BUILD_BACKEND_WHEEL_HASHES[distribution]
+                    ),
+                    "size": smoke.EXACT_BUILD_BACKEND_WHEEL_SIZES[distribution],
+                }
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"CORTEXEL_BUILD_BACKEND_WHEELHOUSE": str(wheelhouse)},
+                    clear=False,
+                ),
+                patch.object(
+                    smoke,
+                    "regular_file_sha256_evidence",
+                    side_effect=raced_evidence,
+                ),
+                self.assertRaisesRegex(RuntimeError, "changed"),
+            ):
+                smoke.build_backend_wheelhouse_result()
+            self.assertEqual(calls, len(smoke.EXACT_BUILD_BACKEND_DISTRIBUTIONS))
+
+    def test_result_source_seal_uses_only_the_exact_validated_lock_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            fixture = self._result(root)
+            requirements = b"initial exact validated requirements\n"
+            resources = {
+                **{
+                    f"schemas/skills/skill-{index}.request.v1.schema.json": b"{}\n"
+                    for index in range(19)
+                },
+                "schemas/common.v1.schema.json": b"{}\n",
+                "manifest.v1.json": b"{}\n",
+            }
+            sources = {"source.txt": b"source authority\n"}
+            license_bytes = b"license authority\n"
+            with (
+                patch.object(
+                    smoke,
+                    "build_python_runtime_results",
+                    return_value=(fixture["python"], fixture["uv"]),
+                ),
+                patch.object(
+                    smoke,
+                    "build_backend_wheelhouse_result",
+                    return_value=fixture["backendWheelhouse"],
+                ),
+                patch.object(
+                    smoke,
+                    "require_build_backend_requirements_unchanged",
+                ) as require_unchanged,
+            ):
+                result = smoke.build_python_package_smoke_result(
+                    version=self.VERSION,
+                    python=str(root / "runtime" / "bin" / "python"),
+                    uv=str(root / "uv"),
+                    expected_resources=resources,
+                    expected_sources=sources,
+                    license_bytes=license_bytes,
+                    backend_requirements=requirements,
+                    wheel_evidence=fixture["artifacts"]["wheel"] | {},
+                    sdist_evidence=fixture["artifacts"]["sdist"] | {},
+                )
+            require_unchanged.assert_called_once_with(requirements)
+            expected_source_seal = smoke.inventory_sha256(
+                "cortexel-python-package-source-authority-v1",
+                {
+                    ".github/requirements/python-package-build.txt": requirements,
+                    "LICENSE": license_bytes,
+                    "python/source.txt": sources["source.txt"],
+                },
+            )
+            self.assertEqual(
+                result["sourceAuthority"],
+                {"sha256": expected_source_seal},
+            )
+
+    def test_result_rejects_duplicate_and_noncanonical_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            result = self._result(root)
+            canonical = smoke.canonical_json_bytes(result)
+            duplicate = canonical.replace(
+                b'"status":"passed"',
+                b'"status":"failed","status":"passed"',
+            )
+            cases = (
+                ("duplicate", duplicate, "repeats JSON member"),
+                ("malformed", b"{\n", "strict UTF-8 JSON"),
+                ("invalid UTF-8", b'"\xff"\n', "strict UTF-8 JSON"),
+                (
+                    "excessive nesting",
+                    b"[" * 2_000 + b"]" * 2_000 + b"\n",
+                    "strict UTF-8 JSON",
+                ),
+                ("missing LF", canonical.rstrip(b"\n"), "not canonical JSON"),
+                ("pretty", b"  " + canonical, "not canonical JSON"),
+            )
+            for name, payload, error in cases:
+                with self.subTest(name=name):
+                    path = root / f"{name.replace(' ', '-')}.json"
+                    self._write_raw(path, payload)
+                    with self.assertRaisesRegex(RuntimeError, error):
+                        smoke.read_python_package_smoke_result(path)
+
+    def test_result_json_depth_budget_is_runtime_independent(self) -> None:
+        maximum = smoke.MAX_RESULT_JSON_DEPTH
+        smoke._require_bounded_result_json_depth("[" * maximum + "0" + "]" * maximum)
+        smoke._require_bounded_result_json_depth(json.dumps("[{" * (maximum + 1)))
+        with self.assertRaisesRegex(ValueError, "JSON depth budget"):
+            smoke._require_bounded_result_json_depth(
+                "[" * (maximum + 1) + "0" + "]" * (maximum + 1)
+            )
+
+    def test_result_exact_keys_and_cross_field_tampering_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            cases: list[tuple[str, dict[str, Any], str]] = []
+
+            extra = copy.deepcopy(self._result(root))
+            extra["extra"] = False
+            cases.append(("extra key", extra, "key inventory"))
+
+            artifact = copy.deepcopy(self._result(root))
+            artifact["artifacts"]["wheel"]["filename"] = "attacker.whl"
+            cases.append(("artifact filename", artifact, "differs from packageVersion"))
+
+            backend = copy.deepcopy(self._result(root))
+            backend["backendWheelhouse"]["inventory"][0]["size"] += 1
+            cases.append(("backend size", backend, "authority differs"))
+
+            uv_version = copy.deepcopy(self._result(root))
+            uv_version["uv"]["version"] = "0.11.15"
+            cases.append(("uv version", uv_version, "must be exactly"))
+
+            escaped_python = copy.deepcopy(self._result(root))
+            escaped_python["python"]["executable"] = str(root / "outside-python")
+            cases.append(("python prefix escape", escaped_python, "escapes its prefix"))
+
+            prefix_as_executable = copy.deepcopy(self._result(root))
+            prefix_as_executable["python"]["prefix"] = prefix_as_executable[
+                "python"
+            ]["executable"]
+            cases.append(
+                (
+                    "python prefix is executable",
+                    prefix_as_executable,
+                    "executable must be below",
+                )
+            )
+
+            base_as_executable = copy.deepcopy(self._result(root))
+            base_as_executable["python"]["baseExecutable"] = base_as_executable[
+                "python"
+            ]["executable"]
+            cases.append(
+                ("base is executable", base_as_executable, "distinct paths")
+            )
+
+            uv_as_executable = copy.deepcopy(self._result(root))
+            uv_as_executable["uv"]["executable"] = uv_as_executable["python"][
+                "executable"
+            ]
+            cases.append(("uv is Python", uv_as_executable, "distinct paths"))
+
+            aliased_prefix = copy.deepcopy(self._result(root))
+            aliased_prefix["python"]["prefix"] = (
+                f"{root}/alias/../package-python-runtime"
+            )
+            cases.append(
+                ("dot-dot prefix alias", aliased_prefix, "normalized absolute path")
+            )
+
+            invalid_digest = copy.deepcopy(self._result(root))
+            invalid_digest["sourceAuthority"]["sha256"] = "5" * 64
+            cases.append(("digest prefix", invalid_digest, "canonical prefixed"))
+
+            boolean_count = copy.deepcopy(self._result(root))
+            boolean_count["resources"]["resourceCount"] = True
+            cases.append(("boolean count", boolean_count, "must be an integer"))
+
+            changed_count = copy.deepcopy(self._result(root))
+            changed_count["resources"]["resourceCount"] = 20
+            cases.append(("changed count", changed_count, "differ from the v1 contract"))
+
+            for name, result, error in cases:
+                with self.subTest(name=name), self.assertRaisesRegex(RuntimeError, error):
+                    smoke.validate_python_package_smoke_result(result)
+
+    def test_result_file_permissions_links_and_size_are_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            payload = smoke.canonical_json_bytes(self._result(root))
+
+            wrong_mode = root / "wrong-mode.json"
+            self._write_raw(wrong_mode, payload, mode=0o600)
+            with self.assertRaisesRegex(RuntimeError, "mode must be exactly 0644"):
+                smoke.read_python_package_smoke_result(wrong_mode)
+
+            linked = root / "linked.json"
+            alias = root / "linked-alias.json"
+            self._write_raw(linked, payload)
+            os.link(linked, alias)
+            with self.assertRaisesRegex(RuntimeError, "exactly one filesystem link"):
+                smoke.read_python_package_smoke_result(linked)
+
+            symlink_target = root / "symlink-target.json"
+            symlink_leaf = root / "symlink-leaf.json"
+            self._write_raw(symlink_target, payload)
+            symlink_leaf.symlink_to(symlink_target)
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "canonical.*physical regular file",
+            ):
+                smoke.read_python_package_smoke_result(symlink_leaf)
+
+            oversized = root / "oversized.json"
+            with oversized.open("wb") as stream:
+                stream.truncate(smoke.MAX_RESULT_BYTES + 1)
+            oversized.chmod(0o644)
+            with self.assertRaisesRegex(RuntimeError, "byte budget"):
+                smoke.read_python_package_smoke_result(oversized)
+
+    @unittest.skipUnless(sys.platform == "darwin", "Darwin extended ACL regression")
+    def test_result_parent_and_file_reject_darwin_extended_acls(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            result = self._result(root)
+            parent = root / "acl-parent"
+            parent.mkdir(mode=0o700)
+            subprocess.run(
+                [
+                    "/bin/chmod",
+                    "+a",
+                    "everyone allow list,search,add_file,delete_child,file_inherit",
+                    str(parent),
+                ],
+                check=True,
+            )
+            try:
+                path = parent / "result.json"
+                with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                    smoke.write_python_package_smoke_result(path, result)
+                self.assertFalse(path.exists())
+            finally:
+                subprocess.run(["/bin/chmod", "-N", str(parent)], check=True)
+
+            path = root / "acl-result.json"
+            self._write_raw(path, smoke.canonical_json_bytes(result))
+            subprocess.run(
+                ["/bin/chmod", "+a", "everyone allow read,write", str(path)],
+                check=True,
+            )
+            try:
+                with self.assertRaisesRegex(RuntimeError, "extended ACL"):
+                    smoke.read_python_package_smoke_result(path)
+            finally:
+                subprocess.run(["/bin/chmod", "-N", str(path)], check=True)
+
+    def test_linux_acl_xattrs_are_rejected_for_paths_and_descriptors(self) -> None:
+        inspected: list[tuple[Path | int, bool]] = []
+
+        def acl_xattr(
+            value: Path | int,
+            *,
+            follow_symlinks: bool = True,
+        ) -> list[str] | list[bytes]:
+            inspected.append((value, follow_symlinks))
+            if isinstance(value, Path):
+                return ["system.posix_acl_access"]
+            return [b"system.posix_acl_default"]
+
+        with (
+            patch.object(smoke.sys, "platform", "linux"),
+            patch.object(smoke.os, "listxattr", create=True, side_effect=acl_xattr),
+            patch.object(smoke.os, "getxattr", create=True),
+        ):
+            for value in (Path("/result.json"), 17):
+                with self.subTest(value=value), self.assertRaisesRegex(
+                    RuntimeError,
+                    "extended ACL",
+                ):
+                    smoke.require_no_extended_acl(value, label="test authority")
+
+        self.assertEqual(inspected, [(Path("/result.json"), False), (17, True)])
+
+        with (
+            patch.object(smoke.sys, "platform", "linux"),
+            patch.object(
+                smoke.os,
+                "listxattr",
+                create=True,
+                side_effect=OSError(errno.ENOTSUP, "unsupported"),
+            ),
+            patch.object(smoke.os, "getxattr", create=True),
+            self.assertRaisesRegex(RuntimeError, "cannot be inspected"),
+        ):
+            smoke.require_no_extended_acl(Path("/result.json"), label="test authority")
+
+        def hidden_acl(
+            _value: Path | int,
+            attribute: str,
+            **_kwargs: object,
+        ) -> bytes:
+            if attribute == "system.posix_acl_access":
+                return b"hidden from listxattr"
+            raise OSError(errno.ENODATA, "absent")
+
+        with (
+            patch.object(smoke.sys, "platform", "linux"),
+            patch.object(smoke.os, "listxattr", create=True, return_value=[]),
+            patch.object(smoke.os, "getxattr", create=True, side_effect=hidden_acl),
+            self.assertRaisesRegex(RuntimeError, "extended ACL"),
+        ):
+            smoke.require_no_extended_acl(Path("/result.json"), label="test authority")
+
+    def test_result_output_requires_a_new_canonical_protected_location(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            result = self._result(root)
+
+            relative = Path("relative-result.json")
+            with self.assertRaisesRegex(RuntimeError, "canonical absolute path"):
+                smoke.write_python_package_smoke_result(relative, result)
+
+            for name, raw_alias in (
+                ("redundant separator", f"{root}//raw-alias.json"),
+                ("dot segment", f"{root}/./raw-alias.json"),
+                ("dot-dot segment", f"{root}/alias/../raw-alias.json"),
+            ):
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    RuntimeError,
+                    "normalized absolute path",
+                ):
+                    smoke._authorize_new_result_path(raw_alias)
+            with self.assertRaisesRegex(RuntimeError, "control or surrogate"):
+                smoke._authorize_new_result_path(f"{root}/bad\nname.json")
+
+            exposed = root / "exposed"
+            exposed.mkdir(mode=0o777)
+            exposed.chmod(0o777)
+            with self.assertRaisesRegex(RuntimeError, "protected.*physical directory"):
+                smoke.write_python_package_smoke_result(
+                    exposed / "result.json",
+                    result,
+                )
+
+            for mode in (0o500, 0o711, 0o755):
+                protected = root / f"wrong-parent-mode-{mode:o}"
+                protected.mkdir(mode=0o700)
+                protected.chmod(mode)
+                with self.subTest(mode=oct(mode)), self.assertRaisesRegex(
+                    RuntimeError,
+                    "exact 0700 mode",
+                ):
+                    smoke.write_python_package_smoke_result(
+                        protected / "result.json",
+                        result,
+                    )
+
+            existing = root / "existing.json"
+            existing.write_text("occupied", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "must be absent"):
+                smoke.write_python_package_smoke_result(existing, result)
+
+            target = root / "target"
+            target.mkdir(mode=0o700)
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(target, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "canonical absolute path"):
+                smoke.write_python_package_smoke_result(
+                    linked_parent / "result.json",
+                    result,
+                )
+
+    def test_result_output_is_disjoint_from_every_evidence_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            authorities: dict[str, Path] = {}
+            for name in ("source", "wheelhouse", "runtime", "base", "uv-bin"):
+                authority = root / name
+                authority.mkdir(mode=0o700)
+                authorities[name] = authority
+            scratch = root / "scratch"
+            scratch.mkdir(mode=0o700)
+            smoke._require_result_path_outside_authorities(
+                scratch / "result.json",
+                authorities,
+            )
+            for name, authority in authorities.items():
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    RuntimeError,
+                    f"overlaps {name}",
+                ):
+                    smoke._require_result_path_outside_authorities(
+                        authority / "result.json",
+                        authorities,
+                    )
+
+    def test_result_parent_authority_is_bound_across_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            parent = root / "scratch"
+            parent.mkdir(mode=0o700)
+            path = parent / "result.json"
+            result = self._result(root)
+            authority = smoke._new_result_parent(path)
+            original = root / "original-scratch"
+            parent.rename(original)
+            parent.mkdir(mode=0o700)
+            with self.assertRaisesRegex(RuntimeError, "changed after initial"):
+                smoke.write_python_package_smoke_result(
+                    path,
+                    result,
+                    expected_parent_authority=authority,
+                )
+            self.assertFalse(path.exists())
+
+    def test_result_parent_swap_between_authorization_and_open_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True)
+            parent = root / "scratch"
+            parent.mkdir(mode=0o700)
+            path = parent / "result.json"
+            result = self._result(root)
+            original = root / "original-scratch"
+            real_open = os.open
+            swapped = False
+
+            def racing_open(
+                received: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                nonlocal swapped
+                received_path = os.fspath(received)
+                if (
+                    not swapped
+                    and dir_fd is None
+                    and isinstance(received_path, str)
+                    and Path(received_path) == parent
+                ):
+                    swapped = True
+                    parent.rename(original)
+                    parent.mkdir(mode=0o700)
+                return real_open(received, flags, mode, dir_fd=dir_fd)
+
+            with (
+                patch.object(smoke.os, "open", side_effect=racing_open),
+                self.assertRaisesRegex(RuntimeError, "changed before creation"),
+            ):
+                smoke.write_python_package_smoke_result(path, result)
+            self.assertTrue(swapped)
+            self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":
