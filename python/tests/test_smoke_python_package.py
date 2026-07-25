@@ -657,6 +657,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             environment = smoke.isolated_environment(Path(temporary), python, uv)
             self.assertEqual(environment["UV_PYTHON"], python)
             self.assertEqual(environment["UV_PYTHON_DOWNLOADS"], "never")
+            self.assertEqual(environment["UV_LINK_MODE"], "copy")
             self.assertEqual(environment["UV_NO_CONFIG"], "1")
             self.assertEqual(environment["UV_NO_ENV_FILE"], "1")
             self.assertEqual(environment["UV_OFFLINE"], "1")
@@ -676,6 +677,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 self.assertNotEqual(first[key], second[key])
 
         for name, value in (
+            ("UV_LINK_MODE", "hardlink"),
             ("UV_PYTHON_DOWNLOADS", "automatic"),
             ("UV_NO_CONFIG", "0"),
             ("UV_NO_ENV_FILE", "false"),

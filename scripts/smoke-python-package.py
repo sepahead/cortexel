@@ -83,6 +83,7 @@ NATIVE_WHEEL_MAGICS = (
     b"\xbf\xba\xfe\xca",
 )
 LOCKED_UV_ENVIRONMENT = {
+    "UV_LINK_MODE": "copy",
     "UV_NO_CONFIG": "1",
     "UV_NO_SYSTEM_CONFIG": "1",
     "UV_NO_ENV_FILE": "1",
@@ -3847,6 +3848,8 @@ def main() -> int:
                 str(interpreter),
                 "--no-index",
                 "--no-deps",
+                "--link-mode",
+                "copy",
                 "--only-binary",
                 ":all:",
                 str(first_wheel),
