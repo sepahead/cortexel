@@ -241,7 +241,9 @@ describe('two-phase package smoke contract', () => {
     expect(changedNpm.tree.sha256).not.toBe(firstNpm.tree.sha256);
 
     const originalNode = readFileSync(fixture.node);
-    rmSync(fixture.node);
+    // Keep the first inode live so filesystems that immediately recycle an
+    // unlinked inode cannot make the replacement look path-identical.
+    renameSync(fixture.node, `${fixture.node}.retired`);
     writeFileSync(fixture.node, originalNode, { mode: 0o755 });
     chmodSync(fixture.node, 0o755);
     const replacedNode = inspectNodeExecutableAuthority(fixture.node);
