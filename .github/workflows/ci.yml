@@ -426,4 +426,7 @@ jobs:
             exit 1
           fi
 
+          # The runtime modes are now explicit and immutable for this job. Use the
+          # reviewed package-install mask so extracted files retain tar member modes.
+          umask 022
           PATH="$runtime_root/bin:$PATH" bun run test:package
