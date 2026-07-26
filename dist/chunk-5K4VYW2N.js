@@ -7,7 +7,7 @@ import {
   freezeGenerated,
   makeError,
   pointer
-} from "./chunk-LVMEHDQI.js";
+} from "./chunk-KG73JKSJ.js";
 import {
   canonicalDigest
 } from "./chunk-ZYBCCIMH.js";
@@ -1277,7 +1277,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_distribution": {
     "id": "network.delay_distribution",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -1289,7 +1289,7 @@ var SKILL_CATALOG = freezeGenerated({
       "Anything about connections that were not supplied. The histogram describes exactly the rows in the declared selection. A row filtered upstream is invisible, and Cortexel cannot see that it ever existed.",
       "The global delay distribution from a rank-local or sampled snapshot. It is complete for the retained edges only; extrapolating requires that retention be independent of delay, which Cortexel cannot check and which a prefix of NEST's rank/thread-ordered rows does not satisfy.",
       "The per-pair distribution from a per-synapse histogram, or the reverse. Where multiplicity covaries with delay -- as under a distance-dependent rule, where near pairs get both more contacts and shorter delays -- the two differ systematically and neither can be recovered from the other.",
-      "That an alternating comb in the bars is a property of the network. For delays actually produced on a resolution lattice -- for example by ordinary NEST Connect rounding -- a bin width that is not an integer multiple of that resolution can make consecutive bins straddle different numbers of lattice points. `cont_delay_synapse` values retained through model defaults or post-creation SetStatus may be off-grid, so source resolution alone cannot establish this mechanism.",
+      "That an alternating comb in the bars is a property of the network. For delays actually produced on a resolution lattice -- for example by ordinary NEST 3.9/3.10 Connect rounding -- a bin width that is not an integer multiple of that resolution can make consecutive bins straddle different numbers of lattice points. `cont_delay_synapse` values retained through model defaults supplied by CopyModel or SetDefaults, or through post-creation SynapseCollection.set (legacy SetStatus), may be off-grid, so source resolution alone cannot establish this mechanism.",
       "That these were the delays in effect at any time other than the declared snapshot. A delay-modifying operation or structural plasticity between two snapshots of one run changes every value here.",
       "Anything about synaptic strength, sign, or receptor. Weights may ride along on the rows; they never affect, filter, or group a delay, and two synapses with identical delay can differ by orders of magnitude in drive.",
       "That the distribution has any functional form. Cortexel draws the empirical histogram: it fits nothing and tests nothing, and a mean delay is a summary of the rows supplied, not a claim about the rule that generated them.",
@@ -1530,7 +1530,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_distribution.output_authority.v4"
+        "id": "network.delay_distribution.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -1691,7 +1691,7 @@ var SKILL_CATALOG = freezeGenerated({
         "name": "numpy.histogram",
         "version": "2.1.0",
         "status": "not_run",
-        "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle: verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, the lower bound of one simulation resolution, and MPI target-rank-local row semantics. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle: verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through model defaults supplied by CopyModel or SetDefaults and post-creation SynapseCollection.set (legacy SetStatus), the lower bound of one simulation resolution, and MPI target-rank-local row semantics. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
       }
     },
     "legacyIds": [
@@ -1699,13 +1699,14 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "`sourceResolution` is DECLARED context in the request, artifact and summary, not lattice proof. Registry v1 does not know the NEST synapse model or whether delay assignment used normal Connect, SetDefaults, or post-creation SetStatus; it therefore neither requires delays to be integer multiples of the resolution nor rejects valid off-grid `cont_delay_synapse` values. It also does not enforce NEST's model-conditioned lower bound of one resolution.",
+      "Revision 5 scientific erratum: revision 4 prose incorrectly treated `sourceResolution` as proof that every selected NEST delay lies on one resolution lattice. From revision 5 it is context only: in the verified NEST 3.9/3.10 behavior normal Connect assignment rounds to the resolution, while `cont_delay_synapse` model defaults supplied through CopyModel or SetDefaults and post-creation SynapseCollection.set (legacy SetStatus) can retain valid off-grid values. Revision-4 artifacts retain their recorded identity and must not be reinterpreted as revision 5.",
+      "`sourceResolution` is DECLARED context in the request, artifact and summary, not lattice proof. Registry v1 does not bind the NEST version, synapse model, or whether delay assignment used normal Connect, CopyModel/SetDefaults, or post-creation SynapseCollection.set (legacy SetStatus); it therefore neither requires delays to be integer multiples of the resolution nor rejects valid off-grid `cont_delay_synapse` values. It also does not enforce the cited NEST 3.9/3.10 model-conditioned lower bound of one resolution.",
       "Registry gap: there is no disclosure id for out-of-range exclusions. Under `exclude_and_report` the under- and over-range counts reach the summary and the table, but no footer disclosure states them. EVENTS_EXCLUDED_OUT_OF_WINDOW is about a time window and is deliberately not reused.",
       "Registry gap: there is no dedicated error code for a delay falling outside the declared bin range under `reject`. SCIENCE_BIN_EDGES_INVALID is used, matching neuro.isi_distribution; a future SCIENCE_BIN_RANGE_INCOMPLETE would be more precise.",
       "Revision 2 executes conservation, exact prebinned length, normalized-value re-derivation, endpoint binding, group partition and counting-policy-specific multapse semantics inside topology.delay_positive. In particular, per_connection preserves every multapse row and forbids pair aggregation.",
       "MULTAPSE_AGGREGATED's registry text is worded for matrix cells. On this figure {contributingCount} must be read as connections per ordered endpoint pair.",
       "MISSING_VALUES_PRESENT can fire only from a ride-along weight series. A null DELAY is refused outright, so it can never be the cause here.",
-      "Cortexel does not choose bin edges. For a population independently known to come from a grid-constrained model or normal Connect assignment, a 0.1 ms lattice cut by 0.15 ms bins makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth. Off-grid `cont_delay_synapse` values need not show that comb, and `sourceResolution` alone cannot predict it.",
+      "Cortexel does not choose bin edges. For a population independently known to come from a grid-constrained model or the cited NEST 3.9/3.10 normal Connect assignment, a 0.1 ms lattice cut by 0.15 ms bins makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth. Off-grid `cont_delay_synapse` values need not show that comb, and `sourceResolution` alone cannot predict it.",
       "Cortexel cannot verify that the supplied rows are the selection the caller says they are. It verifies scope, endpoints, positivity and conservation; it cannot know which GetConnections call produced the rows.",
       "There is no autapse filter. A self-connection's delay is a delay and is counted like any other; excluding self-connections means not supplying those rows.",
       "Prebinned mode verifies the normalization and the conservation identity but cannot verify positivity, endpoint membership, or the counting policy, because Cortexel never saw an edge. PRE_BINNED_INPUT says so on the figure.",
@@ -1714,7 +1715,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "network.delay_matrix": {
     "id": "network.delay_matrix",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -1960,7 +1961,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "network.delay_matrix.output_authority.v4"
+        "id": "network.delay_matrix.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -2115,7 +2116,7 @@ var SKILL_CATALOG = freezeGenerated({
         "name": "nest.GetConnections + SynapseCollection.get(['source','target','delay'])",
         "version": "3.10.0",
         "status": "not_run",
-        "notes": "The intended differential oracle is NEST itself: build a fixture with known multapses, an autapse, an isolate target, and known per-connection delays; verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, and the lower bound of one simulation resolution. Read the SynapseCollection and assert the derived cells, counts, min/mean/max aggregates, and source-column/target-row orientation. Under MPI also confirm rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed here, so status remains not_run. Aggregation arithmetic is covered separately by hand vectors."
+        "notes": "The intended differential oracle is NEST itself: build a fixture with known multapses, an autapse, an isolate target, and known per-connection delays; verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through model defaults supplied by CopyModel or SetDefaults and post-creation SynapseCollection.set (legacy SetStatus), and the lower bound of one simulation resolution. Read the SynapseCollection and assert the derived cells, counts, min/mean/max aggregates, and source-column/target-row orientation. Under MPI also confirm rank-local output covers exactly the locally owned targets. The pinned NEST 3.10 environment has NOT been executed here, so status remains not_run. Aggregation arithmetic is covered separately by hand vectors."
       }
     },
     "legacyIds": [
@@ -2123,10 +2124,11 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
+      "Revision 5 scientific erratum: revision 4 prose incorrectly treated `simulationResolution` as proof that every selected NEST delay lies on one resolution lattice. From revision 5 it is context only: in the verified NEST 3.9/3.10 behavior normal Connect assignment rounds to the resolution, while `cont_delay_synapse` model defaults supplied through CopyModel or SetDefaults and post-creation SynapseCollection.set (legacy SetStatus) can retain valid off-grid values. Revision-4 artifacts retain their recorded identity and must not be reinterpreted as revision 5.",
       "No disclosure id exists for delay semantics. `delaySemantics` is machine-checkable, but disclosures.v1.json has no rule for it, so it is carried in the legend, the accessible summary, and the table rather than the disclosure footer. A DELAY_COMPONENT_SEMANTICS rule is proposed for the registry.",
       "ABSENT_IS_NOT_ZERO's published text names a zero weight. For this figure that clause is vacuous \u2014 a zero delay is rejected \u2014 and the real hazard it must cover is an empty cell being read as instantaneous transmission at the fast end of the ramp.",
       "The registered `matrix_value_quantize` policy is not advertised or executed by revision 2. Every accepted cell is painted directly and an over-budget request is refused, so no quantization receipt, downsampling fact, or downsampling disclosure is produced. A future paint-only implementation would have to retain every cell and bind a complete evidence table before this skill could advertise it.",
-      "`simulationResolution` is recorded as context but does not establish a delay lattice. No registered validator knows whether NEST used normal Connect rounding, `cont_delay_synapse` SetDefaults, or post-creation SetStatus, and no validator enforces the model-conditioned lower bound of one resolution. Valid off-grid continuous delays are intentionally accepted and displayed rather than snapped or rejected.",
+      "`simulationResolution` is recorded as context but does not establish a delay lattice. No registered validator binds the NEST version or knows whether NEST used normal Connect rounding, `cont_delay_synapse` model defaults supplied through CopyModel or SetDefaults, or post-creation SynapseCollection.set (legacy SetStatus), and no validator enforces the cited NEST 3.9/3.10 model-conditioned lower bound of one resolution. Valid off-grid continuous delays are intentionally accepted and displayed rather than snapped or rejected.",
       "There is no declared or shared colour domain, so two delay matrices are NOT comparable by colour \u2014 compare the legends or the tables. A shared domain needs a clipping disclosure that does not exist in disclosures.v1.json.",
       "Cortexel cannot detect a transposed adapter: if the source and target arrays are swapped, every validator passes and the figure is a plausible lie about direction. The defences are the adapter's own vectors and restating orientation on the axes, legend, caption, and table.",
       "No uncertainty variant is renderable in a cell, so the spread across aggregated multapses is invisible in the colour. The complete returned table preserves contributor count and observed minimum/maximum, but those values are an empirical range rather than an uncertainty estimate.",
@@ -13757,4 +13759,4 @@ export {
   verifyPeakBasisAgainstWindow,
   verifyBinnedPeakValueLattice
 };
-//# sourceMappingURL=chunk-GFFRGANP.js.map
+//# sourceMappingURL=chunk-5K4VYW2N.js.map

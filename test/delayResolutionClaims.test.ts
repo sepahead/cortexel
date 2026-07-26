@@ -36,6 +36,8 @@ interface DelayExample {
 }
 
 interface DelayContract {
+  id: string;
+  revision: number;
   adapters: Array<{
     notes: string;
     status: string;
@@ -43,6 +45,15 @@ interface DelayContract {
   }>;
   examples: {
     valid: DelayExample[];
+  };
+  outputAuthority: {
+    evaluator: {
+      id: string;
+    };
+  };
+  renderer: {
+    id: string;
+    revision: number;
   };
 }
 
@@ -114,6 +125,15 @@ const findContinuousOffGridExample = (contract: DelayContract): DelayExample | u
   });
 
 describe('model-conditioned NEST delay-resolution claims', () => {
+  it('publishes the scientific erratum as skill revision 5 without relabelling the renderer', () => {
+    for (const { contract, relativePath } of contracts) {
+      expect(contract.revision, relativePath).toBe(5);
+      expect(contract.renderer.revision, relativePath).toBe(4);
+      expect(contract.outputAuthority.evaluator.id, relativePath)
+        .toBe(`${contract.id}.output_authority.v5`);
+    }
+  });
+
   it('contains no universal delay-lattice claim in either V1 contract', () => {
     const violations: string[] = [];
     for (const { relativePath, source } of contracts) {
@@ -129,15 +149,21 @@ describe('model-conditioned NEST delay-resolution claims', () => {
     expect(violations).toEqual([]);
   });
 
-  it('retains the complete model- and assignment-conditioned NEST semantics', () => {
+  it('retains the cited NEST 3.9/3.10 model- and assignment-conditioned semantics', () => {
     for (const { relativePath, source } of contracts) {
+      expect(source, `${relativePath} scopes the upstream behavior`)
+        .toContain('NEST 3.9/3.10');
       expect(source, `${relativePath} names the continuous-delay model`)
         .toContain('cont_delay_synapse');
       expect(source, `${relativePath} distinguishes ordinary assignment`)
         .toContain('normal Connect');
-      expect(source, `${relativePath} records the model-default path`)
+      expect(source, `${relativePath} records the copied-model default path`)
+        .toContain('CopyModel');
+      expect(source, `${relativePath} records the global model-default path`)
         .toContain('SetDefaults');
-      expect(source, `${relativePath} records the post-creation path`)
+      expect(source, `${relativePath} records the modern post-creation path`)
+        .toContain('SynapseCollection.set');
+      expect(source, `${relativePath} records the legacy post-creation name`)
         .toContain('SetStatus');
       expect(source, `${relativePath} retains the minimum-delay condition`)
         .toMatch(/at least (?:one|the) simulation resolution/i);

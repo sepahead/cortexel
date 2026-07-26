@@ -2,8 +2,8 @@
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:aab1ebe99d73fcd9f3c70f2ee81595d68dbd2f96ce527741217444284cc15e36";
-var CATALOG_DIGEST = "sha256:4f534010ee514ffe9c1c9a9d6be365d7bdb7289e54008f2fab0e2df81fe0e001";
+var CONTRACT_DIGEST = "sha256:ba52f26842cfc452532936e39f78e63a8095fdaa7e401b5618ac0af25f1b553a";
+var CATALOG_DIGEST = "sha256:b267cf79a79862230d7f54e35b9f4b4bc54634fa21721ca1b8f3ef4a98d3f8af";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
   return Object.freeze({
@@ -424,4 +424,4 @@ export {
   REQUEST_CONTRACT_IDENTITY,
   ARTIFACT_CONTRACT_IDENTITY
 };
-//# sourceMappingURL=chunk-LVMEHDQI.js.map
+//# sourceMappingURL=chunk-KG73JKSJ.js.map

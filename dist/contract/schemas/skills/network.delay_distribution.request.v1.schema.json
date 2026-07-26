@@ -188,7 +188,7 @@
         },
         "sourceResolution": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
-          "description": "The simulator's time resolution, kind `duration`, recorded as DECLARED context. It establishes neither the synapse model nor the assignment path: normal NEST Connect rounds delays to it, while `cont_delay_synapse` defaults or post-creation SetStatus can retain valid off-grid values. Registry v1 does not use this field as lattice proof and never snaps supplied delays to it (see knownLimitations)."
+          "description": "The simulator's time resolution, kind `duration`, recorded as DECLARED context. It establishes neither the synapse model nor the assignment path: in the cited NEST 3.9/3.10 behavior normal Connect rounds delays to it, while `cont_delay_synapse` model defaults supplied through CopyModel or SetDefaults, or post-creation values changed through SynapseCollection.set (legacy SetStatus), can retain valid off-grid values. Registry v1 does not use this field as lattice proof and never snaps supplied delays to it (see knownLimitations)."
         },
         "scope": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",

@@ -776,5 +776,7 @@ describe('cli — render emission boundary', () => {
       expect(stagedTempNames(directory)).toEqual([]);
       expect(emissionLockNames(directory)).toEqual([]);
     });
-  });
+  // Eight real child runtimes can exceed Bun's five-second default under a
+  // concurrently loaded suite; keep the process-race evidence locally bounded.
+  }, 30_000);
 });

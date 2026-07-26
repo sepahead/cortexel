@@ -24,7 +24,7 @@ function stableRenderers(): JsonRecord[] {
 }
 
 describe('global stable SVG output identity', () => {
-  it('coordinates every stable skill and renderer at revision 4', () => {
+  it('keeps renderer revision 4 while identifying both delay errata at skill revision 5', () => {
     const skills = stableSkills();
     const renderers = stableRenderers();
     const rendererById = new Map(renderers.map((renderer) => [renderer.id, renderer]));
@@ -35,12 +35,16 @@ describe('global stable SVG output identity', () => {
     expect(renderers.filter((renderer) => renderer.id !== 'figure.correlogram')).toHaveLength(13);
 
     for (const skill of skills) {
-      expect(skill.revision, skill.id).toBe(4);
+      const expectedSkillRevision = (
+        skill.id === 'network.delay_distribution' ||
+        skill.id === 'network.delay_matrix'
+      ) ? 5 : 4;
+      expect(skill.revision, skill.id).toBe(expectedSkillRevision);
       expect(skill.renderer?.revision, skill.id).toBe(4);
       expect(rendererById.get(skill.renderer?.id)?.revision, skill.renderer?.id).toBe(4);
 
       expect(skill.outputAuthority?.evaluator?.id, skill.id).toBe(
-        `${skill.id}.output_authority.v4`,
+        `${skill.id}.output_authority.v${expectedSkillRevision}`,
       );
     }
 

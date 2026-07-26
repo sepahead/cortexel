@@ -32,6 +32,11 @@ const MATRIX_SKILLS = [
   'network.weight_matrix',
   'network.delay_matrix',
 ] as const;
+const MATRIX_SKILL_REVISIONS = {
+  'network.adjacency_matrix': 4,
+  'network.weight_matrix': 4,
+  'network.delay_matrix': 5,
+} as const;
 
 function source(skillId: string): JsonRecord {
   return JSON.parse(readFileSync(
@@ -41,8 +46,9 @@ function source(skillId: string): JsonRecord {
 }
 
 function evaluator(skillId: string) {
+  const revision = MATRIX_SKILL_REVISIONS[skillId as keyof typeof MATRIX_SKILL_REVISIONS];
   const found = MATRIX_AUTHORITY_EVALUATORS.find(
-    (candidate) => candidate.id === `${skillId}.output_authority.v4`,
+    (candidate) => candidate.id === `${skillId}.output_authority.v${revision}`,
   );
   if (!found) throw new Error(`missing matrix authority evaluator ${skillId}`);
   return found;
@@ -666,13 +672,14 @@ describe('independent matrix OutputAuthority evaluators', () => {
     }
   });
 
-  it('pins matrix skill, renderer, and evaluator identities at coordinated revision 4', () => {
+  it('pins matrix identities while the delay erratum leaves renderer revision 4', () => {
     for (const skillId of MATRIX_SKILLS) {
       const contract = source(skillId);
-      expect(contract.revision).toBe(4);
+      const expectedSkillRevision = MATRIX_SKILL_REVISIONS[skillId];
+      expect(contract.revision).toBe(expectedSkillRevision);
       expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 4 });
       expect(contract.outputAuthority.evaluator.id).toBe(
-        `${skillId}.output_authority.v4`,
+        `${skillId}.output_authority.v${expectedSkillRevision}`,
       );
       expect(contract.accessibility.tableColumns.map((column: JsonRecord) => column.key))
         .toContain('scopeSummary');
@@ -688,7 +695,10 @@ describe('independent matrix OutputAuthority evaluators', () => {
       .map((column: JsonRecord) => column.key);
     expect(delayColumns).not.toContain('snapshotTime');
     expect(MATRIX_AUTHORITY_EVALUATORS.map((entry) => entry.id).sort()).toEqual(
-      MATRIX_SKILLS.map((skillId) => `${skillId}.output_authority.v4`).sort(),
+      MATRIX_SKILLS
+        .map((skillId) =>
+          `${skillId}.output_authority.v${MATRIX_SKILL_REVISIONS[skillId]}`)
+        .sort(),
     );
     const renderers = JSON.parse(readFileSync(
       path.join(ROOT, 'contract/registries/renderers.v1.json'),

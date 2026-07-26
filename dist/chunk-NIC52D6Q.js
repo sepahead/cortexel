@@ -1,6 +1,6 @@
 import {
   deriveDisclosures
-} from "./chunk-2RRYYOCI.js";
+} from "./chunk-W64RVV5H.js";
 import {
   DistributionDerivationError,
   MATRIX_AXIS_ORDER,
@@ -15,7 +15,7 @@ import {
   deriveWeightDistribution,
   deriveWeightMatrix,
   validateArtifactStructure
-} from "./chunk-J2WGJCHL.js";
+} from "./chunk-IRRGIT52.js";
 import {
   CATEGORICAL_SERIES_STYLES,
   RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
@@ -48,7 +48,7 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "./chunk-GFFRGANP.js";
+} from "./chunk-5K4VYW2N.js";
 import {
   binary64RelativeDifferenceWithinEpsilons,
   exactBinary64AffineFraction,
@@ -78,7 +78,7 @@ import {
   makeError,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "./chunk-LVMEHDQI.js";
+} from "./chunk-KG73JKSJ.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding,
@@ -8271,7 +8271,7 @@ function delayModel(requestValue) {
   };
 }
 DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.delay_distribution", 4),
+  authorityEvaluatorId("network.delay_distribution", 5),
   (request) => modelFields(delayModel(request))
 );
 function weightGroups(data, parameters, bins) {
@@ -9339,8 +9339,8 @@ var OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
   "network.adjacency_matrix.output_authority.v4",
   "network.connection_graph.output_authority.v4",
   "network.degree_distribution.output_authority.v4",
-  "network.delay_distribution.output_authority.v4",
-  "network.delay_matrix.output_authority.v4",
+  "network.delay_distribution.output_authority.v5",
+  "network.delay_matrix.output_authority.v5",
   "network.spatial_map_2d.output_authority.v4",
   "network.synaptic_weight_trace.output_authority.v4",
   "network.weight_distribution.output_authority.v4",
@@ -9981,7 +9981,7 @@ var WEIGHT_AUTHORITY2 = defineAuthorityEvaluator(
   (request) => modelFields2(weightModel2(request))
 );
 var DELAY_AUTHORITY2 = defineAuthorityEvaluator(
-  authorityEvaluatorId("network.delay_matrix", 4),
+  authorityEvaluatorId("network.delay_matrix", 5),
   (request) => modelFields2(delayModel2(request))
 );
 var MATRIX_AUTHORITY_EVALUATORS = [
@@ -24907,4 +24907,4 @@ export {
   buildFigureFromJson,
   buildFigure
 };
-//# sourceMappingURL=chunk-XCHF5I3R.js.map
+//# sourceMappingURL=chunk-NIC52D6Q.js.map

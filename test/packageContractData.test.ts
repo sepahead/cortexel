@@ -92,7 +92,9 @@ describe('packaged normative contract', () => {
         'manifest inventory is missing normative source contract/schemas/undeclared.schema.json',
       );
     });
-  });
+  // Three independent contract copies and full digest passes exceed Bun's
+  // five-second default on a cold filesystem; keep the bound local and finite.
+  }, 30_000);
 
   it('derives every public manifest field instead of trusting a self-description', () => {
     const living = JSON.parse(readFileSync(path.join(SOURCE, 'manifest.v1.json'), 'utf8')) as

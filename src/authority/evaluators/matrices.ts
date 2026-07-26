@@ -813,7 +813,7 @@ const WEIGHT_AUTHORITY = defineAuthorityEvaluator(
 );
 
 const DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.delay_matrix', 4),
+  authorityEvaluatorId('network.delay_matrix', 5),
   (request) => modelFields(delayModel(request)),
 );
 

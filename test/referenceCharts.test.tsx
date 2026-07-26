@@ -55,12 +55,13 @@ function renderDirectChart(
   skill: string,
   scene: Parameters<typeof ReferenceChartScene>[0]['scene'],
   params: Record<string, unknown>,
+  themeMode: 'dark' | 'light' = 'dark',
 ): string {
   return renderToStaticMarkup(
     <ReferenceChartScene
       skill={skill}
       scene={scene}
-      themeMode="dark"
+      themeMode={themeMode}
       active
       palette={CORTEXEL_PALETTE}
       params={params}
@@ -528,10 +529,38 @@ describe('React-only topology and connection-analysis figures', () => {
       'connection-matrix',
       examples[0].params,
     );
+    const lightAdjacency = renderDirectChart(
+      examples[0].skill,
+      'connection-matrix',
+      examples[0].params,
+      'light',
+    );
     expect(adjacency).toContain('each present cell encodes binary connection presence');
     expect(adjacency).toContain('present connection');
     expect(adjacency).toContain('binary-presence path');
-    expect(adjacency).toContain(CORTEXEL_PALETTE.excitatory);
+    expect(adjacency).toContain('neutral theme foreground encodes presence only');
+    const adjacencyBucketFill = adjacency.match(
+      /<path[^>]*data-mark="matrix-value-bucket"[^>]*fill="([^"]+)"/u,
+    )?.[1];
+    const lightAdjacencyBucketFill = lightAdjacency.match(
+      /<path[^>]*data-mark="matrix-value-bucket"[^>]*fill="([^"]+)"/u,
+    )?.[1];
+    const adjacencyLegendFill = adjacency.match(
+      /<rect[^>]*data-legend-label="present connection"[^>]*fill="([^"]+)"/u,
+    )?.[1];
+    const lightAdjacencyLegendFill = lightAdjacency.match(
+      /<rect[^>]*data-legend-label="present connection"[^>]*fill="([^"]+)"/u,
+    )?.[1];
+    expect(adjacencyBucketFill).toBe(CORTEXEL_PALETTE.ink);
+    expect(adjacencyLegendFill).toBe(adjacencyBucketFill);
+    expect(adjacencyBucketFill).not.toBe(CORTEXEL_PALETTE.panel);
+    expect(lightAdjacencyBucketFill).toBe(CORTEXEL_PALETTE.deepNavy);
+    expect(lightAdjacencyLegendFill).toBe(lightAdjacencyBucketFill);
+    expect(lightAdjacencyBucketFill).not.toBe(CORTEXEL_PALETTE.ink);
+    for (const rendered of [adjacency, lightAdjacency]) {
+      expect(rendered).not.toContain(CORTEXEL_PALETTE.excitatory);
+      expect(rendered).not.toContain(CORTEXEL_PALETTE.inhibitory);
+    }
     expect(adjacency).not.toContain('present zero weight');
     expect(adjacency).not.toContain('numeric sign only');
     expect(adjacency).not.toContain('disclosed magnitude levels');

@@ -6,6 +6,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — NEST delay-resolution scientific erratum
+
+- Stable skill revision 4 incorrectly described `sourceResolution` on
+  `network.delay_distribution` and `simulationResolution` on
+  `network.delay_matrix` as establishing a universal NEST delay lattice. In the
+  verified NEST 3.9/3.10 behavior, normal `Connect` assignment rounds to the
+  simulation resolution, but `cont_delay_synapse` model defaults supplied through
+  `CopyModel` or `SetDefaults`, and per-connection values changed after creation
+  through `SynapseCollection.set` (legacy `SetStatus`), can retain valid off-grid delays.
+  Revision 5 records resolution as context only, preserves those values without
+  snapping, and keeps the model-conditioned lower bound as an explicitly
+  unenforced limitation.
+- Both affected skills and their OutputAuthority evaluator identities move to
+  revision 5. Their shared renderer revisions remain 4 because the rendering
+  algorithms did not change. Explicit revision-4 request pins now refuse instead
+  of silently receiving the corrected interpretation; existing revision-4
+  artifacts retain their recorded identity and are not reinterpreted in place.
+  The request and artifact contract lines remain `1.0`, while the contract and
+  stable-catalog digests change with the corrected stable promise.
+- The NEST entries in both V1 contracts are now labelled as planned mapping
+  recipes rather than executable adapters. This repository does not yet ship a
+  V1 adapter capable of authenticating the synapse model and assignment path.
+
 ### Fixed — legacy topology chart evidence
 
 - The large-parameter preflight now admits schema-valid empty connection-graph
@@ -15,7 +38,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   instead of failing before their schemas can validate them.
 - Matrix descriptions and legends now follow the selected analysis: adjacency
   reports binary presence only, delay reports strictly positive delays only, and
-  weight alone reports signed values and present zero-weight cells. The low-level
+  weight alone reports signed values and present zero-weight cells. Adjacency
+  presence uses the neutral theme foreground rather than a semantic excitatory
+  token, so topology-only evidence cannot imply E/I identity. The default palette
+  keeps that foreground distinct from both supported theme backgrounds; registered
+  palettes remain subject to the documented contrast limitation. Signed weights
+  use cool and warm brand hues for numeric sign only, while delays use neutral teal
+  for positive magnitude; none of these colors assert synapse identity. The low-level
   public `ReferenceChartScene` also revalidates its exact registered skill,
   scene, and params before dispatch, so a mismatched discriminator cannot borrow
   another analysis renderer. This low-level guard does not validate provenance

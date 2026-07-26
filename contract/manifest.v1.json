@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:aab1ebe99d73fcd9f3c70f2ee81595d68dbd2f96ce527741217444284cc15e36",
-  "catalogDigest": "sha256:4f534010ee514ffe9c1c9a9d6be365d7bdb7289e54008f2fab0e2df81fe0e001",
+  "contractDigest": "sha256:ba52f26842cfc452532936e39f78e63a8095fdaa7e401b5618ac0af25f1b553a",
+  "catalogDigest": "sha256:b267cf79a79862230d7f54e35b9f4b4bc54634fa21721ca1b8f3ef4a98d3f8af",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
     "packaged",
@@ -1044,7 +1044,7 @@
     },
     {
       "id": "network.delay_distribution",
-      "revision": 4,
+      "revision": 5,
       "title": "Synaptic delay distribution over a declared edge population",
       "renderer": {
         "id": "figure.distribution",
@@ -1108,7 +1108,7 @@
           "name": "numpy.histogram",
           "version": "2.1.0",
           "status": "not_run",
-          "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle: verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, the lower bound of one simulation resolution, and MPI target-rank-local row semantics. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+          "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle: verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through model defaults supplied by CopyModel or SetDefaults and post-creation SynapseCollection.set (legacy SetStatus), the lower bound of one simulation resolution, and MPI target-rank-local row semantics. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
         }
       },
       "accessibility": {
@@ -1247,7 +1247,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.delay_distribution.output_authority.v4"
+          "id": "network.delay_distribution.output_authority.v5"
         },
         "requestPaths": [
           {
@@ -1408,7 +1408,7 @@
     },
     {
       "id": "network.delay_matrix",
-      "revision": 4,
+      "revision": 5,
       "title": "Transmission-delay matrix over a declared target-row / source-column node universe",
       "renderer": {
         "id": "figure.matrix",
@@ -1469,7 +1469,7 @@
           "name": "nest.GetConnections + SynapseCollection.get(['source','target','delay'])",
           "version": "3.10.0",
           "status": "not_run",
-          "notes": "The intended differential oracle is NEST itself: build a fixture with known multapses, an autapse, an isolate target, and known per-connection delays; verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, and the lower bound of one simulation resolution. Read the SynapseCollection and assert the derived cells, counts, min/mean/max aggregates, and source-column/target-row orientation. Under MPI also confirm rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed here, so status remains not_run. Aggregation arithmetic is covered separately by hand vectors."
+          "notes": "The intended differential oracle is NEST itself: build a fixture with known multapses, an autapse, an isolate target, and known per-connection delays; verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through model defaults supplied by CopyModel or SetDefaults and post-creation SynapseCollection.set (legacy SetStatus), and the lower bound of one simulation resolution. Read the SynapseCollection and assert the derived cells, counts, min/mean/max aggregates, and source-column/target-row orientation. Under MPI also confirm rank-local output covers exactly the locally owned targets. The pinned NEST 3.10 environment has NOT been executed here, so status remains not_run. Aggregation arithmetic is covered separately by hand vectors."
         }
       },
       "accessibility": {
@@ -1608,7 +1608,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "network.delay_matrix.output_authority.v4"
+          "id": "network.delay_matrix.output_authority.v5"
         },
         "requestPaths": [
           {
@@ -8351,11 +8351,11 @@
     },
     {
       "path": "contract/schemas/skills/network.delay_distribution.request.v1.schema.json",
-      "digest": "sha256:f1eeba3ce90f8568f09b58dd73b83ce2b1445dfa27eccc05939929daa9ed9a60"
+      "digest": "sha256:2b3aa644f89998998fc12e142b36cc9317eb6c20e8c4680d84277b89c6dfe772"
     },
     {
       "path": "contract/schemas/skills/network.delay_matrix.request.v1.schema.json",
-      "digest": "sha256:9cbe7f59306783ec0eba635864a5e8708f8f6f04dbd37bdd760a7a31567a80f3"
+      "digest": "sha256:6c110e9ecb6ce7acced54de3f158d50cc019181cfa9a85a6dd95d8596ea24047"
     },
     {
       "path": "contract/schemas/skills/network.spatial_map_2d.request.v1.schema.json",
@@ -8435,11 +8435,11 @@
     },
     {
       "path": "contract/skills/network.delay_distribution.v1.json",
-      "digest": "sha256:78d2dcbe348d3eda86eb34840b9265847a42e3825e0584ef25d2689899032a2d"
+      "digest": "sha256:b17dff0bba41c32544586d933ea74e4baa3c19b004d53dd24b88a7b2ebe17786"
     },
     {
       "path": "contract/skills/network.delay_matrix.v1.json",
-      "digest": "sha256:2869f89291a3c9726afab27522f6cf5dfb24c7dc7e0dd3ef98b9104dcafe4c01"
+      "digest": "sha256:f41a383980edbc3e5cf0fe239bf4727fe11de4dea95f465a500852e609e382f7"
     },
     {
       "path": "contract/skills/network.spatial_map_2d.v1.json",

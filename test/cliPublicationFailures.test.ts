@@ -3,23 +3,41 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const faults = vi.hoisted(() => ({ failLockFstatOnce: false, failTempUnlinkOnce: false }));
+interface PublicationFaults {
+  failLockFstatOnce: boolean;
+  failTempUnlinkOnce: boolean;
+}
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>();
+function publicationFaults(): PublicationFaults {
+  const key = Symbol.for('cortexel.test.cli-publication-faults');
+  const host = globalThis as unknown as Record<symbol, PublicationFaults | undefined>;
+  return host[key] ?? (host[key] = {
+    failLockFstatOnce: false,
+    failTempUnlinkOnce: false,
+  });
+}
+
+vi.mock('node:fs', () => {
+  const key = Symbol.for('cortexel.test.cli-publication-faults');
+  const host = globalThis as unknown as Record<symbol, PublicationFaults | undefined>;
+  const faults = host[key] ?? (host[key] = {
+    failLockFstatOnce: false,
+    failTempUnlinkOnce: false,
+  });
+  const actualFs = process.getBuiltinModule('fs') as typeof import('node:fs');
   const injectedIoError = (operation: string): NodeJS.ErrnoException => {
     const error = new Error(`injected ${operation} failure`) as NodeJS.ErrnoException;
     error.code = 'EIO';
     return error;
   };
   return {
-    ...actual,
+    ...actualFs,
     fstatSync: (...args: unknown[]) => {
       if (faults.failLockFstatOnce) {
         faults.failLockFstatOnce = false;
         throw injectedIoError('fstat');
       }
-      return (actual.fstatSync as (...values: unknown[]) => unknown)(...args);
+      return (actualFs.fstatSync as (...values: unknown[]) => unknown)(...args);
     },
     unlinkSync: (...args: unknown[]) => {
       const target = String(args[0]);
@@ -27,13 +45,14 @@ vi.mock('node:fs', async (importOriginal) => {
         faults.failTempUnlinkOnce = false;
         throw injectedIoError('unlink');
       }
-      return (actual.unlinkSync as (...values: unknown[]) => unknown)(...args);
+      return (actualFs.unlinkSync as (...values: unknown[]) => unknown)(...args);
     },
   };
 });
 
 import { run } from '../src/cli/main.js';
 
+const faults = publicationFaults();
 const populationRate = JSON.parse(readFileSync(
   path.resolve(import.meta.dirname, '../contract/skills/neuro.population_rate.v1.json'),
   'utf8',

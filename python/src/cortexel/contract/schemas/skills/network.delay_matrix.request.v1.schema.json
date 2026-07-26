@@ -250,7 +250,7 @@
               ]
             }
           ],
-          "description": "Optional declared context: the source's simulation timestep. It is not lattice proof. In NEST, normal Connect rounds delays to this resolution, but `cont_delay_synapse` defaults set with SetDefaults or values changed after creation with SetStatus can remain off-grid; every supported delay is still at least one simulation resolution. Cortexel records the value without snapping supplied delays or inferring the model and assignment path (see knownLimitations)."
+          "description": "Optional declared context: the source's simulation timestep. It is not lattice proof. In the cited NEST 3.9/3.10 behavior, normal Connect rounds delays to this resolution, but `cont_delay_synapse` model defaults supplied through CopyModel or SetDefaults, or values changed after creation through SynapseCollection.set (legacy SetStatus), can remain off-grid; every delay admitted by those cited models is still at least one simulation resolution. Cortexel records the value without snapping supplied delays or inferring the model and assignment path (see knownLimitations)."
         }
       },
       "required": [

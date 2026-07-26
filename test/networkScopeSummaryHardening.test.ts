@@ -164,13 +164,14 @@ function observedFromEvaluation(
 }
 
 describe('bounded NetworkScope authority summaries', () => {
-  it('pins skill, renderer, and evaluator identities at coordinated revision 4', () => {
+  it('pins current skill, renderer, and evaluator identities across the delay erratum', () => {
     for (const skillId of SKILLS) {
       const contract = source(skillId);
-      expect(contract.revision, skillId).toBe(4);
+      const expectedSkillRevision = skillId === 'network.delay_distribution' ? 5 : 4;
+      expect(contract.revision, skillId).toBe(expectedSkillRevision);
       expect(contract.renderer.revision, skillId).toBe(4);
       expect(contract.outputAuthority.evaluator.id, skillId)
-        .toBe(`${skillId}.output_authority.v4`);
+        .toBe(`${skillId}.output_authority.v${expectedSkillRevision}`);
       const contractText = JSON.stringify(contract);
       expect(contractText, `${skillId} shape-only wording`).toContain('shape_only');
       expect(contractText, `${skillId} unbound wording`).toContain('unbound');

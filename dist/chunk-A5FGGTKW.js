@@ -2,7 +2,7 @@ import {
   err,
   makeError,
   ok
-} from "./chunk-LVMEHDQI.js";
+} from "./chunk-KG73JKSJ.js";
 
 // src/core/safe-snapshot.ts
 var DANGEROUS_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
@@ -249,4 +249,4 @@ function snapshotValue(value, limits) {
 export {
   snapshotValue
 };
-//# sourceMappingURL=chunk-3GHBLEPE.js.map
+//# sourceMappingURL=chunk-A5FGGTKW.js.map

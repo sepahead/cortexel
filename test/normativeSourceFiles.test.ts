@@ -59,7 +59,9 @@ describe('closed recursive normative-source inventory', () => {
       expect(files).toContain('registries/future/extension.v1.json');
       expect(files).toEqual([...files].sort());
     });
-  });
+  // This first independent recursive copy can exceed Bun's five-second default
+  // when many test files contend for a cold filesystem; retain a local bound.
+  }, 30_000);
 
   it('uses the declared UTF-8 byte order rather than JavaScript UTF-16 order', () => {
     withContractCopy((temporary) => {

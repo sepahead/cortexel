@@ -1062,7 +1062,7 @@ function delayModel(requestValue: JsonValue): AuthorityModel {
 }
 
 DELAY_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('network.delay_distribution', 4),
+  authorityEvaluatorId('network.delay_distribution', 5),
   (request) => modelFields(delayModel(request)),
 );
 

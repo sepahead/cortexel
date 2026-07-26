@@ -4,7 +4,7 @@ import {
   conversionReceipt,
   convert,
   divideExactIntegerByConvertedDifference
-} from "./chunk-GFFRGANP.js";
+} from "./chunk-5K4VYW2N.js";
 import {
   binary64RelativeDifferenceWithinTolerance,
   exactBinary64Mean,
@@ -14,7 +14,7 @@ import {
 import {
   finalizeErrors,
   makeError
-} from "./chunk-LVMEHDQI.js";
+} from "./chunk-KG73JKSJ.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding
@@ -2871,4 +2871,4 @@ export {
   deriveWeightDistribution,
   verifyHistogramValues
 };
-//# sourceMappingURL=chunk-J2WGJCHL.js.map
+//# sourceMappingURL=chunk-IRRGIT52.js.map

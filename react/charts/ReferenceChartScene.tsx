@@ -187,11 +187,12 @@ function matrixBucketPaint(
   bucket: MatrixValueBucketPath,
   palette: ReadonlySemanticPalette,
   skill: 'nest.adjacency_matrix' | 'nest.weight_matrix' | 'nest.delay_matrix',
+  neutralForeground: string,
 ): { color: string; opacity: number } {
   if (bucket.sign === 0) return { color: palette.inkDim, opacity: 0.58 };
   return {
     color: skill === 'nest.adjacency_matrix'
-      ? palette.excitatory
+      ? neutralForeground
       : skill === 'nest.weight_matrix'
         ? (bucket.sign < 0 ? palette.cyan : palette.orange)
         : palette.teal,
@@ -1313,7 +1314,7 @@ function MatrixChart(
       ? `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? 'no measured weight value is displayed because the snapshot has no present cells' : 'a present measured zero weight remains visibly distinct'}. Cells are never interpolated or spatially merged.`
       : `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? 'no measured delay value is displayed because the snapshot has no present cells' : 'every present displayed delay is strictly positive'}. Cells are never interpolated or spatially merged.`;
   const geometryNote = skill === 'nest.adjacency_matrix'
-    ? `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} binary-presence ${valuePathNoun}.`
+    ? `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} binary-presence ${valuePathNoun}. The neutral theme foreground encodes presence only, not synapse identity or excitation.`
     : skill === 'nest.weight_matrix'
       ? params.cells.length === 0
         ? 'No measured weight value is displayed because the snapshot has no present cells; the declared row and column axes remain represented.'
@@ -1325,7 +1326,7 @@ function MatrixChart(
     skill === 'nest.adjacency_matrix'
       ? [
           ['absent: no connection', colors.grid, 0.3],
-          ['present connection', args.palette.excitatory, 1],
+          ['present connection', colors.foreground, 1],
         ]
       : skill === 'nest.weight_matrix'
         ? [
@@ -1416,7 +1417,7 @@ function MatrixChart(
           data-mark="matrix-absent-background"
         />
         {geometry.buckets.map((bucket) => {
-          const paint = matrixBucketPaint(bucket, args.palette, skill);
+          const paint = matrixBucketPaint(bucket, args.palette, skill, colors.foreground);
           return (
             <path
               key={bucket.key}
@@ -1476,6 +1477,7 @@ function MatrixChart(
                   y={y}
                   width={10}
                   height={10}
+                  data-legend-label={label}
                   fill={String(color)}
                   fillOpacity={Number(opacity)}
                 />

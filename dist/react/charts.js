@@ -801,10 +801,10 @@ function sampledIndices(length, maximum = 8) {
   }
   return [...new Set(indices)];
 }
-function matrixBucketPaint(bucket, palette, skill) {
+function matrixBucketPaint(bucket, palette, skill, neutralForeground) {
   if (bucket.sign === 0) return { color: palette.inkDim, opacity: 0.58 };
   return {
-    color: skill === "nest.adjacency_matrix" ? palette.excitatory : skill === "nest.weight_matrix" ? bucket.sign < 0 ? palette.cyan : palette.orange : palette.teal,
+    color: skill === "nest.adjacency_matrix" ? neutralForeground : skill === "nest.weight_matrix" ? bucket.sign < 0 ? palette.cyan : palette.orange : palette.teal,
     opacity: 0.18 + 0.82 * bucket.level / MATRIX_VALUE_LEVELS_PER_SIGN
   };
 }
@@ -1807,10 +1807,10 @@ function MatrixChart(args, width, height, id) {
   const maximum = formatChartNumber(geometry.maximumAbsoluteValue);
   const valuePathNoun = geometry.valueBucketCount === 1 ? "path" : "paths";
   const description = skill === "nest.adjacency_matrix" ? `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; each present cell encodes binary connection presence. Cells are never interpolated or spatially merged.` : skill === "nest.weight_matrix" ? `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? "no measured weight value is displayed because the snapshot has no present cells" : "a present measured zero weight remains visibly distinct"}. Cells are never interpolated or spatially merged.` : `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? "no measured delay value is displayed because the snapshot has no present cells" : "every present displayed delay is strictly positive"}. Cells are never interpolated or spatially merged.`;
-  const geometryNote = skill === "nest.adjacency_matrix" ? `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} binary-presence ${valuePathNoun}.` : skill === "nest.weight_matrix" ? params.cells.length === 0 ? "No measured weight value is displayed because the snapshot has no present cells; the declared row and column axes remain represented." : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded signed weight-value ${valuePathNoun}, with ${presentZeroCount} present zero-weight cells and maximum absolute displayed weight ${maximum}. Cool and warm hues encode numeric sign only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed absolute-magnitude levels.` : params.cells.length === 0 ? "No measured delay value is displayed because the snapshot has no present cells; the declared row and column axes remain represented." : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded positive delay-value ${valuePathNoun}, with maximum displayed delay ${maximum}. The neutral teal hue encodes positive numeric delay values only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed magnitude levels.`;
+  const geometryNote = skill === "nest.adjacency_matrix" ? `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} binary-presence ${valuePathNoun}. The neutral theme foreground encodes presence only, not synapse identity or excitation.` : skill === "nest.weight_matrix" ? params.cells.length === 0 ? "No measured weight value is displayed because the snapshot has no present cells; the declared row and column axes remain represented." : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded signed weight-value ${valuePathNoun}, with ${presentZeroCount} present zero-weight cells and maximum absolute displayed weight ${maximum}. Cool and warm hues encode numeric sign only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed absolute-magnitude levels.` : params.cells.length === 0 ? "No measured delay value is displayed because the snapshot has no present cells; the declared row and column axes remain represented." : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded positive delay-value ${valuePathNoun}, with maximum displayed delay ${maximum}. The neutral teal hue encodes positive numeric delay values only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed magnitude levels.`;
   const legendEntries = skill === "nest.adjacency_matrix" ? [
     ["absent: no connection", colors.grid, 0.3],
-    ["present connection", args.palette.excitatory, 1]
+    ["present connection", colors.foreground, 1]
   ] : skill === "nest.weight_matrix" ? [
     ["absent: no connection", colors.grid, 0.3],
     ["present zero weight", args.palette.inkDim, 0.58],
@@ -1897,7 +1897,7 @@ function MatrixChart(args, width, height, id) {
                 }
               ),
               geometry.buckets.map((bucket) => {
-                const paint = matrixBucketPaint(bucket, args.palette, skill);
+                const paint = matrixBucketPaint(bucket, args.palette, skill, colors.foreground);
                 return /* @__PURE__ */ jsx(
                   "path",
                   {
@@ -1959,6 +1959,7 @@ function MatrixChart(args, width, height, id) {
                 y,
                 width: 10,
                 height: 10,
+                "data-legend-label": label,
                 fill: String(color),
                 fillOpacity: Number(opacity)
               }
