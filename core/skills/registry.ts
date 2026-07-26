@@ -1131,7 +1131,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         'target|targets',
         'weight|weights?',
         'delay|delays?',
-        'synapse_model|synapse_models?',
+        'synapse_model|synapse_models? (required when weight or delay is present)',
         'target_thread|target_threads?',
         'synapse_id|synapse_ids?',
         'port|ports?',
@@ -1142,6 +1142,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         'snapshotTimeMs',
         'snapshotScope',
         'samplePolicy',
+        'synapseModelSemantics when weight or delay is present',
         'weightUnits when weight is present',
         "delayUnits='ms' when delay is present",
       ],
@@ -1322,8 +1323,14 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: 'weight_matrix' },
     transform: {
       id: 'synapseCollectionToWeightMatrixParams',
-      rawFields: ['source|sources', 'target|targets', 'weight|weights'],
-      requiredOptions: ['sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope', 'weightUnits', 'aggregation'],
+      rawFields: [
+        'source|sources', 'target|targets', 'weight|weights',
+        'synapse_model|synapse_models',
+      ],
+      requiredOptions: [
+        'sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope',
+        'synapseModelSemantics', 'weightUnits', 'aggregation',
+      ],
       outputSkill: 'nest.weight_matrix',
     },
     requiredInputKeys: [
@@ -1384,8 +1391,14 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: 'delay_matrix' },
     transform: {
       id: 'synapseCollectionToDelayMatrixParams',
-      rawFields: ['source|sources', 'target|targets', 'delay|delays'],
-      requiredOptions: ['sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope', "delayUnits='ms'", 'aggregation'],
+      rawFields: [
+        'source|sources', 'target|targets', 'delay|delays',
+        'synapse_model|synapse_models',
+      ],
+      requiredOptions: [
+        'sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope',
+        'synapseModelSemantics', "delayUnits='ms'", 'aggregation',
+      ],
       outputSkill: 'nest.delay_matrix',
     },
     requiredInputKeys: [
@@ -1598,10 +1611,14 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: 'delay_distribution' },
     transform: {
       id: 'synapseCollectionToDelayDistributionParams',
-      rawFields: ['source|sources', 'target|targets', 'delay|delays'],
+      rawFields: [
+        'source|sources', 'target|targets', 'delay|delays',
+        'synapse_model|synapse_models',
+      ],
       requiredOptions: [
         'sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope',
-        "delayUnits='ms'", 'binWidthMs', 'windowStartMs', 'windowStopMs', 'normalization',
+        'synapseModelSemantics', "delayUnits='ms'", 'binWidthMs',
+        'windowStartMs', 'windowStopMs', 'normalization',
       ],
       outputSkill: 'nest.delay_distribution',
     },

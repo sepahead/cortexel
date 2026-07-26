@@ -1,8 +1,13 @@
 import {
+  exactBinary64MultiplyByRational,
+  exactRationalToBinary64,
+  finiteBinary64ToMinSubnormalUnits
+} from "./chunk-HTREPOSY.js";
+import {
   freezeGenerated,
   makeError,
   pointer
-} from "./chunk-OLQMLMTT.js";
+} from "./chunk-LVMEHDQI.js";
 import {
   canonicalDigest
 } from "./chunk-ZYBCCIMH.js";
@@ -1284,7 +1289,7 @@ var SKILL_CATALOG = freezeGenerated({
       "Anything about connections that were not supplied. The histogram describes exactly the rows in the declared selection. A row filtered upstream is invisible, and Cortexel cannot see that it ever existed.",
       "The global delay distribution from a rank-local or sampled snapshot. It is complete for the retained edges only; extrapolating requires that retention be independent of delay, which Cortexel cannot check and which a prefix of NEST's rank/thread-ordered rows does not satisfy.",
       "The per-pair distribution from a per-synapse histogram, or the reverse. Where multiplicity covaries with delay -- as under a distance-dependent rule, where near pairs get both more contacts and shorter delays -- the two differ systematically and neither can be recovered from the other.",
-      "That an alternating comb in the bars is a property of the network. When the bin width is not an integer multiple of the simulator's resolution, consecutive bins straddle different numbers of grid delays, and a uniform delay population is drawn as structure.",
+      "That an alternating comb in the bars is a property of the network. For delays actually produced on a resolution lattice -- for example by ordinary NEST Connect rounding -- a bin width that is not an integer multiple of that resolution can make consecutive bins straddle different numbers of lattice points. `cont_delay_synapse` values retained through model defaults or post-creation SetStatus may be off-grid, so source resolution alone cannot establish this mechanism.",
       "That these were the delays in effect at any time other than the declared snapshot. A delay-modifying operation or structural plasticity between two snapshots of one run changes every value here.",
       "Anything about synaptic strength, sign, or receptor. Weights may ride along on the rows; they never affect, filter, or group a delay, and two synapses with identical delay can differ by orders of magnitude in drive.",
       "That the distribution has any functional form. Cortexel draws the empirical histogram: it fits nothing and tests nothing, and a mean delay is a summary of the rows supplied, not a claim about the rule that generated them.",
@@ -1686,7 +1691,7 @@ var SKILL_CATALOG = freezeGenerated({
         "name": "numpy.histogram",
         "version": "2.1.0",
         "status": "not_run",
-        "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle, for the delay resolution grid and for the MPI target-rank-local row semantics specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+        "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle: verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, the lower bound of one simulation resolution, and MPI target-rank-local row semantics. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
       }
     },
     "legacyIds": [
@@ -1694,13 +1699,13 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "owner": "Sepehr Mahmoudian",
     "knownLimitations": [
-      "Registry gap: there is no `bins.grid_aligned` validator id. `sourceResolution` is a DECLARED fact that reaches the artifact, the table and the summary, but registry v1 cannot check that a delay is a multiple of it or that a bin width is. The comb artifact is disclosed in prose, not refused.",
+      "`sourceResolution` is DECLARED context in the request, artifact and summary, not lattice proof. Registry v1 does not know the NEST synapse model or whether delay assignment used normal Connect, SetDefaults, or post-creation SetStatus; it therefore neither requires delays to be integer multiples of the resolution nor rejects valid off-grid `cont_delay_synapse` values. It also does not enforce NEST's model-conditioned lower bound of one resolution.",
       "Registry gap: there is no disclosure id for out-of-range exclusions. Under `exclude_and_report` the under- and over-range counts reach the summary and the table, but no footer disclosure states them. EVENTS_EXCLUDED_OUT_OF_WINDOW is about a time window and is deliberately not reused.",
       "Registry gap: there is no dedicated error code for a delay falling outside the declared bin range under `reject`. SCIENCE_BIN_EDGES_INVALID is used, matching neuro.isi_distribution; a future SCIENCE_BIN_RANGE_INCOMPLETE would be more precise.",
       "Revision 2 executes conservation, exact prebinned length, normalized-value re-derivation, endpoint binding, group partition and counting-policy-specific multapse semantics inside topology.delay_positive. In particular, per_connection preserves every multapse row and forbids pair aggregation.",
       "MULTAPSE_AGGREGATED's registry text is worded for matrix cells. On this figure {contributingCount} must be read as connections per ordered endpoint pair.",
       "MISSING_VALUES_PRESENT can fire only from a ride-along weight series. A null DELAY is refused outright, so it can never be the cause here.",
-      "Cortexel does not choose bin edges, and for a grid-quantized delay the choice is unusually consequential: with a 0.1 ms resolution, a 0.15 ms bin width makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth.",
+      "Cortexel does not choose bin edges. For a population independently known to come from a grid-constrained model or normal Connect assignment, a 0.1 ms lattice cut by 0.15 ms bins makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth. Off-grid `cont_delay_synapse` values need not show that comb, and `sourceResolution` alone cannot predict it.",
       "Cortexel cannot verify that the supplied rows are the selection the caller says they are. It verifies scope, endpoints, positivity and conservation; it cannot know which GetConnections call produced the rows.",
       "There is no autapse filter. A self-connection's delay is a delay and is counted like any other; excluding self-connections means not supplying those rows.",
       "Prebinned mode verifies the normalization and the conservation identity but cannot verify positivity, endpoint membership, or the counting policy, because Cortexel never saw an edge. PRE_BINNED_INPUT says so on the figure.",
@@ -2110,7 +2115,7 @@ var SKILL_CATALOG = freezeGenerated({
         "name": "nest.GetConnections + SynapseCollection.get(['source','target','delay'])",
         "version": "3.10.0",
         "status": "not_run",
-        "notes": "The intended differential oracle is NEST itself: build a fixture network with known multapses, an autapse, an isolate target, and known per-connection delays; read the SynapseCollection; and assert that the derived cell set, the contributing counts, and the min/mean/max aggregates match the constructed truth, and that GetConnections' source/target fields land in columns/rows respectively rather than transposed. Under MPI it must also confirm that rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed. The aggregation arithmetic itself is covered by hand vectors, which is the stronger evidence: two libraries can share a convention error, but arithmetic done on paper cannot."
+        "notes": "The intended differential oracle is NEST itself: build a fixture with known multapses, an autapse, an isolate target, and known per-connection delays; verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, and the lower bound of one simulation resolution. Read the SynapseCollection and assert the derived cells, counts, min/mean/max aggregates, and source-column/target-row orientation. Under MPI also confirm rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed here, so status remains not_run. Aggregation arithmetic is covered separately by hand vectors."
       }
     },
     "legacyIds": [
@@ -2121,7 +2126,7 @@ var SKILL_CATALOG = freezeGenerated({
       "No disclosure id exists for delay semantics. `delaySemantics` is machine-checkable, but disclosures.v1.json has no rule for it, so it is carried in the legend, the accessible summary, and the table rather than the disclosure footer. A DELAY_COMPONENT_SEMANTICS rule is proposed for the registry.",
       "ABSENT_IS_NOT_ZERO's published text names a zero weight. For this figure that clause is vacuous \u2014 a zero delay is rejected \u2014 and the real hazard it must cover is an empty cell being read as instantaneous transmission at the fast end of the ramp.",
       "The registered `matrix_value_quantize` policy is not advertised or executed by revision 2. Every accepted cell is painted directly and an over-budget request is refused, so no quantization receipt, downsampling fact, or downsampling disclosure is produced. A future paint-only implementation would have to retain every cell and bind a complete evidence table before this skill could advertise it.",
-      "`simulationResolution` is recorded but NOT enforced. No registered validator checks that each delay is an integer multiple of the declared resolution, so a delay off the simulator's grid is accepted and displayed.",
+      "`simulationResolution` is recorded as context but does not establish a delay lattice. No registered validator knows whether NEST used normal Connect rounding, `cont_delay_synapse` SetDefaults, or post-creation SetStatus, and no validator enforces the model-conditioned lower bound of one resolution. Valid off-grid continuous delays are intentionally accepted and displayed rather than snapped or rejected.",
       "There is no declared or shared colour domain, so two delay matrices are NOT comparable by colour \u2014 compare the legends or the tables. A shared domain needs a clipping disclosure that does not exist in disclosures.v1.json.",
       "Cortexel cannot detect a transposed adapter: if the source and target arrays are swapped, every validator passes and the figure is a plausible lie about direction. The defences are the adapter's own vectors and restating orientation on the axes, legend, caption, and table.",
       "No uncertainty variant is renderable in a cell, so the spread across aggregated multapses is invisible in the colour. The complete returned table preserves contributor count and observed minimum/maximum, but those values are an empirical range rather than an uncertainty estimate.",
@@ -12459,416 +12464,6 @@ var CANONICALIZATION_IDS = freezeGenerated([
   "cortexel_utf16_sorted_unique_identifier_array_rfc8785_v1"
 ]);
 
-// src/core/exact-binary64.ts
-var FRACTION_BITS = 52n;
-var FRACTION_MASK = (1n << FRACTION_BITS) - 1n;
-var HIDDEN_BIT = 1n << FRACTION_BITS;
-var SIGN_BIT = 1n << 63n;
-var scratch = new DataView(new ArrayBuffer(8));
-function finiteValueInMinSubnormalUnits(value) {
-  if (!Number.isFinite(value)) throw new Error("exact binary64 accumulation requires finite values");
-  scratch.setFloat64(0, value, false);
-  const bits = scratch.getBigUint64(0, false);
-  const negative = (bits & SIGN_BIT) !== 0n;
-  const exponentBits = Number(bits >> FRACTION_BITS & 0x7ffn);
-  const fraction = bits & FRACTION_MASK;
-  if (exponentBits === 0 && fraction === 0n) return 0n;
-  const mantissa = exponentBits === 0 ? fraction : HIDDEN_BIT + fraction;
-  const shift = exponentBits === 0 ? 0n : BigInt(exponentBits - 1);
-  const units = mantissa << shift;
-  return negative ? -units : units;
-}
-function finiteBinary64ToMinSubnormalUnits(value) {
-  return finiteValueInMinSubnormalUnits(value);
-}
-function bitLength(value) {
-  return value === 0n ? 0 : value.toString(2).length;
-}
-function roundedQuotientEven(numerator, denominator) {
-  const quotient = numerator / denominator;
-  const remainder = numerator % denominator;
-  const doubled = remainder << 1n;
-  if (doubled > denominator || doubled === denominator && (quotient & 1n) === 1n) {
-    return quotient + 1n;
-  }
-  return quotient;
-}
-function binary64FromBits(bits) {
-  scratch.setBigUint64(0, bits, false);
-  return scratch.getFloat64(0, false);
-}
-function floorBinaryLogarithmOfRational(numerator, denominator) {
-  let exponent = bitLength(numerator) - bitLength(denominator);
-  const numeratorAtExponent = exponent >= 0 ? denominator << BigInt(exponent) : denominator;
-  const denominatorAtExponent = exponent >= 0 ? numerator : numerator << BigInt(-exponent);
-  if (denominatorAtExponent < numeratorAtExponent) exponent--;
-  return exponent;
-}
-function roundedScaledQuotient(numerator, denominator, binaryShift) {
-  return binaryShift >= 0 ? roundedQuotientEven(numerator << BigInt(binaryShift), denominator) : roundedQuotientEven(numerator, denominator << BigInt(-binaryShift));
-}
-function roundRationalWithBinaryExponent(signedNumerator, denominator, binaryExponent) {
-  if (denominator <= 0n) throw new Error("exact binary64 denominator must be positive");
-  if (signedNumerator === 0n) return { value: 0, exactNonZero: false };
-  const negative = signedNumerator < 0n;
-  const numerator = negative ? -signedNumerator : signedNumerator;
-  let exponentBits;
-  let fraction;
-  let valueExponent = floorBinaryLogarithmOfRational(numerator, denominator) + binaryExponent;
-  if (valueExponent < -1022) {
-    const subnormal = roundedScaledQuotient(
-      numerator,
-      denominator,
-      binaryExponent + 1074
-    );
-    if (subnormal === 0n) return { value: negative ? -0 : 0, exactNonZero: true };
-    if (subnormal >= HIDDEN_BIT) {
-      exponentBits = 1;
-      fraction = 0n;
-    } else {
-      exponentBits = 0;
-      fraction = subnormal;
-    }
-  } else {
-    let mantissa = roundedScaledQuotient(
-      numerator,
-      denominator,
-      binaryExponent + 52 - valueExponent
-    );
-    if (mantissa === HIDDEN_BIT << 1n) {
-      mantissa >>= 1n;
-      valueExponent++;
-    }
-    exponentBits = valueExponent + 1023;
-    if (exponentBits >= 2047) {
-      throw new Error("exact binary64 result overflows the finite range");
-    }
-    fraction = mantissa - HIDDEN_BIT;
-  }
-  const bits = (negative ? SIGN_BIT : 0n) | BigInt(exponentBits) << FRACTION_BITS | fraction;
-  return { value: binary64FromBits(bits), exactNonZero: true };
-}
-function comparePositiveRationalToPowerOfTwo(numerator, denominator, binaryExponent) {
-  const left = binaryExponent < 0 ? numerator << BigInt(-binaryExponent) : numerator;
-  const right = binaryExponent < 0 ? denominator : denominator << BigInt(binaryExponent);
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-function floorBinaryLogarithmOfSquareRootRational(numerator, denominator) {
-  let exponent = Math.floor((bitLength(numerator) - bitLength(denominator)) / 2);
-  while (comparePositiveRationalToPowerOfTwo(
-    numerator,
-    denominator,
-    2 * exponent
-  ) < 0) exponent--;
-  while (comparePositiveRationalToPowerOfTwo(
-    numerator,
-    denominator,
-    2 * (exponent + 1)
-  ) >= 0) exponent++;
-  return exponent;
-}
-function integerSquareRootFloor(value) {
-  if (value < 0n) throw new Error("integer square root requires a non-negative value");
-  if (value < 2n) return value;
-  let estimate = 1n << BigInt(Math.ceil(bitLength(value) / 2));
-  for (; ; ) {
-    const next = estimate + value / estimate >> 1n;
-    if (next >= estimate) return estimate;
-    estimate = next;
-  }
-}
-function roundedSquareRootScaledQuotient(numerator, denominator, binaryShift) {
-  const doubledShift = 2 * binaryShift;
-  const scaledNumerator = doubledShift >= 0 ? numerator << BigInt(doubledShift) : numerator;
-  const scaledDenominator = doubledShift >= 0 ? denominator : denominator << BigInt(-doubledShift);
-  const lower = integerSquareRootFloor(scaledNumerator / scaledDenominator);
-  const midpointTwice = (lower << 1n) + 1n;
-  const left = scaledNumerator << 2n;
-  const right = scaledDenominator * midpointTwice * midpointTwice;
-  if (left > right || left === right && (lower & 1n) === 1n) return lower + 1n;
-  return lower;
-}
-function roundSquareRootRationalWithBinaryExponent(numerator, denominator, binaryExponent) {
-  if (numerator < 0n) throw new Error("exact binary64 square root requires a non-negative numerator");
-  if (denominator <= 0n) throw new Error("exact binary64 square-root denominator must be positive");
-  if (numerator === 0n) return { value: 0, exactNonZero: false };
-  let valueExponent = floorBinaryLogarithmOfSquareRootRational(numerator, denominator) + binaryExponent;
-  let exponentBits;
-  let fraction;
-  if (valueExponent < -1022) {
-    const subnormal = roundedSquareRootScaledQuotient(
-      numerator,
-      denominator,
-      binaryExponent + 1074
-    );
-    if (subnormal === 0n) return { value: 0, exactNonZero: true };
-    if (subnormal >= HIDDEN_BIT) {
-      exponentBits = 1;
-      fraction = 0n;
-    } else {
-      exponentBits = 0;
-      fraction = subnormal;
-    }
-  } else {
-    let mantissa = roundedSquareRootScaledQuotient(
-      numerator,
-      denominator,
-      binaryExponent + 52 - valueExponent
-    );
-    if (mantissa === HIDDEN_BIT << 1n) {
-      mantissa >>= 1n;
-      valueExponent++;
-    }
-    exponentBits = valueExponent + 1023;
-    if (exponentBits >= 2047) {
-      throw new Error("exact binary64 square-root result overflows the finite range");
-    }
-    fraction = mantissa - HIDDEN_BIT;
-  }
-  return {
-    value: binary64FromBits(BigInt(exponentBits) << FRACTION_BITS | fraction),
-    exactNonZero: true
-  };
-}
-function exactBinary64MeanResult(values) {
-  if (values.length === 0) throw new Error("exact binary64 mean requires at least one value");
-  let numerator = 0n;
-  for (const value of values) numerator += finiteValueInMinSubnormalUnits(value);
-  return roundRationalWithBinaryExponent(numerator, BigInt(values.length), -1074);
-}
-function roundedBinary64Mean(values) {
-  const rounded = exactBinary64MeanResult(values);
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
-}
-function exactBinary64Mean(values) {
-  const rounded = exactBinary64MeanResult(values);
-  if (rounded.exactNonZero && rounded.value === 0) {
-    throw new Error("exact binary64 mean underflows to zero");
-  }
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
-}
-function exactBinary64EmpiricalQuantileType7(values, probability) {
-  if (values.length === 0) {
-    throw new Error("exact binary64 Type-7 quantile requires at least one value");
-  }
-  if (!Number.isFinite(probability) || probability < 0 || probability > 1) {
-    throw new Error("exact binary64 Type-7 quantile probability must be finite and lie in [0, 1]");
-  }
-  const ordered = values.map((value) => {
-    if (!Number.isFinite(value)) {
-      throw new Error("exact binary64 Type-7 quantile requires finite values");
-    }
-    return value === 0 ? 0 : value;
-  }).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-  if (ordered.length === 1) return ordered[0];
-  const denominator = 1n << 1074n;
-  const scaledPosition = finiteValueInMinSubnormalUnits(probability === 0 ? 0 : probability) * BigInt(ordered.length - 1);
-  const lowerIndex = Number(scaledPosition / denominator);
-  const fractionNumerator = scaledPosition % denominator;
-  if (lowerIndex === ordered.length - 1 || fractionNumerator === 0n) {
-    return ordered[lowerIndex];
-  }
-  const lower = finiteValueInMinSubnormalUnits(ordered[lowerIndex]);
-  const upper = finiteValueInMinSubnormalUnits(ordered[lowerIndex + 1]);
-  const numerator = lower * (denominator - fractionNumerator) + upper * fractionNumerator;
-  return finiteNonzeroRoundedResult(
-    roundRationalWithBinaryExponent(numerator, denominator, -1074),
-    "Type-7 quantile"
-  );
-}
-function exactBinary64SampleVarianceRatio(values) {
-  if (values.length < 2) {
-    throw new Error("exact binary64 sample variance requires at least two values");
-  }
-  const origin = finiteValueInMinSubnormalUnits(values[0]);
-  let sum = 0n;
-  let sumSquares = 0n;
-  for (const value of values) {
-    const difference = finiteValueInMinSubnormalUnits(value) - origin;
-    sum += difference;
-    sumSquares += difference * difference;
-  }
-  const count = BigInt(values.length);
-  const numerator = count * sumSquares - sum * sum;
-  if (numerator < 0n) {
-    throw new Error("exact binary64 sample variance invariant was violated");
-  }
-  return {
-    numerator,
-    denominator: count * (count - 1n),
-    count
-  };
-}
-function exactBinary64SampleStandardDeviation(values) {
-  const variance = exactBinary64SampleVarianceRatio(values);
-  if (variance.numerator === 0n) return 0;
-  return finiteNonzeroRoundedResult(
-    roundSquareRootRationalWithBinaryExponent(
-      variance.numerator,
-      variance.denominator,
-      -1074
-    ),
-    "sample standard deviation"
-  );
-}
-function isRoundedMeanOfSafeNonnegativeIntegers(value, count) {
-  if (!Number.isFinite(value) || value < 0 || value > Number.MAX_SAFE_INTEGER || !Number.isSafeInteger(count) || count < 1) return false;
-  const canonicalValue = value === 0 ? 0 : value;
-  const scaledUnits = finiteValueInMinSubnormalUnits(canonicalValue) * BigInt(count);
-  const denominator = 1n << 1074n;
-  const floorTotal = scaledUnits / denominator;
-  const maximumTotal = BigInt(Number.MAX_SAFE_INTEGER) * BigInt(count);
-  for (const total of [floorTotal, floorTotal + 1n]) {
-    if (total < 0n || total > maximumTotal) continue;
-    if (exactRationalToBinary64(total, BigInt(count)) === canonicalValue) return true;
-  }
-  return false;
-}
-function floorExactBinary64TimesSafeInteger(value, factor) {
-  if (!Number.isFinite(value) || value < 0) {
-    throw new Error("exact floor product requires a finite non-negative binary64 value");
-  }
-  if (!Number.isSafeInteger(factor) || factor < 0) {
-    throw new Error("exact floor product requires a non-negative safe-integer factor");
-  }
-  const productUnits = finiteValueInMinSubnormalUnits(value) * BigInt(factor);
-  const quotient = productUnits / (1n << 1074n);
-  if (quotient > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error("exact floor product exceeds the safe-integer range");
-  }
-  return Number(quotient);
-}
-function exactBinary64Sum(values) {
-  let numerator = 0n;
-  for (const value of values) numerator += finiteValueInMinSubnormalUnits(value);
-  const rounded = roundRationalWithBinaryExponent(numerator, 1n, -1074);
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
-}
-function exactWeightedProductSum(values, weights) {
-  if (values.length === 0 || values.length !== weights.length) {
-    throw new Error("exact binary64 weighted aggregate requires equal non-empty value and weight arrays");
-  }
-  let numerator = 0n;
-  let weightSum = 0n;
-  for (let index = 0; index < values.length; index++) {
-    const valueUnits = finiteValueInMinSubnormalUnits(values[index]);
-    const weightUnits = finiteValueInMinSubnormalUnits(weights[index]);
-    if (weightUnits <= 0n) {
-      throw new Error("exact binary64 weighted aggregate requires finite positive weights");
-    }
-    numerator += valueUnits * weightUnits;
-    weightSum += weightUnits;
-  }
-  return { numerator, weightSum };
-}
-function finiteNonzeroRoundedResult(rounded, noun) {
-  if (rounded.exactNonZero && rounded.value === 0) {
-    throw new Error(`exact binary64 ${noun} underflows to zero`);
-  }
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
-}
-function exactBinary64WeightedSum(values, weights) {
-  const aggregate = exactWeightedProductSum(values, weights);
-  return finiteNonzeroRoundedResult(
-    roundRationalWithBinaryExponent(aggregate.numerator, 1n, -2148),
-    "weighted sum"
-  );
-}
-function exactBinary64WeightedMean(values, weights) {
-  const aggregate = exactWeightedProductSum(values, weights);
-  return finiteNonzeroRoundedResult(
-    roundRationalWithBinaryExponent(aggregate.numerator, aggregate.weightSum, -1074),
-    "weighted mean"
-  );
-}
-function exactRationalToBinary64(numerator, denominator, binaryExponent = 0) {
-  const rounded = roundRationalWithBinaryExponent(numerator, denominator, binaryExponent);
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
-}
-function exactBinary64MultiplyByRational(value, numerator, denominator, binaryExponent = 0) {
-  return exactRationalToBinary64(
-    finiteValueInMinSubnormalUnits(value) * numerator,
-    denominator,
-    binaryExponent - 1074
-  );
-}
-function exactBinary64DivideByIntegerProduct(numerator, integerFactor, denominatorValue) {
-  if (!Number.isFinite(numerator)) {
-    throw new Error("exact binary64 quotient requires a finite numerator");
-  }
-  if (!Number.isSafeInteger(integerFactor) || integerFactor < 1) {
-    throw new Error("exact binary64 quotient requires a positive safe-integer factor");
-  }
-  if (!Number.isFinite(denominatorValue) || !(denominatorValue > 0)) {
-    throw new Error("exact binary64 quotient requires a finite positive denominator value");
-  }
-  const numeratorUnits = finiteValueInMinSubnormalUnits(numerator);
-  const denominatorUnits = BigInt(integerFactor) * finiteValueInMinSubnormalUnits(denominatorValue);
-  const result = exactRationalToBinary64(numeratorUnits, denominatorUnits);
-  if (numeratorUnits !== 0n && result === 0) {
-    throw new Error("exact binary64 quotient underflows to zero");
-  }
-  return result;
-}
-function binary64RelativeDifferenceWithinEpsilons(left, right, epsilonMultiples) {
-  if (!Number.isFinite(left) || !Number.isFinite(right) || !Number.isSafeInteger(epsilonMultiples) || epsilonMultiples < 0) return false;
-  const leftUnits = finiteValueInMinSubnormalUnits(left);
-  const rightUnits = finiteValueInMinSubnormalUnits(right);
-  const absoluteLeft = leftUnits < 0n ? -leftUnits : leftUnits;
-  const absoluteRight = rightUnits < 0n ? -rightUnits : rightUnits;
-  const scale = absoluteLeft > absoluteRight ? absoluteLeft : absoluteRight;
-  if (scale === 0n) return true;
-  const difference = leftUnits >= rightUnits ? leftUnits - rightUnits : rightUnits - leftUnits;
-  return difference << 52n <= BigInt(epsilonMultiples) * scale;
-}
-function binary64RelativeDifferenceWithinTolerance(left, right, relativeTolerance) {
-  if (!Number.isFinite(left) || !Number.isFinite(right) || !Number.isFinite(relativeTolerance) || relativeTolerance < 0) return false;
-  const leftUnits = finiteValueInMinSubnormalUnits(left);
-  const rightUnits = finiteValueInMinSubnormalUnits(right);
-  const toleranceUnits = finiteValueInMinSubnormalUnits(relativeTolerance);
-  const absoluteLeft = leftUnits < 0n ? -leftUnits : leftUnits;
-  const absoluteRight = rightUnits < 0n ? -rightUnits : rightUnits;
-  const scale = absoluteLeft > absoluteRight ? absoluteLeft : absoluteRight;
-  if (scale === 0n) return true;
-  const difference = leftUnits >= rightUnits ? leftUnits - rightUnits : rightUnits - leftUnits;
-  return difference << 1074n <= scale * toleranceUnits;
-}
-function exactBinary64SumUnits(values) {
-  let numerator = 0n;
-  for (const value of values) numerator += finiteValueInMinSubnormalUnits(value);
-  return numerator.toString(10);
-}
-function exactBinary64RatioToMean(value, exactSumUnits, count) {
-  if (!Number.isSafeInteger(count) || count < 1) {
-    throw new Error("exact binary64 mean ratio requires a positive safe-integer count");
-  }
-  const denominator = BigInt(exactSumUnits);
-  if (denominator <= 0n) {
-    throw new Error("exact binary64 mean ratio requires a strictly positive exact mean");
-  }
-  const numerator = finiteValueInMinSubnormalUnits(value) * BigInt(count);
-  const rounded = roundRationalWithBinaryExponent(numerator, denominator, 0);
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
-}
-function exactBinary64AffineFraction(value, origin, minimum, maximum) {
-  const denominator = finiteValueInMinSubnormalUnits(maximum) - finiteValueInMinSubnormalUnits(minimum);
-  if (denominator <= 0n) throw new Error("exact binary64 affine fraction requires maximum > minimum");
-  const numerator = finiteValueInMinSubnormalUnits(value) - finiteValueInMinSubnormalUnits(origin);
-  const rounded = roundRationalWithBinaryExponent(numerator, denominator, 0);
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
-}
-function exactBinary64RatioToDifference(value, minimum, maximum) {
-  const denominator = finiteValueInMinSubnormalUnits(maximum) - finiteValueInMinSubnormalUnits(minimum);
-  if (denominator <= 0n) {
-    throw new Error("exact binary64 ratio to difference requires maximum > minimum");
-  }
-  const numerator = finiteValueInMinSubnormalUnits(value);
-  return finiteNonzeroRoundedResult(
-    roundRationalWithBinaryExponent(numerator, denominator, 0),
-    "ratio to difference"
-  );
-}
-
 // src/core/units.ts
 function isKnownUnit(code) {
   return typeof code === "string" && Object.prototype.hasOwnProperty.call(UNITS, code);
@@ -14126,24 +13721,6 @@ export {
   SEMANTIC_VALIDATOR_IDS,
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
-  finiteBinary64ToMinSubnormalUnits,
-  roundedBinary64Mean,
-  exactBinary64Mean,
-  exactBinary64EmpiricalQuantileType7,
-  exactBinary64SampleStandardDeviation,
-  isRoundedMeanOfSafeNonnegativeIntegers,
-  floorExactBinary64TimesSafeInteger,
-  exactBinary64Sum,
-  exactBinary64WeightedSum,
-  exactBinary64WeightedMean,
-  exactRationalToBinary64,
-  exactBinary64DivideByIntegerProduct,
-  binary64RelativeDifferenceWithinEpsilons,
-  binary64RelativeDifferenceWithinTolerance,
-  exactBinary64SumUnits,
-  exactBinary64RatioToMean,
-  exactBinary64AffineFraction,
-  exactBinary64RatioToDifference,
   MAX_MATERIALIZED_BINS,
   materializeWidthBins,
   materializeCenteredLagBins,
@@ -14180,4 +13757,4 @@ export {
   verifyPeakBasisAgainstWindow,
   verifyBinnedPeakValueLattice
 };
-//# sourceMappingURL=chunk-DXJPMLTB.js.map
+//# sourceMappingURL=chunk-GFFRGANP.js.map

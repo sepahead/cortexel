@@ -4533,7 +4533,40 @@ const runtimeTopologyProbe = `
     target: [3, 3, 4],
     weight: [2, -2, 0],
     delay: [1, 2, 3],
+    synapse_model: ['static_synapse', 'static_synapse', 'static_synapse'],
   };
+  const synapseModelSemantics = [{
+    synapseModel: 'static_synapse',
+    weight: 'effective',
+    delay: 'effective',
+  }];
+  const endpointOnly = core.getConnectionsToSceneData({
+    sources: [1],
+    targets: [2],
+  });
+  const unusedMeasurementUnits = core.getConnectionsToSceneData({
+    sources: [1],
+    targets: [2],
+  }, { weightUnits: 'pA' });
+  const emptyMeasuredScene = core.getConnectionsToSceneData({
+    sources: [],
+    targets: [],
+    weights: [],
+    delays: [],
+    synapse_models: [],
+  }, {
+    weightUnits: 'pA',
+    delayUnits: 'ms',
+    synapseModelSemantics: [],
+  });
+  const emptyMeasuredVerification = emptyMeasuredScene.ok
+    ? core.detectEmptyScene(emptyMeasuredScene.data)
+    : null;
+  const unusedMeasurementAuthority = core.getConnectionsToSceneData({
+    sources: [1],
+    targets: [2],
+    synapse_models: ['static_synapse'],
+  }, { synapseModelSemantics });
   const common = {
     sourceIds: [1, 2],
     targetIds: [3, 4],
@@ -4545,15 +4578,18 @@ const runtimeTopologyProbe = `
     ...common,
     weightUnits: 'pA',
     delayUnits: 'ms',
+    synapseModelSemantics,
     samplePolicy: { kind: 'complete' },
   });
   const weights = core.synapseCollectionToWeightMatrixParams(snapshot, {
     ...common,
+    synapseModelSemantics,
     weightUnits: 'pA',
     aggregation: 'sum',
   });
   const delays = core.synapseCollectionToDelayMatrixParams(snapshot, {
     ...common,
+    synapseModelSemantics,
     delayUnits: 'ms',
     aggregation: 'mean',
   });
@@ -4569,6 +4605,7 @@ const runtimeTopologyProbe = `
   });
   const delayDistribution = core.synapseCollectionToDelayDistributionParams(snapshot, {
     ...common,
+    synapseModelSemantics,
     delayUnits: 'ms',
     binWidthMs: 1,
     windowStartMs: 1,
@@ -4588,12 +4625,18 @@ const runtimeTopologyProbe = `
   );
   const largeOrigin = 1e9;
   const preciseDelay = core.synapseCollectionToDelayDistributionParams(
-    { source: [1], target: [2], delay: [largeOrigin + 1 - 1e-6] },
+    {
+      source: [1],
+      target: [2],
+      delay: [largeOrigin + 1 - 1e-6],
+      synapse_model: ['static_synapse'],
+    },
     {
       sourceIds: [1],
       targetIds: [2],
       snapshotTimeMs: 0,
       snapshotScope: { kind: 'single_process_complete' },
+      synapseModelSemantics,
       delayUnits: 'ms',
       binWidthMs: 1,
       windowStartMs: largeOrigin,
@@ -4602,13 +4645,24 @@ const runtimeTopologyProbe = `
     },
   );
   const meanUnderflow = core.synapseCollectionToWeightMatrixParams(
-    { source: [1, 1], target: [3, 3], weight: [-5e-324, 0] },
-    { ...common, weightUnits: 'pA', aggregation: 'mean' },
+    {
+      source: [1, 1],
+      target: [3, 3],
+      weight: [-5e-324, 0],
+      synapse_model: ['static_synapse', 'static_synapse'],
+    },
+    { ...common, synapseModelSemantics, weightUnits: 'pA', aggregation: 'mean' },
   );
   const densityOverflow = core.synapseCollectionToDelayDistributionParams(
-    { source: [1, 1], target: [3, 3], delay: [1, 2] },
+    {
+      source: [1, 1],
+      target: [3, 3],
+      delay: [1, 2],
+      synapse_model: ['static_synapse', 'static_synapse'],
+    },
     {
       ...common,
+      synapseModelSemantics,
       delayUnits: 'ms',
       binWidthMs: Number.MAX_VALUE,
       windowStartMs: 0,
@@ -4629,7 +4683,13 @@ const runtimeTopologyProbe = `
         edges: [{ ...graph.params.edges[0], id: 'not-a-canonical-id' }, ...graph.params.edges.slice(1)],
       }).success
     : true;
-  if (!scalarSnapshot.ok || scalarSnapshot.params.weights?.[0] !== 0 ||
+  if (Object.hasOwn(core, 'validateSynapseModelMeasurementSemantics') ||
+      !scalarSnapshot.ok || scalarSnapshot.params.weights?.[0] !== 0 ||
+      !endpointOnly.ok || unusedMeasurementUnits.ok || unusedMeasurementAuthority.ok ||
+      !emptyMeasuredScene.ok ||
+      Object.hasOwn(emptyMeasuredScene.data, 'networkWeightUnits') ||
+      Object.hasOwn(emptyMeasuredScene.data, 'networkDelayUnits') ||
+      !emptyMeasuredVerification?.valid || !emptyMeasuredVerification.empty ||
       !adjacency.ok || adjacency.params.connection_count !== 3 ||
       adjacency.params.cells[0].connection_count !== 2 ||
       !graph.ok || graph.params.edges.length !== 3 ||
@@ -5306,6 +5366,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
           const charts = await import('cortexel/react/charts');
           if (typeof charts.ReferenceVizSpecFigure !== 'function' ||
               typeof charts.ReferenceChartScene !== 'function' ||
+              Object.hasOwn(charts, 'CheckedReferenceChartScene') ||
               typeof charts.binnedStepPath !== 'function' ||
               typeof charts.boundedStemPointPaths !== 'function' ||
               typeof charts.matrixValueBucketPaths !== 'function' ||
@@ -5320,6 +5381,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
           const charts = require('cortexel/react/charts');
           if (typeof charts.ReferenceVizSpecFigure !== 'function' ||
               typeof charts.ReferenceChartScene !== 'function' ||
+              Object.hasOwn(charts, 'CheckedReferenceChartScene') ||
               typeof charts.binnedStepPath !== 'function' ||
               typeof charts.boundedStemPointPaths !== 'function' ||
               typeof charts.matrixValueBucketPaths !== 'function' ||
@@ -5436,10 +5498,13 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         validateHostRendererSpec,
         type ConnectionGraphOptions,
         type DelayDistributionOptions,
+        type GetConnectionsSceneOptions,
         type NestTopologyResult,
         type SpatialMap2DOptions,
+        type SynapseModelMeasurementSemantics,
         type WeightMatrixParams,
       } from 'cortexel/core';
+      import * as coreSurface from 'cortexel/core';
       import {
         NeuronA11yPager,
         PopulationA11yList,
@@ -5461,6 +5526,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         equalAspectDomains,
         matrixValueBucketPaths,
       } from 'cortexel/react/charts';
+      import * as chartSurface from 'cortexel/react/charts';
 
       const authored = buildVizSpec({
         skill: 'nest.spike_raster',
@@ -5472,6 +5538,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const args = {} as RenderSceneArgs;
       const graphOptions = {} as ConnectionGraphOptions;
       const delayOptions = {} as DelayDistributionOptions;
+      const connectionSceneOptions = {} as GetConnectionsSceneOptions;
+      const modelSemantics = {} as SynapseModelMeasurementSemantics;
       const spatialOptions = {} as SpatialMap2DOptions;
       const topologyResult = {} as NestTopologyResult<WeightMatrixParams>;
       const assurance = {} as InputAssurance;
@@ -5498,6 +5566,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenRenderPlan = import('cortexel/render-svg').RenderPlanV1;
       // @ts-expect-error callers cannot import plan-construction types
       type ForbiddenPanel = import('cortexel/render-svg').Panel;
+      // @ts-expect-error the checked chart dispatcher is package-internal
+      void chartSurface.CheckedReferenceChartScene;
+      // @ts-expect-error raw model-semantics validation is package-internal
+      void coreSurface.validateSynapseModelMeasurementSemantics;
       // @ts-expect-error callers cannot import plan-construction types
       type ForbiddenMark = import('cortexel/render-svg').Mark;
       // @ts-expect-error callers cannot import plan-construction types
@@ -5543,6 +5615,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         ROUTING_DISCRIMINATORS,
         graphOptions,
         delayOptions,
+        connectionSceneOptions,
+        modelSemantics,
         spatialOptions,
         topologyResult,
         normalizeSynapseCollectionSnapshot,
@@ -5585,6 +5659,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const build: typeof cortexel.buildVizSpec = core.buildVizSpec;
       const graphOptions = {} as core.ConnectionGraphOptions;
       const delayOptions = {} as core.DelayDistributionOptions;
+      const connectionSceneOptions = {} as core.GetConnectionsSceneOptions;
+      const modelSemantics = {} as core.SynapseModelMeasurementSemantics;
       const spatialOptions = {} as core.SpatialMap2DOptions;
       const topologyResult = {} as core.NestTopologyResult<core.WeightMatrixParams>;
       const assurance = {} as figure.InputAssurance;
@@ -5613,6 +5689,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenRenderPlan = renderSvg.RenderPlanV1;
       // @ts-expect-error callers cannot import plan-construction types
       type ForbiddenPanel = renderSvg.Panel;
+      // @ts-expect-error the checked chart dispatcher is package-internal
+      void charts.CheckedReferenceChartScene;
+      // @ts-expect-error raw model-semantics validation is package-internal
+      void core.validateSynapseModelMeasurementSemantics;
       // @ts-expect-error callers cannot import plan-construction types
       type ForbiddenMark = renderSvg.Mark;
       // @ts-expect-error callers cannot import plan-construction types
@@ -5652,6 +5732,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         core.ROUTING_DISCRIMINATORS,
         graphOptions,
         delayOptions,
+        connectionSceneOptions,
+        modelSemantics,
         spatialOptions,
         topologyResult,
         core.spikeRecorderToIsiParams,

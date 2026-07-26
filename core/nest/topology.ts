@@ -28,6 +28,15 @@ import {
 } from '../skills/params';
 import { NEST_INPUT_LIMITS } from './shapes';
 import { parseNestInput, projectNestInputFields } from './safeInput';
+import {
+  boundedSynapseModelMeasurementSemanticsSchema,
+  validateSynapseModelMeasurementSemantics,
+  type SynapseModelMeasurementSemantics,
+} from './modelSemantics';
+import {
+  exactBinary64Mean,
+  exactBinary64Sum,
+} from '../../src/core/exact-binary64';
 
 export type NestTopologyResult<T> =
   | { ok: true; params: T }
@@ -283,6 +292,9 @@ const GraphOptionsSchema = z
     ...CommonConnectionOptionsShape,
     sourceIds: graphNodeIds,
     targetIds: graphNodeIds,
+    synapseModelSemantics:
+      boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections)
+        .optional(),
     weightUnits: displayText(80).optional(),
     delayUnits: z.literal('ms').optional(),
     samplePolicy: z.discriminatedUnion('kind', [
@@ -299,6 +311,8 @@ const MatrixOptionsSchema = z.object(CommonConnectionOptionsShape).strict();
 const WeightMatrixOptionsSchema = z
   .object({
     ...CommonConnectionOptionsShape,
+    synapseModelSemantics:
+      boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
     weightUnits: displayText(80),
     aggregation: z.enum(['sum', 'mean', 'minimum', 'maximum', 'single_connection']),
   })
@@ -306,6 +320,8 @@ const WeightMatrixOptionsSchema = z
 const DelayMatrixOptionsSchema = z
   .object({
     ...CommonConnectionOptionsShape,
+    synapseModelSemantics:
+      boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
     delayUnits: z.literal('ms'),
     aggregation: z.enum(['mean', 'minimum', 'maximum', 'single_connection']),
   })
@@ -319,6 +335,8 @@ const DegreeOptionsSchema = z
 const DelayDistributionOptionsSchema = z
   .object({
     ...CommonConnectionOptionsShape,
+    synapseModelSemantics:
+      boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
     delayUnits: z.literal('ms'),
     binWidthMs: finite.positive(),
     windowStartMs: finite.nonnegative(),
@@ -345,6 +363,7 @@ export interface ConnectionSnapshotOptions {
 }
 
 export interface ConnectionGraphOptions extends ConnectionSnapshotOptions {
+  synapseModelSemantics?: readonly SynapseModelMeasurementSemantics[];
   weightUnits?: string;
   delayUnits?: 'ms';
   samplePolicy:
@@ -353,11 +372,13 @@ export interface ConnectionGraphOptions extends ConnectionSnapshotOptions {
 }
 
 export interface WeightMatrixOptions extends ConnectionSnapshotOptions {
+  synapseModelSemantics: readonly SynapseModelMeasurementSemantics[];
   weightUnits: string;
   aggregation: 'sum' | 'mean' | 'minimum' | 'maximum' | 'single_connection';
 }
 
 export interface DelayMatrixOptions extends ConnectionSnapshotOptions {
+  synapseModelSemantics: readonly SynapseModelMeasurementSemantics[];
   delayUnits: 'ms';
   aggregation: 'mean' | 'minimum' | 'maximum' | 'single_connection';
 }
@@ -367,6 +388,7 @@ export interface DegreeDistributionOptions extends ConnectionSnapshotOptions {
 }
 
 export interface DelayDistributionOptions extends ConnectionSnapshotOptions {
+  synapseModelSemantics: readonly SynapseModelMeasurementSemantics[];
   delayUnits: 'ms';
   binWidthMs: number;
   windowStartMs: number;
@@ -501,6 +523,15 @@ export function synapseCollectionToConnectionGraphParams(
     if ((snapshot.delays_ms !== undefined) !== (opts.delayUnits !== undefined)) {
       return error("delayUnits:'ms' must be supplied exactly when the SynapseCollection contains delay");
     }
+    const semantics = validateSynapseModelMeasurementSemantics(
+      snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      [
+        ...(snapshot.weights !== undefined ? ['weight' as const] : []),
+        ...(snapshot.delays_ms !== undefined ? ['delay' as const] : []),
+      ],
+    );
+    if (!semantics.ok) return semantics;
     const allNodeIds = [...sourceIds];
     const seenNodes = new Set(allNodeIds);
     for (const id of targetIds) {
@@ -610,7 +641,10 @@ function pairBuckets(
 
 type MeasurementAggregationResult =
   | { ok: true; value: number }
-  | { ok: false; reason: 'multiple_connections' | 'mean_underflow' };
+  | {
+    ok: false;
+    reason: 'multiple_connections' | 'sum_unrepresentable' | 'mean_unrepresentable';
+  };
 
 function aggregateMeasurements(
   values: number[],
@@ -631,15 +665,21 @@ function aggregateMeasurements(
     for (let index = 1; index < values.length; index++) maximum = Math.max(maximum, values[index]);
     return { ok: true, value: maximum };
   }
-  const ordered = [...values].sort((left, right) => left - right);
-  let sum = 0;
-  for (const value of ordered) sum += value;
-  if (aggregation === 'mean') {
-    const mean = sum / ordered.length;
-    if (sum !== 0 && mean === 0) return { ok: false, reason: 'mean_underflow' };
-    return { ok: true, value: mean };
+  try {
+    return {
+      ok: true,
+      value: aggregation === 'mean'
+        ? exactBinary64Mean(values)
+        : exactBinary64Sum(values),
+    };
+  } catch {
+    return {
+      ok: false,
+      reason: aggregation === 'mean'
+        ? 'mean_unrepresentable'
+        : 'sum_unrepresentable',
+    };
   }
-  return { ok: true, value: sum };
 }
 
 function matrixCommon(context: ParsedConnectionContext) {
@@ -711,6 +751,12 @@ export function synapseCollectionToWeightMatrixParams(
     const weights = context.params.snapshot.weights;
     if (!weights) return error('weight: weight matrix requires a complete weight channel');
     const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ['weight'],
+    );
+    if (!semantics.ok) return semantics;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -730,7 +776,7 @@ export function synapseCollectionToWeightMatrixParams(
       }
       if (!aggregated.ok) {
         return error(
-          `weight matrix cell ${bucket.source_id}->${bucket.target_id} mean underflows binary64 and would erase nonzero weight evidence`,
+          `weight matrix cell ${bucket.source_id}->${bucket.target_id} ${aggregated.reason === 'mean_unrepresentable' ? 'mean' : 'sum'} is not representable as finite binary64 without erasing or overflowing weight evidence`,
         );
       }
       const value = aggregated.value;
@@ -773,6 +819,12 @@ export function synapseCollectionToDelayMatrixParams(
     const delays = context.params.snapshot.delays_ms;
     if (!delays) return error('delay: delay matrix requires a complete delay channel');
     const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ['delay'],
+    );
+    if (!semantics.ok) return semantics;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -792,7 +844,7 @@ export function synapseCollectionToDelayMatrixParams(
       }
       if (!aggregated.ok) {
         return error(
-          `delay matrix cell ${bucket.source_id}->${bucket.target_id} mean underflows binary64`,
+          `delay matrix cell ${bucket.source_id}->${bucket.target_id} mean is not representable as finite binary64`,
         );
       }
       const value = aggregated.value;
@@ -974,6 +1026,12 @@ export function synapseCollectionToDelayDistributionParams(
     const delays = context.params.snapshot.delays_ms;
     if (!delays) return error('delay: delay distribution requires a complete delay channel');
     const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ['delay'],
+    );
+    if (!semantics.ok) return semantics;
     const geometry = exactBinCount(opts.windowStartMs, opts.windowStopMs, opts.binWidthMs);
     if (!geometry.ok) return geometry;
     if (delays.length === 0 && opts.normalization !== 'count') {

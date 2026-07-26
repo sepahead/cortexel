@@ -75,6 +75,28 @@ function renderDirectChart(
   );
 }
 
+function emptyConnectionSnapshotSpec(
+  skill:
+    | 'nest.connection_graph'
+    | 'nest.adjacency_matrix'
+    | 'nest.weight_matrix'
+    | 'nest.delay_matrix',
+) {
+  const spec = structuredClone(getExamplePayload(skill)!);
+  if (skill === 'nest.connection_graph') {
+    spec.params.edges = [];
+    spec.params.source_connection_count = 0;
+    delete spec.params.weight_units;
+    delete spec.params.delay_units;
+    delete spec.provenance.declared_inputs?.weight_units;
+    delete spec.provenance.declared_inputs?.delay_units;
+  } else {
+    spec.params.cells = [];
+    spec.params.connection_count = 0;
+  }
+  return spec;
+}
+
 describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
   it('covers all nineteen chart skills with distinct SVG naming structure and a bound caption', () => {
     expect(REFERENCE_CHART_SKILLS).toHaveLength(19);
@@ -441,7 +463,7 @@ describe('React-only topology and connection-analysis figures', () => {
     snapshot_scope: { kind: 'mpi_all_ranks_merged', world_size: 4 },
   };
 
-  it('renders all three sparse matrix skills with exact cells and absent-versus-zero disclosure', () => {
+  it('renders all three sparse matrix skills with exact, skill-specific value semantics', () => {
     const examples = [
       {
         skill: 'nest.adjacency_matrix',
@@ -492,7 +514,6 @@ describe('React-only topology and connection-analysis figures', () => {
       expect(html, example.skill).toContain('data-absent-cell="no_connection"');
       expect(html, example.skill).toContain('target_rows_source_columns');
       expect(html, example.skill).toContain('absent: no connection');
-      expect(html, example.skill).toContain('present zero');
       expect(html, example.skill).toContain('mpi_all_ranks_merged');
       expect(html, example.skill).toContain('MPI ownership');
       expect(html, example.skill).toContain('aria-label="Matrix data ordered as source-axis columns, target-axis rows, then present cells"');
@@ -502,12 +523,92 @@ describe('React-only topology and connection-analysis figures', () => {
       expect(html, example.skill).not.toMatch(/(?:NaN|Infinity)/);
       expect(html.match(/data-mark="matrix-value-bucket"/g)?.length ?? 0).toBeLessThanOrEqual(17);
     }
+    const adjacency = renderDirectChart(
+      examples[0].skill,
+      'connection-matrix',
+      examples[0].params,
+    );
+    expect(adjacency).toContain('each present cell encodes binary connection presence');
+    expect(adjacency).toContain('present connection');
+    expect(adjacency).toContain('binary-presence path');
+    expect(adjacency).toContain(CORTEXEL_PALETTE.excitatory);
+    expect(adjacency).not.toContain('present zero weight');
+    expect(adjacency).not.toContain('numeric sign only');
+    expect(adjacency).not.toContain('disclosed magnitude levels');
+
     const weighted = renderDirectChart(
       examples[1].skill,
       'connection-matrix',
       examples[1].params,
     );
     expect(weighted).toContain('data-present-zero-count="1"');
+    expect(weighted).toContain('a present measured zero weight remains visibly distinct');
+    expect(weighted).toContain('present zero weight');
+    expect(weighted).toContain('cool hue: negative numeric weight');
+    expect(weighted).toContain('warm hue: positive numeric weight');
+    expect(weighted).toContain('hues encode numeric sign only, not synapse identity or excitation');
+    expect(weighted).toContain('opacity uses 8 disclosed absolute-magnitude levels');
+    expect(weighted).toContain(CORTEXEL_PALETTE.cyan);
+    expect(weighted).toContain(CORTEXEL_PALETTE.orange);
+    expect(weighted).not.toContain(CORTEXEL_PALETTE.excitatory);
+    expect(weighted).not.toContain(CORTEXEL_PALETTE.inhibitory);
+    expect(weighted).not.toMatch(/\b(?:excitatory|inhibitory)\b/iu);
+
+    const delayed = renderDirectChart(
+      examples[2].skill,
+      'connection-matrix',
+      examples[2].params,
+    );
+    expect(delayed).toContain('every present displayed delay is strictly positive');
+    expect(delayed).toContain('teal hue: positive numeric delay');
+    expect(delayed).toContain('bounded positive delay-value paths');
+    expect(delayed).toContain('hue encodes positive numeric delay values only, not synapse identity or excitation');
+    expect(delayed).toContain(CORTEXEL_PALETTE.teal);
+    expect(delayed).not.toContain(CORTEXEL_PALETTE.excitatory);
+    expect(delayed).not.toContain(CORTEXEL_PALETTE.inhibitory);
+    expect(delayed).not.toMatch(/\b(?:excitatory|inhibitory)\b/iu);
+    expect(delayed).not.toContain('present zero weight');
+    expect(delayed).not.toContain('negative weight');
+  });
+
+  it('renders valid all-absent graph and matrix snapshots through the strict wrapper', () => {
+    for (const skill of [
+      'nest.connection_graph',
+      'nest.adjacency_matrix',
+      'nest.weight_matrix',
+      'nest.delay_matrix',
+    ] as const) {
+      const html = renderToStaticMarkup(
+        <ReferenceVizSpecFigure spec={emptyConnectionSnapshotSpec(skill)} />,
+      );
+      expect(html, skill).toContain('<svg');
+      expect(html, skill).not.toContain('Invalid skill invocation');
+      expect(html, skill).not.toContain('Invalid reference chart input');
+      if (skill === 'nest.connection_graph') {
+        expect(html).toContain('data-provided-edge-count="0"');
+        expect(html).toContain('data-rendered-edge-count="0"');
+        expect(html).toContain('3 isolates');
+      } else {
+        expect(html).toContain('data-source-cell-count="0"');
+        expect(html).toContain('data-rendered-cell-count="0"');
+        expect(html).toContain('data-value-bucket-count="0"');
+        expect(html).not.toContain('data-mark="matrix-value-bucket"');
+        expect(html).toContain('0 present sparse cells');
+        if (skill === 'nest.weight_matrix') {
+          expect(html).toContain('No measured weight value is displayed because the snapshot has no present cells');
+          expect(html).not.toContain('maximum absolute displayed weight');
+          expect(html).not.toContain('present zero-weight cells');
+          expect(html).not.toContain('absolute-magnitude levels');
+          expect(html).not.toContain('opacity uses');
+        }
+        if (skill === 'nest.delay_matrix') {
+          expect(html).toContain('No measured delay value is displayed because the snapshot has no present cells');
+          expect(html).not.toContain('maximum displayed delay');
+          expect(html).not.toContain('magnitude levels');
+          expect(html).not.toContain('opacity uses');
+        }
+      }
+    }
   });
 
   it('exposes isolated matrix axes in exact non-monotonic declared order', () => {
@@ -1099,6 +1200,32 @@ describe('topology and distribution geometry is exact, deterministic, and bounde
 });
 
 describe('reference chart routing fails closed', () => {
+  it('revalidates the public low-level chart discriminator and scene before dispatch', () => {
+    const outDegree = getExamplePayload('nest.out_degree_distribution')!;
+    const wrongSkill = renderDirectChart(
+      'nest.in_degree_distribution',
+      'degree-distribution',
+      outDegree.params,
+    );
+    expect(wrongSkill).toContain('role="alert"');
+    expect(wrongSkill).toContain('Invalid reference chart input');
+    expect(wrongSkill).toContain('validates only its registered skill, scene, and params');
+    expect(wrongSkill).not.toContain('<svg');
+    expect(wrongSkill).not.toContain('In-degree distribution');
+    expect(wrongSkill).not.toContain('Out-degree distribution');
+
+    const wrongScene = renderDirectChart(
+      'nest.out_degree_distribution',
+      'spike-raster',
+      outDegree.params,
+    );
+    expect(wrongScene).toContain('role="alert"');
+    expect(wrongScene).toContain(
+      'The skill and scene do not identify the same registered Cortexel chart contract.',
+    );
+    expect(wrongScene).not.toContain('<svg');
+  });
+
   it('rejects a scene mismatch before a chart receives params', () => {
     const spec = getExamplePayload('nest.spike_raster')!;
     spec.scene = 'voltage-trace';

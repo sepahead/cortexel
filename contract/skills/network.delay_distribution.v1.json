@@ -12,7 +12,7 @@
       "Anything about connections that were not supplied. The histogram describes exactly the rows in the declared selection. A row filtered upstream is invisible, and Cortexel cannot see that it ever existed.",
       "The global delay distribution from a rank-local or sampled snapshot. It is complete for the retained edges only; extrapolating requires that retention be independent of delay, which Cortexel cannot check and which a prefix of NEST's rank/thread-ordered rows does not satisfy.",
       "The per-pair distribution from a per-synapse histogram, or the reverse. Where multiplicity covaries with delay -- as under a distance-dependent rule, where near pairs get both more contacts and shorter delays -- the two differ systematically and neither can be recovered from the other.",
-      "That an alternating comb in the bars is a property of the network. When the bin width is not an integer multiple of the simulator's resolution, consecutive bins straddle different numbers of grid delays, and a uniform delay population is drawn as structure.",
+      "That an alternating comb in the bars is a property of the network. For delays actually produced on a resolution lattice -- for example by ordinary NEST Connect rounding -- a bin width that is not an integer multiple of that resolution can make consecutive bins straddle different numbers of lattice points. `cont_delay_synapse` values retained through model defaults or post-creation SetStatus may be off-grid, so source resolution alone cannot establish this mechanism.",
       "That these were the delays in effect at any time other than the declared snapshot. A delay-modifying operation or structural plasticity between two snapshots of one run changes every value here.",
       "Anything about synaptic strength, sign, or receptor. Weights may ride along on the rows; they never affect, filter, or group a delay, and two synapses with identical delay can differ by orders of magnitude in drive.",
       "That the distribution has any functional form. Cortexel draws the empirical histogram: it fits nothing and tests nothing, and a mean delay is a summary of the rows supplied, not a claim about the rule that generated them.",
@@ -23,12 +23,12 @@
     "normalization": [
       "Connection rows are NOT assumed to arrive in a semantic order: NEST's GetConnections may return a rank- and thread-dependent order. The histogram is order-invariant, and pair means sort their numeric contributors before binary64 accumulation. The artifact-bound canonical request retains the complete source arrays; revision 2 emits neither a separate original-order digest nor generated ordinal edge identities.",
       "Duplicate identical rows are PRESERVED. Two connections between the same ordered pair are two synapses -- a multapse, not a duplicate-entry error. Under per_connection each contributes its own observation; deduplicating them would silently convert the figure into a per-pair distribution and shift its mass wherever multiplicity covaries with delay.",
-      "A delay is a finite, strictly positive time. Zero, negative and -0 are refused with SCIENCE_DELAY_NONPOSITIVE. NEST's minimum delay is one resolution tick, and a zero-delay synapse is not representable in an event-driven scheduler that relies on min-delay lookahead; a 0 in a delay column is a default, not a measurement.",
+      "A delay is a finite, strictly positive time. Zero, negative and -0 are refused with SCIENCE_DELAY_NONPOSITIVE. Every supported NEST delay, including an off-grid `cont_delay_synapse` value, is at least one simulation resolution; a zero-delay synapse is not representable in an event-driven scheduler that relies on min-delay lookahead.",
       "A null delay is REFUSED, never skipped. A row whose delay was not read cannot enter the histogram, and dropping it silently shrinks the edge population by an amount nobody sees. Supply the delay or remove the row from the declared selection.",
       "Delay values carry kind `delay` and a time-dimension unit. `nest:delay` is accepted and maps to milliseconds exactly -- unlike `nest:weight`, whose dimension is simulator-defined and never convertible. The bin unit must share the time dimension; conversion is a single typed step, never a hard-coded factor of 1000, and it is disclosed.",
       "Bins are half-open [lo, hi), except that a value exactly at the FINAL edge falls in the final bin -- otherwise the largest observed delay would always be silently dropped. Bins are ordered by ascending lower edge, always; never by frequency.",
       "Boundary membership carries a bounded binary64 allowance: after the one registered conversion into the bin unit, a value within 8 binary64 ulps of an edge (8 × epsilon × max(minSubnormal, |value|, |edge|)) is treated as lying ON that edge and is assigned to the upper bin under the half-open rule. The allowance is relative to the two magnitudes compared and NEVER grows with the bin index -- a tolerance that scaled with the index would move real sub-boundary delays into the wrong bin.",
-      "Simulator delays are quantized to the resolution grid: NEST rounds every delay to a multiple of h (default 0.1 ms). The population is therefore supported on a lattice, and `sourceResolution` is a declared fact that reaches the artifact, the table and the summary so a reader can see the lattice the bins are cutting.",
+      "NEST delay-grid semantics depend on the synapse model and assignment path. Normal Connect assignment rounds delays to the simulation resolution h, including for `cont_delay_synapse`; however, `cont_delay_synapse` model defaults set with SetDefaults or per-connection values changed after creation with SetStatus can retain off-grid delays. All supported delays remain at least h. `sourceResolution` is therefore declared context in the request, artifact and summary, not proof that the observed population lies on a lattice, and Cortexel never snaps a supplied value to it.",
       "Weights, synapse models and edge ids may ride along on the rows. A weight NEVER affects, filters, or groups a delay. A selection is expressed by supplying exactly the rows it contains, because a filter Cortexel applied silently would change the population the histogram claims to describe.",
       "Self-connections are ordinary connections: an autapse's delay is a real delay and is counted like any other. There is deliberately no autapse filter; excluding autapses means not supplying those rows.",
       "The exact raw `NetworkScopeV1` is retained once in the canonical request, and the live in-process `requestDigest` covers that request. Authority rows and summary facts expose only the bounded canonical scope projection, so `mergedRanks` is not repeated with world-size cardinality. Artifact 1.0 table assurance is `shape_only` and cell bytes remain unbound; it provides no detached verification or persisted assurance receipt."
@@ -204,7 +204,7 @@
         },
         "sourceResolution": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
-          "description": "The simulator's time resolution, kind `duration`. Simulator delays are quantized to multiples of it, so it is what tells a reader whether the bin width cuts the lattice evenly. It is a DECLARED fact: registry v1 has no validator that can check a delay against it (see knownLimitations)."
+          "description": "The simulator's time resolution, kind `duration`, recorded as DECLARED context. It establishes neither the synapse model nor the assignment path: normal NEST Connect rounds delays to it, while `cont_delay_synapse` defaults or post-creation SetStatus can retain valid off-grid values. Registry v1 does not use this field as lattice proof and never snaps supplied delays to it (see knownLimitations)."
         },
         "scope": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
@@ -354,7 +354,7 @@
         },
         "bins": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
-          "description": "Required, in both modes, and the single source of truth for the bin edges. Cortexel does not choose them: for a grid-quantized delay the choice is unusually consequential, because a width that is not an integer multiple of the simulator resolution draws a uniform population as an alternating comb."
+          "description": "Required, in both modes, and the single source of truth for the bin edges. Cortexel does not choose them. When the selected delays are known independently to lie on a resolution lattice, a width that is not an integer multiple of that resolution can draw a uniform lattice population as an alternating comb; `sourceResolution` alone does not establish that condition."
         },
         "normalization": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",
@@ -831,19 +831,19 @@
       "name": "numpy.histogram",
       "version": "2.1.0",
       "status": "not_run",
-      "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle, for the delay resolution grid and for the MPI target-rank-local row semantics specifically. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
+      "notes": "numpy.histogram is the intended differential oracle for the binning and normalization only, and it is meaningful only parameter for parameter: its rightmost bin is CLOSED, which matches this contract's final-edge-inclusive rule, and `density=True` divides by the total count and the LINEAR bin width, which is the formula fixed here. It has no notion of a counting policy or an edge selection, so per_ordered_pair aggregation and endpoint binding must be applied before the comparison means anything, and it will happily bin a zero or negative delay that this contract refuses. NEST 3.10 is the second intended oracle: verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, the lower bound of one simulation resolution, and MPI target-rank-local row semantics. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed."
     }
   },
   "adapters": [
     {
       "system": "nest.GetConnections",
-      "status": "supported",
-      "notes": "Supplies source, target and the per-connection `delay`, preserving every multapse as its own row. Delays come back in milliseconds and are multiples of the simulation resolution; the adapter must carry that resolution as sourceResolution and must never round, snap, or re-quantize a delay itself. Under MPI the rows are those whose TARGET the rank owns, so the adapter emits an mpi_target_rank_local scope -- and unlike an out-degree, a delay distribution over the local target rectangle remains answerable."
+      "status": "planned",
+      "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. A future adapter must supply source, target and each observed per-connection `delay` in milliseconds, preserve every multapse row, carry the simulation resolution as context, and never round or snap values. It must preserve valid off-grid `cont_delay_synapse` values and inspect the model and assignment path before making any lattice claim. Under MPI it must emit mpi_target_rank_local for rows whose TARGET the rank owns."
     },
     {
       "system": "nest.synapse_model_status",
-      "status": "supported",
-      "notes": "Supplies the synapse model per row for grouping. Where a model decomposes the total delay into components, the adapter must export exactly one declared delay quantity and must never sum or substitute components silently -- two different delays reported under one name is precisely the failure this contract exists to prevent."
+      "status": "planned",
+      "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. A future mapping must supply the synapse model per row for grouping and retain enough assignment provenance to distinguish normal Connect rounding from `cont_delay_synapse` values set through SetDefaults or post-creation SetStatus. Where a model decomposes total delay, it must export exactly one declared delay quantity and never sum or substitute components silently."
     },
     {
       "system": "networkx.MultiDiGraph",
@@ -887,13 +887,13 @@
     "Adding a grouping key, table column, or summary fact is MINOR. Adding uncertainty is MINOR only when estimator, basis, table, summary, legend and geometry ship together."
   ],
   "knownLimitations": [
-    "Registry gap: there is no `bins.grid_aligned` validator id. `sourceResolution` is a DECLARED fact that reaches the artifact, the table and the summary, but registry v1 cannot check that a delay is a multiple of it or that a bin width is. The comb artifact is disclosed in prose, not refused.",
+    "`sourceResolution` is DECLARED context in the request, artifact and summary, not lattice proof. Registry v1 does not know the NEST synapse model or whether delay assignment used normal Connect, SetDefaults, or post-creation SetStatus; it therefore neither requires delays to be integer multiples of the resolution nor rejects valid off-grid `cont_delay_synapse` values. It also does not enforce NEST's model-conditioned lower bound of one resolution.",
     "Registry gap: there is no disclosure id for out-of-range exclusions. Under `exclude_and_report` the under- and over-range counts reach the summary and the table, but no footer disclosure states them. EVENTS_EXCLUDED_OUT_OF_WINDOW is about a time window and is deliberately not reused.",
     "Registry gap: there is no dedicated error code for a delay falling outside the declared bin range under `reject`. SCIENCE_BIN_EDGES_INVALID is used, matching neuro.isi_distribution; a future SCIENCE_BIN_RANGE_INCOMPLETE would be more precise.",
     "Revision 2 executes conservation, exact prebinned length, normalized-value re-derivation, endpoint binding, group partition and counting-policy-specific multapse semantics inside topology.delay_positive. In particular, per_connection preserves every multapse row and forbids pair aggregation.",
     "MULTAPSE_AGGREGATED's registry text is worded for matrix cells. On this figure {contributingCount} must be read as connections per ordered endpoint pair.",
     "MISSING_VALUES_PRESENT can fire only from a ride-along weight series. A null DELAY is refused outright, so it can never be the cause here.",
-    "Cortexel does not choose bin edges, and for a grid-quantized delay the choice is unusually consequential: with a 0.1 ms resolution, a 0.15 ms bin width makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth.",
+    "Cortexel does not choose bin edges. For a population independently known to come from a grid-constrained model or normal Connect assignment, a 0.1 ms lattice cut by 0.15 ms bins makes consecutive bins span two and one lattice points, drawing a uniform population as a 2:1 sawtooth. Off-grid `cont_delay_synapse` values need not show that comb, and `sourceResolution` alone cannot predict it.",
     "Cortexel cannot verify that the supplied rows are the selection the caller says they are. It verifies scope, endpoints, positivity and conservation; it cannot know which GetConnections call produced the rows.",
     "There is no autapse filter. A self-connection's delay is a delay and is counted like any other; excluding self-connections means not supplying those rows.",
     "Prebinned mode verifies the normalization and the conservation identity but cannot verify positivity, endpoint membership, or the counting policy, because Cortexel never saw an edge. PRE_BINNED_INPUT says so on the figure.",
@@ -1208,12 +1208,18 @@
               "kind": "delay",
               "unit": "s",
               "values": [
-                0.001,
-                0.0015,
-                0.0015,
-                0.0025
+                0.00105,
+                0.00155,
+                0.00155,
+                0.00205
               ]
-            }
+            },
+            "synapseModels": [
+              "cont_delay_synapse",
+              "cont_delay_synapse",
+              "cont_delay_synapse",
+              "cont_delay_synapse"
+            ]
           },
           "groupBy": "none",
           "sourceResolution": {
@@ -1264,7 +1270,7 @@
     ],
     "invalid": [
       {
-        "why": "A connection is supplied with a delay of 0. NEST's minimum delay is one resolution tick (0.1 ms by default) and a zero-delay synapse is not representable in an event-driven scheduler that relies on min-delay lookahead, so a 0 in a delay column is a default value or an unread field -- never a measurement. Drawn, it would put mass in the lowest bin and, in a network whose real delays cluster at 1.5 ms, invent a population of instantaneous contacts at a latency no synapse in the model has. Cortexel refuses rather than bin a number that cannot be a delay.",
+        "why": "A connection is supplied with a delay of 0. Every supported NEST delay is at least one simulation resolution, including an off-grid `cont_delay_synapse` value retained through SetDefaults or post-creation SetStatus. A zero-delay synapse is not representable in the event scheduler; drawn, it would put mass in the lowest bin and invent instantaneous contacts at a latency no supported synapse has. Cortexel refuses zero without imposing an integer-resolution lattice on positive values.",
         "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
         "request": {
           "contract": {

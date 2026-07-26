@@ -14,7 +14,7 @@ export { B as BudgetProfileId, I as InputAssurance, V as ValidateOptions, a as V
 declare const PACKAGE_VERSION = "0.10.0-dev.0";
 declare const REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 declare const ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-declare const CONTRACT_DIGEST = "sha256:116ee37659546e6432fa4e4f543764da847d9a2696f2b153877ae610492b789d";
+declare const CONTRACT_DIGEST = "sha256:aab1ebe99d73fcd9f3c70f2ee81595d68dbd2f96ce527741217444284cc15e36";
 declare const CATALOG_DIGEST = "sha256:4f534010ee514ffe9c1c9a9d6be365d7bdb7289e54008f2fab0e2df81fe0e001";
 declare const STABLE_SKILL_COUNT = 19;
 interface BuildIdentity {

@@ -1,6 +1,6 @@
 import {
   deriveDisclosures
-} from "./chunk-YZTPTP35.js";
+} from "./chunk-2RRYYOCI.js";
 import {
   DistributionDerivationError,
   MATRIX_AXIS_ORDER,
@@ -15,7 +15,7 @@ import {
   deriveWeightDistribution,
   deriveWeightMatrix,
   validateArtifactStructure
-} from "./chunk-UU7RYO22.js";
+} from "./chunk-J2WGJCHL.js";
 import {
   CATEGORICAL_SERIES_STYLES,
   RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
@@ -23,7 +23,6 @@ import {
   THEMES,
   UNCERTAINTY_STYLES_BY_KIND,
   axesAreCompatible,
-  binary64RelativeDifferenceWithinEpsilons,
   canonicalUnitFor,
   compareExactUnitArraySumToDifference,
   compareExactUnitSumToValue,
@@ -39,6 +38,19 @@ import {
   deriveExactCountRateWithIntegerFactorsInUnit,
   dimensionOf,
   divideExactIntegerByConvertedDifference,
+  isKnownUnit,
+  materializeCenteredLagBins,
+  materializeWidthBins,
+  reciprocalUnit,
+  responseEventMembershipDigest,
+  unitLabel,
+  verifyBinnedPeakValueLattice,
+  verifyPeakBasisAgainstWindow,
+  verifyResponseEventScope,
+  verifyResponseRateAuthority
+} from "./chunk-GFFRGANP.js";
+import {
+  binary64RelativeDifferenceWithinEpsilons,
   exactBinary64AffineFraction,
   exactBinary64DivideByIntegerProduct,
   exactBinary64EmpiricalQuantileType7,
@@ -53,19 +65,9 @@ import {
   exactRationalToBinary64,
   finiteBinary64ToMinSubnormalUnits,
   floorExactBinary64TimesSafeInteger,
-  isKnownUnit,
   isRoundedMeanOfSafeNonnegativeIntegers,
-  materializeCenteredLagBins,
-  materializeWidthBins,
-  reciprocalUnit,
-  responseEventMembershipDigest,
-  roundedBinary64Mean,
-  unitLabel,
-  verifyBinnedPeakValueLattice,
-  verifyPeakBasisAgainstWindow,
-  verifyResponseEventScope,
-  verifyResponseRateAuthority
-} from "./chunk-DXJPMLTB.js";
+  roundedBinary64Mean
+} from "./chunk-HTREPOSY.js";
 import {
   ARTIFACT_CONTRACT,
   ARTIFACT_CONTRACT_IDENTITY,
@@ -76,7 +78,7 @@ import {
   makeError,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "./chunk-OLQMLMTT.js";
+} from "./chunk-LVMEHDQI.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding,
@@ -24905,4 +24907,4 @@ export {
   buildFigureFromJson,
   buildFigure
 };
-//# sourceMappingURL=chunk-LTGPBTAZ.js.map
+//# sourceMappingURL=chunk-XCHF5I3R.js.map

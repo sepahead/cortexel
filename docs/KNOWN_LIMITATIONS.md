@@ -241,6 +241,26 @@ The machine-readable state of every release gate is in
   one is introduced, it remains experimental until both real code and certification against
   an immutable NCP release exist — never against moving HEAD.
   *Gates: R049–R059.*
+- **Legacy connection model semantics remain a host-authored source claim.** The
+  legacy `core/nest` connection graph, weight/delay matrix, delay-distribution,
+  and SceneData adapter paths now require complete synapse-model rows and an
+  exact bounded declaration for every observed model before exporting a weight
+  or delay. They hard-code the documented ignored fields of the exact built-in
+  names `gap_junction`, `rate_connection_instantaneous`, and
+  `diffusion_connection`. Cortexel does not infer the ancestry or behavior of a
+  copied/custom model name, authenticate the supplied model rows, or inspect
+  NEST's installed model registry; those declarations remain attributable to the
+  host. A source-header review of all 89 connection/synapse headers at
+  [NEST main commit `182eba446a8b89108f21cd2ad54aa4c667afd86a`](https://github.com/nest/nest-simulator/commit/182eba446a8b89108f21cd2ad54aa4c667afd86a)
+  found exactly these three
+  `set_delay` contradictions and only `diffusion_connection` also rejecting
+  per-connection weight. Base `Connection::get_status` can nevertheless report
+  delay, and diffusion status reports its unused `weight_`, which is why raw
+  field presence is not accepted as semantic effectiveness. This is versioned
+  design evidence, not certification against a running NEST installation. This
+  legacy boundary is separate from the unimplemented FigureRequestV1 NEST
+  connection adapter described above, and neither has been certified against the
+  pinned real-NEST oracle.
 
 ## Packaging and release
 

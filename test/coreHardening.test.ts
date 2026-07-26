@@ -17,6 +17,7 @@ import {
   validateSpec,
   validateVizSpec,
 } from '../core';
+import { preflightLargeSkillParams } from '../core/skills/paramPreflight';
 
 const spikeInputs = {
   recorder_id: 'sr_1',
@@ -30,6 +31,43 @@ function spikeParams(extra: Record<string, unknown> = {}) {
 }
 
 describe('public agent boundaries never trust JavaScript object prototypes', () => {
+  it('preflights legitimate empty connection evidence without relaxing axis budgets', () => {
+    expect(preflightLargeSkillParams('nest.connection_graph', {
+      nodes: [{ id: 1, label: 'isolated' }],
+      edges: [],
+    })).toBeNull();
+    for (const skill of [
+      'nest.adjacency_matrix',
+      'nest.weight_matrix',
+      'nest.delay_matrix',
+    ] as const) {
+      expect(preflightLargeSkillParams(skill, {
+        source_ids: [1],
+        target_ids: [2],
+        cells: [],
+      }), skill).toBeNull();
+    }
+
+    expect(preflightLargeSkillParams('nest.connection_graph', {
+      nodes: [],
+      edges: [],
+    })).toMatchObject({ path: 'nodes' });
+    expect(preflightLargeSkillParams('nest.adjacency_matrix', {
+      source_ids: [],
+      target_ids: [2],
+      cells: [],
+    })).toMatchObject({ path: 'source_ids' });
+    expect(preflightLargeSkillParams('nest.connection_graph', {
+      nodes: [{ id: 1, label: 'isolated' }],
+      edges: new Array(PARAM_LIMITS.maxTopologyEdges + 1),
+    })).toMatchObject({ path: 'edges' });
+    expect(preflightLargeSkillParams('nest.weight_matrix', {
+      source_ids: [1],
+      target_ids: [2],
+      cells: new Array(PARAM_LIMITS.maxSamples + 1),
+    })).toMatchObject({ path: 'cells' });
+  });
+
   it.each(['__proto__', 'constructor', 'toString'])('rejects inherited skill id %s', (id) => {
     expect(() => validateSkillInvocation(id, {})).not.toThrow();
     expect(validateSkillInvocation(id, {}).ok).toBe(false);

@@ -10,6 +10,16 @@ import {
 } from '../core/nest/adapters';
 import { MultimeterEventsSchema } from '../core/nest/shapes';
 import { routeToScene } from '../core/skills/router';
+import { detectEmptyScene } from '../core/skills/verify';
+
+const staticModelSemantics = [{
+  synapseModel: 'static_synapse',
+  weight: 'effective',
+  delay: 'effective',
+}] as const;
+const staticConnectionOptions = {
+  synapseModelSemantics: staticModelSemantics,
+} as const;
 
 describe('NEST adapters', () => {
   it('maps spike_recorder events and re-indexes senders to 0..N', () => {
@@ -55,7 +65,10 @@ describe('NEST adapters', () => {
   });
 
   it('builds nodes+edges from GetConnections', () => {
-    const r = getConnectionsToSceneData({ sources: [1, 2], targets: [2, 3] });
+    const r = getConnectionsToSceneData({
+      sources: [1, 2],
+      targets: [2, 3],
+    });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.data.networkEdges).toHaveLength(2);
@@ -63,6 +76,7 @@ describe('NEST adapters', () => {
       expect(r.data.networkLayout).toBe('unpositioned');
       expect(r.data.networkNodes!.every((node) => node.x === undefined)).toBe(true);
       expect(r.data.networkEdges!.every((edge) => edge.weight === undefined)).toBe(true);
+      expect(detectEmptyScene(r.data)).toMatchObject({ valid: true, empty: false });
     }
   });
 
@@ -72,9 +86,11 @@ describe('NEST adapters', () => {
       targets: [2],
       weights: [0.5],
       delays: [1.5],
+      synapse_models: ['static_synapse'],
     };
-    expect(getConnectionsToSceneData(measured).ok).toBe(false);
+    expect(getConnectionsToSceneData(measured, staticConnectionOptions).ok).toBe(false);
     const result = getConnectionsToSceneData(measured, {
+      ...staticConnectionOptions,
       weightUnits: ' nS ',
       delayUnits: ' ms ',
     });
@@ -82,13 +98,82 @@ describe('NEST adapters', () => {
     if (!result.ok) return;
     expect(result.data.networkWeightUnits).toBe('nS');
     expect(result.data.networkDelayUnits).toBe('ms');
+    expect(detectEmptyScene(result.data)).toMatchObject({ valid: true, empty: false });
+  });
+
+  it('emits verifier-valid endpoint and empty measured scenes without orphan units', () => {
+    const results = [
+      getConnectionsToSceneData({ sources: [], targets: [] }),
+      getConnectionsToSceneData({
+        sources: [],
+        targets: [],
+        weights: [],
+        synapse_models: [],
+      }, {
+        weightUnits: 'nS',
+        synapseModelSemantics: [],
+      }),
+      getConnectionsToSceneData({
+        sources: [],
+        targets: [],
+        delays: [],
+        synapse_models: [],
+      }, {
+        delayUnits: 'ms',
+        synapseModelSemantics: [],
+      }),
+      getConnectionsToSceneData({
+        sources: [],
+        targets: [],
+        weights: [],
+        delays: [],
+        synapse_models: [],
+      }, {
+        weightUnits: 'nS',
+        delayUnits: 'ms',
+        synapseModelSemantics: [],
+      }),
+    ];
+    for (const result of results) {
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.data.networkWeightUnits).toBeUndefined();
+      expect(result.data.networkDelayUnits).toBeUndefined();
+      expect(detectEmptyScene(result.data)).toMatchObject({
+        valid: true,
+        empty: true,
+      });
+    }
+  });
+
+  it('rejects weight or delay units without the corresponding raw channel', () => {
+    const endpoints = { sources: [1], targets: [2] };
+    expect(getConnectionsToSceneData(endpoints, { weightUnits: 'nS' }).ok).toBe(false);
+    expect(getConnectionsToSceneData(endpoints, { delayUnits: 'ms' }).ok).toBe(false);
+    expect(getConnectionsToSceneData(endpoints, {
+      weightUnits: 'nS',
+      delayUnits: 'ms',
+    }).ok).toBe(false);
+    expect(getConnectionsToSceneData(endpoints, { weightUnits: '   ' }).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      synapse_models: ['static_synapse'],
+    }, {
+      delayUnits: 'ms',
+      synapseModelSemantics: staticModelSemantics,
+    }).ok).toBe(false);
   });
 
   it('rejects non-positive synaptic delays and negative-zero ids', () => {
     for (const delay of [-1, 0]) {
       expect(getConnectionsToSceneData(
-        { sources: [1], targets: [2], delays: [delay] },
-        { delayUnits: 'ms' },
+        {
+          sources: [1], targets: [2], delays: [delay],
+          synapse_models: ['static_synapse'],
+        },
+        { ...staticConnectionOptions, delayUnits: 'ms' },
       ).ok).toBe(false);
     }
     expect(multimeterToSceneData({ times: [0], values: [1], sender: -0 }).ok).toBe(false);
@@ -107,9 +192,190 @@ describe('NEST adapters', () => {
       getConnectionsToSceneData({
         sources: [1],
         targets: [2],
+        synapse_models: ['static_synapse'],
         wieghts: [0.5],
-      }).ok,
+      }, staticConnectionOptions).ok,
     ).toBe(false);
+  });
+
+  it('binds measurement channels to exact per-model effectiveness semantics', () => {
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+    }).ok).toBe(true);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      synapse_models: ['static_synapse'],
+    }, {
+      synapseModelSemantics: staticModelSemantics,
+    }).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+    }, {
+      synapseModelSemantics: [],
+    }).ok).toBe(true);
+    expect(getConnectionsToSceneData(
+      { sources: [1], targets: [2], weights: [1] },
+      { ...staticConnectionOptions, weightUnits: 'nS' },
+    ).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      synapse_models: ['static_synapse'],
+    }, {
+      weightUnits: 'nS',
+    } as never).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      synapse_models: ['static_synapse'],
+    }, {
+      weightUnits: 'nS',
+      synapseModelSemantics: [],
+    }).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      synapse_models: ['static_synapse'],
+    }, {
+      weightUnits: 'nS',
+      synapseModelSemantics: [
+        ...staticModelSemantics,
+        {
+          synapseModel: 'unobserved_synapse',
+          weight: 'effective',
+          delay: 'unknown',
+        } as const,
+      ],
+    }).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      synapse_models: ['static_synapse'],
+    }, {
+      weightUnits: 'nS',
+      synapseModelSemantics: [...staticModelSemantics, ...staticModelSemantics],
+    }).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      synapse_models: ['static_synapse'],
+    }, {
+      weightUnits: 'nS',
+      synapseModelSemantics: [{
+        synapseModel: 'static_synapse',
+        weight: 'unknown',
+        delay: 'unknown',
+      }],
+    }).ok).toBe(false);
+
+    let reads = 0;
+    const accessorDeclaration: Record<string, unknown> = {
+      synapseModel: 'static_synapse',
+      delay: 'unknown',
+    };
+    Object.defineProperty(accessorDeclaration, 'weight', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        return 'effective';
+      },
+    });
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      synapse_models: ['static_synapse'],
+    }, {
+      weightUnits: 'nS',
+      synapseModelSemantics: [accessorDeclaration],
+    } as never).ok).toBe(false);
+    expect(reads).toBe(0);
+
+    for (const synapseModel of ['gap_junction', 'rate_connection_instantaneous']) {
+      expect(getConnectionsToSceneData({
+        sources: [1],
+        targets: [2],
+        delays: [1],
+        synapse_models: [synapseModel],
+      }, {
+        delayUnits: 'ms',
+        synapseModelSemantics: [{
+          synapseModel,
+          weight: 'unknown',
+          delay: 'effective',
+        }],
+      }).ok).toBe(false);
+    }
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      delays: [1],
+      synapse_models: ['diffusion_connection'],
+    }, {
+      weightUnits: 'nS',
+      delayUnits: 'ms',
+      synapseModelSemantics: [{
+        synapseModel: 'diffusion_connection',
+        weight: 'effective',
+        delay: 'effective',
+      }],
+    }).ok).toBe(false);
+    expect(getConnectionsToSceneData({
+      sources: [1, 1],
+      targets: [2, 2],
+      delays: [1, 1],
+      synapse_models: ['static_synapse', 'gap_junction'],
+    }, {
+      delayUnits: 'ms',
+      synapseModelSemantics: [
+        {
+          synapseModel: 'static_synapse',
+          weight: 'unknown',
+          delay: 'effective',
+        },
+        {
+          synapseModel: 'gap_junction',
+          weight: 'unknown',
+          delay: 'ignored',
+        },
+      ],
+    }).ok).toBe(false);
+
+    expect(getConnectionsToSceneData({
+      sources: [1],
+      targets: [2],
+      weights: [1],
+      delays: [1],
+      synapse_models: ['custom_copied_model'],
+    }, {
+      weightUnits: 'nS',
+      delayUnits: 'ms',
+      synapseModelSemantics: [{
+        synapseModel: 'custom_copied_model',
+        weight: 'effective',
+        delay: 'effective',
+      }],
+    }).ok).toBe(true);
+    expect(getConnectionsToSceneData({
+      sources: [],
+      targets: [],
+      weights: [],
+      delays: [],
+      synapse_models: [],
+    }, {
+      weightUnits: 'nS',
+      delayUnits: 'ms',
+      synapseModelSemantics: [],
+    }).ok).toBe(true);
   });
 });
 
@@ -294,7 +560,7 @@ describe('NEST input hardening', () => {
       () => spikeRecorderToSceneData(hostile),
       () => multimeterToSceneData(hostile),
       () => splitMultimeterBySender(hostile),
-      () => getConnectionsToSceneData(hostile),
+      () => getConnectionsToSceneData(hostile, staticConnectionOptions),
       () => getPositionToSceneData(hostile, { coordinateUnits: 'mm' }),
       () => weightRecorderToSceneData(hostile, { weightUnits: 'nS' }),
       () => splitWeightRecorderBySynapse(hostile),
@@ -316,7 +582,9 @@ describe('NEST input hardening', () => {
         hostileOptions as never,
       ),
       () => getConnectionsToSceneData(
-        { sources: [1], targets: [2] },
+        {
+          sources: [1], targets: [2], synapse_models: ['static_synapse'],
+        },
         hostileOptions as never,
       ),
       () => getPositionToSceneData(
@@ -404,9 +672,13 @@ describe('NEST input hardening', () => {
 
   it('rejects connection output amplification for arrays and typed arrays', () => {
     const oversized = new Array(20_001).fill(1);
-    expect(getConnectionsToSceneData({ sources: oversized, targets: oversized }).ok).toBe(false);
+    expect(getConnectionsToSceneData(
+      { sources: oversized, targets: oversized },
+    ).ok).toBe(false);
     const typed = new Uint32Array(20_001);
-    expect(getConnectionsToSceneData({ sources: typed, targets: typed }).ok).toBe(false);
+    expect(getConnectionsToSceneData(
+      { sources: typed, targets: typed },
+    ).ok).toBe(false);
 
     const sources = Array.from({ length: 12_501 }, (_, index) => index);
     const targets = Array.from({ length: 12_501 }, (_, index) => index + 12_501);
@@ -530,7 +802,8 @@ describe('NEST input hardening', () => {
         sources: [1],
         targets: [2],
         weights: [1e300],
-      }).ok,
+        synapse_models: ['static_synapse'],
+      }, { ...staticConnectionOptions, weightUnits: 'nS' }).ok,
     ).toBe(false);
     expect(
       getPositionToSceneData(

@@ -9,7 +9,10 @@
 // narrowed to Float32 — because ms timestamps lose precision at float32 scale.
 
 import { z } from 'zod';
-import { intrinsicTypedArrayLength } from '../safeRuntime';
+import {
+  SAFE_DISPLAY_STRING_PATTERN,
+  intrinsicTypedArrayLength,
+} from '../safeRuntime';
 
 export const NEST_INPUT_LIMITS = Object.freeze({
   maxSamples: 100_000,
@@ -142,11 +145,16 @@ const nonEmptyFloat32Array = numberArray({
   minMessage: 'empty array — no samples to render',
   float32: true,
 });
-const nonEmptyFiniteIdArray = numberArray({
-  min: 1,
-  minMessage: 'no connections',
-  integerId: true,
-});
+const synapseModelArray = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(120)
+      .regex(SAFE_DISPLAY_STRING_PATTERN),
+  )
+  .max(NEST_INPUT_LIMITS.maxSamples);
 
 function positionArray<const D extends 2 | 3>(
   dimensions: D,
@@ -308,13 +316,20 @@ export const MultimeterMultiSenderSchema = z
   });
 export type MultimeterMultiSender = z.infer<typeof MultimeterMultiSenderSchema>;
 
-/** nest.GetConnections() → parallel source/target/weight/delay arrays. */
+/**
+ * Canonical nest.GetConnections() snapshot.
+ *
+ * `synapse_models` becomes mandatory at the consuming authority boundary when
+ * a weight or delay channel is present; endpoint-only snapshots retain their
+ * model-free legacy shape.
+ */
 export const GetConnectionsSchema = z
   .object({
-    sources: nonEmptyFiniteIdArray,
-    targets: nonEmptyFiniteIdArray,
+    sources: finiteIntegerArray,
+    targets: finiteIntegerArray,
     weights: float32NumberArray.optional(),
     delays: float32NumberArray.optional(),
+    synapse_models: synapseModelArray.optional(),
   })
   .strict()
   .superRefine((v, ctx) => {
@@ -334,6 +349,12 @@ export const GetConnectionsSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'delays length does not match connection count',
+      });
+    }
+    if (v.synapse_models && v.synapse_models.length !== v.sources.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'synapse_models length does not match connection count',
       });
     }
     if (v.delays) {

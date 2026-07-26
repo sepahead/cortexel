@@ -871,2188 +871,6 @@ function readOwnEnumerableDataProperty(input, key) {
   return "value" in descriptor && descriptor.enumerable ? { kind: "value", value: descriptor.value } : { kind: "invalid" };
 }
 
-// react/charts/ReferenceChartScene.tsx
-var import_jsx_runtime = require("react/jsx-runtime");
-var REFERENCE_CHART_SKILLS = Object.freeze([
-  "nest.voltage_trace",
-  "nest.astrocyte_dynamics",
-  "nest.spike_raster",
-  "nest.population_rate",
-  "nest.rate_response",
-  "nest.isi_distribution",
-  "nest.psth",
-  "nest.correlogram",
-  "nest.weight_histogram",
-  "nest.plasticity_dynamics",
-  "nest.phase_plane",
-  "nest.connection_graph",
-  "nest.adjacency_matrix",
-  "nest.weight_matrix",
-  "nest.delay_matrix",
-  "nest.in_degree_distribution",
-  "nest.out_degree_distribution",
-  "nest.delay_distribution",
-  "nest.spatial_map_2d"
-]);
-function chartColors(palette, themeMode) {
-  return themeMode === "dark" ? {
-    background: palette.panel,
-    foreground: palette.ink,
-    muted: palette.inkDim,
-    grid: palette.grid
-  } : {
-    background: palette.ink,
-    foreground: palette.deepNavy,
-    muted: palette.inkFaint,
-    grid: palette.inkDim
-  };
-}
-function seriesColor(palette, index) {
-  switch (index % 8) {
-    case 0:
-      return palette.cyan;
-    case 1:
-      return palette.orange;
-    case 2:
-      return palette.violet;
-    case 3:
-      return palette.teal;
-    case 4:
-      return palette.pink;
-    case 5:
-      return palette.amber;
-    case 6:
-      return palette.excitatory;
-    default:
-      return palette.inhibitory;
-  }
-}
-function declaredInput(args, key) {
-  const value = args.provenance.declared_inputs?.[key];
-  if (typeof value === "string") return safeDiagnosticText(value, 120);
-  if (typeof value === "number" || value === true) {
-    return safeDiagnosticText(String(value), 120);
-  }
-  return void 0;
-}
-var MIN_REFERENCE_PLOT_WIDTH = 180;
-function makeFrame(width, height, requestedRight = 28) {
-  const left = 82;
-  const right = Math.min(
-    requestedRight,
-    Math.max(18, width - left - MIN_REFERENCE_PLOT_WIDTH)
-  );
-  return { width, height, left, right, top: 72, bottom: 68 };
-}
-function seriesLabelSummary(labels, limit = 8) {
-  const shown = labels.slice(0, limit).join("; ");
-  const remaining = labels.length - Math.min(labels.length, limit);
-  return remaining > 0 ? `${shown}; plus ${remaining} more series` : shown;
-}
-function metadataValue(value, limit = 180) {
-  if (typeof value === "string") return safeDiagnosticText(value, limit);
-  if (typeof value === "number" || typeof value === "boolean") {
-    return safeDiagnosticText(String(value), limit);
-  }
-  try {
-    return safeDiagnosticText(JSON.stringify(value), limit);
-  } catch {
-    return "<unavailable>";
-  }
-}
-function sampledIndices(length, maximum = 8) {
-  if (length <= 0) return [];
-  const count = Math.min(length, Math.max(1, Math.floor(maximum)));
-  if (count === 1) return [0];
-  const indices = new Array(count);
-  for (let index = 0; index < count; index++) {
-    indices[index] = Math.round(index * (length - 1) / (count - 1));
-  }
-  return [...new Set(indices)];
-}
-function matrixBucketPaint(bucket, palette) {
-  if (bucket.sign === 0) return { color: palette.inkDim, opacity: 0.58 };
-  return {
-    color: bucket.sign < 0 ? palette.inhibitory : palette.excitatory,
-    opacity: 0.18 + 0.82 * bucket.level / MATRIX_VALUE_LEVELS_PER_SIGN
-  };
-}
-var MAX_CHART_DATA_PAGE_SIZE = 100;
-var DEFAULT_CHART_DATA_PAGE_SIZE = 25;
-function PaginatedChartData({
-  label,
-  rowCount,
-  rowAt,
-  pageSize = DEFAULT_CHART_DATA_PAGE_SIZE,
-  foreground,
-  background
-}) {
-  const safeRowCount = Number.isSafeInteger(rowCount) ? Math.max(0, rowCount) : 0;
-  const safePageSize = Number.isFinite(pageSize) ? Math.min(MAX_CHART_DATA_PAGE_SIZE, Math.max(1, Math.floor(pageSize))) : DEFAULT_CHART_DATA_PAGE_SIZE;
-  const pageCount = Math.max(1, Math.ceil(safeRowCount / safePageSize));
-  const [page, setPage] = (0, import_react.useState)(0);
-  (0, import_react.useEffect)(() => {
-    setPage((current) => Math.min(current, pageCount - 1));
-  }, [pageCount]);
-  const start = page * safePageSize;
-  const stop = Math.min(safeRowCount, start + safePageSize);
-  const rows = new Array(stop - start);
-  for (let index = start; index < stop; index++) {
-    rows[index - start] = { index, text: rowAt(index) };
-  }
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    "section",
-    {
-      className: "cortexel-reference-chart-data",
-      "aria-label": label,
-      style: {
-        boxSizing: "border-box",
-        padding: "9px 12px",
-        color: foreground,
-        background,
-        fontSize: 12,
-        lineHeight: 1.45
-      },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "aria-live": "polite", "aria-atomic": "true", children: safeRowCount === 0 ? `${label}: no rows.` : `${label}: rows ${start + 1}\u2013${stop} of ${safeRowCount}; page ${page + 1} of ${pageCount}.` }),
-        rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", { start: start + 1, children: rows.map((row) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("bdi", { dir: "auto", style: { unicodeBidi: "isolate" }, children: row.text }) }, row.index)) }),
-        pageCount > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { "aria-label": `${label} pages`, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "button",
-            {
-              type: "button",
-              disabled: page === 0,
-              onClick: () => setPage((current) => Math.max(0, current - 1)),
-              style: { minWidth: 44, minHeight: 44 },
-              children: "Previous"
-            }
-          ),
-          " ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "button",
-            {
-              type: "button",
-              disabled: page + 1 >= pageCount,
-              onClick: () => setPage((current) => Math.min(pageCount - 1, current + 1)),
-              style: { minWidth: 44, minHeight: 44 },
-              children: "Next"
-            }
-          )
-        ] })
-      ]
-    }
-  );
-}
-function ChartShell({
-  id: id2,
-  skill,
-  scene,
-  title,
-  description,
-  metadata,
-  note,
-  accessibleDetails = [],
-  accessibleDetailsLabel = "Series summary",
-  xLabel,
-  yLabel,
-  xDomain,
-  yDomain,
-  frame,
-  colors,
-  legend = [],
-  xTicks: requestedXTicks,
-  yTicks: requestedYTicks,
-  sampleCount,
-  dataRows,
-  children
-}) {
-  const titleId = `${id2}-title`;
-  const descriptionId = `${id2}-description`;
-  const xTicks = requestedXTicks ?? tickValues(xDomain);
-  const yTicks = requestedYTicks ?? tickValues(yDomain);
-  const xTickLabels = formatDistinctChartNumbers(xTicks);
-  const yTickLabels = formatDistinctChartNumbers(yTicks);
-  const plotWidth = chartPlotWidth(frame);
-  const plotHeight = chartPlotHeight(frame);
-  const legendEntries = legend.slice(0, 8);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    "figure",
-    {
-      className: "cortexel-reference-chart",
-      "data-skill": skill,
-      "data-scene": scene,
-      "data-sample-count": sampleCount,
-      "data-plot-width": plotWidth,
-      style: { margin: 0, width: frame.width, maxWidth: "100%" },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "svg",
-          {
-            role: "img",
-            "aria-labelledby": titleId,
-            "aria-describedby": descriptionId,
-            viewBox: `0 0 ${frame.width} ${frame.height}`,
-            width: frame.width,
-            height: frame.height,
-            preserveAspectRatio: "xMidYMid meet",
-            style: { display: "block", width: "100%", maxWidth: "100%", height: "auto" },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("title", { id: titleId, children: title }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("desc", { id: descriptionId, children: description }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { width: frame.width, height: frame.height, fill: colors.background }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "text",
-                {
-                  x: frame.left,
-                  y: 30,
-                  fill: colors.foreground,
-                  fontSize: 18,
-                  fontWeight: 600,
-                  children: title
-                }
-              ),
-              metadata && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("text", { x: frame.left, y: 51, fill: colors.muted, fontSize: 11, children: metadata }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "aria-hidden": "true", children: [
-                xTicks.map((tick, index) => {
-                  const x = chartX(tick, xDomain, frame);
-                  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                      "line",
-                      {
-                        x1: x,
-                        y1: frame.top,
-                        x2: x,
-                        y2: frame.top + plotHeight,
-                        stroke: colors.grid,
-                        strokeOpacity: 0.55,
-                        vectorEffect: "non-scaling-stroke"
-                      }
-                    ),
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                      "text",
-                      {
-                        x,
-                        y: frame.height - frame.bottom + 20,
-                        fill: colors.muted,
-                        fontSize: 10,
-                        textAnchor: "middle",
-                        children: xTickLabels[index]
-                      }
-                    )
-                  ] }, `x-${index}`);
-                }),
-                yTicks.map((tick, index) => {
-                  const y = chartY(tick, yDomain, frame);
-                  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                      "line",
-                      {
-                        x1: frame.left,
-                        y1: y,
-                        x2: frame.left + plotWidth,
-                        y2: y,
-                        stroke: colors.grid,
-                        strokeOpacity: 0.55,
-                        vectorEffect: "non-scaling-stroke"
-                      }
-                    ),
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                      "text",
-                      {
-                        x: frame.left - 10,
-                        y: y + 4,
-                        fill: colors.muted,
-                        fontSize: 10,
-                        textAnchor: "end",
-                        children: yTickLabels[index]
-                      }
-                    )
-                  ] }, `y-${index}`);
-                }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  "rect",
-                  {
-                    x: frame.left,
-                    y: frame.top,
-                    width: plotWidth,
-                    height: plotHeight,
-                    fill: "none",
-                    stroke: colors.muted,
-                    strokeOpacity: 0.75,
-                    vectorEffect: "non-scaling-stroke"
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  "text",
-                  {
-                    x: frame.left + plotWidth / 2,
-                    y: frame.height - 16,
-                    fill: colors.foreground,
-                    fontSize: 12,
-                    textAnchor: "middle",
-                    children: xLabel
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  "text",
-                  {
-                    x: 18,
-                    y: frame.top + plotHeight / 2,
-                    fill: colors.foreground,
-                    fontSize: 12,
-                    textAnchor: "middle",
-                    transform: `rotate(-90 18 ${frame.top + plotHeight / 2})`,
-                    children: yLabel
-                  }
-                )
-              ] }),
-              children,
-              legendEntries.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "aria-label": "Series legend", children: [
-                legendEntries.map((entry, index) => {
-                  const y = frame.top + 15 + index * 18;
-                  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                      "line",
-                      {
-                        x1: frame.width - frame.right + 18,
-                        y1: y,
-                        x2: frame.width - frame.right + 42,
-                        y2: y,
-                        stroke: entry.color,
-                        strokeWidth: 2,
-                        vectorEffect: "non-scaling-stroke"
-                      }
-                    ),
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                      "text",
-                      {
-                        x: frame.width - frame.right + 48,
-                        y: y + 4,
-                        fill: colors.foreground,
-                        fontSize: 10,
-                        children: entry.label.length > 22 ? `${entry.label.slice(0, 21)}\u2026` : entry.label
-                      }
-                    )
-                  ] }, `${index}-${entry.label}`);
-                }),
-                legend.length > legendEntries.length && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-                  "text",
-                  {
-                    x: frame.width - frame.right + 18,
-                    y: frame.top + 15 + legendEntries.length * 18,
-                    fill: colors.muted,
-                    fontSize: 10,
-                    children: [
-                      "+",
-                      legend.length - legendEntries.length,
-                      " more series"
-                    ]
-                  }
-                )
-              ] })
-            ]
-          }
-        ),
-        dataRows && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          PaginatedChartData,
-          {
-            label: dataRows.label,
-            rowCount: dataRows.rowCount,
-            rowAt: dataRows.rowAt,
-            pageSize: dataRows.pageSize,
-            foreground: colors.foreground,
-            background: colors.background
-          },
-          dataRows.key
-        ),
-        (note || accessibleDetails.length > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "figcaption",
-          {
-            className: "cortexel-reference-chart-details",
-            style: {
-              boxSizing: "border-box",
-              padding: "9px 12px",
-              color: colors.foreground,
-              background: colors.background,
-              fontSize: 12,
-              lineHeight: 1.45
-            },
-            children: [
-              note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: note }),
-              accessibleDetails.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "aria-label": accessibleDetailsLabel, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-                  accessibleDetailsLabel,
-                  ": "
-                ] }),
-                accessibleDetails.join(" ")
-              ] })
-            ]
-          }
-        )
-      ]
-    }
-  );
-}
-function sampledUniqueValues(values, maximum = 8) {
-  const unique = [...new Set(values)].sort((left, right) => left - right);
-  if (unique.length <= maximum) return unique;
-  const sampled = new Array(maximum);
-  for (let index = 0; index < maximum; index++) {
-    sampled[index] = unique[Math.round(index * (unique.length - 1) / (maximum - 1))];
-  }
-  return sampled;
-}
-function TraceChart(args, width, height, id2) {
-  const params = args.params;
-  const xDomain = numericDomain(params.times_ms);
-  const yDomain = nestedNumericDomain(params.series);
-  const legend = params.series_labels.map((label, index) => ({
-    label,
-    color: seriesColor(args.palette, index)
-  }));
-  const showLegend = params.series.length > 1 && width >= 600;
-  const frame = makeFrame(width, height, showLegend ? 210 : 28);
-  const variable = declaredInput(args, "recorded_variable") ?? "Recorded variable";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: `${variable} trace`,
-      description: `${params.series.length} labeled series with ${params.times_ms.length} samples each. Series: ${seriesLabelSummary(params.series_labels)}. Time is in milliseconds and the shared value axis is in ${params.units}.`,
-      metadata: `${params.series.length} series \u2022 ${params.times_ms.length} samples`,
-      xLabel: "Time (ms)",
-      yLabel: `${variable} (${params.units})`,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      legend: showLegend ? legend : void 0,
-      sampleCount: params.times_ms.length * params.series.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { fill: "none", children: params.series.map((series, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "trace-line",
-          d: linePath(params.times_ms, series, xDomain, yDomain, frame),
-          stroke: seriesColor(args.palette, index),
-          strokeWidth: 2,
-          vectorEffect: "non-scaling-stroke"
-        },
-        `${index}-${params.series_labels[index]}`
-      )) })
-    }
-  );
-}
-function AstrocyteChart(args, width, height, id2) {
-  const params = args.params;
-  const xDomain = numericDomain(params.times_ms);
-  const yDomain = numericDomain(params.ca_trace, { includeZero: true });
-  const frame = makeFrame(width, height);
-  const variable = declaredInput(args, "recorded_variable") ?? "Ca\xB2\u207A/IP\u2083";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: `${variable} dynamics`,
-      description: `Glial ${variable} analog signal with ${params.times_ms.length} samples in ${params.units}. This is not membrane voltage.`,
-      metadata: `${params.times_ms.length} samples \u2022 glial analog trace, not voltage`,
-      xLabel: "Time (ms)",
-      yLabel: `${variable} (${params.units})`,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: params.times_ms.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "astrocyte-line",
-          d: linePath(params.times_ms, params.ca_trace, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.teal,
-          strokeWidth: 2,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
-    }
-  );
-}
-function SpikeRasterChart(args, width, height, id2) {
-  const params = args.params;
-  const xDomain = numericDomain(params.times_ms);
-  const yDomain = numericDomain(params.senders);
-  const frame = makeFrame(width, height);
-  const senderCount = new Set(params.senders).size;
-  const senderTicks = sampledUniqueValues(params.senders);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Spike raster",
-      description: `${params.times_ms.length} exact spike events from ${senderCount} senders. No rate bins or synthetic events are added.`,
-      metadata: `${params.times_ms.length} spikes \u2022 ${senderCount} senders \u2022 exact event times`,
-      xLabel: "Time (ms)",
-      yLabel: "Sender ID",
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      yTicks: senderTicks,
-      sampleCount: params.times_ms.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "spike-events",
-          "data-event-count": params.times_ms.length,
-          d: rasterTickPath(params.times_ms, params.senders, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.spike,
-          strokeWidth: 1.5,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
-    }
-  );
-}
-var POPULATION_RATE_PATH_SAMPLE_BUDGET = 8192;
-function populationRateSeriesDetail(series) {
-  let minimumRate = Number.POSITIVE_INFINITY;
-  let maximumRate = Number.NEGATIVE_INFINITY;
-  for (let index = 0; index < series.rates_hz.length; index++) {
-    minimumRate = Math.min(minimumRate, series.rates_hz[index]);
-    maximumRate = Math.max(maximumRate, series.rates_hz[index]);
-  }
-  return `${series.label} (id ${series.id}): ${series.recorded_sender_count} recorded senders, ${series.spike_counts.length} spike-count bins, rate range ${formatChartNumber(minimumRate)}\u2013${formatChartNumber(maximumRate)} Hz.`;
-}
-function PopulationRateChart(args, width, height, id2) {
-  const params = args.params;
-  const xDomain = numericDomain([params.window_start_ms, params.window_stop_ms]);
-  const yDomain = nestedNumericDomain(
-    params.series.map((series) => series.rates_hz),
-    { includeZero: true }
-  );
-  const showLegend = width >= 600;
-  const frame = makeFrame(width, height, showLegend ? 230 : 28);
-  const legend = params.series.map((series, index) => ({
-    label: `${series.label} (${series.id})`,
-    color: seriesColor(args.palette, index)
-  }));
-  const perSeriesBudget = Math.max(
-    2,
-    Math.floor(POPULATION_RATE_PATH_SAMPLE_BUDGET / params.series.length)
-  );
-  const paths = params.series.map((series) => binnedStepPath(
-    params.bin_centers_ms,
-    series.rates_hz,
-    params.bin_width_ms,
-    xDomain,
-    yDomain,
-    frame,
-    perSeriesBudget
-  ));
-  const compacted = paths.some((path) => path.compacted);
-  const seriesDetails = params.series.map(populationRateSeriesDetail);
-  const formula = "rates_hz = spike_counts \xD7 1000 \xF7 (recorded_sender_count \xD7 bin_width_ms)";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Population firing rate",
-      description: `${params.series.length} exact checked population-rate series over ${params.bin_centers_ms.length} uniform bins. Horizontal steps show the supplied bin values without interpolation or smoothing. Series: ${seriesLabelSummary(params.series.map((series) => `${series.label} (${series.id})`))}. ${formula}.`,
-      metadata: `${params.series.length} series \u2022 ${params.bin_centers_ms.length} bins \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms \u2022 window ${formatChartInterval(params.window_start_ms, params.window_stop_ms)} ms`,
-      note: `Rate formula: ${formula}. Binning: ${params.binning}; aggregation: ${params.aggregation}; normalization: ${params.normalization}.${compacted ? " Long series are visually compacted to exact per-bucket extrema; omitted bins are never bridged." : ""}`,
-      accessibleDetails: seriesDetails,
-      xLabel: "Time (ms)",
-      yLabel: "Population rate (Hz)",
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      legend: showLegend ? legend : void 0,
-      sampleCount: params.bin_centers_ms.length * params.series.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { fill: "none", children: params.series.map((series, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "population-rate-steps",
-          "data-series-id": series.id,
-          "data-source-bin-count": paths[index].sourceSampleCount,
-          "data-rendered-bin-count": paths[index].renderedSampleCount,
-          "data-compacted": paths[index].compacted ? "true" : "false",
-          d: paths[index].path,
-          stroke: seriesColor(args.palette, index),
-          strokeWidth: 2,
-          strokeLinejoin: "miter",
-          vectorEffect: "non-scaling-stroke"
-        },
-        series.id
-      )) })
-    }
-  );
-}
-function RateResponseChart(args, width, height, id2) {
-  const params = args.params;
-  const xDomain = numericDomain(params.stimulus_amplitudes);
-  const yDomain = numericDomain(params.rates_hz, { includeZero: true });
-  const frame = makeFrame(width, height);
-  const bin = declaredInput(args, "bin_ms");
-  const normalization = declaredInput(args, "rate_normalization");
-  const metadata = [
-    `${params.rates_hz.length} response points`,
-    bin ? `counting window ${bin} ms` : void 0,
-    normalization
-  ].filter((value) => value !== void 0).join(" \u2022 ");
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "F\u2013I response",
-      description: `${params.rates_hz.length} firing-rate measurements ordered by stimulus amplitude for display. Rates are in hertz and stimulus is in ${params.stimulus_units}.`,
-      metadata,
-      xLabel: `Stimulus (${params.stimulus_units})`,
-      yLabel: "Firing rate (Hz)",
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: params.rates_hz.length,
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "fi-line",
-            d: sortedLinePath(
-              params.stimulus_amplitudes,
-              params.rates_hz,
-              xDomain,
-              yDomain,
-              frame
-            ),
-            fill: "none",
-            stroke: args.palette.excitatory,
-            strokeWidth: 2,
-            vectorEffect: "non-scaling-stroke"
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "fi-points",
-            d: pointPath(
-              params.stimulus_amplitudes,
-              params.rates_hz,
-              xDomain,
-              yDomain,
-              frame
-            ),
-            fill: args.palette.excitatory
-          }
-        )
-      ]
-    }
-  );
-}
-function HistogramChart({
-  args,
-  width,
-  height,
-  id: id2,
-  title,
-  description,
-  metadata,
-  xLabel,
-  yLabel,
-  centers,
-  values,
-  binWidth,
-  color,
-  alignmentLabel
-}) {
-  const xDomain = histogramDomain(centers, binWidth);
-  const yDomain = numericDomain(values, { includeZero: true });
-  const frame = makeFrame(width, height);
-  const zeroInDomain = xDomain.min <= 0 && xDomain.max >= 0;
-  const zeroX = chartX(0, xDomain, frame);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title,
-      description,
-      metadata,
-      xLabel,
-      yLabel,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: values.length,
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "histogram-bars",
-            "data-bar-count": values.length,
-            d: histogramBarPath(centers, values, binWidth, xDomain, yDomain, frame),
-            fill: color,
-            fillOpacity: 0.82,
-            stroke: color,
-            strokeWidth: 0.75,
-            vectorEffect: "non-scaling-stroke"
-          }
-        ),
-        alignmentLabel && zeroInDomain && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "data-mark": "alignment-zero", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "line",
-            {
-              x1: zeroX,
-              y1: frame.top,
-              x2: zeroX,
-              y2: frame.height - frame.bottom,
-              stroke: args.palette.amber,
-              strokeWidth: 1.5,
-              strokeDasharray: "5 4",
-              vectorEffect: "non-scaling-stroke"
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "text",
-            {
-              x: zeroX + 5,
-              y: frame.top + 13,
-              fill: args.palette.amber,
-              fontSize: 10,
-              children: [
-                "t=0: ",
-                alignmentLabel.length > 36 ? `${alignmentLabel.slice(0, 35)}\u2026` : alignmentLabel
-              ]
-            }
-          )
-        ] })
-      ]
-    }
-  );
-}
-function IsiChart(args, width, height, id2) {
-  const params = args.params;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    HistogramChart,
-    {
-      args,
-      width,
-      height,
-      id: id2,
-      title: "Inter-spike interval distribution",
-      description: `${params.values.length} uniform ${params.bin_width_ms} ms bins using ${params.normalization} normalization and ${params.interval_scope} interval scope.`,
-      metadata: `${params.normalization} \u2022 ${params.interval_scope} \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms`,
-      xLabel: "Inter-spike interval (ms)",
-      yLabel: params.value_units,
-      centers: params.bin_centers_ms,
-      values: params.values,
-      binWidth: params.bin_width_ms,
-      color: args.palette.teal
-    }
-  );
-}
-function PsthChart(args, width, height, id2) {
-  const params = args.params;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    HistogramChart,
-    {
-      args,
-      width,
-      height,
-      id: id2,
-      title: "Peri-stimulus time histogram",
-      description: `${params.values.length} trial-aligned bins aggregated across selected senders for ${params.trial_count} trials. Alignment event: ${params.alignment_event}. Normalization: ${params.normalization}.`,
-      metadata: `${params.normalization} \u2022 ${params.trial_count} trials \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms`,
-      xLabel: "Time from alignment event (ms)",
-      yLabel: params.value_units,
-      centers: params.bin_centers_ms,
-      values: params.values,
-      binWidth: params.bin_width_ms,
-      color: args.palette.spike,
-      alignmentLabel: params.alignment_event
-    }
-  );
-}
-function correlogramStatisticDetail(statistic) {
-  switch (statistic.kind) {
-    case "pair_rate_hz":
-      return `${statistic.kind} (${statistic.units}), exposure ${formatChartNumber(statistic.exposure_s)} s`;
-    case "pearson_coefficient":
-      return `${statistic.kind} (${statistic.units}), ${statistic.sample_count} samples`;
-    default:
-      return `${statistic.kind} (${statistic.units})`;
-  }
-}
-function CorrelogramChart(args, width, height, id2) {
-  const params = args.params;
-  const xDomain = numericDomain([-params.tau_max_ms, params.tau_max_ms]);
-  const yDomain = numericDomain(params.values, { includeZero: true });
-  const frame = makeFrame(width, height);
-  const zeroX = chartX(0, xDomain, frame);
-  const statistic = correlogramStatisticDetail(params.statistic);
-  const pair = `${params.pair.reference_label} \u2192 ${params.pair.target_label}`;
-  const marks = boundedStemPointPaths(
-    params.lags_ms,
-    params.values,
-    xDomain,
-    yDomain,
-    frame
-  );
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Spike-train correlogram",
-      description: `${params.values.length} exact binned ${params.statistic.kind} values for the oriented pair ${pair}. Positive lag means the target follows the reference. Signed values and lag asymmetry are preserved; bins are shown as independent stems and points with no interpolation or mirroring. The zero-lag reference line does not add a zero bin.`,
-      metadata: `${pair} \u2022 ${statistic} \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms \u2022 \u03C4 range \xB1${formatChartNumber(params.tau_max_ms)} ms`,
-      note: `Pair orientation: ${pair}. Lag convention: ${params.lag_convention}. Statistic: ${statistic}. Counting window: ${formatChartInterval(params.counting_start_ms, params.counting_stop_ms)} ms. Binning: ${params.binning}. Zero-lag policy: ${params.zero_lag_policy}; the lag-zero line is a reference only and does not invent a bin.${marks.compacted ? " Long series are visually compacted to exact per-bucket extrema; omitted bins remain disconnected and are never mirrored." : ""}`,
-      xLabel: "Lag (ms)",
-      yLabel: `${params.statistic.kind} (${params.statistic.units})`,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: params.values.length,
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "data-mark": "zero-lag-reference", "data-zero-bin-present": params.lags_ms.includes(0), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "line",
-            {
-              x1: zeroX,
-              y1: frame.top,
-              x2: zeroX,
-              y2: frame.height - frame.bottom,
-              stroke: args.palette.amber,
-              strokeWidth: 1.5,
-              strokeDasharray: "5 4",
-              vectorEffect: "non-scaling-stroke"
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("text", { x: zeroX + 5, y: frame.top + 13, fill: args.palette.amber, fontSize: 10, children: "lag 0 reference" })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "correlogram-stems",
-            "data-bin-count": params.values.length,
-            "data-source-bin-count": marks.sourceSampleCount,
-            "data-rendered-bin-count": marks.renderedSampleCount,
-            "data-compacted": marks.compacted ? "true" : "false",
-            d: marks.stems,
-            fill: "none",
-            stroke: args.palette.excitatory,
-            strokeWidth: 1.5,
-            vectorEffect: "non-scaling-stroke"
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "correlogram-points",
-            "data-bin-count": params.values.length,
-            "data-source-bin-count": marks.sourceSampleCount,
-            "data-rendered-bin-count": marks.renderedSampleCount,
-            "data-compacted": marks.compacted ? "true" : "false",
-            d: marks.points,
-            fill: args.palette.excitatory
-          }
-        )
-      ]
-    }
-  );
-}
-var WEIGHT_RENDER_BIN_BUDGET = 4096;
-function WeightHistogramChart(args, width, height, id2) {
-  const params = args.params;
-  const aggregated = aggregateUniformHistogramBins(
-    params.bin_centers,
-    params.weight_counts,
-    params.values,
-    params.bin_width,
-    params.normalization,
-    WEIGHT_RENDER_BIN_BUDGET
-  );
-  const frame = makeFrame(width, height);
-  const xDomain = { min: params.window_start, max: params.window_stop };
-  const yDomain = numericDomain(
-    aggregated.bins.map((bin) => bin.value),
-    { includeZero: true }
-  );
-  const path = variableHistogramPath(
-    aggregated.bins,
-    xDomain,
-    yDomain,
-    frame
-  );
-  const scope = metadataValue(params.snapshot_scope);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Connection-weight distribution",
-      description: `${params.values.length} checked ${formatChartNumber(params.bin_width)} ${params.weight_units} bins with raw connection counts retained alongside ${params.normalization} values. The typed snapshot scope and complete sampling policy distinguish rank-local from merged evidence.`,
-      metadata: `${aggregated.sourceRawCount} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
-      note: `Weight units: ${params.weight_units}; normalization: ${params.normalization}; aggregation: ${params.aggregation}; binning: ${params.binning}; sample policy: ${params.sample_policy}; window ${formatChartInterval(params.window_start, params.window_stop)} ${params.weight_units}. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema sampling was used.` : " Every source bin is rendered directly."}`,
-      accessibleDetails: [
-        `Raw connection count is ${aggregated.sourceRawCount} before and ${aggregated.renderedRawCount} after display grouping.`
-      ],
-      accessibleDetailsLabel: "Connection-weight distribution summary",
-      xLabel: `Connection weight (${params.weight_units})`,
-      yLabel: params.value_units,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: params.values.length,
-      dataRows: {
-        key: `weight-${params.snapshot_time_ms}-${params.values.length}`,
-        label: "Connection-weight bin data",
-        rowCount: params.values.length,
-        rowAt: (index) => {
-          const left = params.bin_centers[index] - params.bin_width / 2;
-          const right = params.bin_centers[index] + params.bin_width / 2;
-          return `Weight bin ${formatChartInterval(left, right)} ${params.weight_units}: ${params.weight_counts[index]} connection${params.weight_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`;
-        }
-      },
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "weight-histogram-bars",
-          "data-bar-count": params.values.length,
-          "data-source-bin-count": aggregated.sourceBinCount,
-          "data-rendered-bin-count": aggregated.renderedBinCount,
-          "data-source-connection-count": aggregated.sourceRawCount,
-          "data-rendered-connection-count": aggregated.renderedRawCount,
-          "data-compacted": aggregated.compacted ? "true" : "false",
-          "data-sample-policy": params.sample_policy,
-          "data-snapshot-scope": params.snapshot_scope.kind,
-          d: path,
-          fill: args.palette.violet,
-          fillOpacity: 0.82,
-          stroke: args.palette.violet,
-          strokeWidth: 0.6,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
-    }
-  );
-}
-function PlasticityChart(args, width, height, id2) {
-  const params = args.params;
-  const xDomain = numericDomain(params.times_ms);
-  const yDomain = numericDomain(params.weights);
-  const frame = makeFrame(width, height);
-  const synapseModel = declaredInput(args, "synapse_model");
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Synaptic weight dynamics",
-      description: `${params.weights.length} measured weight samples over time in ${params.weight_units}. This view does not invent an STDP window or pre/post spike protocol.`,
-      metadata: [synapseModel, `${params.weights.length} samples`].filter((value) => value !== void 0).join(" \u2022 "),
-      xLabel: "Time (ms)",
-      yLabel: `Weight (${params.weight_units})`,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: params.weights.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "weight-line",
-          d: linePath(params.times_ms, params.weights, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.ltp,
-          strokeWidth: 2,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
-    }
-  );
-}
-function PhasePlaneChart(args, width, height, id2) {
-  const params = args.params;
-  const [xAxis, yAxis] = params.axis_order;
-  const xValues = params.grid[xAxis];
-  const yValues = params.grid[yAxis];
-  const xDomain = numericDomain(xValues);
-  const yDomain = numericDomain(yValues);
-  const frame = makeFrame(width, height);
-  const samples = phasePlaneSamples(
-    params.axis_order,
-    params.grid,
-    params.derivatives
-  );
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Phase-plane vector field",
-      description: `${samples.length} derivative vectors on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}. Arrows are normalized in plotted coordinate space and do not encode an absolute integration timestep. No trajectory, nullcline, or equilibrium is invented.`,
-      metadata: `${xValues.length}\xD7${yValues.length} grid \u2022 vector units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} \u2022 row-major, last axis fastest`,
-      xLabel: `${xAxis} (${params.axis_units[xAxis]})`,
-      yLabel: `${yAxis} (${params.axis_units[yAxis]})`,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: samples.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "phase-vectors",
-          "data-vector-count": samples.length,
-          d: phasePlaneArrowPath(samples, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.orange,
-          strokeWidth: 1.4,
-          strokeLinecap: "round",
-          strokeLinejoin: "round",
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
-    }
-  );
-}
-function MatrixChart(args, width, height, id2) {
-  const skill = args.skill;
-  const params = args.params;
-  const showLegend = width >= 600;
-  const frame = makeFrame(width, height, showLegend ? 190 : 28);
-  const sourceIndex = /* @__PURE__ */ new Map();
-  const targetIndex = /* @__PURE__ */ new Map();
-  for (let index = 0; index < params.source_ids.length; index++) {
-    sourceIndex.set(params.source_ids[index], index);
-  }
-  for (let index = 0; index < params.target_ids.length; index++) {
-    targetIndex.set(params.target_ids[index], index);
-  }
-  const cells = params.cells.map((cell) => ({
-    sourceIndex: sourceIndex.get(cell.source_id) ?? -1,
-    targetIndex: targetIndex.get(cell.target_id) ?? -1,
-    value: skill === "nest.adjacency_matrix" ? 1 : cell.value
-  }));
-  const geometry = matrixValueBucketPaths(
-    cells,
-    params.source_ids.length,
-    params.target_ids.length,
-    frame
-  );
-  const minimumCellPixels = Math.min(
-    chartPlotWidth(frame) / params.source_ids.length,
-    chartPlotHeight(frame) / params.target_ids.length
-  );
-  const cellStrokeWidth = minimumCellPixels >= 1.5 ? 0.35 : 0;
-  const colors = chartColors(args.palette, args.themeMode);
-  const sourceTicks = sampledIndices(params.source_ids.length, 6);
-  const targetTicks = sampledIndices(params.target_ids.length, 6);
-  const presentZeroCount = geometry.buckets.find((bucket) => bucket.sign === 0)?.cellCount ?? 0;
-  const connectionCount = params.connection_count;
-  const title = skill === "nest.adjacency_matrix" ? "Connection adjacency matrix" : skill === "nest.weight_matrix" ? "Connection-weight matrix" : "Connection-delay matrix";
-  const metric = skill === "nest.adjacency_matrix" ? "binary presence" : `${params.aggregation} ${skill === "nest.weight_matrix" ? `weight (${params.weight_units})` : `delay (${params.delay_units})`}`;
-  const scope = metadataValue(params.snapshot_scope);
-  const maximum = formatChartNumber(geometry.maximumAbsoluteValue);
-  const sourceSummary = params.source_ids.length === 0 ? "none" : `${params.source_ids[0]}\u2026${params.source_ids[params.source_ids.length - 1]}`;
-  const targetSummary = params.target_ids.length === 0 ? "none" : `${params.target_ids[0]}\u2026${params.target_ids[params.target_ids.length - 1]}`;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title,
-      description: `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; a present measured zero remains visibly distinct. Cells are never interpolated or spatially merged.`,
-      metadata: `${params.target_ids.length}\xD7${params.source_ids.length} axes \u2022 ${params.cells.length} present cells \u2022 ${connectionCount} connections \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
-      note: `Orientation: ${params.axis_order}. Metric: ${metric}. Absent cell: ${params.absent_cell}. Connection sample policy: ${params.sample_policy}. Snapshot scope (including MPI ownership): ${scope}. Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded signed value paths, with ${presentZeroCount} present zero-valued cells and maximum absolute displayed value ${maximum}. Negative values use the inhibitory color, positive values use the excitatory color, and opacity uses eight disclosed magnitude levels.${cellStrokeWidth === 0 ? " Cell border strokes are suppressed below pixel scale, but no cell or value is removed." : ""}`,
-      accessibleDetails: [
-        `Source axis ids: ${sourceSummary}.`,
-        `Target axis ids: ${targetSummary}.`,
-        `${geometry.sourceCellCount} source cells and ${geometry.renderedCellCount} rendered cells; none omitted.`
-      ],
-      accessibleDetailsLabel: "Matrix summary",
-      xLabel: "Source node ID (declared column order)",
-      yLabel: "Target node ID (declared row order)",
-      xDomain: { min: 0, max: Math.max(1, params.source_ids.length) },
-      yDomain: { min: 0, max: Math.max(1, params.target_ids.length) },
-      xTicks: [],
-      yTicks: [],
-      frame,
-      colors,
-      sampleCount: params.cells.length,
-      dataRows: {
-        key: `${skill}-${params.snapshot_time_ms}-${params.source_ids.length}-${params.target_ids.length}-${params.cells.length}`,
-        label: "Matrix data ordered as source-axis columns, target-axis rows, then present cells",
-        rowCount: params.source_ids.length + params.target_ids.length + params.cells.length,
-        rowAt: (index) => {
-          if (index < params.source_ids.length) {
-            return `Source-axis column ${index + 1} of ${params.source_ids.length} (declared order): node ID ${params.source_ids[index]}.`;
-          }
-          const targetRow = index - params.source_ids.length;
-          if (targetRow < params.target_ids.length) {
-            return `Target-axis row ${targetRow + 1} of ${params.target_ids.length} (declared order): node ID ${params.target_ids[targetRow]}.`;
-          }
-          const cellIndex = targetRow - params.target_ids.length;
-          const cell = params.cells[cellIndex];
-          const declaredRow = (targetIndex.get(cell.target_id) ?? -1) + 1;
-          const declaredColumn = (sourceIndex.get(cell.source_id) ?? -1) + 1;
-          if (skill === "nest.adjacency_matrix") {
-            return `Present-cell record ${cellIndex + 1} of ${params.cells.length}: target node ID ${cell.target_id} at declared row ${declaredRow}, source node ID ${cell.source_id} at declared column ${declaredColumn}; ${cell.connection_count} connection${cell.connection_count === 1 ? "" : "s"}; binary presence.`;
-          }
-          const measured = cell;
-          const units2 = skill === "nest.weight_matrix" ? params.weight_units : params.delay_units;
-          return `Present-cell record ${cellIndex + 1} of ${params.cells.length}: target node ID ${cell.target_id} at declared row ${declaredRow}, source node ID ${cell.source_id} at declared column ${declaredColumn}; ${cell.connection_count} connection${cell.connection_count === 1 ? "" : "s"}; displayed value ${formatChartNumber(measured.value)} ${units2}; aggregation ${params.aggregation}.`;
-        }
-      },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "g",
-          {
-            "data-mark": "matrix-cells",
-            "data-source-cell-count": geometry.sourceCellCount,
-            "data-rendered-cell-count": geometry.renderedCellCount,
-            "data-value-bucket-count": geometry.valueBucketCount,
-            "data-present-zero-count": presentZeroCount,
-            "data-absent-cell": params.absent_cell,
-            "data-axis-order": params.axis_order,
-            "data-cell-stroke": cellStrokeWidth > 0 ? "visible" : "suppressed-below-pixel-scale",
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "rect",
-                {
-                  x: frame.left,
-                  y: frame.top,
-                  width: chartPlotWidth(frame),
-                  height: chartPlotHeight(frame),
-                  fill: colors.grid,
-                  fillOpacity: 0.14,
-                  "data-mark": "matrix-absent-background"
-                }
-              ),
-              geometry.buckets.map((bucket) => {
-                const paint = matrixBucketPaint(bucket, args.palette);
-                return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  "path",
-                  {
-                    "data-mark": "matrix-value-bucket",
-                    "data-bucket": bucket.key,
-                    "data-cell-count": bucket.cellCount,
-                    d: bucket.path,
-                    fill: paint.color,
-                    fillOpacity: paint.opacity,
-                    stroke: colors.background,
-                    strokeWidth: cellStrokeWidth,
-                    vectorEffect: "non-scaling-stroke"
-                  },
-                  bucket.key
-                );
-              })
-            ]
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "aria-hidden": "true", "data-mark": "matrix-axis-identities", children: [
-          sourceTicks.map((axisIndex) => {
-            const x = frame.left + (axisIndex + 0.5) / params.source_ids.length * chartPlotWidth(frame);
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "text",
-              {
-                x,
-                y: frame.height - frame.bottom + 18,
-                fill: colors.muted,
-                fontSize: 9,
-                textAnchor: "middle",
-                children: params.source_ids[axisIndex]
-              },
-              `source-${axisIndex}`
-            );
-          }),
-          targetTicks.map((axisIndex) => {
-            const y = frame.top + (axisIndex + 0.5) / params.target_ids.length * chartPlotHeight(frame);
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "text",
-              {
-                x: frame.left - 9,
-                y: y + 3,
-                fill: colors.muted,
-                fontSize: 9,
-                textAnchor: "end",
-                children: params.target_ids[axisIndex]
-              },
-              `target-${axisIndex}`
-            );
-          })
-        ] }),
-        showLegend && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { "aria-label": "Matrix value legend", "data-mark": "matrix-value-legend", children: [
-          ["absent: no connection", colors.grid, 0.3],
-          ["present zero", args.palette.inkDim, 0.58],
-          ["negative", args.palette.inhibitory, 1],
-          ["positive", args.palette.excitatory, 1]
-        ].map(([label, color, opacity], legendIndex) => {
-          const y = frame.top + legendIndex * 22;
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "rect",
-              {
-                x: frame.width - frame.right + 18,
-                y,
-                width: 10,
-                height: 10,
-                fill: String(color),
-                fillOpacity: Number(opacity)
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "text",
-              {
-                x: frame.width - frame.right + 34,
-                y: y + 9,
-                fill: colors.foreground,
-                fontSize: 9,
-                children: String(label)
-              }
-            )
-          ] }, String(label));
-        }) })
-      ]
-    }
-  );
-}
-function ConnectionGraphChart(args, width, height, id2) {
-  const params = args.params;
-  const frame = makeFrame(width, height);
-  const geometry = circleTopologyGeometry(params.nodes, params.edges, frame);
-  const colors = chartColors(args.palette, args.themeMode);
-  const endpointIds = /* @__PURE__ */ new Set();
-  let weightedEdges = 0;
-  let delayedEdges = 0;
-  for (let index = 0; index < params.edges.length; index++) {
-    endpointIds.add(params.edges[index].source);
-    endpointIds.add(params.edges[index].target);
-    if (params.edges[index].weight !== void 0) weightedEdges += 1;
-    if (params.edges[index].delay_ms !== void 0) delayedEdges += 1;
-  }
-  const isolateCount = params.nodes.reduce(
-    (count, node) => count + (endpointIds.has(node.id) ? 0 : 1),
-    0
-  );
-  const scope = metadataValue(params.snapshot_scope);
-  const samplePolicy = metadataValue(params.sample_policy);
-  const labels = sampledIndices(params.nodes.length, 8);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Connection topology graph",
-      description: `${params.nodes.length} declared nodes, including ${isolateCount} isolates, and ${params.edges.length} provided directed connection records on a deterministic schematic circle. Every provided multapse, reverse edge, and autapse is retained with a separate deterministic lane and persistent arrowhead. Circle positions and distances are derived for readability and are not spatial evidence.`,
-      metadata: `${params.nodes.length} nodes \u2022 ${params.edges.length} rendered of ${params.source_connection_count} source connections \u2022 ${isolateCount} isolates \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
-      note: `Schematic layout: ${params.layout}; node positions and distances are not measured. Parallel edges: ${params.parallel_edges}; self-connections: ${params.self_connections}; arrowheads preserve source\u2192target direction. ${weightedEdges} edges carry weights${params.weight_units ? ` in ${params.weight_units}` : ""} and ${delayedEdges} carry delays${params.delay_units ? ` in ${params.delay_units}` : ""}; neither channel is mapped to geometry. Edge identity: ${params.edge_identity}. Source connection count: ${params.source_connection_count}. Sample policy: ${samplePolicy}. Snapshot scope (including MPI ownership): ${scope}.`,
-      accessibleDetails: [
-        `${geometry.sourceNodeCount} source nodes and ${geometry.renderedNodeCount} rendered nodes; none omitted.`,
-        `${params.source_connection_count} source connections, ${geometry.sourceEdgeCount} provided sample edges, and ${geometry.renderedEdgeCount} rendered edges; no provided edge omitted.`,
-        `${geometry.selfLoopCount} self-connections and ${geometry.parallelEdgeCount} edges in parallel bundles.`
-      ],
-      accessibleDetailsLabel: "Topology summary",
-      xLabel: "Schematic circle layout \u2014 horizontal position is non-quantitative",
-      yLabel: "Schematic vertical position",
-      xDomain: { min: 0, max: 1 },
-      yDomain: { min: 0, max: 1 },
-      xTicks: [],
-      yTicks: [],
-      frame,
-      colors,
-      sampleCount: params.nodes.length + params.edges.length,
-      dataRows: {
-        key: `connection-graph-${params.snapshot_time_ms}-${params.nodes.length}-${params.edges.length}`,
-        label: "Connection graph node and edge data",
-        rowCount: params.nodes.length + params.edges.length,
-        rowAt: (index) => {
-          if (index < params.nodes.length) {
-            const node = params.nodes[index];
-            return `Node ${node.id}: ${node.label}; ${endpointIds.has(node.id) ? "incident to at least one provided edge" : "isolated in the provided graph"}.`;
-          }
-          const edge = params.edges[index - params.nodes.length];
-          const details = [
-            edge.weight === void 0 ? void 0 : `weight ${formatChartNumber(edge.weight)} ${params.weight_units}`,
-            edge.delay_ms === void 0 ? void 0 : `delay ${formatChartNumber(edge.delay_ms)} ${params.delay_units}`,
-            edge.synapse_model === void 0 ? void 0 : `synapse model ${edge.synapse_model}`,
-            `edge identity ${params.edge_identity}`
-          ].filter((value) => value !== void 0);
-          return `Edge ${edge.id}: ${edge.source} \u2192 ${edge.target}${details.length > 0 ? `; ${details.join("; ")}` : ""}.`;
-        }
-      },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "connection-edges",
-            "data-source-edge-count": params.source_connection_count,
-            "data-provided-edge-count": geometry.sourceEdgeCount,
-            "data-rendered-edge-count": geometry.renderedEdgeCount,
-            "data-self-loop-count": geometry.selfLoopCount,
-            "data-parallel-edge-count": geometry.parallelEdgeCount,
-            "data-edge-identity": params.edge_identity,
-            "data-sample-policy": params.sample_policy,
-            d: geometry.edgePath,
-            fill: "none",
-            stroke: args.palette.cyan,
-            strokeOpacity: 0.65,
-            strokeWidth: 1.25,
-            vectorEffect: "non-scaling-stroke"
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "connection-arrowheads",
-            "data-arrow-count": geometry.renderedEdgeCount,
-            d: geometry.arrowPath,
-            fill: args.palette.orange
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "connection-nodes",
-            "data-source-node-count": geometry.sourceNodeCount,
-            "data-rendered-node-count": geometry.renderedNodeCount,
-            "data-isolate-count": isolateCount,
-            d: geometry.nodePath,
-            fill: args.palette.excitatory,
-            stroke: colors.background,
-            strokeWidth: 1,
-            vectorEffect: "non-scaling-stroke"
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { "aria-hidden": "true", "data-mark": "connection-node-labels", children: labels.map((nodeIndex) => {
-          const position = geometry.positions[nodeIndex];
-          const label = params.nodes[nodeIndex].label;
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "text",
-            {
-              x: position.x + 6,
-              y: position.y - 6,
-              fill: colors.foreground,
-              fontSize: 9,
-              children: label.length > 24 ? `${label.slice(0, 23)}\u2026` : label
-            },
-            params.nodes[nodeIndex].id
-          );
-        }) })
-      ]
-    }
-  );
-}
-var DEGREE_RENDER_BIN_BUDGET = 512;
-function DegreeDistributionChart(args, width, height, id2) {
-  const params = args.params;
-  const aggregated = aggregateDegreeBins(
-    params.degrees,
-    params.node_counts,
-    params.values,
-    DEGREE_RENDER_BIN_BUDGET
-  );
-  const frame = makeFrame(width, height);
-  const firstDegree = params.degrees[0] ?? 0;
-  const finalDegree = params.degrees[params.degrees.length - 1] ?? firstDegree;
-  const xDomain = { min: firstDegree - 0.5, max: finalDegree + 0.5 };
-  const yDomain = numericDomain(aggregated.bins.map((bin) => bin.value), {
-    includeZero: true
-  });
-  const path = variableHistogramPath(aggregated.bins, xDomain, yDomain, frame);
-  const scope = metadataValue(params.snapshot_scope);
-  const directionTitle = params.direction === "in" ? "In-degree distribution" : "Out-degree distribution";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: directionTitle,
-      description: `${params.degrees.length} ordered ${params.direction}-degree bins over ${params.node_count} declared nodes. Adjacent display bins may be grouped by summing both raw node counts and displayed mass; extrema sampling is never used.`,
-      metadata: `${params.node_count} nodes \u2022 ${params.connection_count} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins`,
-      note: `Direction: ${params.direction}; normalization: ${params.normalization}; edge counting: ${params.edge_counting}; zero-degree policy: ${params.zero_degree_policy}; sample policy: ${params.sample_policy}. Snapshot: ${formatChartNumber(params.snapshot_time_ms)} ms. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema selection or interpolation was used.` : " Every source bin is rendered directly."}`,
-      accessibleDetails: [
-        `Raw node-count mass: ${formatChartNumber(aggregated.sourceNodeMass)} before and ${formatChartNumber(aggregated.renderedNodeMass)} after display grouping.`,
-        `Displayed value mass: ${formatChartNumber(aggregated.sourceValueMass)} before and ${formatChartNumber(aggregated.renderedValueMass)} after grouping.`
-      ],
-      accessibleDetailsLabel: "Degree distribution summary",
-      xLabel: `${params.direction === "in" ? "In" : "Out"}-degree`,
-      yLabel: params.value_units,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: params.degrees.length,
-      dataRows: {
-        key: `${params.direction}-degree-${params.snapshot_time_ms}-${params.degrees.length}`,
-        label: `${params.direction === "in" ? "In" : "Out"}-degree bin data`,
-        rowCount: params.degrees.length,
-        rowAt: (index) => `Degree ${params.degrees[index]}: ${params.node_counts[index]} node${params.node_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`
-      },
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "degree-distribution-bars",
-          "data-direction": params.direction,
-          "data-source-bin-count": aggregated.sourceBinCount,
-          "data-rendered-bin-count": aggregated.renderedBinCount,
-          "data-source-node-mass": aggregated.sourceNodeMass,
-          "data-rendered-node-mass": aggregated.renderedNodeMass,
-          "data-compacted": aggregated.compacted ? "true" : "false",
-          "data-sample-policy": params.sample_policy,
-          d: path,
-          fill: params.direction === "in" ? args.palette.cyan : args.palette.orange,
-          fillOpacity: 0.82,
-          stroke: params.direction === "in" ? args.palette.cyan : args.palette.orange,
-          strokeWidth: 0.6,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
-    }
-  );
-}
-var DELAY_RENDER_BIN_BUDGET = 4096;
-function DelayDistributionChart(args, width, height, id2) {
-  const params = args.params;
-  const aggregated = aggregateUniformHistogramBins(
-    params.bin_centers_ms,
-    params.delay_counts,
-    params.values,
-    params.bin_width_ms,
-    params.normalization,
-    DELAY_RENDER_BIN_BUDGET
-  );
-  const frame = makeFrame(width, height);
-  const xDomain = { min: params.window_start_ms, max: params.window_stop_ms };
-  const yDomain = numericDomain(aggregated.bins.map((bin) => bin.value), {
-    includeZero: true
-  });
-  const path = variableHistogramPath(aggregated.bins, xDomain, yDomain, frame);
-  const scope = metadataValue(params.snapshot_scope);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "Connection-delay distribution",
-      description: `${params.values.length} checked ${params.bin_width_ms} ms delay bins with raw connection counts retained alongside ${params.normalization} values. Adjacent visual compaction preserves raw counts and displayed mass.`,
-      metadata: `${aggregated.sourceRawCount} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
-      note: `Delay units: ${params.delay_units}; normalization: ${params.normalization}; aggregation: ${params.aggregation}; binning: ${params.binning}; sample policy: ${params.sample_policy}; window ${formatChartInterval(params.window_start_ms, params.window_stop_ms)} ms. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema sampling was used.` : " Every source bin is rendered directly."}`,
-      accessibleDetails: [
-        `Raw delay-event count is ${aggregated.sourceRawCount} before and ${aggregated.renderedRawCount} after display grouping.`
-      ],
-      accessibleDetailsLabel: "Delay distribution summary",
-      xLabel: "Connection delay (ms)",
-      yLabel: params.value_units,
-      xDomain,
-      yDomain,
-      frame,
-      colors: chartColors(args.palette, args.themeMode),
-      sampleCount: params.values.length,
-      dataRows: {
-        key: `delay-${params.snapshot_time_ms}-${params.values.length}`,
-        label: "Connection-delay bin data",
-        rowCount: params.values.length,
-        rowAt: (index) => {
-          const left = params.bin_centers_ms[index] - params.bin_width_ms / 2;
-          const right = params.bin_centers_ms[index] + params.bin_width_ms / 2;
-          return `Delay bin ${formatChartInterval(left, right)} ms: ${params.delay_counts[index]} connection${params.delay_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`;
-        }
-      },
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "delay-distribution-bars",
-          "data-source-bin-count": aggregated.sourceBinCount,
-          "data-rendered-bin-count": aggregated.renderedBinCount,
-          "data-source-delay-count": aggregated.sourceRawCount,
-          "data-rendered-delay-count": aggregated.renderedRawCount,
-          "data-compacted": aggregated.compacted ? "true" : "false",
-          "data-sample-policy": params.sample_policy,
-          d: path,
-          fill: args.palette.teal,
-          fillOpacity: 0.82,
-          stroke: args.palette.teal,
-          strokeWidth: 0.6,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
-    }
-  );
-}
-function SpatialMap2DChart(args, width, height, id2) {
-  const params = args.params;
-  const frame = makeFrame(width, height);
-  const extent = params.extent;
-  const center = params.center;
-  const domains = equalAspectDomains(extent, center, frame);
-  const xs = params.nodes.map((node) => node.x);
-  const ys = params.nodes.map((node) => node.y);
-  const nodePath = pointPath(xs, ys, domains.xDomain, domains.yDomain, frame, 2.75);
-  const boundaryLeft = chartX(center[0] - extent[0] / 2, domains.xDomain, frame);
-  const boundaryRight = chartX(center[0] + extent[0] / 2, domains.xDomain, frame);
-  const boundaryTop = chartY(center[1] + extent[1] / 2, domains.yDomain, frame);
-  const boundaryBottom = chartY(center[1] - extent[1] / 2, domains.yDomain, frame);
-  const colors = chartColors(args.palette, args.themeMode);
-  const labels = sampledIndices(params.nodes.length, 8);
-  const scope = metadataValue(params.position_scope);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    ChartShell,
-    {
-      id: id2,
-      skill: args.skill,
-      scene: args.scene,
-      title: "2D spatial node map",
-      description: `${params.nodes.length} typed nodes at their exact supplied x/y coordinates in ${params.coordinate_units}. One common scale is used for both axes; coordinates are neither jittered nor independently stretched. Marker radius is fixed in screen space and does not encode physical node size.`,
-      metadata: `${params.nodes.length} nodes \u2022 extent ${formatChartNumber(extent[0])}\xD7${formatChartNumber(extent[1])} ${params.coordinate_units} \u2022 center (${formatChartNumber(center[0])}, ${formatChartNumber(center[1])})`,
-      note: `Position scope (including MPI ownership): ${scope}. Boundary edge wrap: ${params.edge_wrap ? "enabled (periodic boundary)" : "disabled"}. Marker size: ${params.marker_size}; it is not a physical measurement. The declared boundary is shown exactly, x/y use equal scale, and no point is sampled, aggregated, projected, or jittered.`,
-      accessibleDetails: [
-        `${params.nodes.length} source positions and ${params.nodes.length} rendered positions; none omitted.`,
-        `Node id range in declared order: ${params.nodes[0]?.id ?? "none"}\u2026${params.nodes[params.nodes.length - 1]?.id ?? "none"}.`
-      ],
-      accessibleDetailsLabel: "Spatial map summary",
-      xLabel: `x (${params.coordinate_units})`,
-      yLabel: `y (${params.coordinate_units})`,
-      xDomain: domains.xDomain,
-      yDomain: domains.yDomain,
-      frame,
-      colors,
-      sampleCount: params.nodes.length,
-      dataRows: {
-        key: `spatial-${metadataValue(params.position_scope)}-${params.nodes.length}`,
-        label: "Spatial node-coordinate data",
-        rowCount: params.nodes.length,
-        rowAt: (index) => {
-          const node = params.nodes[index];
-          return `Node ${node.id}: ${node.label}; x ${formatChartNumber(node.x)} ${params.coordinate_units}; y ${formatChartNumber(node.y)} ${params.coordinate_units}.`;
-        }
-      },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "rect",
-          {
-            "data-mark": "spatial-boundary",
-            "data-edge-wrap": params.edge_wrap ? "true" : "false",
-            x: boundaryLeft,
-            y: boundaryTop,
-            width: boundaryRight - boundaryLeft,
-            height: boundaryBottom - boundaryTop,
-            fill: "none",
-            stroke: args.palette.amber,
-            strokeWidth: 1.25,
-            strokeDasharray: params.edge_wrap ? "5 3" : void 0,
-            vectorEffect: "non-scaling-stroke"
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "path",
-          {
-            "data-mark": "spatial-nodes",
-            "data-source-node-count": params.nodes.length,
-            "data-rendered-node-count": params.nodes.length,
-            "data-marker-size": params.marker_size,
-            "data-jitter": "none",
-            d: nodePath,
-            fill: args.palette.cyan
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { "aria-hidden": "true", "data-mark": "spatial-node-labels", children: labels.map((nodeIndex) => {
-          const node = params.nodes[nodeIndex];
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "text",
-            {
-              x: chartX(node.x, domains.xDomain, frame) + 5,
-              y: chartY(node.y, domains.yDomain, frame) - 5,
-              fill: colors.foreground,
-              fontSize: 9,
-              children: node.label.length > 24 ? `${node.label.slice(0, 23)}\u2026` : node.label
-            },
-            node.id
-          );
-        }) })
-      ]
-    }
-  );
-}
-function UnsupportedReferenceChart({ skill, scene }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { role: "alert", className: "cortexel-reference-chart-unsupported", children: [
-    "Cortexel has no canonical SVG chart for skill \u201C",
-    skill ?? "(missing skill)",
-    "\u201D",
-    " ",
-    "on scene \u201C",
-    scene,
-    "\u201D. Use that skill's native scene or checked host renderer."
-  ] });
-}
-function ReferenceChartScene(args) {
-  const reactId = (0, import_react.useId)();
-  const id2 = `cortexel-chart-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const width = normalizeChartDimension(
-    args.width,
-    REFERENCE_CHART_DIMENSIONS.width,
-    REFERENCE_CHART_DIMENSIONS.minWidth
-  );
-  const height = normalizeChartDimension(
-    args.height,
-    REFERENCE_CHART_DIMENSIONS.height,
-    REFERENCE_CHART_DIMENSIONS.minHeight
-  );
-  switch (args.skill) {
-    case "nest.voltage_trace":
-      return TraceChart(args, width, height, id2);
-    case "nest.astrocyte_dynamics":
-      return AstrocyteChart(args, width, height, id2);
-    case "nest.spike_raster":
-      return SpikeRasterChart(args, width, height, id2);
-    case "nest.population_rate":
-      return PopulationRateChart(args, width, height, id2);
-    case "nest.rate_response":
-      return RateResponseChart(args, width, height, id2);
-    case "nest.isi_distribution":
-      return IsiChart(args, width, height, id2);
-    case "nest.psth":
-      return PsthChart(args, width, height, id2);
-    case "nest.correlogram":
-      return CorrelogramChart(args, width, height, id2);
-    case "nest.weight_histogram":
-      return WeightHistogramChart(args, width, height, id2);
-    case "nest.plasticity_dynamics":
-      return PlasticityChart(args, width, height, id2);
-    case "nest.phase_plane":
-      return PhasePlaneChart(args, width, height, id2);
-    case "nest.connection_graph":
-      return ConnectionGraphChart(args, width, height, id2);
-    case "nest.adjacency_matrix":
-    case "nest.weight_matrix":
-    case "nest.delay_matrix":
-      return MatrixChart(args, width, height, id2);
-    case "nest.in_degree_distribution":
-    case "nest.out_degree_distribution":
-      return DegreeDistributionChart(args, width, height, id2);
-    case "nest.delay_distribution":
-      return DelayDistributionChart(args, width, height, id2);
-    case "nest.spatial_map_2d":
-      return SpatialMap2DChart(args, width, height, id2);
-    default:
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(UnsupportedReferenceChart, { skill: args.skill, scene: args.scene });
-  }
-}
-
-// react/VizSpecRenderer.tsx
-var import_react2 = require("react");
-
-// core/provenance.ts
-var CONSERVATIVE_PROVENANCE = Object.freeze({
-  calibrated_posterior: false,
-  advisory_only: true,
-  is_paper_local_evidence: false,
-  synthetic: false
-});
-var HONESTY_POLICY = Object.freeze({
-  version: "3",
-  calibratedPosteriorAccepted: false,
-  captionRequiredWhenAny: Object.freeze([
-    "synthetic=true",
-    "calibrated_posterior=false",
-    "advisory_only=true",
-    "is_paper_local_evidence=false"
-  ]),
-  precedence: Object.freeze([
-    "synthetic",
-    "advisory_only",
-    "not_paper_local",
-    "not_calibrated"
-  ]),
-  templates: Object.freeze({
-    synthetic: "Schematic \u2014 illustrative synthetic data, not measured.",
-    advisory_only: "Advisory \u2014 advisory evidence only; not a calibrated posterior.",
-    not_paper_local: "Advisory \u2014 not paper-local evidence; candidate ranking only.",
-    not_calibrated: "Illustrative \u2014 not a calibrated posterior."
-  }),
-  callerCaption: "append_only_unverified",
-  callerCaptionLabel: "Caller note (unverified):",
-  callerCaptionControls: "escape C0/C1, bidi, zero-width, and BOM controls",
-  bidiIsolationRequired: true,
-  contractDisclosureOrder: Object.freeze([
-    "weak_skill",
-    "external_provenance",
-    "flag_derived_mandatory",
-    "caller_note"
-  ]),
-  weakSkillDisclosure: "contract_owned_first",
-  externalProvenanceDisclosure: "contract_owned_after_weak_before_flag_derived_mandatory",
-  flagDerivedMandatoryDisclosure: "derived_only_from_provenance_flags_and_always_before_caller_note"
-});
-function requiresHonestyCaption(p) {
-  return !!p.synthetic || !p.calibrated_posterior || p.advisory_only || !p.is_paper_local_evidence;
-}
-function mandatoryDisclosure(p) {
-  if (p.synthetic) {
-    return HONESTY_POLICY.templates.synthetic;
-  }
-  if (p.advisory_only) {
-    return HONESTY_POLICY.templates.advisory_only;
-  }
-  if (!p.is_paper_local_evidence) {
-    return HONESTY_POLICY.templates.not_paper_local;
-  }
-  return HONESTY_POLICY.templates.not_calibrated;
-}
-function defaultHonestyCaption(p) {
-  return composeHonestyCaption(p) ?? mandatoryDisclosure(p);
-}
-function composeHonestyCaption(p, contractDisclosures = {}) {
-  const parts = [];
-  if (contractDisclosures.weakSkill) {
-    parts.push(contractDisclosures.weakSkill);
-  }
-  if (contractDisclosures.externalProvenance) {
-    parts.push(contractDisclosures.externalProvenance);
-  }
-  if (requiresHonestyCaption(p)) {
-    parts.push(mandatoryDisclosure(p));
-  }
-  const note = p.caption?.trim();
-  if (note) {
-    parts.push(`Caller note (unverified): ${safeDiagnosticText(note, 500)}`);
-  }
-  return parts.length > 0 ? parts.join(" ") : null;
-}
-
-// core/vizSpec.ts
-var import_zod = require("zod");
-
-// core/designLaws.ts
-var SCENE_NAMES = Object.freeze([
-  "live-activity",
-  "cortical-column",
-  "stdp",
-  "spike-raster",
-  "network-topology",
-  "voltage-trace",
-  "phase-plane",
-  "brunel-network",
-  "fi-curve",
-  "isi-distribution",
-  "psth",
-  "population-rate",
-  "correlogram",
-  "weight-histogram",
-  "connection-matrix",
-  "degree-distribution",
-  "delay-distribution",
-  "spatial-map-2d",
-  "knowledge-graph-3d"
-]);
-
-// core/vizSpec.ts
-var CORTEXEL_SPEC_VERSION = "1.4.0";
-var CORTEXEL_JSON_LIMITS = Object.freeze({
-  maxDepth: 32,
-  maxNodes: 5e5,
-  maxObjectKeys: 1e4,
-  maxStringLength: 1e5,
-  maxTotalStringLength: 5e6
-});
-var CORTEXEL_JSON_POLICY = Object.freeze({
-  finiteNumbersOnly: true,
-  rejectNegativeZero: true,
-  plainObjectsOnly: true,
-  enumerableDataPropertiesOnly: true,
-  rejectAccessors: true,
-  rejectSymbolKeys: true,
-  rejectSparseArrays: true,
-  rejectNamedArrayProperties: true,
-  rejectCircularReferences: true,
-  rejectRawJson: true,
-  duplicateObjectMemberNames: "reject before materialization",
-  rawJsonParsingPrecondition: "detect duplicate member names in raw JSON text before converting to an object",
-  rejectedObjectKeys: Object.freeze(["__proto__"])
-});
-var STRING_NORMALIZATION_POLICY = Object.freeze({
-  version: "1",
-  lengthModel: "ECMAScript UTF-16 code units",
-  portableLengthKeyword: "x-cortexel-max-utf16-code-units",
-  trimAlgorithm: "ECMA-262 String.prototype.trim / TrimString",
-  trimCodePointsHex: Object.freeze([
-    "0009-000D",
-    "0020",
-    "00A0",
-    "1680",
-    "2000-200A",
-    "2028",
-    "2029",
-    "202F",
-    "205F",
-    "3000",
-    "FEFF"
-  ]),
-  regexDialect: "ECMA-262 Unicode-aware regular expressions",
-  unicodeNormalization: "none",
-  wellFormedUnicodeOnly: true,
-  displayStringPattern: SAFE_DISPLAY_STRING_PATTERN.source,
-  displayStringControls: "reject C0/C1, bidi, zero-width, and BOM controls"
-});
-var NUMERIC_MODEL_POLICY = Object.freeze({
-  version: "1",
-  representation: "IEEE-754 binary64",
-  coerceBeforeValidation: true,
-  finiteOnly: true,
-  negativeZeroRejected: true,
-  integerIdentityFields: "safe integers only",
-  constraintEvaluationUsesCoercedValues: true
-});
-var JSON_BUDGET_SEMANTICS = Object.freeze({
-  version: "1",
-  scope: "one snapshot of the complete invocation envelope",
-  rootDepth: 0,
-  nodeCount: "every scalar, array, and object value; property names are not nodes",
-  objectKeyCount: "per object",
-  stringLengthModel: "UTF-16 code units",
-  totalStringLength: "all string values plus every object property name",
-  repeatedReference: "counted once per JSON occurrence; cycles reject"
-});
-var JSON_PARAMS_PORTABLE_SCHEMA = Object.freeze({
-  type: "object",
-  maxProperties: CORTEXEL_JSON_LIMITS.maxObjectKeys,
-  propertyNames: Object.freeze({
-    type: "string",
-    maxLength: CORTEXEL_JSON_LIMITS.maxStringLength,
-    "x-cortexel-max-utf16-code-units": CORTEXEL_JSON_LIMITS.maxStringLength,
-    not: Object.freeze({ const: "__proto__" })
-  }),
-  additionalProperties: true
-});
-var DECLARED_INPUTS_PORTABLE_SCHEMA = Object.freeze({
-  type: "object",
-  maxProperties: 64,
-  propertyNames: Object.freeze({
-    type: "string",
-    minLength: 1,
-    maxLength: 80,
-    "x-cortexel-max-utf16-code-units": 80,
-    allOf: Object.freeze([
-      Object.freeze({ pattern: "^\\S(?:[\\s\\S]*\\S)?$" }),
-      Object.freeze({ pattern: SAFE_DISPLAY_STRING_PATTERN.source })
-    ])
-  }),
-  additionalProperties: Object.freeze({
-    anyOf: Object.freeze([
-      Object.freeze({
-        type: "string",
-        maxLength: 5e3,
-        "x-cortexel-max-utf16-code-units": 5e3,
-        pattern: SAFE_DISPLAY_STRING_PATTERN.source
-      }),
-      Object.freeze({ type: "number" }),
-      Object.freeze({ type: "boolean", const: true })
-    ])
-  })
-});
-var ENVELOPE_NORMALIZATION_POLICY = Object.freeze({
-  version: "1",
-  evaluationOrder: Object.freeze([
-    "parse/coerce every JSON number to IEEE-754 binary64",
-    "validate and snapshot the raw envelope with exact-JSON budgets",
-    "normalize fields carrying x-cortexel-normalize",
-    "materialize envelope defaults",
-    "validate the envelope JSON Schema",
-    "validate skill params, provenance values, and portable constraints",
-    "derive and display the mandatory honesty caption"
-  ]),
-  vizSpecDefaults: Object.freeze({
-    params: Object.freeze({}),
-    mode: "interactive",
-    themeMode: "dark"
-  }),
-  honestyDefaults: Object.freeze({
-    calibrated_posterior: false,
-    advisory_only: true,
-    is_paper_local_evidence: false,
-    synthetic: false
-  }),
-  jsonSchemaDefaultsAreAnnotations: true,
-  missingHonestyFlagsMustUseConservativeDefaults: true
-});
-var normalizedRecordKey = import_zod.z.string().min(1).max(80).regex(
-  /^\S(?:[\s\S]*\S)?$/,
-  "record keys must already be trimmed and contain a non-whitespace character"
-).regex(SAFE_DISPLAY_STRING_PATTERN, "record keys must not contain display control characters");
-function cloneExactJson(root) {
-  const ancestors = /* @__PURE__ */ new WeakSet();
-  let visited = 0;
-  let totalStringLength = 0;
-  const fail = (path, message) => ({
-    ok: false,
-    issue: { path, message }
-  });
-  function inspectString(value, path) {
-    if (value.length > CORTEXEL_JSON_LIMITS.maxStringLength) {
-      return {
-        path,
-        message: `JSON string exceeds ${CORTEXEL_JSON_LIMITS.maxStringLength} characters`
-      };
-    }
-    totalStringLength += value.length;
-    if (totalStringLength > CORTEXEL_JSON_LIMITS.maxTotalStringLength) {
-      return {
-        path,
-        message: `JSON strings exceed ${CORTEXEL_JSON_LIMITS.maxTotalStringLength} total characters`
-      };
-    }
-    for (let index = 0; index < value.length; index++) {
-      const codeUnit = value.charCodeAt(index);
-      if (codeUnit >= 55296 && codeUnit <= 56319) {
-        const next = value.charCodeAt(index + 1);
-        if (!(next >= 56320 && next <= 57343)) {
-          return { path, message: "strings must not contain an unpaired high surrogate" };
-        }
-        index += 1;
-      } else if (codeUnit >= 56320 && codeUnit <= 57343) {
-        return { path, message: "strings must not contain an unpaired low surrogate" };
-      }
-    }
-    return null;
-  }
-  function visit(value, path, depth) {
-    visited += 1;
-    if (visited > CORTEXEL_JSON_LIMITS.maxNodes) {
-      return fail(path, `JSON value exceeds ${CORTEXEL_JSON_LIMITS.maxNodes} nodes`);
-    }
-    if (depth > CORTEXEL_JSON_LIMITS.maxDepth) {
-      return fail(path, `JSON nesting exceeds ${CORTEXEL_JSON_LIMITS.maxDepth} levels`);
-    }
-    if (value === null || typeof value === "boolean") {
-      return { ok: true, value };
-    }
-    if (typeof value === "string") {
-      const issue = inspectString(value, path);
-      return issue ? { ok: false, issue } : { ok: true, value };
-    }
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) {
-        return fail(path, "JSON numbers must be finite (NaN/Infinity are not allowed)");
-      }
-      return Object.is(value, -0) ? fail(path, "negative zero is not stable through JSON.stringify") : { ok: true, value };
-    }
-    if (typeof value !== "object") {
-      return fail(path, `value of type '${typeof value}' is not JSON-serializable`);
-    }
-    const object = value;
-    if (ancestors.has(object)) return fail(path, "circular JSON reference");
-    ancestors.add(object);
-    try {
-      const isRawJson = JSON.isRawJSON;
-      if (isRawJson?.(value)) {
-        return fail(path, "JSON.rawJSON values are not literal objects and are not allowed");
-      }
-      if (Array.isArray(value)) {
-        const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
-        if (!lengthDescriptor || !("value" in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
-          return fail(path, "JSON arrays must have an ordinary non-negative length");
-        }
-        const length = lengthDescriptor.value;
-        if (length > CORTEXEL_JSON_LIMITS.maxNodes - visited) {
-          return fail(path, `JSON value exceeds ${CORTEXEL_JSON_LIMITS.maxNodes} nodes`);
-        }
-        const ownKeys2 = Reflect.ownKeys(value);
-        for (const key of ownKeys2) {
-          if (key === "length") continue;
-          if (typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= length) {
-            return fail(
-              path,
-              "JSON arrays may not carry symbol, named, or out-of-range properties"
-            );
-          }
-        }
-        const clone2 = new Array(length);
-        for (let i = 0; i < length; i++) {
-          const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
-          if (!descriptor) {
-            return fail([...path, i], "sparse arrays are not allowed in exact JSON");
-          }
-          if (!("value" in descriptor) || !descriptor.enumerable) {
-            return fail(
-              [...path, i],
-              "JSON array entries must be enumerable data properties, not accessors"
-            );
-          }
-          const nested = visit(descriptor.value, [...path, i], depth + 1);
-          if (!nested.ok) return nested;
-          clone2[i] = nested.value;
-        }
-        return { ok: true, value: clone2 };
-      }
-      const prototype = Object.getPrototypeOf(value);
-      if (prototype !== Object.prototype && prototype !== null) {
-        return fail(path, "exact JSON must contain plain objects, not class instances");
-      }
-      const ownKeys = Reflect.ownKeys(value);
-      if (ownKeys.some((key) => typeof key === "symbol")) {
-        return fail(path, "JSON objects may not contain symbol keys");
-      }
-      const keys = ownKeys;
-      if (keys.length > CORTEXEL_JSON_LIMITS.maxObjectKeys) {
-        return fail(path, `JSON object exceeds ${CORTEXEL_JSON_LIMITS.maxObjectKeys} keys`);
-      }
-      const clone = {};
-      for (const key of keys) {
-        if (key === "__proto__") {
-          return fail(
-            [...path, key],
-            "the '__proto__' key is not preserved by the runtime schema parser"
-          );
-        }
-        const keyIssue = inspectString(key, [...path, key]);
-        if (keyIssue) return { ok: false, issue: keyIssue };
-        const descriptor = Object.getOwnPropertyDescriptor(value, key);
-        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
-          return fail(
-            [...path, key],
-            "JSON object fields must be enumerable data properties, not accessors"
-          );
-        }
-        const nested = visit(descriptor.value, [...path, key], depth + 1);
-        if (!nested.ok) return nested;
-        Object.defineProperty(clone, key, {
-          value: nested.value,
-          enumerable: true,
-          writable: true,
-          configurable: true
-        });
-      }
-      return { ok: true, value: clone };
-    } finally {
-      ancestors.delete(object);
-    }
-  }
-  return visit(root, [], 0);
-}
-var JsonParamsSchema = import_zod.z.unknown().transform((params, ctx) => {
-  const result = cloneExactJson(params);
-  if (!result.ok) {
-    ctx.addIssue({
-      code: import_zod.z.ZodIssueCode.custom,
-      path: result.issue.path,
-      message: result.issue.message
-    });
-    return import_zod.z.NEVER;
-  }
-  if (result.value === null || typeof result.value !== "object" || Array.isArray(result.value)) {
-    ctx.addIssue({
-      code: import_zod.z.ZodIssueCode.custom,
-      message: "exact JSON envelope must be a plain object"
-    });
-    return import_zod.z.NEVER;
-  }
-  return result.value;
-});
-var ProvenanceSchema = import_zod.z.object({
-  source: import_zod.z.string().trim().min(1).max(200).regex(SAFE_DISPLAY_STRING_PATTERN),
-  calibrated_posterior: import_zod.z.literal(false).default(false),
-  // fail-closed + portable
-  advisory_only: import_zod.z.boolean().default(true),
-  is_paper_local_evidence: import_zod.z.boolean().default(false),
-  caption: import_zod.z.string().trim().max(500).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
-  /** Machine-checkable record of the inputs an agent declared. Keys are
-   *  open here (lenient envelope) — validateSkillInvocation enforces the
-   *  closed ProvenanceKey set a skill demands, so an unknown key surfaces as a
-   *  clear missing_provenance error rather than zod's opaque invalid_key.
-   *  The strict gate closes the key set, validates every present known value,
-   *  and checks portable params↔claim consistency; factual truth remains the
-   *  producer's responsibility. */
-  declared_inputs: JsonParamsSchema.pipe(
-    import_zod.z.record(
-      normalizedRecordKey,
-      import_zod.z.union([
-        import_zod.z.string().max(5e3).regex(SAFE_DISPLAY_STRING_PATTERN),
-        import_zod.z.number(),
-        import_zod.z.literal(true)
-      ])
-    )
-  ).refine((inputs) => Object.keys(inputs).length <= 64, {
-    message: "declared_inputs may contain at most 64 keys"
-  }).optional(),
-  /** Explicit synthetic/illustrative discriminator — forces the schematic
-   *  caption regardless of the other flags. */
-  synthetic: import_zod.z.boolean().default(false)
-}).strict();
-var VizSpecSchema = import_zod.z.object({
-  scene: import_zod.z.enum(SCENE_NAMES),
-  /** Optional self-describing skill id (e.g. 'nest.spike_raster'). When present,
-   *  a stored spec is independently re-validatable and its honesty caption is
-   *  deterministic: validateSkillInvocation cross-checks it, and VizSpecRenderer
-   *  uses it when no explicit `skillId` prop is passed. Scene→skill is many-to-one
-   *  (voltage-trace ← voltage_trace AND astrocyte_dynamics), so the scene alone
-   *  cannot recover the skill — this field closes that gap. */
-  skill: import_zod.z.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN, "skill must not contain display control characters").optional(),
-  /** Optional contract version this spec targets (see CORTEXEL_SPEC_VERSION). */
-  specVersion: import_zod.z.literal(CORTEXEL_SPEC_VERSION).optional(),
-  // Scene-specific data/options. The envelope path guarantees bounded literal
-  // JSON; the strict agent path `validateSkillInvocation` additionally enforces
-  // the per-skill shape and cross-field invariants before render.
-  params: JsonParamsSchema.default({}),
-  mode: import_zod.z.enum(["interactive", "export"]).default("interactive"),
-  themeMode: import_zod.z.enum(["dark", "light"]).default("dark"),
-  camera: import_zod.z.enum(["default", "top", "side", "close", "cinematic"]).optional(),
-  /** Optional palette hint — an agent can request a named semantic palette
-   *  (e.g. 'crameri', 'okabe-ito'). On the strict skill path an unregistered name
-   *  is rejected with 'unknown_palette'; on the lenient validateVizSpec path an
-   *  unregistered name is tolerated and getPalette falls back to the default (with
-   *  a dev-mode warning). When absent, the host's active palette is used. */
-  palette: import_zod.z.string().trim().min(1).max(60).regex(SAFE_DISPLAY_STRING_PATTERN, "palette must not contain display control characters").optional(),
-  provenance: ProvenanceSchema
-}).strict();
-function validateVizSpec(input) {
-  try {
-    const exact = JsonParamsSchema.safeParse(input);
-    if (!exact.success) {
-      return {
-        ok: false,
-        errors: formatValidationIssues(exact.error.issues)
-      };
-    }
-    const result = VizSpecSchema.safeParse(exact.data);
-    if (result.success) return { ok: true, spec: result.data };
-    return {
-      ok: false,
-      errors: formatValidationIssues(result.error.issues)
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      errors: [
-        `(root): validation could not safely inspect the payload: ${safeErrorMessage(error)}`
-      ]
-    };
-  }
-}
-
 // core/skills/registry.ts
 var import_zod4 = require("zod");
 
@@ -3116,7 +934,7 @@ var VALID_RENDERER_ROUTES = Object.freeze([
 ]);
 
 // core/skills/provenanceKeys.ts
-var import_zod2 = require("zod");
+var import_zod = require("zod");
 
 // src/core/sha256.ts
 var K = new Uint32Array([
@@ -3499,7 +1317,7 @@ var PROVENANCE_KEYS = Object.freeze([
   "graph_scope",
   "identity_advisory"
 ]);
-var ProvenanceKeyEnum = import_zod2.z.enum(PROVENANCE_KEYS);
+var ProvenanceKeyEnum = import_zod.z.enum(PROVENANCE_KEYS);
 var STRICT_PROVENANCE_POLICY = Object.freeze({
   unknownDeclaredInputKeys: "reject",
   globallyKnownButSkillUnclassifiedKeys: "reject",
@@ -4128,7 +1946,7 @@ function provenanceParamConstraintError(constraint, params, declared) {
 }
 
 // core/skills/params.ts
-var import_zod3 = require("zod");
+var import_zod2 = require("zod");
 var PARAM_LIMITS = Object.freeze({
   // Inline JSON is defensively cloned and schema-validated more than once at
   // the trust boundary. Larger recordings must be decimated/aggregated or
@@ -4142,26 +1960,26 @@ var PARAM_LIMITS = Object.freeze({
   maxGraphEdges: 4e3
 });
 var FLOAT32_MAX = 34028234663852886e22;
-var timeArray = import_zod3.z.array(import_zod3.z.number()).max(PARAM_LIMITS.maxSamples);
-var gpuNumber = import_zod3.z.number().min(-FLOAT32_MAX, "value exceeds the finite Float32 range used by render buffers").max(FLOAT32_MAX, "value exceeds the finite Float32 range used by render buffers");
-var gpuArray = import_zod3.z.array(gpuNumber).max(PARAM_LIMITS.maxSamples);
-var idArray = import_zod3.z.array(
-  import_zod3.z.number().int("node/sender ids must be integers").nonnegative("node/sender ids must be non-negative").max(Number.MAX_SAFE_INTEGER, "node/sender ids must be safe integers")
+var timeArray = import_zod2.z.array(import_zod2.z.number()).max(PARAM_LIMITS.maxSamples);
+var gpuNumber = import_zod2.z.number().min(-FLOAT32_MAX, "value exceeds the finite Float32 range used by render buffers").max(FLOAT32_MAX, "value exceeds the finite Float32 range used by render buffers");
+var gpuArray = import_zod2.z.array(gpuNumber).max(PARAM_LIMITS.maxSamples);
+var idArray = import_zod2.z.array(
+  import_zod2.z.number().int("node/sender ids must be integers").nonnegative("node/sender ids must be non-negative").max(Number.MAX_SAFE_INTEGER, "node/sender ids must be safe integers")
 ).max(PARAM_LIMITS.maxSamples);
-var displayText = (max) => import_zod3.z.string().trim().min(1).max(max).regex(SAFE_DISPLAY_STRING_PATTERN, "display text must not contain control or bidi characters").meta({ "x-cortexel-normalize": "trim" });
-var Rfc3339TimestampSchema = import_zod3.z.iso.datetime({ offset: true }).max(80).regex(
+var displayText = (max) => import_zod2.z.string().trim().min(1).max(max).regex(SAFE_DISPLAY_STRING_PATTERN, "display text must not contain control or bidi characters").meta({ "x-cortexel-normalize": "trim" });
+var Rfc3339TimestampSchema = import_zod2.z.iso.datetime({ offset: true }).max(80).regex(
   /T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
   "timestamp must be RFC 3339 with seconds and an explicit UTC/numeric offset"
 );
 var units = displayText(80);
-var normalizedRecordKey2 = import_zod3.z.string().min(1).max(80).regex(
+var normalizedRecordKey = import_zod2.z.string().min(1).max(80).regex(
   /^\S(?:[\s\S]*\S)?$/,
   "record keys must already be trimmed and contain a non-whitespace character"
 ).regex(SAFE_DISPLAY_STRING_PATTERN, "record keys must not contain control or bidi characters");
 function equalLengthIssue(ctx, path, expectedName, expected, actual) {
   if (actual !== expected) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: [path],
       message: `${path} length (${actual}) must match ${expectedName} length (${expected})`
     });
@@ -4171,7 +1989,7 @@ function requireMonotonic(values, ctx, path) {
   for (let i = 1; i < values.length; i++) {
     if (values[i] < values[i - 1]) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: [path, i],
         message: `${path} must be monotonically non-decreasing`
       });
@@ -4183,7 +2001,7 @@ function requireStrictlyIncreasing(values, ctx, path) {
   for (let i = 1; i < values.length; i++) {
     if (!(values[i] > values[i - 1])) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: [path, i],
         message: `${path} must be strictly increasing`
       });
@@ -4191,12 +2009,12 @@ function requireStrictlyIncreasing(values, ctx, path) {
     }
   }
 }
-var VoltageTraceParamsSchema = import_zod3.z.object({
+var VoltageTraceParamsSchema = import_zod2.z.object({
   // At least two samples are required because the strict provenance contract
   // promises to cross-check the declared device sampling interval.
   times_ms: timeArray.min(2),
-  series: import_zod3.z.array(gpuArray.min(1)).min(1).max(PARAM_LIMITS.maxSeries),
-  series_labels: import_zod3.z.array(displayText(120)).min(1).max(PARAM_LIMITS.maxSeries),
+  series: import_zod2.z.array(gpuArray.min(1)).min(1).max(PARAM_LIMITS.maxSeries),
+  series_labels: import_zod2.z.array(displayText(120)).min(1).max(PARAM_LIMITS.maxSeries),
   /** One shared unit for every series. Heterogeneous recorded variables must
    *  be authored as separate specs rather than sharing a misleading axis. */
   units
@@ -4219,7 +2037,7 @@ var VoltageTraceParamsSchema = import_zod3.z.object({
     value.series_labels.length
   );
 });
-var SpikeRasterParamsSchema = import_zod3.z.object({
+var SpikeRasterParamsSchema = import_zod2.z.object({
   times_ms: timeArray.min(1),
   senders: idArray.min(1)
 }).strict().superRefine((value, ctx) => {
@@ -4246,7 +2064,7 @@ function approximatelyEqual(actual, expected, absoluteTolerance, relativeToleran
 function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativeLowerEdge = false) {
   if (!Number.isFinite(width) || width <= 0) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: [centerPath],
       message: "histogram bin width must be a positive finite number"
     });
@@ -4255,7 +2073,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
   const halfWidth = width / 2;
   if (!Number.isFinite(halfWidth) || !(halfWidth > 0)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: [centerPath],
       message: "histogram bin half-width must remain positive and finite in binary64"
     });
@@ -4274,7 +2092,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
       HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: [centerPath, index],
         message: "histogram bin edges must remain finite, strictly straddle their center, and retain the declared width in binary64"
       });
@@ -4293,7 +2111,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
         );
         if (arithmeticTolerance > GEOMETRY_MAX_ROUNDOFF_FRACTION * Math.abs(width) || difference > HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.abs(width) + arithmeticTolerance) {
           ctx.addIssue({
-            code: import_zod3.z.ZodIssueCode.custom,
+            code: import_zod2.z.ZodIssueCode.custom,
             path: [centerPath, index],
             message: "adjacent histogram bin edges must meet within the published bounded binary64 tolerance"
           });
@@ -4308,7 +2126,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
     const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(centers[0]), Math.abs(halfWidth));
     if (!Number.isFinite(lowerEdge) || lowerEdge < -tolerance) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: [centerPath, 0],
         message: "the first ISI bin lower edge cannot be negative"
       });
@@ -4318,7 +2136,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
   for (let index = 1; index < centers.length; index++) {
     if (!(centers[index] > centers[index - 1])) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: [centerPath, index],
         message: "histogram bin centers must be strictly increasing"
       });
@@ -4332,7 +2150,7 @@ function requireUniformHistogramBins(centers, width, ctx, centerPath, nonNegativ
       HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: [centerPath, index],
         message: "adjacent histogram bin centers must differ by the declared bin width"
       });
@@ -4356,7 +2174,7 @@ function requireNormalizedHistogramMass(normalization, values, width, rules, ctx
     HISTOGRAM_MASS_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["values"],
       message: rule.measure === "density_integral" ? "probability-density values times bin width must integrate to 1" : "probability values must sum to 1"
     });
@@ -4367,13 +2185,13 @@ var isiValueUnits = {
   probability: "probability",
   probability_density: "1/ms"
 };
-var IsiDistributionParamsSchema = import_zod3.z.object({
+var IsiDistributionParamsSchema = import_zod2.z.object({
   bin_centers_ms: timeArray.min(1),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
-  normalization: import_zod3.z.enum(["count", "probability", "probability_density"]),
-  value_units: import_zod3.z.enum(["count", "probability", "1/ms"]),
-  interval_scope: import_zod3.z.enum(["per_sender", "single_train"])
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  normalization: import_zod2.z.enum(["count", "probability", "probability_density"]),
+  value_units: import_zod2.z.enum(["count", "probability", "1/ms"]),
+  interval_scope: import_zod2.z.enum(["per_sender", "single_train"])
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -4393,7 +2211,7 @@ var IsiDistributionParamsSchema = import_zod3.z.object({
   for (let index = 0; index < value.bin_centers_ms.length; index++) {
     if (value.bin_centers_ms[index] < 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["bin_centers_ms", index],
         message: "inter-spike interval bin centers cannot be negative"
       });
@@ -4402,7 +2220,7 @@ var IsiDistributionParamsSchema = import_zod3.z.object({
   }
   if (value.value_units !== isiValueUnits[value.normalization]) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${isiValueUnits[value.normalization]}' for ${value.normalization}`
     });
@@ -4411,7 +2229,7 @@ var IsiDistributionParamsSchema = import_zod3.z.object({
     const sample = value.values[index];
     if (sample < 0 || value.normalization === "probability" && sample > 1 || value.normalization === "count" && !Number.isSafeInteger(sample)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values", index],
         message: value.normalization === "count" ? "histogram counts must be non-negative safe integers" : value.normalization === "probability" ? "probability values must lie in [0, 1]" : "histogram values cannot be negative"
       });
@@ -4455,7 +2273,7 @@ function requirePsthDerivedCounts(normalization, values, trialCount, binWidthMs,
     const exactCount = normalization === "count";
     if (!Number.isFinite(rawCount) || rawCount < 0 || !Number.isSafeInteger(rounded) || (exactCount ? !Number.isSafeInteger(rawCount) : Math.abs(rawCount - rounded) > PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values", index],
         message: exactCount ? "aggregate PSTH counts must be non-negative safe integers" : "normalized PSTH values must recover a non-negative safe-integer aggregate spike count"
       });
@@ -4463,15 +2281,15 @@ function requirePsthDerivedCounts(normalization, values, trialCount, binWidthMs,
     }
   }
 }
-var PsthParamsSchema = import_zod3.z.object({
+var PsthParamsSchema = import_zod2.z.object({
   bin_centers_ms: timeArray.min(1),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
-  normalization: import_zod3.z.enum(["count", "count_per_trial", "rate_hz"]),
-  value_units: import_zod3.z.enum(["count", "count/trial", "Hz"]),
-  trial_count: import_zod3.z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  normalization: import_zod2.z.enum(["count", "count_per_trial", "rate_hz"]),
+  value_units: import_zod2.z.enum(["count", "count/trial", "Hz"]),
+  trial_count: import_zod2.z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   alignment_event: displayText(240),
-  aggregation: import_zod3.z.literal("selected_senders_per_trial")
+  aggregation: import_zod2.z.literal("selected_senders_per_trial")
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -4489,7 +2307,7 @@ var PsthParamsSchema = import_zod3.z.object({
   );
   if (value.value_units !== psthValueUnits[value.normalization]) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${psthValueUnits[value.normalization]}' for ${value.normalization}`
     });
@@ -4498,7 +2316,7 @@ var PsthParamsSchema = import_zod3.z.object({
     const sample = value.values[index];
     if (sample < 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values", index],
         message: "histogram values cannot be negative"
       });
@@ -4513,12 +2331,12 @@ var PsthParamsSchema = import_zod3.z.object({
     ctx
   );
 });
-var PopulationRateSeriesSchema = import_zod3.z.object({
+var PopulationRateSeriesSchema = import_zod2.z.object({
   id: displayText(120),
   label: displayText(240),
-  recorded_sender_count: import_zod3.z.number().int("recorded_sender_count must be an integer").positive("recorded_sender_count must be positive").max(Number.MAX_SAFE_INTEGER, "recorded_sender_count must be a safe integer"),
-  spike_counts: import_zod3.z.array(
-    import_zod3.z.number().int("spike counts must be integers").nonnegative("spike counts cannot be negative").max(Number.MAX_SAFE_INTEGER, "spike counts must be safe integers")
+  recorded_sender_count: import_zod2.z.number().int("recorded_sender_count must be an integer").positive("recorded_sender_count must be positive").max(Number.MAX_SAFE_INTEGER, "recorded_sender_count must be a safe integer"),
+  spike_counts: import_zod2.z.array(
+    import_zod2.z.number().int("spike counts must be integers").nonnegative("spike counts cannot be negative").max(Number.MAX_SAFE_INTEGER, "spike counts must be safe integers")
   ).min(1).max(PARAM_LIMITS.maxSamples),
   rates_hz: gpuArray.min(1)
 }).strict();
@@ -4529,7 +2347,7 @@ function requireUniformBinWindow(centers, width, start, stop, ctx, paths = {
 }) {
   if (!(stop > start)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: [paths.stop],
       message: `${paths.stop} must be greater than ${paths.start}`
     });
@@ -4558,14 +2376,14 @@ function requireUniformBinWindow(centers, width, start, stop, ctx, paths = {
   };
   if (!edgeMatches(firstEdge, start, firstCenter)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: [paths.centers, 0],
       message: `the first left-closed bin edge must match ${paths.start} within the published bounded binary64 tolerance`
     });
   }
   if (!edgeMatches(lastEdge, stop, lastCenter)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: [paths.centers, centers.length - 1],
       message: `the final right-open bin edge must match ${paths.stop} within the published bounded binary64 tolerance`
     });
@@ -4577,7 +2395,7 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
     const item = series[seriesIndex];
     if (ids.has(item.id)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["series", seriesIndex, "id"],
         message: `duplicate population-rate series id '${item.id}'`
       });
@@ -4602,7 +2420,7 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
       const rate = item.rates_hz[binIndex];
       if (rate < 0) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["series", seriesIndex, "rates_hz", binIndex],
           message: "population rates cannot be negative"
         });
@@ -4618,7 +2436,7 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
         POPULATION_RATE_RELATIVE_TOLERANCE
       )) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["series", seriesIndex, "rates_hz", binIndex],
           message: "rate must equal spike_count \xD7 1000 / (recorded_sender_count \xD7 bin_width_ms)"
         });
@@ -4626,15 +2444,15 @@ function requirePopulationRateValues(series, binCount, binWidthMs, ctx) {
     }
   }
 }
-var PopulationRateParamsSchema = import_zod3.z.object({
+var PopulationRateParamsSchema = import_zod2.z.object({
   bin_centers_ms: timeArray.min(1),
-  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
-  window_start_ms: import_zod3.z.number(),
-  window_stop_ms: import_zod3.z.number(),
-  series: import_zod3.z.array(PopulationRateSeriesSchema).min(1).max(PARAM_LIMITS.maxSeries),
-  normalization: import_zod3.z.literal("mean_per_recorded_sender_hz"),
-  aggregation: import_zod3.z.literal("selected_senders"),
-  binning: import_zod3.z.literal("left_closed_right_open")
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  window_start_ms: import_zod2.z.number(),
+  window_stop_ms: import_zod2.z.number(),
+  series: import_zod2.z.array(PopulationRateSeriesSchema).min(1).max(PARAM_LIMITS.maxSeries),
+  normalization: import_zod2.z.literal("mean_per_recorded_sender_hz"),
+  aggregation: import_zod2.z.literal("selected_senders"),
+  binning: import_zod2.z.literal("left_closed_right_open")
 }).strict().superRefine((value, ctx) => {
   requireUniformHistogramBins(
     value.bin_centers_ms,
@@ -4656,7 +2474,7 @@ var PopulationRateParamsSchema = import_zod3.z.object({
     ctx
   );
 });
-var RateResponseParamsSchema = import_zod3.z.object({
+var RateResponseParamsSchema = import_zod2.z.object({
   stimulus_amplitudes: gpuArray.min(1),
   rates_hz: gpuArray.min(1),
   stimulus_units: units
@@ -4672,7 +2490,7 @@ var RateResponseParamsSchema = import_zod3.z.object({
     const rate = value.rates_hz[index];
     if (rate < 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["rates_hz", index],
         message: "firing rates cannot be negative"
       });
@@ -4680,7 +2498,7 @@ var RateResponseParamsSchema = import_zod3.z.object({
     }
   }
 });
-var NetworkParamsSchema = import_zod3.z.object({
+var NetworkParamsSchema = import_zod2.z.object({
   sources: idArray.min(1),
   targets: idArray.min(1),
   weights: gpuArray.optional(),
@@ -4715,7 +2533,7 @@ var NetworkParamsSchema = import_zod3.z.object({
     const index = value.delays.findIndex((delay) => delay <= 0);
     if (index >= 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["delays", index],
         message: "connection delays must be strictly positive"
       });
@@ -4723,68 +2541,68 @@ var NetworkParamsSchema = import_zod3.z.object({
   }
   if (value.weights !== void 0 !== (value.weight_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["weight_units"],
       message: "weight_units must be present exactly when weights are present"
     });
   }
   if (value.delays !== void 0 !== (value.delay_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["delay_units"],
       message: "delay_units must be present exactly when delays are present"
     });
   }
 });
-var topologyCount = import_zod3.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "topology counts and ranks must not be negative zero");
+var topologyCount = import_zod2.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "topology counts and ranks must not be negative zero");
 var topologyPositiveCount = topologyCount.positive();
-var MpiTargetRankLocalScopeSchema = import_zod3.z.object({
-  kind: import_zod3.z.literal("mpi_target_rank_local"),
+var MpiTargetRankLocalScopeSchema = import_zod2.z.object({
+  kind: import_zod2.z.literal("mpi_target_rank_local"),
   rank: topologyCount,
   world_size: topologyPositiveCount
 }).strict().superRefine((value, ctx) => {
   if (value.rank >= value.world_size) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["rank"],
       message: "MPI rank must be smaller than world_size"
     });
   }
 });
-var SnapshotScopeSchema = import_zod3.z.discriminatedUnion("kind", [
-  import_zod3.z.object({ kind: import_zod3.z.literal("single_process_complete") }).strict(),
+var SnapshotScopeSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({ kind: import_zod2.z.literal("single_process_complete") }).strict(),
   MpiTargetRankLocalScopeSchema,
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("mpi_all_ranks_merged"),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("mpi_all_ranks_merged"),
     world_size: topologyPositiveCount
   }).strict()
 ]);
-var MpiRankLocalPositionScopeSchema = import_zod3.z.object({
-  kind: import_zod3.z.literal("mpi_rank_local"),
+var MpiRankLocalPositionScopeSchema = import_zod2.z.object({
+  kind: import_zod2.z.literal("mpi_rank_local"),
   rank: topologyCount,
   world_size: topologyPositiveCount
 }).strict().superRefine((value, ctx) => {
   if (value.rank >= value.world_size) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["rank"],
       message: "MPI rank must be smaller than world_size"
     });
   }
 });
-var PositionScopeSchema = import_zod3.z.discriminatedUnion("kind", [
-  import_zod3.z.object({ kind: import_zod3.z.literal("single_process_complete") }).strict(),
+var PositionScopeSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({ kind: import_zod2.z.literal("single_process_complete") }).strict(),
   MpiRankLocalPositionScopeSchema,
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("mpi_all_ranks_merged"),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("mpi_all_ranks_merged"),
     world_size: topologyPositiveCount
   }).strict()
 ]);
-var ConnectionGraphNodeSchema = import_zod3.z.object({
+var ConnectionGraphNodeSchema = import_zod2.z.object({
   id: idArray.element,
   label: displayText(120)
 }).strict();
-var ConnectionGraphEdgeSchema = import_zod3.z.object({
+var ConnectionGraphEdgeSchema = import_zod2.z.object({
   id: displayText(240),
   source: idArray.element,
   target: idArray.element,
@@ -4797,26 +2615,26 @@ function canonicalEdgeIdInteger(value) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 && String(parsed) === value ? parsed : void 0;
 }
-var ConnectionGraphParamsSchema = import_zod3.z.object({
-  nodes: import_zod3.z.array(ConnectionGraphNodeSchema).min(1).max(PARAM_LIMITS.maxTopologyNodes),
-  edges: import_zod3.z.array(ConnectionGraphEdgeSchema).max(PARAM_LIMITS.maxTopologyEdges),
+var ConnectionGraphParamsSchema = import_zod2.z.object({
+  nodes: import_zod2.z.array(ConnectionGraphNodeSchema).min(1).max(PARAM_LIMITS.maxTopologyNodes),
+  edges: import_zod2.z.array(ConnectionGraphEdgeSchema).max(PARAM_LIMITS.maxTopologyEdges),
   weight_units: units.optional(),
-  delay_units: import_zod3.z.literal("ms").optional(),
-  layout: import_zod3.z.literal("schematic_circle"),
-  parallel_edges: import_zod3.z.literal("preserved"),
-  self_connections: import_zod3.z.literal("preserved"),
-  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
+  delay_units: import_zod2.z.literal("ms").optional(),
+  layout: import_zod2.z.literal("schematic_circle"),
+  parallel_edges: import_zod2.z.literal("preserved"),
+  self_connections: import_zod2.z.literal("preserved"),
+  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
   snapshot_scope: SnapshotScopeSchema,
-  sample_policy: import_zod3.z.enum(["complete", "deterministic_even_stride"]),
+  sample_policy: import_zod2.z.enum(["complete", "deterministic_even_stride"]),
   source_connection_count: topologyCount,
-  edge_identity: import_zod3.z.enum(["nest_connection_identifier", "canonical_sorted_ordinal"])
+  edge_identity: import_zod2.z.enum(["nest_connection_identifier", "canonical_sorted_ordinal"])
 }).strict().superRefine((value, ctx) => {
   const nodeIds = /* @__PURE__ */ new Set();
   for (let index = 0; index < value.nodes.length; index++) {
     const id2 = value.nodes[index].id;
     if (nodeIds.has(id2)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["nodes", index, "id"],
         message: "graph node ids must be unique"
       });
@@ -4831,7 +2649,7 @@ var ConnectionGraphParamsSchema = import_zod3.z.object({
     const edge = value.edges[index];
     if (edgeIds.has(edge.id)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index, "id"],
         message: "graph edge ids must be unique"
       });
@@ -4839,14 +2657,14 @@ var ConnectionGraphParamsSchema = import_zod3.z.object({
     edgeIds.add(edge.id);
     if (!nodeIds.has(edge.source)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index, "source"],
         message: "graph edge source must reference a declared node"
       });
     }
     if (!nodeIds.has(edge.target)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index, "target"],
         message: "graph edge target must reference a declared node"
       });
@@ -4859,7 +2677,7 @@ var ConnectionGraphParamsSchema = import_zod3.z.object({
       const ordinal = idParts.length === 2 && idParts[0] === "connection" ? canonicalEdgeIdInteger(idParts[1]) : void 0;
       if (ordinal === void 0 || ordinal >= value.source_connection_count) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["edges", index, "id"],
           message: "canonical edge ids must be connection:<source ordinal> within source_connection_count"
         });
@@ -4868,7 +2686,7 @@ var ConnectionGraphParamsSchema = import_zod3.z.object({
       const components = idParts.length === 6 && idParts[0] === "connection" ? idParts.slice(1).map(canonicalEdgeIdInteger) : [];
       if (components.length !== 5 || components.some((component) => component === void 0) || components[0] !== edge.source || components[1] !== edge.target) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["edges", index, "id"],
           message: "NEST edge ids must be connection:source:target:target_thread:synapse_id:port and match the edge endpoints"
         });
@@ -4882,7 +2700,7 @@ var ConnectionGraphParamsSchema = import_zod3.z.object({
   ]) {
     if (count !== 0 && count !== value.edges.length) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges"],
         message: `${field} must be present on every graph edge or none`
       });
@@ -4890,14 +2708,14 @@ var ConnectionGraphParamsSchema = import_zod3.z.object({
   }
   if (weightCount > 0 !== (value.weight_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["weight_units"],
       message: "weight_units must be present exactly when every edge carries weight"
     });
   }
   if (delayCount > 0 !== (value.delay_units !== void 0)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["delay_units"],
       message: "delay_units must be present exactly when every edge carries delay_ms"
     });
@@ -4905,20 +2723,20 @@ var ConnectionGraphParamsSchema = import_zod3.z.object({
   if (value.sample_policy === "complete") {
     if (value.source_connection_count !== value.edges.length) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["source_connection_count"],
         message: "complete graph output must contain every source connection"
       });
     }
   } else if (value.edges.length === 0 || value.source_connection_count <= value.edges.length) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["source_connection_count"],
       message: "deterministic_even_stride requires a non-empty strict subset of source connections"
     });
   }
 });
-var MatrixCellBaseSchema = import_zod3.z.object({
+var MatrixCellBaseSchema = import_zod2.z.object({
   source_id: idArray.element,
   target_id: idArray.element,
   connection_count: topologyPositiveCount
@@ -4929,21 +2747,21 @@ var DelayMatrixCellSchema = MatrixCellBaseSchema.extend({ value: gpuNumber.posit
 var matrixBaseShape = {
   source_ids: idArray.min(1),
   target_ids: idArray.min(1),
-  axis_order: import_zod3.z.literal("target_rows_source_columns"),
-  absent_cell: import_zod3.z.literal("no_connection"),
-  sample_policy: import_zod3.z.literal("complete"),
+  axis_order: import_zod2.z.literal("target_rows_source_columns"),
+  absent_cell: import_zod2.z.literal("no_connection"),
+  sample_policy: import_zod2.z.literal("complete"),
   connection_count: topologyCount,
-  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
+  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
   snapshot_scope: SnapshotScopeSchema
 };
 function refineSparseMatrix(value, ctx) {
   const sourceIds = new Set(value.source_ids);
   const targetIds = new Set(value.target_ids);
   if (sourceIds.size !== value.source_ids.length) {
-    ctx.addIssue({ code: import_zod3.z.ZodIssueCode.custom, path: ["source_ids"], message: "source_ids must be unique" });
+    ctx.addIssue({ code: import_zod2.z.ZodIssueCode.custom, path: ["source_ids"], message: "source_ids must be unique" });
   }
   if (targetIds.size !== value.target_ids.length) {
-    ctx.addIssue({ code: import_zod3.z.ZodIssueCode.custom, path: ["target_ids"], message: "target_ids must be unique" });
+    ctx.addIssue({ code: import_zod2.z.ZodIssueCode.custom, path: ["target_ids"], message: "target_ids must be unique" });
   }
   const pairs = /* @__PURE__ */ new Set();
   let total = 0;
@@ -4951,14 +2769,14 @@ function refineSparseMatrix(value, ctx) {
     const cell = value.cells[index];
     if (!sourceIds.has(cell.source_id)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["cells", index, "source_id"],
         message: "matrix cell source_id must occur in source_ids"
       });
     }
     if (!targetIds.has(cell.target_id)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["cells", index, "target_id"],
         message: "matrix cell target_id must occur in target_ids"
       });
@@ -4966,7 +2784,7 @@ function refineSparseMatrix(value, ctx) {
     const pair = `${cell.source_id}\0${cell.target_id}`;
     if (pairs.has(pair)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["cells", index],
         message: "matrix cells must contain at most one entry per source-target pair"
       });
@@ -4975,7 +2793,7 @@ function refineSparseMatrix(value, ctx) {
     total += cell.connection_count;
     if (!Number.isSafeInteger(total)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["connection_count"],
         message: "matrix connection count sum exceeds the safe-integer range"
       });
@@ -4984,48 +2802,48 @@ function refineSparseMatrix(value, ctx) {
   }
   if (total !== value.connection_count) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["connection_count"],
       message: "connection_count must equal the sum of sparse cell connection_count values"
     });
   }
 }
-var AdjacencyMatrixParamsSchema = import_zod3.z.object({
+var AdjacencyMatrixParamsSchema = import_zod2.z.object({
   ...matrixBaseShape,
-  cells: import_zod3.z.array(AdjacencyMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
-  display: import_zod3.z.literal("binary_presence"),
-  aggregation: import_zod3.z.literal("any_connection")
+  cells: import_zod2.z.array(AdjacencyMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  display: import_zod2.z.literal("binary_presence"),
+  aggregation: import_zod2.z.literal("any_connection")
 }).strict().superRefine(refineSparseMatrix);
-var WeightMatrixParamsSchema = import_zod3.z.object({
+var WeightMatrixParamsSchema = import_zod2.z.object({
   ...matrixBaseShape,
-  cells: import_zod3.z.array(WeightMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  cells: import_zod2.z.array(WeightMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
   weight_units: units,
-  aggregation: import_zod3.z.enum(["sum", "mean", "minimum", "maximum", "single_connection"])
+  aggregation: import_zod2.z.enum(["sum", "mean", "minimum", "maximum", "single_connection"])
 }).strict().superRefine((value, ctx) => {
   refineSparseMatrix(value, ctx);
   if (value.aggregation === "single_connection") {
     const index = value.cells.findIndex((cell) => cell.connection_count !== 1);
     if (index >= 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["cells", index, "connection_count"],
         message: "single_connection aggregation requires exactly one connection per cell"
       });
     }
   }
 });
-var DelayMatrixParamsSchema = import_zod3.z.object({
+var DelayMatrixParamsSchema = import_zod2.z.object({
   ...matrixBaseShape,
-  cells: import_zod3.z.array(DelayMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
-  delay_units: import_zod3.z.literal("ms"),
-  aggregation: import_zod3.z.enum(["mean", "minimum", "maximum", "single_connection"])
+  cells: import_zod2.z.array(DelayMatrixCellSchema).max(PARAM_LIMITS.maxSamples),
+  delay_units: import_zod2.z.literal("ms"),
+  aggregation: import_zod2.z.enum(["mean", "minimum", "maximum", "single_connection"])
 }).strict().superRefine((value, ctx) => {
   refineSparseMatrix(value, ctx);
   if (value.aggregation === "single_connection") {
     const index = value.cells.findIndex((cell) => cell.connection_count !== 1);
     if (index >= 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["cells", index, "connection_count"],
         message: "single_connection aggregation requires exactly one connection per cell"
       });
@@ -5035,19 +2853,19 @@ var DelayMatrixParamsSchema = import_zod3.z.object({
 var DEGREE_VALUE_ABSOLUTE_TOLERANCE = 1e-12;
 var DEGREE_VALUE_RELATIVE_TOLERANCE = 1e-12;
 function degreeDistributionSchema(direction) {
-  return import_zod3.z.object({
-    degrees: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
-    node_counts: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+  return import_zod2.z.object({
+    degrees: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+    node_counts: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
     values: gpuArray.min(1),
     node_count: topologyPositiveCount,
     connection_count: topologyCount,
-    direction: import_zod3.z.literal(direction),
-    normalization: import_zod3.z.enum(["count", "probability"]),
-    value_units: import_zod3.z.enum(["count", "probability"]),
-    edge_counting: import_zod3.z.literal("each_synapse_collection_entry"),
-    zero_degree_policy: import_zod3.z.literal("include_declared_universe"),
-    sample_policy: import_zod3.z.literal("complete"),
-    snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
+    direction: import_zod2.z.literal(direction),
+    normalization: import_zod2.z.enum(["count", "probability"]),
+    value_units: import_zod2.z.enum(["count", "probability"]),
+    edge_counting: import_zod2.z.literal("each_synapse_collection_entry"),
+    zero_degree_policy: import_zod2.z.literal("include_declared_universe"),
+    sample_policy: import_zod2.z.literal("complete"),
+    snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
     snapshot_scope: SnapshotScopeSchema
   }).strict().superRefine((value, ctx) => {
     equalLengthIssue(ctx, "node_counts", "degrees", value.degrees.length, value.node_counts.length);
@@ -5055,7 +2873,7 @@ function degreeDistributionSchema(direction) {
     for (let index = 0; index < value.degrees.length; index++) {
       if (value.degrees[index] !== index) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["degrees", index],
           message: "degrees must be the contiguous integer range beginning at zero"
         });
@@ -5070,14 +2888,14 @@ function degreeDistributionSchema(direction) {
     }
     if (!Number.isSafeInteger(countedNodes) || countedNodes !== value.node_count) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["node_count"],
         message: "node_count must equal the sum of node_counts"
       });
     }
     if (!Number.isSafeInteger(countedConnections) || countedConnections !== value.connection_count) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["connection_count"],
         message: "connection_count must equal the degree-weighted sum of node_counts"
       });
@@ -5085,7 +2903,7 @@ function degreeDistributionSchema(direction) {
     const expectedUnits = value.normalization === "count" ? "count" : "probability";
     if (value.value_units !== expectedUnits) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["value_units"],
         message: `value_units must be '${expectedUnits}' for ${value.normalization}`
       });
@@ -5095,7 +2913,7 @@ function degreeDistributionSchema(direction) {
       const displayed = value.values[index];
       if (displayed < 0) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["values", index],
           message: "displayed degree values cannot be negative"
         });
@@ -5110,7 +2928,7 @@ function degreeDistributionSchema(direction) {
       );
       if (!matches) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["values", index],
           message: "displayed degree value must be derived from node_counts and node_count"
         });
@@ -5125,14 +2943,14 @@ function degreeDistributionSchema(direction) {
       DEGREE_VALUE_RELATIVE_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values"],
         message: "displayed degree probabilities must sum to one"
       });
     }
     if (direction === "out" && value.snapshot_scope.kind === "mpi_target_rank_local") {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["snapshot_scope", "kind"],
         message: "out-degree requires a complete single-process or all-ranks-merged snapshot"
       });
@@ -5146,21 +2964,21 @@ var delayDistributionValueUnits = {
   probability: "probability",
   probability_density: "1/ms"
 };
-var DelayDistributionParamsSchema = import_zod3.z.object({
+var DelayDistributionParamsSchema = import_zod2.z.object({
   bin_centers_ms: timeArray.min(1),
-  delay_counts: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+  delay_counts: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod3.z.number().finite().positive(),
-  window_start_ms: import_zod3.z.number().finite().nonnegative(),
-  window_stop_ms: import_zod3.z.number().finite().positive(),
-  normalization: import_zod3.z.enum(["count", "probability", "probability_density"]),
-  value_units: import_zod3.z.enum(["count", "probability", "1/ms"]),
-  delay_units: import_zod3.z.literal("ms"),
-  aggregation: import_zod3.z.literal("each_connection"),
-  binning: import_zod3.z.literal("left_closed_right_open"),
-  sample_policy: import_zod3.z.literal("complete"),
+  bin_width_ms: import_zod2.z.number().finite().positive(),
+  window_start_ms: import_zod2.z.number().finite().nonnegative(),
+  window_stop_ms: import_zod2.z.number().finite().positive(),
+  normalization: import_zod2.z.enum(["count", "probability", "probability_density"]),
+  value_units: import_zod2.z.enum(["count", "probability", "1/ms"]),
+  delay_units: import_zod2.z.literal("ms"),
+  aggregation: import_zod2.z.literal("each_connection"),
+  binning: import_zod2.z.literal("left_closed_right_open"),
+  sample_policy: import_zod2.z.literal("complete"),
   connection_count: topologyCount,
-  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
+  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
   snapshot_scope: SnapshotScopeSchema
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(ctx, "delay_counts", "bin_centers_ms", value.bin_centers_ms.length, value.delay_counts.length);
@@ -5176,7 +2994,7 @@ var DelayDistributionParamsSchema = import_zod3.z.object({
   const expectedUnits = delayDistributionValueUnits[value.normalization];
   if (value.value_units !== expectedUnits) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${expectedUnits}' for ${value.normalization}`
     });
@@ -5185,14 +3003,14 @@ var DelayDistributionParamsSchema = import_zod3.z.object({
   for (const count of value.delay_counts) total += count;
   if (!Number.isSafeInteger(total) || total !== value.connection_count) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["connection_count"],
       message: "connection_count must equal the sum of delay_counts"
     });
   }
   if (value.connection_count === 0 && value.normalization !== "count") {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["normalization"],
       message: "an empty delay snapshot cannot be probability-normalized"
     });
@@ -5200,7 +3018,7 @@ var DelayDistributionParamsSchema = import_zod3.z.object({
   const densityDenominator = value.connection_count * value.bin_width_ms;
   if (value.normalization === "probability_density" && (!Number.isFinite(densityDenominator) || densityDenominator <= 0)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["bin_width_ms"],
       message: "connection_count \xD7 bin_width_ms must be finite for probability density"
     });
@@ -5211,7 +3029,7 @@ var DelayDistributionParamsSchema = import_zod3.z.object({
     const displayed = value.values[index];
     if (displayed < 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values", index],
         message: "displayed delay values cannot be negative"
       });
@@ -5221,7 +3039,7 @@ var DelayDistributionParamsSchema = import_zod3.z.object({
     const matches = value.normalization === "count" ? Number.isSafeInteger(displayed) && displayed === expected : Object.is(displayed, expected);
     if (!matches) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values", index],
         message: "displayed delay value must be recoverable from delay_counts"
       });
@@ -5238,14 +3056,14 @@ var DelayDistributionParamsSchema = import_zod3.z.object({
       HISTOGRAM_MASS_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values"],
         message: value.normalization === "probability_density" ? "displayed delay density must integrate to one" : "displayed delay probabilities must sum to one"
       });
     }
   }
 });
-var SpatialMap2DNodeSchema = import_zod3.z.object({
+var SpatialMap2DNodeSchema = import_zod2.z.object({
   id: idArray.element,
   label: displayText(120),
   x: gpuNumber,
@@ -5263,14 +3081,14 @@ function spatialBoundsTolerance(center, halfExtent, minimum, maximum) {
   const boundedArithmeticTolerance = arithmeticTolerance <= GEOMETRY_MAX_ROUNDOFF_FRACTION * Math.abs(halfExtent) ? arithmeticTolerance : 0;
   return extentTolerance + boundedArithmeticTolerance;
 }
-var SpatialMap2DParamsSchema = import_zod3.z.object({
-  nodes: import_zod3.z.array(SpatialMap2DNodeSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
+var SpatialMap2DParamsSchema = import_zod2.z.object({
+  nodes: import_zod2.z.array(SpatialMap2DNodeSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
   coordinate_units: units,
-  extent: import_zod3.z.tuple([gpuNumber.positive(), gpuNumber.positive()]),
-  center: import_zod3.z.tuple([gpuNumber, gpuNumber]),
-  edge_wrap: import_zod3.z.boolean(),
+  extent: import_zod2.z.tuple([gpuNumber.positive(), gpuNumber.positive()]),
+  center: import_zod2.z.tuple([gpuNumber, gpuNumber]),
+  edge_wrap: import_zod2.z.boolean(),
   position_scope: PositionScopeSchema,
-  marker_size: import_zod3.z.literal("fixed_screen_space")
+  marker_size: import_zod2.z.literal("fixed_screen_space")
 }).strict().superRefine((value, ctx) => {
   const ids = /* @__PURE__ */ new Set();
   const halfWidth = value.extent[0] / 2;
@@ -5281,14 +3099,14 @@ var SpatialMap2DParamsSchema = import_zod3.z.object({
   const maxY = value.center[1] + halfHeight;
   if (!(minX < maxX)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["extent", 0],
       message: "x extent must remain representable at the declared center"
     });
   }
   if (!(minY < maxY)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["extent", 1],
       message: "y extent must remain representable at the declared center"
     });
@@ -5299,7 +3117,7 @@ var SpatialMap2DParamsSchema = import_zod3.z.object({
     const node = value.nodes[index];
     if (ids.has(node.id)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["nodes", index, "id"],
         message: "spatial node ids must be unique"
       });
@@ -5307,7 +3125,7 @@ var SpatialMap2DParamsSchema = import_zod3.z.object({
     ids.add(node.id);
     if (node.x < minX - xTolerance || node.x > maxX + xTolerance || node.y < minY - yTolerance || node.y > maxY + yTolerance) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["nodes", index],
         message: "spatial node coordinates must lie inside center \xB1 extent/2"
       });
@@ -5318,21 +3136,21 @@ var weightHistogramValueUnits = {
   count: "count",
   probability: "probability"
 };
-var WeightHistogramParamsSchema = import_zod3.z.object({
+var WeightHistogramParamsSchema = import_zod2.z.object({
   bin_centers: gpuArray.min(1),
-  weight_counts: import_zod3.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
+  weight_counts: import_zod2.z.array(topologyCount).min(1).max(PARAM_LIMITS.maxSamples),
   values: gpuArray.min(1),
   bin_width: gpuNumber.positive(),
-  window_start: import_zod3.z.number().finite(),
-  window_stop: import_zod3.z.number().finite(),
+  window_start: import_zod2.z.number().finite(),
+  window_stop: import_zod2.z.number().finite(),
   weight_units: units,
-  normalization: import_zod3.z.enum(["count", "probability"]),
-  value_units: import_zod3.z.enum(["count", "probability"]),
-  aggregation: import_zod3.z.literal("each_connection"),
-  binning: import_zod3.z.literal("left_closed_right_open"),
-  sample_policy: import_zod3.z.literal("complete"),
+  normalization: import_zod2.z.enum(["count", "probability"]),
+  value_units: import_zod2.z.enum(["count", "probability"]),
+  aggregation: import_zod2.z.literal("each_connection"),
+  binning: import_zod2.z.literal("left_closed_right_open"),
+  sample_policy: import_zod2.z.literal("complete"),
   connection_count: topologyCount,
-  snapshot_time_ms: import_zod3.z.number().finite().nonnegative(),
+  snapshot_time_ms: import_zod2.z.number().finite().nonnegative(),
   snapshot_scope: SnapshotScopeSchema
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
@@ -5369,7 +3187,7 @@ var WeightHistogramParamsSchema = import_zod3.z.object({
   );
   if (value.value_units !== weightHistogramValueUnits[value.normalization]) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["value_units"],
       message: `value_units must be '${weightHistogramValueUnits[value.normalization]}' for ${value.normalization}`
     });
@@ -5381,14 +3199,14 @@ var WeightHistogramParamsSchema = import_zod3.z.object({
   }
   if (!Number.isSafeInteger(total) || total !== value.connection_count) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["connection_count"],
       message: "connection_count must equal the sum of weight_counts"
     });
   }
   if (value.connection_count === 0 && value.normalization !== "count") {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["normalization"],
       message: "an empty weight snapshot cannot be probability-normalized"
     });
@@ -5399,7 +3217,7 @@ var WeightHistogramParamsSchema = import_zod3.z.object({
     const matches = value.normalization === "count" ? Number.isSafeInteger(sample) && sample === expected : Object.is(sample, expected);
     if (!matches) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values", index],
         message: "displayed weight value must be exactly recoverable from weight_counts and connection_count"
       });
@@ -5407,16 +3225,16 @@ var WeightHistogramParamsSchema = import_zod3.z.object({
     }
   }
 });
-var Spatial3DObjectSchema = import_zod3.z.object({
+var Spatial3DObjectSchema = import_zod2.z.object({
   x: gpuNumber,
   y: gpuNumber,
   z: gpuNumber
 }).passthrough();
-var Spatial3DParamsSchema = import_zod3.z.object({
-  objects: import_zod3.z.array(Spatial3DObjectSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
+var Spatial3DParamsSchema = import_zod2.z.object({
+  objects: import_zod2.z.array(Spatial3DObjectSchema).min(1).max(PARAM_LIMITS.maxSpatialObjects),
   coordinate_units: units
 }).strict();
-var PlasticityParamsSchema = import_zod3.z.object({
+var PlasticityParamsSchema = import_zod2.z.object({
   times_ms: timeArray.min(1),
   weights: gpuArray.min(1),
   weight_units: units
@@ -5430,30 +3248,30 @@ var PlasticityParamsSchema = import_zod3.z.object({
   );
   requireMonotonic(value.times_ms, ctx, "times_ms");
 });
-var PhasePlaneParamsSchema = import_zod3.z.object({
-  grid: import_zod3.z.record(normalizedRecordKey2, gpuArray.min(1)).refine((g) => Object.keys(g).length === 2, {
+var PhasePlaneParamsSchema = import_zod2.z.object({
+  grid: import_zod2.z.record(normalizedRecordKey, gpuArray.min(1)).refine((g) => Object.keys(g).length === 2, {
     message: "phase-plane grid must declare exactly two non-empty state-variable axes"
   }),
-  derivatives: import_zod3.z.record(normalizedRecordKey2, gpuArray.min(1)),
-  axis_units: import_zod3.z.record(normalizedRecordKey2, units),
-  derivative_units: import_zod3.z.record(normalizedRecordKey2, units),
-  axis_order: import_zod3.z.tuple([normalizedRecordKey2, normalizedRecordKey2]).refine(([first, second]) => first !== second, {
+  derivatives: import_zod2.z.record(normalizedRecordKey, gpuArray.min(1)),
+  axis_units: import_zod2.z.record(normalizedRecordKey, units),
+  derivative_units: import_zod2.z.record(normalizedRecordKey, units),
+  axis_order: import_zod2.z.tuple([normalizedRecordKey, normalizedRecordKey]).refine(([first, second]) => first !== second, {
     message: "axis_order must name two distinct state variables"
   }),
-  flattening: import_zod3.z.literal("row-major-last-axis-fastest")
+  flattening: import_zod2.z.literal("row-major-last-axis-fastest")
 }).strict().superRefine((value, ctx) => {
   const axes = Object.keys(value.grid);
   const derivativeNames = Object.keys(value.derivatives);
   if (value.axis_order.some((axis) => !Object.hasOwn(value.grid, axis)) || axes.some((axis) => !value.axis_order.includes(axis))) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["axis_order"],
       message: "axis_order must be a permutation of the two grid state variables"
     });
   }
   if (derivativeNames.length !== axes.length || axes.some((axis) => !Object.hasOwn(value.derivatives, axis))) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["derivatives"],
       message: "derivatives must declare the same two state variables as grid"
     });
@@ -5466,7 +3284,7 @@ var PhasePlaneParamsSchema = import_zod3.z.object({
     const names = Object.keys(values);
     if (names.length !== axes.length || axes.some((axis) => !Object.hasOwn(values, axis))) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: [field],
         message: `${field} must declare units for the same two state variables as grid`
       });
@@ -5483,13 +3301,13 @@ var PhasePlaneParamsSchema = import_zod3.z.object({
     );
   }
 });
-var AstrocyteParamsSchema = import_zod3.z.object({
+var AstrocyteParamsSchema = import_zod2.z.object({
   times_ms: timeArray.min(2),
   ca_trace: gpuArray.min(1),
   /** The legacy Ca-only skill follows the NEST astrocyte examples' explicit
    * micromolar concentration axis. Other quantities or converted units need
    * a typed analog-trace contract rather than overloading ca_trace. */
-  units: import_zod3.z.enum(["uM", "\xB5M", "\u03BCM"])
+  units: import_zod2.z.enum(["uM", "\xB5M", "\u03BCM"])
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
     ctx,
@@ -5502,7 +3320,7 @@ var AstrocyteParamsSchema = import_zod3.z.object({
   for (let index = 0; index < value.ca_trace.length; index++) {
     if (value.ca_trace[index] < 0) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["ca_trace", index],
         message: "absolute Ca\xB2\u207A concentration cannot be negative"
       });
@@ -5531,87 +3349,87 @@ var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
   maxAttributeStringLength: 500,
   maxExcerptLength: 1e3
 });
-var KnowledgeGraphAttributeScalarSchema = import_zod3.z.union([
-  import_zod3.z.string().max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength).regex(
+var KnowledgeGraphAttributeScalarSchema = import_zod2.z.union([
+  import_zod2.z.string().max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength).regex(
     SAFE_DISPLAY_STRING_PATTERN,
     "attribute strings must not contain control or bidi characters"
   ),
-  import_zod3.z.number(),
-  import_zod3.z.boolean(),
-  import_zod3.z.null()
+  import_zod2.z.number(),
+  import_zod2.z.boolean(),
+  import_zod2.z.null()
 ]);
-var KnowledgeGraphAttributeValueSchema = import_zod3.z.union([
+var KnowledgeGraphAttributeValueSchema = import_zod2.z.union([
   KnowledgeGraphAttributeScalarSchema,
-  import_zod3.z.array(KnowledgeGraphAttributeScalarSchema).max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems)
+  import_zod2.z.array(KnowledgeGraphAttributeScalarSchema).max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems)
 ]);
-var KnowledgeGraphAttributesSchema = import_zod3.z.record(normalizedRecordKey2, KnowledgeGraphAttributeValueSchema).superRefine((value, ctx) => {
+var KnowledgeGraphAttributesSchema = import_zod2.z.record(normalizedRecordKey, KnowledgeGraphAttributeValueSchema).superRefine((value, ctx) => {
   if (Object.keys(value).length > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       message: `knowledge-graph attributes may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxAttributes} keys`
     });
   }
 });
-var KnowledgeGraphEvidenceRefSchema = import_zod3.z.discriminatedUnion("kind", [
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("graph_snapshot_record"),
+var KnowledgeGraphEvidenceRefSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("graph_snapshot_record"),
     evidence_id: displayText(384),
     record_id: displayText(320),
     locator: displayText(240).optional()
   }).strict(),
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("graph_node"),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("graph_node"),
     evidence_id: displayText(384),
     node_id: displayText(120),
     locator: displayText(240).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
   }).strict(),
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("citation"),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("citation"),
     evidence_id: displayText(384),
     paper_id: displayText(160),
     citation_id: displayText(160),
-    page: import_zod3.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    page: import_zod2.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
     locator: displayText(240).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
     doi: displayText(240).optional()
   }).strict(),
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("external_source"),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("external_source"),
     evidence_id: displayText(384),
     source_id: displayText(240),
     locator: displayText(240).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
   }).strict()
 ]);
-var KnowledgeGraphEvidenceRefsSchema = import_zod3.z.array(KnowledgeGraphEvidenceRefSchema).min(1).max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement).superRefine((evidence, ctx) => {
+var KnowledgeGraphEvidenceRefsSchema = import_zod2.z.array(KnowledgeGraphEvidenceRefSchema).min(1).max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement).superRefine((evidence, ctx) => {
   if (!evidence.some((reference) => reference.kind !== "graph_node")) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       message: "evidence must contain at least one direct source anchor (graph_snapshot_record, citation, or external_source); graph_node references are supplemental only"
     });
   }
 });
-var KnowledgeGraphUncalibratedScoreSchema = import_zod3.z.object({
-  kind: import_zod3.z.enum([
+var KnowledgeGraphUncalibratedScoreSchema = import_zod2.z.object({
+  kind: import_zod2.z.enum([
     "extraction_confidence",
     "citation_resolution_confidence",
     "structural_similarity",
     "behavioral_agreement",
     "retrieval_relevance"
   ]),
-  value: import_zod3.z.number().min(0).max(1),
-  calibrated_posterior: import_zod3.z.literal(false)
+  value: import_zod2.z.number().min(0).max(1),
+  calibrated_posterior: import_zod2.z.literal(false)
 }).strict();
-var DerivedAdvisoryEpistemicSchema = import_zod3.z.object({
-  status: import_zod3.z.literal("derived_advisory"),
-  advisory_only: import_zod3.z.literal(true),
-  is_paper_local_evidence: import_zod3.z.literal(false),
-  calibrated_posterior: import_zod3.z.literal(false)
+var DerivedAdvisoryEpistemicSchema = import_zod2.z.object({
+  status: import_zod2.z.literal("derived_advisory"),
+  advisory_only: import_zod2.z.literal(true),
+  is_paper_local_evidence: import_zod2.z.literal(false),
+  calibrated_posterior: import_zod2.z.literal(false)
 }).strict();
-var KnowledgeGraphNodeSchema = import_zod3.z.object({
+var KnowledgeGraphNodeSchema = import_zod2.z.object({
   id: displayText(120),
-  kind: import_zod3.z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
+  kind: import_zod2.z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
   label: displayText(240),
   detail: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDetailLength).optional(),
   attributes: KnowledgeGraphAttributesSchema,
@@ -5619,25 +3437,25 @@ var KnowledgeGraphNodeSchema = import_zod3.z.object({
   evidence: KnowledgeGraphEvidenceRefsSchema,
   uncalibrated_score: KnowledgeGraphUncalibratedScoreSchema.optional()
 }).strict();
-var KnowledgeGraphEdgeSchema = import_zod3.z.object({
+var KnowledgeGraphEdgeSchema = import_zod2.z.object({
   id: displayText(320),
   source: displayText(120),
   target: displayText(120),
-  kind: import_zod3.z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
+  kind: import_zod2.z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
   label: displayText(160),
   attributes: KnowledgeGraphAttributesSchema,
   epistemic: DerivedAdvisoryEpistemicSchema,
   evidence: KnowledgeGraphEvidenceRefsSchema,
   uncalibrated_score: KnowledgeGraphUncalibratedScoreSchema.optional()
 }).strict();
-var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
+var KnowledgeGraph3DParamsSchema = import_zod2.z.object({
   graph_id: displayText(160),
   graph_source: displayText(200),
   graph_snapshot_id: displayText(200),
-  graph_scope: import_zod3.z.literal("corpus_entity"),
+  graph_scope: import_zod2.z.literal("corpus_entity"),
   generated_at: Rfc3339TimestampSchema,
-  nodes: import_zod3.z.array(KnowledgeGraphNodeSchema).min(1).max(PARAM_LIMITS.maxGraphNodes),
-  edges: import_zod3.z.array(KnowledgeGraphEdgeSchema).max(PARAM_LIMITS.maxGraphEdges)
+  nodes: import_zod2.z.array(KnowledgeGraphNodeSchema).min(1).max(PARAM_LIMITS.maxGraphNodes),
+  edges: import_zod2.z.array(KnowledgeGraphEdgeSchema).max(PARAM_LIMITS.maxGraphEdges)
 }).strict().superRefine((value, ctx) => {
   const ids = /* @__PURE__ */ new Set();
   const nodeKinds = /* @__PURE__ */ new Map();
@@ -5652,7 +3470,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
   value.nodes.forEach((node, index) => {
     if (ids.has(node.id)) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["nodes", index, "id"],
         message: `duplicate node id '${node.id}'`
       });
@@ -5663,7 +3481,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
   value.edges.forEach((edge, index) => {
     if (edgeIds.has(edge.id)) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index, "id"],
         message: `duplicate edge id '${edge.id}'`
       });
@@ -5676,28 +3494,28 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
     parallelCounts.set(pairKey, parallelCount);
     if (parallelCount > KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index],
         message: `at most ${KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair} parallel edges may connect one unordered node pair`
       });
     }
     if (!ids.has(edge.source)) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index, "source"],
         message: `edge source '${edge.source}' does not reference a node`
       });
     }
     if (!ids.has(edge.target)) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index, "target"],
         message: `edge target '${edge.target}' does not reference a node`
       });
     }
     if (edge.source === edge.target) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index],
         message: "self-loop edges are not renderable"
       });
@@ -5714,7 +3532,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
     const [expectedSource, expectedTarget] = expected[edge.kind];
     if (sourceKind !== void 0 && targetKind !== void 0 && (sourceKind !== expectedSource || targetKind !== expectedTarget)) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index],
         message: `${edge.kind} requires ${expectedSource} \u2192 ${expectedTarget} endpoints`
       });
@@ -5728,7 +3546,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
     };
     if (edge.uncalibrated_score && !allowedScoreKinds[edge.kind].includes(edge.uncalibrated_score.kind)) {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["edges", index, "uncalibrated_score", "kind"],
         message: `${edge.kind} does not allow score kind '${edge.uncalibrated_score.kind}'`
       });
@@ -5738,7 +3556,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
       const evidence = edge.evidence[evidenceIndex];
       if (evidenceIds.has(evidence.evidence_id)) {
         addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["edges", index, "evidence", evidenceIndex, "evidence_id"],
           message: `duplicate evidence id '${evidence.evidence_id}' on edge '${edge.id}'`
         });
@@ -5746,7 +3564,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
       evidenceIds.add(evidence.evidence_id);
       if (evidence.kind === "graph_node" && !ids.has(evidence.node_id)) {
         addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["edges", index, "evidence", evidenceIndex, "node_id"],
           message: `edge evidence node '${evidence.node_id}' does not reference a node`
         });
@@ -5756,7 +3574,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
   value.nodes.forEach((node, nodeIndex) => {
     if (node.uncalibrated_score && node.uncalibrated_score.kind !== "extraction_confidence") {
       addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["nodes", nodeIndex, "uncalibrated_score", "kind"],
         message: `knowledge-graph nodes only allow score kind 'extraction_confidence'; received '${node.uncalibrated_score.kind}'`
       });
@@ -5766,7 +3584,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
       const evidence = node.evidence[evidenceIndex];
       if (evidenceIds.has(evidence.evidence_id)) {
         addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["nodes", nodeIndex, "evidence", evidenceIndex, "evidence_id"],
           message: `duplicate evidence id '${evidence.evidence_id}' on node '${node.id}'`
         });
@@ -5774,7 +3592,7 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
       evidenceIds.add(evidence.evidence_id);
       if (evidence.kind === "graph_node" && !ids.has(evidence.node_id)) {
         addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["nodes", nodeIndex, "evidence", evidenceIndex, "node_id"],
           message: `node evidence node '${evidence.node_id}' does not reference a node`
         });
@@ -5782,26 +3600,26 @@ var KnowledgeGraph3DParamsSchema = import_zod3.z.object({
     }
   });
 });
-var Spatial2DParamsSchema = import_zod3.z.object({
-  positions: import_zod3.z.array(import_zod3.z.tuple([gpuNumber, gpuNumber])).min(1).max(PARAM_LIMITS.maxSpatialObjects),
+var Spatial2DParamsSchema = import_zod2.z.object({
+  positions: import_zod2.z.array(import_zod2.z.tuple([gpuNumber, gpuNumber])).min(1).max(PARAM_LIMITS.maxSpatialObjects),
   coordinate_units: units
 }).strict();
-var CorrelogramPairSchema = import_zod3.z.object({
+var CorrelogramPairSchema = import_zod2.z.object({
   reference_label: displayText(240),
   target_label: displayText(240)
 }).strict();
-var CorrelogramStatisticSchema = import_zod3.z.discriminatedUnion("kind", [
-  import_zod3.z.object({ kind: import_zod3.z.literal("raw_pair_count"), units: import_zod3.z.literal("count") }).strict(),
-  import_zod3.z.object({ kind: import_zod3.z.literal("weighted_pair_sum"), units }).strict(),
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("pair_rate_hz"),
-    units: import_zod3.z.literal("Hz"),
-    exposure_s: import_zod3.z.number().positive().max(Number.MAX_VALUE)
+var CorrelogramStatisticSchema = import_zod2.z.discriminatedUnion("kind", [
+  import_zod2.z.object({ kind: import_zod2.z.literal("raw_pair_count"), units: import_zod2.z.literal("count") }).strict(),
+  import_zod2.z.object({ kind: import_zod2.z.literal("weighted_pair_sum"), units }).strict(),
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("pair_rate_hz"),
+    units: import_zod2.z.literal("Hz"),
+    exposure_s: import_zod2.z.number().positive().max(Number.MAX_VALUE)
   }).strict(),
-  import_zod3.z.object({
-    kind: import_zod3.z.literal("pearson_coefficient"),
-    units: import_zod3.z.literal("1"),
-    sample_count: import_zod3.z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+  import_zod2.z.object({
+    kind: import_zod2.z.literal("pearson_coefficient"),
+    units: import_zod2.z.literal("1"),
+    sample_count: import_zod2.z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
   }).strict()
 ]);
 function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
@@ -5809,7 +3627,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
   if (lags.length === 0 || !Number.isFinite(tauMax) || tauMax <= 0) return;
   if (lags.length % 2 === 0) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["lags_ms"],
       message: "a symmetric correlogram axis must contain an odd number of lag centers"
     });
@@ -5822,7 +3640,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["lags_ms", 0],
       message: "the first lag center must equal -tau_max_ms"
     });
@@ -5835,7 +3653,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["lags_ms", lastIndex],
       message: "the final lag center must equal tau_max_ms"
     });
@@ -5848,7 +3666,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
   )) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["lags_ms", middle],
       message: "the middle lag center must be zero"
     });
@@ -5861,7 +3679,7 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
       HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE
     )) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["lags_ms", index],
         message: "lag centers must be pairwise symmetric around zero"
       });
@@ -5869,17 +3687,17 @@ function requireSymmetricLagAxis(lags, width, tauMax, ctx) {
     }
   }
 }
-var CorrelogramParamsSchema = import_zod3.z.object({
+var CorrelogramParamsSchema = import_zod2.z.object({
   lags_ms: timeArray.min(1),
   values: gpuArray.min(1),
-  bin_width_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
-  tau_max_ms: import_zod3.z.number().positive().max(Number.MAX_VALUE),
-  counting_start_ms: import_zod3.z.number(),
-  counting_stop_ms: import_zod3.z.number(),
+  bin_width_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  tau_max_ms: import_zod2.z.number().positive().max(Number.MAX_VALUE),
+  counting_start_ms: import_zod2.z.number(),
+  counting_stop_ms: import_zod2.z.number(),
   pair: CorrelogramPairSchema,
-  lag_convention: import_zod3.z.literal("positive_target_after_reference"),
-  binning: import_zod3.z.literal("left_closed_right_open"),
-  zero_lag_policy: import_zod3.z.enum(["included", "excluded_self_pairs"]),
+  lag_convention: import_zod2.z.literal("positive_target_after_reference"),
+  binning: import_zod2.z.literal("left_closed_right_open"),
+  zero_lag_policy: import_zod2.z.enum(["included", "excluded_self_pairs"]),
   statistic: CorrelogramStatisticSchema
 }).strict().superRefine((value, ctx) => {
   equalLengthIssue(
@@ -5897,7 +3715,7 @@ var CorrelogramParamsSchema = import_zod3.z.object({
   );
   if (!(value.counting_stop_ms > value.counting_start_ms)) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["counting_stop_ms"],
       message: "counting_stop_ms must be greater than counting_start_ms"
     });
@@ -5907,7 +3725,7 @@ var CorrelogramParamsSchema = import_zod3.z.object({
     const invalid = value.statistic.kind === "pearson_coefficient" ? sample < -1 || sample > 1 : value.statistic.kind === "raw_pair_count" ? sample < 0 || !Number.isSafeInteger(sample) : value.statistic.kind === "pair_rate_hz" ? sample < 0 : false;
     if (invalid) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["values", index],
         message: value.statistic.kind === "pearson_coefficient" ? "Pearson coefficients must lie in [-1, 1]" : value.statistic.kind === "raw_pair_count" ? "raw pair counts must be non-negative safe integers" : "pair rates cannot be negative"
       });
@@ -5915,7 +3733,7 @@ var CorrelogramParamsSchema = import_zod3.z.object({
     }
   }
 });
-var StimulusResponseParamsSchema = import_zod3.z.object({
+var StimulusResponseParamsSchema = import_zod2.z.object({
   times_ms: timeArray.min(1),
   stimulus: gpuArray.min(1),
   response: gpuArray.min(1)
@@ -5936,12 +3754,12 @@ var StimulusResponseParamsSchema = import_zod3.z.object({
   );
   requireMonotonic(value.times_ms, ctx, "times_ms");
 });
-var CompartmentalParamsSchema = import_zod3.z.object({
+var CompartmentalParamsSchema = import_zod2.z.object({
   // A declared sampling interval is required for this host envelope, so a
   // one-point axis would leave that claim mechanically unverifiable.
   times_ms: timeArray.min(2),
-  compartments: import_zod3.z.array(
-    import_zod3.z.object({
+  compartments: import_zod2.z.array(
+    import_zod2.z.object({
       id: displayText(120),
       parent_id: displayText(120).nullable(),
       label: displayText(240).optional(),
@@ -5956,7 +3774,7 @@ var CompartmentalParamsSchema = import_zod3.z.object({
   value.compartments.forEach((compartment, index) => {
     if (ids.has(compartment.id)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["compartments", index, "id"],
         message: `duplicate compartment id '${compartment.id}'`
       });
@@ -5974,7 +3792,7 @@ var CompartmentalParamsSchema = import_zod3.z.object({
   });
   if (roots === 0) {
     ctx.addIssue({
-      code: import_zod3.z.ZodIssueCode.custom,
+      code: import_zod2.z.ZodIssueCode.custom,
       path: ["compartments"],
       message: "at least one root compartment must have parent_id:null"
     });
@@ -5982,7 +3800,7 @@ var CompartmentalParamsSchema = import_zod3.z.object({
   value.compartments.forEach((compartment, index) => {
     if (compartment.parent_id !== null && !ids.has(compartment.parent_id)) {
       ctx.addIssue({
-        code: import_zod3.z.ZodIssueCode.custom,
+        code: import_zod2.z.ZodIssueCode.custom,
         path: ["compartments", index, "parent_id"],
         message: `parent '${compartment.parent_id}' does not reference a compartment`
       });
@@ -5992,7 +3810,7 @@ var CompartmentalParamsSchema = import_zod3.z.object({
     while (cursor !== null && parents.has(cursor)) {
       if (seen.has(cursor)) {
         ctx.addIssue({
-          code: import_zod3.z.ZodIssueCode.custom,
+          code: import_zod2.z.ZodIssueCode.custom,
           path: ["compartments", index, "parent_id"],
           message: "compartment parent graph must be acyclic"
         });
@@ -6003,11 +3821,11 @@ var CompartmentalParamsSchema = import_zod3.z.object({
     }
   });
 });
-var AnimationReplayParamsSchema = import_zod3.z.object({
-  frames: import_zod3.z.array(
-    import_zod3.z.object({
-      time_ms: import_zod3.z.number().nonnegative(),
-      state: import_zod3.z.record(normalizedRecordKey2, import_zod3.z.unknown()).refine((state) => Object.keys(state).length > 0, {
+var AnimationReplayParamsSchema = import_zod2.z.object({
+  frames: import_zod2.z.array(
+    import_zod2.z.object({
+      time_ms: import_zod2.z.number().nonnegative(),
+      state: import_zod2.z.record(normalizedRecordKey, import_zod2.z.unknown()).refine((state) => Object.keys(state).length > 0, {
         message: "frame state must contain at least one field"
       }),
       annotation: displayText(500).optional()
@@ -6020,6 +3838,415 @@ var AnimationReplayParamsSchema = import_zod3.z.object({
     "frames.time_ms"
   );
 });
+
+// core/vizSpec.ts
+var import_zod3 = require("zod");
+
+// core/designLaws.ts
+var SCENE_NAMES = Object.freeze([
+  "live-activity",
+  "cortical-column",
+  "stdp",
+  "spike-raster",
+  "network-topology",
+  "voltage-trace",
+  "phase-plane",
+  "brunel-network",
+  "fi-curve",
+  "isi-distribution",
+  "psth",
+  "population-rate",
+  "correlogram",
+  "weight-histogram",
+  "connection-matrix",
+  "degree-distribution",
+  "delay-distribution",
+  "spatial-map-2d",
+  "knowledge-graph-3d"
+]);
+
+// core/vizSpec.ts
+var CORTEXEL_SPEC_VERSION = "1.4.0";
+var CORTEXEL_JSON_LIMITS = Object.freeze({
+  maxDepth: 32,
+  maxNodes: 5e5,
+  maxObjectKeys: 1e4,
+  maxStringLength: 1e5,
+  maxTotalStringLength: 5e6
+});
+var CORTEXEL_JSON_POLICY = Object.freeze({
+  finiteNumbersOnly: true,
+  rejectNegativeZero: true,
+  plainObjectsOnly: true,
+  enumerableDataPropertiesOnly: true,
+  rejectAccessors: true,
+  rejectSymbolKeys: true,
+  rejectSparseArrays: true,
+  rejectNamedArrayProperties: true,
+  rejectCircularReferences: true,
+  rejectRawJson: true,
+  duplicateObjectMemberNames: "reject before materialization",
+  rawJsonParsingPrecondition: "detect duplicate member names in raw JSON text before converting to an object",
+  rejectedObjectKeys: Object.freeze(["__proto__"])
+});
+var STRING_NORMALIZATION_POLICY = Object.freeze({
+  version: "1",
+  lengthModel: "ECMAScript UTF-16 code units",
+  portableLengthKeyword: "x-cortexel-max-utf16-code-units",
+  trimAlgorithm: "ECMA-262 String.prototype.trim / TrimString",
+  trimCodePointsHex: Object.freeze([
+    "0009-000D",
+    "0020",
+    "00A0",
+    "1680",
+    "2000-200A",
+    "2028",
+    "2029",
+    "202F",
+    "205F",
+    "3000",
+    "FEFF"
+  ]),
+  regexDialect: "ECMA-262 Unicode-aware regular expressions",
+  unicodeNormalization: "none",
+  wellFormedUnicodeOnly: true,
+  displayStringPattern: SAFE_DISPLAY_STRING_PATTERN.source,
+  displayStringControls: "reject C0/C1, bidi, zero-width, and BOM controls"
+});
+var NUMERIC_MODEL_POLICY = Object.freeze({
+  version: "1",
+  representation: "IEEE-754 binary64",
+  coerceBeforeValidation: true,
+  finiteOnly: true,
+  negativeZeroRejected: true,
+  integerIdentityFields: "safe integers only",
+  constraintEvaluationUsesCoercedValues: true
+});
+var JSON_BUDGET_SEMANTICS = Object.freeze({
+  version: "1",
+  scope: "one snapshot of the complete invocation envelope",
+  rootDepth: 0,
+  nodeCount: "every scalar, array, and object value; property names are not nodes",
+  objectKeyCount: "per object",
+  stringLengthModel: "UTF-16 code units",
+  totalStringLength: "all string values plus every object property name",
+  repeatedReference: "counted once per JSON occurrence; cycles reject"
+});
+var JSON_PARAMS_PORTABLE_SCHEMA = Object.freeze({
+  type: "object",
+  maxProperties: CORTEXEL_JSON_LIMITS.maxObjectKeys,
+  propertyNames: Object.freeze({
+    type: "string",
+    maxLength: CORTEXEL_JSON_LIMITS.maxStringLength,
+    "x-cortexel-max-utf16-code-units": CORTEXEL_JSON_LIMITS.maxStringLength,
+    not: Object.freeze({ const: "__proto__" })
+  }),
+  additionalProperties: true
+});
+var DECLARED_INPUTS_PORTABLE_SCHEMA = Object.freeze({
+  type: "object",
+  maxProperties: 64,
+  propertyNames: Object.freeze({
+    type: "string",
+    minLength: 1,
+    maxLength: 80,
+    "x-cortexel-max-utf16-code-units": 80,
+    allOf: Object.freeze([
+      Object.freeze({ pattern: "^\\S(?:[\\s\\S]*\\S)?$" }),
+      Object.freeze({ pattern: SAFE_DISPLAY_STRING_PATTERN.source })
+    ])
+  }),
+  additionalProperties: Object.freeze({
+    anyOf: Object.freeze([
+      Object.freeze({
+        type: "string",
+        maxLength: 5e3,
+        "x-cortexel-max-utf16-code-units": 5e3,
+        pattern: SAFE_DISPLAY_STRING_PATTERN.source
+      }),
+      Object.freeze({ type: "number" }),
+      Object.freeze({ type: "boolean", const: true })
+    ])
+  })
+});
+var ENVELOPE_NORMALIZATION_POLICY = Object.freeze({
+  version: "1",
+  evaluationOrder: Object.freeze([
+    "parse/coerce every JSON number to IEEE-754 binary64",
+    "validate and snapshot the raw envelope with exact-JSON budgets",
+    "normalize fields carrying x-cortexel-normalize",
+    "materialize envelope defaults",
+    "validate the envelope JSON Schema",
+    "validate skill params, provenance values, and portable constraints",
+    "derive and display the mandatory honesty caption"
+  ]),
+  vizSpecDefaults: Object.freeze({
+    params: Object.freeze({}),
+    mode: "interactive",
+    themeMode: "dark"
+  }),
+  honestyDefaults: Object.freeze({
+    calibrated_posterior: false,
+    advisory_only: true,
+    is_paper_local_evidence: false,
+    synthetic: false
+  }),
+  jsonSchemaDefaultsAreAnnotations: true,
+  missingHonestyFlagsMustUseConservativeDefaults: true
+});
+var normalizedRecordKey2 = import_zod3.z.string().min(1).max(80).regex(
+  /^\S(?:[\s\S]*\S)?$/,
+  "record keys must already be trimmed and contain a non-whitespace character"
+).regex(SAFE_DISPLAY_STRING_PATTERN, "record keys must not contain display control characters");
+function cloneExactJson(root) {
+  const ancestors = /* @__PURE__ */ new WeakSet();
+  let visited = 0;
+  let totalStringLength = 0;
+  const fail = (path, message) => ({
+    ok: false,
+    issue: { path, message }
+  });
+  function inspectString(value, path) {
+    if (value.length > CORTEXEL_JSON_LIMITS.maxStringLength) {
+      return {
+        path,
+        message: `JSON string exceeds ${CORTEXEL_JSON_LIMITS.maxStringLength} characters`
+      };
+    }
+    totalStringLength += value.length;
+    if (totalStringLength > CORTEXEL_JSON_LIMITS.maxTotalStringLength) {
+      return {
+        path,
+        message: `JSON strings exceed ${CORTEXEL_JSON_LIMITS.maxTotalStringLength} total characters`
+      };
+    }
+    for (let index = 0; index < value.length; index++) {
+      const codeUnit = value.charCodeAt(index);
+      if (codeUnit >= 55296 && codeUnit <= 56319) {
+        const next = value.charCodeAt(index + 1);
+        if (!(next >= 56320 && next <= 57343)) {
+          return { path, message: "strings must not contain an unpaired high surrogate" };
+        }
+        index += 1;
+      } else if (codeUnit >= 56320 && codeUnit <= 57343) {
+        return { path, message: "strings must not contain an unpaired low surrogate" };
+      }
+    }
+    return null;
+  }
+  function visit(value, path, depth) {
+    visited += 1;
+    if (visited > CORTEXEL_JSON_LIMITS.maxNodes) {
+      return fail(path, `JSON value exceeds ${CORTEXEL_JSON_LIMITS.maxNodes} nodes`);
+    }
+    if (depth > CORTEXEL_JSON_LIMITS.maxDepth) {
+      return fail(path, `JSON nesting exceeds ${CORTEXEL_JSON_LIMITS.maxDepth} levels`);
+    }
+    if (value === null || typeof value === "boolean") {
+      return { ok: true, value };
+    }
+    if (typeof value === "string") {
+      const issue = inspectString(value, path);
+      return issue ? { ok: false, issue } : { ok: true, value };
+    }
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) {
+        return fail(path, "JSON numbers must be finite (NaN/Infinity are not allowed)");
+      }
+      return Object.is(value, -0) ? fail(path, "negative zero is not stable through JSON.stringify") : { ok: true, value };
+    }
+    if (typeof value !== "object") {
+      return fail(path, `value of type '${typeof value}' is not JSON-serializable`);
+    }
+    const object = value;
+    if (ancestors.has(object)) return fail(path, "circular JSON reference");
+    ancestors.add(object);
+    try {
+      const isRawJson = JSON.isRawJSON;
+      if (isRawJson?.(value)) {
+        return fail(path, "JSON.rawJSON values are not literal objects and are not allowed");
+      }
+      if (Array.isArray(value)) {
+        const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+        if (!lengthDescriptor || !("value" in lengthDescriptor) || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
+          return fail(path, "JSON arrays must have an ordinary non-negative length");
+        }
+        const length = lengthDescriptor.value;
+        if (length > CORTEXEL_JSON_LIMITS.maxNodes - visited) {
+          return fail(path, `JSON value exceeds ${CORTEXEL_JSON_LIMITS.maxNodes} nodes`);
+        }
+        const ownKeys2 = Reflect.ownKeys(value);
+        for (const key of ownKeys2) {
+          if (key === "length") continue;
+          if (typeof key !== "string" || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= length) {
+            return fail(
+              path,
+              "JSON arrays may not carry symbol, named, or out-of-range properties"
+            );
+          }
+        }
+        const clone2 = new Array(length);
+        for (let i = 0; i < length; i++) {
+          const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+          if (!descriptor) {
+            return fail([...path, i], "sparse arrays are not allowed in exact JSON");
+          }
+          if (!("value" in descriptor) || !descriptor.enumerable) {
+            return fail(
+              [...path, i],
+              "JSON array entries must be enumerable data properties, not accessors"
+            );
+          }
+          const nested = visit(descriptor.value, [...path, i], depth + 1);
+          if (!nested.ok) return nested;
+          clone2[i] = nested.value;
+        }
+        return { ok: true, value: clone2 };
+      }
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) {
+        return fail(path, "exact JSON must contain plain objects, not class instances");
+      }
+      const ownKeys = Reflect.ownKeys(value);
+      if (ownKeys.some((key) => typeof key === "symbol")) {
+        return fail(path, "JSON objects may not contain symbol keys");
+      }
+      const keys = ownKeys;
+      if (keys.length > CORTEXEL_JSON_LIMITS.maxObjectKeys) {
+        return fail(path, `JSON object exceeds ${CORTEXEL_JSON_LIMITS.maxObjectKeys} keys`);
+      }
+      const clone = {};
+      for (const key of keys) {
+        if (key === "__proto__") {
+          return fail(
+            [...path, key],
+            "the '__proto__' key is not preserved by the runtime schema parser"
+          );
+        }
+        const keyIssue = inspectString(key, [...path, key]);
+        if (keyIssue) return { ok: false, issue: keyIssue };
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+          return fail(
+            [...path, key],
+            "JSON object fields must be enumerable data properties, not accessors"
+          );
+        }
+        const nested = visit(descriptor.value, [...path, key], depth + 1);
+        if (!nested.ok) return nested;
+        Object.defineProperty(clone, key, {
+          value: nested.value,
+          enumerable: true,
+          writable: true,
+          configurable: true
+        });
+      }
+      return { ok: true, value: clone };
+    } finally {
+      ancestors.delete(object);
+    }
+  }
+  return visit(root, [], 0);
+}
+var JsonParamsSchema = import_zod3.z.unknown().transform((params, ctx) => {
+  const result = cloneExactJson(params);
+  if (!result.ok) {
+    ctx.addIssue({
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: result.issue.path,
+      message: result.issue.message
+    });
+    return import_zod3.z.NEVER;
+  }
+  if (result.value === null || typeof result.value !== "object" || Array.isArray(result.value)) {
+    ctx.addIssue({
+      code: import_zod3.z.ZodIssueCode.custom,
+      message: "exact JSON envelope must be a plain object"
+    });
+    return import_zod3.z.NEVER;
+  }
+  return result.value;
+});
+var ProvenanceSchema = import_zod3.z.object({
+  source: import_zod3.z.string().trim().min(1).max(200).regex(SAFE_DISPLAY_STRING_PATTERN),
+  calibrated_posterior: import_zod3.z.literal(false).default(false),
+  // fail-closed + portable
+  advisory_only: import_zod3.z.boolean().default(true),
+  is_paper_local_evidence: import_zod3.z.boolean().default(false),
+  caption: import_zod3.z.string().trim().max(500).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
+  /** Machine-checkable record of the inputs an agent declared. Keys are
+   *  open here (lenient envelope) — validateSkillInvocation enforces the
+   *  closed ProvenanceKey set a skill demands, so an unknown key surfaces as a
+   *  clear missing_provenance error rather than zod's opaque invalid_key.
+   *  The strict gate closes the key set, validates every present known value,
+   *  and checks portable params↔claim consistency; factual truth remains the
+   *  producer's responsibility. */
+  declared_inputs: JsonParamsSchema.pipe(
+    import_zod3.z.record(
+      normalizedRecordKey2,
+      import_zod3.z.union([
+        import_zod3.z.string().max(5e3).regex(SAFE_DISPLAY_STRING_PATTERN),
+        import_zod3.z.number(),
+        import_zod3.z.literal(true)
+      ])
+    )
+  ).refine((inputs) => Object.keys(inputs).length <= 64, {
+    message: "declared_inputs may contain at most 64 keys"
+  }).optional(),
+  /** Explicit synthetic/illustrative discriminator — forces the schematic
+   *  caption regardless of the other flags. */
+  synthetic: import_zod3.z.boolean().default(false)
+}).strict();
+var VizSpecSchema = import_zod3.z.object({
+  scene: import_zod3.z.enum(SCENE_NAMES),
+  /** Optional self-describing skill id (e.g. 'nest.spike_raster'). When present,
+   *  a stored spec is independently re-validatable and its honesty caption is
+   *  deterministic: validateSkillInvocation cross-checks it, and VizSpecRenderer
+   *  uses it when no explicit `skillId` prop is passed. Scene→skill is many-to-one
+   *  (voltage-trace ← voltage_trace AND astrocyte_dynamics), so the scene alone
+   *  cannot recover the skill — this field closes that gap. */
+  skill: import_zod3.z.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN, "skill must not contain display control characters").optional(),
+  /** Optional contract version this spec targets (see CORTEXEL_SPEC_VERSION). */
+  specVersion: import_zod3.z.literal(CORTEXEL_SPEC_VERSION).optional(),
+  // Scene-specific data/options. The envelope path guarantees bounded literal
+  // JSON; the strict agent path `validateSkillInvocation` additionally enforces
+  // the per-skill shape and cross-field invariants before render.
+  params: JsonParamsSchema.default({}),
+  mode: import_zod3.z.enum(["interactive", "export"]).default("interactive"),
+  themeMode: import_zod3.z.enum(["dark", "light"]).default("dark"),
+  camera: import_zod3.z.enum(["default", "top", "side", "close", "cinematic"]).optional(),
+  /** Optional palette hint — an agent can request a named semantic palette
+   *  (e.g. 'crameri', 'okabe-ito'). On the strict skill path an unregistered name
+   *  is rejected with 'unknown_palette'; on the lenient validateVizSpec path an
+   *  unregistered name is tolerated and getPalette falls back to the default (with
+   *  a dev-mode warning). When absent, the host's active palette is used. */
+  palette: import_zod3.z.string().trim().min(1).max(60).regex(SAFE_DISPLAY_STRING_PATTERN, "palette must not contain display control characters").optional(),
+  provenance: ProvenanceSchema
+}).strict();
+function validateVizSpec(input) {
+  try {
+    const exact = JsonParamsSchema.safeParse(input);
+    if (!exact.success) {
+      return {
+        ok: false,
+        errors: formatValidationIssues(exact.error.issues)
+      };
+    }
+    const result = VizSpecSchema.safeParse(exact.data);
+    if (result.success) return { ok: true, spec: result.data };
+    return {
+      ok: false,
+      errors: formatValidationIssues(result.error.issues)
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      errors: [
+        `(root): validation could not safely inspect the payload: ${safeErrorMessage(error)}`
+      ]
+    };
+  }
+}
 
 // core/skills/examples.ts
 var synthetic = (declared_inputs) => ({
@@ -7612,7 +5839,7 @@ var NEST_SKILL_REGISTRY = {
         "target|targets",
         "weight|weights?",
         "delay|delays?",
-        "synapse_model|synapse_models?",
+        "synapse_model|synapse_models? (required when weight or delay is present)",
         "target_thread|target_threads?",
         "synapse_id|synapse_ids?",
         "port|ports?"
@@ -7623,6 +5850,7 @@ var NEST_SKILL_REGISTRY = {
         "snapshotTimeMs",
         "snapshotScope",
         "samplePolicy",
+        "synapseModelSemantics when weight or delay is present",
         "weightUnits when weight is present",
         "delayUnits='ms' when delay is present"
       ],
@@ -7829,8 +6057,21 @@ var NEST_SKILL_REGISTRY = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "weight_matrix" },
     transform: {
       id: "synapseCollectionToWeightMatrixParams",
-      rawFields: ["source|sources", "target|targets", "weight|weights"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "weightUnits", "aggregation"],
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "weight|weights",
+        "synapse_model|synapse_models"
+      ],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "synapseModelSemantics",
+        "weightUnits",
+        "aggregation"
+      ],
       outputSkill: "nest.weight_matrix"
     },
     requiredInputKeys: [
@@ -7906,8 +6147,21 @@ var NEST_SKILL_REGISTRY = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "delay_matrix" },
     transform: {
       id: "synapseCollectionToDelayMatrixParams",
-      rawFields: ["source|sources", "target|targets", "delay|delays"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "delayUnits='ms'", "aggregation"],
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "delay|delays",
+        "synapse_model|synapse_models"
+      ],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "synapseModelSemantics",
+        "delayUnits='ms'",
+        "aggregation"
+      ],
       outputSkill: "nest.delay_matrix"
     },
     requiredInputKeys: [
@@ -8169,12 +6423,18 @@ var NEST_SKILL_REGISTRY = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "delay_distribution" },
     transform: {
       id: "synapseCollectionToDelayDistributionParams",
-      rawFields: ["source|sources", "target|targets", "delay|delays"],
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "delay|delays",
+        "synapse_model|synapse_models"
+      ],
       requiredOptions: [
         "sourceIds",
         "targetIds",
         "snapshotTimeMs",
         "snapshotScope",
+        "synapseModelSemantics",
         "delayUnits='ms'",
         "binWidthMs",
         "windowStartMs",
@@ -9763,6 +8023,84 @@ function getSkill(id2) {
   return isSkillId(id2) ? NEST_SKILL_REGISTRY[id2] : void 0;
 }
 
+// core/provenance.ts
+var CONSERVATIVE_PROVENANCE = Object.freeze({
+  calibrated_posterior: false,
+  advisory_only: true,
+  is_paper_local_evidence: false,
+  synthetic: false
+});
+var HONESTY_POLICY = Object.freeze({
+  version: "3",
+  calibratedPosteriorAccepted: false,
+  captionRequiredWhenAny: Object.freeze([
+    "synthetic=true",
+    "calibrated_posterior=false",
+    "advisory_only=true",
+    "is_paper_local_evidence=false"
+  ]),
+  precedence: Object.freeze([
+    "synthetic",
+    "advisory_only",
+    "not_paper_local",
+    "not_calibrated"
+  ]),
+  templates: Object.freeze({
+    synthetic: "Schematic \u2014 illustrative synthetic data, not measured.",
+    advisory_only: "Advisory \u2014 advisory evidence only; not a calibrated posterior.",
+    not_paper_local: "Advisory \u2014 not paper-local evidence; candidate ranking only.",
+    not_calibrated: "Illustrative \u2014 not a calibrated posterior."
+  }),
+  callerCaption: "append_only_unverified",
+  callerCaptionLabel: "Caller note (unverified):",
+  callerCaptionControls: "escape C0/C1, bidi, zero-width, and BOM controls",
+  bidiIsolationRequired: true,
+  contractDisclosureOrder: Object.freeze([
+    "weak_skill",
+    "external_provenance",
+    "flag_derived_mandatory",
+    "caller_note"
+  ]),
+  weakSkillDisclosure: "contract_owned_first",
+  externalProvenanceDisclosure: "contract_owned_after_weak_before_flag_derived_mandatory",
+  flagDerivedMandatoryDisclosure: "derived_only_from_provenance_flags_and_always_before_caller_note"
+});
+function requiresHonestyCaption(p) {
+  return !!p.synthetic || !p.calibrated_posterior || p.advisory_only || !p.is_paper_local_evidence;
+}
+function mandatoryDisclosure(p) {
+  if (p.synthetic) {
+    return HONESTY_POLICY.templates.synthetic;
+  }
+  if (p.advisory_only) {
+    return HONESTY_POLICY.templates.advisory_only;
+  }
+  if (!p.is_paper_local_evidence) {
+    return HONESTY_POLICY.templates.not_paper_local;
+  }
+  return HONESTY_POLICY.templates.not_calibrated;
+}
+function defaultHonestyCaption(p) {
+  return composeHonestyCaption(p) ?? mandatoryDisclosure(p);
+}
+function composeHonestyCaption(p, contractDisclosures = {}) {
+  const parts = [];
+  if (contractDisclosures.weakSkill) {
+    parts.push(contractDisclosures.weakSkill);
+  }
+  if (contractDisclosures.externalProvenance) {
+    parts.push(contractDisclosures.externalProvenance);
+  }
+  if (requiresHonestyCaption(p)) {
+    parts.push(mandatoryDisclosure(p));
+  }
+  const note = p.caption?.trim();
+  if (note) {
+    parts.push(`Caller note (unverified): ${safeDiagnosticText(note, 500)}`);
+  }
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
 // core/colormaps.ts
 var STOPS = {
   batlow: [
@@ -10389,7 +8727,7 @@ function preflightLargeSkillParams(skillId, params) {
           return !!edge && boundedText(edge.id, 240) && id(edge.source) && id(edge.target) && (edge.weight === void 0 || gpu(edge.weight)) && (edge.delay_ms === void 0 || gpu(edge.delay_ms) && edge.delay_ms > 0);
         },
         "a closed graph edge with safe endpoints and optional finite measurements",
-        { max: PARAM_LIMITS.maxTopologyEdges }
+        { min: 0, max: PARAM_LIMITS.maxTopologyEdges }
       );
     }
     case "nest.adjacency_matrix":
@@ -10405,7 +8743,7 @@ function preflightLargeSkillParams(skillId, params) {
           return !!cell && id(cell.source_id) && id(cell.target_id) && id(cell.connection_count) && cell.connection_count > 0 && (cell.value === void 0 || gpu(cell.value));
         },
         "a sparse matrix cell with safe endpoint ids and positive connection count",
-        { max: PARAM_LIMITS.maxSamples }
+        { min: 0, max: PARAM_LIMITS.maxSamples }
       );
     }
     case "nest.in_degree_distribution":
@@ -10899,6 +9237,113 @@ function nearestSkill(id2) {
   return best !== void 0 && bestD <= Math.max(3, Math.ceil(id2.length * 0.4)) ? best : void 0;
 }
 var MAX_INVOCATION_ERRORS = 32;
+function validateSkillParams(skillId, params) {
+  try {
+    const contract = getSkill(skillId);
+    if (!contract) {
+      const suggestion = typeof skillId === "string" ? nearestSkill(skillId) : void 0;
+      return {
+        ok: false,
+        errors: [
+          {
+            code: "unknown_skill",
+            path: "skillId",
+            message: `unknown skill '${safePrimitiveDiagnostic(skillId)}'`,
+            hint: suggestion ? `Did you mean '${suggestion}'?` : "Use one of the ids in validSkills.",
+            validSkills: NEST_SKILL_IDS,
+            didYouMean: suggestion,
+            example: suggestion ? getInvocationExamplePayload(suggestion) : void 0
+          }
+        ]
+      };
+    }
+    const rawPreflight = preflightRawSkillParams(contract.id, params);
+    if (rawPreflight) {
+      return {
+        ok: false,
+        errors: [{
+          code: "invalid_params",
+          path: `params.${rawPreflight.path}`,
+          message: rawPreflight.message,
+          hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`,
+          example: getInvocationExamplePayload(contract.id)
+        }]
+      };
+    }
+    const json = JsonParamsSchema.safeParse(params);
+    if (!json.success) {
+      return {
+        ok: false,
+        errors: json.error.issues.slice(0, MAX_INVOCATION_ERRORS).map((issue, index) => {
+          const bounded = boundValidationIssue(issue);
+          return {
+            code: "invalid_params",
+            path: `params.${bounded.path}`,
+            message: bounded.message,
+            hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`,
+            example: index === 0 ? getInvocationExamplePayload(contract.id) : void 0
+          };
+        })
+      };
+    }
+    if (!contract.paramsSchema) {
+      return {
+        ok: false,
+        errors: [
+          {
+            code: "invalid_params",
+            path: "params",
+            message: `skill '${contract.id}' has no parameter schema`,
+            hint: "This is a registry defect; do not route an unvalidated payload."
+          }
+        ]
+      };
+    }
+    const preflight = preflightLargeSkillParams(contract.id, json.data);
+    if (preflight) {
+      return {
+        ok: false,
+        errors: [
+          {
+            code: "invalid_params",
+            path: `params.${preflight.path}`,
+            message: preflight.message,
+            hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`,
+            example: getInvocationExamplePayload(contract.id)
+          }
+        ]
+      };
+    }
+    const parsed = contract.paramsSchema.safeParse(json.data);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        errors: parsed.error.issues.slice(0, MAX_INVOCATION_ERRORS).map((issue, index) => {
+          const bounded = boundValidationIssue(issue);
+          return {
+            code: "invalid_params",
+            path: `params.${bounded.path}`,
+            message: bounded.message,
+            hint: `Required params: ${contract.requiredInputKeys.join(", ")}.`,
+            example: index === 0 ? getInvocationExamplePayload(contract.id) : void 0
+          };
+        })
+      };
+    }
+    return { ok: true, params: parsed.data };
+  } catch (error) {
+    return {
+      ok: false,
+      errors: [
+        {
+          code: "invalid_params",
+          path: "params",
+          message: `validation could not safely inspect params: ${safeErrorMessage(error)}`
+        }
+      ]
+    };
+  }
+}
 function validateSkillInvocationUnsafe(skillId, payload) {
   const errors = [];
   const contract = getSkill(skillId);
@@ -11203,6 +9648,1751 @@ function validateSkillInvocation(skillId, payload) {
   }
 }
 
+// react/charts/ReferenceChartScene.tsx
+var import_jsx_runtime = require("react/jsx-runtime");
+var REFERENCE_CHART_SKILLS = Object.freeze([
+  "nest.voltage_trace",
+  "nest.astrocyte_dynamics",
+  "nest.spike_raster",
+  "nest.population_rate",
+  "nest.rate_response",
+  "nest.isi_distribution",
+  "nest.psth",
+  "nest.correlogram",
+  "nest.weight_histogram",
+  "nest.plasticity_dynamics",
+  "nest.phase_plane",
+  "nest.connection_graph",
+  "nest.adjacency_matrix",
+  "nest.weight_matrix",
+  "nest.delay_matrix",
+  "nest.in_degree_distribution",
+  "nest.out_degree_distribution",
+  "nest.delay_distribution",
+  "nest.spatial_map_2d"
+]);
+function chartColors(palette, themeMode) {
+  return themeMode === "dark" ? {
+    background: palette.panel,
+    foreground: palette.ink,
+    muted: palette.inkDim,
+    grid: palette.grid
+  } : {
+    background: palette.ink,
+    foreground: palette.deepNavy,
+    muted: palette.inkFaint,
+    grid: palette.inkDim
+  };
+}
+function seriesColor(palette, index) {
+  switch (index % 8) {
+    case 0:
+      return palette.cyan;
+    case 1:
+      return palette.orange;
+    case 2:
+      return palette.violet;
+    case 3:
+      return palette.teal;
+    case 4:
+      return palette.pink;
+    case 5:
+      return palette.amber;
+    case 6:
+      return palette.excitatory;
+    default:
+      return palette.inhibitory;
+  }
+}
+function declaredInput(args, key) {
+  const value = args.provenance.declared_inputs?.[key];
+  if (typeof value === "string") return safeDiagnosticText(value, 120);
+  if (typeof value === "number" || value === true) {
+    return safeDiagnosticText(String(value), 120);
+  }
+  return void 0;
+}
+var MIN_REFERENCE_PLOT_WIDTH = 180;
+function makeFrame(width, height, requestedRight = 28) {
+  const left = 82;
+  const right = Math.min(
+    requestedRight,
+    Math.max(18, width - left - MIN_REFERENCE_PLOT_WIDTH)
+  );
+  return { width, height, left, right, top: 72, bottom: 68 };
+}
+function seriesLabelSummary(labels, limit = 8) {
+  const shown = labels.slice(0, limit).join("; ");
+  const remaining = labels.length - Math.min(labels.length, limit);
+  return remaining > 0 ? `${shown}; plus ${remaining} more series` : shown;
+}
+function metadataValue(value, limit = 180) {
+  if (typeof value === "string") return safeDiagnosticText(value, limit);
+  if (typeof value === "number" || typeof value === "boolean") {
+    return safeDiagnosticText(String(value), limit);
+  }
+  try {
+    return safeDiagnosticText(JSON.stringify(value), limit);
+  } catch {
+    return "<unavailable>";
+  }
+}
+function sampledIndices(length, maximum = 8) {
+  if (length <= 0) return [];
+  const count = Math.min(length, Math.max(1, Math.floor(maximum)));
+  if (count === 1) return [0];
+  const indices = new Array(count);
+  for (let index = 0; index < count; index++) {
+    indices[index] = Math.round(index * (length - 1) / (count - 1));
+  }
+  return [...new Set(indices)];
+}
+function matrixBucketPaint(bucket, palette, skill) {
+  if (bucket.sign === 0) return { color: palette.inkDim, opacity: 0.58 };
+  return {
+    color: skill === "nest.adjacency_matrix" ? palette.excitatory : skill === "nest.weight_matrix" ? bucket.sign < 0 ? palette.cyan : palette.orange : palette.teal,
+    opacity: 0.18 + 0.82 * bucket.level / MATRIX_VALUE_LEVELS_PER_SIGN
+  };
+}
+var MAX_CHART_DATA_PAGE_SIZE = 100;
+var DEFAULT_CHART_DATA_PAGE_SIZE = 25;
+function PaginatedChartData({
+  label,
+  rowCount,
+  rowAt,
+  pageSize = DEFAULT_CHART_DATA_PAGE_SIZE,
+  foreground,
+  background
+}) {
+  const safeRowCount = Number.isSafeInteger(rowCount) ? Math.max(0, rowCount) : 0;
+  const safePageSize = Number.isFinite(pageSize) ? Math.min(MAX_CHART_DATA_PAGE_SIZE, Math.max(1, Math.floor(pageSize))) : DEFAULT_CHART_DATA_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(safeRowCount / safePageSize));
+  const [page, setPage] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    setPage((current) => Math.min(current, pageCount - 1));
+  }, [pageCount]);
+  const start = page * safePageSize;
+  const stop = Math.min(safeRowCount, start + safePageSize);
+  const rows = new Array(stop - start);
+  for (let index = start; index < stop; index++) {
+    rows[index - start] = { index, text: rowAt(index) };
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    "section",
+    {
+      className: "cortexel-reference-chart-data",
+      "aria-label": label,
+      style: {
+        boxSizing: "border-box",
+        padding: "9px 12px",
+        color: foreground,
+        background,
+        fontSize: 12,
+        lineHeight: 1.45
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "aria-live": "polite", "aria-atomic": "true", children: safeRowCount === 0 ? `${label}: no rows.` : `${label}: rows ${start + 1}\u2013${stop} of ${safeRowCount}; page ${page + 1} of ${pageCount}.` }),
+        rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", { start: start + 1, children: rows.map((row) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("bdi", { dir: "auto", style: { unicodeBidi: "isolate" }, children: row.text }) }, row.index)) }),
+        pageCount > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { "aria-label": `${label} pages`, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              disabled: page === 0,
+              onClick: () => setPage((current) => Math.max(0, current - 1)),
+              style: { minWidth: 44, minHeight: 44 },
+              children: "Previous"
+            }
+          ),
+          " ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              type: "button",
+              disabled: page + 1 >= pageCount,
+              onClick: () => setPage((current) => Math.min(pageCount - 1, current + 1)),
+              style: { minWidth: 44, minHeight: 44 },
+              children: "Next"
+            }
+          )
+        ] })
+      ]
+    }
+  );
+}
+function ChartShell({
+  id: id2,
+  skill,
+  scene,
+  title,
+  description,
+  metadata,
+  note,
+  accessibleDetails = [],
+  accessibleDetailsLabel = "Series summary",
+  xLabel,
+  yLabel,
+  xDomain,
+  yDomain,
+  frame,
+  colors,
+  legend = [],
+  xTicks: requestedXTicks,
+  yTicks: requestedYTicks,
+  sampleCount,
+  dataRows,
+  children
+}) {
+  const titleId = `${id2}-title`;
+  const descriptionId = `${id2}-description`;
+  const xTicks = requestedXTicks ?? tickValues(xDomain);
+  const yTicks = requestedYTicks ?? tickValues(yDomain);
+  const xTickLabels = formatDistinctChartNumbers(xTicks);
+  const yTickLabels = formatDistinctChartNumbers(yTicks);
+  const plotWidth = chartPlotWidth(frame);
+  const plotHeight = chartPlotHeight(frame);
+  const legendEntries = legend.slice(0, 8);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    "figure",
+    {
+      className: "cortexel-reference-chart",
+      "data-skill": skill,
+      "data-scene": scene,
+      "data-sample-count": sampleCount,
+      "data-plot-width": plotWidth,
+      style: { margin: 0, width: frame.width, maxWidth: "100%" },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "svg",
+          {
+            role: "img",
+            "aria-labelledby": titleId,
+            "aria-describedby": descriptionId,
+            viewBox: `0 0 ${frame.width} ${frame.height}`,
+            width: frame.width,
+            height: frame.height,
+            preserveAspectRatio: "xMidYMid meet",
+            style: { display: "block", width: "100%", maxWidth: "100%", height: "auto" },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("title", { id: titleId, children: title }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("desc", { id: descriptionId, children: description }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("rect", { width: frame.width, height: frame.height, fill: colors.background }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "text",
+                {
+                  x: frame.left,
+                  y: 30,
+                  fill: colors.foreground,
+                  fontSize: 18,
+                  fontWeight: 600,
+                  children: title
+                }
+              ),
+              metadata && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("text", { x: frame.left, y: 51, fill: colors.muted, fontSize: 11, children: metadata }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "aria-hidden": "true", children: [
+                xTicks.map((tick, index) => {
+                  const x = chartX(tick, xDomain, frame);
+                  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                      "line",
+                      {
+                        x1: x,
+                        y1: frame.top,
+                        x2: x,
+                        y2: frame.top + plotHeight,
+                        stroke: colors.grid,
+                        strokeOpacity: 0.55,
+                        vectorEffect: "non-scaling-stroke"
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                      "text",
+                      {
+                        x,
+                        y: frame.height - frame.bottom + 20,
+                        fill: colors.muted,
+                        fontSize: 10,
+                        textAnchor: "middle",
+                        children: xTickLabels[index]
+                      }
+                    )
+                  ] }, `x-${index}`);
+                }),
+                yTicks.map((tick, index) => {
+                  const y = chartY(tick, yDomain, frame);
+                  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                      "line",
+                      {
+                        x1: frame.left,
+                        y1: y,
+                        x2: frame.left + plotWidth,
+                        y2: y,
+                        stroke: colors.grid,
+                        strokeOpacity: 0.55,
+                        vectorEffect: "non-scaling-stroke"
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                      "text",
+                      {
+                        x: frame.left - 10,
+                        y: y + 4,
+                        fill: colors.muted,
+                        fontSize: 10,
+                        textAnchor: "end",
+                        children: yTickLabels[index]
+                      }
+                    )
+                  ] }, `y-${index}`);
+                }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "rect",
+                  {
+                    x: frame.left,
+                    y: frame.top,
+                    width: plotWidth,
+                    height: plotHeight,
+                    fill: "none",
+                    stroke: colors.muted,
+                    strokeOpacity: 0.75,
+                    vectorEffect: "non-scaling-stroke"
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "text",
+                  {
+                    x: frame.left + plotWidth / 2,
+                    y: frame.height - 16,
+                    fill: colors.foreground,
+                    fontSize: 12,
+                    textAnchor: "middle",
+                    children: xLabel
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "text",
+                  {
+                    x: 18,
+                    y: frame.top + plotHeight / 2,
+                    fill: colors.foreground,
+                    fontSize: 12,
+                    textAnchor: "middle",
+                    transform: `rotate(-90 18 ${frame.top + plotHeight / 2})`,
+                    children: yLabel
+                  }
+                )
+              ] }),
+              children,
+              legendEntries.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "aria-label": "Series legend", children: [
+                legendEntries.map((entry, index) => {
+                  const y = frame.top + 15 + index * 18;
+                  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                      "line",
+                      {
+                        x1: frame.width - frame.right + 18,
+                        y1: y,
+                        x2: frame.width - frame.right + 42,
+                        y2: y,
+                        stroke: entry.color,
+                        strokeWidth: 2,
+                        vectorEffect: "non-scaling-stroke"
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                      "text",
+                      {
+                        x: frame.width - frame.right + 48,
+                        y: y + 4,
+                        fill: colors.foreground,
+                        fontSize: 10,
+                        children: entry.label.length > 22 ? `${entry.label.slice(0, 21)}\u2026` : entry.label
+                      }
+                    )
+                  ] }, `${index}-${entry.label}`);
+                }),
+                legend.length > legendEntries.length && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                  "text",
+                  {
+                    x: frame.width - frame.right + 18,
+                    y: frame.top + 15 + legendEntries.length * 18,
+                    fill: colors.muted,
+                    fontSize: 10,
+                    children: [
+                      "+",
+                      legend.length - legendEntries.length,
+                      " more series"
+                    ]
+                  }
+                )
+              ] })
+            ]
+          }
+        ),
+        dataRows && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          PaginatedChartData,
+          {
+            label: dataRows.label,
+            rowCount: dataRows.rowCount,
+            rowAt: dataRows.rowAt,
+            pageSize: dataRows.pageSize,
+            foreground: colors.foreground,
+            background: colors.background
+          },
+          dataRows.key
+        ),
+        (note || accessibleDetails.length > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "figcaption",
+          {
+            className: "cortexel-reference-chart-details",
+            style: {
+              boxSizing: "border-box",
+              padding: "9px 12px",
+              color: colors.foreground,
+              background: colors.background,
+              fontSize: 12,
+              lineHeight: 1.45
+            },
+            children: [
+              note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: note }),
+              accessibleDetails.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "aria-label": accessibleDetailsLabel, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+                  accessibleDetailsLabel,
+                  ": "
+                ] }),
+                accessibleDetails.join(" ")
+              ] })
+            ]
+          }
+        )
+      ]
+    }
+  );
+}
+function sampledUniqueValues(values, maximum = 8) {
+  const unique = [...new Set(values)].sort((left, right) => left - right);
+  if (unique.length <= maximum) return unique;
+  const sampled = new Array(maximum);
+  for (let index = 0; index < maximum; index++) {
+    sampled[index] = unique[Math.round(index * (unique.length - 1) / (maximum - 1))];
+  }
+  return sampled;
+}
+function TraceChart(args, width, height, id2) {
+  const params = args.params;
+  const xDomain = numericDomain(params.times_ms);
+  const yDomain = nestedNumericDomain(params.series);
+  const legend = params.series_labels.map((label, index) => ({
+    label,
+    color: seriesColor(args.palette, index)
+  }));
+  const showLegend = params.series.length > 1 && width >= 600;
+  const frame = makeFrame(width, height, showLegend ? 210 : 28);
+  const variable = declaredInput(args, "recorded_variable") ?? "Recorded variable";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: `${variable} trace`,
+      description: `${params.series.length} labeled series with ${params.times_ms.length} samples each. Series: ${seriesLabelSummary(params.series_labels)}. Time is in milliseconds and the shared value axis is in ${params.units}.`,
+      metadata: `${params.series.length} series \u2022 ${params.times_ms.length} samples`,
+      xLabel: "Time (ms)",
+      yLabel: `${variable} (${params.units})`,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      legend: showLegend ? legend : void 0,
+      sampleCount: params.times_ms.length * params.series.length,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { fill: "none", children: params.series.map((series, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "trace-line",
+          d: linePath(params.times_ms, series, xDomain, yDomain, frame),
+          stroke: seriesColor(args.palette, index),
+          strokeWidth: 2,
+          vectorEffect: "non-scaling-stroke"
+        },
+        `${index}-${params.series_labels[index]}`
+      )) })
+    }
+  );
+}
+function AstrocyteChart(args, width, height, id2) {
+  const params = args.params;
+  const xDomain = numericDomain(params.times_ms);
+  const yDomain = numericDomain(params.ca_trace, { includeZero: true });
+  const frame = makeFrame(width, height);
+  const variable = declaredInput(args, "recorded_variable") ?? "Ca\xB2\u207A/IP\u2083";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: `${variable} dynamics`,
+      description: `Glial ${variable} analog signal with ${params.times_ms.length} samples in ${params.units}. This is not membrane voltage.`,
+      metadata: `${params.times_ms.length} samples \u2022 glial analog trace, not voltage`,
+      xLabel: "Time (ms)",
+      yLabel: `${variable} (${params.units})`,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.times_ms.length,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "astrocyte-line",
+          d: linePath(params.times_ms, params.ca_trace, xDomain, yDomain, frame),
+          fill: "none",
+          stroke: args.palette.teal,
+          strokeWidth: 2,
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
+    }
+  );
+}
+function SpikeRasterChart(args, width, height, id2) {
+  const params = args.params;
+  const xDomain = numericDomain(params.times_ms);
+  const yDomain = numericDomain(params.senders);
+  const frame = makeFrame(width, height);
+  const senderCount = new Set(params.senders).size;
+  const senderTicks = sampledUniqueValues(params.senders);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Spike raster",
+      description: `${params.times_ms.length} exact spike events from ${senderCount} senders. No rate bins or synthetic events are added.`,
+      metadata: `${params.times_ms.length} spikes \u2022 ${senderCount} senders \u2022 exact event times`,
+      xLabel: "Time (ms)",
+      yLabel: "Sender ID",
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      yTicks: senderTicks,
+      sampleCount: params.times_ms.length,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "spike-events",
+          "data-event-count": params.times_ms.length,
+          d: rasterTickPath(params.times_ms, params.senders, xDomain, yDomain, frame),
+          fill: "none",
+          stroke: args.palette.spike,
+          strokeWidth: 1.5,
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
+    }
+  );
+}
+var POPULATION_RATE_PATH_SAMPLE_BUDGET = 8192;
+function populationRateSeriesDetail(series) {
+  let minimumRate = Number.POSITIVE_INFINITY;
+  let maximumRate = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < series.rates_hz.length; index++) {
+    minimumRate = Math.min(minimumRate, series.rates_hz[index]);
+    maximumRate = Math.max(maximumRate, series.rates_hz[index]);
+  }
+  return `${series.label} (id ${series.id}): ${series.recorded_sender_count} recorded senders, ${series.spike_counts.length} spike-count bins, rate range ${formatChartNumber(minimumRate)}\u2013${formatChartNumber(maximumRate)} Hz.`;
+}
+function PopulationRateChart(args, width, height, id2) {
+  const params = args.params;
+  const xDomain = numericDomain([params.window_start_ms, params.window_stop_ms]);
+  const yDomain = nestedNumericDomain(
+    params.series.map((series) => series.rates_hz),
+    { includeZero: true }
+  );
+  const showLegend = width >= 600;
+  const frame = makeFrame(width, height, showLegend ? 230 : 28);
+  const legend = params.series.map((series, index) => ({
+    label: `${series.label} (${series.id})`,
+    color: seriesColor(args.palette, index)
+  }));
+  const perSeriesBudget = Math.max(
+    2,
+    Math.floor(POPULATION_RATE_PATH_SAMPLE_BUDGET / params.series.length)
+  );
+  const paths = params.series.map((series) => binnedStepPath(
+    params.bin_centers_ms,
+    series.rates_hz,
+    params.bin_width_ms,
+    xDomain,
+    yDomain,
+    frame,
+    perSeriesBudget
+  ));
+  const compacted = paths.some((path) => path.compacted);
+  const seriesDetails = params.series.map(populationRateSeriesDetail);
+  const formula = "rates_hz = spike_counts \xD7 1000 \xF7 (recorded_sender_count \xD7 bin_width_ms)";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Population firing rate",
+      description: `${params.series.length} exact checked population-rate series over ${params.bin_centers_ms.length} uniform bins. Horizontal steps show the supplied bin values without interpolation or smoothing. Series: ${seriesLabelSummary(params.series.map((series) => `${series.label} (${series.id})`))}. ${formula}.`,
+      metadata: `${params.series.length} series \u2022 ${params.bin_centers_ms.length} bins \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms \u2022 window ${formatChartInterval(params.window_start_ms, params.window_stop_ms)} ms`,
+      note: `Rate formula: ${formula}. Binning: ${params.binning}; aggregation: ${params.aggregation}; normalization: ${params.normalization}.${compacted ? " Long series are visually compacted to exact per-bucket extrema; omitted bins are never bridged." : ""}`,
+      accessibleDetails: seriesDetails,
+      xLabel: "Time (ms)",
+      yLabel: "Population rate (Hz)",
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      legend: showLegend ? legend : void 0,
+      sampleCount: params.bin_centers_ms.length * params.series.length,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { fill: "none", children: params.series.map((series, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "population-rate-steps",
+          "data-series-id": series.id,
+          "data-source-bin-count": paths[index].sourceSampleCount,
+          "data-rendered-bin-count": paths[index].renderedSampleCount,
+          "data-compacted": paths[index].compacted ? "true" : "false",
+          d: paths[index].path,
+          stroke: seriesColor(args.palette, index),
+          strokeWidth: 2,
+          strokeLinejoin: "miter",
+          vectorEffect: "non-scaling-stroke"
+        },
+        series.id
+      )) })
+    }
+  );
+}
+function RateResponseChart(args, width, height, id2) {
+  const params = args.params;
+  const xDomain = numericDomain(params.stimulus_amplitudes);
+  const yDomain = numericDomain(params.rates_hz, { includeZero: true });
+  const frame = makeFrame(width, height);
+  const bin = declaredInput(args, "bin_ms");
+  const normalization = declaredInput(args, "rate_normalization");
+  const metadata = [
+    `${params.rates_hz.length} response points`,
+    bin ? `counting window ${bin} ms` : void 0,
+    normalization
+  ].filter((value) => value !== void 0).join(" \u2022 ");
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "F\u2013I response",
+      description: `${params.rates_hz.length} firing-rate measurements ordered by stimulus amplitude for display. Rates are in hertz and stimulus is in ${params.stimulus_units}.`,
+      metadata,
+      xLabel: `Stimulus (${params.stimulus_units})`,
+      yLabel: "Firing rate (Hz)",
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.rates_hz.length,
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "fi-line",
+            d: sortedLinePath(
+              params.stimulus_amplitudes,
+              params.rates_hz,
+              xDomain,
+              yDomain,
+              frame
+            ),
+            fill: "none",
+            stroke: args.palette.excitatory,
+            strokeWidth: 2,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "fi-points",
+            d: pointPath(
+              params.stimulus_amplitudes,
+              params.rates_hz,
+              xDomain,
+              yDomain,
+              frame
+            ),
+            fill: args.palette.excitatory
+          }
+        )
+      ]
+    }
+  );
+}
+function HistogramChart({
+  args,
+  width,
+  height,
+  id: id2,
+  title,
+  description,
+  metadata,
+  xLabel,
+  yLabel,
+  centers,
+  values,
+  binWidth,
+  color,
+  alignmentLabel
+}) {
+  const xDomain = histogramDomain(centers, binWidth);
+  const yDomain = numericDomain(values, { includeZero: true });
+  const frame = makeFrame(width, height);
+  const zeroInDomain = xDomain.min <= 0 && xDomain.max >= 0;
+  const zeroX = chartX(0, xDomain, frame);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title,
+      description,
+      metadata,
+      xLabel,
+      yLabel,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: values.length,
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "histogram-bars",
+            "data-bar-count": values.length,
+            d: histogramBarPath(centers, values, binWidth, xDomain, yDomain, frame),
+            fill: color,
+            fillOpacity: 0.82,
+            stroke: color,
+            strokeWidth: 0.75,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        alignmentLabel && zeroInDomain && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "data-mark": "alignment-zero", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "line",
+            {
+              x1: zeroX,
+              y1: frame.top,
+              x2: zeroX,
+              y2: frame.height - frame.bottom,
+              stroke: args.palette.amber,
+              strokeWidth: 1.5,
+              strokeDasharray: "5 4",
+              vectorEffect: "non-scaling-stroke"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "text",
+            {
+              x: zeroX + 5,
+              y: frame.top + 13,
+              fill: args.palette.amber,
+              fontSize: 10,
+              children: [
+                "t=0: ",
+                alignmentLabel.length > 36 ? `${alignmentLabel.slice(0, 35)}\u2026` : alignmentLabel
+              ]
+            }
+          )
+        ] })
+      ]
+    }
+  );
+}
+function IsiChart(args, width, height, id2) {
+  const params = args.params;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    HistogramChart,
+    {
+      args,
+      width,
+      height,
+      id: id2,
+      title: "Inter-spike interval distribution",
+      description: `${params.values.length} uniform ${params.bin_width_ms} ms bins using ${params.normalization} normalization and ${params.interval_scope} interval scope.`,
+      metadata: `${params.normalization} \u2022 ${params.interval_scope} \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms`,
+      xLabel: "Inter-spike interval (ms)",
+      yLabel: params.value_units,
+      centers: params.bin_centers_ms,
+      values: params.values,
+      binWidth: params.bin_width_ms,
+      color: args.palette.teal
+    }
+  );
+}
+function PsthChart(args, width, height, id2) {
+  const params = args.params;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    HistogramChart,
+    {
+      args,
+      width,
+      height,
+      id: id2,
+      title: "Peri-stimulus time histogram",
+      description: `${params.values.length} trial-aligned bins aggregated across selected senders for ${params.trial_count} trials. Alignment event: ${params.alignment_event}. Normalization: ${params.normalization}.`,
+      metadata: `${params.normalization} \u2022 ${params.trial_count} trials \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms`,
+      xLabel: "Time from alignment event (ms)",
+      yLabel: params.value_units,
+      centers: params.bin_centers_ms,
+      values: params.values,
+      binWidth: params.bin_width_ms,
+      color: args.palette.spike,
+      alignmentLabel: params.alignment_event
+    }
+  );
+}
+function correlogramStatisticDetail(statistic) {
+  switch (statistic.kind) {
+    case "pair_rate_hz":
+      return `${statistic.kind} (${statistic.units}), exposure ${formatChartNumber(statistic.exposure_s)} s`;
+    case "pearson_coefficient":
+      return `${statistic.kind} (${statistic.units}), ${statistic.sample_count} samples`;
+    default:
+      return `${statistic.kind} (${statistic.units})`;
+  }
+}
+function CorrelogramChart(args, width, height, id2) {
+  const params = args.params;
+  const xDomain = numericDomain([-params.tau_max_ms, params.tau_max_ms]);
+  const yDomain = numericDomain(params.values, { includeZero: true });
+  const frame = makeFrame(width, height);
+  const zeroX = chartX(0, xDomain, frame);
+  const statistic = correlogramStatisticDetail(params.statistic);
+  const pair = `${params.pair.reference_label} \u2192 ${params.pair.target_label}`;
+  const marks = boundedStemPointPaths(
+    params.lags_ms,
+    params.values,
+    xDomain,
+    yDomain,
+    frame
+  );
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Spike-train correlogram",
+      description: `${params.values.length} exact binned ${params.statistic.kind} values for the oriented pair ${pair}. Positive lag means the target follows the reference. Signed values and lag asymmetry are preserved; bins are shown as independent stems and points with no interpolation or mirroring. The zero-lag reference line does not add a zero bin.`,
+      metadata: `${pair} \u2022 ${statistic} \u2022 bin ${formatChartNumber(params.bin_width_ms)} ms \u2022 \u03C4 range \xB1${formatChartNumber(params.tau_max_ms)} ms`,
+      note: `Pair orientation: ${pair}. Lag convention: ${params.lag_convention}. Statistic: ${statistic}. Counting window: ${formatChartInterval(params.counting_start_ms, params.counting_stop_ms)} ms. Binning: ${params.binning}. Zero-lag policy: ${params.zero_lag_policy}; the lag-zero line is a reference only and does not invent a bin.${marks.compacted ? " Long series are visually compacted to exact per-bucket extrema; omitted bins remain disconnected and are never mirrored." : ""}`,
+      xLabel: "Lag (ms)",
+      yLabel: `${params.statistic.kind} (${params.statistic.units})`,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.values.length,
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "data-mark": "zero-lag-reference", "data-zero-bin-present": params.lags_ms.includes(0), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "line",
+            {
+              x1: zeroX,
+              y1: frame.top,
+              x2: zeroX,
+              y2: frame.height - frame.bottom,
+              stroke: args.palette.amber,
+              strokeWidth: 1.5,
+              strokeDasharray: "5 4",
+              vectorEffect: "non-scaling-stroke"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("text", { x: zeroX + 5, y: frame.top + 13, fill: args.palette.amber, fontSize: 10, children: "lag 0 reference" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "correlogram-stems",
+            "data-bin-count": params.values.length,
+            "data-source-bin-count": marks.sourceSampleCount,
+            "data-rendered-bin-count": marks.renderedSampleCount,
+            "data-compacted": marks.compacted ? "true" : "false",
+            d: marks.stems,
+            fill: "none",
+            stroke: args.palette.excitatory,
+            strokeWidth: 1.5,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "correlogram-points",
+            "data-bin-count": params.values.length,
+            "data-source-bin-count": marks.sourceSampleCount,
+            "data-rendered-bin-count": marks.renderedSampleCount,
+            "data-compacted": marks.compacted ? "true" : "false",
+            d: marks.points,
+            fill: args.palette.excitatory
+          }
+        )
+      ]
+    }
+  );
+}
+var WEIGHT_RENDER_BIN_BUDGET = 4096;
+function WeightHistogramChart(args, width, height, id2) {
+  const params = args.params;
+  const aggregated = aggregateUniformHistogramBins(
+    params.bin_centers,
+    params.weight_counts,
+    params.values,
+    params.bin_width,
+    params.normalization,
+    WEIGHT_RENDER_BIN_BUDGET
+  );
+  const frame = makeFrame(width, height);
+  const xDomain = { min: params.window_start, max: params.window_stop };
+  const yDomain = numericDomain(
+    aggregated.bins.map((bin) => bin.value),
+    { includeZero: true }
+  );
+  const path = variableHistogramPath(
+    aggregated.bins,
+    xDomain,
+    yDomain,
+    frame
+  );
+  const scope = metadataValue(params.snapshot_scope);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Connection-weight distribution",
+      description: `${params.values.length} checked ${formatChartNumber(params.bin_width)} ${params.weight_units} bins with raw connection counts retained alongside ${params.normalization} values. The typed snapshot scope and complete sampling policy distinguish rank-local from merged evidence.`,
+      metadata: `${aggregated.sourceRawCount} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
+      note: `Weight units: ${params.weight_units}; normalization: ${params.normalization}; aggregation: ${params.aggregation}; binning: ${params.binning}; sample policy: ${params.sample_policy}; window ${formatChartInterval(params.window_start, params.window_stop)} ${params.weight_units}. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema sampling was used.` : " Every source bin is rendered directly."}`,
+      accessibleDetails: [
+        `Raw connection count is ${aggregated.sourceRawCount} before and ${aggregated.renderedRawCount} after display grouping.`
+      ],
+      accessibleDetailsLabel: "Connection-weight distribution summary",
+      xLabel: `Connection weight (${params.weight_units})`,
+      yLabel: params.value_units,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.values.length,
+      dataRows: {
+        key: `weight-${params.snapshot_time_ms}-${params.values.length}`,
+        label: "Connection-weight bin data",
+        rowCount: params.values.length,
+        rowAt: (index) => {
+          const left = params.bin_centers[index] - params.bin_width / 2;
+          const right = params.bin_centers[index] + params.bin_width / 2;
+          return `Weight bin ${formatChartInterval(left, right)} ${params.weight_units}: ${params.weight_counts[index]} connection${params.weight_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`;
+        }
+      },
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "weight-histogram-bars",
+          "data-bar-count": params.values.length,
+          "data-source-bin-count": aggregated.sourceBinCount,
+          "data-rendered-bin-count": aggregated.renderedBinCount,
+          "data-source-connection-count": aggregated.sourceRawCount,
+          "data-rendered-connection-count": aggregated.renderedRawCount,
+          "data-compacted": aggregated.compacted ? "true" : "false",
+          "data-sample-policy": params.sample_policy,
+          "data-snapshot-scope": params.snapshot_scope.kind,
+          d: path,
+          fill: args.palette.violet,
+          fillOpacity: 0.82,
+          stroke: args.palette.violet,
+          strokeWidth: 0.6,
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
+    }
+  );
+}
+function PlasticityChart(args, width, height, id2) {
+  const params = args.params;
+  const xDomain = numericDomain(params.times_ms);
+  const yDomain = numericDomain(params.weights);
+  const frame = makeFrame(width, height);
+  const synapseModel = declaredInput(args, "synapse_model");
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Synaptic weight dynamics",
+      description: `${params.weights.length} measured weight samples over time in ${params.weight_units}. This view does not invent an STDP window or pre/post spike protocol.`,
+      metadata: [synapseModel, `${params.weights.length} samples`].filter((value) => value !== void 0).join(" \u2022 "),
+      xLabel: "Time (ms)",
+      yLabel: `Weight (${params.weight_units})`,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.weights.length,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "weight-line",
+          d: linePath(params.times_ms, params.weights, xDomain, yDomain, frame),
+          fill: "none",
+          stroke: args.palette.ltp,
+          strokeWidth: 2,
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
+    }
+  );
+}
+function PhasePlaneChart(args, width, height, id2) {
+  const params = args.params;
+  const [xAxis, yAxis] = params.axis_order;
+  const xValues = params.grid[xAxis];
+  const yValues = params.grid[yAxis];
+  const xDomain = numericDomain(xValues);
+  const yDomain = numericDomain(yValues);
+  const frame = makeFrame(width, height);
+  const samples = phasePlaneSamples(
+    params.axis_order,
+    params.grid,
+    params.derivatives
+  );
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Phase-plane vector field",
+      description: `${samples.length} derivative vectors on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}. Arrows are normalized in plotted coordinate space and do not encode an absolute integration timestep. No trajectory, nullcline, or equilibrium is invented.`,
+      metadata: `${xValues.length}\xD7${yValues.length} grid \u2022 vector units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} \u2022 row-major, last axis fastest`,
+      xLabel: `${xAxis} (${params.axis_units[xAxis]})`,
+      yLabel: `${yAxis} (${params.axis_units[yAxis]})`,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: samples.length,
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "phase-vectors",
+          "data-vector-count": samples.length,
+          d: phasePlaneArrowPath(samples, xDomain, yDomain, frame),
+          fill: "none",
+          stroke: args.palette.orange,
+          strokeWidth: 1.4,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
+    }
+  );
+}
+function MatrixChart(args, width, height, id2) {
+  const skill = args.skill;
+  const params = args.params;
+  const showLegend = width >= 600;
+  const frame = makeFrame(width, height, showLegend ? 190 : 28);
+  const sourceIndex = /* @__PURE__ */ new Map();
+  const targetIndex = /* @__PURE__ */ new Map();
+  for (let index = 0; index < params.source_ids.length; index++) {
+    sourceIndex.set(params.source_ids[index], index);
+  }
+  for (let index = 0; index < params.target_ids.length; index++) {
+    targetIndex.set(params.target_ids[index], index);
+  }
+  const cells = params.cells.map((cell) => ({
+    sourceIndex: sourceIndex.get(cell.source_id) ?? -1,
+    targetIndex: targetIndex.get(cell.target_id) ?? -1,
+    value: skill === "nest.adjacency_matrix" ? 1 : cell.value
+  }));
+  const geometry = matrixValueBucketPaths(
+    cells,
+    params.source_ids.length,
+    params.target_ids.length,
+    frame
+  );
+  const minimumCellPixels = Math.min(
+    chartPlotWidth(frame) / params.source_ids.length,
+    chartPlotHeight(frame) / params.target_ids.length
+  );
+  const cellStrokeWidth = minimumCellPixels >= 1.5 ? 0.35 : 0;
+  const colors = chartColors(args.palette, args.themeMode);
+  const sourceTicks = sampledIndices(params.source_ids.length, 6);
+  const targetTicks = sampledIndices(params.target_ids.length, 6);
+  const presentZeroCount = geometry.buckets.find((bucket) => bucket.sign === 0)?.cellCount ?? 0;
+  const connectionCount = params.connection_count;
+  const title = skill === "nest.adjacency_matrix" ? "Connection adjacency matrix" : skill === "nest.weight_matrix" ? "Connection-weight matrix" : "Connection-delay matrix";
+  const metric = skill === "nest.adjacency_matrix" ? "binary presence" : `${params.aggregation} ${skill === "nest.weight_matrix" ? `weight (${params.weight_units})` : `delay (${params.delay_units})`}`;
+  const scope = metadataValue(params.snapshot_scope);
+  const maximum = formatChartNumber(geometry.maximumAbsoluteValue);
+  const valuePathNoun = geometry.valueBucketCount === 1 ? "path" : "paths";
+  const description = skill === "nest.adjacency_matrix" ? `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; each present cell encodes binary connection presence. Cells are never interpolated or spatially merged.` : skill === "nest.weight_matrix" ? `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? "no measured weight value is displayed because the snapshot has no present cells" : "a present measured zero weight remains visibly distinct"}. Cells are never interpolated or spatially merged.` : `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? "no measured delay value is displayed because the snapshot has no present cells" : "every present displayed delay is strictly positive"}. Cells are never interpolated or spatially merged.`;
+  const geometryNote = skill === "nest.adjacency_matrix" ? `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} binary-presence ${valuePathNoun}.` : skill === "nest.weight_matrix" ? params.cells.length === 0 ? "No measured weight value is displayed because the snapshot has no present cells; the declared row and column axes remain represented." : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded signed weight-value ${valuePathNoun}, with ${presentZeroCount} present zero-weight cells and maximum absolute displayed weight ${maximum}. Cool and warm hues encode numeric sign only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed absolute-magnitude levels.` : params.cells.length === 0 ? "No measured delay value is displayed because the snapshot has no present cells; the declared row and column axes remain represented." : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded positive delay-value ${valuePathNoun}, with maximum displayed delay ${maximum}. The neutral teal hue encodes positive numeric delay values only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed magnitude levels.`;
+  const legendEntries = skill === "nest.adjacency_matrix" ? [
+    ["absent: no connection", colors.grid, 0.3],
+    ["present connection", args.palette.excitatory, 1]
+  ] : skill === "nest.weight_matrix" ? [
+    ["absent: no connection", colors.grid, 0.3],
+    ["present zero weight", args.palette.inkDim, 0.58],
+    ["cool hue: negative numeric weight", args.palette.cyan, 1],
+    ["warm hue: positive numeric weight", args.palette.orange, 1]
+  ] : [
+    ["absent: no connection", colors.grid, 0.3],
+    ["teal hue: positive numeric delay", args.palette.teal, 1]
+  ];
+  const sourceSummary = params.source_ids.length === 0 ? "none" : `${params.source_ids[0]}\u2026${params.source_ids[params.source_ids.length - 1]}`;
+  const targetSummary = params.target_ids.length === 0 ? "none" : `${params.target_ids[0]}\u2026${params.target_ids[params.target_ids.length - 1]}`;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title,
+      description,
+      metadata: `${params.target_ids.length}\xD7${params.source_ids.length} axes \u2022 ${params.cells.length} present cells \u2022 ${connectionCount} connections \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
+      note: `Orientation: ${params.axis_order}. Metric: ${metric}. Absent cell: ${params.absent_cell}. Connection sample policy: ${params.sample_policy}. Snapshot scope (including MPI ownership): ${scope}. ${geometryNote}${cellStrokeWidth === 0 ? " Cell border strokes are suppressed below pixel scale, but no cell or value is removed." : ""}`,
+      accessibleDetails: [
+        `Source axis ids: ${sourceSummary}.`,
+        `Target axis ids: ${targetSummary}.`,
+        `${geometry.sourceCellCount} source cells and ${geometry.renderedCellCount} rendered cells; none omitted.`
+      ],
+      accessibleDetailsLabel: "Matrix summary",
+      xLabel: "Source node ID (declared column order)",
+      yLabel: "Target node ID (declared row order)",
+      xDomain: { min: 0, max: Math.max(1, params.source_ids.length) },
+      yDomain: { min: 0, max: Math.max(1, params.target_ids.length) },
+      xTicks: [],
+      yTicks: [],
+      frame,
+      colors,
+      sampleCount: params.cells.length,
+      dataRows: {
+        key: `${skill}-${params.snapshot_time_ms}-${params.source_ids.length}-${params.target_ids.length}-${params.cells.length}`,
+        label: "Matrix data ordered as source-axis columns, target-axis rows, then present cells",
+        rowCount: params.source_ids.length + params.target_ids.length + params.cells.length,
+        rowAt: (index) => {
+          if (index < params.source_ids.length) {
+            return `Source-axis column ${index + 1} of ${params.source_ids.length} (declared order): node ID ${params.source_ids[index]}.`;
+          }
+          const targetRow = index - params.source_ids.length;
+          if (targetRow < params.target_ids.length) {
+            return `Target-axis row ${targetRow + 1} of ${params.target_ids.length} (declared order): node ID ${params.target_ids[targetRow]}.`;
+          }
+          const cellIndex = targetRow - params.target_ids.length;
+          const cell = params.cells[cellIndex];
+          const declaredRow = (targetIndex.get(cell.target_id) ?? -1) + 1;
+          const declaredColumn = (sourceIndex.get(cell.source_id) ?? -1) + 1;
+          if (skill === "nest.adjacency_matrix") {
+            return `Present-cell record ${cellIndex + 1} of ${params.cells.length}: target node ID ${cell.target_id} at declared row ${declaredRow}, source node ID ${cell.source_id} at declared column ${declaredColumn}; ${cell.connection_count} connection${cell.connection_count === 1 ? "" : "s"}; binary presence.`;
+          }
+          const measured = cell;
+          const units2 = skill === "nest.weight_matrix" ? params.weight_units : params.delay_units;
+          return `Present-cell record ${cellIndex + 1} of ${params.cells.length}: target node ID ${cell.target_id} at declared row ${declaredRow}, source node ID ${cell.source_id} at declared column ${declaredColumn}; ${cell.connection_count} connection${cell.connection_count === 1 ? "" : "s"}; displayed value ${formatChartNumber(measured.value)} ${units2}; aggregation ${params.aggregation}.`;
+        }
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "g",
+          {
+            "data-mark": "matrix-cells",
+            "data-source-cell-count": geometry.sourceCellCount,
+            "data-rendered-cell-count": geometry.renderedCellCount,
+            "data-value-bucket-count": geometry.valueBucketCount,
+            "data-present-zero-count": presentZeroCount,
+            "data-absent-cell": params.absent_cell,
+            "data-axis-order": params.axis_order,
+            "data-cell-stroke": cellStrokeWidth > 0 ? "visible" : "suppressed-below-pixel-scale",
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "rect",
+                {
+                  x: frame.left,
+                  y: frame.top,
+                  width: chartPlotWidth(frame),
+                  height: chartPlotHeight(frame),
+                  fill: colors.grid,
+                  fillOpacity: 0.14,
+                  "data-mark": "matrix-absent-background"
+                }
+              ),
+              geometry.buckets.map((bucket) => {
+                const paint = matrixBucketPaint(bucket, args.palette, skill);
+                return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "path",
+                  {
+                    "data-mark": "matrix-value-bucket",
+                    "data-bucket": bucket.key,
+                    "data-cell-count": bucket.cellCount,
+                    d: bucket.path,
+                    fill: paint.color,
+                    fillOpacity: paint.opacity,
+                    stroke: colors.background,
+                    strokeWidth: cellStrokeWidth,
+                    vectorEffect: "non-scaling-stroke"
+                  },
+                  bucket.key
+                );
+              })
+            ]
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { "aria-hidden": "true", "data-mark": "matrix-axis-identities", children: [
+          sourceTicks.map((axisIndex) => {
+            const x = frame.left + (axisIndex + 0.5) / params.source_ids.length * chartPlotWidth(frame);
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "text",
+              {
+                x,
+                y: frame.height - frame.bottom + 18,
+                fill: colors.muted,
+                fontSize: 9,
+                textAnchor: "middle",
+                children: params.source_ids[axisIndex]
+              },
+              `source-${axisIndex}`
+            );
+          }),
+          targetTicks.map((axisIndex) => {
+            const y = frame.top + (axisIndex + 0.5) / params.target_ids.length * chartPlotHeight(frame);
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "text",
+              {
+                x: frame.left - 9,
+                y: y + 3,
+                fill: colors.muted,
+                fontSize: 9,
+                textAnchor: "end",
+                children: params.target_ids[axisIndex]
+              },
+              `target-${axisIndex}`
+            );
+          })
+        ] }),
+        showLegend && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { "aria-label": "Matrix value legend", "data-mark": "matrix-value-legend", children: legendEntries.map(([label, color, opacity], legendIndex) => {
+          const y = frame.top + legendIndex * 22;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("g", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "rect",
+              {
+                x: frame.width - frame.right + 18,
+                y,
+                width: 10,
+                height: 10,
+                fill: String(color),
+                fillOpacity: Number(opacity)
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "text",
+              {
+                x: frame.width - frame.right + 34,
+                y: y + 9,
+                fill: colors.foreground,
+                fontSize: 9,
+                children: String(label)
+              }
+            )
+          ] }, String(label));
+        }) })
+      ]
+    }
+  );
+}
+function ConnectionGraphChart(args, width, height, id2) {
+  const params = args.params;
+  const frame = makeFrame(width, height);
+  const geometry = circleTopologyGeometry(params.nodes, params.edges, frame);
+  const colors = chartColors(args.palette, args.themeMode);
+  const endpointIds = /* @__PURE__ */ new Set();
+  let weightedEdges = 0;
+  let delayedEdges = 0;
+  for (let index = 0; index < params.edges.length; index++) {
+    endpointIds.add(params.edges[index].source);
+    endpointIds.add(params.edges[index].target);
+    if (params.edges[index].weight !== void 0) weightedEdges += 1;
+    if (params.edges[index].delay_ms !== void 0) delayedEdges += 1;
+  }
+  const isolateCount = params.nodes.reduce(
+    (count, node) => count + (endpointIds.has(node.id) ? 0 : 1),
+    0
+  );
+  const scope = metadataValue(params.snapshot_scope);
+  const samplePolicy = metadataValue(params.sample_policy);
+  const labels = sampledIndices(params.nodes.length, 8);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Connection topology graph",
+      description: `${params.nodes.length} declared nodes, including ${isolateCount} isolates, and ${params.edges.length} provided directed connection records on a deterministic schematic circle. Every provided multapse, reverse edge, and autapse is retained with a separate deterministic lane and persistent arrowhead. Circle positions and distances are derived for readability and are not spatial evidence.`,
+      metadata: `${params.nodes.length} nodes \u2022 ${params.edges.length} rendered of ${params.source_connection_count} source connections \u2022 ${isolateCount} isolates \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
+      note: `Schematic layout: ${params.layout}; node positions and distances are not measured. Parallel edges: ${params.parallel_edges}; self-connections: ${params.self_connections}; arrowheads preserve source\u2192target direction. ${weightedEdges} edges carry weights${params.weight_units ? ` in ${params.weight_units}` : ""} and ${delayedEdges} carry delays${params.delay_units ? ` in ${params.delay_units}` : ""}; neither channel is mapped to geometry. Edge identity: ${params.edge_identity}. Source connection count: ${params.source_connection_count}. Sample policy: ${samplePolicy}. Snapshot scope (including MPI ownership): ${scope}.`,
+      accessibleDetails: [
+        `${geometry.sourceNodeCount} source nodes and ${geometry.renderedNodeCount} rendered nodes; none omitted.`,
+        `${params.source_connection_count} source connections, ${geometry.sourceEdgeCount} provided sample edges, and ${geometry.renderedEdgeCount} rendered edges; no provided edge omitted.`,
+        `${geometry.selfLoopCount} self-connections and ${geometry.parallelEdgeCount} edges in parallel bundles.`
+      ],
+      accessibleDetailsLabel: "Topology summary",
+      xLabel: "Schematic circle layout \u2014 horizontal position is non-quantitative",
+      yLabel: "Schematic vertical position",
+      xDomain: { min: 0, max: 1 },
+      yDomain: { min: 0, max: 1 },
+      xTicks: [],
+      yTicks: [],
+      frame,
+      colors,
+      sampleCount: params.nodes.length + params.edges.length,
+      dataRows: {
+        key: `connection-graph-${params.snapshot_time_ms}-${params.nodes.length}-${params.edges.length}`,
+        label: "Connection graph node and edge data",
+        rowCount: params.nodes.length + params.edges.length,
+        rowAt: (index) => {
+          if (index < params.nodes.length) {
+            const node = params.nodes[index];
+            return `Node ${node.id}: ${node.label}; ${endpointIds.has(node.id) ? "incident to at least one provided edge" : "isolated in the provided graph"}.`;
+          }
+          const edge = params.edges[index - params.nodes.length];
+          const details = [
+            edge.weight === void 0 ? void 0 : `weight ${formatChartNumber(edge.weight)} ${params.weight_units}`,
+            edge.delay_ms === void 0 ? void 0 : `delay ${formatChartNumber(edge.delay_ms)} ${params.delay_units}`,
+            edge.synapse_model === void 0 ? void 0 : `synapse model ${edge.synapse_model}`,
+            `edge identity ${params.edge_identity}`
+          ].filter((value) => value !== void 0);
+          return `Edge ${edge.id}: ${edge.source} \u2192 ${edge.target}${details.length > 0 ? `; ${details.join("; ")}` : ""}.`;
+        }
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "connection-edges",
+            "data-source-edge-count": params.source_connection_count,
+            "data-provided-edge-count": geometry.sourceEdgeCount,
+            "data-rendered-edge-count": geometry.renderedEdgeCount,
+            "data-self-loop-count": geometry.selfLoopCount,
+            "data-parallel-edge-count": geometry.parallelEdgeCount,
+            "data-edge-identity": params.edge_identity,
+            "data-sample-policy": params.sample_policy,
+            d: geometry.edgePath,
+            fill: "none",
+            stroke: args.palette.cyan,
+            strokeOpacity: 0.65,
+            strokeWidth: 1.25,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "connection-arrowheads",
+            "data-arrow-count": geometry.renderedEdgeCount,
+            d: geometry.arrowPath,
+            fill: args.palette.orange
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "connection-nodes",
+            "data-source-node-count": geometry.sourceNodeCount,
+            "data-rendered-node-count": geometry.renderedNodeCount,
+            "data-isolate-count": isolateCount,
+            d: geometry.nodePath,
+            fill: args.palette.excitatory,
+            stroke: colors.background,
+            strokeWidth: 1,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { "aria-hidden": "true", "data-mark": "connection-node-labels", children: labels.map((nodeIndex) => {
+          const position = geometry.positions[nodeIndex];
+          const label = params.nodes[nodeIndex].label;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "text",
+            {
+              x: position.x + 6,
+              y: position.y - 6,
+              fill: colors.foreground,
+              fontSize: 9,
+              children: label.length > 24 ? `${label.slice(0, 23)}\u2026` : label
+            },
+            params.nodes[nodeIndex].id
+          );
+        }) })
+      ]
+    }
+  );
+}
+var DEGREE_RENDER_BIN_BUDGET = 512;
+function DegreeDistributionChart(args, width, height, id2) {
+  const params = args.params;
+  const aggregated = aggregateDegreeBins(
+    params.degrees,
+    params.node_counts,
+    params.values,
+    DEGREE_RENDER_BIN_BUDGET
+  );
+  const frame = makeFrame(width, height);
+  const firstDegree = params.degrees[0] ?? 0;
+  const finalDegree = params.degrees[params.degrees.length - 1] ?? firstDegree;
+  const xDomain = { min: firstDegree - 0.5, max: finalDegree + 0.5 };
+  const yDomain = numericDomain(aggregated.bins.map((bin) => bin.value), {
+    includeZero: true
+  });
+  const path = variableHistogramPath(aggregated.bins, xDomain, yDomain, frame);
+  const scope = metadataValue(params.snapshot_scope);
+  const directionTitle = params.direction === "in" ? "In-degree distribution" : "Out-degree distribution";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: directionTitle,
+      description: `${params.degrees.length} ordered ${params.direction}-degree bins over ${params.node_count} declared nodes. Adjacent display bins may be grouped by summing both raw node counts and displayed mass; extrema sampling is never used.`,
+      metadata: `${params.node_count} nodes \u2022 ${params.connection_count} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins`,
+      note: `Direction: ${params.direction}; normalization: ${params.normalization}; edge counting: ${params.edge_counting}; zero-degree policy: ${params.zero_degree_policy}; sample policy: ${params.sample_policy}. Snapshot: ${formatChartNumber(params.snapshot_time_ms)} ms. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema selection or interpolation was used.` : " Every source bin is rendered directly."}`,
+      accessibleDetails: [
+        `Raw node-count mass: ${formatChartNumber(aggregated.sourceNodeMass)} before and ${formatChartNumber(aggregated.renderedNodeMass)} after display grouping.`,
+        `Displayed value mass: ${formatChartNumber(aggregated.sourceValueMass)} before and ${formatChartNumber(aggregated.renderedValueMass)} after grouping.`
+      ],
+      accessibleDetailsLabel: "Degree distribution summary",
+      xLabel: `${params.direction === "in" ? "In" : "Out"}-degree`,
+      yLabel: params.value_units,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.degrees.length,
+      dataRows: {
+        key: `${params.direction}-degree-${params.snapshot_time_ms}-${params.degrees.length}`,
+        label: `${params.direction === "in" ? "In" : "Out"}-degree bin data`,
+        rowCount: params.degrees.length,
+        rowAt: (index) => `Degree ${params.degrees[index]}: ${params.node_counts[index]} node${params.node_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`
+      },
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "degree-distribution-bars",
+          "data-direction": params.direction,
+          "data-source-bin-count": aggregated.sourceBinCount,
+          "data-rendered-bin-count": aggregated.renderedBinCount,
+          "data-source-node-mass": aggregated.sourceNodeMass,
+          "data-rendered-node-mass": aggregated.renderedNodeMass,
+          "data-compacted": aggregated.compacted ? "true" : "false",
+          "data-sample-policy": params.sample_policy,
+          d: path,
+          fill: params.direction === "in" ? args.palette.cyan : args.palette.orange,
+          fillOpacity: 0.82,
+          stroke: params.direction === "in" ? args.palette.cyan : args.palette.orange,
+          strokeWidth: 0.6,
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
+    }
+  );
+}
+var DELAY_RENDER_BIN_BUDGET = 4096;
+function DelayDistributionChart(args, width, height, id2) {
+  const params = args.params;
+  const aggregated = aggregateUniformHistogramBins(
+    params.bin_centers_ms,
+    params.delay_counts,
+    params.values,
+    params.bin_width_ms,
+    params.normalization,
+    DELAY_RENDER_BIN_BUDGET
+  );
+  const frame = makeFrame(width, height);
+  const xDomain = { min: params.window_start_ms, max: params.window_stop_ms };
+  const yDomain = numericDomain(aggregated.bins.map((bin) => bin.value), {
+    includeZero: true
+  });
+  const path = variableHistogramPath(aggregated.bins, xDomain, yDomain, frame);
+  const scope = metadataValue(params.snapshot_scope);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "Connection-delay distribution",
+      description: `${params.values.length} checked ${params.bin_width_ms} ms delay bins with raw connection counts retained alongside ${params.normalization} values. Adjacent visual compaction preserves raw counts and displayed mass.`,
+      metadata: `${aggregated.sourceRawCount} connections \u2022 ${aggregated.sourceBinCount} source bins \u2022 ${aggregated.renderedBinCount} rendered bins \u2022 snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`,
+      note: `Delay units: ${params.delay_units}; normalization: ${params.normalization}; aggregation: ${params.aggregation}; binning: ${params.binning}; sample policy: ${params.sample_policy}; window ${formatChartInterval(params.window_start_ms, params.window_stop_ms)} ms. Snapshot scope (including MPI ownership): ${scope}.${aggregated.compacted ? ` Adjacent bins were mass-preservingly compacted from ${aggregated.sourceBinCount} to ${aggregated.renderedBinCount}; no extrema sampling was used.` : " Every source bin is rendered directly."}`,
+      accessibleDetails: [
+        `Raw delay-event count is ${aggregated.sourceRawCount} before and ${aggregated.renderedRawCount} after display grouping.`
+      ],
+      accessibleDetailsLabel: "Delay distribution summary",
+      xLabel: "Connection delay (ms)",
+      yLabel: params.value_units,
+      xDomain,
+      yDomain,
+      frame,
+      colors: chartColors(args.palette, args.themeMode),
+      sampleCount: params.values.length,
+      dataRows: {
+        key: `delay-${params.snapshot_time_ms}-${params.values.length}`,
+        label: "Connection-delay bin data",
+        rowCount: params.values.length,
+        rowAt: (index) => {
+          const left = params.bin_centers_ms[index] - params.bin_width_ms / 2;
+          const right = params.bin_centers_ms[index] + params.bin_width_ms / 2;
+          return `Delay bin ${formatChartInterval(left, right)} ms: ${params.delay_counts[index]} connection${params.delay_counts[index] === 1 ? "" : "s"}; displayed value ${formatChartNumber(params.values[index])} ${params.value_units}.`;
+        }
+      },
+      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "path",
+        {
+          "data-mark": "delay-distribution-bars",
+          "data-source-bin-count": aggregated.sourceBinCount,
+          "data-rendered-bin-count": aggregated.renderedBinCount,
+          "data-source-delay-count": aggregated.sourceRawCount,
+          "data-rendered-delay-count": aggregated.renderedRawCount,
+          "data-compacted": aggregated.compacted ? "true" : "false",
+          "data-sample-policy": params.sample_policy,
+          d: path,
+          fill: args.palette.teal,
+          fillOpacity: 0.82,
+          stroke: args.palette.teal,
+          strokeWidth: 0.6,
+          vectorEffect: "non-scaling-stroke"
+        }
+      )
+    }
+  );
+}
+function SpatialMap2DChart(args, width, height, id2) {
+  const params = args.params;
+  const frame = makeFrame(width, height);
+  const extent = params.extent;
+  const center = params.center;
+  const domains = equalAspectDomains(extent, center, frame);
+  const xs = params.nodes.map((node) => node.x);
+  const ys = params.nodes.map((node) => node.y);
+  const nodePath = pointPath(xs, ys, domains.xDomain, domains.yDomain, frame, 2.75);
+  const boundaryLeft = chartX(center[0] - extent[0] / 2, domains.xDomain, frame);
+  const boundaryRight = chartX(center[0] + extent[0] / 2, domains.xDomain, frame);
+  const boundaryTop = chartY(center[1] + extent[1] / 2, domains.yDomain, frame);
+  const boundaryBottom = chartY(center[1] - extent[1] / 2, domains.yDomain, frame);
+  const colors = chartColors(args.palette, args.themeMode);
+  const labels = sampledIndices(params.nodes.length, 8);
+  const scope = metadataValue(params.position_scope);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    ChartShell,
+    {
+      id: id2,
+      skill: args.skill,
+      scene: args.scene,
+      title: "2D spatial node map",
+      description: `${params.nodes.length} typed nodes at their exact supplied x/y coordinates in ${params.coordinate_units}. One common scale is used for both axes; coordinates are neither jittered nor independently stretched. Marker radius is fixed in screen space and does not encode physical node size.`,
+      metadata: `${params.nodes.length} nodes \u2022 extent ${formatChartNumber(extent[0])}\xD7${formatChartNumber(extent[1])} ${params.coordinate_units} \u2022 center (${formatChartNumber(center[0])}, ${formatChartNumber(center[1])})`,
+      note: `Position scope (including MPI ownership): ${scope}. Boundary edge wrap: ${params.edge_wrap ? "enabled (periodic boundary)" : "disabled"}. Marker size: ${params.marker_size}; it is not a physical measurement. The declared boundary is shown exactly, x/y use equal scale, and no point is sampled, aggregated, projected, or jittered.`,
+      accessibleDetails: [
+        `${params.nodes.length} source positions and ${params.nodes.length} rendered positions; none omitted.`,
+        `Node id range in declared order: ${params.nodes[0]?.id ?? "none"}\u2026${params.nodes[params.nodes.length - 1]?.id ?? "none"}.`
+      ],
+      accessibleDetailsLabel: "Spatial map summary",
+      xLabel: `x (${params.coordinate_units})`,
+      yLabel: `y (${params.coordinate_units})`,
+      xDomain: domains.xDomain,
+      yDomain: domains.yDomain,
+      frame,
+      colors,
+      sampleCount: params.nodes.length,
+      dataRows: {
+        key: `spatial-${metadataValue(params.position_scope)}-${params.nodes.length}`,
+        label: "Spatial node-coordinate data",
+        rowCount: params.nodes.length,
+        rowAt: (index) => {
+          const node = params.nodes[index];
+          return `Node ${node.id}: ${node.label}; x ${formatChartNumber(node.x)} ${params.coordinate_units}; y ${formatChartNumber(node.y)} ${params.coordinate_units}.`;
+        }
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "rect",
+          {
+            "data-mark": "spatial-boundary",
+            "data-edge-wrap": params.edge_wrap ? "true" : "false",
+            x: boundaryLeft,
+            y: boundaryTop,
+            width: boundaryRight - boundaryLeft,
+            height: boundaryBottom - boundaryTop,
+            fill: "none",
+            stroke: args.palette.amber,
+            strokeWidth: 1.25,
+            strokeDasharray: params.edge_wrap ? "5 3" : void 0,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "spatial-nodes",
+            "data-source-node-count": params.nodes.length,
+            "data-rendered-node-count": params.nodes.length,
+            "data-marker-size": params.marker_size,
+            "data-jitter": "none",
+            d: nodePath,
+            fill: args.palette.cyan
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("g", { "aria-hidden": "true", "data-mark": "spatial-node-labels", children: labels.map((nodeIndex) => {
+          const node = params.nodes[nodeIndex];
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "text",
+            {
+              x: chartX(node.x, domains.xDomain, frame) + 5,
+              y: chartY(node.y, domains.yDomain, frame) - 5,
+              fill: colors.foreground,
+              fontSize: 9,
+              children: node.label.length > 24 ? `${node.label.slice(0, 23)}\u2026` : node.label
+            },
+            node.id
+          );
+        }) })
+      ]
+    }
+  );
+}
+function UnsupportedReferenceChart({ skill, scene }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { role: "alert", className: "cortexel-reference-chart-unsupported", children: [
+    "Cortexel has no canonical SVG chart for skill \u201C",
+    skill ?? "(missing skill)",
+    "\u201D",
+    " ",
+    "on scene \u201C",
+    scene,
+    "\u201D. Use that skill's native scene or checked host renderer."
+  ] });
+}
+function validateReferenceChartInput(args) {
+  const contract = getSkill(args.skill);
+  if (!contract || contract.scene !== args.scene) {
+    return {
+      ok: false,
+      messages: ["The skill and scene do not identify the same registered Cortexel chart contract."]
+    };
+  }
+  const checked = validateSkillParams(args.skill, args.params);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      messages: checked.errors.map((error) => safeDiagnosticText(`${error.path}: ${error.message}`, 500))
+    };
+  }
+  return { ok: true, params: checked.params };
+}
+function InvalidReferenceChartInput({ messages }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { role: "alert", className: "cortexel-reference-chart-invalid", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Invalid reference chart input" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: "The low-level chart surface validates only its registered skill, scene, and params. Validate the complete spec with ReferenceVizSpecFigure to bind provenance and the honesty caption." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", { children: messages.map((message, index) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: message }, `${index}-${message}`)) })
+  ] });
+}
+function ReferenceChartScene(args) {
+  const checked = (0, import_react.useMemo)(
+    () => validateReferenceChartInput(args),
+    [args.params, args.scene, args.skill]
+  );
+  if (!checked.ok) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InvalidReferenceChartInput, { messages: checked.messages });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CheckedReferenceChartScene, { ...args, params: checked.params });
+}
+function CheckedReferenceChartScene(args) {
+  const reactId = (0, import_react.useId)();
+  const id2 = `cortexel-chart-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const width = normalizeChartDimension(
+    args.width,
+    REFERENCE_CHART_DIMENSIONS.width,
+    REFERENCE_CHART_DIMENSIONS.minWidth
+  );
+  const height = normalizeChartDimension(
+    args.height,
+    REFERENCE_CHART_DIMENSIONS.height,
+    REFERENCE_CHART_DIMENSIONS.minHeight
+  );
+  switch (args.skill) {
+    case "nest.voltage_trace":
+      return TraceChart(args, width, height, id2);
+    case "nest.astrocyte_dynamics":
+      return AstrocyteChart(args, width, height, id2);
+    case "nest.spike_raster":
+      return SpikeRasterChart(args, width, height, id2);
+    case "nest.population_rate":
+      return PopulationRateChart(args, width, height, id2);
+    case "nest.rate_response":
+      return RateResponseChart(args, width, height, id2);
+    case "nest.isi_distribution":
+      return IsiChart(args, width, height, id2);
+    case "nest.psth":
+      return PsthChart(args, width, height, id2);
+    case "nest.correlogram":
+      return CorrelogramChart(args, width, height, id2);
+    case "nest.weight_histogram":
+      return WeightHistogramChart(args, width, height, id2);
+    case "nest.plasticity_dynamics":
+      return PlasticityChart(args, width, height, id2);
+    case "nest.phase_plane":
+      return PhasePlaneChart(args, width, height, id2);
+    case "nest.connection_graph":
+      return ConnectionGraphChart(args, width, height, id2);
+    case "nest.adjacency_matrix":
+    case "nest.weight_matrix":
+    case "nest.delay_matrix":
+      return MatrixChart(args, width, height, id2);
+    case "nest.in_degree_distribution":
+    case "nest.out_degree_distribution":
+      return DegreeDistributionChart(args, width, height, id2);
+    case "nest.delay_distribution":
+      return DelayDistributionChart(args, width, height, id2);
+    case "nest.spatial_map_2d":
+      return SpatialMap2DChart(args, width, height, id2);
+    default:
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        UnsupportedReferenceChart,
+        {
+          skill: args.skill,
+          scene: args.scene
+        }
+      );
+  }
+}
+
+// react/VizSpecRenderer.tsx
+var import_react2 = require("react");
+
 // core/skills/authoring.ts
 function validateSpec(payload) {
   let skillProperty;
@@ -11461,7 +11651,7 @@ function ReferenceVizSpecFigure({
       onError,
       onInvocationError,
       captionPlacement: "footer",
-      renderScene: (args) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(ReferenceChartScene, { ...args, width, height })
+      renderScene: (args) => /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(CheckedReferenceChartScene, { ...args, width, height })
     }
   );
 }

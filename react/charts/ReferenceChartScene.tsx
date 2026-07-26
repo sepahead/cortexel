@@ -1,6 +1,8 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import type { ReadonlySemanticPalette } from '../../core/colormaps';
 import { safeDiagnosticText } from '../../core/safeRuntime';
+import { getSkill } from '../../core/skills/registry';
+import { validateSkillParams } from '../../core/skills/validateSkillInvocation';
 import type {
   AdjacencyMatrixParams,
   AstrocyteParams,
@@ -84,6 +86,10 @@ export const REFERENCE_CHART_SKILLS = Object.freeze([
 
 export type ReferenceChartSkill = (typeof REFERENCE_CHART_SKILLS)[number];
 
+/** Low-level canonical-chart surface. It revalidates the registered skill,
+ * scene, and params before dispatch, but it neither validates provenance nor
+ * binds an honesty caption. Render untrusted complete specs through
+ * ReferenceVizSpecFigure instead. */
 export interface ReferenceChartSceneProps extends RenderSceneArgs {
   width?: number;
   height?: number;
@@ -180,10 +186,15 @@ function sampledIndices(length: number, maximum = 8): number[] {
 function matrixBucketPaint(
   bucket: MatrixValueBucketPath,
   palette: ReadonlySemanticPalette,
+  skill: 'nest.adjacency_matrix' | 'nest.weight_matrix' | 'nest.delay_matrix',
 ): { color: string; opacity: number } {
   if (bucket.sign === 0) return { color: palette.inkDim, opacity: 0.58 };
   return {
-    color: bucket.sign < 0 ? palette.inhibitory : palette.excitatory,
+    color: skill === 'nest.adjacency_matrix'
+      ? palette.excitatory
+      : skill === 'nest.weight_matrix'
+        ? (bucket.sign < 0 ? palette.cyan : palette.orange)
+        : palette.teal,
     opacity: 0.18 + 0.82 * bucket.level / MATRIX_VALUE_LEVELS_PER_SIGN,
   };
 }
@@ -1295,6 +1306,38 @@ function MatrixChart(
       }`;
   const scope = metadataValue(params.snapshot_scope);
   const maximum = formatChartNumber(geometry.maximumAbsoluteValue);
+  const valuePathNoun = geometry.valueBucketCount === 1 ? 'path' : 'paths';
+  const description = skill === 'nest.adjacency_matrix'
+    ? `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; each present cell encodes binary connection presence. Cells are never interpolated or spatially merged.`
+    : skill === 'nest.weight_matrix'
+      ? `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? 'no measured weight value is displayed because the snapshot has no present cells' : 'a present measured zero weight remains visibly distinct'}. Cells are never interpolated or spatially merged.`
+      : `${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; ${params.cells.length === 0 ? 'no measured delay value is displayed because the snapshot has no present cells' : 'every present displayed delay is strictly positive'}. Cells are never interpolated or spatially merged.`;
+  const geometryNote = skill === 'nest.adjacency_matrix'
+    ? `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} binary-presence ${valuePathNoun}.`
+    : skill === 'nest.weight_matrix'
+      ? params.cells.length === 0
+        ? 'No measured weight value is displayed because the snapshot has no present cells; the declared row and column axes remain represented.'
+        : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded signed weight-value ${valuePathNoun}, with ${presentZeroCount} present zero-weight cells and maximum absolute displayed weight ${maximum}. Cool and warm hues encode numeric sign only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed absolute-magnitude levels.`
+      : params.cells.length === 0
+        ? 'No measured delay value is displayed because the snapshot has no present cells; the declared row and column axes remain represented.'
+        : `Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded positive delay-value ${valuePathNoun}, with maximum displayed delay ${maximum}. The neutral teal hue encodes positive numeric delay values only, not synapse identity or excitation; opacity uses ${MATRIX_VALUE_LEVELS_PER_SIGN} disclosed magnitude levels.`;
+  const legendEntries: readonly (readonly [string, string, number])[] =
+    skill === 'nest.adjacency_matrix'
+      ? [
+          ['absent: no connection', colors.grid, 0.3],
+          ['present connection', args.palette.excitatory, 1],
+        ]
+      : skill === 'nest.weight_matrix'
+        ? [
+            ['absent: no connection', colors.grid, 0.3],
+            ['present zero weight', args.palette.inkDim, 0.58],
+            ['cool hue: negative numeric weight', args.palette.cyan, 1],
+            ['warm hue: positive numeric weight', args.palette.orange, 1],
+          ]
+        : [
+            ['absent: no connection', colors.grid, 0.3],
+            ['teal hue: positive numeric delay', args.palette.teal, 1],
+          ];
   const sourceSummary = params.source_ids.length === 0
     ? 'none'
     : `${params.source_ids[0]}…${params.source_ids[params.source_ids.length - 1]}`;
@@ -1308,9 +1351,9 @@ function MatrixChart(
       skill={args.skill!}
       scene={args.scene}
       title={title}
-      description={`${params.cells.length} present sparse cells on ${params.target_ids.length} declared target rows and ${params.source_ids.length} declared source columns. Target rows follow the declared top-to-bottom order and source columns follow the declared left-to-right order. Absent cells mean no connection; a present measured zero remains visibly distinct. Cells are never interpolated or spatially merged.`}
+      description={description}
       metadata={`${params.target_ids.length}×${params.source_ids.length} axes • ${params.cells.length} present cells • ${connectionCount} connections • snapshot ${formatChartNumber(params.snapshot_time_ms)} ms`}
-      note={`Orientation: ${params.axis_order}. Metric: ${metric}. Absent cell: ${params.absent_cell}. Connection sample policy: ${params.sample_policy}. Snapshot scope (including MPI ownership): ${scope}. Every sparse cell keeps exact row/column geometry; paint is grouped into ${geometry.valueBucketCount} bounded signed value paths, with ${presentZeroCount} present zero-valued cells and maximum absolute displayed value ${maximum}. Negative values use the inhibitory color, positive values use the excitatory color, and opacity uses eight disclosed magnitude levels.${cellStrokeWidth === 0 ? ' Cell border strokes are suppressed below pixel scale, but no cell or value is removed.' : ''}`}
+      note={`Orientation: ${params.axis_order}. Metric: ${metric}. Absent cell: ${params.absent_cell}. Connection sample policy: ${params.sample_policy}. Snapshot scope (including MPI ownership): ${scope}. ${geometryNote}${cellStrokeWidth === 0 ? ' Cell border strokes are suppressed below pixel scale, but no cell or value is removed.' : ''}`}
       accessibleDetails={[
         `Source axis ids: ${sourceSummary}.`,
         `Target axis ids: ${targetSummary}.`,
@@ -1373,7 +1416,7 @@ function MatrixChart(
           data-mark="matrix-absent-background"
         />
         {geometry.buckets.map((bucket) => {
-          const paint = matrixBucketPaint(bucket, args.palette);
+          const paint = matrixBucketPaint(bucket, args.palette, skill);
           return (
             <path
               key={bucket.key}
@@ -1424,12 +1467,7 @@ function MatrixChart(
       </g>
       {showLegend && (
         <g aria-label="Matrix value legend" data-mark="matrix-value-legend">
-          {[
-            ['absent: no connection', colors.grid, 0.3],
-            ['present zero', args.palette.inkDim, 0.58],
-            ['negative', args.palette.inhibitory, 1],
-            ['positive', args.palette.excitatory, 1],
-          ].map(([label, color, opacity], legendIndex) => {
+          {legendEntries.map(([label, color, opacity], legendIndex) => {
             const y = frame.top + legendIndex * 22;
             return (
               <g key={String(label)}>
@@ -1840,7 +1878,64 @@ function UnsupportedReferenceChart({ skill, scene }: Pick<RenderSceneArgs, 'skil
   );
 }
 
+type ReferenceChartInputGate =
+  | { ok: true; params: Record<string, unknown> }
+  | { ok: false; messages: readonly string[] };
+
+function validateReferenceChartInput(
+  args: Pick<ReferenceChartSceneProps, 'skill' | 'scene' | 'params'>,
+): ReferenceChartInputGate {
+  const contract = getSkill(args.skill);
+  if (!contract || contract.scene !== args.scene) {
+    return {
+      ok: false,
+      messages: ['The skill and scene do not identify the same registered Cortexel chart contract.'],
+    };
+  }
+  const checked = validateSkillParams(args.skill, args.params);
+  if (!checked.ok) {
+    return {
+      ok: false,
+      messages: checked.errors.map((error) =>
+        safeDiagnosticText(`${error.path}: ${error.message}`, 500)),
+    };
+  }
+  return { ok: true, params: checked.params };
+}
+
+function InvalidReferenceChartInput({ messages }: { messages: readonly string[] }) {
+  return (
+    <div role="alert" className="cortexel-reference-chart-invalid">
+      <strong>Invalid reference chart input</strong>
+      <p>
+        The low-level chart surface validates only its registered skill, scene,
+        and params. Validate the complete spec with ReferenceVizSpecFigure to
+        bind provenance and the honesty caption.
+      </p>
+      <ul>
+        {messages.map((message, index) => (
+          <li key={`${index}-${message}`}>{message}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function ReferenceChartScene(args: ReferenceChartSceneProps) {
+  const checked = useMemo(
+    () => validateReferenceChartInput(args),
+    [args.params, args.scene, args.skill],
+  );
+  if (!checked.ok) {
+    return <InvalidReferenceChartInput messages={checked.messages} />;
+  }
+  return <CheckedReferenceChartScene {...args} params={checked.params} />;
+}
+
+/** Package-internal sink for the detached RenderSceneArgs produced by the
+ * strict ReferenceVizSpecFigure path. It is deliberately not re-exported from
+ * the public charts subpath. */
+export function CheckedReferenceChartScene(args: ReferenceChartSceneProps) {
   const reactId = useId();
   const id = `cortexel-chart-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const width = normalizeChartDimension(
@@ -1890,6 +1985,11 @@ export function ReferenceChartScene(args: ReferenceChartSceneProps) {
     case 'nest.spatial_map_2d':
       return SpatialMap2DChart(args, width, height, id);
     default:
-      return <UnsupportedReferenceChart skill={args.skill} scene={args.scene} />;
+      return (
+        <UnsupportedReferenceChart
+          skill={args.skill}
+          scene={args.scene}
+        />
+      );
   }
 }

@@ -250,7 +250,7 @@
               ]
             }
           ],
-          "description": "Optional. The source's simulation timestep, which is the grid every delay must lie on in NEST. It is RECORDED and shown as context; it is not enforced (see knownLimitations). Cortexel does not assume a shared minimum timestep across sources, and hard-codes no 0.1 ms grid."
+          "description": "Optional declared context: the source's simulation timestep. It is not lattice proof. In NEST, normal Connect rounds delays to this resolution, but `cont_delay_synapse` defaults set with SetDefaults or values changed after creation with SetStatus can remain off-grid; every supported delay is still at least one simulation resolution. Cortexel records the value without snapping supplied delays or inferring the model and assignment path (see knownLimitations)."
         }
       },
       "required": [

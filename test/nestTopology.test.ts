@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
   AdjacencyMatrixParamsSchema,
@@ -21,6 +22,12 @@ import {
   synapseCollectionToWeightMatrixParams,
   type NestTopologyResult,
 } from '../core/nest/topology';
+import type {
+  SynapseMeasurementFieldSemantics,
+  SynapseModelMeasurementSemantics,
+} from '../core/nest/modelSemantics';
+import { validateSynapseModelMeasurementSemantics } from '../core/nest/modelSemantics';
+import * as publicCore from '../core';
 import {
   normalizeSynapseCollectionSnapshot as normalizeFromCore,
 } from '../core';
@@ -35,6 +42,23 @@ function paramsOf<T>(result: NestTopologyResult<T>): T {
 }
 
 const completeScope = { kind: 'single_process_complete' } as const;
+const staticEffectiveSemantics = [{
+  synapseModel: 'static_synapse',
+  weight: 'effective',
+  delay: 'effective',
+}] as const;
+
+function semanticsFor(
+  models: readonly string[],
+  weight: SynapseMeasurementFieldSemantics = 'unknown',
+  delay: SynapseMeasurementFieldSemantics = 'unknown',
+): SynapseModelMeasurementSemantics[] {
+  return [...new Set(models)].map((synapseModel) => ({
+    synapseModel,
+    weight,
+    delay,
+  }));
+}
 
 describe('NEST topology exports and raw SynapseCollection normalization', () => {
   it('exports the normalizer through both public core boundaries', () => {
@@ -163,6 +187,7 @@ describe('connection graph transform', () => {
       snapshotTimeMs: 25,
       snapshotScope: { kind: 'mpi_all_ranks_merged', world_size: 2 },
       samplePolicy: { kind: 'complete' },
+      synapseModelSemantics: staticEffectiveSemantics,
       weightUnits: 'nS',
       delayUnits: 'ms',
     }));
@@ -223,10 +248,11 @@ describe('connection graph transform', () => {
 
   it('keeps legitimate empty snapshots renderable and rejects undeclared endpoints', () => {
     const empty = paramsOf(synapseCollectionToConnectionGraphParams({
-      source: [], target: [], weight: [], delay: [],
+      source: [], target: [], weight: [], delay: [], synapse_model: [],
     }, {
       sourceIds: [1], targetIds: [2], snapshotTimeMs: 0,
       snapshotScope: completeScope, samplePolicy: { kind: 'complete' },
+      synapseModelSemantics: [],
       weightUnits: 'nS', delayUnits: 'ms',
     }));
     expect(empty.edges).toEqual([]);
@@ -241,6 +267,29 @@ describe('connection graph transform', () => {
         snapshotScope: completeScope, samplePolicy: { kind: 'complete' },
       },
     ).ok).toBe(false);
+  });
+
+  it('preserves the model-free endpoint API and rejects unused declarations', () => {
+    const options = {
+      sourceIds: [1],
+      targetIds: [2],
+      snapshotTimeMs: 0,
+      snapshotScope: completeScope,
+      samplePolicy: { kind: 'complete' as const },
+    };
+    const canonical = paramsOf(synapseCollectionToConnectionGraphParams(
+      { source: [1], target: [2] },
+      options,
+    ));
+    expect(canonical.edges[0].synapse_model).toBeUndefined();
+    expect(synapseCollectionToConnectionGraphParams(
+      { source: [1], target: [2], synapse_model: ['static_synapse'] },
+      { ...options, synapseModelSemantics: staticEffectiveSemantics },
+    ).ok).toBe(false);
+    expect(synapseCollectionToConnectionGraphParams(
+      { source: [1], target: [2] },
+      { ...options, synapseModelSemantics: [] },
+    ).ok).toBe(true);
   });
 
   it('binds every disclosed edge-identity mode to its canonical id grammar', () => {
@@ -267,11 +316,273 @@ describe('connection graph transform', () => {
   });
 });
 
+describe('connection measurement model semantics', () => {
+  const snapshot = {
+    sourceIds: [1],
+    targetIds: [2],
+    snapshotTimeMs: 0,
+    snapshotScope: completeScope,
+  };
+
+  it('requires one exact declaration per observed model and complete model rows', () => {
+    const weightInput = {
+      source: [1, 1],
+      target: [2, 2],
+      weight: [1, 2],
+      synapse_model: ['static_synapse', 'custom_synapse'],
+    };
+    const weightOptions = {
+      ...snapshot,
+      weightUnits: 'nS',
+      aggregation: 'sum' as const,
+    };
+
+    expect(synapseCollectionToWeightMatrixParams(
+      { source: [1], target: [2], weight: [1] },
+      { ...weightOptions, synapseModelSemantics: staticEffectiveSemantics },
+    ).ok).toBe(false);
+    expect(synapseCollectionToWeightMatrixParams(weightInput, weightOptions).ok).toBe(false);
+    expect(synapseCollectionToWeightMatrixParams(weightInput, {
+      ...weightOptions,
+      synapseModelSemantics: staticEffectiveSemantics,
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightMatrixParams(weightInput, {
+      ...weightOptions,
+      synapseModelSemantics: [
+        ...semanticsFor(['static_synapse', 'custom_synapse'], 'effective', 'unknown'),
+        {
+          synapseModel: 'unobserved_synapse',
+          weight: 'effective',
+          delay: 'unknown',
+        },
+      ],
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightMatrixParams(weightInput, {
+      ...weightOptions,
+      synapseModelSemantics: [
+        {
+          synapseModel: 'static_synapse',
+          weight: 'effective',
+          delay: 'unknown',
+        },
+        {
+          synapseModel: 'static_synapse',
+          weight: 'effective',
+          delay: 'unknown',
+        },
+      ],
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightMatrixParams(weightInput, {
+      ...weightOptions,
+      synapseModelSemantics:
+        semanticsFor(['static_synapse', 'custom_synapse'], 'unknown', 'unknown'),
+    }).ok).toBe(false);
+
+    let reads = 0;
+    const accessorDeclaration: Record<string, unknown> = {
+      synapseModel: 'static_synapse',
+      delay: 'unknown',
+    };
+    Object.defineProperty(accessorDeclaration, 'weight', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        return 'effective';
+      },
+    });
+    expect(synapseCollectionToWeightMatrixParams({
+      source: [1],
+      target: [2],
+      weight: [1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...weightOptions,
+      synapseModelSemantics: [accessorDeclaration],
+    }).ok).toBe(false);
+    expect(reads).toBe(0);
+  });
+
+  it('rejects official ignored fields, including mixed snapshots, without inferring copies', () => {
+    for (const synapseModel of ['gap_junction', 'rate_connection_instantaneous']) {
+      expect(synapseCollectionToDelayMatrixParams({
+        source: [1],
+        target: [2],
+        delay: [1],
+        synapse_model: [synapseModel],
+      }, {
+        ...snapshot,
+        delayUnits: 'ms',
+        aggregation: 'single_connection',
+        synapseModelSemantics: semanticsFor([synapseModel], 'unknown', 'effective'),
+      }).ok).toBe(false);
+    }
+
+    expect(synapseCollectionToWeightMatrixParams({
+      source: [1],
+      target: [2],
+      weight: [1],
+      synapse_model: ['diffusion_connection'],
+    }, {
+      ...snapshot,
+      weightUnits: 'nS',
+      aggregation: 'single_connection',
+      synapseModelSemantics:
+        semanticsFor(['diffusion_connection'], 'effective', 'ignored'),
+    }).ok).toBe(false);
+    expect(synapseCollectionToDelayDistributionParams({
+      source: [1],
+      target: [2],
+      delay: [1],
+      synapse_model: ['diffusion_connection'],
+    }, {
+      ...snapshot,
+      delayUnits: 'ms',
+      binWidthMs: 1,
+      windowStartMs: 1,
+      windowStopMs: 2,
+      normalization: 'count',
+      synapseModelSemantics:
+        semanticsFor(['diffusion_connection'], 'ignored', 'effective'),
+    }).ok).toBe(false);
+
+    expect(synapseCollectionToConnectionGraphParams({
+      source: [1, 1],
+      target: [2, 2],
+      delay: [1, 1],
+      synapse_model: ['static_synapse', 'gap_junction'],
+    }, {
+      ...snapshot,
+      delayUnits: 'ms',
+      samplePolicy: { kind: 'complete' },
+      synapseModelSemantics: [
+        ...semanticsFor(['static_synapse'], 'unknown', 'effective'),
+        ...semanticsFor(['gap_junction'], 'unknown', 'ignored'),
+      ],
+    }).ok).toBe(false);
+
+    const copied = paramsOf(synapseCollectionToConnectionGraphParams({
+      source: [1],
+      target: [2],
+      weight: [1],
+      delay: [1],
+      synapse_model: ['my_copied_connection'],
+    }, {
+      ...snapshot,
+      weightUnits: 'nS',
+      delayUnits: 'ms',
+      samplePolicy: { kind: 'complete' },
+      synapseModelSemantics:
+        semanticsFor(['my_copied_connection'], 'effective', 'effective'),
+    }));
+    expect(copied.edges[0]).toMatchObject({
+      weight: 1,
+      delay_ms: 1,
+      synapse_model: 'my_copied_connection',
+    });
+  });
+});
+
+describe('direct model-semantics authority boundary', () => {
+  it('is package-internal, no-throw on hostile/null values, and rejects duplicates', () => {
+    expect('validateSynapseModelMeasurementSemantics' in publicCore).toBe(false);
+    expect(validateSynapseModelMeasurementSemantics(
+      undefined,
+      undefined,
+      [],
+    )).toEqual({ ok: true });
+    expect(validateSynapseModelMeasurementSemantics(
+      ['static_synapse'],
+      null,
+      ['weight'],
+    ).ok).toBe(false);
+    expect(validateSynapseModelMeasurementSemantics(
+      ['static_synapse'],
+      [...staticEffectiveSemantics, ...staticEffectiveSemantics],
+      ['weight'],
+    ).ok).toBe(false);
+    expect(validateSynapseModelMeasurementSemantics(
+      ['static_synapse'],
+      staticEffectiveSemantics,
+      null,
+    ).ok).toBe(false);
+    expect(validateSynapseModelMeasurementSemantics(
+      ['static_synapse'],
+      staticEffectiveSemantics,
+      [],
+    ).ok).toBe(false);
+
+    let reads = 0;
+    const accessorDeclaration: Record<string, unknown> = {
+      synapseModel: 'static_synapse',
+      delay: 'unknown',
+    };
+    Object.defineProperty(accessorDeclaration, 'weight', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        return 'effective';
+      },
+    });
+    expect(validateSynapseModelMeasurementSemantics(
+      ['static_synapse'],
+      [accessorDeclaration],
+      ['weight'],
+    ).ok).toBe(false);
+    expect(reads).toBe(0);
+
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(() => validateSynapseModelMeasurementSemantics(
+      ['static_synapse'],
+      revoked.proxy,
+      ['weight'],
+    )).not.toThrow();
+    expect(validateSynapseModelMeasurementSemantics(
+      ['static_synapse'],
+      revoked.proxy,
+      ['weight'],
+    ).ok).toBe(false);
+  });
+});
+
 describe('sparse connection matrices', () => {
   const snapshot = {
     sourceIds: [1, 2], targetIds: [3, 4], snapshotTimeMs: 10,
     snapshotScope: completeScope,
   };
+
+  it('emits schema-valid empty sparse matrices for an all-absent snapshot', () => {
+    const adjacency = paramsOf(synapseCollectionToAdjacencyMatrixParams({
+      source: [],
+      target: [],
+    }, snapshot));
+    const weight = paramsOf(synapseCollectionToWeightMatrixParams({
+      source: [],
+      target: [],
+      weight: [],
+      synapse_model: [],
+    }, {
+      ...snapshot, synapseModelSemantics: [], weightUnits: 'nS', aggregation: 'sum',
+    }));
+    const delay = paramsOf(synapseCollectionToDelayMatrixParams({
+      source: [],
+      target: [],
+      delay: [],
+      synapse_model: [],
+    }, {
+      ...snapshot, synapseModelSemantics: [], delayUnits: 'ms', aggregation: 'mean',
+    }));
+
+    for (const [schema, params] of [
+      [AdjacencyMatrixParamsSchema, adjacency],
+      [WeightMatrixParamsSchema, weight],
+      [DelayMatrixParamsSchema, delay],
+    ] as const) {
+      expect(params.cells).toEqual([]);
+      expect(params.connection_count).toBe(0);
+      expect(schema.safeParse(params).success).toBe(true);
+    }
+  });
 
   it('aggregates multapses without conflating absence with a zero weight', () => {
     const adjacency = paramsOf(synapseCollectionToAdjacencyMatrixParams({
@@ -284,14 +595,26 @@ describe('sparse connection matrices', () => {
 
     const weights = paramsOf(synapseCollectionToWeightMatrixParams({
       source: [1, 1], target: [3, 3], weight: [1, -1],
-    }, { ...snapshot, weightUnits: 'nS', aggregation: 'sum' }));
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      weightUnits: 'nS',
+      aggregation: 'sum',
+    }));
     expect(weights.cells).toEqual([
       { source_id: 1, target_id: 3, connection_count: 2, value: 0 },
     ]);
 
     const delays = paramsOf(synapseCollectionToDelayMatrixParams({
       source: [1, 1], target: [3, 3], delay: [1, 3],
-    }, { ...snapshot, delayUnits: 'ms', aggregation: 'mean' }));
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      delayUnits: 'ms',
+      aggregation: 'mean',
+    }));
     expect(delays.cells[0]).toEqual({
       source_id: 1, target_id: 3, connection_count: 2, value: 2,
     });
@@ -316,19 +639,88 @@ describe('sparse connection matrices', () => {
 
     const weight = paramsOf(synapseCollectionToWeightMatrixParams({
       source: [1, 1], target: [3, 3], weight: [1, -1],
-    }, { ...snapshot, weightUnits: 'nS', aggregation: 'sum' }));
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      weightUnits: 'nS',
+      aggregation: 'sum',
+    }));
     expect(WeightMatrixParamsSchema.safeParse({
       ...weight, aggregation: 'single_connection',
     }).success).toBe(false);
     const delay = paramsOf(synapseCollectionToDelayMatrixParams({
       source: [1, 1], target: [3, 3], delay: [1, 2],
-    }, { ...snapshot, delayUnits: 'ms', aggregation: 'mean' }));
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      delayUnits: 'ms',
+      aggregation: 'mean',
+    }));
     expect(DelayMatrixParamsSchema.safeParse({
       ...delay, aggregation: 'single_connection',
     }).success).toBe(false);
     expect(synapseCollectionToWeightMatrixParams({
       source: [1, 1], target: [3, 3], weight: [-5e-324, 0],
-    }, { ...snapshot, weightUnits: 'nS', aggregation: 'mean' }).ok).toBe(false);
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      weightUnits: 'nS',
+      aggregation: 'mean',
+    }).ok).toBe(false);
+  });
+
+  it('uses exact, permutation-invariant binary64 weight aggregation', () => {
+    const cancellation = [-(2 ** 54), 1, 2 ** 54];
+    for (const values of [
+      cancellation,
+      [cancellation[0], cancellation[2], cancellation[1]],
+      [cancellation[1], cancellation[0], cancellation[2]],
+      [cancellation[1], cancellation[2], cancellation[0]],
+      [cancellation[2], cancellation[0], cancellation[1]],
+      [cancellation[2], cancellation[1], cancellation[0]],
+    ]) {
+      const result = paramsOf(synapseCollectionToWeightMatrixParams({
+        source: new Array(values.length).fill(1),
+        target: new Array(values.length).fill(3),
+        weight: values,
+        synapse_model: new Array(values.length).fill('static_synapse'),
+      }, {
+        ...snapshot,
+        synapseModelSemantics: staticEffectiveSemantics,
+        weightUnits: 'nS',
+        aggregation: 'sum',
+      }));
+      expect(result.cells[0].value).toBe(1);
+      expect(Object.is(result.cells[0].value, -0)).toBe(false);
+    }
+
+    fc.assert(fc.property(
+      fc.array(fc.integer({ min: -1_000_000, max: 1_000_000 }), {
+        minLength: 1,
+        maxLength: 64,
+      }),
+      (values) => {
+        const run = (ordered: number[]) => paramsOf(
+          synapseCollectionToWeightMatrixParams({
+            source: new Array(ordered.length).fill(1),
+            target: new Array(ordered.length).fill(3),
+            weight: ordered,
+            synapse_model: new Array(ordered.length).fill('static_synapse'),
+          }, {
+            ...snapshot,
+            synapseModelSemantics: staticEffectiveSemantics,
+            weightUnits: 'nS',
+            aggregation: 'sum',
+          }),
+        ).cells[0].value;
+        const expected = values.reduce((sum, value) => sum + value, 0);
+        expect(run(values)).toBe(expected);
+        expect(run([...values].reverse())).toBe(expected);
+      },
+    ), { numRuns: 100 });
   });
 });
 
@@ -391,10 +783,12 @@ describe('degree and delay distributions', () => {
     const base = {
       sourceIds: [1], targetIds: [2], snapshotTimeMs: 5,
       snapshotScope: completeScope, delayUnits: 'ms' as const,
+      synapseModelSemantics: staticEffectiveSemantics,
       binWidthMs: 1, windowStartMs: 1, windowStopMs: 3,
     };
     const result = paramsOf(synapseCollectionToDelayDistributionParams({
       source: [1, 1, 1, 1], target: [2, 2, 2, 2], delay: [1, 1.9, 2, 2.999],
+      synapse_model: new Array(4).fill('static_synapse'),
     }, { ...base, normalization: 'probability_density' }));
     expect(result).toMatchObject({
       bin_centers_ms: [1.5, 2.5], delay_counts: [2, 2], values: [0.5, 0.5],
@@ -404,19 +798,19 @@ describe('degree and delay distributions', () => {
     expect(DelayDistributionParamsSchema.safeParse(result).success).toBe(true);
 
     expect(synapseCollectionToDelayDistributionParams(
-      { source: [1], target: [2], delay: [3] },
+      { source: [1], target: [2], delay: [3], synapse_model: ['static_synapse'] },
       { ...base, normalization: 'count' },
     ).ok).toBe(false);
     expect(synapseCollectionToDelayDistributionParams(
-      { source: [], target: [], delay: [] },
-      { ...base, normalization: 'probability' },
+      { source: [], target: [], delay: [], synapse_model: [] },
+      { ...base, synapseModelSemantics: [], normalization: 'probability' },
     ).ok).toBe(false);
     expect(synapseCollectionToDelayDistributionParams(
-      { source: [], target: [], delay: [] },
-      { ...base, normalization: 'count' },
+      { source: [], target: [], delay: [], synapse_model: [] },
+      { ...base, synapseModelSemantics: [], normalization: 'count' },
     ).ok).toBe(true);
     expect(synapseCollectionToDelayDistributionParams(
-      { source: [1], target: [2], delay: [1] },
+      { source: [1], target: [2], delay: [1], synapse_model: ['static_synapse'] },
       { ...base, windowStopMs: 3.5, normalization: 'count' },
     ).ok).toBe(false);
   });
@@ -425,10 +819,11 @@ describe('degree and delay distributions', () => {
     const common = {
       sourceIds: [1], targetIds: [2], snapshotTimeMs: 0,
       snapshotScope: completeScope, delayUnits: 'ms' as const,
+      synapseModelSemantics: staticEffectiveSemantics,
       normalization: 'count' as const,
     };
     const decimalBoundary = paramsOf(synapseCollectionToDelayDistributionParams(
-      { source: [1], target: [2], delay: [0.3] },
+      { source: [1], target: [2], delay: [0.3], synapse_model: ['static_synapse'] },
       {
         ...common, binWidthMs: 0.1, windowStartMs: 0.2, windowStopMs: 0.4,
       },
@@ -437,7 +832,10 @@ describe('degree and delay distributions', () => {
 
     const largeOrigin = 1e9;
     const belowBoundary = paramsOf(synapseCollectionToDelayDistributionParams(
-      { source: [1], target: [2], delay: [largeOrigin + 1 - 1e-6] },
+      {
+        source: [1], target: [2], delay: [largeOrigin + 1 - 1e-6],
+        synapse_model: ['static_synapse'],
+      },
       {
         ...common, binWidthMs: 1,
         windowStartMs: largeOrigin, windowStopMs: largeOrigin + 2,
@@ -490,7 +888,10 @@ describe('degree and delay distributions', () => {
       snapshot_scope: completeScope,
     }).success).toBe(false);
     expect(synapseCollectionToDelayDistributionParams(
-      { source: [1, 1], target: [2, 2], delay: [1, 2] },
+      {
+        source: [1, 1], target: [2, 2], delay: [1, 2],
+        synapse_model: ['static_synapse', 'static_synapse'],
+      },
       {
         ...common, binWidthMs: Number.MAX_VALUE, windowStartMs: 0,
         windowStopMs: Number.MAX_VALUE, normalization: 'probability_density',
@@ -534,7 +935,10 @@ describe('degree and delay distributions', () => {
     }).success).toBe(false);
 
     const highIndex = paramsOf(synapseCollectionToDelayDistributionParams(
-      { source: [1], target: [2], delay: [49_998.99999] },
+      {
+        source: [1], target: [2], delay: [49_998.99999],
+        synapse_model: ['static_synapse'],
+      },
       {
         ...common, binWidthMs: 1, windowStartMs: 0, windowStopMs: 50_000,
       },

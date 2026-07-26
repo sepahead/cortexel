@@ -188,7 +188,7 @@
         },
         "sourceResolution": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity",
-          "description": "The simulator's time resolution, kind `duration`. Simulator delays are quantized to multiples of it, so it is what tells a reader whether the bin width cuts the lattice evenly. It is a DECLARED fact: registry v1 has no validator that can check a delay against it (see knownLimitations)."
+          "description": "The simulator's time resolution, kind `duration`, recorded as DECLARED context. It establishes neither the synapse model nor the assignment path: normal NEST Connect rounds delays to it, while `cont_delay_synapse` defaults or post-creation SetStatus can retain valid off-grid values. Registry v1 does not use this field as lattice proof and never snaps supplied delays to it (see knownLimitations)."
         },
         "scope": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/networkScope",
@@ -354,7 +354,7 @@
         },
         "bins": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/binSpec",
-          "description": "Required, in both modes, and the single source of truth for the bin edges. Cortexel does not choose them: for a grid-quantized delay the choice is unusually consequential, because a width that is not an integer multiple of the simulator resolution draws a uniform population as an alternating comb."
+          "description": "Required, in both modes, and the single source of truth for the bin edges. Cortexel does not choose them. When the selected delays are known independently to lie on a resolution lattice, a width that is not an integer multiple of that resolution can draw a uniform lattice population as an alternating comb; `sourceResolution` alone does not establish that condition."
         },
         "normalization": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/histogramNormalization",

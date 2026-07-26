@@ -58,6 +58,38 @@ describe('validateSkillInvocation', () => {
     }
   });
 
+  it('accepts all-absent connection snapshots at the strict invocation boundary', () => {
+    for (const skill of [
+      'nest.connection_graph',
+      'nest.adjacency_matrix',
+      'nest.weight_matrix',
+      'nest.delay_matrix',
+    ] as const) {
+      const spec = structuredClone(getExamplePayload(skill)!);
+      if (skill === 'nest.connection_graph') {
+        spec.params.edges = [];
+        spec.params.source_connection_count = 0;
+        delete spec.params.weight_units;
+        delete spec.params.delay_units;
+        delete spec.provenance.declared_inputs?.weight_units;
+        delete spec.provenance.declared_inputs?.delay_units;
+      } else {
+        spec.params.cells = [];
+        spec.params.connection_count = 0;
+      }
+
+      const checked = validateSkillInvocation(skill, spec);
+      expect(checked.ok, skill).toBe(true);
+      if (checked.ok) {
+        expect(checked.spec.params, skill).toMatchObject(
+          skill === 'nest.connection_graph'
+            ? { edges: [], source_connection_count: 0 }
+            : { cells: [], connection_count: 0 },
+        );
+      }
+    }
+  });
+
   it('rejects an unknown skill id (fail-closed)', () => {
     const r = validateSkillInvocation('nest.nope', spikeSpec());
     expect(r.ok).toBe(false);

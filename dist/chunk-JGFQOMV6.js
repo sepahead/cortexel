@@ -1,4 +1,8 @@
 import {
+  exactBinary64Mean,
+  exactBinary64Sum
+} from "./chunk-HTREPOSY.js";
+import {
   AdjacencyMatrixParamsSchema,
   CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS,
   CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS,
@@ -26,7 +30,7 @@ import {
   WeightMatrixParamsSchema,
   isSkillId,
   listSkills
-} from "./chunk-E5I6ZDY7.js";
+} from "./chunk-VKPKMYSC.js";
 import {
   PUBLIC_DIAGNOSTIC_LIMITS,
   SAFE_DISPLAY_STRING_PATTERN,
@@ -983,11 +987,9 @@ var nonEmptyFloat32Array = numberArray({
   minMessage: "empty array \u2014 no samples to render",
   float32: true
 });
-var nonEmptyFiniteIdArray = numberArray({
-  min: 1,
-  minMessage: "no connections",
-  integerId: true
-});
+var synapseModelArray = z2.array(
+  z2.string().trim().min(1).max(120).regex(SAFE_DISPLAY_STRING_PATTERN)
+).max(NEST_INPUT_LIMITS.maxSamples);
 function positionArray(dimensions) {
   return z2.preprocess(
     (value) => boundedArrayInput(value, NEST_INPUT_LIMITS.maxPositions),
@@ -1102,10 +1104,11 @@ var MultimeterMultiSenderSchema = z2.object({
   }
 });
 var GetConnectionsSchema = z2.object({
-  sources: nonEmptyFiniteIdArray,
-  targets: nonEmptyFiniteIdArray,
+  sources: finiteIntegerArray,
+  targets: finiteIntegerArray,
   weights: float32NumberArray.optional(),
-  delays: float32NumberArray.optional()
+  delays: float32NumberArray.optional(),
+  synapse_models: synapseModelArray.optional()
 }).strict().superRefine((v, ctx) => {
   if (v.sources.length !== v.targets.length) {
     ctx.addIssue({
@@ -1123,6 +1126,12 @@ var GetConnectionsSchema = z2.object({
     ctx.addIssue({
       code: z2.ZodIssueCode.custom,
       message: "delays length does not match connection count"
+    });
+  }
+  if (v.synapse_models && v.synapse_models.length !== v.sources.length) {
+    ctx.addIssue({
+      code: z2.ZodIssueCode.custom,
+      message: "synapse_models length does not match connection count"
     });
   }
   if (v.delays) {
@@ -1268,7 +1277,7 @@ var CorrelationDetectorStatusSchema = z2.object({
 });
 
 // core/nest/adapters.ts
-import { z as z3 } from "zod";
+import { z as z4 } from "zod";
 
 // core/nest/safeInput.ts
 var NEST_SAFE_INPUT_LIMITS = Object.freeze({
@@ -1470,6 +1479,135 @@ function projectNestInputFields(input, fields) {
   }
 }
 
+// core/nest/modelSemantics.ts
+import { z as z3 } from "zod";
+var SYNAPSE_MEASUREMENT_FIELD_SEMANTICS = Object.freeze([
+  "effective",
+  "ignored",
+  "unknown"
+]);
+var SYNAPSE_MODEL_SEMANTICS_MAXIMUM = 1e5;
+var synapseModelNameSchema = z3.string().trim().min(1).max(120).regex(SAFE_DISPLAY_STRING_PATTERN);
+var SynapseModelMeasurementSemanticsSchema = z3.object({
+  synapseModel: synapseModelNameSchema,
+  weight: z3.enum(SYNAPSE_MEASUREMENT_FIELD_SEMANTICS),
+  delay: z3.enum(SYNAPSE_MEASUREMENT_FIELD_SEMANTICS)
+}).strict();
+function boundedSynapseModelMeasurementSemanticsSchema(maximum) {
+  return z3.array(SynapseModelMeasurementSemanticsSchema).max(maximum);
+}
+var KNOWN_IGNORED_CHANNELS = /* @__PURE__ */ new Map([
+  // NEST main 182eba446a8b89108f21cd2ad54aa4c667afd86a:
+  // these are the exact connection types whose set_delay rejects a supplied
+  // value; diffusion_connection alone also rejects per-connection weight.
+  // Base Connection::get_status can still report delay, and diffusion's
+  // get_status reports its unused weight_, so raw field presence is not proof
+  // that the model uses the measurement.
+  ["gap_junction", /* @__PURE__ */ new Set(["delay"])],
+  ["rate_connection_instantaneous", /* @__PURE__ */ new Set(["delay"])],
+  ["diffusion_connection", /* @__PURE__ */ new Set(["weight", "delay"])]
+]);
+var SynapseModelSemanticsValidationInputSchema = z3.object({
+  synapseModels: z3.array(synapseModelNameSchema).max(SYNAPSE_MODEL_SEMANTICS_MAXIMUM).optional(),
+  declarations: boundedSynapseModelMeasurementSemanticsSchema(
+    SYNAPSE_MODEL_SEMANTICS_MAXIMUM
+  ).optional(),
+  presentChannels: z3.array(z3.enum(["weight", "delay"])).max(2)
+}).strict();
+function validateSynapseModelMeasurementSemantics(synapseModels, declarations, presentChannels) {
+  const parsed = parseNestInput(SynapseModelSemanticsValidationInputSchema, {
+    synapseModels,
+    declarations,
+    presentChannels
+  });
+  if (!parsed.ok) return parsed;
+  const safeModels = parsed.data.synapseModels;
+  const safeDeclarations = parsed.data.declarations;
+  const safePresentChannels = parsed.data.presentChannels;
+  if (safePresentChannels.length === 0) {
+    return (safeDeclarations?.length ?? 0) === 0 ? { ok: true } : {
+      ok: false,
+      errors: [
+        "synapseModelSemantics: nonempty declarations are not allowed when no weight or delay channel is present"
+      ]
+    };
+  }
+  if (safeModels === void 0) {
+    return {
+      ok: false,
+      errors: ["synapse_model: a complete per-connection model channel is required"]
+    };
+  }
+  if (safeDeclarations === void 0) {
+    return {
+      ok: false,
+      errors: [
+        "synapseModelSemantics: declarations are required when a weight or delay channel is present"
+      ]
+    };
+  }
+  const observed = new Set(safeModels);
+  const byModel = /* @__PURE__ */ new Map();
+  for (let index = 0; index < safeDeclarations.length; index++) {
+    const declaration = safeDeclarations[index];
+    if (byModel.has(declaration.synapseModel)) {
+      return {
+        ok: false,
+        errors: [
+          `synapseModelSemantics.${index}: duplicate declaration for observed model ${JSON.stringify(declaration.synapseModel)}`
+        ]
+      };
+    }
+    byModel.set(declaration.synapseModel, declaration);
+  }
+  for (const model of byModel.keys()) {
+    if (!observed.has(model)) {
+      return {
+        ok: false,
+        errors: [
+          `synapseModelSemantics: declaration for unobserved model ${JSON.stringify(model)} is not allowed`
+        ]
+      };
+    }
+  }
+  for (const model of observed) {
+    if (!byModel.has(model)) {
+      return {
+        ok: false,
+        errors: [
+          `synapseModelSemantics: missing declaration for observed model ${JSON.stringify(model)}`
+        ]
+      };
+    }
+  }
+  for (const [model, declaration] of byModel) {
+    const knownIgnored = KNOWN_IGNORED_CHANNELS.get(model);
+    if (knownIgnored) {
+      for (const channel of knownIgnored) {
+        if (declaration[channel] === "effective") {
+          return {
+            ok: false,
+            errors: [
+              `synapseModelSemantics: ${JSON.stringify(model)} ${channel} is ignored by official NEST semantics and cannot be declared effective`
+            ]
+          };
+        }
+      }
+    }
+    for (const channel of safePresentChannels) {
+      if (declaration[channel] !== "effective") {
+        return {
+          ok: false,
+          errors: [
+            `synapseModelSemantics: observed model ${JSON.stringify(model)} declares present ${channel} channel ${declaration[channel]}; every rendered measurement must be effective`
+          ]
+        };
+      }
+    }
+  }
+  return { ok: true };
+}
+
 // core/nest/adapters.ts
 var NEST_ADAPTER_LIMITS = Object.freeze({
   maxRootKeys: 32,
@@ -1478,20 +1616,21 @@ var NEST_ADAPTER_LIMITS = Object.freeze({
   maxSplitSeries: 4096,
   maxUniqueSpikeSenders: 5e4
 });
-var MultimeterOptionsSchema = z3.object({
-  variable: z3.string().max(120).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
-  units: z3.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
+var MultimeterOptionsSchema = z4.object({
+  variable: z4.string().max(120).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
+  units: z4.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
 }).strict();
-var ConnectionOptionsSchema = z3.object({
-  weightUnits: z3.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
-  delayUnits: z3.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
+var ConnectionOptionsSchema = z4.object({
+  synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_ADAPTER_LIMITS.maxConnections).optional(),
+  weightUnits: z4.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
+  delayUnits: z4.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
 }).strict();
-var PositionOptionsSchema = z3.object({
-  dims: z3.union([z3.literal(2), z3.literal(3)]).default(3),
-  coordinateUnits: z3.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN)
+var PositionOptionsSchema = z4.object({
+  dims: z4.union([z4.literal(2), z4.literal(3)]).default(3),
+  coordinateUnits: z4.string().trim().min(1).max(80).regex(SAFE_DISPLAY_STRING_PATTERN)
 }).strict();
-var WeightOptionsSchema = z3.object({
-  weightUnits: z3.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
+var WeightOptionsSchema = z4.object({
+  weightUnits: z4.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional()
 }).strict();
 function preflightArrayFields(input, fields, max) {
   if (input === null || typeof input !== "object" || Array.isArray(input)) return null;
@@ -1626,7 +1765,7 @@ function splitMultimeterBySender(events) {
 function getConnectionsToSceneData(conns, opts = {}) {
   const sizePreflight = preflightArrayFields(
     conns,
-    ["sources", "targets", "weights", "delays"],
+    ["sources", "targets", "weights", "delays", "synapse_models"],
     NEST_ADAPTER_LIMITS.maxConnections
   );
   if (sizePreflight) return sizePreflight;
@@ -1634,27 +1773,40 @@ function getConnectionsToSceneData(conns, opts = {}) {
   if (!parsedOptions.ok) return parsedOptions;
   const parsed = parseNestInput(GetConnectionsSchema, conns);
   if (!parsed.ok) return parsed;
-  const { sources, targets, weights, delays } = parsed.data;
-  if (sources.length > NEST_ADAPTER_LIMITS.maxConnections || targets.length > NEST_ADAPTER_LIMITS.maxConnections || (weights?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections || (delays?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections) {
+  const { sources, targets, weights, delays, synapse_models: synapseModels } = parsed.data;
+  if (sources.length > NEST_ADAPTER_LIMITS.maxConnections || targets.length > NEST_ADAPTER_LIMITS.maxConnections || (weights?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections || (delays?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections || (synapseModels?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections) {
     return {
       ok: false,
       errors: [`connections: at most ${NEST_ADAPTER_LIMITS.maxConnections} edges can be adapted inline`]
     };
   }
-  const weightUnits = parsedOptions.data.weightUnits?.trim();
-  const delayUnits = parsedOptions.data.delayUnits?.trim();
-  if (weights && !weightUnits) {
+  const weightUnits = parsedOptions.data.weightUnits;
+  const delayUnits = parsedOptions.data.delayUnits;
+  if (weights !== void 0 !== (weightUnits !== void 0)) {
     return {
       ok: false,
-      errors: ["weightUnits is required when connection weights are present"]
+      errors: [
+        "weightUnits must be supplied exactly when the connection weights channel is present"
+      ]
     };
   }
-  if (delays && !delayUnits) {
+  if (delays !== void 0 !== (delayUnits !== void 0)) {
     return {
       ok: false,
-      errors: ["delayUnits is required when connection delays are present"]
+      errors: [
+        "delayUnits must be supplied exactly when the connection delays channel is present"
+      ]
     };
   }
+  const semantics = validateSynapseModelMeasurementSemantics(
+    synapseModels,
+    parsedOptions.data.synapseModelSemantics,
+    [
+      ...weights !== void 0 ? ["weight"] : [],
+      ...delays !== void 0 ? ["delay"] : []
+    ]
+  );
+  if (!semantics.ok) return semantics;
   const ids = /* @__PURE__ */ new Set();
   for (let index = 0; index < sources.length; index++) {
     ids.add(sources[index]);
@@ -1682,8 +1834,8 @@ function getConnectionsToSceneData(conns, opts = {}) {
       networkNodes,
       networkEdges,
       networkLayout: "unpositioned",
-      ...weightUnits ? { networkWeightUnits: weightUnits } : {},
-      ...delayUnits ? { networkDelayUnits: delayUnits } : {}
+      ...weights !== void 0 && weights.length > 0 ? { networkWeightUnits: weightUnits } : {},
+      ...delays !== void 0 && delays.length > 0 ? { networkDelayUnits: delayUnits } : {}
     }
   };
 }
@@ -1731,11 +1883,11 @@ function getPositionToSceneData(positions, opts) {
     data: {
       networkLayout: "provided-3d",
       networkCoordinateUnits: parsedOptions.data.coordinateUnits,
-      networkNodes: parsed.data.positions.map(([x, y, z6], i) => ({
+      networkNodes: parsed.data.positions.map(([x, y, z7], i) => ({
         id: parsed.data.node_ids?.[i] ?? i,
         x,
         y,
-        z: z6,
+        z: z7,
         label: String(parsed.data.node_ids?.[i] ?? i)
       })),
       networkEdges: parsed.data.edges?.map((e) => ({
@@ -1846,7 +1998,7 @@ function splitWeightRecorderBySynapse(events) {
 }
 
 // core/nest/analysis.ts
-import { z as z4 } from "zod";
+import { z as z5 } from "zod";
 var NEST_ANALYSIS_LIMITS = Object.freeze({
   maxPopulations: PARAM_LIMITS.maxSeries,
   maxSelectedSenders: 5e4,
@@ -1855,40 +2007,40 @@ var NEST_ANALYSIS_LIMITS = Object.freeze({
   maxOutputBins: PARAM_LIMITS.maxSamples,
   maxPopulationBinCells: 1e5
 });
-var finite = z4.number().finite();
-var senderId = z4.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "sender ids must not be negative zero");
-var displayText = (maximum) => z4.string().trim().min(1).max(maximum).regex(SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
-var PopulationRateOptionsSchema = z4.object({
+var finite = z5.number().finite();
+var senderId = z5.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "sender ids must not be negative zero");
+var displayText = (maximum) => z5.string().trim().min(1).max(maximum).regex(SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
+var PopulationRateOptionsSchema = z5.object({
   startMs: finite,
   stopMs: finite,
   binWidthMs: finite.positive(),
-  populations: z4.array(z4.object({
+  populations: z5.array(z5.object({
     id: displayText(120),
     label: displayText(240),
-    senderIds: z4.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders)
+    senderIds: z5.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders)
   }).strict()).min(1).max(NEST_ANALYSIS_LIMITS.maxPopulations),
-  unassignedPolicy: z4.enum(["reject", "ignore"])
+  unassignedPolicy: z5.enum(["reject", "ignore"])
 }).strict();
-var IsiOptionsSchema = z4.object({
-  senderIds: z4.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
+var IsiOptionsSchema = z5.object({
+  senderIds: z5.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
   binWidthMs: finite.positive(),
   maxIntervalMs: finite.positive(),
-  normalization: z4.enum(["count", "probability", "probability_density"]),
-  intervalScope: z4.literal("per_sender").default("per_sender")
+  normalization: z5.enum(["count", "probability", "probability_density"]),
+  intervalScope: z5.literal("per_sender").default("per_sender")
 }).strict();
-var PsthOptionsSchema = z4.object({
-  alignmentTimesMs: z4.array(finite).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials),
-  windowMs: z4.tuple([finite, finite]),
+var PsthOptionsSchema = z5.object({
+  alignmentTimesMs: z5.array(finite).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials),
+  windowMs: z5.tuple([finite, finite]),
   binWidthMs: finite.positive(),
-  senderIds: z4.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
-  normalization: z4.enum(["count", "count_per_trial", "rate_hz"]),
+  senderIds: z5.array(senderId).min(1).max(NEST_ANALYSIS_LIMITS.maxSelectedSenders),
+  normalization: z5.enum(["count", "count_per_trial", "rate_hz"]),
   alignmentEvent: displayText(240)
 }).strict();
-var CorrelationDetectorOptionsSchema = z4.object({
-  measurement: z4.literal("count_histogram"),
+var CorrelationDetectorOptionsSchema = z5.object({
+  measurement: z5.literal("count_histogram"),
   referenceLabel: displayText(240),
   targetLabel: displayText(240),
-  zeroLagPolicy: z4.literal("included")
+  zeroLagPolicy: z5.literal("included")
 }).strict();
 function error(message) {
   return { ok: false, errors: [message] };
@@ -2134,7 +2286,7 @@ function spikeRecorderToIsiParams(events, options) {
 }
 function spikeTrialsToPsthParams(trials, options) {
   try {
-    const TrialArraySchema = z4.array(SpikeRecorderEventsSchema).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials);
+    const TrialArraySchema = z5.array(SpikeRecorderEventsSchema).min(1).max(NEST_ANALYSIS_LIMITS.maxTrials);
     const parsedTrials = parseNestInput(TrialArraySchema, trials);
     if (!parsedTrials.ok) return parsedTrials;
     const total = totalEventCount(parsedTrials.data);
@@ -2273,7 +2425,7 @@ function correlationDetectorToCorrelogramParams(status, options) {
 }
 
 // core/nest/topology.ts
-import { z as z5 } from "zod";
+import { z as z6 } from "zod";
 var NEST_TOPOLOGY_LIMITS = Object.freeze({
   maxConnections: NEST_INPUT_LIMITS.maxSamples,
   maxGraphNodes: PARAM_LIMITS.maxTopologyNodes,
@@ -2284,16 +2436,16 @@ var NEST_TOPOLOGY_LIMITS = Object.freeze({
   maxSpatialNodes: PARAM_LIMITS.maxSpatialObjects
 });
 var FLOAT32_MAX3 = 34028234663852886e22;
-var finite2 = z5.number().finite().refine((value) => !Object.is(value, -0), "negative zero is not exact JSON");
+var finite2 = z6.number().finite().refine((value) => !Object.is(value, -0), "negative zero is not exact JSON");
 var gpuNumber = finite2.min(-FLOAT32_MAX3).max(FLOAT32_MAX3);
-var nodeId = z5.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "node ids must not be negative zero");
-var displayText2 = (maximum) => z5.string().trim().min(1).max(maximum).regex(SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
-var scalarOrArray = (item) => z5.union([
+var nodeId = z6.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "node ids must not be negative zero");
+var displayText2 = (maximum) => z6.string().trim().min(1).max(maximum).regex(SAFE_DISPLAY_STRING_PATTERN).transform((value) => value.trim());
+var scalarOrArray = (item) => z6.union([
   item,
-  z5.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections)
+  z6.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections)
 ]);
-var arrayOnly = (item) => z5.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections);
-var RawSynapseCollectionSchema = z5.object({
+var arrayOnly = (item) => z6.array(item).max(NEST_TOPOLOGY_LIMITS.maxConnections);
+var RawSynapseCollectionSchema = z6.object({
   source: scalarOrArray(nodeId).optional(),
   sources: arrayOnly(nodeId).optional(),
   target: scalarOrArray(nodeId).optional(),
@@ -2454,57 +2606,61 @@ function normalizeSynapseCollectionSnapshot(input) {
     return error2("SynapseCollection input could not be safely normalized");
   }
 }
-var graphNodeIds = z5.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxGraphNodes);
-var connectionAxisIds = z5.array(nodeId).min(1).max(PARAM_LIMITS.maxSamples);
+var graphNodeIds = z6.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxGraphNodes);
+var connectionAxisIds = z6.array(nodeId).min(1).max(PARAM_LIMITS.maxSamples);
 var CommonConnectionOptionsShape = {
   sourceIds: connectionAxisIds,
   targetIds: connectionAxisIds,
   snapshotTimeMs: finite2.nonnegative(),
   snapshotScope: SnapshotScopeSchema
 };
-var GraphOptionsSchema = z5.object({
+var GraphOptionsSchema = z6.object({
   ...CommonConnectionOptionsShape,
   sourceIds: graphNodeIds,
   targetIds: graphNodeIds,
+  synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections).optional(),
   weightUnits: displayText2(80).optional(),
-  delayUnits: z5.literal("ms").optional(),
-  samplePolicy: z5.discriminatedUnion("kind", [
-    z5.object({ kind: z5.literal("complete") }).strict(),
-    z5.object({
-      kind: z5.literal("deterministic_even_stride"),
-      maxEdges: z5.number().int().positive().max(NEST_TOPOLOGY_LIMITS.maxGraphEdges)
+  delayUnits: z6.literal("ms").optional(),
+  samplePolicy: z6.discriminatedUnion("kind", [
+    z6.object({ kind: z6.literal("complete") }).strict(),
+    z6.object({
+      kind: z6.literal("deterministic_even_stride"),
+      maxEdges: z6.number().int().positive().max(NEST_TOPOLOGY_LIMITS.maxGraphEdges)
     }).strict()
   ])
 }).strict();
-var MatrixOptionsSchema = z5.object(CommonConnectionOptionsShape).strict();
-var WeightMatrixOptionsSchema = z5.object({
+var MatrixOptionsSchema = z6.object(CommonConnectionOptionsShape).strict();
+var WeightMatrixOptionsSchema = z6.object({
   ...CommonConnectionOptionsShape,
+  synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
   weightUnits: displayText2(80),
-  aggregation: z5.enum(["sum", "mean", "minimum", "maximum", "single_connection"])
+  aggregation: z6.enum(["sum", "mean", "minimum", "maximum", "single_connection"])
 }).strict();
-var DelayMatrixOptionsSchema = z5.object({
+var DelayMatrixOptionsSchema = z6.object({
   ...CommonConnectionOptionsShape,
-  delayUnits: z5.literal("ms"),
-  aggregation: z5.enum(["mean", "minimum", "maximum", "single_connection"])
+  synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
+  delayUnits: z6.literal("ms"),
+  aggregation: z6.enum(["mean", "minimum", "maximum", "single_connection"])
 }).strict();
-var DegreeOptionsSchema = z5.object({
+var DegreeOptionsSchema = z6.object({
   ...CommonConnectionOptionsShape,
-  normalization: z5.enum(["count", "probability"])
+  normalization: z6.enum(["count", "probability"])
 }).strict();
-var DelayDistributionOptionsSchema = z5.object({
+var DelayDistributionOptionsSchema = z6.object({
   ...CommonConnectionOptionsShape,
-  delayUnits: z5.literal("ms"),
+  synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
+  delayUnits: z6.literal("ms"),
   binWidthMs: finite2.positive(),
   windowStartMs: finite2.nonnegative(),
   windowStopMs: finite2.positive(),
-  normalization: z5.enum(["count", "probability", "probability_density"])
+  normalization: z6.enum(["count", "probability", "probability_density"])
 }).strict();
-var SpatialMapOptionsSchema = z5.object({
-  nodeIds: z5.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes),
+var SpatialMapOptionsSchema = z6.object({
+  nodeIds: z6.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes),
   coordinateUnits: displayText2(80),
-  extent: z5.tuple([gpuNumber.positive(), gpuNumber.positive()]),
-  center: z5.tuple([gpuNumber, gpuNumber]),
-  edgeWrap: z5.boolean(),
+  extent: z6.tuple([gpuNumber.positive(), gpuNumber.positive()]),
+  center: z6.tuple([gpuNumber, gpuNumber]),
+  edgeWrap: z6.boolean(),
   positionScope: PositionScopeSchema
 }).strict();
 function parseConnectionContext(input, options, schema) {
@@ -2589,6 +2745,15 @@ function synapseCollectionToConnectionGraphParams(input, options) {
     if (snapshot.delays_ms !== void 0 !== (opts.delayUnits !== void 0)) {
       return error2("delayUnits:'ms' must be supplied exactly when the SynapseCollection contains delay");
     }
+    const semantics = validateSynapseModelMeasurementSemantics(
+      snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      [
+        ...snapshot.weights !== void 0 ? ["weight"] : [],
+        ...snapshot.delays_ms !== void 0 ? ["delay"] : []
+      ]
+    );
+    if (!semantics.ok) return semantics;
     const allNodeIds = [...sourceIds];
     const seenNodes = new Set(allNodeIds);
     for (const id of targetIds) {
@@ -2686,15 +2851,17 @@ function aggregateMeasurements(values, aggregation) {
     for (let index = 1; index < values.length; index++) maximum = Math.max(maximum, values[index]);
     return { ok: true, value: maximum };
   }
-  const ordered = [...values].sort((left, right) => left - right);
-  let sum = 0;
-  for (const value of ordered) sum += value;
-  if (aggregation === "mean") {
-    const mean = sum / ordered.length;
-    if (sum !== 0 && mean === 0) return { ok: false, reason: "mean_underflow" };
-    return { ok: true, value: mean };
+  try {
+    return {
+      ok: true,
+      value: aggregation === "mean" ? exactBinary64Mean(values) : exactBinary64Sum(values)
+    };
+  } catch {
+    return {
+      ok: false,
+      reason: aggregation === "mean" ? "mean_unrepresentable" : "sum_unrepresentable"
+    };
   }
-  return { ok: true, value: sum };
 }
 function matrixCommon(context) {
   return {
@@ -2741,6 +2908,12 @@ function synapseCollectionToWeightMatrixParams(input, options) {
     const weights = context.params.snapshot.weights;
     if (!weights) return error2("weight: weight matrix requires a complete weight channel");
     const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ["weight"]
+    );
+    if (!semantics.ok) return semantics;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -2760,7 +2933,7 @@ function synapseCollectionToWeightMatrixParams(input, options) {
       }
       if (!aggregated.ok) {
         return error2(
-          `weight matrix cell ${bucket.source_id}->${bucket.target_id} mean underflows binary64 and would erase nonzero weight evidence`
+          `weight matrix cell ${bucket.source_id}->${bucket.target_id} ${aggregated.reason === "mean_unrepresentable" ? "mean" : "sum"} is not representable as finite binary64 without erasing or overflowing weight evidence`
         );
       }
       const value = aggregated.value;
@@ -2791,6 +2964,12 @@ function synapseCollectionToDelayMatrixParams(input, options) {
     const delays = context.params.snapshot.delays_ms;
     if (!delays) return error2("delay: delay matrix requires a complete delay channel");
     const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ["delay"]
+    );
+    if (!semantics.ok) return semantics;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -2810,7 +2989,7 @@ function synapseCollectionToDelayMatrixParams(input, options) {
       }
       if (!aggregated.ok) {
         return error2(
-          `delay matrix cell ${bucket.source_id}->${bucket.target_id} mean underflows binary64`
+          `delay matrix cell ${bucket.source_id}->${bucket.target_id} mean is not representable as finite binary64`
         );
       }
       const value = aggregated.value;
@@ -2922,6 +3101,12 @@ function synapseCollectionToDelayDistributionParams(input, options) {
     const delays = context.params.snapshot.delays_ms;
     if (!delays) return error2("delay: delay distribution requires a complete delay channel");
     const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ["delay"]
+    );
+    if (!semantics.ok) return semantics;
     const geometry = exactBinCount2(opts.windowStartMs, opts.windowStopMs, opts.binWidthMs);
     if (!geometry.ok) return geometry;
     if (delays.length === 0 && opts.normalization !== "count") {
@@ -2979,13 +3164,13 @@ function synapseCollectionToDelayDistributionParams(input, options) {
     return error2("delay distribution transform could not safely inspect its inputs");
   }
 }
-var PositionListSchema = z5.union([
-  z5.tuple([gpuNumber, gpuNumber]).transform((position) => [position]),
-  z5.array(z5.tuple([gpuNumber, gpuNumber])).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes)
+var PositionListSchema = z6.union([
+  z6.tuple([gpuNumber, gpuNumber]).transform((position) => [position]),
+  z6.array(z6.tuple([gpuNumber, gpuNumber])).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes)
 ]);
-var PositionWrapperSchema = z5.object({
+var PositionWrapperSchema = z6.object({
   positions: PositionListSchema,
-  node_ids: z5.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes).optional()
+  node_ids: z6.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes).optional()
 }).strict();
 function normalizePositions2D(input) {
   if (input !== null && typeof input === "object" && !Array.isArray(input) && !ArrayBuffer.isView(input)) {
@@ -3054,6 +3239,7 @@ export {
   GetPosition3DSchema,
   WeightRecorderEventsSchema,
   CorrelationDetectorStatusSchema,
+  SYNAPSE_MEASUREMENT_FIELD_SEMANTICS,
   NEST_ADAPTER_LIMITS,
   spikeRecorderToSceneData,
   multimeterToSceneData,
@@ -3078,4 +3264,4 @@ export {
   synapseCollectionToDelayDistributionParams,
   getPositionToSpatialMap2DParams
 };
-//# sourceMappingURL=chunk-IIYZDJDV.js.map
+//# sourceMappingURL=chunk-JGFQOMV6.js.map

@@ -204,6 +204,10 @@ declare function equalAspectDomains(extent: readonly [number, number], center: r
 
 declare const REFERENCE_CHART_SKILLS: readonly ["nest.voltage_trace", "nest.astrocyte_dynamics", "nest.spike_raster", "nest.population_rate", "nest.rate_response", "nest.isi_distribution", "nest.psth", "nest.correlogram", "nest.weight_histogram", "nest.plasticity_dynamics", "nest.phase_plane", "nest.connection_graph", "nest.adjacency_matrix", "nest.weight_matrix", "nest.delay_matrix", "nest.in_degree_distribution", "nest.out_degree_distribution", "nest.delay_distribution", "nest.spatial_map_2d"];
 type ReferenceChartSkill = (typeof REFERENCE_CHART_SKILLS)[number];
+/** Low-level canonical-chart surface. It revalidates the registered skill,
+ * scene, and params before dispatch, but it neither validates provenance nor
+ * binds an honesty caption. Render untrusted complete specs through
+ * ReferenceVizSpecFigure instead. */
 interface ReferenceChartSceneProps extends RenderSceneArgs {
     width?: number;
     height?: number;
@@ -223,8 +227,8 @@ interface ReferenceVizSpecFigureProps {
     onInvocationError?: (errors: readonly SkillInvocationError[]) => void;
 }
 /** Strict agent-spec -> canonical SVG chart path. VizSpecRenderer remains the
- * owner of validation and the mandatory honesty caption; ReferenceChartScene
- * sees only its detached, checked params/provenance snapshot. */
+ * owner of validation and the mandatory honesty caption; the package-internal
+ * chart sink sees only its detached, checked params/provenance snapshot. */
 declare function ReferenceVizSpecFigure({ spec, skillId, active, activePalette, width, height, onError, onInvocationError, }: ReferenceVizSpecFigureProps): react.JSX.Element;
 
 export { type AggregatedDegreeBin, type AggregatedDegreeBins, type AggregatedUniformHistogramBin, type AggregatedUniformHistogramBins, type BoundedChartPath, type BoundedStemPointPaths, type ChartDomain, type ChartFrame, type CircleTopologyGeometry, MATRIX_VALUE_LEVELS_PER_SIGN, type MatrixCellDatum, type MatrixValueBucketPath, type MatrixValueBucketPaths, type PhasePlaneSample, REFERENCE_CHART_DIMENSIONS, REFERENCE_CHART_SKILLS, ReferenceChartScene, type ReferenceChartSceneProps, type ReferenceChartSkill, ReferenceVizSpecFigure, type ReferenceVizSpecFigureProps, type TopologyEdgeDatum, type TopologyNodeDatum, type TopologyNodeId, type TopologyNodePosition, aggregateDegreeBins, aggregateUniformHistogramBins, binnedStepPath, boundedExtremaIndices, boundedStemPointPaths, chartPlotHeight, chartPlotWidth, chartX, chartY, circleTopologyGeometry, equalAspectDomains, formatChartInterval, formatChartNumber, formatDistinctChartNumbers, formatExactChartNumber, histogramBarPath, histogramDomain, linePath, matrixValueBucketPaths, nestedNumericDomain, normalizeChartDimension, numericDomain, phasePlaneArrowPath, phasePlaneSamples, pointPath, rasterTickPath, scaleToRange, sortedLinePath, stemPath, tickValues, variableHistogramPath };

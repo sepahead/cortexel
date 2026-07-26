@@ -417,9 +417,24 @@ preserves it as `networkCoordinateUnits`; never guess spatial units. For example
 A single-series adapter never
 guesses an unlabeled analog variable is voltage or merges multiple synapses.
 `weightRecorderToSceneData` requires `weightUnits`; `getConnectionsToSceneData`
-requires `weightUnits` and/or `delayUnits` whenever those measurement channels are
-present. GetConnections data remains explicitly `unpositioned` and never receives
-invented ring coordinates or weights.
+retains its model-free, options-free endpoint-only path. If a `weights` or
+`delays` property is present (including an empty measurement array), it instead
+requires a complete parallel `synapse_models` channel plus one exact
+`synapseModelSemantics` declaration for every observed model. A weight or delay
+is exported only when every observed model declares that channel `effective`;
+`ignored` and `unknown` fail closed for a present channel. Nonempty semantics
+declarations are rejected when neither measurement channel is present. The
+adapter requires `weightUnits` and `delayUnits` exactly when their corresponding
+raw channels are present and rejects unused units. An explicitly empty measured
+snapshot still validates its units and semantics, but emits no orphan unit
+metadata because no rendered edge carries that measurement.
+The exact official model names `gap_junction` and
+`rate_connection_instantaneous` cannot declare delay effective, and
+`diffusion_connection` cannot declare either weight or delay effective. A copied
+or custom model name is never inferred from its spelling: the host must declare
+its semantics explicitly and remains responsible for that truth claim.
+GetConnections data remains explicitly `unpositioned` and never receives invented
+ring coordinates or weights.
 Pass `node_ids` with GetPosition data when it must join global connection ids.
 
 For deterministic derived analyses, use `spikeRecorderToIsiParams`,
@@ -441,8 +456,15 @@ For connection/spatial figures, use `normalizeSynapseCollectionSnapshot`,
 `synapseCollectionToDelayDistributionParams`, and
 `getPositionToSpatialMap2DParams`. SynapseCollection input may use official
 singular keys/scalars or canonical plural arrays, but never a mixture or implicit
-scalar broadcast. Every connection transform requires explicit source/target
-universes, time and scope. For example:
+scalar broadcast. The connection graph requires complete parallel
+`synapse_model` rows and the same exact per-model measurement-semantics authority
+as the SceneData adapter when it carries weight or delay; its endpoint-only path
+does not. Weight-matrix, delay-matrix, and delay-distribution transforms always
+require the corresponding measurement channel, complete model rows, and
+semantics. Adjacency and degree transforms do not require them because they
+consume endpoints only. Every connection transform requires explicit
+source/target universes, time and scope.
+For example:
 
 ```ts
 const matrix = synapseCollectionToWeightMatrixParams(rawConnections, {
@@ -450,6 +472,11 @@ const matrix = synapseCollectionToWeightMatrixParams(rawConnections, {
   targetIds: inhibitoryIds,
   snapshotTimeMs: 1000,
   snapshotScope: { kind: 'single_process_complete' },
+  synapseModelSemantics: [{
+    synapseModel: 'static_synapse',
+    weight: 'effective',
+    delay: 'effective',
+  }],
   weightUnits: 'pA',
   aggregation: 'sum',
 });

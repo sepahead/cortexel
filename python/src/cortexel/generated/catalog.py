@@ -21,7 +21,7 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:116ee37659546e6432fa4e4f543764da847d9a2696f2b153877ae610492b789d"
+CONTRACT_DIGEST: str = "sha256:aab1ebe99d73fcd9f3c70f2ee81595d68dbd2f96ce527741217444284cc15e36"
 CATALOG_DIGEST: str = "sha256:4f534010ee514ffe9c1c9a9d6be365d7bdb7289e54008f2fab0e2df81fe0e001"
 
 STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([

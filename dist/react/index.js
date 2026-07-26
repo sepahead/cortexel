@@ -1,7 +1,7 @@
 import {
   VizSpecRenderer
-} from "../chunk-MJLTHKYM.js";
-import "../chunk-E5I6ZDY7.js";
+} from "../chunk-GMBKCI3R.js";
+import "../chunk-VKPKMYSC.js";
 import {
   safeDiagnosticText
 } from "../chunk-UEJPZXDX.js";

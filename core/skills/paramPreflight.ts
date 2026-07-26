@@ -308,7 +308,7 @@ export function preflightLargeSkillParams(
             (edge.delay_ms === undefined || (gpu(edge.delay_ms) && (edge.delay_ms as number) > 0));
         },
         'a closed graph edge with safe endpoints and optional finite measurements',
-        { max: PARAM_LIMITS.maxTopologyEdges },
+        { min: 0, max: PARAM_LIMITS.maxTopologyEdges },
       );
     }
     case 'nest.adjacency_matrix':
@@ -326,7 +326,7 @@ export function preflightLargeSkillParams(
             (cell.value === undefined || gpu(cell.value));
         },
         'a sparse matrix cell with safe endpoint ids and positive connection count',
-        { max: PARAM_LIMITS.maxSamples },
+        { min: 0, max: PARAM_LIMITS.maxSamples },
       );
     }
     case 'nest.in_degree_distribution':

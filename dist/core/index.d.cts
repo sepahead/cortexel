@@ -854,12 +854,19 @@ declare const MultimeterMultiSenderSchema: z.ZodObject<{
     senders: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
 }, z.core.$strict>;
 type MultimeterMultiSender = z.infer<typeof MultimeterMultiSenderSchema>;
-/** nest.GetConnections() → parallel source/target/weight/delay arrays. */
+/**
+ * Canonical nest.GetConnections() snapshot.
+ *
+ * `synapse_models` becomes mandatory at the consuming authority boundary when
+ * a weight or delay channel is present; endpoint-only snapshots retain their
+ * model-free legacy shape.
+ */
 declare const GetConnectionsSchema: z.ZodObject<{
     sources: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
     targets: z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>;
     weights: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
     delays: z.ZodOptional<z.ZodType<number[], unknown, z.core.$ZodTypeInternals<number[], unknown>>>;
+    synapse_models: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strict>;
 type GetConnections = z.infer<typeof GetConnectionsSchema>;
 /** nest.GetPosition(nodes) in 2D → ((x,y), ...). */
@@ -906,6 +913,14 @@ declare const CorrelationDetectorStatusSchema: z.ZodObject<{
 }, z.core.$strict>;
 type CorrelationDetectorStatus = z.infer<typeof CorrelationDetectorStatusSchema>;
 
+declare const SYNAPSE_MEASUREMENT_FIELD_SEMANTICS: readonly ["effective", "ignored", "unknown"];
+type SynapseMeasurementFieldSemantics = (typeof SYNAPSE_MEASUREMENT_FIELD_SEMANTICS)[number];
+interface SynapseModelMeasurementSemantics {
+    synapseModel: string;
+    weight: SynapseMeasurementFieldSemantics;
+    delay: SynapseMeasurementFieldSemantics;
+}
+
 type AdapterResult = {
     ok: true;
     data: SceneData;
@@ -944,10 +959,12 @@ type MultimeterSplitResult = {
 /** Split a flattened multi-sender multimeter dump ({times,values,senders}) into
  *  one monotonic series per sender — the honest alternative to rejecting it. */
 declare function splitMultimeterBySender(events: unknown): MultimeterSplitResult;
-declare function getConnectionsToSceneData(conns: unknown, opts?: {
+interface GetConnectionsSceneOptions {
+    synapseModelSemantics?: readonly SynapseModelMeasurementSemantics[];
     weightUnits?: string;
     delayUnits?: string;
-}): AdapterResult;
+}
+declare function getConnectionsToSceneData(conns: unknown, opts?: GetConnectionsSceneOptions): AdapterResult;
 declare function getPositionToSceneData(positions: unknown, opts: {
     dims?: 2 | 3;
     coordinateUnits: string;
@@ -1073,6 +1090,7 @@ interface ConnectionSnapshotOptions {
     snapshotScope: SnapshotScope;
 }
 interface ConnectionGraphOptions extends ConnectionSnapshotOptions {
+    synapseModelSemantics?: readonly SynapseModelMeasurementSemantics[];
     weightUnits?: string;
     delayUnits?: 'ms';
     samplePolicy: {
@@ -1083,10 +1101,12 @@ interface ConnectionGraphOptions extends ConnectionSnapshotOptions {
     };
 }
 interface WeightMatrixOptions extends ConnectionSnapshotOptions {
+    synapseModelSemantics: readonly SynapseModelMeasurementSemantics[];
     weightUnits: string;
     aggregation: 'sum' | 'mean' | 'minimum' | 'maximum' | 'single_connection';
 }
 interface DelayMatrixOptions extends ConnectionSnapshotOptions {
+    synapseModelSemantics: readonly SynapseModelMeasurementSemantics[];
     delayUnits: 'ms';
     aggregation: 'mean' | 'minimum' | 'maximum' | 'single_connection';
 }
@@ -1094,6 +1114,7 @@ interface DegreeDistributionOptions extends ConnectionSnapshotOptions {
     normalization: 'count' | 'probability';
 }
 interface DelayDistributionOptions extends ConnectionSnapshotOptions {
+    synapseModelSemantics: readonly SynapseModelMeasurementSemantics[];
     delayUnits: 'ms';
     binWidthMs: number;
     windowStartMs: number;
@@ -1126,4 +1147,4 @@ declare function synapseCollectionToDelayDistributionParams(input: unknown, opti
 declare function getPositionToSpatialMap2DParams(input: unknown, options: SpatialMap2DOptions): NestTopologyResult<SpatialMap2DParams>;
 declare function getPositionToSpatialMap2DParams(input: unknown, options: unknown): NestTopologyResult<SpatialMap2DParams>;
 
-export { type AdaptEngramCorpusEntityGraphOptions, type AdaptEngramCorpusEntityGraphResult, type AdapterResult, AdjacencyMatrixParams, type BuildHostRendererInvocationInput, type BuildVizSpecInput, CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, CORTEXEL_SKILL_VERSION, type ConnectionGraphOptions, ConnectionGraphParams, type ConnectionSnapshotOptions, type CorrelationDetectorOptions, type CorrelationDetectorStatus, CorrelationDetectorStatusSchema, CorrelogramParams, type DeclaredInputs, type DegreeDistributionOptions, type DelayDistributionOptions, DelayDistributionParams, type DelayMatrixOptions, DelayMatrixParams, type Disambiguator, type EmptySceneResult, type EngramCorpusEntityEdge, type EngramCorpusEntityEdgeKind, type EngramCorpusEntityGraphResponse, type EngramCorpusEntityNode, type EngramCorpusEntityNodeKind, type ExternalProvenanceClaim, type GetConnections, type GetConnectionsDataKind, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type GetPositionDataKind, HOST_RENDERER_EXAMPLE_PAYLOADS, HostRendererInvocation, HostRendererInvocationResult, InDegreeDistributionParams, type IsiAnalysisOptions, IsiDistributionParams, KnowledgeGraph3DParams, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_ADAPTER_LIMITS, NEST_ANALYSIS_LIMITS, NEST_INPUT_LIMITS, NEST_SKILL_REGISTRY, NEST_TOPOLOGY_LIMITS, type NestAnalysisResult, NestDeviceFamily, NestSkillId, type NestTopologyResult, type NormalizedSynapseCollectionSnapshot, OutDegreeDistributionParams, PARAM_CONSTRAINT_LANGUAGE, PARAM_VALIDATION_CONSTRAINTS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE, PROVENANCE_VALUE_CONSTRAINTS, type ParamValidationConstraint, type PopulationRateOptions, PopulationRateParams, type PopulationRatePopulation, PositionScope, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceOverrides, type ProvenanceParamConstraint, type ProvenanceValueConstraint, type ProvenanceVerification, type ProvenanceVerificationKind, type PsthAnalysisOptions, PsthParams, ROUTING_DISCRIMINATORS, RendererRoute, type RequiredProvenanceFlags, type RouteDataKind, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SKILL_REGISTRY, STRICT_INVOCATION_POLICY, STRICT_PROVENANCE_POLICY, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, SkillInvocationError, SkillInvocationResult, SnapshotScope, type SpatialMap2DOptions, SpatialMap2DParams, type SpikeDataKind, type SpikeRecorderEvents, SpikeRecorderEventsSchema, VizSpec, type WeightMatrixOptions, WeightMatrixParams, type WeightRecorderEvents, WeightRecorderEventsSchema, type WeightRecorderSplitResult, type WeightSynapseSeries, adaptEngramCorpusEntityGraph, buildHostRendererInvocation, buildVizSpec, conservativeProvenance, correlationDetectorToCorrelogramParams, declaredProvenanceValueError, describeSkill, describeSkills, detectEmptyScene, externalProvenanceDisclosure, formatInvocationErrors, getConnectionsToSceneData, getExamplePayload, getHostRendererExamplePayload, getInvocationExamplePayload, getPositionToSceneData, getPositionToSpatialMap2DParams, getSkill, isProvenanceKey, listSkills, multimeterToSceneData, normalizeDeclaredProvenanceInputs, normalizeDeclaredProvenanceValue, normalizeSynapseCollectionSnapshot, provenanceParamConstraintError, provenanceVerificationForContract, routeToScene, skillParamsJsonSchema, spikeRecorderToIsiParams, spikeRecorderToPopulationRateParams, spikeRecorderToSceneData, spikeTrialsToPsthParams, splitMultimeterBySender, splitWeightRecorderBySynapse, synapseCollectionToAdjacencyMatrixParams, synapseCollectionToConnectionGraphParams, synapseCollectionToDelayDistributionParams, synapseCollectionToDelayMatrixParams, synapseCollectionToInDegreeDistributionParams, synapseCollectionToOutDegreeDistributionParams, synapseCollectionToWeightMatrixParams, toPortableJsonSchema, validateSpec, weightRecorderToSceneData };
+export { type AdaptEngramCorpusEntityGraphOptions, type AdaptEngramCorpusEntityGraphResult, type AdapterResult, AdjacencyMatrixParams, type BuildHostRendererInvocationInput, type BuildVizSpecInput, CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, CORTEXEL_SKILL_VERSION, type ConnectionGraphOptions, ConnectionGraphParams, type ConnectionSnapshotOptions, type CorrelationDetectorOptions, type CorrelationDetectorStatus, CorrelationDetectorStatusSchema, CorrelogramParams, type DeclaredInputs, type DegreeDistributionOptions, type DelayDistributionOptions, DelayDistributionParams, type DelayMatrixOptions, DelayMatrixParams, type Disambiguator, type EmptySceneResult, type EngramCorpusEntityEdge, type EngramCorpusEntityEdgeKind, type EngramCorpusEntityGraphResponse, type EngramCorpusEntityNode, type EngramCorpusEntityNodeKind, type ExternalProvenanceClaim, type GetConnections, type GetConnectionsDataKind, type GetConnectionsSceneOptions, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type GetPositionDataKind, HOST_RENDERER_EXAMPLE_PAYLOADS, HostRendererInvocation, HostRendererInvocationResult, InDegreeDistributionParams, type IsiAnalysisOptions, IsiDistributionParams, KnowledgeGraph3DParams, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_ADAPTER_LIMITS, NEST_ANALYSIS_LIMITS, NEST_INPUT_LIMITS, NEST_SKILL_REGISTRY, NEST_TOPOLOGY_LIMITS, type NestAnalysisResult, NestDeviceFamily, NestSkillId, type NestTopologyResult, type NormalizedSynapseCollectionSnapshot, OutDegreeDistributionParams, PARAM_CONSTRAINT_LANGUAGE, PARAM_VALIDATION_CONSTRAINTS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE, PROVENANCE_VALUE_CONSTRAINTS, type ParamValidationConstraint, type PopulationRateOptions, PopulationRateParams, type PopulationRatePopulation, PositionScope, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceOverrides, type ProvenanceParamConstraint, type ProvenanceValueConstraint, type ProvenanceVerification, type ProvenanceVerificationKind, type PsthAnalysisOptions, PsthParams, ROUTING_DISCRIMINATORS, RendererRoute, type RequiredProvenanceFlags, type RouteDataKind, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SKILL_REGISTRY, STRICT_INVOCATION_POLICY, STRICT_PROVENANCE_POLICY, SYNAPSE_MEASUREMENT_FIELD_SEMANTICS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, SkillInvocationError, SkillInvocationResult, SnapshotScope, type SpatialMap2DOptions, SpatialMap2DParams, type SpikeDataKind, type SpikeRecorderEvents, SpikeRecorderEventsSchema, type SynapseMeasurementFieldSemantics, type SynapseModelMeasurementSemantics, VizSpec, type WeightMatrixOptions, WeightMatrixParams, type WeightRecorderEvents, WeightRecorderEventsSchema, type WeightRecorderSplitResult, type WeightSynapseSeries, adaptEngramCorpusEntityGraph, buildHostRendererInvocation, buildVizSpec, conservativeProvenance, correlationDetectorToCorrelogramParams, declaredProvenanceValueError, describeSkill, describeSkills, detectEmptyScene, externalProvenanceDisclosure, formatInvocationErrors, getConnectionsToSceneData, getExamplePayload, getHostRendererExamplePayload, getInvocationExamplePayload, getPositionToSceneData, getPositionToSpatialMap2DParams, getSkill, isProvenanceKey, listSkills, multimeterToSceneData, normalizeDeclaredProvenanceInputs, normalizeDeclaredProvenanceValue, normalizeSynapseCollectionSnapshot, provenanceParamConstraintError, provenanceVerificationForContract, routeToScene, skillParamsJsonSchema, spikeRecorderToIsiParams, spikeRecorderToPopulationRateParams, spikeRecorderToSceneData, spikeTrialsToPsthParams, splitMultimeterBySender, splitWeightRecorderBySynapse, synapseCollectionToAdjacencyMatrixParams, synapseCollectionToConnectionGraphParams, synapseCollectionToDelayDistributionParams, synapseCollectionToDelayMatrixParams, synapseCollectionToInDegreeDistributionParams, synapseCollectionToOutDegreeDistributionParams, synapseCollectionToWeightMatrixParams, toPortableJsonSchema, validateSpec, weightRecorderToSceneData };

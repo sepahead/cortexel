@@ -5798,7 +5798,7 @@ var NEST_SKILL_REGISTRY = {
         "target|targets",
         "weight|weights?",
         "delay|delays?",
-        "synapse_model|synapse_models?",
+        "synapse_model|synapse_models? (required when weight or delay is present)",
         "target_thread|target_threads?",
         "synapse_id|synapse_ids?",
         "port|ports?"
@@ -5809,6 +5809,7 @@ var NEST_SKILL_REGISTRY = {
         "snapshotTimeMs",
         "snapshotScope",
         "samplePolicy",
+        "synapseModelSemantics when weight or delay is present",
         "weightUnits when weight is present",
         "delayUnits='ms' when delay is present"
       ],
@@ -6015,8 +6016,21 @@ var NEST_SKILL_REGISTRY = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "weight_matrix" },
     transform: {
       id: "synapseCollectionToWeightMatrixParams",
-      rawFields: ["source|sources", "target|targets", "weight|weights"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "weightUnits", "aggregation"],
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "weight|weights",
+        "synapse_model|synapse_models"
+      ],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "synapseModelSemantics",
+        "weightUnits",
+        "aggregation"
+      ],
       outputSkill: "nest.weight_matrix"
     },
     requiredInputKeys: [
@@ -6092,8 +6106,21 @@ var NEST_SKILL_REGISTRY = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "delay_matrix" },
     transform: {
       id: "synapseCollectionToDelayMatrixParams",
-      rawFields: ["source|sources", "target|targets", "delay|delays"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "delayUnits='ms'", "aggregation"],
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "delay|delays",
+        "synapse_model|synapse_models"
+      ],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "synapseModelSemantics",
+        "delayUnits='ms'",
+        "aggregation"
+      ],
       outputSkill: "nest.delay_matrix"
     },
     requiredInputKeys: [
@@ -6355,12 +6382,18 @@ var NEST_SKILL_REGISTRY = {
     routerEligibility: { bareFamilyCandidate: true, dataShapeKind: "delay_distribution" },
     transform: {
       id: "synapseCollectionToDelayDistributionParams",
-      rawFields: ["source|sources", "target|targets", "delay|delays"],
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "delay|delays",
+        "synapse_model|synapse_models"
+      ],
       requiredOptions: [
         "sourceIds",
         "targetIds",
         "snapshotTimeMs",
         "snapshotScope",
+        "synapseModelSemantics",
         "delayUnits='ms'",
         "binWidthMs",
         "windowStartMs",
@@ -8575,7 +8608,7 @@ function preflightLargeSkillParams(skillId, params) {
           return !!edge && boundedText(edge.id, 240) && id(edge.source) && id(edge.target) && (edge.weight === void 0 || gpu(edge.weight)) && (edge.delay_ms === void 0 || gpu(edge.delay_ms) && edge.delay_ms > 0);
         },
         "a closed graph edge with safe endpoints and optional finite measurements",
-        { max: PARAM_LIMITS.maxTopologyEdges }
+        { min: 0, max: PARAM_LIMITS.maxTopologyEdges }
       );
     }
     case "nest.adjacency_matrix":
@@ -8591,7 +8624,7 @@ function preflightLargeSkillParams(skillId, params) {
           return !!cell && id(cell.source_id) && id(cell.target_id) && id(cell.connection_count) && cell.connection_count > 0 && (cell.value === void 0 || gpu(cell.value));
         },
         "a sparse matrix cell with safe endpoint ids and positive connection count",
-        { max: PARAM_LIMITS.maxSamples }
+        { min: 0, max: PARAM_LIMITS.maxSamples }
       );
     }
     case "nest.in_degree_distribution":

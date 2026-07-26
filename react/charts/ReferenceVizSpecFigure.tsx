@@ -1,7 +1,7 @@
 import type { ReadonlySemanticPalette } from '../../core/colormaps';
 import type { SkillInvocationError } from '../../core/skills/validateSkillInvocation';
 import { VizSpecRenderer } from '../VizSpecRenderer';
-import { ReferenceChartScene } from './ReferenceChartScene';
+import { CheckedReferenceChartScene } from './ReferenceChartScene';
 
 export interface ReferenceVizSpecFigureProps {
   /** Untrusted agent payload. It is always routed through VizSpecRenderer's
@@ -17,8 +17,8 @@ export interface ReferenceVizSpecFigureProps {
 }
 
 /** Strict agent-spec -> canonical SVG chart path. VizSpecRenderer remains the
- * owner of validation and the mandatory honesty caption; ReferenceChartScene
- * sees only its detached, checked params/provenance snapshot. */
+ * owner of validation and the mandatory honesty caption; the package-internal
+ * chart sink sees only its detached, checked params/provenance snapshot. */
 export function ReferenceVizSpecFigure({
   spec,
   skillId,
@@ -39,7 +39,7 @@ export function ReferenceVizSpecFigure({
       onInvocationError={onInvocationError}
       captionPlacement="footer"
       renderScene={(args) => (
-        <ReferenceChartScene {...args} width={width} height={height} />
+        <CheckedReferenceChartScene {...args} width={width} height={height} />
       )}
     />
   );

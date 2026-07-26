@@ -1,18 +1,20 @@
 import {
-  binary64RelativeDifferenceWithinTolerance,
   compareExactUnitArraySumToDifference,
   compareExactUnitSumToValue,
   conversionReceipt,
   convert,
-  divideExactIntegerByConvertedDifference,
+  divideExactIntegerByConvertedDifference
+} from "./chunk-GFFRGANP.js";
+import {
+  binary64RelativeDifferenceWithinTolerance,
   exactBinary64Mean,
   exactBinary64Sum,
   exactRationalToBinary64
-} from "./chunk-DXJPMLTB.js";
+} from "./chunk-HTREPOSY.js";
 import {
   finalizeErrors,
   makeError
-} from "./chunk-OLQMLMTT.js";
+} from "./chunk-LVMEHDQI.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding
@@ -2869,4 +2871,4 @@ export {
   deriveWeightDistribution,
   verifyHistogramValues
 };
-//# sourceMappingURL=chunk-UU7RYO22.js.map
+//# sourceMappingURL=chunk-J2WGJCHL.js.map

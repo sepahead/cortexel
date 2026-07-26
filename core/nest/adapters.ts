@@ -23,6 +23,11 @@ import {
   intrinsicTypedArrayLength,
 } from '../safeRuntime';
 import { parseNestInput } from './safeInput';
+import {
+  boundedSynapseModelMeasurementSemanticsSchema,
+  validateSynapseModelMeasurementSemantics,
+  type SynapseModelMeasurementSemantics,
+} from './modelSemantics';
 
 export type AdapterResult =
   | { ok: true; data: SceneData; senderIndexMap?: Map<number, number> }
@@ -44,8 +49,23 @@ const MultimeterOptionsSchema = z.object({
   units: z.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
 }).strict();
 const ConnectionOptionsSchema = z.object({
-  weightUnits: z.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
-  delayUnits: z.string().max(80).regex(SAFE_DISPLAY_STRING_PATTERN).optional(),
+  synapseModelSemantics:
+    boundedSynapseModelMeasurementSemanticsSchema(NEST_ADAPTER_LIMITS.maxConnections)
+      .optional(),
+  weightUnits: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(SAFE_DISPLAY_STRING_PATTERN)
+    .optional(),
+  delayUnits: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(SAFE_DISPLAY_STRING_PATTERN)
+    .optional(),
 }).strict();
 const PositionOptionsSchema = z.object({
   dims: z.union([z.literal(2), z.literal(3)]).default(3),
@@ -218,13 +238,19 @@ export function splitMultimeterBySender(events: unknown): MultimeterSplitResult 
   return { ok: true, series };
 }
 
+export interface GetConnectionsSceneOptions {
+  synapseModelSemantics?: readonly SynapseModelMeasurementSemantics[];
+  weightUnits?: string;
+  delayUnits?: string;
+}
+
 export function getConnectionsToSceneData(
   conns: unknown,
-  opts: { weightUnits?: string; delayUnits?: string } = {},
+  opts: GetConnectionsSceneOptions = {},
 ): AdapterResult {
   const sizePreflight = preflightArrayFields(
     conns,
-    ['sources', 'targets', 'weights', 'delays'],
+    ['sources', 'targets', 'weights', 'delays', 'synapse_models'],
     NEST_ADAPTER_LIMITS.maxConnections,
   );
   if (sizePreflight) return sizePreflight;
@@ -232,32 +258,46 @@ export function getConnectionsToSceneData(
   if (!parsedOptions.ok) return parsedOptions;
   const parsed = parseNestInput(GetConnectionsSchema, conns);
   if (!parsed.ok) return parsed;
-  const { sources, targets, weights, delays } = parsed.data;
+  const { sources, targets, weights, delays, synapse_models: synapseModels } = parsed.data;
   if (
     sources.length > NEST_ADAPTER_LIMITS.maxConnections ||
     targets.length > NEST_ADAPTER_LIMITS.maxConnections ||
     (weights?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections ||
-    (delays?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections
+    (delays?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections ||
+    (synapseModels?.length ?? 0) > NEST_ADAPTER_LIMITS.maxConnections
   ) {
     return {
       ok: false,
       errors: [`connections: at most ${NEST_ADAPTER_LIMITS.maxConnections} edges can be adapted inline`],
     };
   }
-  const weightUnits = parsedOptions.data.weightUnits?.trim();
-  const delayUnits = parsedOptions.data.delayUnits?.trim();
-  if (weights && !weightUnits) {
+  const weightUnits = parsedOptions.data.weightUnits;
+  const delayUnits = parsedOptions.data.delayUnits;
+  if ((weights !== undefined) !== (weightUnits !== undefined)) {
     return {
       ok: false,
-      errors: ['weightUnits is required when connection weights are present'],
+      errors: [
+        'weightUnits must be supplied exactly when the connection weights channel is present',
+      ],
     };
   }
-  if (delays && !delayUnits) {
+  if ((delays !== undefined) !== (delayUnits !== undefined)) {
     return {
       ok: false,
-      errors: ['delayUnits is required when connection delays are present'],
+      errors: [
+        'delayUnits must be supplied exactly when the connection delays channel is present',
+      ],
     };
   }
+  const semantics = validateSynapseModelMeasurementSemantics(
+    synapseModels,
+    parsedOptions.data.synapseModelSemantics,
+    [
+      ...(weights !== undefined ? ['weight' as const] : []),
+      ...(delays !== undefined ? ['delay' as const] : []),
+    ],
+  );
+  if (!semantics.ok) return semantics;
   const ids = new Set<number>();
   for (let index = 0; index < sources.length; index++) {
     ids.add(sources[index]);
@@ -285,8 +325,12 @@ export function getConnectionsToSceneData(
       networkNodes,
       networkEdges,
       networkLayout: 'unpositioned',
-      ...(weightUnits ? { networkWeightUnits: weightUnits } : {}),
-      ...(delayUnits ? { networkDelayUnits: delayUnits } : {}),
+      ...(weights !== undefined && weights.length > 0
+        ? { networkWeightUnits: weightUnits! }
+        : {}),
+      ...(delays !== undefined && delays.length > 0
+        ? { networkDelayUnits: delayUnits! }
+        : {}),
     },
   };
 }

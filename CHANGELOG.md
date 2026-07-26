@@ -6,6 +6,39 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — legacy topology chart evidence
+
+- The large-parameter preflight now admits schema-valid empty connection-graph
+  edge lists and empty adjacency/weight/delay matrix cell lists while retaining
+  the existing node, axis, and upper resource bounds. All-absent snapshots
+  therefore reach the strict invocation boundary and canonical React renderer
+  instead of failing before their schemas can validate them.
+- Matrix descriptions and legends now follow the selected analysis: adjacency
+  reports binary presence only, delay reports strictly positive delays only, and
+  weight alone reports signed values and present zero-weight cells. The low-level
+  public `ReferenceChartScene` also revalidates its exact registered skill,
+  scene, and params before dispatch, so a mismatched discriminator cannot borrow
+  another analysis renderer. This low-level guard does not validate provenance
+  or bind an honesty caption; untrusted complete specs still require
+  `ReferenceVizSpecFigure`.
+- Measurement-bearing legacy connection transforms and the measured
+  `getConnectionsToSceneData` path now bind a complete per-row synapse-model
+  channel to an exact, bounded per-model declaration of whether weight and delay
+  are effective, ignored, or unknown. Present channels render only when every
+  observed model declares them effective; endpoint-only adapter and graph calls
+  retain their model-free API, and unused nonempty declarations fail closed.
+  Adapter measurement units are likewise accepted exactly with their raw
+  channel; empty measured snapshots validate the claim but omit unit metadata
+  when no edge carries a measurement, preserving valid empty `SceneData`.
+  Exact official ignored-field semantics for `gap_junction`,
+  `rate_connection_instantaneous`, and `diffusion_connection` cannot be
+  relabelled by callers; copied/custom names remain explicit caller truth claims.
+- Legacy weight-matrix sums and means now reuse the exact finite-binary64
+  accumulator: all contributors are combined exactly before one
+  round-to-nearest-ties-to-even, the result is permutation-invariant, negative
+  zero is canonicalized, and underflow/overflow fail closed instead of turning a
+  nonzero aggregate into a measured zero.
+
 ### Fixed — exact correlogram and output authority
 
 - `neuro.correlogram` and `figure.correlogram` now publish revision 4, and the

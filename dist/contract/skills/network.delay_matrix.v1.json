@@ -201,7 +201,7 @@
             { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/quantity" },
             { "type": "object", "properties": { "kind": { "const": "duration" }, "value": { "type": "number", "exclusiveMinimum": 0 } }, "required": ["kind", "value"] }
           ],
-          "description": "Optional. The source's simulation timestep, which is the grid every delay must lie on in NEST. It is RECORDED and shown as context; it is not enforced (see knownLimitations). Cortexel does not assume a shared minimum timestep across sources, and hard-codes no 0.1 ms grid."
+          "description": "Optional declared context: the source's simulation timestep. It is not lattice proof. In NEST, normal Connect rounds delays to this resolution, but `cont_delay_synapse` defaults set with SetDefaults or values changed after creation with SetStatus can remain off-grid; every supported delay is still at least one simulation resolution. Cortexel records the value without snapping supplied delays or inferring the model and assignment path (see knownLimitations)."
         }
       },
       "required": [
@@ -711,14 +711,14 @@
       "name": "nest.GetConnections + SynapseCollection.get(['source','target','delay'])",
       "version": "3.10.0",
       "status": "not_run",
-      "notes": "The intended differential oracle is NEST itself: build a fixture network with known multapses, an autapse, an isolate target, and known per-connection delays; read the SynapseCollection; and assert that the derived cell set, the contributing counts, and the min/mean/max aggregates match the constructed truth, and that GetConnections' source/target fields land in columns/rows respectively rather than transposed. Under MPI it must also confirm that rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed in this environment, so the status is not_run rather than assumed. The aggregation arithmetic itself is covered by hand vectors, which is the stronger evidence: two libraries can share a convention error, but arithmetic done on paper cannot."
+      "notes": "The intended differential oracle is NEST itself: build a fixture with known multapses, an autapse, an isolate target, and known per-connection delays; verify normal Connect rounding, off-grid `cont_delay_synapse` values retained through SetDefaults and post-creation SetStatus, and the lower bound of one simulation resolution. Read the SynapseCollection and assert the derived cells, counts, min/mean/max aggregates, and source-column/target-row orientation. Under MPI also confirm rank-local output covers exactly the locally owned targets. The pinned reference environment has NOT been executed here, so status remains not_run. Aggregation arithmetic is covered separately by hand vectors."
     }
   },
   "adapters": [
     {
       "system": "nest.GetConnections",
-      "status": "supported",
-      "notes": "The adapter must map NEST's `target` to rows and `source` to columns, must never deduplicate multapses, must declare the scope (single_process, or mpi_target_rank_local with the locally owned target ids, because GetConnections on rank r returns the connections whose target r owns), and must declare delaySemantics from the synapse model — a model that splits axonal and dendritic delays reports only the dendritic component in its `delay` field. NEST delays are milliseconds and are emitted as `ms` (or the equivalent `nest:delay` code), never as the simulator-defined `nest:weight`. Declaring source.system and source.systemVersion is strongly recommended: the delay grid and the split-delay behaviour are simulator- and version-specific."
+      "status": "planned",
+      "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. A future adapter must map NEST `target` to rows and `source` to columns, preserve multapses, declare scope and delaySemantics, and copy observed millisecond delays verbatim. It must retain valid off-grid `cont_delay_synapse` values, carry simulationResolution only as context, and inspect the model and assignment path before claiming a lattice. Models that split axonal and dendritic delay require the reported component to be declared explicitly."
     },
     {
       "system": "brian2.Synapses",
@@ -768,7 +768,7 @@
     "No disclosure id exists for delay semantics. `delaySemantics` is machine-checkable, but disclosures.v1.json has no rule for it, so it is carried in the legend, the accessible summary, and the table rather than the disclosure footer. A DELAY_COMPONENT_SEMANTICS rule is proposed for the registry.",
     "ABSENT_IS_NOT_ZERO's published text names a zero weight. For this figure that clause is vacuous — a zero delay is rejected — and the real hazard it must cover is an empty cell being read as instantaneous transmission at the fast end of the ramp.",
     "The registered `matrix_value_quantize` policy is not advertised or executed by revision 2. Every accepted cell is painted directly and an over-budget request is refused, so no quantization receipt, downsampling fact, or downsampling disclosure is produced. A future paint-only implementation would have to retain every cell and bind a complete evidence table before this skill could advertise it.",
-    "`simulationResolution` is recorded but NOT enforced. No registered validator checks that each delay is an integer multiple of the declared resolution, so a delay off the simulator's grid is accepted and displayed.",
+    "`simulationResolution` is recorded as context but does not establish a delay lattice. No registered validator knows whether NEST used normal Connect rounding, `cont_delay_synapse` SetDefaults, or post-creation SetStatus, and no validator enforces the model-conditioned lower bound of one resolution. Valid off-grid continuous delays are intentionally accepted and displayed rather than snapped or rejected.",
     "There is no declared or shared colour domain, so two delay matrices are NOT comparable by colour — compare the legends or the tables. A shared domain needs a clipping disclosure that does not exist in disclosures.v1.json.",
     "Cortexel cannot detect a transposed adapter: if the source and target arrays are swapped, every validator passes and the figure is a plausible lie about direction. The defences are the adapter's own vectors and restating orientation on the axes, legend, caption, and table.",
     "No uncertainty variant is renderable in a cell, so the spread across aggregated multapses is invisible in the colour. The complete returned table preserves contributor count and observed minimum/maximum, but those values are an empirical range rather than an uncertainty estimate.",
@@ -896,10 +896,14 @@
               "kind": "delay",
               "unit": "ms",
               "values": [
-                1.5,
-                3.0
+                1.55,
+                3.05
               ]
-            }
+            },
+            "synapseModels": [
+              "cont_delay_synapse",
+              "cont_delay_synapse"
+            ]
           },
           "scope": {
             "kind": "mpi_target_rank_local",
@@ -915,7 +919,12 @@
           "observedTargetIds": [
             "1",
             "3"
-          ]
+          ],
+          "simulationResolution": {
+            "kind": "duration",
+            "unit": "ms",
+            "value": 0.1
+          }
         },
         "parameters": {
           "multapseAggregation": "no_aggregation",
@@ -1122,7 +1131,7 @@
         }
       },
       {
-        "why": "A delay of 0 is not a fast synapse, it is an impossible one: in NEST a delay is a positive multiple of the resolution (here 0.1 ms), and a zero delay would make the event queue's causal ordering ill-defined. Drawn on a sequential ramp it would sit at the fast end, indistinguishable from the genuine 0.1 ms minimum, and would silently pull the colour domain down to zero.",
+        "why": "A delay of 0 is not a fast synapse, it is impossible in NEST: every supported delay is at least one simulation resolution, including an off-grid `cont_delay_synapse` value retained through SetDefaults or post-creation SetStatus. Drawn on a sequential ramp, zero would sit at the fast end and silently pull the colour domain below the genuine minimum. Cortexel refuses zero without requiring positive delays to be integer multiples of the resolution.",
         "expectedCode": "SCIENCE_DELAY_NONPOSITIVE",
         "request": {
           "contract": {

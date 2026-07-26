@@ -10,6 +10,7 @@ import {
   NEST_INPUT_LIMITS,
   NEST_TOPOLOGY_LIMITS,
   ROUTING_DISCRIMINATORS,
+  SYNAPSE_MEASUREMENT_FIELD_SEMANTICS,
   SpikeRecorderEventsSchema,
   WeightRecorderEventsSchema,
   adaptEngramCorpusEntityGraph,
@@ -35,7 +36,8 @@ import {
   synapseCollectionToOutDegreeDistributionParams,
   synapseCollectionToWeightMatrixParams,
   weightRecorderToSceneData
-} from "./chunk-IIYZDJDV.js";
+} from "./chunk-JGFQOMV6.js";
+import "./chunk-HTREPOSY.js";
 import {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,
@@ -172,7 +174,7 @@ import {
   validateSkillParams,
   validateSpec,
   validateVizSpec
-} from "./chunk-E5I6ZDY7.js";
+} from "./chunk-VKPKMYSC.js";
 import "./chunk-UEJPZXDX.js";
 import "./chunk-ZYBCCIMH.js";
 export {
@@ -263,6 +265,7 @@ export {
   STRICT_PROVENANCE_POLICY,
   STRING_NORMALIZATION_POLICY,
   SYNAPSE_COLORS,
+  SYNAPSE_MEASUREMENT_FIELD_SEMANTICS,
   SnapshotScopeSchema,
   Spatial2DParamsSchema,
   Spatial3DParamsSchema,

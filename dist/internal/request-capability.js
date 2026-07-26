@@ -1,6 +1,6 @@
 import {
   parseJsonStrict
-} from "../chunk-ZJLU6WRU.js";
+} from "../chunk-3SJNDQPS.js";
 import {
   DistributionDerivationError,
   MatrixDerivationError,
@@ -13,15 +13,13 @@ import {
   deriveWeightMatrix,
   validateStructure,
   verifyHistogramValues
-} from "../chunk-UU7RYO22.js";
+} from "../chunk-J2WGJCHL.js";
 import {
   LEGACY_SKILL_MAP,
   MAX_MATERIALIZED_BINS,
   SEMANTIC_VALIDATOR_IDS,
   SKILL_CATALOG,
   axesAreCompatible,
-  binary64RelativeDifferenceWithinEpsilons,
-  binary64RelativeDifferenceWithinTolerance,
   checkQuantityUnit,
   compareExactUnitArraySumToDifference,
   compareExactUnitSumToValue,
@@ -32,14 +30,8 @@ import {
   deriveExactCountRateInUnit,
   dimensionOf,
   divideExactIntegerByConvertedDifference,
-  exactBinary64Mean,
-  exactBinary64Sum,
-  exactRationalToBinary64,
-  finiteBinary64ToMinSubnormalUnits,
-  floorExactBinary64TimesSafeInteger,
   isKnownUnit,
   isQuantityKind,
-  isRoundedMeanOfSafeNonnegativeIntegers,
   kindAcceptsDimension,
   materializeCenteredLagBins,
   materializeWidthBins,
@@ -49,10 +41,20 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "../chunk-DXJPMLTB.js";
+} from "../chunk-GFFRGANP.js";
+import {
+  binary64RelativeDifferenceWithinEpsilons,
+  binary64RelativeDifferenceWithinTolerance,
+  exactBinary64Mean,
+  exactBinary64Sum,
+  exactRationalToBinary64,
+  finiteBinary64ToMinSubnormalUnits,
+  floorExactBinary64TimesSafeInteger,
+  isRoundedMeanOfSafeNonnegativeIntegers
+} from "../chunk-HTREPOSY.js";
 import {
   snapshotValue
-} from "../chunk-QI535UGK.js";
+} from "../chunk-3GHBLEPE.js";
 import {
   CONTRACT_DIGEST,
   DEFAULT_PROFILE,
@@ -66,7 +68,7 @@ import {
   pointer,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-OLQMLMTT.js";
+} from "../chunk-LVMEHDQI.js";
 import {
   canonicalDigest
 } from "../chunk-ZYBCCIMH.js";
