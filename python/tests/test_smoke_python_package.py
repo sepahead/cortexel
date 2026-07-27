@@ -1041,11 +1041,19 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                         continue
                     target = site_packages / relative
                     target.parent.mkdir(parents=True, exist_ok=True)
+                    for parent in target.relative_to(site_packages).parents:
+                        if parent == Path("."):
+                            continue
+                        (site_packages / parent).chmod(0o755)
                     target.write_bytes(payload)
                     target.chmod(0o644)
 
-            for name, projection in projections.items():
-                write_distribution(name, source=projection)
+            previous_umask = os.umask(0o077)
+            try:
+                for name, projection in projections.items():
+                    write_distribution(name, source=projection)
+            finally:
+                os.umask(previous_umask)
 
             def inspect() -> None:
                 with (
@@ -1069,6 +1077,12 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     )
 
             inspect()
+
+            hatchling_directory = site_packages / "hatchling"
+            hatchling_directory.chmod(0o700)
+            with self.assertRaisesRegex(RuntimeError, "directory mode"):
+                inspect()
+            hatchling_directory.chmod(0o755)
 
             mutated_projection = dict(projections["hatchling"])
             mutated_projection["hatchling/build.py"] = b"attacker-controlled backend\n"

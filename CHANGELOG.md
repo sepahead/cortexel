@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — restrictive-umask Python package fixture
+
+- The Python package boundary fixture now assigns exact directory modes after
+  creation. It passes under the release harness `umask 077` and still rejects a
+  retained package directory whose mode differs from `0755`.
+
 ### Fixed — sandbox-portable package supervision tests
 
 - Package supervision tests no longer launch `ps` from reviewed child code.
