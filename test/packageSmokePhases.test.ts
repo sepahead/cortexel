@@ -768,61 +768,6 @@ describe('two-phase package smoke contract', () => {
       }
     }
 
-    const supervisorKillWrapperPidFile = join(workspace, 'supervisor-kill-wrapper.pid');
-    const supervisorKillPidFile = join(workspace, 'supervisor-kill-target.pid');
-    const psExecutable = process.platform === 'darwin' ? '/bin/ps' : '/usr/bin/ps';
-    let supervisorKillWrapperPid: number | undefined;
-    let supervisorKillTargetPid: number | undefined;
-    try {
-      expect(() => runReviewedNodeCommand(
-        reviewedNode,
-        [
-          '-e',
-          `const childProcess = require('node:child_process');
-           const fs = require('node:fs');
-           fs.writeFileSync(
-             ${JSON.stringify(supervisorKillWrapperPidFile)},
-             String(process.ppid),
-           );
-           fs.writeFileSync(${JSON.stringify(supervisorKillPidFile)}, String(process.pid));
-           const supervisorPid = Number(childProcess.execFileSync(
-             ${JSON.stringify(psExecutable)},
-             ['-o', 'ppid=', '-p', String(process.ppid)],
-             { encoding: 'utf8' },
-           ).trim());
-           if (!Number.isSafeInteger(supervisorPid) || supervisorPid <= 1) process.exit(71);
-           process.kill(supervisorPid, 'SIGKILL');
-           setInterval(() => {}, 1000);`,
-        ],
-        workspace,
-        { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
-      )).toThrow(/outer SIGKILL boundary/u);
-      supervisorKillWrapperPid = Number(readFileSync(supervisorKillWrapperPidFile, 'utf8'));
-      supervisorKillTargetPid = Number(readFileSync(supervisorKillPidFile, 'utf8'));
-      expect(waitForGone(supervisorKillWrapperPid, true)).toBe(true);
-      expect(waitForGone(supervisorKillWrapperPid, false)).toBe(true);
-      expect(waitForGone(supervisorKillTargetPid, false)).toBe(true);
-    } finally {
-      if (supervisorKillWrapperPid === undefined && existsSync(supervisorKillWrapperPidFile)) {
-        supervisorKillWrapperPid = Number(readFileSync(supervisorKillWrapperPidFile, 'utf8'));
-      }
-      if (supervisorKillTargetPid === undefined && existsSync(supervisorKillPidFile)) {
-        supervisorKillTargetPid = Number(readFileSync(supervisorKillPidFile, 'utf8'));
-      }
-      for (const [pid, group] of [
-        [supervisorKillWrapperPid, true],
-        [supervisorKillTargetPid, false],
-      ] as const) {
-        if (pid === undefined) continue;
-        try {
-          process.kill(group ? -pid : pid, 'SIGKILL');
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code !== 'ESRCH' && code !== 'EPERM') throw error;
-        }
-      }
-    }
-
     for (const [result, pidFile] of [
       [successfulWithChild, successChildPid],
       [nonzeroWithChild, nonzeroChildPid],
@@ -948,7 +893,6 @@ describe('two-phase package smoke contract', () => {
     const environment = packageSmokeEnvironment(reviewedNode, workspace, {});
     const wrapperPidFile = join(workspace, 'wrapper.pid');
     const targetPidFile = join(workspace, 'target.pid');
-    const psExecutable = process.platform === 'darwin' ? '/bin/ps' : '/usr/bin/ps';
     const originalKill = process.kill;
     let publishedProcessGroupId: number | undefined;
     let targetPid: number | undefined;
@@ -987,17 +931,10 @@ describe('two-phase package smoke contract', () => {
           reviewedNode,
           [
             '-e',
-            `const childProcess = require('node:child_process');
-             const fs = require('node:fs');
+            `const fs = require('node:fs');
              fs.writeFileSync(${JSON.stringify(wrapperPidFile)}, String(process.ppid));
              fs.writeFileSync(${JSON.stringify(targetPidFile)}, String(process.pid));
-             const supervisorPid = Number(childProcess.execFileSync(
-               ${JSON.stringify(psExecutable)},
-               ['-o', 'ppid=', '-p', String(process.ppid)],
-               { encoding: 'utf8' },
-             ).trim());
-             if (!Number.isSafeInteger(supervisorPid) || supervisorPid <= 1) process.exit(71);
-             process.kill(supervisorPid, 'SIGKILL');
+             process.kill(process.ppid, 'SIGKILL');
              setInterval(() => {}, 1000);`,
           ],
           workspace,

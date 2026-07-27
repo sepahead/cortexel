@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — sandbox-portable package supervision tests
+
+- Package supervision tests no longer launch `ps` from reviewed child code.
+  macOS `sandbox-exec` rejects that launch even with an allow-default profile.
+  The tests now trigger the same abnormal outer completion by killing the direct
+  wrapper. Separate handshake tests continue to cover supervisor death and
+  detached process-group cleanup without weakening the production boundary.
+
 ### Fixed — phase-plane derivative and accessibility authority
 
 - Physical derivative components now compose the exact state-unit and
