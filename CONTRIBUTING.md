@@ -196,6 +196,35 @@ are authoritative: `ENOTSUP`/`EOPNOTSUPP` fails closed. Cortexel does not yet cl
 network or stacked filesystems, so release evidence must keep the result parent on a
 locally administered filesystem with trustworthy ACL semantics.
 
+Every build, install, and runtime probe launched by this Python gate uses a private
+POSIX session/process group. The reviewed lifecycle requires a dedicated CPython
+3.14.x host on macOS or Linux, default `SIGCHLD`, one kernel-visible host thread,
+and `waitid(..., WNOWAIT)`. Result evidence binds the exact patch version, paths,
+and executable bytes; CI currently pins CPython 3.14.6. Linux additionally requires
+readable `/proc/self/task`; Darwin requires the supported `/usr/lib/libproc.dylib`
+`proc_taskinfo` ABI. Missing WNOWAIT, signal-mask, or kernel thread authority fails
+closed. Kqueue process registration/readiness is never child-ownership evidence;
+Darwin may still use a kqueue-backed selector only for pipe descriptors. The gate
+drains captured output under fixed bounds, makes one
+`killpg(SIGKILL)` attempt while the direct leader is still unreaped, re-proves child
+ownership before any direct-PID fallback, performs a bounded pipe drain, and only then
+reaps. If a pre-signal, fallback, exit-confirmation, or final pre-reap observation
+reports lost ownership, or cannot ultimately prove current ownership, the gate performs
+no later numeric signal or `Popen.wait()` on that identity.
+Once final reaping starts, retries are reap-only. `INT`, `TERM`, and `HUP` are deferred
+until cleanup finishes; they are not forwarded to the reviewed command.
+
+This boundary covers descendants only while they remain in that group and retain the
+caller's signal authority. It is not a hostile process sandbox and does not contain a
+descendant that deliberately changes session/group or signaling authority. It also does
+not claim safety against hostile same-process native reapers or unrelated signal
+handlers racing the final proof, uncatchable owner death, kernel/OS failure, or Windows.
+Same-UID descendants can also signal the owner, and a signal outside the deferred
+`INT`/`TERM`/`HUP` set can terminate it. Windows and every other host without the
+reviewed wait/thread primitives fail closed.
+Use a cgroup, VM, or an equivalently strong platform lifetime primitive when those
+capabilities are in scope.
+
 `bun run test:package` is the backwards-compatible local orchestration. The
 reviewed command supervisor currently requires POSIX process-group semantics and
 therefore fails closed on Windows; a Windows boundary needs a separately reviewed

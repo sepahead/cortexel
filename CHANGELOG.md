@@ -6,6 +6,36 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — unreaped Python package subprocess cleanup
+
+- The Python package build-evidence gate no longer calls `Popen.poll()`,
+  `Popen.wait()`, `Popen.terminate()`, or `Popen.kill()` before process-group
+  cleanup. On the reviewed macOS/Linux lifecycle it requires a dedicated CPython
+  3.14.x host, default `SIGCHLD`, one kernel-visible thread, and
+  `waitid(..., WNOWAIT)` ownership of the exact child. A fresh non-reaping
+  observation immediately precedes the one
+  `killpg(SIGKILL)` call; a failed group operation requires another ownership
+  proof before an anchored direct-PID fallback. `ECHILD` and an unproved
+  `ProcessLookupError` permit neither a later numeric signal nor `Popen.wait()`.
+  Linux additionally requires readable `/proc/self/task`; Darwin requires the
+  reviewed `libproc` `proc_taskinfo` ABI. Missing wait, signal-mask, or thread
+  authority fails closed. Kqueue process registration/readiness is never child
+  ownership evidence; a kqueue-backed selector may still drain pipe descriptors.
+- Output pipes are drained under fixed bounds while the group leader remains
+  unreaped. Once final reaping begins, an interruption can retry only
+  `Popen.wait()`; no process/group signal or identity probe occurs afterward.
+  Regression controls cover normal success and failure, timeout, output
+  overflow, deferred `INT`/`TERM`/`HUP`, post-spawn interruption, an inherited
+  pipe held by a same-group descendant, external reaping before and after a
+  positive observation, group-signal/reaper races, and the absence of any
+  post-reap `killpg`.
+- This is bounded same-authority POSIX process-group cleanup, not process-tree
+  isolation. Deliberate regrouping/detachment, a credential or security-label
+  transition, hostile same-process native reaping or unrelated signal handlers,
+  same-UID signaling of the owner, owner death from `SIGKILL` or a signal outside
+  deferred `INT`/`TERM`/`HUP`, kernel/OS failure, and unsupported operating
+  systems require external containment or a separately reviewed mechanism.
+
 ### Fixed — restrictive-umask Python package fixture
 
 - The Python package boundary fixture now assigns exact directory modes after

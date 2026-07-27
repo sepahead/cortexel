@@ -303,6 +303,22 @@ The machine-readable state of every release gate is in
   workspace's root, parent ancestry, modes, topology, and bytes are change-bound,
   but mode hardening is not a substitute for an externally enforced read-only
   mount against a hostile same-UID actor.
+- **Python package subprocess cleanup is group-bounded.** The macOS/Linux gate
+  requires a dedicated CPython 3.14.x host, default `SIGCHLD`, a single
+  kernel-visible thread, and a fresh
+  non-reaping `waitid(..., WNOWAIT)` child-ownership proof before its sole group
+  signal. It never interprets `ProcessLookupError` as proof of an unreaped zombie,
+  and it performs no numeric signal or `Popen.wait()` after an observation reports
+  `ECHILD`. Linux requires readable `/proc/self/task`; Darwin requires the supported
+  `libproc` `proc_taskinfo` ABI. Kqueue process readiness is not ownership evidence.
+  This prevents
+  the reviewed cleanup path from knowingly addressing a PID/PGID after its leader
+  identity was released; it is not an atomic defense against hostile same-process
+  native reaping or an unrelated signal handler racing the last proof. Descendants
+  that detach, regroup, or shed the caller's signal authority remain outside this
+  evidence and require external lifetime containment. Same-UID signaling of the
+  owner, owner death, and unsupported hosts likewise remain outside the boundary;
+  they fail closed where execution can still be controlled.
 - **No package is published.** Nothing has been pushed to npm or PyPI, and no DOI has been
   minted. The npm/PyPI/CI badges in the README are inactive by design. *Gate:
   R108, R134–R155.*

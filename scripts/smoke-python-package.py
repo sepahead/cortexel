@@ -23,6 +23,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+import threading
 import time
 import tomllib
 import urllib.request
@@ -30,7 +31,7 @@ import venv
 import zipfile
 import zlib
 from pathlib import Path, PurePosixPath
-from typing import Literal, NoReturn, overload
+from typing import Callable, Literal, NoReturn, overload
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -53,7 +54,7 @@ MAX_SUBPROCESS_OUTPUT_BYTES = 64 * 1024
 MAX_RESULT_BYTES = 64 * 1024
 MAX_RESULT_JSON_DEPTH = 32
 UV_POSIX_SHEBANG_LIMIT_BYTES = 127
-PROCESS_TERM_GRACE_SECONDS = 0.25
+PROCESS_CLEANUP_TIMEOUT_SECONDS = 2.0
 BUILD_TIMEOUT_SECONDS = 300
 INSTALL_TIMEOUT_SECONDS = 120
 PROBE_TIMEOUT_SECONDS = 60
@@ -1339,6 +1340,602 @@ def expected_uv_entry_point_script(
     ).encode("utf-8")
 
 
+_SUBPROCESS_CANCELLATION_SIGNALS = frozenset(
+    signal_number
+    for signal_number in (
+        getattr(signal, "SIGINT", None),
+        getattr(signal, "SIGTERM", None),
+        getattr(signal, "SIGHUP", None),
+    )
+    if signal_number is not None
+)
+
+
+class _DarwinProcTaskInfo(ctypes.Structure):
+    """Darwin proc_taskinfo through its kernel-visible thread count."""
+
+    _fields_ = (
+        ("pti_virtual_size", ctypes.c_uint64),
+        ("pti_resident_size", ctypes.c_uint64),
+        ("pti_total_user", ctypes.c_uint64),
+        ("pti_total_system", ctypes.c_uint64),
+        ("pti_threads_user", ctypes.c_uint64),
+        ("pti_threads_system", ctypes.c_uint64),
+        ("pti_policy", ctypes.c_int32),
+        ("pti_faults", ctypes.c_int32),
+        ("pti_pageins", ctypes.c_int32),
+        ("pti_cow_faults", ctypes.c_int32),
+        ("pti_messages_sent", ctypes.c_int32),
+        ("pti_messages_received", ctypes.c_int32),
+        ("pti_syscalls_mach", ctypes.c_int32),
+        ("pti_syscalls_unix", ctypes.c_int32),
+        ("pti_csw", ctypes.c_int32),
+        ("pti_threadnum", ctypes.c_int32),
+        ("pti_numrunning", ctypes.c_int32),
+        ("pti_priority", ctypes.c_int32),
+    )
+
+
+def _operating_system_thread_count() -> int:
+    """Return the kernel-visible thread count on supported package hosts."""
+
+    if sys.platform == "darwin":
+        if (
+            ctypes.sizeof(_DarwinProcTaskInfo) != 96
+            or _DarwinProcTaskInfo.pti_threadnum.offset != 84
+        ):
+            fail("the Darwin proc_taskinfo layout is unsupported")
+        try:
+            function = ctypes.CDLL(
+                "/usr/lib/libproc.dylib", use_errno=True
+            ).proc_pidinfo
+        except (AttributeError, OSError) as exc:
+            raise RuntimeError(
+                "Darwin process-thread authority is unavailable"
+            ) from exc
+        function.argtypes = (
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        )
+        function.restype = ctypes.c_int
+        information = _DarwinProcTaskInfo()
+        ctypes.set_errno(0)
+        result = function(
+            os.getpid(),
+            4,  # PROC_PIDTASKINFO.
+            0,
+            ctypes.byref(information),
+            ctypes.sizeof(information),
+        )
+        if result != ctypes.sizeof(information) or information.pti_threadnum <= 0:
+            error_number = ctypes.get_errno()
+            raise RuntimeError(
+                "cannot establish Darwin process-thread authority"
+            ) from (
+                OSError(error_number, os.strerror(error_number))
+                if error_number
+                else None
+            )
+        return information.pti_threadnum
+    if sys.platform.startswith("linux"):
+        try:
+            with os.scandir("/proc/self/task") as entries:
+                count = sum(1 for _ in entries)
+        except OSError as exc:
+            raise RuntimeError(
+                "cannot establish Linux process-thread authority"
+            ) from exc
+        if count <= 0:
+            fail("Linux process-thread authority is invalid")
+        return count
+    fail("the bounded package subprocess boundary lacks kernel thread accounting")
+
+
+def _assert_exclusive_child_reaper_authority(label: str) -> None:
+    """Fail closed unless this process exclusively owns child reaping."""
+
+    if signal.getsignal(signal.SIGCHLD) != signal.SIG_DFL:
+        fail(f"{label} requires exclusive default SIGCHLD authority")
+    if threading.active_count() != 1 or _operating_system_thread_count() != 1:
+        fail(f"{label} requires exclusive single-threaded child-reaping authority")
+
+
+class _ChildProcessAnchorLost(RuntimeError):
+    """The child was reaped outside this lifecycle; numeric identity is unsafe."""
+
+
+class _UnreapedProcessExitObserver:
+    """Observe one owned child without releasing its PID/PGID anchor."""
+
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.process_id: int | None = None
+        self.reaped = False
+        self.return_code: int | None = None
+
+    def bind(self, process_id: int) -> None:
+        if self.process_id is not None or process_id <= 1:
+            fail(f"{self.label} leader identity is invalid")
+        self.process_id = process_id
+
+    def exited(self) -> bool:
+        if self.reaped:
+            fail(f"{self.label} exit was queried after reaping")
+        if self.process_id is None:
+            fail(f"{self.label} exit observer is unbound")
+        for _ in range(64):
+            try:
+                result = os.waitid(
+                    os.P_PID,
+                    self.process_id,
+                    os.WEXITED | os.WNOHANG | os.WNOWAIT,
+                )
+            except ChildProcessError as exc:
+                raise _ChildProcessAnchorLost(
+                    f"{self.label} leader was reaped outside its owner"
+                ) from exc
+            except OSError as exc:
+                if exc.errno == errno.EINTR:
+                    continue
+                if exc.errno == errno.ECHILD:
+                    raise _ChildProcessAnchorLost(
+                        f"{self.label} leader was reaped outside its owner"
+                    ) from exc
+                raise RuntimeError(f"cannot observe {self.label} leader") from exc
+            if result is None or result.si_pid == 0:
+                return False
+            if result.si_pid != self.process_id:
+                fail(f"{self.label} exit observation changed child identity")
+            if result.si_code not in {
+                os.CLD_EXITED,
+                os.CLD_KILLED,
+                os.CLD_DUMPED,
+            }:
+                fail(f"{self.label} exit observation reported an invalid state")
+            return True
+        fail(f"{self.label} child observation remained interrupted")
+
+    def mark_reaped(self, return_code: int) -> None:
+        self.reaped = True
+        self.return_code = return_code
+
+
+def _note_exception(error: BaseException, note: str) -> None:
+    add_note = getattr(error, "add_note", None)
+    if callable(add_note):
+        add_note(note)
+
+
+def _fresh_unreaped_child_observation(
+    observer: _UnreapedProcessExitObserver,
+) -> tuple[bool, BaseException | None]:
+    """Prove child ownership, retaining transient interruptions until cleanup."""
+
+    interruption: BaseException | None = None
+    for _ in range(64):
+        try:
+            return observer.exited(), interruption
+        except _ChildProcessAnchorLost:
+            raise
+        except BaseException as exc:
+            if interruption is None:
+                interruption = exc
+            else:
+                _note_exception(
+                    interruption,
+                    "additional child-ownership observation interruption: "
+                    f"{type(exc).__name__}: {exc}",
+                )
+    error = RuntimeError(
+        f"{observer.label} child ownership could not be independently proved"
+    )
+    assert interruption is not None
+    raise error from interruption
+
+
+def _signal_private_process_group(process_group_id: int) -> str:
+    """Make the sole numeric PGID signal while the leader remains unreaped."""
+
+    try:
+        os.killpg(process_group_id, signal.SIGKILL)
+    except OSError as exc:
+        if exc.errno == errno.ESRCH:
+            return "absent"
+        if exc.errno == errno.EPERM:
+            return "permission_denied"
+        raise RuntimeError("cannot signal the package subprocess group") from exc
+    return "delivered"
+
+
+def _wait_for_unreaped_process_exit(
+    observer: _UnreapedProcessExitObserver,
+    *,
+    label: str,
+) -> BaseException | None:
+    deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
+    interruption: BaseException | None = None
+    while True:
+        exited, observation_interruption = _fresh_unreaped_child_observation(observer)
+        if observation_interruption is not None:
+            if interruption is None:
+                interruption = observation_interruption
+            else:
+                _note_exception(
+                    interruption,
+                    "additional exit-confirmation interruption: "
+                    f"{type(observation_interruption).__name__}: "
+                    f"{observation_interruption}",
+                )
+        if exited:
+            return interruption
+        if time.monotonic() >= deadline:
+            fail(f"{label} direct process survived group cleanup")
+        time.sleep(0.01)
+
+
+def _cleanup_private_process_group(
+    process: subprocess.Popen[bytes],
+    observer: _UnreapedProcessExitObserver,
+    *,
+    label: str,
+    before_reap: Callable[[], None] | None = None,
+) -> int:
+    """Signal once while anchored, drain, and only then reap exactly once."""
+
+    if observer.process_id is not None and observer.process_id != process.pid:
+        fail(f"{label} cleanup changed child identity")
+    if observer.reaped:
+        if observer.return_code is None or observer.process_id is None:
+            fail(f"{label} reap state is incomplete")
+        return observer.return_code
+    if observer.process_id is None:
+        observer.bind(process.pid)
+
+    # Establish structural ownership, observe without reaping, then establish
+    # structural ownership again and make a final WNOWAIT observation. The last
+    # operation before killpg is therefore an independent child-identity proof.
+    _assert_exclusive_child_reaper_authority(label)
+    _, observation_error = _fresh_unreaped_child_observation(observer)
+    _assert_exclusive_child_reaper_authority(label)
+
+    # ECHILD here forbids every later numeric signal and Popen.wait call.
+    leader_exited_before_signal, final_observation_error = (
+        _fresh_unreaped_child_observation(observer)
+    )
+    if observation_error is None:
+        observation_error = final_observation_error
+    elif final_observation_error is not None:
+        _note_exception(
+            observation_error,
+            "final pre-signal observation was also interrupted: "
+            f"{type(final_observation_error).__name__}: {final_observation_error}",
+        )
+    signal_error: BaseException | None = None
+    signal_status = "error"
+    try:
+        signal_status = _signal_private_process_group(process.pid)
+    except BaseException as exc:
+        signal_error = exc
+
+    darwin_zombie_only = (
+        signal_status == "permission_denied"
+        and sys.platform == "darwin"
+        and leader_exited_before_signal
+    )
+    absent_after_exit = signal_status == "absent" and leader_exited_before_signal
+    group_signal_safe = (
+        signal_status == "delivered" or darwin_zombie_only or absent_after_exit
+    )
+    if not group_signal_safe and signal_error is None:
+        if signal_status == "permission_denied":
+            signal_error = RuntimeError(f"{label} process-group cleanup was denied")
+        elif signal_status == "absent":
+            signal_error = RuntimeError(
+                f"{label} process group disappeared before leader exit"
+            )
+        else:
+            signal_error = RuntimeError(
+                f"{label} process-group cleanup was inconclusive"
+            )
+
+    leader_exit_observed = leader_exited_before_signal
+    fallback_observation_error: BaseException | None = None
+    if not group_signal_safe:
+        # The group operation may have raced an external reaper. Re-prove both
+        # structural and kernel child authority before any direct PID signal.
+        # ECHILD forbids both os.kill and the final Popen.wait.
+        _assert_exclusive_child_reaper_authority(label)
+        leader_exit_observed, fallback_observation_error = (
+            _fresh_unreaped_child_observation(observer)
+        )
+
+    # A direct fallback is still anchored here. Popen.kill/terminate are banned:
+    # their implementations may poll and reap before sending the signal.
+    if not group_signal_safe and not leader_exit_observed:
+        try:
+            os.kill(process.pid, signal.SIGKILL)
+        except OSError as exc:
+            if signal_error is None:
+                signal_error = RuntimeError(f"cannot kill {label} leader")
+                signal_error.__cause__ = exc
+        except BaseException as exc:
+            if signal_error is None:
+                signal_error = exc
+            else:
+                _note_exception(
+                    signal_error,
+                    f"direct leader signal was interrupted: {type(exc).__name__}: {exc}",
+                )
+
+    # Re-observe even an already-exited leader. This catches an external reap
+    # that raced the group operation before entering the final reap-only region.
+    exit_confirmation_error: BaseException | None = None
+    try:
+        exit_confirmation_error = _wait_for_unreaped_process_exit(
+            observer,
+            label=label,
+        )
+    except _ChildProcessAnchorLost:
+        raise
+    except BaseException as exc:
+        exit_confirmation_error = exc
+
+    drain_error: BaseException | None = None
+    if before_reap is not None:
+        try:
+            before_reap()
+        except BaseException as exc:
+            drain_error = exc
+
+    # Draining may be long enough for an uncooperative in-process owner to reap
+    # the child. Re-prove structural and kernel ownership one last time. Failure
+    # here forbids Popen.wait just as it forbids every earlier numeric fallback.
+    _assert_exclusive_child_reaper_authority(label)
+    _, final_reap_observation_error = _fresh_unreaped_child_observation(observer)
+
+    # No signal, waitid probe, or process-state query is permitted below this
+    # line. Retry only the reap if it is interrupted; signals remain blocked.
+    reap_deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
+    wait_interruption: BaseException | None = None
+    wait_error: BaseException | None = None
+    return_code: int | None = None
+    wait_attempts = 0
+    while return_code is None:
+        remaining = reap_deadline - time.monotonic()
+        if remaining <= 0:
+            wait_error = RuntimeError(f"{label} leader could not be reaped")
+            break
+        try:
+            wait_attempts += 1
+            return_code = process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired as exc:
+            if wait_interruption is None:
+                wait_interruption = exc
+            else:
+                _note_exception(
+                    wait_interruption,
+                    f"additional leader-reap timeout: {exc}",
+                )
+            if wait_attempts >= 64:
+                wait_error = RuntimeError(f"{label} leader could not be reaped")
+                wait_error.__cause__ = exc
+                break
+        except BaseException as exc:
+            if wait_interruption is None:
+                wait_interruption = exc
+            else:
+                _note_exception(
+                    wait_interruption,
+                    f"additional leader-reap interruption: {type(exc).__name__}: {exc}",
+                )
+            cached_return_code = getattr(process, "returncode", None)
+            if cached_return_code is not None:
+                return_code = cached_return_code
+
+    if wait_error is not None:
+        for secondary_label, secondary in (
+            ("group signal failure", signal_error),
+            ("ownership observation failure", observation_error),
+            ("fallback observation failure", fallback_observation_error),
+            ("exit confirmation failure", exit_confirmation_error),
+            ("pipe drain failure", drain_error),
+            ("final reap observation failure", final_reap_observation_error),
+            ("wait interruption", wait_interruption),
+        ):
+            if secondary is not None:
+                _note_exception(
+                    wait_error,
+                    f"{secondary_label}: {type(secondary).__name__}: {secondary}",
+                )
+        raise wait_error
+    assert return_code is not None
+    observer.mark_reaped(return_code)
+
+    primary = (
+        signal_error
+        or observation_error
+        or fallback_observation_error
+        or exit_confirmation_error
+        or drain_error
+        or final_reap_observation_error
+        or wait_interruption
+    )
+    if primary is not None:
+        for secondary_label, secondary in (
+            ("group signal failure", signal_error),
+            ("ownership observation failure", observation_error),
+            ("fallback observation failure", fallback_observation_error),
+            ("exit confirmation failure", exit_confirmation_error),
+            ("pipe drain failure", drain_error),
+            ("final reap observation failure", final_reap_observation_error),
+            ("wait interruption", wait_interruption),
+        ):
+            if secondary is not None and secondary is not primary:
+                _note_exception(
+                    primary,
+                    f"{secondary_label}: {type(secondary).__name__}: {secondary}",
+                )
+        raise primary
+    return return_code
+
+
+class _DeferredSubprocessCancellation(BaseException):
+    def __init__(self, signal_number: int) -> None:
+        super().__init__(signal_number)
+        self.signal_number = signal_number
+
+
+def _raise_if_subprocess_cancellation_pending() -> None:
+    pending = signal.sigpending() & _SUBPROCESS_CANCELLATION_SIGNALS
+    if pending:
+        raise _DeferredSubprocessCancellation(min(pending))
+
+
+def _run_checked_with_blocked_cancellation(
+    command: list[str],
+    *,
+    cwd: Path,
+    environment: dict[str, str],
+    timeout: int,
+    label: str,
+    capture_output: bool,
+) -> tuple[int, bytes, bytes]:
+    """Run one command while retaining its unreaped PID/PGID authority."""
+
+    required_waitid = (
+        "P_PID",
+        "WEXITED",
+        "WNOHANG",
+        "WNOWAIT",
+        "CLD_EXITED",
+        "CLD_KILLED",
+        "CLD_DUMPED",
+        "waitid",
+    )
+    if (
+        os.name != "posix"
+        or not hasattr(os, "killpg")
+        or not all(hasattr(os, name) for name in required_waitid)
+    ):
+        fail("the bounded package subprocess boundary requires POSIX WNOWAIT")
+    _assert_exclusive_child_reaper_authority(label)
+
+    # Initialize every lifecycle object and closure before Popen so the child is
+    # followed immediately by the cleanup guard. Supported cancellation signals
+    # remain blocked across this entire function.
+    process: subprocess.Popen[bytes]
+    observer = _UnreapedProcessExitObserver(label)
+    stdout_target = subprocess.PIPE if capture_output else None
+    stderr_target = subprocess.PIPE if capture_output else None
+    selector: selectors.BaseSelector | None = None
+    stdout_stream: io.BufferedReader | None = None
+    stderr_stream: io.BufferedReader | None = None
+    captured = {"stdout": bytearray(), "stderr": bytearray()}
+    body_error: BaseException | None = None
+    cleanup_error: BaseException | None = None
+    return_code: int | None = None
+
+    def read_ready_streams(*, deadline: float, retain_output: bool) -> None:
+        if selector is None:
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            fail(f"{label} pipe drain timed out")
+        for key, _events in selector.select(min(remaining, 0.1)):
+            chunk = os.read(key.fd, IO_CHUNK_BYTES)
+            if not chunk:
+                selector.unregister(key.fileobj)
+                continue
+            if retain_output:
+                captured[key.data].extend(chunk)
+                if sum(map(len, captured.values())) > MAX_SUBPROCESS_OUTPUT_BYTES:
+                    fail(
+                        f"{label} exceeded its {MAX_SUBPROCESS_OUTPUT_BYTES}-byte "
+                        "captured-output budget"
+                    )
+
+    def drain_after_group_signal() -> None:
+        if selector is None:
+            return
+        deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
+        while selector.get_map():
+            read_ready_streams(deadline=deadline, retain_output=body_error is None)
+
+    try:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=stdout_target,
+            stderr=stderr_target,
+            close_fds=True,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"{label} could not be launched") from exc
+
+    # No fallible operation occurs between Popen and this lifecycle guard.
+    try:
+        try:
+            observer.bind(process.pid)
+            stdout_stream = process.stdout
+            stderr_stream = process.stderr
+            if capture_output:
+                if stdout_stream is None or stderr_stream is None:
+                    fail(f"{label} output pipes were not created")
+                selector = selectors.DefaultSelector()
+                selector.register(stdout_stream, selectors.EVENT_READ, "stdout")
+                selector.register(stderr_stream, selectors.EVENT_READ, "stderr")
+            deadline = time.monotonic() + timeout
+            while not observer.exited():
+                _raise_if_subprocess_cancellation_pending()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    fail(f"{label} exceeded its {timeout}-second timeout")
+                if selector is not None and selector.get_map():
+                    read_ready_streams(deadline=deadline, retain_output=True)
+                else:
+                    time.sleep(min(remaining, 0.01))
+        except BaseException as exc:
+            body_error = exc
+    finally:
+        try:
+            return_code = _cleanup_private_process_group(
+                process,
+                observer,
+                label=label,
+                before_reap=drain_after_group_signal,
+            )
+        except BaseException as exc:
+            cleanup_error = exc
+        for resource in (selector, process.stdout, process.stderr):
+            if resource is not None:
+                try:
+                    resource.close()
+                except BaseException as exc:
+                    if cleanup_error is None:
+                        cleanup_error = exc
+                    else:
+                        _note_exception(cleanup_error, f"resource close failed: {exc}")
+
+    if cleanup_error is not None:
+        if body_error is not None:
+            _note_exception(
+                cleanup_error,
+                f"suppressed operation error: {type(body_error).__name__}: {body_error}",
+            )
+        raise cleanup_error
+    if body_error is not None:
+        raise body_error
+    if return_code is None:
+        fail(f"{label} leader was not safely reaped")
+    return return_code, bytes(captured["stdout"]), bytes(captured["stderr"])
+
+
 @overload
 def run_checked(
     command: list[str],
@@ -1377,159 +1974,49 @@ def run_checked(
 ) -> subprocess.CompletedProcess[str] | subprocess.CompletedProcess[bytes]:
     if timeout <= 0:
         fail(f"{label} timeout must be positive")
-    if os.name != "posix":
-        fail("the bounded package subprocess boundary currently requires POSIX")
-    stdout = subprocess.PIPE if capture_output else None
-    stderr = subprocess.PIPE if capture_output else None
+    if not all(hasattr(signal, name) for name in ("pthread_sigmask", "sigpending")):
+        fail("the bounded package subprocess boundary requires POSIX signal masks")
+    previous_mask = signal.pthread_sigmask(
+        signal.SIG_BLOCK,
+        _SUBPROCESS_CANCELLATION_SIGNALS,
+    )
+    deferred_signal: int | None = None
+    result: tuple[int, bytes, bytes] | None = None
     try:
-        process = subprocess.Popen(
+        result = _run_checked_with_blocked_cancellation(
             command,
             cwd=cwd,
-            env=environment,
-            stdin=subprocess.DEVNULL,
-            stdout=stdout,
-            stderr=stderr,
-            start_new_session=True,
+            environment=environment,
+            timeout=timeout,
+            label=label,
+            capture_output=capture_output,
         )
-    except OSError as exc:
-        raise RuntimeError(f"{label} could not be launched") from exc
-
-    group_cleanup_started = False
-
-    def terminate_group() -> None:
-        nonlocal group_cleanup_started
-        if group_cleanup_started:
-            return
-        # A failure raised from this cleanup's caller can cross the surrounding
-        # BaseException boundary. Never signal the same numeric PGID a second
-        # time after the original group may have disappeared and been reused.
-        group_cleanup_started = True
-
-        def terminate_direct_leader() -> None:
-            if process.poll() is not None:
-                return
-            process.terminate()
-            try:
-                process.wait(timeout=PROCESS_TERM_GRACE_SECONDS)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=PROCESS_TERM_GRACE_SECONDS)
-
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            terminate_direct_leader()
-            return
-        except PermissionError as exc:
-            leader_was_alive = process.poll() is None
-            terminate_direct_leader()
-            if leader_was_alive:
-                raise RuntimeError(f"{label} process-group cleanup was denied") from exc
-            # Darwin reports EPERM for a group containing only an already-dead
-            # unreaped leader. A same-uid living descendant would remain signalable.
-            return
-        time.sleep(PROCESS_TERM_GRACE_SECONDS)
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except PermissionError as exc:
-            leader_was_alive = process.poll() is None
-            terminate_direct_leader()
-            if leader_was_alive:
-                raise RuntimeError(f"{label} process-group cleanup was denied") from exc
-            return
-        if process.poll() is None:
-            try:
-                process.wait(timeout=PROCESS_TERM_GRACE_SECONDS)
-            except subprocess.TimeoutExpired as exc:
-                terminate_direct_leader()
-                raise RuntimeError(
-                    f"{label} direct process survived group cleanup"
-                ) from exc
-
-    if not capture_output:
-        try:
-            return_code = process.wait(timeout=timeout)
-        except subprocess.TimeoutExpired as exc:
-            terminate_group()
-            raise RuntimeError(f"{label} exceeded its {timeout}-second timeout") from exc
-        except BaseException:
-            terminate_group()
-            raise
-        terminate_group()
-        if return_code:
-            raise subprocess.CalledProcessError(return_code, command)
-        return subprocess.CompletedProcess(command, return_code, None, None)
-
-    captured = {"stdout": bytearray(), "stderr": bytearray()}
-    selector = selectors.DefaultSelector()
-    assert process.stdout is not None and process.stderr is not None
-    selector.register(process.stdout, selectors.EVENT_READ, "stdout")
-    selector.register(process.stderr, selectors.EVENT_READ, "stderr")
-    deadline = time.monotonic() + timeout
-    try:
-        while selector.get_map():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                terminate_group()
-                fail(f"{label} exceeded its {timeout}-second timeout")
-            for key, _events in selector.select(min(remaining, 0.1)):
-                chunk = os.read(key.fd, IO_CHUNK_BYTES)
-                if not chunk:
-                    selector.unregister(key.fileobj)
-                    continue
-                destination = captured[key.data]
-                destination.extend(chunk)
-                if sum(map(len, captured.values())) > MAX_SUBPROCESS_OUTPUT_BYTES:
-                    terminate_group()
-                    fail(
-                        f"{label} exceeded its {MAX_SUBPROCESS_OUTPUT_BYTES}-byte "
-                        "captured-output budget"
-                    )
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            terminate_group()
-            fail(f"{label} exceeded its {timeout}-second timeout")
-        return_code = process.wait(timeout=remaining)
-    except BaseException:
-        terminate_group()
-        raise
+    except _DeferredSubprocessCancellation as exc:
+        deferred_signal = exc.signal_number
     finally:
-        selector.close()
-        process.stdout.close()
-        process.stderr.close()
-    output_bytes = bytes(captured["stdout"])
-    error_bytes = bytes(captured["stderr"])
-    terminate_group()
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+    if deferred_signal is not None:
+        fail(f"{label} cancellation signal was deferred until after cleanup")
+    assert result is not None
+    return_code, output_bytes, error_bytes = result
     if text:
-        output_text = output_bytes.decode("utf-8", "strict")
-        error_text = error_bytes.decode("utf-8", "strict")
-        if return_code:
-            raise subprocess.CalledProcessError(
-                return_code,
-                command,
-                output=output_text,
-                stderr=error_text,
-            )
-        return subprocess.CompletedProcess(
-            command,
-            return_code,
-            output_text,
-            error_text,
-        )
+        output: str | bytes = output_bytes.decode("utf-8", "strict")
+        error: str | bytes = error_bytes.decode("utf-8", "strict")
+    else:
+        output = output_bytes
+        error = error_bytes
     if return_code:
         raise subprocess.CalledProcessError(
             return_code,
             command,
-            output=output_bytes,
-            stderr=error_bytes,
+            output=output if capture_output else None,
+            stderr=error if capture_output else None,
         )
     return subprocess.CompletedProcess(
         command,
         return_code,
-        output_bytes,
-        error_bytes,
+        output if capture_output else None,
+        error if capture_output else None,
     )
 
 
@@ -1587,8 +2074,11 @@ def require_build_backend_requirements_unchanged(
 def download_build_backend_wheelhouse(destination: Path) -> None:
     """Materialize the retained, hash-pinned build wheel evidence exactly once."""
 
-    if sys.version_info[:2] != EXPECTED_PACKAGE_BUILD_PYTHON:
-        fail("the build-backend wheelhouse bootstrap requires Python 3.14.x")
+    if (
+        sys.implementation.name != "cpython"
+        or sys.version_info[:2] != EXPECTED_PACKAGE_BUILD_PYTHON
+    ):
+        fail("the build-backend wheelhouse bootstrap requires CPython 3.14.x")
     if (
         sys.flags.isolated != 1
         or sys.flags.no_site != 1
@@ -3031,9 +3521,12 @@ def expected_python_no_site_path(
 
 
 def reviewed_python() -> str:
-    if sys.version_info[:2] != EXPECTED_PACKAGE_BUILD_PYTHON:
+    if (
+        sys.implementation.name != "cpython"
+        or sys.version_info[:2] != EXPECTED_PACKAGE_BUILD_PYTHON
+    ):
         fail(
-            "the package build evidence gate requires a dedicated Python 3.14.x "
+            "the package build evidence gate requires a dedicated CPython 3.14.x "
             "runtime; the installed cortexel package remains compatible with Python >=3.11"
         )
     if (
