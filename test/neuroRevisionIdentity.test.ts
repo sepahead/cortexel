@@ -18,7 +18,7 @@ const NEURO_SKILLS = [
   ['neuro.correlogram', 'figure.correlogram', 4],
   ['neuro.isi_distribution', 'figure.distribution', 4],
   ['neuro.multisignal_trace', 'figure.multisignal_trace', 4],
-  ['neuro.phase_plane', 'figure.phase_plane', 4],
+  ['neuro.phase_plane', 'figure.phase_plane', 5],
   ['neuro.population_rate', 'figure.population_rate', 4],
   ['neuro.psth', 'figure.psth', 4],
   ['neuro.response_curve', 'figure.response_curve', 4],

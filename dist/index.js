@@ -36,8 +36,8 @@ import {
   synapseCollectionToOutDegreeDistributionParams,
   synapseCollectionToWeightMatrixParams,
   weightRecorderToSceneData
-} from "./chunk-JGFQOMV6.js";
-import "./chunk-HTREPOSY.js";
+} from "./chunk-V6SUE45Z.js";
+import "./chunk-XGABDL4O.js";
 import {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,

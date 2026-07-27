@@ -2,12 +2,12 @@ import {
   exactBinary64MultiplyByRational,
   exactRationalToBinary64,
   finiteBinary64ToMinSubnormalUnits
-} from "./chunk-HTREPOSY.js";
+} from "./chunk-XGABDL4O.js";
 import {
   freezeGenerated,
   makeError,
   pointer
-} from "./chunk-KG73JKSJ.js";
+} from "./chunk-JRDY5D5C.js";
 import {
   canonicalDigest
 } from "./chunk-ZYBCCIMH.js";
@@ -6444,7 +6444,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.phase_plane": {
     "id": "neuro.phase_plane",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -6465,7 +6465,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -6587,7 +6587,7 @@ var SKILL_CATALOG = freezeGenerated({
       "none"
     ],
     "accessibility": {
-      "summaryTemplate": "Phase plane: {yLabel} ({yUnit}) against {xLabel} ({xUnit}). {trajectoryCount} trajectories, {trajectoryPointCount} points, times {timeStart} to {timeStop} {timeUnit}, running {timeDirection} along the supplied order; arrowheads mark increasing model time. Vector field: {fieldSampleCount} samples, {latticeKind}, over x {xDomainStart} to {xDomainStop} {xUnit} and y {yDomainStart} to {yDomainStop} {yUnit}; arrow length is a {arrowScalingMode} display normalization, not a physical length; magnitude basis {magnitudeBasis}. {nullclineCount} nullclines and {fixedPointCount} fixed-point annotations, each with a declared method, residual, and convergence status. {missingStatement} {uncertaintyStatement} The path shows where the state went, not how fast; exact values and times are in the table.",
+      "summaryTemplate": "Phase plane: {yLabel} ({yUnit}) against {xLabel} ({xUnit}). {trajectoryStatement} {directionMarkerStatement} {vectorFieldStatement} {annotationStatement} {missingStatement} {uncertaintyStatement} Exact supplied values and any supplied trajectory times are in the table.",
       "tableColumns": [
         {
           "key": "rowKind",
@@ -6698,7 +6698,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.phase_plane.output_authority.v4"
+        "id": "neuro.phase_plane.output_authority.v5"
       },
       "requestPaths": [
         {
@@ -6852,22 +6852,10 @@ var SKILL_CATALOG = freezeGenerated({
           "yUnit",
           "xLabel",
           "xUnit",
-          "trajectoryCount",
-          "trajectoryPointCount",
-          "timeStart",
-          "timeStop",
-          "timeUnit",
-          "timeDirection",
-          "fieldSampleCount",
-          "latticeKind",
-          "xDomainStart",
-          "xDomainStop",
-          "yDomainStart",
-          "yDomainStop",
-          "arrowScalingMode",
-          "magnitudeBasis",
-          "nullclineCount",
-          "fixedPointCount",
+          "trajectoryStatement",
+          "directionMarkerStatement",
+          "vectorFieldStatement",
+          "annotationStatement",
           "missingStatement",
           "uncertaintyStatement"
         ],
@@ -6898,11 +6886,13 @@ var SKILL_CATALOG = freezeGenerated({
     "knownLimitations": [
       "The 1.0 unit registry has no composite state-per-time code (there is no `mV/ms`). A derivative therefore carries only the reciprocal-time factor and inherits its state dimension from its axis. A composite unit dimension is a post-1.0 registry addition.",
       "Because `/s` and `/ms` share the `per_time` dimension, a derivative labelled `/s` whose numbers were computed in `/ms` passes every dimensional check while being wrong by 1000x. No contract can catch this from the values alone.",
-      "The semantic-validator registry has no `trajectory.time_monotone` id. Monotonicity against the declared `timeDirection` is enforced at derivation and reported with the closest registered code, SCIENCE_NEGATIVE_INTERVAL, whose name reflects its ISI origin.",
+      "Revision 5 has one global `data.trajectories.timeDirection` per FigureRequest for compatibility. It is checked separately for every stably grouped trajectory, but it cannot represent a portrait whose identities were integrated in opposite directions. Such identities require separate FigureRequests; Cortexel refuses a contrary identity rather than adding an unversioned per-identity direction side channel.",
+      "The semantic-validator registry has no `trajectory.time_monotone` id. Direction is checked independently within each stably grouped trajectory at derivation: reversals use the closest registered code, SCIENCE_NEGATIVE_INTERVAL, whose name reflects its ISI origin; equality under `duplicateTimePolicy: reject` uses SCIENCE_DUPLICATE_TIME_POLICY. Equal times under `keep_replicates` are retained but break geometry.",
       "There is no registered validator for trajectory-universe membership (`events.sender_universe_declared` is sender-specific and is deliberately not reused). The rule is enforced at the semantic stage and reported as SEMANTIC_UNKNOWN_REFERENCE.",
       "There is no registered validator for the fixed-point convergence re-derivation. It is enforced at derivation and reported as SCIENCE_NORMALIZATION_UNVERIFIABLE, which is the registered code for a derived claim that does not follow from the numbers supplied with it.",
       "`phase_plane.derivative_dimension` only checks that `data.vectorField.dx` and `dy` carry kind `derivative` (SCIENCE_UNIT_DIMENSION_MISMATCH). It does not verify lattice shape (a derivation check); trajectory and fixed-point derivative units are covered by `unit.dimension_match`.",
-      "No registered disclosure rule announces the arrow display normalization or an unconverged fixed-point annotation. Both facts reach the artifact, the accessible summary, and the table - but not the footer disclosure list - until such rules are registered.",
+      "No registered disclosure rule announces the arrow display normalization or an unconverged fixed-point annotation. Arrow scaling reaches the canonical request embedded in the artifact and the accessible summary; fixed-point convergence also reaches the table. Neither fact reaches the footer disclosure list until such rules are registered.",
+      "The at-most-eight nullclines with drawable or isolated finite points have mutually distinct non-colour dash/marker tuples. An empty nullcline remains declared only in the legend and summary count; an all-missing nullcline also retains its supplied missing table rows. Neither receives invented plot geometry. Trajectory styles cycle after the registered eight-style palette and a trajectory may share a tuple with a nullcline. The legend and complete table retain the identities of carriers they represent; cross-carrier or more-than-eight trajectory identity is not established independently of colour.",
       "No registered compaction policy is valid here: `line_envelope_minmax` takes a min/max envelope per pixel column, which would collapse a limit cycle into a filled band. An over-budget figure is refused with RESOURCE_COMPACTION_UNAVAILABLE; arc-length-preserving decimation is post-1.0.",
       'UncertaintyV1 is one-dimensional, so no joint uncertainty region for a point in state space can be expressed. `uncertaintySupport` is therefore `["none"]`, and an ensemble of trajectories must be drawn as trajectories, not as a band.',
       "Cortexel 1.0 does not integrate ODEs, evaluate model equations, compute nullclines, locate fixed points, differentiate trajectories, or draw streamlines. Every such quantity is a caller-supplied sample with a declared method.",
@@ -9646,7 +9636,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -9655,7 +9645,7 @@ var RENDERERS = freezeGenerated({
       "arrow",
       "text"
     ],
-    "notes": "Trajectories with direction markers plus a bounded vector field. Arrow length may be normalized for display, but the magnitude is retained and the normalization is recorded."
+    "notes": "Any supported carrier mix is described conditionally. Trajectory direction-marker policy is explicit even when it is none or a zero-length candidate cannot carry an arrow. Drawable members of the bounded nullcline set use mutually distinct registered dash/marker tuples with exact legend parity; an empty declaration remains legend/summary-only, while an all-missing declaration also retains its supplied missing table rows. Neither receives invented plot geometry. This does not claim cross-carrier or >8-trajectory style uniqueness. A bounded vector field retains magnitude while recording arrow-length normalization and stating unit-length direction-only semantics."
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
@@ -12518,6 +12508,13 @@ function exactScaleRatio(from, to) {
     binaryExponent: source.binaryExponent - target.binaryExponent
   };
 }
+function multiplyExactScales(left, right) {
+  return {
+    numerator: left.numerator * right.numerator,
+    denominator: left.denominator * right.denominator,
+    binaryExponent: left.binaryExponent + right.binaryExponent
+  };
+}
 function exactQuantityRational(value, unitCode) {
   if (!Number.isFinite(value) || !isKnownUnit(unitCode)) {
     throw new Error("exact unit comparison requires finite values and registered units");
@@ -12704,6 +12701,88 @@ function conversionReceipt(from, to) {
     },
     algorithm: "exact_rational_round_to_binary64"
   };
+}
+function compositeDerivativeConversionReceipt(stateFrom, stateTo, derivativeFrom, derivativeTo) {
+  const state = conversionScaleRatio(stateFrom, stateTo);
+  const derivative = conversionScaleRatio(derivativeFrom, derivativeTo);
+  const composite = multiplyExactScales(state, derivative);
+  return {
+    stateUnitConversion: conversionReceipt(stateFrom, stateTo),
+    derivativeUnitConversion: conversionReceipt(derivativeFrom, derivativeTo),
+    factor: exactRationalToBinary64(
+      composite.numerator,
+      composite.denominator,
+      composite.binaryExponent
+    ),
+    exactFactor: {
+      numerator: composite.numerator.toString(10),
+      denominator: composite.denominator.toString(10),
+      binaryExponent: composite.binaryExponent
+    },
+    algorithm: "exact_composite_derivative_round_to_binary64"
+  };
+}
+function convertCompositeDerivative(value, stateFrom, stateTo, derivativeFrom, derivativeTo) {
+  if (!Number.isFinite(value)) {
+    throw new Error("composite derivative conversion requires a finite value");
+  }
+  const composite = multiplyExactScales(
+    conversionScaleRatio(stateFrom, stateTo),
+    conversionScaleRatio(derivativeFrom, derivativeTo)
+  );
+  let converted;
+  try {
+    converted = exactBinary64MultiplyByRational(
+      value,
+      composite.numerator,
+      composite.denominator,
+      composite.binaryExponent
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("overflows")) {
+      throw new Error("composite derivative conversion overflowed binary64");
+    }
+    throw error;
+  }
+  if (!Number.isFinite(converted) || value !== 0 && converted === 0) {
+    throw new Error("composite derivative conversion overflowed or underflowed binary64");
+  }
+  return converted;
+}
+function axisNormalizedDerivativeConversionReceipt(derivativeFrom, derivativeTo) {
+  return {
+    derivativeUnitConversion: conversionReceipt(derivativeFrom, derivativeTo),
+    algorithm: "exact_derivative_unit_factor_over_exact_binary64_extent_round_to_binary64"
+  };
+}
+function normalizeDerivativeByExactAxisExtent(value, derivativeFrom, derivativeTo, minimum, maximum) {
+  if (!Number.isFinite(value) || !Number.isFinite(minimum) || !Number.isFinite(maximum) || !(maximum > minimum)) {
+    throw new Error(
+      "axis-normalized derivative conversion requires a finite value and ordered extent"
+    );
+  }
+  const ratio = conversionScaleRatio(derivativeFrom, derivativeTo);
+  const valueUnits = finiteBinary64ToMinSubnormalUnits(value);
+  const extentUnits = finiteBinary64ToMinSubnormalUnits(maximum) - finiteBinary64ToMinSubnormalUnits(minimum);
+  let normalized;
+  try {
+    normalized = exactRationalToBinary64(
+      valueUnits * ratio.numerator,
+      extentUnits * ratio.denominator,
+      ratio.binaryExponent
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("overflows")) {
+      throw new Error("axis-normalized derivative conversion overflowed binary64");
+    }
+    throw error;
+  }
+  if (!Number.isFinite(normalized) || value !== 0 && normalized === 0) {
+    throw new Error(
+      "axis-normalized derivative conversion overflowed or underflowed binary64"
+    );
+  }
+  return Object.is(normalized, -0) ? 0 : normalized;
 }
 function convertDifference(lower, upper, from, to) {
   if (!Number.isFinite(lower) || !Number.isFinite(upper) || !(upper > lower)) {
@@ -13738,6 +13817,10 @@ export {
   convert,
   conversionFactor,
   conversionReceipt,
+  compositeDerivativeConversionReceipt,
+  convertCompositeDerivative,
+  axisNormalizedDerivativeConversionReceipt,
+  normalizeDerivativeByExactAxisExtent,
   convertDifference,
   divideExactIntegerByConvertedDifference,
   deriveExactCountRateInUnit,
@@ -13759,4 +13842,4 @@ export {
   verifyPeakBasisAgainstWindow,
   verifyBinnedPeakValueLattice
 };
-//# sourceMappingURL=chunk-5K4VYW2N.js.map
+//# sourceMappingURL=chunk-QD4CIX2J.js.map

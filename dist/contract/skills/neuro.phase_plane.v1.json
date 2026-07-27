@@ -1,6 +1,6 @@
 {
   "id": "neuro.phase_plane",
-  "revision": 4,
+  "revision": 5,
   "status": "stable",
   "releaseReady": false,
   "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
@@ -24,23 +24,24 @@
     "normalization": [
       "Trajectory points are NEVER sorted. The supplied array order IS the trajectory order. A trajectory is a parametric curve, not a function of x: sorting by a coordinate would reconnect the points into a shape the system never traced, and a limit cycle would collapse into a fold.",
       "Points are grouped by `pointTrajectoryIds` with a stable grouping that preserves relative index order. Points of one trajectory need not be contiguous in the arrays; their relative order is their trajectory order.",
-      "`timeDirection` declares whether time increases or decreases along the supplied order. Times must be monotone in that direction. A violation is REFUSED, never re-sorted: re-sorting a backward-integrated orbit reverses its arrowheads and converts an unstable manifold into a stable-looking one.",
-      "Duplicate timestamps within one trajectory require an explicit policy (`reject` or `keep_replicates`). No aggregate is offered: averaging two state coordinates would place the system at a point it never occupied, and last-write-wins would make the drawn curve depend on array order.",
+      "The one `timeDirection` value in a FigureRequest governs every declared trajectory. Cortexel stably groups rows by `pointTrajectoryIds` and checks each identity independently against that shared direction; interleaving different identities never creates a temporal comparison. `duplicateTimePolicy: reject` requires strict increase or decrease within each trajectory. `keep_replicates` permits equality but still refuses a reversal. Every row participates in this check, including a row whose state coordinate is missing. A violation is REFUSED, never re-sorted: re-sorting a backward-integrated orbit reverses its arrowheads and converts an unstable manifold into a stable-looking one.",
+      "Duplicate timestamps within one trajectory require the explicit `keep_replicates` policy. Every replicate remains in the table, but each equal-time boundary breaks path geometry: no connecting segment or direction arrow crosses dt = 0. No aggregate is offered: averaging two state coordinates would place the system at a point it never occupied, and last-write-wins would make the drawn curve depend on array order.",
       "A point is MISSING when EITHER coordinate is null. It is never half-plotted at a partial coordinate, never interpolated across, and always counted in the missing-value disclosure. The path breaks there.",
-      "A genuine discontinuity - an integrate-and-fire reset from threshold to reset potential - MUST be expressed as a missing pair or as two separate trajectories. Otherwise the renderer draws a straight segment from threshold to reset, through states the model never visited.",
-      "Duplicate identical rows are PRESERVED. Two samples with the same time and the same state are a source-data question, not something the renderer may quietly resolve.",
-      "Unit conversion is same-dimension only, is applied as a single multiplication, and is recorded and disclosed. A derivative's SI value is value x toCanonical(axis unit) x toCanonical(derivative unit); the two factors are multiplied once and never chained through an intermediate unit.",
-      "Category ordering is declared, never derived from a value. Trajectories are listed in the order of the declared universe; nullclines and fixed points in their declared order. Nothing is ever sorted by residual, by magnitude, or by proximity to a fixed point.",
+      "A genuine discontinuity - an integrate-and-fire reset from threshold to reset potential - MUST be expressed as an equal-time `keep_replicates` boundary, a missing pair, or two separate trajectories. All three break geometry; Cortexel never draws a straight segment through states the model never visited.",
+      "Duplicate identical rows are PRESERVED under `keep_replicates`, and their equal-time boundary still breaks the path. Two samples with the same time and state are a source-data question, not something the renderer may quietly resolve or use as evidence of direction.",
+      "Unit conversion is same-dimension only, is recorded, and is disclosed. A derivative's SI value is value x toCanonical(axis unit) x toCanonical(derivative unit); both exact registered factors are composed with the received binary64 component before one final ties-to-even rounding. Neither factor is rounded or applied to an intermediate binary64 value.",
+      "Category ordering is declared, never derived from a value. Trajectories are listed in the order of the declared universe; nullclines and fixed points in their declared order. Each of the at most eight nullclines with at least one drawable or isolated finite point receives a distinct registered categorical dash plus marker tuple in both marks and legend, so identities within that drawn nullcline set do not depend on hue. This does not establish uniqueness against a simultaneously rendered trajectory style. Nothing is ever sorted by residual, by magnitude, or by proximity to a fixed point.",
+      "A declared nullcline with no drawable finite point remains declared in the legend and summary count; Cortexel invents neither plot geometry nor any table row beyond its supplied point rows.",
       "The two axes generally carry DIFFERENT dimensions, so no equal-aspect constraint is applied and no cross-axis distance is ever computed in physical units. An aspect ratio between mV and a dimensionless gating variable has no meaning.",
       "A declared trajectory id with no points is retained in the legend, the table, and the summary count. It is never silently dropped: a trajectory that left the domain immediately is a result, not an absence."
     ],
     "derivation": [
-      "Derivative unit composition. A derivative declares only the RECIPROCAL-TIME factor (`/s` or `/ms`, kind `derivative`) and INHERITS its state dimension from its axis: `dxdt` in `/ms` on an x axis in `mV` means mV per ms. Its SI value is value x toCanonical(mV) x toCanonical(/ms) = value x 1e-3 x 1e3, so 1 mV/ms is exactly 1 V/s.",
-      "Axis-normalized speed (the default, and the only basis legal across incommensurable axes). Each component is divided by the drawn extent of its own axis: u = (dx/dt) / (xMax - xMin), v = (dy/dt) / (yMax - yMin). The finite binary64 endpoints are differenced exactly as integers and each exact quotient is rounded once, so an opposite-sign finite domain whose native subtraction would overflow cannot erase a nonzero vector. An exact nonzero component that cannot be represented as a nonzero finite binary64 is refused rather than reported as zero or infinity. Both components are dimensionless per unit time, and speed = sqrt(u^2 + v^2). It is a DISPLAY quantity that depends on the drawn extent, and it is labelled as one.",
+      "Derivative unit composition. A derivative declares only the RECIPROCAL-TIME factor (`/s` or `/ms`, kind `derivative`) and INHERITS its state dimension from its axis: `dxdt` in `/ms` on an x axis in `mV` means mV per ms. Its SI value is value x toCanonical(mV) x toCanonical(/ms) = value x 1e-3 x 1e3, so 1 mV/ms is exactly 1 V/s. The state and reciprocal-time scales remain exact rationals until the component is rounded once; the cancelling 1e-3 and 1e3 factors therefore cannot double-round or erase a subnormal derivative.",
+      "Axis-normalized speed (the default, and the only basis legal across incommensurable axes). Each component is divided by the drawn extent of its own axis: u = (dx/dt) / (xMax - xMin), v = (dy/dt) / (yMax - yMin). The finite binary64 endpoints are differenced exactly as integers; any reciprocal-time conversion into the x component's time basis is composed into that exact quotient; and each final component is rounded once. An opposite-sign finite domain whose native subtraction would overflow therefore cannot erase a nonzero vector, and an intermediate `/s` to `/ms` conversion cannot double-round or underflow before division. An exact nonzero component that cannot be represented as a nonzero finite binary64 is refused rather than reported as zero or infinity. Both components are dimensionless per unit time, and speed = sqrt(u^2 + v^2). It is a DISPLAY quantity that depends on the drawn extent, and it is labelled as one.",
       "Physical magnitude is legal ONLY when both axes share a dimension and both derivative units are convertible. Then magnitude = sqrt((dx/dt)^2 + (dy/dt)^2) in SI, with its unit. Across incommensurable axes it is refused: adding mV/ms to a dimensionless 1/ms yields a number that changes by three orders of magnitude when the voltage axis is written in V rather than mV, with the dynamics unchanged.",
-      "Arrow display normalization. Arrow LENGTH is set by `arrowScaling` (`unit_length`, `magnitude_proportional`, or `sqrt_magnitude`) and is bounded by `maxArrowLengthFraction` of the shorter drawn axis. The normalization is recorded in the artifact and stated in the summary and the table; the raw dx/dt and dy/dt are always retained. A normalized arrow never implies equal dynamics.",
-      "Magnitude legend. When arrow length encodes magnitude (`magnitude_proportional` or `sqrt_magnitude`) the figure MUST carry a separate magnitude legend: a reference arrow, its magnitude, its unit, and its basis. `sqrt_magnitude` is labelled compressed, so a doubled arrow is never read as a doubled speed. `unit_length` carries a key stating it encodes direction only.",
-      "Direction markers point along INCREASING model time. With `timeDirection: backward` the samples run backward in time, so the arrowhead points from index i+1 to index i. This is the whole reason the direction is declared: a backward-integrated separatrix drawn with forward arrows inverts the stability it exists to show.",
+      "Arrow display normalization. Arrow LENGTH is set by `arrowScaling` (`unit_length`, `magnitude_proportional`, or `sqrt_magnitude`) and is bounded by `maxArrowLengthFraction` of the shorter drawn axis. The normalization remains in the canonical request embedded in the artifact and is stated in the accessible summary; the raw dx/dt, dy/dt, and derived magnitude are retained in the table. A normalized arrow never implies equal dynamics.",
+      "Magnitude legend. When arrow length encodes magnitude (`magnitude_proportional` or `sqrt_magnitude`) the figure MUST carry a textual legend key naming the reference magnitude, its unit, its basis, and its mapping to the maximum display length. `sqrt_magnitude` is labelled compressed, so a doubled arrow is never read as a doubled speed. `unit_length` carries a textual key stating that it encodes direction only and magnitude does not affect arrow length.",
+      "A direction marker is eligible only on a strictly timed, geometrically nonzero candidate segment and points from its lower to higher model time. `mode: none`, a short run, an equal-time path break, or an ineligible zero-length candidate may therefore emit no marker. With `timeDirection: backward`, an eligible segment is reversed relative to supplied point order. This is the whole reason direction is declared: a backward-integrated separatrix drawn with forward arrows inverts the stability it exists to show.",
       "Fixed points: convergence is RE-DERIVED, not trusted. `converged` must equal (|residualDxDt| <= toleranceDxDt) AND (|residualDyDt| <= toleranceDyDt) after unit conversion, compared with a relative binary64 tolerance of 1e-9. A contradiction is refused rather than drawn as an equilibrium.",
       "Nullclines: each curve declares which derivative it claims to zero (`zeroDerivativeOf`), a named method, and the residual tolerance that bounds |d?/dt| along the curve. Cortexel renders the declared vertices and never solves, refines, closes, or extends the curve.",
       "Lattice verification. A `regular_grid` claim is checked: nx x ny must equal the sample count, and the coordinates must actually form that lattice. A false lattice claim is refused, because a scattered field drawn as a lattice implies uniform coverage of the domain that was never evaluated.",
@@ -55,7 +56,8 @@
       "A figure exceeding the visible-mark budget is REFUSED with RESOURCE_COMPACTION_UNAVAILABLE, never decimated. No registered compaction policy is valid here (see knownLimitations), so `compactionPolicies` is `[\"none\"]`.",
       "When `data.vectorField` is present, `parameters.arrowScaling` and `parameters.magnitudeBasis` are REQUIRED; a missing one is reported as SCHEMA_REQUIRED_PROPERTY_MISSING. When `data.trajectories` is present, `parameters.directionMarkers` and `parameters.duplicateTimePolicy` are REQUIRED on the same terms.",
       "Every `pointTrajectoryIds` entry must be a member of the declared trajectory universe. A point belonging to a trajectory that was not declared is a contradiction in the source, reported as SEMANTIC_UNKNOWN_REFERENCE.",
-      "Trajectories beyond the distinguishable-colour cap of the active palette are drawn in one shared neutral style and distinguished only in the table. Cortexel does not mint indistinguishable colours (RENDER_SERIES_LIMIT_EXCEEDED where no shared style is acceptable).",
+      "One FigureRequest has exactly one global `data.trajectories.timeDirection`, and it applies to every trajectory identity in that request. A portrait containing both forward-integrated and backward-integrated trajectories is not representable as one request: the caller must emit separate FigureRequests so each figure has one honest direction authority.",
+      "Trajectory styles follow declared order and cycle through the registered eight-style palette. The legend and complete table retain every identity, but more than eight trajectories are not guaranteed distinguishable by colour, dash, or marker alone.",
       "The state space is exactly two-dimensional. A projection of a higher-dimensional model is a caller fact that Cortexel cannot detect; declare it in `source.declaredNote`, where it renders as an attributed, unverified caller note."
     ],
     "uncertaintySupport": [
@@ -159,7 +161,7 @@
                 "forward",
                 "backward"
               ],
-              "description": "Whether model time increases or decreases along the supplied order. Arrowheads always point along INCREASING model time, so `backward` reverses them. Backward integration is how a stable manifold is computed; drawing it with forward arrows would invert the stability claim."
+              "description": "The one global direction authority for every trajectory identity in this FigureRequest: model time must increase (`forward`) or decrease (`backward`) within each identity's stable source order. Arrowheads always point along INCREASING model time, so `backward` reverses them. A mixed forward/backward portrait requires separate FigureRequests; per-identity direction selection is not part of revision 5."
             },
             "pointTrajectoryIds": {
               "type": "array",
@@ -936,7 +938,7 @@
         },
         "directionMarkers": {
           "type": "object",
-          "description": "Required whenever trajectories are present. Placement is deterministic and never depends on animation: the arrowheads are present in a still export and under reduced motion.",
+          "description": "Required whenever trajectories are present. Placement is deterministic and never depends on animation. A marker is emitted only for an eligible strictly timed, geometrically nonzero candidate segment; mode none, short runs, equal-time path breaks, and zero-length candidates may emit none.",
           "properties": {
             "mode": {
               "type": "string",
@@ -950,7 +952,7 @@
               "type": "integer",
               "minimum": 2,
               "maximum": 250000,
-              "description": "For arrowheads_every_n_points, place an arrowhead on the Nth, 2Nth, ... finite point of EACH continuous trajectory run (zero-based target ordinals N-1, 2N-1, ...). A null resets the run, so a two-point run with N=2 still receives one direction marker and is never left directionless."
+              "description": "For arrowheads_every_n_points, request a candidate on the Nth, 2Nth, ... finite point of EACH continuous strictly timed trajectory run (zero-based target ordinals N-1, 2N-1, ...). A missing coordinate or equal-time boundary resets the run. Each candidate is independently skipped when its segment has zero geometric length, so even a long run may emit no marker."
             }
           },
           "required": [
@@ -964,7 +966,7 @@
             "reject",
             "keep_replicates"
           ],
-          "description": "Required whenever trajectories are present. There is deliberately no aggregate: averaging two state coordinates that share a timestamp would place the system at a point it never occupied. keep_replicates retains both samples, which is how an instantaneous reset is represented."
+          "description": "Required whenever trajectories are present and applied independently after stable grouping by trajectory id. reject requires strict time in the declared direction and refuses equality. keep_replicates permits equal times without permitting reversal, retains every row, and turns each equal-time boundary into a path break with no connecting segment or direction marker. There is deliberately no aggregate."
         },
         "uncertainty": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",
@@ -1072,7 +1074,7 @@
   ],
   "renderer": {
     "id": "figure.phase_plane",
-    "revision": 4
+    "revision": 5
   },
   "budgets": {
     "maxObservations": 250000,
@@ -1106,7 +1108,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.phase_plane.output_authority.v4"
+      "id": "neuro.phase_plane.output_authority.v5"
     },
     "requestPaths": [
       {
@@ -1260,24 +1262,12 @@
         "yUnit",
         "xLabel",
         "xUnit",
-        "trajectoryCount",
-        "trajectoryPointCount",
-        "timeStart",
-        "timeStop",
-        "timeUnit",
-        "timeDirection",
-        "fieldSampleCount",
-        "latticeKind",
-        "xDomainStart",
-        "xDomainStop",
-        "yDomainStart",
-        "yDomainStop",
-        "arrowScalingMode",
-        "magnitudeBasis",
-        "nullclineCount",
-        "fixedPointCount",
-        "missingStatement",
-        "uncertaintyStatement"
+      "trajectoryStatement",
+      "directionMarkerStatement",
+      "vectorFieldStatement",
+      "annotationStatement",
+      "missingStatement",
+      "uncertaintyStatement"
       ],
       "missingFactPolicy": "refuse",
       "unknownFactPolicy": "refuse"
@@ -1292,7 +1282,7 @@
   },
 
   "accessibility": {
-    "summaryTemplate": "Phase plane: {yLabel} ({yUnit}) against {xLabel} ({xUnit}). {trajectoryCount} trajectories, {trajectoryPointCount} points, times {timeStart} to {timeStop} {timeUnit}, running {timeDirection} along the supplied order; arrowheads mark increasing model time. Vector field: {fieldSampleCount} samples, {latticeKind}, over x {xDomainStart} to {xDomainStop} {xUnit} and y {yDomainStart} to {yDomainStop} {yUnit}; arrow length is a {arrowScalingMode} display normalization, not a physical length; magnitude basis {magnitudeBasis}. {nullclineCount} nullclines and {fixedPointCount} fixed-point annotations, each with a declared method, residual, and convergence status. {missingStatement} {uncertaintyStatement} The path shows where the state went, not how fast; exact values and times are in the table.",
+    "summaryTemplate": "Phase plane: {yLabel} ({yUnit}) against {xLabel} ({xUnit}). {trajectoryStatement} {directionMarkerStatement} {vectorFieldStatement} {annotationStatement} {missingStatement} {uncertaintyStatement} Exact supplied values and any supplied trajectory times are in the table.",
     "tableColumns": [
       {
         "key": "rowKind",
@@ -1434,7 +1424,7 @@
     "legacyIds": [
       "nest.phase_plane"
     ],
-    "notes": "The legacy payload carried two coordinate arrays and a scene name. It did not say which state variable each axis was, in which unit, at which times, or in which time direction the samples ran, and its nullcline annotations carried no method. Migration therefore REQUIRES x and y state quantities with units and a per-sample time, and it BLOCKS without them: it never substitutes the sample index for a clock and never infers the flow direction from the array order, because either guess would silently reverse the arrowheads and invert the stability the figure appears to show. A legacy nullcline or fixed-point annotation with no declared method and residual is not migrated as an annotation; it becomes a caller note or is dropped, with a warning."
+    "notes": "The legacy payload had coordinate arrays and a scene, but no axis identities/units, sample times/direction, or annotation methods. Migration REQUIRES typed x/y state quantities, units, and per-sample time, and BLOCKS without them. It never substitutes an index for a clock or infers direction from array order: either guess can reverse arrows and apparent stability. Revision 5 retains one global `timeDirection`; a portrait mixing forward- and backward-integrated trajectories must migrate to separate FigureRequests, never invented per-identity authority. A nullcline or fixed-point annotation lacking a method and residual becomes an attributed caller note or is dropped with a warning."
   },
   "owner": "Sepehr Mahmoudian",
   "changePolicy": [
@@ -1451,11 +1441,13 @@
   "knownLimitations": [
     "The 1.0 unit registry has no composite state-per-time code (there is no `mV/ms`). A derivative therefore carries only the reciprocal-time factor and inherits its state dimension from its axis. A composite unit dimension is a post-1.0 registry addition.",
     "Because `/s` and `/ms` share the `per_time` dimension, a derivative labelled `/s` whose numbers were computed in `/ms` passes every dimensional check while being wrong by 1000x. No contract can catch this from the values alone.",
-    "The semantic-validator registry has no `trajectory.time_monotone` id. Monotonicity against the declared `timeDirection` is enforced at derivation and reported with the closest registered code, SCIENCE_NEGATIVE_INTERVAL, whose name reflects its ISI origin.",
+    "Revision 5 has one global `data.trajectories.timeDirection` per FigureRequest for compatibility. It is checked separately for every stably grouped trajectory, but it cannot represent a portrait whose identities were integrated in opposite directions. Such identities require separate FigureRequests; Cortexel refuses a contrary identity rather than adding an unversioned per-identity direction side channel.",
+    "The semantic-validator registry has no `trajectory.time_monotone` id. Direction is checked independently within each stably grouped trajectory at derivation: reversals use the closest registered code, SCIENCE_NEGATIVE_INTERVAL, whose name reflects its ISI origin; equality under `duplicateTimePolicy: reject` uses SCIENCE_DUPLICATE_TIME_POLICY. Equal times under `keep_replicates` are retained but break geometry.",
     "There is no registered validator for trajectory-universe membership (`events.sender_universe_declared` is sender-specific and is deliberately not reused). The rule is enforced at the semantic stage and reported as SEMANTIC_UNKNOWN_REFERENCE.",
     "There is no registered validator for the fixed-point convergence re-derivation. It is enforced at derivation and reported as SCIENCE_NORMALIZATION_UNVERIFIABLE, which is the registered code for a derived claim that does not follow from the numbers supplied with it.",
     "`phase_plane.derivative_dimension` only checks that `data.vectorField.dx` and `dy` carry kind `derivative` (SCIENCE_UNIT_DIMENSION_MISMATCH). It does not verify lattice shape (a derivation check); trajectory and fixed-point derivative units are covered by `unit.dimension_match`.",
-    "No registered disclosure rule announces the arrow display normalization or an unconverged fixed-point annotation. Both facts reach the artifact, the accessible summary, and the table - but not the footer disclosure list - until such rules are registered.",
+    "No registered disclosure rule announces the arrow display normalization or an unconverged fixed-point annotation. Arrow scaling reaches the canonical request embedded in the artifact and the accessible summary; fixed-point convergence also reaches the table. Neither fact reaches the footer disclosure list until such rules are registered.",
+    "The at-most-eight nullclines with drawable or isolated finite points have mutually distinct non-colour dash/marker tuples. An empty nullcline remains declared only in the legend and summary count; an all-missing nullcline also retains its supplied missing table rows. Neither receives invented plot geometry. Trajectory styles cycle after the registered eight-style palette and a trajectory may share a tuple with a nullcline. The legend and complete table retain the identities of carriers they represent; cross-carrier or more-than-eight trajectory identity is not established independently of colour.",
     "No registered compaction policy is valid here: `line_envelope_minmax` takes a min/max envelope per pixel column, which would collapse a limit cycle into a filled band. An over-budget figure is refused with RESOURCE_COMPACTION_UNAVAILABLE; arc-length-preserving decimation is post-1.0.",
     "UncertaintyV1 is one-dimensional, so no joint uncertainty region for a point in state space can be expressed. `uncertaintySupport` is therefore `[\"none\"]`, and an ensemble of trajectories must be drawn as trajectories, not as a band.",
     "Cortexel 1.0 does not integrate ODEs, evaluate model equations, compute nullclines, locate fixed points, differentiate trajectories, or draw streamlines. Every such quantity is a caller-supplied sample with a declared method.",

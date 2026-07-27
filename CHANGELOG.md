@@ -6,6 +6,59 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — phase-plane derivative and accessibility authority
+
+- Physical derivative components now compose the exact state-unit and
+  reciprocal-time factors with the received binary64 value before one final
+  ties-to-even rounding. Axis-normalized components likewise combine any
+  reciprocal-time conversion with the exact finite endpoint difference before
+  rounding once. Cancelling factors can no longer double-round or erase a
+  representable subnormal component.
+- The phase-plane derivation receipt records structured coordinate transforms,
+  every physical or axis-normalized component transform, exact conversion
+  authority, and conversion counts. The bounded mandatory unit disclosure
+  inventories those transform classes, including composite derivative
+  conversions whose net factor is one, while leaving complete replay factors in
+  the receipt. The independent OutputAuthority evaluator uses the same exact
+  arithmetic contract while deriving table values and disclosures directly from
+  the canonical request.
+- FigureArtifactV1 now closes the phase-plane carrier operation at its exact id,
+  algorithm revision, parameters, receipt, and input/output digests. Its
+  post-schema relation independently replays every converted carrier, trajectory
+  table speed, time-authority record, and convergence flag; deleting,
+  relabelling, duplicating, or forging the operation remains refused even after
+  recomputing the outer artifact digest. Historical open operation payloads
+  remain available only to unrelated skills.
+- The single trajectory `timeDirection` is explicitly global to one
+  FigureRequest and is checked independently within each stably grouped
+  trajectory identity, including interleaved and missing-coordinate rows.
+  `reject` requires strict time; `keep_replicates` retains equal-time rows in the
+  table but makes every equality a hard geometry break with no crossing segment
+  or arrow. Accessible spans use the true global minimum and maximum, and marker
+  prose now admits disabled, short, equal-time, zero-duration, and
+  zero-geometric-length cases that emit no marker. Mixed forward/backward
+  portraits require separate FigureRequests.
+- The accessibility summary is conditional on the supplied carrier mix.
+  Field-only figures no longer claim trajectories or annotations,
+  trajectory-only figures no longer claim a vector field, annotation text
+  distinguishes nullclines from fixed points, and `directionMarkers.mode =
+  none` explicitly states that no trajectory direction markers are drawn.
+  Requested marker modes describe their zero-length and insufficient-run cases
+  without claiming that an arrow was emitted.
+- The at-most-eight nullclines with drawable or isolated finite points use
+  mutually distinct registered categorical dash and marker tokens in the plot
+  and exact matching legend tokens, so identities within that drawn nullcline
+  set remain distinguishable when hue is unavailable. Empty declarations remain
+  explicit in the legend and summary count; all-missing declarations also retain
+  their supplied missing table rows, and neither receives invented geometry.
+  Vector-field legend text now distinguishes
+  magnitude-encoded modes from `unit_length`, for which magnitude does not
+  affect arrow length. This does not establish uniqueness against trajectory styles, which
+  retain the documented eight-style cycling limitation. `neuro.phase_plane`,
+  `figure.phase_plane`, and its OutputAuthority evaluator move together to
+  revision 5 because both scientific values and normative SVG description/style
+  bytes changed.
+
 ### Fixed — NEST delay-resolution scientific erratum
 
 - Stable skill revision 4 incorrectly described `sourceResolution` on

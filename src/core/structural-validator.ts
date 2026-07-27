@@ -37,7 +37,16 @@ import Ajv2020, { type ErrorObject, type ValidateFunction } from 'ajv/dist/2020.
 
 import { canonicalDigest, canonicalDigestExcluding } from './canonicalize.js';
 import { finalizeErrors, makeError, type CortexelError } from './errors.js';
-import { conversionReceipt, convert } from './units.js';
+import {
+  axisNormalizedDerivativeConversionReceipt,
+  canonicalUnitFor,
+  compositeDerivativeConversionReceipt,
+  conversionReceipt,
+  convert,
+  convertCompositeDerivative,
+  dimensionOf,
+  normalizeDerivativeByExactAxisExtent,
+} from './units.js';
 
 // `import.meta.url` works in native ESM source runners as well as tsup's ESM/CJS
 // shims. `__dirname` is absent under tools such as tsx and made source execution fail
@@ -1646,6 +1655,705 @@ function validateAggregateChainAndWrapper(
   return errors;
 }
 
+interface PhaseExtent {
+  readonly min: number;
+  readonly max: number;
+}
+
+function phaseStringArray(value: unknown): string[] {
+  return asArray(value).filter(
+    (candidate): candidate is string => typeof candidate === 'string',
+  );
+}
+
+function phaseNumberArray(value: unknown): number[] {
+  return asArray(value).filter(
+    (candidate): candidate is number => typeof candidate === 'number',
+  );
+}
+
+function phaseNullableNumberArray(value: unknown): (number | null)[] {
+  return asArray(value).map((candidate) =>
+    candidate === null ? null : candidate as number);
+}
+
+function phaseConvertedCarrier(
+  carrier: JsonRecord | undefined,
+  targetUnit: string,
+): (number | null)[] {
+  const sourceUnit = String(carrier?.unit);
+  return phaseNullableNumberArray(carrier?.values).map((value) =>
+    value === null || sourceUnit === targetUnit
+      ? value
+      : convert(value, sourceUnit, targetUnit));
+}
+
+function phaseExtent(values: readonly (number | null)[]): PhaseExtent | undefined {
+  let minimum: number | undefined;
+  let maximum: number | undefined;
+  for (const value of values) {
+    if (value === null) continue;
+    if (minimum === undefined || value < minimum) minimum = value;
+    if (maximum === undefined || value > maximum) maximum = value;
+  }
+  return minimum === undefined || maximum === undefined
+    ? undefined
+    : { min: minimum, max: maximum };
+}
+
+type PhaseTimeReplay =
+  | { readonly ok: true; readonly authority: JsonRecord }
+  | { readonly ok: false };
+
+function replayPhaseTimeAuthority(
+  trajectories: JsonRecord,
+  duplicateTimePolicy: 'reject' | 'keep_replicates',
+): PhaseTimeReplay {
+  const declaredIds = phaseStringArray(asRecord(trajectories.universe)?.ids);
+  const pointIds = phaseStringArray(trajectories.pointTrajectoryIds);
+  const times = phaseNumberArray(asRecord(trajectories.times)?.values);
+  const timeDirection = String(trajectories.timeDirection) as
+    | 'forward'
+    | 'backward';
+  const sourceOrdinalsById = new Map(
+    declaredIds.map((id) => [id, [] as number[]]),
+  );
+  for (let sourceOrdinal = 0; sourceOrdinal < pointIds.length; sourceOrdinal++) {
+    sourceOrdinalsById.get(pointIds[sourceOrdinal])?.push(sourceOrdinal);
+  }
+
+  let globalMinimumTime = times[0];
+  let globalMaximumTime = times[0];
+  for (const time of times) {
+    if (time < globalMinimumTime) globalMinimumTime = time;
+    if (time > globalMaximumTime) globalMaximumTime = time;
+  }
+
+  let equalTimeBreakCount = 0;
+  const entries: JsonRecord[] = [];
+  for (const trajectoryId of declaredIds) {
+    const sourceOrdinals = sourceOrdinalsById.get(trajectoryId) ?? [];
+    let minimumTime: number | null = null;
+    let maximumTime: number | null = null;
+    let trajectoryEqualTimeBreakCount = 0;
+    for (let localIndex = 0; localIndex < sourceOrdinals.length; localIndex++) {
+      const sourceOrdinal = sourceOrdinals[localIndex];
+      const time = times[sourceOrdinal];
+      if (minimumTime === null || time < minimumTime) minimumTime = time;
+      if (maximumTime === null || time > maximumTime) maximumTime = time;
+      if (localIndex === 0) continue;
+      const previousTime = times[sourceOrdinals[localIndex - 1]];
+      if (time === previousTime) {
+        if (duplicateTimePolicy === 'reject') return { ok: false };
+        trajectoryEqualTimeBreakCount++;
+        equalTimeBreakCount++;
+        continue;
+      }
+      if (
+        (timeDirection === 'forward' && time < previousTime) ||
+        (timeDirection === 'backward' && time > previousTime)
+      ) return { ok: false };
+    }
+    entries.push({
+      trajectoryId,
+      appliedGlobalTimeDirection: timeDirection,
+      pointCount: sourceOrdinals.length,
+      firstTime: sourceOrdinals.length === 0
+        ? null
+        : times[sourceOrdinals[0]],
+      lastTime: sourceOrdinals.length === 0
+        ? null
+        : times[sourceOrdinals[sourceOrdinals.length - 1]],
+      minimumTime,
+      maximumTime,
+      equalTimeBreakCount: trajectoryEqualTimeBreakCount,
+    });
+  }
+  return {
+    ok: true,
+    authority: {
+      timeUnit: String(asRecord(trajectories.times)?.unit),
+      timeDirection,
+      duplicateTimePolicy,
+      pointCount: pointIds.length,
+      trajectoryCount: declaredIds.length,
+      globalMinimumTime,
+      globalMaximumTime,
+      equalTimeBreakCount,
+      trajectories: entries,
+    },
+  };
+}
+
+function replayPhaseConvergenceFlags(fixedPoints: JsonRecord | undefined): boolean[] {
+  if (!fixedPoints) return [];
+  const ids = phaseStringArray(fixedPoints.ids);
+  const residualDx = phaseNumberArray(asRecord(fixedPoints.residualDxDt)?.values);
+  const residualDy = phaseNumberArray(asRecord(fixedPoints.residualDyDt)?.values);
+  const toleranceDx = phaseNumberArray(asRecord(fixedPoints.toleranceDxDt)?.values);
+  const toleranceDy = phaseNumberArray(asRecord(fixedPoints.toleranceDyDt)?.values);
+  const residualDxUnit = String(asRecord(fixedPoints.residualDxDt)?.unit);
+  const residualDyUnit = String(asRecord(fixedPoints.residualDyDt)?.unit);
+  const toleranceDxUnit = String(asRecord(fixedPoints.toleranceDxDt)?.unit);
+  const toleranceDyUnit = String(asRecord(fixedPoints.toleranceDyDt)?.unit);
+  const within = (residual: number, tolerance: number): boolean =>
+    residual <= tolerance ||
+    residual - tolerance <= 1e-9 *
+      Math.max(Math.abs(residual), Math.abs(tolerance), Number.MIN_VALUE);
+  return ids.map((_id, index) =>
+    within(
+      Math.abs(convert(
+        residualDx[index],
+        residualDxUnit,
+        toleranceDxUnit,
+      )),
+      toleranceDx[index],
+    ) &&
+    within(
+      Math.abs(convert(
+        residualDy[index],
+        residualDyUnit,
+        toleranceDyUnit,
+      )),
+      toleranceDy[index],
+    ));
+}
+
+/**
+ * Re-execute the complete bounded phase-plane carrier operation from the canonical
+ * request. The artifact schema closes its shape; this relation closes its meaning.
+ */
+function validatePhasePlaneRelations(
+  operation: JsonRecord,
+  operationIndex: number,
+  canonicalRequest: JsonRecord,
+): CortexelError[] {
+  const basePath = `/derivation/operations/${operationIndex}`;
+  const errors: CortexelError[] = [];
+  if (asRecord(canonicalRequest.skill)?.id !== 'neuro.phase_plane') {
+    return [relationError(
+      `${basePath}/algorithm`,
+      'the phase-plane carrier operation is attached to a non-phase-plane canonical request.',
+    )];
+  }
+
+  const data = asRecord(canonicalRequest.data) ?? {};
+  const requestParameters = asRecord(canonicalRequest.parameters) ?? {};
+  const axes = asRecord(data.axes) ?? {};
+  const xAxisUnit = String(asRecord(axes.x)?.unit);
+  const yAxisUnit = String(asRecord(axes.y)?.unit);
+  const trajectories = asRecord(data.trajectories);
+  const vectorField = asRecord(data.vectorField);
+  const nullclines = asRecord(data.nullclines);
+  const fixedPoints = asRecord(data.fixedPoints);
+  const fieldDomain = asRecord(vectorField?.domain);
+  const magnitudeBasis = String(
+    requestParameters.magnitudeBasis ?? 'axis_normalized',
+  ) as 'axis_normalized' | 'physical';
+  const expectedParameters: JsonRecord = {
+    xAxisUnit,
+    yAxisUnit,
+    magnitudeBasis,
+    derivativeBinary64Arithmetic:
+      'exact_state_and_reciprocal_time_factors_then_one_final_round; ' +
+      'axis_normalized_exact_reciprocal_time_factor_over_exact_extent_then_one_final_round',
+    trajectoryTimeSemantics:
+      'one_global_direction_per_request_checked_independently_per_trajectory_source_order; ' +
+      'reject=strict; keep_replicates=nonstrict_equal_time_path_break',
+    convergenceRelativeTolerance: 1e-9,
+  };
+  if (!sameCanonical(operation.parameters, expectedParameters)) {
+    errors.push(relationError(
+      `${basePath}/parameters`,
+      'the phase-plane operation parameters do not equal the axes and scientific controls in the canonical request.',
+    ));
+  }
+
+  const convertedTrajectoryXs = trajectories
+    ? phaseConvertedCarrier(asRecord(trajectories.x), xAxisUnit)
+    : [];
+  const convertedTrajectoryYs = trajectories
+    ? phaseConvertedCarrier(asRecord(trajectories.y), yAxisUnit)
+    : [];
+  const convertedFieldXs = vectorField
+    ? phaseConvertedCarrier(asRecord(vectorField.x), xAxisUnit) as number[]
+    : [];
+  const convertedFieldYs = vectorField
+    ? phaseConvertedCarrier(asRecord(vectorField.y), yAxisUnit) as number[]
+    : [];
+  const convertedNullclineXs = nullclines
+    ? phaseConvertedCarrier(asRecord(nullclines.x), xAxisUnit)
+    : [];
+  const convertedNullclineYs = nullclines
+    ? phaseConvertedCarrier(asRecord(nullclines.y), yAxisUnit)
+    : [];
+  const convertedFixedXs = fixedPoints
+    ? phaseConvertedCarrier(asRecord(fixedPoints.x), xAxisUnit) as number[]
+    : [];
+  const convertedFixedYs = fixedPoints
+    ? phaseConvertedCarrier(asRecord(fixedPoints.y), yAxisUnit) as number[]
+    : [];
+  const convertedDomain = fieldDomain
+    ? {
+      xMin: convert(
+        Number(asRecord(fieldDomain.x)?.start),
+        String(asRecord(fieldDomain.x)?.unit),
+        xAxisUnit,
+      ),
+      xMax: convert(
+        Number(asRecord(fieldDomain.x)?.stop),
+        String(asRecord(fieldDomain.x)?.unit),
+        xAxisUnit,
+      ),
+      yMin: convert(
+        Number(asRecord(fieldDomain.y)?.start),
+        String(asRecord(fieldDomain.y)?.unit),
+        yAxisUnit,
+      ),
+      yMax: convert(
+        Number(asRecord(fieldDomain.y)?.stop),
+        String(asRecord(fieldDomain.y)?.unit),
+        yAxisUnit,
+      ),
+    }
+    : undefined;
+  const xExtent = phaseExtent([
+    ...convertedTrajectoryXs,
+    ...convertedFieldXs,
+    ...convertedNullclineXs,
+    ...convertedFixedXs,
+    ...(convertedDomain ? [convertedDomain.xMin, convertedDomain.xMax] : []),
+  ]);
+  const yExtent = phaseExtent([
+    ...convertedTrajectoryYs,
+    ...convertedFieldYs,
+    ...convertedNullclineYs,
+    ...convertedFixedYs,
+    ...(convertedDomain ? [convertedDomain.yMin, convertedDomain.yMax] : []),
+  ]);
+
+  const fieldDxs = phaseNumberArray(asRecord(vectorField?.dx)?.values);
+  const fieldDys = phaseNumberArray(asRecord(vectorField?.dy)?.values);
+  const fieldDxUnit = String(asRecord(vectorField?.dx)?.unit);
+  const fieldDyUnit = String(asRecord(vectorField?.dy)?.unit);
+  const canonicalStateUnit = canonicalUnitFor(xAxisUnit) ?? xAxisUnit;
+  const canonicalTimeUnit = canonicalUnitFor(fieldDxUnit) ?? fieldDxUnit;
+  const fieldNormalizedComponents = vectorField
+    ? fieldDxs.map((dx, index) => {
+      if (
+        !xExtent ||
+        !yExtent ||
+        !(xExtent.max > xExtent.min) ||
+        !(yExtent.max > yExtent.min)
+      ) return { x: 0, y: 0 };
+      return {
+        x: normalizeDerivativeByExactAxisExtent(
+          dx,
+          fieldDxUnit,
+          fieldDxUnit,
+          xExtent.min,
+          xExtent.max,
+        ),
+        y: normalizeDerivativeByExactAxisExtent(
+          fieldDys[index],
+          fieldDyUnit,
+          fieldDxUnit,
+          yExtent.min,
+          yExtent.max,
+        ),
+      };
+    })
+    : [];
+  const fieldMagnitudes = vectorField
+    ? fieldDxs.map((dx, index) =>
+      magnitudeBasis === 'physical'
+        ? Math.hypot(
+          convertCompositeDerivative(
+            dx,
+            xAxisUnit,
+            canonicalStateUnit,
+            fieldDxUnit,
+            canonicalTimeUnit,
+          ),
+          convertCompositeDerivative(
+            fieldDys[index],
+            yAxisUnit,
+            canonicalStateUnit,
+            fieldDyUnit,
+            canonicalTimeUnit,
+          ),
+        )
+        : Math.hypot(
+          fieldNormalizedComponents[index].x,
+          fieldNormalizedComponents[index].y,
+        ))
+    : [];
+
+  const phaseSpeed = (
+    dx: unknown,
+    dy: unknown,
+    dxUnit: string | null,
+    dyUnit: string | null,
+  ): number | null => {
+    if (
+      typeof dx !== 'number' ||
+      typeof dy !== 'number' ||
+      dxUnit === null ||
+      dyUnit === null
+    ) return null;
+    if (magnitudeBasis === 'physical') {
+      if (dimensionOf(xAxisUnit) !== dimensionOf(yAxisUnit)) return null;
+      const targetStateUnit = canonicalUnitFor(xAxisUnit);
+      const targetDerivativeUnit = canonicalUnitFor(dxUnit);
+      if (!targetStateUnit || !targetDerivativeUnit) return null;
+      return Math.hypot(
+        convertCompositeDerivative(
+          dx,
+          xAxisUnit,
+          targetStateUnit,
+          dxUnit,
+          targetDerivativeUnit,
+        ),
+        convertCompositeDerivative(
+          dy,
+          yAxisUnit,
+          targetStateUnit,
+          dyUnit,
+          targetDerivativeUnit,
+        ),
+      );
+    }
+    if (
+      !xExtent ||
+      !yExtent ||
+      !(xExtent.max > xExtent.min) ||
+      !(yExtent.max > yExtent.min)
+    ) return null;
+    return Math.hypot(
+      normalizeDerivativeByExactAxisExtent(
+        dx,
+        dxUnit,
+        dxUnit,
+        xExtent.min,
+        xExtent.max,
+      ),
+      normalizeDerivativeByExactAxisExtent(
+        dy,
+        dyUnit,
+        dxUnit,
+        yExtent.min,
+        yExtent.max,
+      ),
+    );
+  };
+  const trajectoryTableSpeeds: JsonRecord[] = [];
+  if (trajectories) {
+    const pointIds = phaseStringArray(trajectories.pointTrajectoryIds);
+    const declaredIds = phaseStringArray(asRecord(trajectories.universe)?.ids);
+    const represented = new Set(pointIds);
+    const dxCarrier = asRecord(trajectories.dxdt);
+    const dyCarrier = asRecord(trajectories.dydt);
+    const dxValues = asArray(dxCarrier?.values);
+    const dyValues = asArray(dyCarrier?.values);
+    const dxUnit = typeof dxCarrier?.unit === 'string'
+      ? dxCarrier.unit
+      : null;
+    const dyUnit = typeof dyCarrier?.unit === 'string'
+      ? dyCarrier.unit
+      : null;
+    for (let sourceOrdinal = 0; sourceOrdinal < pointIds.length; sourceOrdinal++) {
+      trajectoryTableSpeeds.push({
+        trajectoryId: pointIds[sourceOrdinal],
+        sourceOrdinal,
+        speed: phaseSpeed(
+          dxValues[sourceOrdinal],
+          dyValues[sourceOrdinal],
+          dxUnit,
+          dyUnit,
+        ),
+      });
+    }
+    for (const trajectoryId of declaredIds) {
+      if (!represented.has(trajectoryId)) {
+        trajectoryTableSpeeds.push({
+          trajectoryId,
+          sourceOrdinal: null,
+          speed: null,
+        });
+      }
+    }
+  }
+
+  const coordinateTransforms: JsonRecord[] = [];
+  let coordinateConversionCount = 0;
+  const noteCoordinate = (
+    carrier: string,
+    sourceUnit: string,
+    targetUnit: string,
+  ): void => {
+    if (sourceUnit === targetUnit) return;
+    coordinateTransforms.push({
+      carrier,
+      conversion: conversionReceipt(sourceUnit, targetUnit),
+    });
+    coordinateConversionCount++;
+  };
+  if (trajectories) {
+    noteCoordinate(
+      'trajectory x',
+      String(asRecord(trajectories.x)?.unit),
+      xAxisUnit,
+    );
+    noteCoordinate(
+      'trajectory y',
+      String(asRecord(trajectories.y)?.unit),
+      yAxisUnit,
+    );
+  }
+  if (vectorField) {
+    noteCoordinate(
+      'vector-field x',
+      String(asRecord(vectorField.x)?.unit),
+      xAxisUnit,
+    );
+    noteCoordinate(
+      'vector-field y',
+      String(asRecord(vectorField.y)?.unit),
+      yAxisUnit,
+    );
+  }
+  if (nullclines) {
+    noteCoordinate(
+      'nullcline x',
+      String(asRecord(nullclines.x)?.unit),
+      xAxisUnit,
+    );
+    noteCoordinate(
+      'nullcline y',
+      String(asRecord(nullclines.y)?.unit),
+      yAxisUnit,
+    );
+  }
+  if (fixedPoints) {
+    noteCoordinate(
+      'fixed-point x',
+      String(asRecord(fixedPoints.x)?.unit),
+      xAxisUnit,
+    );
+    noteCoordinate(
+      'fixed-point y',
+      String(asRecord(fixedPoints.y)?.unit),
+      yAxisUnit,
+    );
+  }
+
+  const derivativeTransforms: JsonRecord[] = [];
+  let physicalDerivativeConversionCount = 0;
+  let axisNormalizedDerivativeConversionCount = 0;
+  const noteDerivativeTransforms = (
+    carrierLabel: 'trajectory' | 'vector-field',
+    carrier: JsonRecord | undefined,
+    xDerivativeKey: 'dxdt' | 'dx',
+    yDerivativeKey: 'dydt' | 'dy',
+  ): void => {
+    if (!carrier) return;
+    const dxCarrier = asRecord(carrier[xDerivativeKey]);
+    const dyCarrier = asRecord(carrier[yDerivativeKey]);
+    if (!dxCarrier || !dyCarrier) return;
+    const dxValues = asArray(dxCarrier.values);
+    const dyValues = asArray(dyCarrier.values);
+    if (!dxValues.some(
+      (value, index) =>
+        typeof value === 'number' && typeof dyValues[index] === 'number',
+    )) return;
+    const dxUnit = String(dxCarrier.unit);
+    const dyUnit = String(dyCarrier.unit);
+    if (
+      (magnitudeBasis === 'axis_normalized' || carrierLabel === 'vector-field') &&
+      xExtent &&
+      yExtent &&
+      xExtent.max > xExtent.min &&
+      yExtent.max > yExtent.min
+    ) {
+      const components = [
+        {
+          component: 'x',
+          derivativeUnit: dxUnit,
+          extent: { ...xExtent, unit: xAxisUnit },
+        },
+        {
+          component: 'y',
+          derivativeUnit: dyUnit,
+          extent: { ...yExtent, unit: yAxisUnit },
+        },
+      ] as const;
+      for (const component of components) {
+        derivativeTransforms.push({
+          carrier: carrierLabel,
+          component: component.component,
+          basis: 'axis_normalized',
+          uses: carrierLabel === 'vector-field'
+            ? magnitudeBasis === 'axis_normalized'
+              ? ['display_direction', 'magnitude', 'table_speed']
+              : ['display_direction']
+            : ['table_speed'],
+          sourceDerivativeUnit: component.derivativeUnit,
+          targetDerivativeUnit: dxUnit,
+          extent: component.extent,
+          conversion: axisNormalizedDerivativeConversionReceipt(
+            component.derivativeUnit,
+            dxUnit,
+          ),
+        });
+        if (component.derivativeUnit !== dxUnit) {
+          axisNormalizedDerivativeConversionCount++;
+        }
+      }
+    }
+    if (magnitudeBasis !== 'physical') return;
+    const canonicalXUnit = canonicalUnitFor(xAxisUnit);
+    const canonicalYUnit = canonicalUnitFor(yAxisUnit);
+    const canonicalDerivativeUnit = canonicalUnitFor(dxUnit);
+    if (!canonicalXUnit || !canonicalYUnit || !canonicalDerivativeUnit) return;
+    const components = [
+      {
+        component: 'x',
+        stateUnit: xAxisUnit,
+        targetStateUnit: canonicalXUnit,
+        derivativeUnit: dxUnit,
+      },
+      {
+        component: 'y',
+        stateUnit: yAxisUnit,
+        targetStateUnit: canonicalYUnit,
+        derivativeUnit: dyUnit,
+      },
+    ] as const;
+    for (const component of components) {
+      derivativeTransforms.push({
+        carrier: carrierLabel,
+        component: component.component,
+        basis: 'physical',
+        uses: carrierLabel === 'vector-field'
+          ? ['magnitude', 'table_speed']
+          : ['table_speed'],
+        sourceCompositeUnit:
+          `${component.stateUnit} ${component.derivativeUnit}`,
+        targetCompositeUnit:
+          `${component.targetStateUnit} ${canonicalDerivativeUnit}`,
+        conversion: compositeDerivativeConversionReceipt(
+          component.stateUnit,
+          component.targetStateUnit,
+          component.derivativeUnit,
+          canonicalDerivativeUnit,
+        ),
+      });
+      if (
+        component.stateUnit !== component.targetStateUnit ||
+        component.derivativeUnit !== canonicalDerivativeUnit
+      ) physicalDerivativeConversionCount++;
+    }
+  };
+  noteDerivativeTransforms('trajectory', trajectories, 'dxdt', 'dydt');
+  noteDerivativeTransforms('vector-field', vectorField, 'dx', 'dy');
+
+  const conversionCount = coordinateConversionCount +
+    physicalDerivativeConversionCount +
+    axisNormalizedDerivativeConversionCount;
+  const conversionDisclosureInventory = conversionCount > 0
+    ? [
+      `phase-plane exact unit transforms: ${coordinateConversionCount} coordinate, ` +
+      `${physicalDerivativeConversionCount} physical derivative, ` +
+      `${axisNormalizedDerivativeConversionCount} axis-normalized derivative; ` +
+      'complete units and factors are recorded in the derivation receipt',
+    ]
+    : [];
+  const duplicateTimePolicy = String(
+    requestParameters.duplicateTimePolicy ?? 'reject',
+  ) as 'reject' | 'keep_replicates';
+  const timeReplay = trajectories
+    ? replayPhaseTimeAuthority(trajectories, duplicateTimePolicy)
+    : undefined;
+  if (timeReplay && !timeReplay.ok) {
+    errors.push(relationError(
+      `${basePath}/receipt/trajectoryTimeAuthority`,
+      'the canonical trajectory rows violate the one global time direction or duplicate-time policy and therefore cannot authorize a phase-plane derivation.',
+    ));
+  }
+  const trajectoryTimeAuthority = timeReplay?.ok
+    ? timeReplay.authority
+    : null;
+  const convergenceFlags = replayPhaseConvergenceFlags(fixedPoints);
+  if (
+    !sameCanonical(
+      fixedPoints ? asArray(fixedPoints.converged) : [],
+      convergenceFlags,
+    )
+  ) {
+    errors.push(relationError(
+      `${basePath}/receipt/convergenceFlags`,
+      'the canonical fixed-point convergence claims do not equal the flags re-derived from their residuals and tolerances.',
+    ));
+  }
+  const expectedReceipt: JsonRecord = {
+    coordinateTransforms,
+    derivativeTransforms,
+    conversionCounts: {
+      coordinate: coordinateConversionCount,
+      physicalDerivative: physicalDerivativeConversionCount,
+      axisNormalizedDerivative: axisNormalizedDerivativeConversionCount,
+    },
+    conversionDisclosureInventory,
+    fieldMagnitudeUnit: vectorField
+      ? magnitudeBasis === 'physical'
+        ? `${canonicalStateUnit} ${canonicalTimeUnit}`
+        : fieldDxUnit
+      : null,
+    trajectoryTimeAuthority,
+    trajectoryTableSpeedCount: trajectoryTableSpeeds.length,
+    trajectoryTableSpeedDigest: canonicalDigest(trajectoryTableSpeeds),
+    fixedPointCount: convergenceFlags.length,
+    convergenceFlags,
+  };
+  if (!sameCanonical(operation.receipt, expectedReceipt)) {
+    errors.push(relationError(
+      `${basePath}/receipt`,
+      'the phase-plane receipt does not exactly equal the replayed conversion, trajectory-time, speed, and convergence authority.',
+    ));
+  }
+  const expectedInputDigest = canonicalDigest({
+    data,
+    parameters: requestParameters,
+  });
+  if (operation.inputDigest !== expectedInputDigest) {
+    errors.push(relationError(
+      `${basePath}/inputDigest`,
+      'the phase-plane input digest does not bind the exact canonical data and parameters.',
+    ));
+  }
+  const expectedOutputDigest = canonicalDigest({
+    ...(trajectories
+      ? { convertedTrajectoryXs, convertedTrajectoryYs }
+      : {}),
+    ...(vectorField ? { convertedFieldXs, convertedFieldYs } : {}),
+    ...(nullclines ? { convertedNullclineXs, convertedNullclineYs } : {}),
+    ...(fixedPoints ? { convertedFixedXs, convertedFixedYs } : {}),
+    ...(convertedDomain ? { convertedDomain } : {}),
+    fieldNormalizedComponents,
+    fieldMagnitudes,
+    trajectoryTableSpeeds,
+    trajectoryTimeAuthority,
+    convergenceFlags,
+  });
+  if (operation.outputDigest !== expectedOutputDigest) {
+    errors.push(relationError(
+      `${basePath}/outputDigest`,
+      'the phase-plane output digest does not bind every replayed converted carrier and derived output.',
+    ));
+  }
+  return errors;
+}
+
 /**
  * Bounded executable relations that Draft 2020-12 cannot express. This is part
  * of Cortexel's internal emission postcondition. It rebinds logical artifact
@@ -1666,6 +2374,19 @@ function validateArtifactRelations(artifact: unknown): CortexelError[] {
     errors.push(relationError(
       '/provenance/requestDigest',
       'the request digest does not bind the exact canonical request.',
+    ));
+  }
+
+  if (
+    asRecord(canonicalRequest.skill)?.id === 'neuro.phase_plane' &&
+    (
+      operations.length !== 1 ||
+      operations[0]?.algorithm !== 'cortexel.phase_plane.canonicalize_carriers'
+    )
+  ) {
+    errors.push(relationError(
+      '/derivation/operations',
+      'a phase-plane artifact must contain exactly its one closed carrier-canonicalization operation; omission, relabelling, and unrelated side operations are not authorized.',
     ));
   }
 
@@ -1718,6 +2439,14 @@ function validateArtifactRelations(artifact: unknown): CortexelError[] {
         operation,
         index,
         operations[index - 1] ?? {},
+        canonicalRequest,
+      ));
+    } else if (
+      operation.algorithm === 'cortexel.phase_plane.canonicalize_carriers'
+    ) {
+      errors.push(...validatePhasePlaneRelations(
+        operation,
+        index,
         canonicalRequest,
       ));
     }

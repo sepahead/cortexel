@@ -24,7 +24,7 @@ function stableRenderers(): JsonRecord[] {
 }
 
 describe('global stable SVG output identity', () => {
-  it('keeps renderer revision 4 while identifying both delay errata at skill revision 5', () => {
+  it('isolates the phase-plane renderer revision and three revision-5 scientific contracts', () => {
     const skills = stableSkills();
     const renderers = stableRenderers();
     const rendererById = new Map(renderers.map((renderer) => [renderer.id, renderer]));
@@ -37,11 +37,14 @@ describe('global stable SVG output identity', () => {
     for (const skill of skills) {
       const expectedSkillRevision = (
         skill.id === 'network.delay_distribution' ||
-        skill.id === 'network.delay_matrix'
+        skill.id === 'network.delay_matrix' ||
+        skill.id === 'neuro.phase_plane'
       ) ? 5 : 4;
+      const expectedRendererRevision = skill.id === 'neuro.phase_plane' ? 5 : 4;
       expect(skill.revision, skill.id).toBe(expectedSkillRevision);
-      expect(skill.renderer?.revision, skill.id).toBe(4);
-      expect(rendererById.get(skill.renderer?.id)?.revision, skill.renderer?.id).toBe(4);
+      expect(skill.renderer?.revision, skill.id).toBe(expectedRendererRevision);
+      expect(rendererById.get(skill.renderer?.id)?.revision, skill.renderer?.id)
+        .toBe(expectedRendererRevision);
 
       expect(skill.outputAuthority?.evaluator?.id, skill.id).toBe(
         `${skill.id}.output_authority.v${expectedSkillRevision}`,
@@ -49,7 +52,8 @@ describe('global stable SVG output identity', () => {
     }
 
     for (const renderer of renderers) {
-      expect(renderer.revision, renderer.id).toBe(4);
+      expect(renderer.revision, renderer.id)
+        .toBe(renderer.id === 'figure.phase_plane' ? 5 : 4);
     }
   });
 });

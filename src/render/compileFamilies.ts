@@ -3009,6 +3009,7 @@ export interface PhasePlaneFigureSpec {
     readonly ids: readonly string[];
     readonly labels: readonly string[];
     readonly pointIds: readonly string[];
+    readonly times: readonly number[];
     readonly xs: readonly (number | null)[];
     readonly ys: readonly (number | null)[];
     readonly timeDirection: 'forward' | 'backward';
@@ -3185,8 +3186,23 @@ export function compilePhasePlaneFigure(
         ],
       });
     }
+    const maximumFieldMagnitude = field.magnitudes.reduce(
+      (maximum, magnitude) => magnitude > maximum ? magnitude : maximum,
+      0,
+    );
     legend.push({
-      label: `Caller-supplied vector field; ${field.scaling}${field.scaling === 'sqrt_magnitude' ? ' (compressed magnitude)' : ''}; ${field.magnitudeBasis} magnitude reference ${formatNumber(field.magnitudes.reduce((maximum, magnitude) => magnitude > maximum ? magnitude : maximum, 0))} ${field.magnitudeUnit} maps to at most ${formatNumber(field.maxArrowLengthFraction * 100)}% of the shorter plot axis`,
+      label: field.scaling === 'unit_length'
+        ? 'Caller-supplied vector field; unit_length (direction only; magnitude does ' +
+          `not affect arrow length); each nonzero vector has ${formatNumber(
+            field.maxArrowLengthFraction * 100,
+          )}% of the shorter plot-axis length; ${field.magnitudeBasis} magnitudes remain in the table`
+        : `Caller-supplied vector field; ${field.scaling}${
+          field.scaling === 'sqrt_magnitude' ? ' (compressed magnitude)' : ''
+        }; textual ${field.magnitudeBasis} magnitude key: ${formatNumber(
+          maximumFieldMagnitude,
+        )} ${field.magnitudeUnit} maps to at most ${formatNumber(
+          field.maxArrowLengthFraction * 100,
+        )}% of the shorter plot axis`,
       color: gridColor(context.themeId),
       glyph: 'series',
     });
@@ -3223,7 +3239,24 @@ export function compilePhasePlaneFigure(
         })))
         .filter((run) => run.length >= 2);
       if (drawable.length > 0) {
-        curveMarks.push({ type: 'line', subpaths: drawable, stroke: style.color, strokeWidth: 1.5, dash: '5 3' });
+        curveMarks.push({
+          type: 'line',
+          subpaths: drawable,
+          stroke: style.color,
+          strokeWidth: 1.5,
+          dash: style.dash,
+        });
+        curveMarks.push({
+          type: 'point',
+          points: [{
+            x: drawable[0][0].x,
+            y: drawable[0][0].y,
+            authority: { tag: 'decorative_mark' },
+          }],
+          fill: style.color,
+          radius: 2.8,
+          shape: style.marker,
+        });
       }
       const isolated = split.runs
         .map((run, runIndex) => ({ run, runIndex }))
@@ -3245,10 +3278,13 @@ export function compilePhasePlaneFigure(
       }
       if (curveMarks.length > 0) marks.push({ type: 'group', id: `nullcline-${id}`, marks: curveMarks });
       legend.push({
-        label: nullclines.labels[curveIndex] ?? id,
+        label: `${nullclines.labels[curveIndex] ?? id}${
+          curveMarks.length === 0 ? ' (declared; no drawable finite points)' : ''
+        }`,
         color: style.color,
         glyph: 'series',
-        dash: '5 3',
+        dash: style.dash,
+        marker: style.marker,
       });
     }
   }
@@ -3259,28 +3295,58 @@ export function compilePhasePlaneFigure(
       const id = trajectories.ids[trajectoryIndex];
       const selectedXs: (number | null)[] = [];
       const selectedYs: (number | null)[] = [];
+      const selectedTimes: number[] = [];
       const selectedOrdinals: number[] = [];
       for (let index = 0; index < trajectories.pointIds.length; index++) {
         if (trajectories.pointIds[index] !== id) continue;
         selectedXs.push(trajectories.xs[index]);
         selectedYs.push(trajectories.ys[index]);
+        selectedTimes.push(trajectories.times[index]);
         selectedOrdinals.push(index);
       }
       const split = splitStatePath(selectedXs, selectedYs);
       const style = categoricalStyle(trajectoryIndex);
       const trajectoryMarks: Mark[] = [];
-      const pageRuns = split.runs.map((run, runIndex) => run.map((point, pointIndex) => ({
-        x: xScale.map(point.x),
-        y: yScale.map(point.y),
-        authority: {
-          tag: 'data_carrier' as const,
-          classId: 'trajectories',
-          provenance: {
-            trajectoryId: id,
-            sourceOrdinal: selectedOrdinals[split.sourceRuns[runIndex][pointIndex]],
+      const strictRuns: { x: number; y: number }[][] = [];
+      const strictSourceRuns: number[][] = [];
+      for (let runIndex = 0; runIndex < split.runs.length; runIndex++) {
+        const run = split.runs[runIndex];
+        const sourceRun = split.sourceRuns[runIndex];
+        let strictRun: { x: number; y: number }[] = [];
+        let strictSourceRun: number[] = [];
+        for (let pointIndex = 0; pointIndex < run.length; pointIndex++) {
+          const localSourceOrdinal = sourceRun[pointIndex];
+          if (
+            strictRun.length > 0 &&
+            selectedTimes[localSourceOrdinal] ===
+              selectedTimes[strictSourceRun[strictSourceRun.length - 1]]
+          ) {
+            strictRuns.push(strictRun);
+            strictSourceRuns.push(strictSourceRun);
+            strictRun = [];
+            strictSourceRun = [];
+          }
+          strictRun.push(run[pointIndex]);
+          strictSourceRun.push(localSourceOrdinal);
+        }
+        if (strictRun.length > 0) {
+          strictRuns.push(strictRun);
+          strictSourceRuns.push(strictSourceRun);
+        }
+      }
+      const pageRuns = strictRuns.map((run, runIndex) =>
+        run.map((point, pointIndex) => ({
+          x: xScale.map(point.x),
+          y: yScale.map(point.y),
+          authority: {
+            tag: 'data_carrier' as const,
+            classId: 'trajectories',
+            provenance: {
+              trajectoryId: id,
+              sourceOrdinal: selectedOrdinals[strictSourceRuns[runIndex][pointIndex]],
+            },
           },
-        },
-      })));
+        })));
       const drawable = pageRuns.filter((run) => run.length >= 2);
       if (drawable.length > 0) {
         trajectoryMarks.push({ type: 'line', subpaths: drawable, stroke: style.color, strokeWidth: 1.75, dash: style.dash });
@@ -3294,7 +3360,8 @@ export function compilePhasePlaneFigure(
         to: { x: number; y: number };
         authority: OutputAuthorityAtomicRoleV1;
       }[] = [];
-      for (const run of pageRuns) {
+      for (let runIndex = 0; runIndex < pageRuns.length; runIndex++) {
+        const run = pageRuns[runIndex];
         if (run.length < 2 || trajectories.directionMode === 'none') continue;
         const every = trajectories.everyNPoints ?? 2;
         const indexes = trajectories.directionMode === 'arrowhead_at_end'
@@ -3309,7 +3376,10 @@ export function compilePhasePlaneFigure(
         for (const index of indexes) {
           const earlier = run[index - 1];
           const later = run[index];
-          const arrow = trajectories.timeDirection === 'forward'
+          const earlierTime = selectedTimes[strictSourceRuns[runIndex][index - 1]];
+          const laterTime = selectedTimes[strictSourceRuns[runIndex][index]];
+          if (earlierTime === laterTime) continue;
+          const arrow = earlierTime < laterTime
             ? { from: earlier, to: later }
             : { from: later, to: earlier };
           if (arrow.from.x !== arrow.to.x || arrow.from.y !== arrow.to.y) {

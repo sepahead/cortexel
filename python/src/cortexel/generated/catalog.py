@@ -21,8 +21,8 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:ba52f26842cfc452532936e39f78e63a8095fdaa7e401b5618ac0af25f1b553a"
-CATALOG_DIGEST: str = "sha256:b267cf79a79862230d7f54e35b9f4b4bc54634fa21721ca1b8f3ef4a98d3f8af"
+CONTRACT_DIGEST: str = "sha256:976dc178bd6ca99bc5a57717bb2f2fae2cdb17f29f4bd18802d58032961113ec"
+CATALOG_DIGEST: str = "sha256:e5eb3c383cb7593c3ed797733865b11f1f397dcfddce3e458e43be54834a4bca"
 
 STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([
     "network.adjacency_matrix",
@@ -61,7 +61,7 @@ SKILL_REVISIONS: Final[Mapping[str, int]] = _freeze({
     "neuro.correlogram": 4,
     "neuro.isi_distribution": 4,
     "neuro.multisignal_trace": 4,
-    "neuro.phase_plane": 4,
+    "neuro.phase_plane": 5,
     "neuro.population_rate": 4,
     "neuro.psth": 4,
     "neuro.response_curve": 4,

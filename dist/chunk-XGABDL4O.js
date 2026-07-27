@@ -396,17 +396,6 @@ function exactBinary64AffineFraction(value, origin, minimum, maximum) {
   const rounded = roundRationalWithBinaryExponent(numerator, denominator, 0);
   return Object.is(rounded.value, -0) ? 0 : rounded.value;
 }
-function exactBinary64RatioToDifference(value, minimum, maximum) {
-  const denominator = finiteValueInMinSubnormalUnits(maximum) - finiteValueInMinSubnormalUnits(minimum);
-  if (denominator <= 0n) {
-    throw new Error("exact binary64 ratio to difference requires maximum > minimum");
-  }
-  const numerator = finiteValueInMinSubnormalUnits(value);
-  return finiteNonzeroRoundedResult(
-    roundRationalWithBinaryExponent(numerator, denominator, 0),
-    "ratio to difference"
-  );
-}
 
 export {
   finiteBinary64ToMinSubnormalUnits,
@@ -426,7 +415,6 @@ export {
   binary64RelativeDifferenceWithinTolerance,
   exactBinary64SumUnits,
   exactBinary64RatioToMean,
-  exactBinary64AffineFraction,
-  exactBinary64RatioToDifference
+  exactBinary64AffineFraction
 };
-//# sourceMappingURL=chunk-HTREPOSY.js.map
+//# sourceMappingURL=chunk-XGABDL4O.js.map

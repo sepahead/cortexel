@@ -40,19 +40,23 @@ import {
   UNCERTAINTY_STYLES_BY_KIND,
 } from '../generated/catalog.js';
 import {
+  axisNormalizedDerivativeConversionReceipt,
   axesAreCompatible,
+  compositeDerivativeConversionReceipt,
   conversionFactor,
   conversionReceipt,
   canonicalUnitFor,
   compareExactUnitSumToValue,
   compareExactUnitArraySumToDifference,
   convert,
+  convertCompositeDerivative,
   convertDifference,
   convertExactUnitSum,
   deriveExactAggregateCountRateInUnit,
   deriveExactCountRateInUnit,
   divideExactIntegerByConvertedDifference,
   dimensionOf,
+  normalizeDerivativeByExactAxisExtent,
   reciprocalUnit,
   unitLabel,
   type ConversionReceipt,
@@ -169,7 +173,6 @@ import { materializeCenteredLagBins } from '../core/binning.js';
 import {
   exactBinary64DivideByIntegerProduct,
   exactBinary64Mean,
-  exactBinary64RatioToDifference,
   exactBinary64Sum,
   exactBinary64WeightedMean,
   exactBinary64WeightedSum,
@@ -4792,6 +4795,137 @@ function phaseConvergenceFlags(fixedPoints: Record<string, unknown> | undefined)
   ));
 }
 
+interface PhaseTrajectoryTimeEntry {
+  readonly trajectoryId: string;
+  readonly appliedGlobalTimeDirection: 'forward' | 'backward';
+  readonly pointCount: number;
+  readonly firstTime: number | null;
+  readonly lastTime: number | null;
+  readonly minimumTime: number | null;
+  readonly maximumTime: number | null;
+  readonly equalTimeBreakCount: number;
+}
+
+interface PhaseTrajectoryTimeAuthority {
+  readonly timeUnit: string;
+  readonly timeDirection: 'forward' | 'backward';
+  readonly duplicateTimePolicy: 'reject' | 'keep_replicates';
+  readonly pointCount: number;
+  readonly trajectoryCount: number;
+  readonly globalMinimumTime: number;
+  readonly globalMaximumTime: number;
+  readonly equalTimeBreakCount: number;
+  readonly trajectories: readonly PhaseTrajectoryTimeEntry[];
+}
+
+type PhaseTrajectoryTimeResult =
+  | { readonly ok: true; readonly authority: PhaseTrajectoryTimeAuthority }
+  | {
+    readonly ok: false;
+    readonly sourceOrdinal: number;
+    readonly previousSourceOrdinal: number;
+    readonly trajectoryId: string;
+    readonly kind: 'duplicate_rejected' | 'direction_reversal';
+    readonly previousTime: number;
+    readonly time: number;
+  };
+
+function phaseTrajectoryTimeAuthority(
+  trajectories: Record<string, unknown>,
+  duplicateTimePolicy: 'reject' | 'keep_replicates',
+): PhaseTrajectoryTimeResult {
+  const declaredIds = strings(rec(trajectories.universe)?.ids);
+  const pointIds = strings(trajectories.pointTrajectoryIds);
+  const times = numbers(rec(trajectories.times)?.values);
+  const timeDirection = String(trajectories.timeDirection) as 'forward' | 'backward';
+  const sourceOrdinalsById = new Map(declaredIds.map((id) => [id, [] as number[]]));
+  for (let sourceOrdinal = 0; sourceOrdinal < pointIds.length; sourceOrdinal++) {
+    sourceOrdinalsById.get(pointIds[sourceOrdinal])?.push(sourceOrdinal);
+  }
+
+  let globalMinimumTime = times[0];
+  let globalMaximumTime = times[0];
+  for (const time of times) {
+    if (time < globalMinimumTime) globalMinimumTime = time;
+    if (time > globalMaximumTime) globalMaximumTime = time;
+  }
+
+  let equalTimeBreakCount = 0;
+  const entries: PhaseTrajectoryTimeEntry[] = [];
+  for (const trajectoryId of declaredIds) {
+    const sourceOrdinals = sourceOrdinalsById.get(trajectoryId) ?? [];
+    let minimumTime: number | null = null;
+    let maximumTime: number | null = null;
+    let trajectoryEqualTimeBreakCount = 0;
+    for (let localIndex = 0; localIndex < sourceOrdinals.length; localIndex++) {
+      const sourceOrdinal = sourceOrdinals[localIndex];
+      const time = times[sourceOrdinal];
+      if (minimumTime === null || time < minimumTime) minimumTime = time;
+      if (maximumTime === null || time > maximumTime) maximumTime = time;
+      if (localIndex === 0) continue;
+      const previousSourceOrdinal = sourceOrdinals[localIndex - 1];
+      const previousTime = times[previousSourceOrdinal];
+      if (time === previousTime) {
+        if (duplicateTimePolicy === 'reject') {
+          return {
+            ok: false,
+            sourceOrdinal,
+            previousSourceOrdinal,
+            trajectoryId,
+            kind: 'duplicate_rejected',
+            previousTime,
+            time,
+          };
+        }
+        trajectoryEqualTimeBreakCount++;
+        equalTimeBreakCount++;
+        continue;
+      }
+      const reversesDirection = timeDirection === 'forward'
+        ? time < previousTime
+        : time > previousTime;
+      if (reversesDirection) {
+        return {
+          ok: false,
+          sourceOrdinal,
+          previousSourceOrdinal,
+          trajectoryId,
+          kind: 'direction_reversal',
+          previousTime,
+          time,
+        };
+      }
+    }
+    entries.push({
+      trajectoryId,
+      appliedGlobalTimeDirection: timeDirection,
+      pointCount: sourceOrdinals.length,
+      firstTime: sourceOrdinals.length === 0 ? null : times[sourceOrdinals[0]],
+      lastTime: sourceOrdinals.length === 0
+        ? null
+        : times[sourceOrdinals[sourceOrdinals.length - 1]],
+      minimumTime,
+      maximumTime,
+      equalTimeBreakCount: trajectoryEqualTimeBreakCount,
+    });
+  }
+
+  return {
+    ok: true,
+    authority: {
+      timeUnit: String(rec(trajectories.times)?.unit),
+      timeDirection,
+      duplicateTimePolicy,
+      pointCount: pointIds.length,
+      trajectoryCount: declaredIds.length,
+      globalMinimumTime,
+      globalMaximumTime,
+      equalTimeBreakCount,
+      trajectories: entries,
+    },
+  };
+}
+
 function phasePlaneTableRows(
   data: Record<string, unknown>,
   parameters: Record<string, unknown>,
@@ -4863,19 +4997,37 @@ function phasePlaneTableRows(
       const canonicalStateUnit = canonicalUnitFor(xUnit);
       const canonicalTimeUnit = canonicalUnitFor(dxUnit);
       if (!canonicalStateUnit || !canonicalTimeUnit) return null;
-      const canonicalDx = dx * conversionFactor(xUnit, canonicalStateUnit) *
-        conversionFactor(dxUnit, canonicalTimeUnit);
-      const canonicalDy = dy * conversionFactor(yUnit, canonicalStateUnit) *
-        conversionFactor(dyUnit, canonicalTimeUnit);
+      const canonicalDx = convertCompositeDerivative(
+        dx,
+        xUnit,
+        canonicalStateUnit,
+        dxUnit,
+        canonicalTimeUnit,
+      );
+      const canonicalDy = convertCompositeDerivative(
+        dy,
+        yUnit,
+        canonicalStateUnit,
+        dyUnit,
+        canonicalTimeUnit,
+      );
       return Math.hypot(canonicalDx, canonicalDy);
     }
     if (!xExtent || !yExtent || !(xExtent.max > xExtent.min) || !(yExtent.max > yExtent.min)) {
       return null;
     }
     return Math.hypot(
-      exactBinary64RatioToDifference(dx, xExtent.min, xExtent.max),
-      exactBinary64RatioToDifference(
-        convert(dy, dyUnit, dxUnit),
+      normalizeDerivativeByExactAxisExtent(
+        dx,
+        dxUnit,
+        dxUnit,
+        xExtent.min,
+        xExtent.max,
+      ),
+      normalizeDerivativeByExactAxisExtent(
+        dy,
+        dyUnit,
+        dxUnit,
         yExtent.min,
         yExtent.max,
       ),
@@ -11593,6 +11745,37 @@ function compile(
     const fieldDyUnit = String(rec(vectorField?.dy)?.unit);
     const directionMarkers = rec(parameters.directionMarkers);
     const arrowScaling = rec(parameters.arrowScaling);
+    const duplicateTimePolicy = String(
+      parameters.duplicateTimePolicy ?? 'reject',
+    ) as 'reject' | 'keep_replicates';
+    const trajectoryTimeResult = trajectories
+      ? phaseTrajectoryTimeAuthority(trajectories, duplicateTimePolicy)
+      : undefined;
+    if (trajectoryTimeResult && !trajectoryTimeResult.ok) {
+      const duplicate = trajectoryTimeResult.kind === 'duplicate_rejected';
+      return fail(
+        duplicate ? 'SCIENCE_DUPLICATE_TIME_POLICY' : 'SCIENCE_NEGATIVE_INTERVAL',
+        'science',
+        duplicate
+          ? `trajectory ${trajectoryTimeResult.trajectoryId} repeats time ${
+            exactNumberText(trajectoryTimeResult.time)
+          } at source ordinals ${trajectoryTimeResult.previousSourceOrdinal} and ${
+            trajectoryTimeResult.sourceOrdinal
+          }, but duplicateTimePolicy=reject requires strict per-trajectory time.`
+          : `trajectory ${trajectoryTimeResult.trajectoryId} changes from time ${
+            exactNumberText(trajectoryTimeResult.previousTime)
+          } at source ordinal ${trajectoryTimeResult.previousSourceOrdinal} to ${
+            exactNumberText(trajectoryTimeResult.time)
+          } at source ordinal ${trajectoryTimeResult.sourceOrdinal}, reversing the one declared ` +
+            `global timeDirection=${String(trajectories?.timeDirection)}, which governs every ` +
+            'trajectory in this FigureRequest. Mixed forward/backward trajectories require ' +
+            'separate FigureRequests.',
+        `/data/trajectories/times/values/${trajectoryTimeResult.sourceOrdinal}`,
+      );
+    }
+    const trajectoryTimeAuthority = trajectoryTimeResult?.ok
+      ? trajectoryTimeResult.authority
+      : null;
     const convergenceFlags = phaseConvergenceFlags(fixedPoints);
     const declaredConvergence = arr(fixedPoints?.converged) ?? [];
     const convergenceMismatch = convergenceFlags.findIndex(
@@ -11628,6 +11811,13 @@ function compile(
         '/data',
       );
     }
+    const trajectoryTableSpeeds = tableRows
+      .filter((row) => row[0] === 'trajectory_point')
+      .map((row) => ({
+        trajectoryId: row[1],
+        sourceOrdinal: row[2],
+        speed: row[9],
+      }));
 
     const convertedTrajectoryXs = trajectories
       ? nullableConverted(arr(rec(trajectories.x)?.values) ?? [], String(rec(trajectories.x)?.unit), xAxisUnit)
@@ -11677,7 +11867,9 @@ function compile(
     ].filter((value): value is number => value !== null));
     const fieldDxs = numbers(rec(vectorField?.dx)?.values);
     const fieldDys = numbers(rec(vectorField?.dy)?.values);
-    const magnitudeBasis = String(parameters.magnitudeBasis) as 'axis_normalized' | 'physical';
+    const magnitudeBasis = String(
+      parameters.magnitudeBasis ?? 'axis_normalized',
+    ) as 'axis_normalized' | 'physical';
     if (magnitudeBasis === 'physical' && dimensionOf(xAxisUnit) !== dimensionOf(yAxisUnit)) {
       return fail(
         'SCIENCE_UNIT_DIMENSION_MISMATCH',
@@ -11699,9 +11891,17 @@ function compile(
           !(phaseYExtent.max > phaseYExtent.min)
         ) return { x: 0, y: 0 };
         return {
-          x: exactBinary64RatioToDifference(dx, phaseXExtent.min, phaseXExtent.max),
-          y: exactBinary64RatioToDifference(
-            convert(dy, fieldDyUnit, fieldDxUnit),
+          x: normalizeDerivativeByExactAxisExtent(
+            dx,
+            fieldDxUnit,
+            fieldDxUnit,
+            phaseXExtent.min,
+            phaseXExtent.max,
+          ),
+          y: normalizeDerivativeByExactAxisExtent(
+            dy,
+            fieldDyUnit,
+            fieldDxUnit,
             phaseYExtent.min,
             phaseYExtent.max,
           ),
@@ -11721,17 +11921,36 @@ function compile(
       const dy = fieldDys[index];
       if (magnitudeBasis === 'physical') {
         return Math.hypot(
-          dx * conversionFactor(xAxisUnit, canonicalStateUnit) * conversionFactor(fieldDxUnit, canonicalTimeUnit),
-          dy * conversionFactor(yAxisUnit, canonicalStateUnit) * conversionFactor(fieldDyUnit, canonicalTimeUnit),
+          convertCompositeDerivative(
+            dx,
+            xAxisUnit,
+            canonicalStateUnit,
+            fieldDxUnit,
+            canonicalTimeUnit,
+          ),
+          convertCompositeDerivative(
+            dy,
+            yAxisUnit,
+            canonicalStateUnit,
+            fieldDyUnit,
+            canonicalTimeUnit,
+          ),
         );
       }
       const normalized = fieldNormalizedComponents[index];
       return Math.hypot(normalized.x, normalized.y);
     }) : [];
-    const phaseConversions: string[] = [];
+    const phaseCoordinateTransforms: Record<string, unknown>[] = [];
+    let phaseCoordinateConversionCount = 0;
+    let phasePhysicalDerivativeConversionCount = 0;
+    let phaseAxisNormalizedDerivativeConversionCount = 0;
     const noteConversion = (label: string, sourceUnit: string, targetUnit: string): void => {
       if (sourceUnit !== targetUnit) {
-        phaseConversions.push(`${label}: ${sourceUnit} -> ${targetUnit} (factor ${conversionFactor(sourceUnit, targetUnit)})`);
+        phaseCoordinateTransforms.push({
+          carrier: label,
+          conversion: conversionReceipt(sourceUnit, targetUnit),
+        });
+        phaseCoordinateConversionCount++;
       }
     };
     if (trajectories) {
@@ -11750,26 +11969,151 @@ function compile(
       noteConversion('fixed-point x', String(rec(fixedPoints.x)?.unit), xAxisUnit);
       noteConversion('fixed-point y', String(rec(fixedPoints.y)?.unit), yAxisUnit);
     }
+    const phaseDerivativeTransforms: Record<string, unknown>[] = [];
+    const noteDerivativeTransforms = (
+      carrierLabel: 'trajectory' | 'vector-field',
+      carrier: Record<string, unknown> | undefined,
+      xDerivativeKey: 'dxdt' | 'dx',
+      yDerivativeKey: 'dydt' | 'dy',
+    ): void => {
+      if (!carrier) return;
+      const dxCarrier = rec(carrier[xDerivativeKey]);
+      const dyCarrier = rec(carrier[yDerivativeKey]);
+      if (!dxCarrier || !dyCarrier) return;
+      const dxValues = arr(dxCarrier.values) ?? [];
+      const dyValues = arr(dyCarrier.values) ?? [];
+      const hasPairedDerivative = dxValues.some(
+        (value, index) => typeof value === 'number' && typeof dyValues[index] === 'number',
+      );
+      if (!hasPairedDerivative) return;
+      const dxUnit = String(dxCarrier.unit);
+      const dyUnit = String(dyCarrier.unit);
+      const axisNormalizedApplied =
+        magnitudeBasis === 'axis_normalized' || carrierLabel === 'vector-field';
+      if (
+        axisNormalizedApplied &&
+        phaseXExtent &&
+        phaseYExtent &&
+        phaseXExtent.max > phaseXExtent.min &&
+        phaseYExtent.max > phaseYExtent.min
+      ) {
+        const components = [
+          {
+            component: 'x',
+            derivativeUnit: dxUnit,
+            extent: { ...phaseXExtent, unit: xAxisUnit },
+          },
+          {
+            component: 'y',
+            derivativeUnit: dyUnit,
+            extent: { ...phaseYExtent, unit: yAxisUnit },
+          },
+        ] as const;
+        for (const component of components) {
+          const conversion = axisNormalizedDerivativeConversionReceipt(
+            component.derivativeUnit,
+            dxUnit,
+          );
+          phaseDerivativeTransforms.push({
+            carrier: carrierLabel,
+            component: component.component,
+            basis: 'axis_normalized',
+            uses: carrierLabel === 'vector-field'
+              ? magnitudeBasis === 'axis_normalized'
+                ? ['display_direction', 'magnitude', 'table_speed']
+                : ['display_direction']
+              : ['table_speed'],
+            sourceDerivativeUnit: component.derivativeUnit,
+            targetDerivativeUnit: dxUnit,
+            extent: component.extent,
+            conversion,
+          });
+          if (component.derivativeUnit !== dxUnit) {
+            phaseAxisNormalizedDerivativeConversionCount++;
+          }
+        }
+      }
+      if (magnitudeBasis === 'physical') {
+        const canonicalXUnit = canonicalUnitFor(xAxisUnit);
+        const canonicalYUnit = canonicalUnitFor(yAxisUnit);
+        const canonicalDerivativeUnit = canonicalUnitFor(dxUnit);
+        if (!canonicalXUnit || !canonicalYUnit || !canonicalDerivativeUnit) return;
+        const components = [
+          {
+            component: 'x',
+            stateUnit: xAxisUnit,
+            targetStateUnit: canonicalXUnit,
+            derivativeUnit: dxUnit,
+          },
+          {
+            component: 'y',
+            stateUnit: yAxisUnit,
+            targetStateUnit: canonicalYUnit,
+            derivativeUnit: dyUnit,
+          },
+        ] as const;
+        for (const component of components) {
+          const conversion = compositeDerivativeConversionReceipt(
+            component.stateUnit,
+            component.targetStateUnit,
+            component.derivativeUnit,
+            canonicalDerivativeUnit,
+          );
+          phaseDerivativeTransforms.push({
+            carrier: carrierLabel,
+            component: component.component,
+            basis: 'physical',
+            uses: carrierLabel === 'vector-field'
+              ? ['magnitude', 'table_speed']
+              : ['table_speed'],
+            sourceCompositeUnit: `${component.stateUnit} ${component.derivativeUnit}`,
+            targetCompositeUnit: `${component.targetStateUnit} ${canonicalDerivativeUnit}`,
+            conversion,
+          });
+          if (
+            component.stateUnit !== component.targetStateUnit ||
+            component.derivativeUnit !== canonicalDerivativeUnit
+          ) {
+            phasePhysicalDerivativeConversionCount++;
+          }
+        }
+        return;
+      }
+    };
+    noteDerivativeTransforms('trajectory', trajectories, 'dxdt', 'dydt');
+    noteDerivativeTransforms('vector-field', vectorField, 'dx', 'dy');
+    const phaseConversionCount =
+      phaseCoordinateConversionCount +
+      phasePhysicalDerivativeConversionCount +
+      phaseAxisNormalizedDerivativeConversionCount;
+    const phaseConversions = phaseConversionCount > 0
+      ? [
+        `phase-plane exact unit transforms: ${phaseCoordinateConversionCount} coordinate, ` +
+        `${phasePhysicalDerivativeConversionCount} physical derivative, ` +
+        `${phaseAxisNormalizedDerivativeConversionCount} axis-normalized derivative; ` +
+        'complete units and factors are recorded in the derivation receipt',
+      ]
+      : [];
     const phaseFacts: Partial<DisclosureFacts> = phaseConversions.length > 0
       ? { unitConversions: phaseConversions }
       : {};
     const phaseOperations: DerivationOperation[] = [{
       id: 'phase_plane.carriers.canonicalize_and_verify',
       algorithm: 'cortexel.phase_plane.canonicalize_carriers',
-      algorithmRevision: 2,
+      algorithmRevision: 3,
       parameters: {
         xAxisUnit,
         yAxisUnit,
         magnitudeBasis,
-        axisNormalizedBinary64Arithmetic: 'exact_component_over_exact_extent_difference_then_one_final_round',
+        derivativeBinary64Arithmetic:
+          'exact_state_and_reciprocal_time_factors_then_one_final_round; ' +
+          'axis_normalized_exact_reciprocal_time_factor_over_exact_extent_then_one_final_round',
+        trajectoryTimeSemantics:
+          'one_global_direction_per_request_checked_independently_per_trajectory_source_order; ' +
+          'reject=strict; keep_replicates=nonstrict_equal_time_path_break',
         convergenceRelativeTolerance: 1e-9,
       },
-      inputDigest: canonicalDigest({
-        ...(trajectories ? { trajectories } : {}),
-        ...(vectorField ? { vectorField } : {}),
-        ...(nullclines ? { nullclines } : {}),
-        ...(fixedPoints ? { fixedPoints } : {}),
-      }),
+      inputDigest: canonicalDigest({ data, parameters }),
       outputDigest: canonicalDigest({
         ...(trajectories ? { convertedTrajectoryXs, convertedTrajectoryYs } : {}),
         ...(vectorField ? { convertedFieldXs, convertedFieldYs } : {}),
@@ -11778,17 +12122,27 @@ function compile(
         ...(convertedDomain ? { convertedDomain } : {}),
         fieldNormalizedComponents,
         fieldMagnitudes,
+        trajectoryTableSpeeds,
+        trajectoryTimeAuthority,
         convergenceFlags,
       }),
       receipt: {
-        conversions: phaseConversions,
-        ...(vectorField
-          ? {
-            fieldMagnitudeUnit: magnitudeBasis === 'physical'
-              ? `${canonicalStateUnit} ${canonicalTimeUnit}`
-              : fieldDxUnit,
-          }
-          : {}),
+        coordinateTransforms: phaseCoordinateTransforms,
+        derivativeTransforms: phaseDerivativeTransforms,
+        conversionCounts: {
+          coordinate: phaseCoordinateConversionCount,
+          physicalDerivative: phasePhysicalDerivativeConversionCount,
+          axisNormalizedDerivative: phaseAxisNormalizedDerivativeConversionCount,
+        },
+        conversionDisclosureInventory: phaseConversions,
+        fieldMagnitudeUnit: vectorField
+          ? magnitudeBasis === 'physical'
+            ? `${canonicalStateUnit} ${canonicalTimeUnit}`
+            : fieldDxUnit
+          : null,
+        trajectoryTimeAuthority,
+        trajectoryTableSpeedCount: trajectoryTableSpeeds.length,
+        trajectoryTableSpeedDigest: canonicalDigest(trajectoryTableSpeeds),
         fixedPointCount: convergenceFlags.length,
         convergenceFlags,
       },
@@ -11812,8 +12166,95 @@ function compile(
       ...phaseFacts,
       ...(missingPhasePointCount > 0 ? { missingValueCount: missingPhasePointCount } : {}),
     };
-    const trajectoryTimes = numbers(rec(trajectories?.times)?.values);
     const uncertaintyRecord = rec(parameters.uncertainty) ?? {};
+    const trajectoryStatement = trajectories
+      ? `${strings(rec(trajectories.universe)?.ids).length} trajectories, ` +
+        `${strings(trajectories.pointTrajectoryIds).length} points, global time span ` +
+        `${exactNumberText(trajectoryTimeAuthority!.globalMinimumTime)} to ` +
+        `${exactNumberText(trajectoryTimeAuthority!.globalMaximumTime)} ` +
+        `${trajectoryTimeAuthority!.timeUnit}. The one declared global timeDirection ` +
+        `applies to every trajectory; each identity is checked independently and model time ` +
+        `${trajectoryTimeAuthority!.timeDirection === 'forward' ? 'increases' : 'decreases'} ` +
+        `along its supplied point order under duplicateTimePolicy=${
+          trajectoryTimeAuthority!.duplicateTimePolicy
+        }. ` +
+        (trajectoryTimeAuthority!.duplicateTimePolicy === 'keep_replicates'
+          ? `${trajectoryTimeAuthority!.equalTimeBreakCount} equal-time ${
+            trajectoryTimeAuthority!.equalTimeBreakCount === 1
+              ? 'boundary is'
+              : 'boundaries are'
+          } retained in the table and ${
+            trajectoryTimeAuthority!.equalTimeBreakCount === 1 ? 'breaks' : 'break'
+          } path geometry.`
+          : 'Equal-time points are refused, so accepted trajectory time is strict.') +
+        ' ' +
+        'Any supplied trajectory path geometry shows where the state went, not how fast.'
+      : '';
+    const directionMarkerStatement = trajectories
+      ? directionMarkers?.mode === 'none'
+        ? 'Direction-marker policy none: no trajectory direction markers are drawn.'
+        : directionMarkers?.mode === 'arrowhead_at_end'
+          ? 'Direction-marker policy arrowhead_at_end requests one arrow on the terminal ' +
+            'candidate segment of each continuous finite, strictly timed run, oriented from lower ' +
+            'to higher model time; a zero-duration or geometrically zero-length terminal ' +
+            'candidate cannot carry direction, and runs with fewer than two finite points ' +
+            'receive no arrow.'
+          : `Direction-marker policy arrowheads_every_n_points (${String(
+            directionMarkers?.everyNPoints,
+          )}) requests arrows on eligible candidate segments, oriented from lower to higher ` +
+            'model time; zero-duration and geometrically zero-length candidates are skipped, ' +
+            'so ineligible candidates can leave a run without a marker; a finite strictly ' +
+            'timed run shorter than everyNPoints has no candidate and receives no arrow.'
+      : '';
+    const arrowScalingMode = String(arrowScaling?.mode);
+    const arrowScalingMeaning = arrowScalingMode === 'unit_length'
+      ? 'unit_length: every nonzero vector has equal display length and magnitude ' +
+        'does not affect arrow length'
+      : arrowScalingMode === 'magnitude_proportional'
+        ? 'magnitude_proportional: display length is linear in the declared-basis magnitude'
+        : 'sqrt_magnitude: display length is proportional to sqrt(magnitude), a compressed ' +
+          'nonlinear encoding';
+    const maximumArrowLengthPercent =
+      (num(arrowScaling?.maxArrowLengthFraction) ?? 0.05) * 100;
+    const vectorFieldStatement = vectorField && convertedDomain
+      ? `Vector field: ${numbers(rec(vectorField.x)?.values).length} samples, ` +
+        `${String(rec(vectorField.lattice)?.kind)}, over x ` +
+        `${exactNumberText(convertedDomain.xMin)} to ${exactNumberText(convertedDomain.xMax)} ` +
+        `${xAxisUnit} and y ${exactNumberText(convertedDomain.yMin)} to ` +
+        `${exactNumberText(convertedDomain.yMax)} ${yAxisUnit}; arrow length is a ` +
+        `display normalization, not a physical length; ${arrowScalingMeaning}; ` +
+        `display length is bounded by ${exactNumberText(maximumArrowLengthPercent)}% ` +
+        'of the shorter plot axis; ' +
+        `magnitude basis ${magnitudeBasis}.`
+      : '';
+    const nullclineCount = strings(nullclines?.curveIds).length;
+    const nullclinePointIds = strings(nullclines?.pointCurveIds);
+    const noDrawableNullclineCount = strings(nullclines?.curveIds).filter(
+      (id) => !nullclinePointIds.some(
+        (ownerId, index) =>
+          ownerId === id &&
+          typeof nullclineRawXs[index] === 'number' &&
+          typeof nullclineRawYs[index] === 'number',
+      ),
+    ).length;
+    const fixedPointCount = strings(fixedPoints?.ids).length;
+    const annotationStatementBase = nullclines && fixedPoints
+      ? `${nullclineCount} nullclines, each with a declared method and residual tolerance, ` +
+        `and ${fixedPointCount} fixed-point annotations, each with a declared method, ` +
+        'residual, and convergence status.'
+      : nullclines
+        ? `${nullclineCount} nullclines, each with a declared method and residual tolerance.`
+        : fixedPoints
+          ? `${fixedPointCount} fixed-point annotations, each with a declared method, ` +
+            'residual, and convergence status.'
+          : '';
+    const annotationStatement = annotationStatementBase +
+      (noDrawableNullclineCount > 0
+        ? ` ${noDrawableNullclineCount} declared nullcline${
+          noDrawableNullclineCount === 1 ? '' : 's'
+        } ${noDrawableNullclineCount === 1 ? 'has' : 'have'} no drawable finite points.`
+        : '');
+    const hasPathCarrier = Boolean(trajectories || nullclines);
     const phaseCompileContext = topologyDynamicsCompilerContext(
       context(tableRows.length, phaseDerivedFacts),
       skillId,
@@ -11822,29 +12263,13 @@ function compile(
         yUnit: yAxisUnit,
         xLabel: String(xAxisRecord.label ?? 'x'),
         xUnit: xAxisUnit,
-        trajectoryCount: exactNumberText(strings(rec(trajectories?.universe)?.ids).length),
-        trajectoryPointCount: exactNumberText(strings(trajectories?.pointTrajectoryIds).length),
-        timeStart: trajectoryTimes.length === 0
-          ? 'not supplied'
-          : exactNumberText(trajectoryTimes[0]),
-        timeStop: trajectoryTimes.length === 0
-          ? 'not supplied'
-          : exactNumberText(trajectoryTimes[trajectoryTimes.length - 1]),
-        timeUnit: trajectoryTimes.length === 0
-          ? 'not supplied'
-          : String(rec(trajectories?.times)?.unit),
-        timeDirection: trajectories ? String(trajectories.timeDirection) : 'not supplied',
-        fieldSampleCount: exactNumberText(numbers(rec(vectorField?.x)?.values).length),
-        latticeKind: vectorField ? String(rec(vectorField.lattice)?.kind) : 'not supplied',
-        xDomainStart: convertedDomain ? exactNumberText(convertedDomain.xMin) : 'not supplied',
-        xDomainStop: convertedDomain ? exactNumberText(convertedDomain.xMax) : 'not supplied',
-        yDomainStart: convertedDomain ? exactNumberText(convertedDomain.yMin) : 'not supplied',
-        yDomainStop: convertedDomain ? exactNumberText(convertedDomain.yMax) : 'not supplied',
-        arrowScalingMode: vectorField ? String(arrowScaling?.mode) : 'not supplied',
-        magnitudeBasis: vectorField ? magnitudeBasis : 'not supplied',
-        nullclineCount: exactNumberText(strings(nullclines?.curveIds).length),
-        fixedPointCount: exactNumberText(strings(fixedPoints?.ids).length),
-        missingStatement: missingPhasePointCount === 0
+        trajectoryStatement,
+        directionMarkerStatement,
+        vectorFieldStatement,
+        annotationStatement,
+        missingStatement: !hasPathCarrier
+          ? ''
+          : missingPhasePointCount === 0
           ? 'No supplied trajectory or nullcline point has a missing coordinate.'
           : `${missingPhasePointCount} supplied path points have a missing coordinate and break their path; missing is never zero.`,
         uncertaintyStatement: uncertaintyRecord.kind === 'none'
@@ -11862,6 +12287,7 @@ function compile(
               ids: strings(rec(trajectories.universe)?.ids),
               labels: strings(rec(trajectories.universe)?.labels),
               pointIds: strings(trajectories.pointTrajectoryIds),
+              times: numbers(rec(trajectories.times)?.values),
               xs: convertedTrajectoryXs,
               ys: convertedTrajectoryYs,
               timeDirection: String(trajectories.timeDirection) as 'forward' | 'backward',

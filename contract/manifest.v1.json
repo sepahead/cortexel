@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:ba52f26842cfc452532936e39f78e63a8095fdaa7e401b5618ac0af25f1b553a",
-  "catalogDigest": "sha256:b267cf79a79862230d7f54e35b9f4b4bc54634fa21721ca1b8f3ef4a98d3f8af",
+  "contractDigest": "sha256:976dc178bd6ca99bc5a57717bb2f2fae2cdb17f29f4bd18802d58032961113ec",
+  "catalogDigest": "sha256:e5eb3c383cb7593c3ed797733865b11f1f397dcfddce3e458e43be54834a4bca",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
     "packaged",
@@ -5278,11 +5278,11 @@
     },
     {
       "id": "neuro.phase_plane",
-      "revision": 4,
+      "revision": 5,
       "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
       "renderer": {
         "id": "figure.phase_plane",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -5337,7 +5337,7 @@
         }
       },
       "accessibility": {
-        "summaryTemplate": "Phase plane: {yLabel} ({yUnit}) against {xLabel} ({xUnit}). {trajectoryCount} trajectories, {trajectoryPointCount} points, times {timeStart} to {timeStop} {timeUnit}, running {timeDirection} along the supplied order; arrowheads mark increasing model time. Vector field: {fieldSampleCount} samples, {latticeKind}, over x {xDomainStart} to {xDomainStop} {xUnit} and y {yDomainStart} to {yDomainStop} {yUnit}; arrow length is a {arrowScalingMode} display normalization, not a physical length; magnitude basis {magnitudeBasis}. {nullclineCount} nullclines and {fixedPointCount} fixed-point annotations, each with a declared method, residual, and convergence status. {missingStatement} {uncertaintyStatement} The path shows where the state went, not how fast; exact values and times are in the table.",
+        "summaryTemplate": "Phase plane: {yLabel} ({yUnit}) against {xLabel} ({xUnit}). {trajectoryStatement} {directionMarkerStatement} {vectorFieldStatement} {annotationStatement} {missingStatement} {uncertaintyStatement} Exact supplied values and any supplied trajectory times are in the table.",
         "tableColumns": [
           {
             "key": "rowKind",
@@ -5448,7 +5448,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.phase_plane.output_authority.v4"
+          "id": "neuro.phase_plane.output_authority.v5"
         },
         "requestPaths": [
           {
@@ -5602,22 +5602,10 @@
             "yUnit",
             "xLabel",
             "xUnit",
-            "trajectoryCount",
-            "trajectoryPointCount",
-            "timeStart",
-            "timeStop",
-            "timeUnit",
-            "timeDirection",
-            "fieldSampleCount",
-            "latticeKind",
-            "xDomainStart",
-            "xDomainStop",
-            "yDomainStart",
-            "yDomainStop",
-            "arrowScalingMode",
-            "magnitudeBasis",
-            "nullclineCount",
-            "fixedPointCount",
+            "trajectoryStatement",
+            "directionMarkerStatement",
+            "vectorFieldStatement",
+            "annotationStatement",
             "missingStatement",
             "uncertaintyStatement"
           ],
@@ -8311,7 +8299,7 @@
     },
     {
       "path": "contract/registries/renderers.v1.json",
-      "digest": "sha256:8dc483ebdf7c6e9879b1fbd0c9b01805a1078f8fd234e8a59a289e07863a5c4f"
+      "digest": "sha256:09786c9be5f5ad5e6bf266f712e178f4f0db081bad00014dcde5f525ab6b5516"
     },
     {
       "path": "contract/registries/semantic-validators.v1.json",
@@ -8327,7 +8315,7 @@
     },
     {
       "path": "contract/schemas/figure-artifact.v1.schema.json",
-      "digest": "sha256:6e2e9df96e87f9f8438e8100aefd11543d4d8fb40fddfbf41589771499733718"
+      "digest": "sha256:6fcd904c0cc9c3d92d45a8561c65b167b8153f2fb537f951fbe071a82ec63531"
     },
     {
       "path": "contract/schemas/figure-request.v1.schema.json",
@@ -8335,7 +8323,7 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:7e31de9143a2205c73d0607321153750a9980b507414416b4d60aabd2c783236"
+      "digest": "sha256:b15ee1359751e584d4fceb549f8363045bee2be0779bf5fb4f24325a745cc140"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
@@ -8395,7 +8383,7 @@
     },
     {
       "path": "contract/schemas/skills/neuro.phase_plane.request.v1.schema.json",
-      "digest": "sha256:49e9ee1cb03711cde2b7b7ce6dab7ab59c561430f5be21d5df864c44084f2f43"
+      "digest": "sha256:d8cefef64f9d689f0cd512dcab3ce73262201778151f05ddb8a8ea139fcd7410"
     },
     {
       "path": "contract/schemas/skills/neuro.population_rate.request.v1.schema.json",
@@ -8479,7 +8467,7 @@
     },
     {
       "path": "contract/skills/neuro.phase_plane.v1.json",
-      "digest": "sha256:2e64ca7ac105bd7efb08f977b20c95f690a9e121e7a51d8a06dc9d4c25cb971d"
+      "digest": "sha256:fb4b57804931bd7914f455fdeb09c1741555fdb2627984cdd691ba7544f64d6d"
     },
     {
       "path": "contract/skills/neuro.population_rate.v1.json",

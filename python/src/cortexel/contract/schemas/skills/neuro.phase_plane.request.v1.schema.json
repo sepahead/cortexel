@@ -143,7 +143,7 @@
                 "forward",
                 "backward"
               ],
-              "description": "Whether model time increases or decreases along the supplied order. Arrowheads always point along INCREASING model time, so `backward` reverses them. Backward integration is how a stable manifold is computed; drawing it with forward arrows would invert the stability claim."
+              "description": "The one global direction authority for every trajectory identity in this FigureRequest: model time must increase (`forward`) or decrease (`backward`) within each identity's stable source order. Arrowheads always point along INCREASING model time, so `backward` reverses them. A mixed forward/backward portrait requires separate FigureRequests; per-identity direction selection is not part of revision 5."
             },
             "pointTrajectoryIds": {
               "type": "array",
@@ -920,7 +920,7 @@
         },
         "directionMarkers": {
           "type": "object",
-          "description": "Required whenever trajectories are present. Placement is deterministic and never depends on animation: the arrowheads are present in a still export and under reduced motion.",
+          "description": "Required whenever trajectories are present. Placement is deterministic and never depends on animation. A marker is emitted only for an eligible strictly timed, geometrically nonzero candidate segment; mode none, short runs, equal-time path breaks, and zero-length candidates may emit none.",
           "properties": {
             "mode": {
               "type": "string",
@@ -934,7 +934,7 @@
               "type": "integer",
               "minimum": 2,
               "maximum": 250000,
-              "description": "For arrowheads_every_n_points, place an arrowhead on the Nth, 2Nth, ... finite point of EACH continuous trajectory run (zero-based target ordinals N-1, 2N-1, ...). A null resets the run, so a two-point run with N=2 still receives one direction marker and is never left directionless."
+              "description": "For arrowheads_every_n_points, request a candidate on the Nth, 2Nth, ... finite point of EACH continuous strictly timed trajectory run (zero-based target ordinals N-1, 2N-1, ...). A missing coordinate or equal-time boundary resets the run. Each candidate is independently skipped when its segment has zero geometric length, so even a long run may emit no marker."
             }
           },
           "required": [
@@ -948,7 +948,7 @@
             "reject",
             "keep_replicates"
           ],
-          "description": "Required whenever trajectories are present. There is deliberately no aggregate: averaging two state coordinates that share a timestamp would place the system at a point it never occupied. keep_replicates retains both samples, which is how an instantaneous reset is represented."
+          "description": "Required whenever trajectories are present and applied independently after stable grouping by trajectory id. reject requires strict time in the declared direction and refuses equality. keep_replicates permits equal times without permitting reversal, retains every row, and turns each equal-time boundary into a path break with no connecting segment or direction marker. There is deliberately no aggregate."
         },
         "uncertainty": {
           "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/uncertainty",

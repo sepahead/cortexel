@@ -1204,7 +1204,7 @@
               "const": "figure.phase_plane"
             },
             "rendererRevision": {
-              "const": 4
+              "const": 5
             }
           },
           "required": [

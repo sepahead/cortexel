@@ -101,6 +101,25 @@ export interface ConversionReceipt {
   readonly algorithm: 'exact_rational_round_to_binary64';
 }
 
+export interface CompositeDerivativeConversionReceipt {
+  readonly stateUnitConversion: ConversionReceipt;
+  readonly derivativeUnitConversion: ConversionReceipt;
+  /** Rounded display value only; the exact tuple below is the replay authority. */
+  readonly factor: number;
+  readonly exactFactor: {
+    readonly numerator: string;
+    readonly denominator: string;
+    readonly binaryExponent: number;
+  };
+  readonly algorithm: 'exact_composite_derivative_round_to_binary64';
+}
+
+export interface AxisNormalizedDerivativeConversionReceipt {
+  readonly derivativeUnitConversion: ConversionReceipt;
+  readonly algorithm:
+    'exact_derivative_unit_factor_over_exact_binary64_extent_round_to_binary64';
+}
+
 interface ExactScale {
   readonly numerator: bigint;
   readonly denominator: bigint;
@@ -137,6 +156,14 @@ function exactScaleRatio(from: (typeof UNITS)[string], to: (typeof UNITS)[string
     numerator: source.numerator * target.denominator,
     denominator: source.denominator * target.numerator,
     binaryExponent: source.binaryExponent - target.binaryExponent,
+  };
+}
+
+function multiplyExactScales(left: ExactScale, right: ExactScale): ExactScale {
+  return {
+    numerator: left.numerator * right.numerator,
+    denominator: left.denominator * right.denominator,
+    binaryExponent: left.binaryExponent + right.binaryExponent,
   };
 }
 
@@ -379,6 +406,139 @@ export function conversionReceipt(from: string, to: string): ConversionReceipt {
     },
     algorithm: 'exact_rational_round_to_binary64',
   };
+}
+
+/**
+ * Reproducible authority for converting a derivative whose state and reciprocal-time
+ * units are carried separately by the phase-plane contract.
+ *
+ * The two registered factors remain exact until their product is rounded for the
+ * informational `factor`; replay uses `exactFactor`, never that rounded number.
+ */
+export function compositeDerivativeConversionReceipt(
+  stateFrom: string,
+  stateTo: string,
+  derivativeFrom: string,
+  derivativeTo: string,
+): CompositeDerivativeConversionReceipt {
+  const state = conversionScaleRatio(stateFrom, stateTo);
+  const derivative = conversionScaleRatio(derivativeFrom, derivativeTo);
+  const composite = multiplyExactScales(state, derivative);
+  return {
+    stateUnitConversion: conversionReceipt(stateFrom, stateTo),
+    derivativeUnitConversion: conversionReceipt(derivativeFrom, derivativeTo),
+    factor: exactRationalToBinary64(
+      composite.numerator,
+      composite.denominator,
+      composite.binaryExponent,
+    ),
+    exactFactor: {
+      numerator: composite.numerator.toString(10),
+      denominator: composite.denominator.toString(10),
+      binaryExponent: composite.binaryExponent,
+    },
+    algorithm: 'exact_composite_derivative_round_to_binary64',
+  };
+}
+
+/**
+ * Convert one derivative component by composing its state-unit and reciprocal-time
+ * factors as one exact rational, then rounding the final component once.
+ */
+export function convertCompositeDerivative(
+  value: number,
+  stateFrom: string,
+  stateTo: string,
+  derivativeFrom: string,
+  derivativeTo: string,
+): number {
+  if (!Number.isFinite(value)) {
+    throw new Error('composite derivative conversion requires a finite value');
+  }
+  const composite = multiplyExactScales(
+    conversionScaleRatio(stateFrom, stateTo),
+    conversionScaleRatio(derivativeFrom, derivativeTo),
+  );
+  let converted: number;
+  try {
+    converted = exactBinary64MultiplyByRational(
+      value,
+      composite.numerator,
+      composite.denominator,
+      composite.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('composite derivative conversion overflowed binary64');
+    }
+    throw error;
+  }
+  if (!Number.isFinite(converted) || (value !== 0 && converted === 0)) {
+    throw new Error('composite derivative conversion overflowed or underflowed binary64');
+  }
+  return converted;
+}
+
+/** Reproducible authority for the unit factor inside one axis-normalized component. */
+export function axisNormalizedDerivativeConversionReceipt(
+  derivativeFrom: string,
+  derivativeTo: string,
+): AxisNormalizedDerivativeConversionReceipt {
+  return {
+    derivativeUnitConversion: conversionReceipt(derivativeFrom, derivativeTo),
+    algorithm: 'exact_derivative_unit_factor_over_exact_binary64_extent_round_to_binary64',
+  };
+}
+
+/**
+ * Correctly round
+ *
+ *   value * exactConvert(derivativeFrom -> derivativeTo) / (maximum - minimum)
+ *
+ * without first rounding either the unit conversion or the finite endpoint
+ * difference. The inherited state unit cancels against its own axis extent.
+ */
+export function normalizeDerivativeByExactAxisExtent(
+  value: number,
+  derivativeFrom: string,
+  derivativeTo: string,
+  minimum: number,
+  maximum: number,
+): number {
+  if (
+    !Number.isFinite(value) ||
+    !Number.isFinite(minimum) ||
+    !Number.isFinite(maximum) ||
+    !(maximum > minimum)
+  ) {
+    throw new Error(
+      'axis-normalized derivative conversion requires a finite value and ordered extent',
+    );
+  }
+  const ratio = conversionScaleRatio(derivativeFrom, derivativeTo);
+  const valueUnits = finiteBinary64ToMinSubnormalUnits(value);
+  const extentUnits =
+    finiteBinary64ToMinSubnormalUnits(maximum) -
+    finiteBinary64ToMinSubnormalUnits(minimum);
+  let normalized: number;
+  try {
+    normalized = exactRationalToBinary64(
+      valueUnits * ratio.numerator,
+      extentUnits * ratio.denominator,
+      ratio.binaryExponent,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('overflows')) {
+      throw new Error('axis-normalized derivative conversion overflowed binary64');
+    }
+    throw error;
+  }
+  if (!Number.isFinite(normalized) || (value !== 0 && normalized === 0)) {
+    throw new Error(
+      'axis-normalized derivative conversion overflowed or underflowed binary64',
+    );
+  }
+  return Object.is(normalized, -0) ? 0 : normalized;
 }
 
 /** Correctly round the exact converted separation `upper - lower` without subtracting first. */

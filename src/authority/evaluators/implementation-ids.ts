@@ -26,7 +26,7 @@ export const OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
   'neuro.correlogram.output_authority.v4',
   'neuro.isi_distribution.output_authority.v4',
   'neuro.multisignal_trace.output_authority.v4',
-  'neuro.phase_plane.output_authority.v4',
+  'neuro.phase_plane.output_authority.v5',
   'neuro.population_rate.output_authority.v4',
   'neuro.psth.output_authority.v4',
   'neuro.response_curve.output_authority.v4',

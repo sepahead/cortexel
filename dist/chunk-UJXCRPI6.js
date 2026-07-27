@@ -1,6 +1,6 @@
 import {
   DISCLOSURE_RULES
-} from "./chunk-5K4VYW2N.js";
+} from "./chunk-QD4CIX2J.js";
 
 // src/core/disclosures.ts
 var RULE_PREDICATES = {
@@ -98,4 +98,4 @@ function deriveDisclosures(facts, allowedIds, forced = []) {
 export {
   deriveDisclosures
 };
-//# sourceMappingURL=chunk-W64RVV5H.js.map
+//# sourceMappingURL=chunk-UJXCRPI6.js.map

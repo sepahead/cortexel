@@ -339,6 +339,32 @@
                   },
                   "required": ["id", "algorithm", "algorithmRevision", "parameters", "inputDigest", "outputDigest", "receipt"]
                 }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "algorithm": { "const": "cortexel.phase_plane.canonicalize_carriers" }
+                  },
+                  "required": ["algorithm"]
+                },
+                "then": {
+                  "properties": {
+                    "id": { "const": "phase_plane.carriers.canonicalize_and_verify" },
+                    "algorithm": { "const": "cortexel.phase_plane.canonicalize_carriers" },
+                    "algorithmRevision": { "const": 3 },
+                    "parameters": { "$ref": "#/$defs/phasePlaneDerivationParameters" },
+                    "inputDigest": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+                      "description": "RFC 8785 SHA-256 over the exact canonical request data and parameters object."
+                    },
+                    "outputDigest": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+                      "description": "RFC 8785 SHA-256 over every converted coordinate carrier, converted field domain, normalized field component, field magnitude, trajectory table-speed row, per-trajectory time authority record, and fixed-point convergence flag."
+                    },
+                    "receipt": { "$ref": "#/$defs/phasePlaneDerivationReceipt" }
+                  },
+                  "required": ["id", "algorithm", "algorithmRevision", "parameters", "inputDigest", "outputDigest", "receipt"]
+                }
               }
             ],
             "additionalProperties": false
@@ -552,6 +578,223 @@
         { "$ref": "#/$defs/traceConversionReceipt" },
         { "type": "null" }
       ]
+    },
+
+    "phasePlaneDerivationParameters": {
+      "type": "object",
+      "properties": {
+        "xAxisUnit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+        "yAxisUnit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+        "magnitudeBasis": { "enum": ["axis_normalized", "physical"] },
+        "derivativeBinary64Arithmetic": {
+          "const": "exact_state_and_reciprocal_time_factors_then_one_final_round; axis_normalized_exact_reciprocal_time_factor_over_exact_extent_then_one_final_round"
+        },
+        "trajectoryTimeSemantics": {
+          "const": "one_global_direction_per_request_checked_independently_per_trajectory_source_order; reject=strict; keep_replicates=nonstrict_equal_time_path_break"
+        },
+        "convergenceRelativeTolerance": { "const": 1e-9 }
+      },
+      "required": ["xAxisUnit", "yAxisUnit", "magnitudeBasis", "derivativeBinary64Arithmetic", "trajectoryTimeSemantics", "convergenceRelativeTolerance"],
+      "additionalProperties": false
+    },
+
+    "phasePlaneCoordinateTransform": {
+      "type": "object",
+      "properties": {
+        "carrier": {
+          "enum": [
+            "trajectory x", "trajectory y", "vector-field x", "vector-field y",
+            "nullcline x", "nullcline y", "fixed-point x", "fixed-point y"
+          ]
+        },
+        "conversion": { "$ref": "#/$defs/traceConversionReceipt" }
+      },
+      "required": ["carrier", "conversion"],
+      "additionalProperties": false
+    },
+
+    "phasePlaneAxisExtent": {
+      "type": "object",
+      "properties": {
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "unit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" }
+      },
+      "required": ["min", "max", "unit"],
+      "additionalProperties": false
+    },
+
+    "phasePlaneAxisDerivativeConversion": {
+      "type": "object",
+      "properties": {
+        "derivativeUnitConversion": { "$ref": "#/$defs/traceConversionReceipt" },
+        "algorithm": {
+          "const": "exact_derivative_unit_factor_over_exact_binary64_extent_round_to_binary64"
+        }
+      },
+      "required": ["derivativeUnitConversion", "algorithm"],
+      "additionalProperties": false
+    },
+
+    "phasePlaneCompositeDerivativeConversion": {
+      "type": "object",
+      "properties": {
+        "stateUnitConversion": { "$ref": "#/$defs/traceConversionReceipt" },
+        "derivativeUnitConversion": { "$ref": "#/$defs/traceConversionReceipt" },
+        "factor": { "type": "number", "exclusiveMinimum": 0 },
+        "exactFactor": {
+          "type": "object",
+          "properties": {
+            "numerator": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "denominator": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+            "binaryExponent": { "type": "integer" }
+          },
+          "required": ["numerator", "denominator", "binaryExponent"],
+          "additionalProperties": false
+        },
+        "algorithm": { "const": "exact_composite_derivative_round_to_binary64" }
+      },
+      "required": ["stateUnitConversion", "derivativeUnitConversion", "factor", "exactFactor", "algorithm"],
+      "additionalProperties": false
+    },
+
+    "phasePlaneDerivativeUses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "enum": ["display_direction", "magnitude", "table_speed"] }
+    },
+
+    "phasePlaneDerivativeTransform": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "carrier": { "enum": ["trajectory", "vector-field"] },
+            "component": { "enum": ["x", "y"] },
+            "basis": { "const": "axis_normalized" },
+            "uses": { "$ref": "#/$defs/phasePlaneDerivativeUses" },
+            "sourceDerivativeUnit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+            "targetDerivativeUnit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+            "extent": { "$ref": "#/$defs/phasePlaneAxisExtent" },
+            "conversion": { "$ref": "#/$defs/phasePlaneAxisDerivativeConversion" }
+          },
+          "required": ["carrier", "component", "basis", "uses", "sourceDerivativeUnit", "targetDerivativeUnit", "extent", "conversion"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "carrier": { "enum": ["trajectory", "vector-field"] },
+            "component": { "enum": ["x", "y"] },
+            "basis": { "const": "physical" },
+            "uses": { "$ref": "#/$defs/phasePlaneDerivativeUses" },
+            "sourceCompositeUnit": { "type": "string", "minLength": 3, "maxLength": 64 },
+            "targetCompositeUnit": { "type": "string", "minLength": 3, "maxLength": 64 },
+            "conversion": { "$ref": "#/$defs/phasePlaneCompositeDerivativeConversion" }
+          },
+          "required": ["carrier", "component", "basis", "uses", "sourceCompositeUnit", "targetCompositeUnit", "conversion"],
+          "additionalProperties": false
+        }
+      ]
+    },
+
+    "phasePlaneTrajectoryTimeEntry": {
+      "type": "object",
+      "properties": {
+        "trajectoryId": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/identifier" },
+        "appliedGlobalTimeDirection": { "enum": ["forward", "backward"] },
+        "pointCount": { "type": "integer", "minimum": 0, "maximum": 250000 },
+        "firstTime": { "type": ["number", "null"] },
+        "lastTime": { "type": ["number", "null"] },
+        "minimumTime": { "type": ["number", "null"] },
+        "maximumTime": { "type": ["number", "null"] },
+        "equalTimeBreakCount": { "type": "integer", "minimum": 0, "maximum": 249999 }
+      },
+      "required": ["trajectoryId", "appliedGlobalTimeDirection", "pointCount", "firstTime", "lastTime", "minimumTime", "maximumTime", "equalTimeBreakCount"],
+      "additionalProperties": false
+    },
+
+    "phasePlaneTrajectoryTimeAuthority": {
+      "type": "object",
+      "properties": {
+        "timeUnit": { "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode" },
+        "timeDirection": { "enum": ["forward", "backward"] },
+        "duplicateTimePolicy": { "enum": ["reject", "keep_replicates"] },
+        "pointCount": { "type": "integer", "minimum": 1, "maximum": 250000 },
+        "trajectoryCount": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "globalMinimumTime": { "type": "number" },
+        "globalMaximumTime": { "type": "number" },
+        "equalTimeBreakCount": { "type": "integer", "minimum": 0, "maximum": 249999 },
+        "trajectories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/phasePlaneTrajectoryTimeEntry" }
+        }
+      },
+      "required": ["timeUnit", "timeDirection", "duplicateTimePolicy", "pointCount", "trajectoryCount", "globalMinimumTime", "globalMaximumTime", "equalTimeBreakCount", "trajectories"],
+      "additionalProperties": false
+    },
+
+    "phasePlaneDerivationReceipt": {
+      "type": "object",
+      "properties": {
+        "coordinateTransforms": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/phasePlaneCoordinateTransform" }
+        },
+        "derivativeTransforms": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/phasePlaneDerivativeTransform" }
+        },
+        "conversionCounts": {
+          "type": "object",
+          "properties": {
+            "coordinate": { "type": "integer", "minimum": 0, "maximum": 8 },
+            "physicalDerivative": { "type": "integer", "minimum": 0, "maximum": 4 },
+            "axisNormalizedDerivative": { "type": "integer", "minimum": 0, "maximum": 4 }
+          },
+          "required": ["coordinate", "physicalDerivative", "axisNormalizedDerivative"],
+          "additionalProperties": false
+        },
+        "conversionDisclosureInventory": {
+          "type": "array",
+          "maxItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 240 }
+        },
+        "fieldMagnitudeUnit": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 64 },
+            { "type": "null" }
+          ]
+        },
+        "trajectoryTimeAuthority": {
+          "anyOf": [
+            { "$ref": "#/$defs/phasePlaneTrajectoryTimeAuthority" },
+            { "type": "null" }
+          ]
+        },
+        "trajectoryTableSpeedCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 250256
+        },
+        "trajectoryTableSpeedDigest": {
+          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256"
+        },
+        "fixedPointCount": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "convergenceFlags": {
+          "type": "array",
+          "maxItems": 64,
+          "items": { "type": "boolean" }
+        }
+      },
+      "required": ["coordinateTransforms", "derivativeTransforms", "conversionCounts", "conversionDisclosureInventory", "fieldMagnitudeUnit", "trajectoryTimeAuthority", "trajectoryTableSpeedCount", "trajectoryTableSpeedDigest", "fixedPointCount", "convergenceFlags"],
+      "additionalProperties": false
     },
 
     "weightMemberPreparationBatchTransforms": {

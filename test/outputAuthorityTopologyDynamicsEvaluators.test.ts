@@ -69,11 +69,24 @@ function checkedModel(skillId: string, exampleIndex: number): {
 } {
   const contract = source(skillId);
   const request = structuredClone(contract.examples.valid[exampleIndex]);
+  return checkedRequest(skillId, request);
+}
+
+function checkedRequest(skillId: string, request: JsonRecord): {
+  readonly contract: JsonRecord;
+  readonly authority: OutputAuthorityV1;
+  readonly evaluation: AuthorityEvaluationV1;
+  readonly observed: AuthorityObservedOutputV1;
+  readonly digest: string;
+  readonly disclosures: readonly AuthorityDisclosureV1[];
+  readonly sourceStatements: readonly CallerSourceStatement[];
+} {
+  const contract = source(skillId);
   const validated = validateRequestValue(request);
-  expect(validated.ok, `${skillId} living example ${exampleIndex} validates`).toBe(true);
+  expect(validated.ok, `${skillId} custom request validates`).toBe(true);
   if (!validated.ok) throw new Error(JSON.stringify(validated.errors));
   const result = buildFigure(request);
-  expect(result.ok, `${skillId} living example ${exampleIndex} builds`).toBe(true);
+  expect(result.ok, `${skillId} custom request builds`).toBe(true);
   if (!result.ok) throw new Error(JSON.stringify(result.errors));
   const extracted = extractObservedOutputAuthorityV1(result.plan);
   expect(extracted.tag).toBe('extracted');
@@ -185,6 +198,191 @@ describe('independent topology/dynamics OutputAuthority evaluators', () => {
         });
       }
     }
+  });
+
+  it('describes only supplied phase-plane carriers and states a disabled marker policy exactly', () => {
+    const phase = source('neuro.phase_plane');
+    const fieldOnly = checkedRequest(
+      'neuro.phase_plane',
+      structuredClone(phase.examples.valid[1]),
+    );
+    expect(interpret(fieldOnly)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: fieldOnly.observed.table.rows.length,
+    });
+    expect(fieldOnly.observed.summary).toContain('Vector field:');
+    expect(fieldOnly.observed.summary).toContain(
+      'magnitude_proportional: display length is linear in the declared-basis magnitude',
+    );
+    expect(fieldOnly.observed.summary).not.toContain('trajectories');
+    expect(fieldOnly.observed.summary).not.toContain('nullclines');
+    expect(fieldOnly.observed.summary).not.toContain('fixed-point');
+
+    const trajectoryRequest = structuredClone(phase.examples.valid[2]);
+    trajectoryRequest.parameters.directionMarkers = { mode: 'none' };
+    const trajectoryOnly = checkedRequest('neuro.phase_plane', trajectoryRequest);
+    expect(interpret(trajectoryOnly)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: trajectoryOnly.observed.table.rows.length,
+    });
+    expect(trajectoryOnly.observed.summary)
+      .toContain('Direction-marker policy none: no trajectory direction markers are drawn.');
+    expect(trajectoryOnly.observed.summary)
+      .toContain('Any supplied trajectory path geometry shows where the state went');
+    expect(trajectoryOnly.observed.summary).not.toContain('Vector field:');
+    expect(trajectoryOnly.observed.summary).not.toContain('nullclines');
+    expect(trajectoryOnly.observed.summary).not.toContain('fixed-point');
+
+    const combined = checkedRequest(
+      'neuro.phase_plane',
+      structuredClone(phase.examples.valid[0]),
+    );
+    expect(interpret(combined)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: combined.observed.table.rows.length,
+    });
+    expect(combined.observed.summary).toContain('trajectories');
+    expect(combined.observed.summary).toContain('Direction-marker policy');
+    expect(combined.observed.summary).toContain('Vector field:');
+    expect(combined.observed.summary).toContain(
+      'sqrt_magnitude: display length is proportional to sqrt(magnitude), a compressed ' +
+      'nonlinear encoding',
+    );
+    expect(combined.observed.summary).toContain('nullclines');
+    expect(combined.observed.summary).toContain('fixed-point annotations');
+
+    const fixedOnly = checkedRequest(
+      'neuro.phase_plane',
+      structuredClone(phase.examples.valid[3]),
+    );
+    expect(interpret(fixedOnly)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: fixedOnly.observed.table.rows.length,
+    });
+    expect(fixedOnly.observed.summary).toContain('Vector field:');
+    expect(fixedOnly.observed.summary).toContain(
+      'unit_length: every nonzero vector has equal display length and magnitude does not ' +
+      'affect arrow length',
+    );
+    expect(fixedOnly.observed.summary).toContain('fixed-point annotations');
+    expect(fixedOnly.observed.summary).not.toContain('trajectories');
+    expect(fixedOnly.observed.summary).not.toContain('nullclines');
+
+    for (const allMissing of [false, true]) {
+      const noDrawableNullcline = structuredClone(phase.examples.valid[0]);
+      noDrawableNullcline.data.nullclines.pointCurveIds = allMissing
+        ? ['v-nullcline', 'v-nullcline']
+        : [];
+      noDrawableNullcline.data.nullclines.x.values = allMissing ? [null, null] : [];
+      noDrawableNullcline.data.nullclines.y.values = allMissing ? [null, null] : [];
+      const model = checkedRequest('neuro.phase_plane', noDrawableNullcline);
+      expect(interpret(model)).toEqual({
+        tag: 'valid',
+        expectedRowsTotal: model.observed.table.rows.length,
+      });
+      expect(model.observed.summary).toContain('1 nullclines');
+      expect(model.observed.summary).toContain(
+        '1 declared nullcline has no drawable finite points.',
+      );
+    }
+  });
+
+  it('keeps direction-marker summaries exact for degenerate and ineligible runs', () => {
+    const phase = source('neuro.phase_plane');
+    const arrowCount = (request: JsonRecord): number => {
+      const result = buildFigure(request);
+      expect(result.ok).toBe(true);
+      if (!result.ok) throw new Error(JSON.stringify(result.errors));
+      return result.plan.panels.flatMap((panel) => panel.marks).reduce(
+        (count, mark) => count + (
+          mark.type === 'group'
+            ? mark.marks
+              .filter((child) => child.type === 'arrow')
+              .reduce((total, child) => total + child.arrows.length, 0)
+            : mark.type === 'arrow'
+              ? mark.arrows.length
+              : 0
+        ),
+        0,
+      );
+    };
+
+    const degenerateEnd = structuredClone(phase.examples.valid[2]);
+    degenerateEnd.parameters.directionMarkers = { mode: 'arrowhead_at_end' };
+    degenerateEnd.data.trajectories.x.values[4] = degenerateEnd.data.trajectories.x.values[3];
+    degenerateEnd.data.trajectories.y.values[4] = degenerateEnd.data.trajectories.y.values[3];
+    expect(arrowCount(degenerateEnd)).toBe(1);
+    const degenerateModel = checkedRequest('neuro.phase_plane', degenerateEnd);
+    expect(interpret(degenerateModel)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: degenerateModel.observed.table.rows.length,
+    });
+    expect(degenerateModel.observed.summary).toContain(
+      'a zero-duration or geometrically zero-length terminal candidate cannot carry direction',
+    );
+
+    const singlePoint = structuredClone(phase.examples.valid[2]);
+    singlePoint.parameters.directionMarkers = { mode: 'arrowhead_at_end' };
+    for (const fieldName of ['x', 'y', 'dxdt', 'dydt']) {
+      const values = singlePoint.data.trajectories[fieldName].values;
+      for (let index = 1; index < values.length; index++) values[index] = null;
+    }
+    expect(arrowCount(singlePoint)).toBe(0);
+    const singlePointModel = checkedRequest('neuro.phase_plane', singlePoint);
+    expect(interpret(singlePointModel)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: singlePointModel.observed.table.rows.length,
+    });
+    expect(singlePointModel.observed.summary).toContain(
+      'Any supplied trajectory path geometry shows where the state went, not how fast.',
+    );
+    expect(singlePointModel.observed.summary).toContain(
+      'runs with fewer than two finite points receive no arrow',
+    );
+
+    const tooShort = structuredClone(phase.examples.valid[2]);
+    tooShort.parameters.directionMarkers = {
+      mode: 'arrowheads_every_n_points',
+      everyNPoints: 3,
+    };
+    for (const fieldName of ['x', 'y', 'dxdt', 'dydt']) {
+      const values = tooShort.data.trajectories[fieldName].values;
+      values[2] = null;
+      values[3] = null;
+      values[4] = null;
+    }
+    expect(arrowCount(tooShort)).toBe(0);
+    const tooShortModel = checkedRequest('neuro.phase_plane', tooShort);
+    expect(interpret(tooShortModel)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: tooShortModel.observed.table.rows.length,
+    });
+    expect(tooShortModel.observed.summary).toContain(
+      'a finite strictly timed run shorter than everyNPoints has no candidate and receives no arrow',
+    );
+
+    const zeroCandidate = structuredClone(phase.examples.valid[2]);
+    zeroCandidate.parameters.directionMarkers = {
+      mode: 'arrowheads_every_n_points',
+      everyNPoints: 2,
+    };
+    zeroCandidate.data.trajectories.x.values[1] = zeroCandidate.data.trajectories.x.values[0];
+    zeroCandidate.data.trajectories.y.values[1] = zeroCandidate.data.trajectories.y.values[0];
+    for (const fieldName of ['x', 'y', 'dxdt', 'dydt']) {
+      const values = zeroCandidate.data.trajectories[fieldName].values;
+      values[2] = null;
+      values[3] = null;
+      values[4] = null;
+    }
+    expect(arrowCount(zeroCandidate)).toBe(0);
+    const zeroCandidateModel = checkedRequest('neuro.phase_plane', zeroCandidate);
+    expect(interpret(zeroCandidateModel)).toEqual({
+      tag: 'valid',
+      expectedRowsTotal: zeroCandidateModel.observed.table.rows.length,
+    });
+    expect(zeroCandidateModel.observed.summary).toContain(
+      'zero-duration and geometrically zero-length candidates are skipped',
+    );
   });
 
   it('preserves literal braces in caller-owned labels through one source-template substitution', () => {

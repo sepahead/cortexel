@@ -3,6 +3,11 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { exactBinary64RatioToDifference } from '../src/core/exact-binary64.js';
+import {
+  compositeDerivativeConversionReceipt,
+  convertCompositeDerivative,
+  normalizeDerivativeByExactAxisExtent,
+} from '../src/core/units.js';
 import { buildFigure } from '../src/render/index.js';
 
 type JsonRecord = Record<string, any>;
@@ -92,12 +97,24 @@ describe('closed geometry preserves every declared evidence carrier', () => {
         expect(trajectoryLine[index].x).toBeCloseTo(mapFromTicks(row.x, xAxis), 12);
         expect(trajectoryLine[index].y).toBeCloseTo(mapFromTicks(row.y, yAxis), 12);
       });
-    expect(converted.artifact.derivation.operations[0].receipt.conversions)
-      .toContain('trajectory x: V -> mV (factor 1000)');
+    expect(converted.artifact.derivation.operations[0].receipt.coordinateTransforms)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          carrier: 'trajectory x',
+          conversion: expect.objectContaining({
+            from: 'V',
+            to: 'mV',
+            factor: 1000,
+            algorithm: 'exact_rational_round_to_binary64',
+          }),
+        }),
+      ]));
   });
 
   it('phase direction markers survive gaps, convergence is re-derived, and physical magnitude is canonical SI', () => {
-    const backward = buildOrThrow('neuro.phase_plane', 2);
+    const backwardRequest = requestFor('neuro.phase_plane', 2);
+    backwardRequest.parameters.directionMarkers = { mode: 'arrowhead_at_end' };
+    const backward = buildOrThrow('neuro.phase_plane', 2, backwardRequest);
     const trajectory = group(backward, 'trajectory-m1');
     const line = trajectory.marks.find((mark: any) => mark.type === 'line');
     const arrows = trajectory.marks.find((mark: any) => mark.type === 'arrow');
@@ -114,6 +131,9 @@ describe('closed geometry preserves every declared evidence carrier', () => {
       y: line.subpaths[0][0].y,
     });
     expect(arrows.arrows[0].authority).toEqual({ tag: 'connector' });
+    expect(backward.plan.accessibility.summary).toContain(
+      'terminal candidate segment of each continuous finite, strictly timed run',
+    );
 
     const contradiction = requestFor('neuro.phase_plane');
     contradiction.data.fixedPoints.converged[0] = false;
@@ -140,8 +160,191 @@ describe('closed geometry preserves every declared evidence carrier', () => {
     lengths.forEach((length, index) => {
       expect(length / maximumLength).toBeCloseTo(speeds[index] / maximumSpeed, 12);
     });
-    expect(physical.plan.legend[0].label).toContain('physical magnitude reference');
+    expect(physical.plan.legend[0].label).toContain('textual physical magnitude key');
     expect(physical.plan.legend[0].label).toContain('V /s');
+
+    const unitLength = buildOrThrow('neuro.phase_plane', 3);
+    expect(unitLength.plan.legend[0].label).toContain(
+      'unit_length (direction only; magnitude does not affect arrow length)',
+    );
+    expect(unitLength.plan.legend[0].label).toContain(
+      'axis_normalized magnitudes remain in the table',
+    );
+  });
+
+  it('groups interleaved trajectory time per identity under one global direction', () => {
+    const interleaved = requestFor('neuro.phase_plane', 2);
+    interleaved.data.trajectories.universe = {
+      ids: ['a', 'b'],
+      labels: ['Trajectory A', 'Trajectory B'],
+    };
+    interleaved.data.trajectories.timeDirection = 'forward';
+    interleaved.data.trajectories.pointTrajectoryIds = ['a', 'b', 'b', 'a'];
+    interleaved.data.trajectories.times.values = [5, 100, 101, 6];
+    interleaved.data.trajectories.x.values = [-65, -60, -59, -64];
+    interleaved.data.trajectories.y.values = [0.1, 0.2, 0.21, 0.11];
+    interleaved.data.trajectories.dxdt.values = [1, 2, 3, 4];
+    interleaved.data.trajectories.dydt.values = [0.01, 0.02, 0.03, 0.04];
+    interleaved.parameters.directionMarkers = { mode: 'arrowhead_at_end' };
+    interleaved.parameters.duplicateTimePolicy = 'reject';
+
+    const result = buildOrThrow('neuro.phase_plane', 2, interleaved);
+    const timeAuthority =
+      result.artifact.derivation.operations[0].receipt.trajectoryTimeAuthority;
+    expect(timeAuthority).toMatchObject({
+      timeDirection: 'forward',
+      globalMinimumTime: 5,
+      globalMaximumTime: 101,
+      equalTimeBreakCount: 0,
+      trajectories: [
+        {
+          trajectoryId: 'a',
+          appliedGlobalTimeDirection: 'forward',
+          firstTime: 5,
+          lastTime: 6,
+          minimumTime: 5,
+          maximumTime: 6,
+        },
+        {
+          trajectoryId: 'b',
+          appliedGlobalTimeDirection: 'forward',
+          firstTime: 100,
+          lastTime: 101,
+          minimumTime: 100,
+          maximumTime: 101,
+        },
+      ],
+    });
+    expect(result.plan.accessibility.summary).toContain(
+      'global time span 5 to 101 ms. The one declared global timeDirection applies to every trajectory',
+    );
+    for (const id of ['a', 'b']) {
+      const trajectory = group(result, `trajectory-${id}`);
+      const line = trajectory.marks.find((mark: JsonRecord) => mark.type === 'line');
+      const arrows = trajectory.marks.find((mark: JsonRecord) => mark.type === 'arrow');
+      expect(line.subpaths).toHaveLength(1);
+      expect(line.subpaths[0]).toHaveLength(2);
+      expect(arrows.arrows).toHaveLength(1);
+      expect(arrows.arrows[0].from).toEqual({
+        x: line.subpaths[0][0].x,
+        y: line.subpaths[0][0].y,
+      });
+      expect(arrows.arrows[0].to).toEqual({
+        x: line.subpaths[0][1].x,
+        y: line.subpaths[0][1].y,
+      });
+    }
+
+    const sameTimesAcrossIdentities = structuredClone(interleaved);
+    sameTimesAcrossIdentities.data.trajectories.times.values = [5, 5, 6, 6];
+    buildOrThrow('neuro.phase_plane', 2, sameTimesAcrossIdentities);
+
+    const contrary = structuredClone(interleaved);
+    contrary.data.trajectories.times.values[3] = 4;
+    const contraryResult = buildFigure(contrary);
+    expect(contraryResult.ok).toBe(false);
+    if (!contraryResult.ok) {
+      expect(contraryResult.errors).toContainEqual(expect.objectContaining({
+        code: 'SCIENCE_NEGATIVE_INTERVAL',
+        instancePath: '/data/trajectories/times/values/3',
+      }));
+      expect(contraryResult.errors[0].message).toContain(
+        'one declared global timeDirection=forward',
+      );
+      expect(contraryResult.errors[0].message).toContain(
+        'Mixed forward/backward trajectories require separate FigureRequests.',
+      );
+    }
+  });
+
+  it('checks every time row and makes equal-time replicates hard path breaks', () => {
+    const missingReversal = requestFor('neuro.phase_plane', 2);
+    missingReversal.data.trajectories.timeDirection = 'forward';
+    missingReversal.data.trajectories.times.values = [0, 2, 1, 3, 4];
+    const missingReversalResult = buildFigure(missingReversal);
+    expect(missingReversalResult.ok).toBe(false);
+    if (!missingReversalResult.ok) {
+      expect(missingReversalResult.errors).toContainEqual(expect.objectContaining({
+        code: 'SCIENCE_NEGATIVE_INTERVAL',
+        instancePath: '/data/trajectories/times/values/2',
+      }));
+    }
+
+    const duplicateRejected = requestFor('neuro.phase_plane', 2);
+    duplicateRejected.data.trajectories.timeDirection = 'forward';
+    duplicateRejected.data.trajectories.times.values = [0, 1, 1, 2, 3];
+    const duplicateRejectedResult = buildFigure(duplicateRejected);
+    expect(duplicateRejectedResult.ok).toBe(false);
+    if (!duplicateRejectedResult.ok) {
+      expect(duplicateRejectedResult.errors).toContainEqual(expect.objectContaining({
+        code: 'SCIENCE_DUPLICATE_TIME_POLICY',
+        instancePath: '/data/trajectories/times/values/2',
+      }));
+    }
+
+    const keepReplicates = requestFor('neuro.phase_plane', 2);
+    keepReplicates.data.trajectories.timeDirection = 'forward';
+    keepReplicates.data.trajectories.times.values = [0, 1, 1, 2];
+    keepReplicates.data.trajectories.pointTrajectoryIds =
+      ['m1', 'm1', 'm1', 'm1'];
+    keepReplicates.data.trajectories.x.values = [-65, -64, -60, -59];
+    keepReplicates.data.trajectories.y.values = [0.08, 0.09, 0.2, 0.21];
+    keepReplicates.data.trajectories.dxdt.values = [1, 1, 2, 2];
+    keepReplicates.data.trajectories.dydt.values = [0.01, 0.01, 0.02, 0.02];
+    keepReplicates.parameters.duplicateTimePolicy = 'keep_replicates';
+    keepReplicates.parameters.directionMarkers = {
+      mode: 'arrowheads_every_n_points',
+      everyNPoints: 2,
+    };
+    const kept = buildOrThrow('neuro.phase_plane', 2, keepReplicates);
+    expect(rowObjects(kept).filter((row) => row.rowKind === 'trajectory_point'))
+      .toHaveLength(4);
+    const trajectory = group(kept, 'trajectory-m1');
+    const line = trajectory.marks.find((mark: JsonRecord) => mark.type === 'line');
+    const arrows = trajectory.marks.find((mark: JsonRecord) => mark.type === 'arrow');
+    expect(line.subpaths).toHaveLength(2);
+    expect(line.subpaths.map((subpath: JsonRecord[]) => subpath.length)).toEqual([2, 2]);
+    expect(arrows.arrows).toHaveLength(2);
+    expect(arrows.arrows[0].from).toEqual({
+      x: line.subpaths[0][0].x,
+      y: line.subpaths[0][0].y,
+    });
+    expect(arrows.arrows[0].to).toEqual({
+      x: line.subpaths[0][1].x,
+      y: line.subpaths[0][1].y,
+    });
+    expect(arrows.arrows[1].from).toEqual({
+      x: line.subpaths[1][0].x,
+      y: line.subpaths[1][0].y,
+    });
+    expect(arrows.arrows[1].to).toEqual({
+      x: line.subpaths[1][1].x,
+      y: line.subpaths[1][1].y,
+    });
+    expect(
+      kept.artifact.derivation.operations[0].receipt.trajectoryTimeAuthority,
+    ).toMatchObject({
+      equalTimeBreakCount: 1,
+      trajectories: [{ equalTimeBreakCount: 1 }],
+    });
+    expect(kept.plan.accessibility.summary).toContain(
+      '1 equal-time boundary is retained in the table and breaks path geometry.',
+    );
+
+    const terminalEqual = structuredClone(keepReplicates);
+    terminalEqual.data.trajectories.times.values = [0, 1, 1];
+    terminalEqual.data.trajectories.pointTrajectoryIds = ['m1', 'm1', 'm1'];
+    for (const carrier of ['x', 'y', 'dxdt', 'dydt']) {
+      terminalEqual.data.trajectories[carrier].values =
+        terminalEqual.data.trajectories[carrier].values.slice(0, 3);
+    }
+    terminalEqual.parameters.directionMarkers = { mode: 'arrowhead_at_end' };
+    const terminal = buildOrThrow('neuro.phase_plane', 2, terminalEqual);
+    const terminalTrajectory = group(terminal, 'trajectory-m1');
+    expect(
+      terminalTrajectory.marks.find((mark: JsonRecord) => mark.type === 'arrow')
+        .arrows,
+    ).toHaveLength(1);
   });
 
   it('keeps axis-normalized phase vectors nonzero across opposite finite extremes', () => {
@@ -165,10 +368,11 @@ describe('closed geometry preserves every declared evidence carrier', () => {
     expect(expectedSpeed).toBeGreaterThan(0);
     expect(result.artifact.derivation.operations[0]).toMatchObject({
       algorithm: 'cortexel.phase_plane.canonicalize_carriers',
-      algorithmRevision: 2,
+      algorithmRevision: 3,
       parameters: {
-        axisNormalizedBinary64Arithmetic:
-          'exact_component_over_exact_extent_difference_then_one_final_round',
+        derivativeBinary64Arithmetic:
+          'exact_state_and_reciprocal_time_factors_then_one_final_round; ' +
+          'axis_normalized_exact_reciprocal_time_factor_over_exact_extent_then_one_final_round',
       },
     });
     for (let index = 0; index < 4; index++) {
@@ -176,8 +380,8 @@ describe('closed geometry preserves every declared evidence carrier', () => {
       expect(vector.marks.some((mark: any) => mark.type === 'line')).toBe(true);
       expect(lineLength(vector)).toBeGreaterThan(0);
     }
-    expect(result.plan.legend[0].label).toContain('axis_normalized magnitude reference');
-    expect(result.plan.legend[0].label).not.toContain('magnitude reference 0 ');
+    expect(result.plan.legend[0].label).toContain('textual axis_normalized magnitude key');
+    expect(result.plan.legend[0].label).not.toContain('magnitude key: 0 ');
 
     const unrepresentable = requestFor('neuro.phase_plane');
     for (const carrier of ['trajectories', 'nullclines', 'fixedPoints']) {
@@ -197,6 +401,213 @@ describe('closed geometry preserves every declared evidence carrier', () => {
         code: 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
         stage: 'science',
       });
+    }
+  });
+
+  it('composes phase derivative factors and exact extent division before one final rounding', () => {
+    expect(9 * 0.001 * 1000).not.toBe(9);
+    expect(convertCompositeDerivative(9, 'mV', 'V', '/ms', '/s')).toBe(9);
+    expect(Number.MIN_VALUE * 0.001 * 1000).toBe(0);
+    expect(convertCompositeDerivative(
+      Number.MIN_VALUE,
+      'mV',
+      'V',
+      '/ms',
+      '/s',
+    )).toBe(Number.MIN_VALUE);
+    expect(12 * 0.001 / 5).not.toBe(0.0024);
+    expect(normalizeDerivativeByExactAxisExtent(12, '/s', '/ms', 0, 5)).toBe(0.0024);
+    expect(normalizeDerivativeByExactAxisExtent(
+      Number.MIN_VALUE,
+      '/s',
+      '/ms',
+      0,
+      0.001,
+    )).toBe(Number.MIN_VALUE);
+    expect(compositeDerivativeConversionReceipt('mV', 'V', '/ms', '/s'))
+      .toMatchObject({
+        factor: 1,
+        algorithm: 'exact_composite_derivative_round_to_binary64',
+      });
+
+    const physicalRequest = requestFor('neuro.phase_plane', 1);
+    physicalRequest.data.vectorField.dx.values[0] = 9;
+    physicalRequest.data.vectorField.dy.values[0] = 0;
+    const physical = buildOrThrow('neuro.phase_plane', 1, physicalRequest);
+    expect(rowObjects(physical)[0].speed).toBe(9);
+    expect(physical.artifact.derivation.operations[0]).toMatchObject({
+      algorithm: 'cortexel.phase_plane.canonicalize_carriers',
+      algorithmRevision: 3,
+      parameters: {
+        derivativeBinary64Arithmetic:
+          'exact_state_and_reciprocal_time_factors_then_one_final_round; ' +
+          'axis_normalized_exact_reciprocal_time_factor_over_exact_extent_then_one_final_round',
+      },
+      receipt: {
+        derivativeTransforms: expect.arrayContaining([
+          expect.objectContaining({
+            carrier: 'vector-field',
+            component: 'x',
+            basis: 'physical',
+            uses: ['magnitude', 'table_speed'],
+            sourceCompositeUnit: 'mV /ms',
+            targetCompositeUnit: 'V /s',
+            conversion: expect.objectContaining({
+              factor: 1,
+              algorithm: 'exact_composite_derivative_round_to_binary64',
+            }),
+          }),
+        ]),
+      },
+    });
+    const physicalConversionDisclosure = physical.disclosures.find(
+      (entry: JsonRecord) => entry.id === 'UNIT_CONVERTED',
+    )?.text;
+    expect(physicalConversionDisclosure).toContain(
+      'phase-plane exact unit transforms: 0 coordinate, 2 physical derivative, ' +
+      '0 axis-normalized derivative',
+    );
+    expect(physicalConversionDisclosure?.length).toBeLessThanOrEqual(400);
+
+    const mixedPhysicalRequest = requestFor('neuro.phase_plane', 1);
+    mixedPhysicalRequest.data.vectorField.dy.unit = '/s';
+    const mixedPhysical = buildOrThrow('neuro.phase_plane', 1, mixedPhysicalRequest);
+    expect(mixedPhysical.artifact.derivation.operations[0].receipt.derivativeTransforms)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          carrier: 'vector-field',
+          component: 'y',
+          basis: 'axis_normalized',
+          uses: ['display_direction'],
+          sourceDerivativeUnit: '/s',
+          targetDerivativeUnit: '/ms',
+        }),
+        expect.objectContaining({
+          carrier: 'vector-field',
+          component: 'y',
+          basis: 'physical',
+          uses: ['magnitude', 'table_speed'],
+          sourceCompositeUnit: 'mV /s',
+          targetCompositeUnit: 'V /s',
+        }),
+      ]));
+    const mixedConversionDisclosure = mixedPhysical.disclosures.find(
+      (entry: JsonRecord) => entry.id === 'UNIT_CONVERTED',
+    )?.text;
+    expect(mixedConversionDisclosure).toContain(
+      'phase-plane exact unit transforms: 0 coordinate, 2 physical derivative, ' +
+      '1 axis-normalized derivative',
+    );
+    expect(mixedConversionDisclosure?.length).toBeLessThanOrEqual(400);
+    expect(mixedPhysical.artifact.derivation.operations[0].receipt.conversionCounts)
+      .toEqual({
+        coordinate: 0,
+        physicalDerivative: 2,
+        axisNormalizedDerivative: 1,
+      });
+
+    const normalizedRequest = requestFor('neuro.phase_plane', 1);
+    normalizedRequest.parameters.magnitudeBasis = 'axis_normalized';
+    normalizedRequest.data.vectorField.x.values = [0, 1, 0, 1];
+    normalizedRequest.data.vectorField.y.values = [0, 0, 5, 5];
+    normalizedRequest.data.vectorField.domain.x = { start: 0, stop: 1, unit: 'mV' };
+    normalizedRequest.data.vectorField.domain.y = { start: 0, stop: 5, unit: 'mV' };
+    normalizedRequest.data.vectorField.dx.values.fill(0);
+    normalizedRequest.data.vectorField.dy.unit = '/s';
+    normalizedRequest.data.vectorField.dy.values.fill(12);
+    const normalized = buildOrThrow('neuro.phase_plane', 1, normalizedRequest);
+    expect(rowObjects(normalized)[0].speed).toBe(0.0024);
+    expect(normalized.artifact.derivation.operations[0].receipt.derivativeTransforms)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          carrier: 'vector-field',
+          component: 'y',
+          basis: 'axis_normalized',
+          sourceDerivativeUnit: '/s',
+          targetDerivativeUnit: '/ms',
+          conversion: expect.objectContaining({
+            algorithm:
+              'exact_derivative_unit_factor_over_exact_binary64_extent_round_to_binary64',
+          }),
+        }),
+      ]));
+    expect(
+      normalized.disclosures.find((entry: JsonRecord) => entry.id === 'UNIT_CONVERTED')?.text,
+    ).toContain(
+      'phase-plane exact unit transforms: 0 coordinate, 0 physical derivative, ' +
+      '1 axis-normalized derivative',
+    );
+  });
+
+  it('keeps multiple nullclines distinguishable without color and mirrors style tokens in the legend', () => {
+    const request = requestFor('neuro.phase_plane');
+    const method = structuredClone(request.data.nullclines.methods[0]);
+    request.data.nullclines = {
+      curveIds: ['x-nullcline', 'y-nullcline'],
+      labels: ['dx/dt = 0', 'dy/dt = 0'],
+      zeroDerivativeOf: ['x', 'y'],
+      methods: [method, structuredClone(method)],
+      pointCurveIds: [
+        'x-nullcline', 'x-nullcline', 'x-nullcline', 'x-nullcline',
+        'y-nullcline', 'y-nullcline', 'y-nullcline', 'y-nullcline',
+      ],
+      x: {
+        kind: 'membrane_voltage',
+        unit: 'mV',
+        values: [-70, -55, null, -40, -70, -55, null, -40],
+      },
+      y: {
+        kind: 'state_variable',
+        unit: '1',
+        values: [0.02, 0.1, null, 0.18, 0.18, 0.1, null, 0.02],
+      },
+    };
+    const result = buildOrThrow('neuro.phase_plane', 0, request);
+    const signatures = request.data.nullclines.curveIds.map((id: string, index: number) => {
+      const curve = group(result, `nullcline-${id}`);
+      const line = curve.marks.find((mark: JsonRecord) => mark.type === 'line');
+      const point = curve.marks.find((mark: JsonRecord) => mark.type === 'point');
+      const legend = result.plan.legend.find(
+        (entry: JsonRecord) => entry.label === request.data.nullclines.labels[index],
+      );
+      expect(line).toBeDefined();
+      expect(point).toBeDefined();
+      expect(legend).toBeDefined();
+      expect(legend.dash).toBe(line.dash);
+      expect(legend.marker).toBe(point.shape);
+      return `${line.dash}|${point.shape}`;
+    });
+    expect(new Set(signatures).size).toBe(signatures.length);
+    expect(signatures).toEqual(['8 2 2 2|diamond', '1 3|cross']);
+  });
+
+  it('keeps empty and all-missing nullcline declarations honest without inventing marks', () => {
+    const cases = [
+      { pointIds: [] as string[], xs: [] as (number | null)[], ys: [] as (number | null)[] },
+      {
+        pointIds: ['v-nullcline', 'v-nullcline'],
+        xs: [null, null] as (number | null)[],
+        ys: [null, null] as (number | null)[],
+      },
+    ];
+    for (const testCase of cases) {
+      const request = requestFor('neuro.phase_plane');
+      request.data.nullclines.pointCurveIds = testCase.pointIds;
+      request.data.nullclines.x.values = testCase.xs;
+      request.data.nullclines.y.values = testCase.ys;
+      const result = buildOrThrow('neuro.phase_plane', 0, request);
+      expect(result.plan.panels[0].marks.some(
+        (mark: JsonRecord) => mark.type === 'group' && mark.id === 'nullcline-v-nullcline',
+      )).toBe(false);
+      expect(result.plan.legend).toContainEqual(expect.objectContaining({
+        label: `${request.data.nullclines.labels[0]} (declared; no drawable finite points)`,
+      }));
+      expect(result.plan.accessibility.summary).toContain('1 nullclines');
+      expect(result.plan.accessibility.summary).toContain(
+        '1 declared nullcline has no drawable finite points.',
+      );
+      expect(rowObjects(result).filter((row) => row.rowKind === 'nullcline_point'))
+        .toHaveLength(testCase.pointIds.length);
     }
   });
 
