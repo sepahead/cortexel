@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — bounded cross-language parity subprocesses
+
+- Cross-language parity tests now give each direct Python child a 60-second
+  timeout. A stalled synchronous child can no longer bypass Vitest's test timeout
+  and block the release gate indefinitely.
+
 ### Fixed — unreaped Python package subprocess cleanup
 
 - The Python package build-evidence gate no longer calls `Popen.poll()`,

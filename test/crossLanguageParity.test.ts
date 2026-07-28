@@ -39,19 +39,25 @@ const SCRATCH = path.join(REPO, 'node_modules/.cache/cortexel-parity');
 // These bounded proofs start an independent Python interpreter over the complete
 // living contract corpus. Under Vitest's file-parallel load they can legitimately
 // exceed the generic five-second unit-test default without being unbounded.
-const PARITY_PROOF_TIMEOUT_MS = 30_000;
+const PARITY_PROOF_TIMEOUT_MS = 60_000;
 // This finite product deliberately executes more than 10,000 complete TypeScript
 // figure boundaries plus one independent Python batch. A cold serialized CI run has
 // measured above 60 seconds, so keep a bounded but non-flaky proof-specific ceiling.
 const EXHAUSTIVE_DIMENSION_PARITY_TIMEOUT_MS = 120_000;
 
 let pythonAvailable = false;
-function python(args: string[], input?: string): string {
+function python(
+  args: string[],
+  input?: string,
+  timeout = PARITY_PROOF_TIMEOUT_MS,
+): string {
   return execFileSync('python3', args, {
     cwd: REPO,
     encoding: 'utf8',
     input,
     env: { ...process.env, PYTHONPATH: path.join(REPO, 'python/src') },
+    timeout,
+    killSignal: 'SIGKILL',
   });
 }
 
@@ -309,6 +315,18 @@ describe('cross-language parity — TypeScript vs Python', () => {
       console.warn('Python 3 / cortexel not available — parity suite skipped.');
     }
     expect(true).toBe(true);
+  });
+
+  it('kills a stalled Python parity child at the helper boundary', () => {
+    if (!pythonAvailable) return;
+    let caught: unknown;
+    try {
+      python(['-c', 'import time; time.sleep(60)'], undefined, 25);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as NodeJS.ErrnoException).code).toBe('ETIMEDOUT');
   });
 
   it('agrees on the canonical digest of every valid example, byte for byte', () => {
