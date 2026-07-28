@@ -118,6 +118,7 @@ describe('mandatory disclosure presentation surfaces', () => {
     const tableDisclosures = result.table.metadata?.disclosures;
     const footer = footerDisclosures(result.svg);
     const description = decodedDescription(result.svg);
+    const describedBy = result.svg.match(/\baria-describedby="([^"]+)"/u)?.[1]?.split(' ') ?? [];
 
     expect(result.disclosures.map((disclosure) => disclosure.id)).toContain(
       'EVENT_SCOPE_MEMBERSHIP_CARDINALITY_ONLY',
@@ -125,6 +126,10 @@ describe('mandatory disclosure presentation surfaces', () => {
     expect(artifactDisclosures).toEqual(result.disclosures);
     expect(tableDisclosures).toEqual(result.disclosures);
     expect(footer.size).toBe(result.disclosures.length);
+    expect(describedBy[0]).toBe(`${result.plan.figureId}-desc`);
+    expect(result.svg.match(
+      new RegExp(`<desc id="${result.plan.figureId}-desc">([\\s\\S]*?)</desc>`, 'u'),
+    )?.[1]).toBe(result.plan.accessibility.summary);
 
     for (const disclosure of result.disclosures) {
       const visible = footer.get(disclosure.id);

@@ -238,7 +238,7 @@
     { "id": "topology.delay_positive" }
   ],
 
-  "renderer": { "id": "figure.matrix", "revision": 4, "axisOrder": "target_rows_source_columns" },
+  "renderer": { "id": "figure.matrix", "revision": 5, "axisOrder": "target_rows_source_columns" },
 
   "budgets": {
     "maxObservations": 200000,

@@ -1088,9 +1088,18 @@ function refineSparseMatrix(
     target_ids: readonly number[];
     cells: readonly { source_id: number; target_id: number; connection_count: number }[];
     connection_count: number;
+    snapshot_scope: SnapshotScope;
   },
   ctx: z.RefinementCtx,
 ): void {
+  if (value.snapshot_scope.kind === 'mpi_target_rank_local') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['snapshot_scope', 'kind'],
+      message:
+        'literal matrices require a complete single-process or all-ranks-merged snapshot',
+    });
+  }
   const sourceIds = new Set(value.source_ids);
   const targetIds = new Set(value.target_ids);
   if (sourceIds.size !== value.source_ids.length) {
@@ -1311,11 +1320,12 @@ function degreeDistributionSchema<const D extends 'in' | 'out'>(direction: D) {
           message: 'displayed degree probabilities must sum to one',
         });
       }
-      if (direction === 'out' && value.snapshot_scope.kind === 'mpi_target_rank_local') {
+      if (value.snapshot_scope.kind === 'mpi_target_rank_local') {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['snapshot_scope', 'kind'],
-          message: 'out-degree requires a complete single-process or all-ranks-merged snapshot',
+          message:
+            `${direction}-degree requires a complete single-process or all-ranks-merged snapshot`,
         });
       }
     });
@@ -1695,19 +1705,25 @@ export const PlasticityParamsSchema = z
   });
 export type PlasticityParams = z.infer<typeof PlasticityParamsSchema>;
 
-// grid maps each state variable name → its sampled axis values (a numeric array).
-// Requiring numeric arrays (and at least one axis) rejects grid:{} or
-// grid:{v:'notanarray'} at the gate instead of rendering an empty phase plane.
+// Phase-plane arrows compare derivative components only after each has been
+// expressed per the same explicit time unit. Canonical labels bind each
+// derivative numerator to its plotted coordinate unit without parsing unit text.
+const PhasePlaneDerivativeTimeUnitSchema = z.enum(['ms', 's']);
+
+// grid maps each state variable name → its sampled axis values. Two strictly
+// increasing samples per axis are the minimum geometry that defines a plane and
+// a non-degenerate plotted coordinate span.
 export const PhasePlaneParamsSchema = z
   .object({
     grid: z
-      .record(normalizedRecordKey, gpuArray.min(1))
+      .record(normalizedRecordKey, gpuArray.min(2))
       .refine((g) => Object.keys(g).length === 2, {
-        message: 'phase-plane grid must declare exactly two non-empty state-variable axes',
+        message: 'phase-plane grid must declare exactly two state-variable axes with at least two coordinates each',
       }),
     derivatives: z.record(normalizedRecordKey, gpuArray.min(1)),
     axis_units: z.record(normalizedRecordKey, units),
     derivative_units: z.record(normalizedRecordKey, units),
+    derivative_time_unit: PhasePlaneDerivativeTimeUnitSchema,
     axis_order: z
       .tuple([normalizedRecordKey, normalizedRecordKey])
       .refine(([first, second]) => first !== second, {
@@ -1719,6 +1735,9 @@ export const PhasePlaneParamsSchema = z
   .superRefine((value, ctx) => {
     const axes = Object.keys(value.grid);
     const derivativeNames = Object.keys(value.derivatives);
+    for (const axis of axes) {
+      requireStrictlyIncreasing(value.grid[axis], ctx, `grid.${axis}`);
+    }
     if (
       value.axis_order.some((axis) => !Object.hasOwn(value.grid, axis)) ||
       axes.some((axis) => !value.axis_order.includes(axis))
@@ -1752,6 +1771,40 @@ export const PhasePlaneParamsSchema = z
           message: `${field} must declare units for the same two state variables as grid`,
         });
       }
+    }
+    for (const axis of axes) {
+      if (
+        Object.hasOwn(value.axis_units, axis) &&
+        Object.hasOwn(value.derivative_units, axis)
+      ) {
+        const expected = `${value.axis_units[axis]}/${value.derivative_time_unit}`;
+        if (value.derivative_units[axis] !== expected) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['derivative_units', axis],
+            message:
+              `derivative_units.${axis} must equal axis_units.${axis}/${value.derivative_time_unit}`,
+          });
+        }
+      }
+    }
+    if (value.derivative_time_unit === 's') {
+      for (const axis of derivativeNames) {
+        for (let index = 0; index < value.derivatives[axis].length; index++) {
+          const derivative = value.derivatives[axis][index];
+          if (derivative !== 0 && derivative / 1000 === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['derivatives', axis, index],
+              message:
+                'a nonzero per-second derivative must remain nonzero after canonical per-ms conversion',
+            });
+          }
+        }
+      }
+    }
+    if (axes.length !== 2) {
+      return;
     }
     const expected = value.grid[axes[0]].length * value.grid[axes[1]].length;
     for (const axis of axes) {

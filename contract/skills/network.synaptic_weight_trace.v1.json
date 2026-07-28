@@ -70,7 +70,7 @@
       "A caller-supplied `groupLabel` is display text. The accessible summary always states the member count beside it, so a label such as 'all E to E synapses' can never do the work of a completeness claim that no scope in this contract supports.",
       "In derived mode the membership edge-id set must equal the data.series edge-id set exactly. A foreign member is a denominator entry with no source behind it; an unused raw series would enter the complete table and carrier counts without being drawn or influencing the aggregate. Both mismatches are refused rather than silently dropped or mixed.",
       "Every weight on the value axis must share one unit dimension, and the duplicate-free set of distinct synapse models must exactly match the explicit comparability declaration for physical and simulator-defined units alike. A derived pool is stricter: every selected value and contributing initial state uses one exact unit code so independently rounded conversions never enter the statistic. `nest:weight` is one code covering values whose physical meaning differs by synapse and neuron model.",
-      "`individual` display refuses more than 8 edges with RENDER_SERIES_LIMIT_EXCEEDED: the CVD-safe palette (Okabe-Ito) carries exactly 8 style tuples (`categoricalSeries.maxStableSeries`), so a ninth could only be drawn by minting a style outside it. Larger sets go through `aggregate_derived_with_members`, where members carry no colour or legend identity and are recoverable only from the table."
+      "`individual` display refuses more than 8 edges with RENDER_SERIES_LIMIT_EXCEEDED: the registry carries exactly 8 colour/dash/marker tuples (`categoricalSeries.maxStableSeries`), so a ninth could only be drawn by minting an unregistered style. Tuple uniqueness is structural evidence, not colour-vision-deficiency, greyscale, or assistive-technology conformance. Larger sets go through `aggregate_derived_with_members`, where members carry no colour or legend identity and are recoverable only from the table."
     ],
     "uncertaintySupport": [
       "none",
@@ -677,7 +677,7 @@
             "aggregate_derived_with_members",
             "aggregate_declared"
           ],
-          "description": "individual: one drawn series per synapse, with a legend entry each; refused above 8 edges — the palette's `categoricalSeries.maxStableSeries` — rather than minting a style outside the colour-vision-deficiency-safe set. aggregate_derived: Cortexel computes the aggregate from the member observations. aggregate_derived_with_members: the same, with the members drawn behind it WITHOUT individual colour or legend identity, so the spread is visible while no per-synapse colour claim is made. aggregate_declared: the caller's pre-aggregated series, which Cortexel cannot re-derive. The first three require `data.mode: edges`; the last requires `data.mode: preaggregated`."
+          "description": "individual: one drawn series per synapse, with a legend entry each; refused above 8 edges — the palette's `categoricalSeries.maxStableSeries` — rather than minting an unregistered style. The cap and tuple-uniqueness test do not establish perceptual or accessibility conformance. aggregate_derived: Cortexel computes the aggregate from the member observations. aggregate_derived_with_members: the same, with the members drawn behind it WITHOUT individual colour or legend identity, so the spread is visible while no per-synapse colour claim is made. aggregate_declared: the caller's pre-aggregated series, which Cortexel cannot re-derive. The first three require `data.mode: edges`; the last requires `data.mode: preaggregated`."
         },
         "weightComparability": {
           "description": "Why these weights may share one value axis at all. Required, because `nest:weight` is one code covering values whose physical meaning differs by synapse and neuron model: the same number 10.0 may be a 10 pA postsynaptic current under one model and a 10 nS conductance under another.",
@@ -1067,7 +1067,7 @@
   ],
   "renderer": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 4
+    "revision": 5
   },
   "budgets": {
     "maxObservations": 2000000,

@@ -21,8 +21,8 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:976dc178bd6ca99bc5a57717bb2f2fae2cdb17f29f4bd18802d58032961113ec"
-CATALOG_DIGEST: str = "sha256:e5eb3c383cb7593c3ed797733865b11f1f397dcfddce3e458e43be54834a4bca"
+CONTRACT_DIGEST: str = "sha256:ef699776098d64ae1d64697eda339ce4459941f70dac3f7c3eb0720934284c8f"
+CATALOG_DIGEST: str = "sha256:be2826569b51a0f933dca61c4b99fc85bea56c5ec8c382f64a4e0c67f72f41a9"
 
 STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze([
     "network.adjacency_matrix",

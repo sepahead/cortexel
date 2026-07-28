@@ -387,7 +387,7 @@
   ],
   "renderer": {
     "id": "figure.matrix",
-    "revision": 4,
+    "revision": 5,
     "axisOrder": "target_rows_source_columns"
   },
   "budgets": {

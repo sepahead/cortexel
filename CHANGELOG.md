@@ -11,6 +11,58 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cross-language parity tests now give each direct Python child a 60-second
   timeout. A stalled synchronous child can no longer bypass Vitest's test timeout
   and block the release gate indefinitely.
+- The Python parity child runs with `-B`, and the harness no longer creates an
+  unused cache directory. Read-only parity checks therefore leave no ambient
+  bytecode or directory state behind.
+
+### Fixed — legacy scientific and portable-contract authority
+
+- Legacy `VizSpec` is now `1.5.0`, the skill axis is `1.8.0`, and the generated
+  manifest plus portable constraint language are version `11`. Stored `1.4.0`
+  payloads refuse rather than receiving the new skill-aware rules under an old
+  stamp.
+- `nest.phase_plane` now requires an explicit shared derivative time unit, two
+  non-degenerate strictly increasing axes, exact numerator/time unit labels, and
+  a portable direction-basis constraint. Per-second components use one binary64
+  division by 1000; a nonzero component that would underflow to zero fails
+  closed. Zero derivatives remain visible samples and are not promoted to
+  equilibria.
+- Literal adjacency, weight, and delay matrices plus both degree distributions
+  reject target-rank-local snapshots at the raw-transform, strict-schema, and
+  independent manifest-evaluator boundaries. Missing cells and zero degrees are
+  not accepted without exact rank-owned target and cross-rank edge authority.
+- Measured weight/delay aggregates reject multiple observed synapse models while
+  the contract has one global unit and no cross-model compatibility/conversion
+  authority.
+- `synapseCollectionToWeightHistogramParams` derives bounded half-open bins from
+  one raw weight/model channel complete for the declared scope, preserves exact
+  integer observation mass, rejects clipping and mixed models, and publishes its
+  transform metadata.
+  Standalone aggregate params carry no raw-entry receipt, so the
+  one-entry/one-observation provenance remains explicitly external.
+- `correlationDetectorToCorrelogramParams` now requires the documented receptor
+  port order, simulation resolution, and simulation bounds; it checks an exact
+  positive odd resolution multiple and both `tau_max` edge margins. Population
+  labels and caller-supplied source configuration remain external authority, and
+  the manifest says so.
+
+### Fixed — renderer accessibility and perception evidence
+
+- Normative SVGs now expose deduplicated panel summaries and explicit no-data
+  reasons through a second referenced description. Essential unencoded spatial,
+  graph, and phase-plane marks use the theme axis token instead of the
+  low-contrast grid token.
+- Palette prose now distinguishes source-described colormap properties and
+  structural dash/marker uniqueness from Cortexel-tested evidence. Selected token
+  and owned-mark checks are not presented as whole-figure WCAG, grayscale,
+  colour-vision-deficiency, host-page, or assistive-technology conformance.
+- Legacy React figures bind the mandatory honesty caption with
+  `aria-describedby`, render a singleton plasticity observation as a visible
+  point, and render zero-derivative phase samples as disclosed rings.
+- All fourteen stable renderer identities move one revision because normative
+  SVG accessibility/colour bytes changed: phase plane moves from 5 to 6 and the
+  other stable renderers move from 4 to 5. The affected skill renderer references
+  move in lockstep.
 
 ### Fixed — unreaped Python package subprocess cleanup
 

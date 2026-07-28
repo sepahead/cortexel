@@ -34,9 +34,10 @@ import {
   synapseCollectionToDelayMatrixParams,
   synapseCollectionToInDegreeDistributionParams,
   synapseCollectionToOutDegreeDistributionParams,
+  synapseCollectionToWeightHistogramParams,
   synapseCollectionToWeightMatrixParams,
   weightRecorderToSceneData
-} from "../chunk-V6SUE45Z.js";
+} from "../chunk-FV7EIRJ4.js";
 import "../chunk-XGABDL4O.js";
 import {
   AXIS_COLORS,
@@ -174,7 +175,7 @@ import {
   validateSkillParams,
   validateSpec,
   validateVizSpec
-} from "../chunk-VKPKMYSC.js";
+} from "../chunk-MEHRBBUS.js";
 import "../chunk-UEJPZXDX.js";
 import "../chunk-ZYBCCIMH.js";
 export {
@@ -340,6 +341,7 @@ export {
   synapseCollectionToDelayMatrixParams,
   synapseCollectionToInDegreeDistributionParams,
   synapseCollectionToOutDegreeDistributionParams,
+  synapseCollectionToWeightHistogramParams,
   synapseCollectionToWeightMatrixParams,
   toPortableJsonSchema,
   validateHostRendererInvocation,

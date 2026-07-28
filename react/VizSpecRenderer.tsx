@@ -12,7 +12,7 @@
 // PNG/MP4) is not implemented in this phase: rather than fake an interactive
 // render, we surface an explicit notice (the backend mirrors this with a 501).
 
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
 import type { SceneName } from '../core/designLaws';
 import type { ReadonlySemanticPalette } from '../core/colormaps';
 import type { ProvenanceMetadata } from '../core/provenance';
@@ -316,6 +316,12 @@ function SceneFrame({
   active,
   renderScene,
 }: SceneFrameProps) {
+  const reactId = useId();
+  const captionId = `cortexel-honesty-caption-${reactId.replace(
+    /[^a-zA-Z0-9_-]/g,
+    '',
+  )}`;
+
   if (mode === 'export') {
     return (
       <div role="status" className="cortexel-vizspec-export-unsupported">
@@ -328,6 +334,8 @@ function SceneFrame({
   return (
     <div
       className="cortexel-vizspec"
+      role={caption ? 'group' : undefined}
+      aria-describedby={caption ? captionId : undefined}
       style={{
         position: 'relative',
         width: '100%',
@@ -346,6 +354,7 @@ function SceneFrame({
       })}
       {caption && (
         <div
+          id={captionId}
           className="cortexel-honesty-caption"
           role="note"
           aria-live="polite"

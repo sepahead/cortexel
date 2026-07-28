@@ -100,12 +100,32 @@ const PsthOptionsSchema = z
   })
   .strict();
 
+const CorrelationDetectorSourceConfigurationSchema = z
+  .object({
+    simulationResolutionMs: finite.positive(),
+    simulationStartMs: finite,
+    simulationStopMs: finite,
+    referenceReceptorPort: z.literal(0),
+    targetReceptorPort: z.literal(1),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (!(value.simulationStopMs > value.simulationStartMs)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['simulationStopMs'],
+        message: 'simulationStopMs must be greater than simulationStartMs',
+      });
+    }
+  });
+
 const CorrelationDetectorOptionsSchema = z
   .object({
     measurement: z.literal('count_histogram'),
     referenceLabel: displayText(240),
     targetLabel: displayText(240),
     zeroLagPolicy: z.literal('included'),
+    sourceConfiguration: CorrelationDetectorSourceConfigurationSchema,
   })
   .strict();
 
@@ -145,10 +165,96 @@ export interface CorrelationDetectorOptions {
   referenceLabel: string;
   targetLabel: string;
   zeroLagPolicy: 'included';
+  sourceConfiguration: CorrelationDetectorSourceConfiguration;
+}
+
+export interface CorrelationDetectorSourceConfiguration {
+  simulationResolutionMs: number;
+  simulationStartMs: number;
+  simulationStopMs: number;
+  referenceReceptorPort: 0;
+  targetReceptorPort: 1;
 }
 
 function error(message: string): { ok: false; errors: string[] } {
   return { ok: false, errors: [message] };
+}
+
+interface CanonicalDecimal {
+  coefficient: bigint;
+  exponent10: number;
+}
+
+/**
+ * Treat the shortest round-trip decimal spelling of a submitted binary64 as the
+ * exact configuration quantity. NEST/Python status values conventionally cross
+ * this boundary as decimal-authored numbers: this accepts 0.3 as three 0.1
+ * resolution steps, while rejecting either adjacent binary64 value instead of
+ * granting a free epsilon around the requested detector geometry.
+ */
+function canonicalDecimal(value: number): CanonicalDecimal | null {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/.exec(
+    value.toString().toLowerCase(),
+  );
+  if (!match) return null;
+  const fraction = match[3] ?? '';
+  const explicitExponent = match[4] === undefined ? 0 : Number(match[4]);
+  if (!Number.isSafeInteger(explicitExponent)) return null;
+  const unsignedCoefficient = BigInt(`${match[2]}${fraction}`);
+  return {
+    coefficient: match[1] === '-' ? -unsignedCoefficient : unsignedCoefficient,
+    exponent10: explicitExponent - fraction.length,
+  };
+}
+
+function powerOfTen(exponent: number): bigint {
+  return 10n ** BigInt(exponent);
+}
+
+function exactCanonicalDecimalIntegerRatio(
+  numeratorValue: number,
+  denominatorValue: number,
+): bigint | null {
+  const numerator = canonicalDecimal(numeratorValue);
+  const denominator = canonicalDecimal(denominatorValue);
+  if (
+    !numerator ||
+    !denominator ||
+    numerator.coefficient <= 0n ||
+    denominator.coefficient <= 0n
+  ) {
+    return null;
+  }
+  const exponentDifference = numerator.exponent10 - denominator.exponent10;
+  const scaledNumerator = exponentDifference >= 0
+    ? numerator.coefficient * powerOfTen(exponentDifference)
+    : numerator.coefficient;
+  const scaledDenominator = exponentDifference >= 0
+    ? denominator.coefficient
+    : denominator.coefficient * powerOfTen(-exponentDifference);
+  if (scaledNumerator % scaledDenominator !== 0n) return null;
+  return scaledNumerator / scaledDenominator;
+}
+
+function compareCanonicalDecimalSums(
+  leftValues: readonly number[],
+  rightValues: readonly number[],
+): -1 | 0 | 1 | null {
+  const left = leftValues.map(canonicalDecimal);
+  const right = rightValues.map(canonicalDecimal);
+  if (left.some((value) => value === null) || right.some((value) => value === null)) {
+    return null;
+  }
+  const decimals = [...left, ...right] as CanonicalDecimal[];
+  const commonExponent = Math.min(...decimals.map((value) => value.exponent10));
+  const sum = (values: readonly CanonicalDecimal[]): bigint => values.reduce(
+    (total, value) => total +
+      value.coefficient * powerOfTen(value.exponent10 - commonExponent),
+    0n,
+  );
+  const leftSum = sum(left as CanonicalDecimal[]);
+  const rightSum = sum(right as CanonicalDecimal[]);
+  return leftSum < rightSum ? -1 : leftSum > rightSum ? 1 : 0;
 }
 
 function validateOutput<T>(schema: ZodType<T>, params: unknown): NestAnalysisResult<T> {
@@ -607,6 +713,44 @@ export function correlationDetectorToCorrelogramParams(
     const opts = parsedOptions.data;
     const values = parsedStatus.data.count_histogram;
     if (!values) return error('count_histogram is absent from the detector status');
+
+    const resolutionMultiple = exactCanonicalDecimalIntegerRatio(
+      parsedStatus.data.delta_tau,
+      opts.sourceConfiguration.simulationResolutionMs,
+    );
+    if (
+      resolutionMultiple === null ||
+      resolutionMultiple < 1n ||
+      resolutionMultiple % 2n !== 1n
+    ) {
+      return error(
+        'delta_tau must be an exact positive odd integer multiple of '
+        + 'sourceConfiguration.simulationResolutionMs',
+      );
+    }
+    const startMarginComparison = compareCanonicalDecimalSums(
+      [parsedStatus.data.Tstart],
+      [
+        opts.sourceConfiguration.simulationStartMs,
+        parsedStatus.data.tau_max,
+      ],
+    );
+    if (startMarginComparison === null || startMarginComparison < 0) {
+      return error(
+        'Tstart must be at least sourceConfiguration.simulationStartMs + tau_max '
+        + 'to exclude the detector start-edge window',
+      );
+    }
+    const stopMarginComparison = compareCanonicalDecimalSums(
+      [parsedStatus.data.Tstop, parsedStatus.data.tau_max],
+      [opts.sourceConfiguration.simulationStopMs],
+    );
+    if (stopMarginComparison === null || stopMarginComparison > 0) {
+      return error(
+        'Tstop + tau_max must be at most sourceConfiguration.simulationStopMs '
+        + 'to exclude the detector stop-edge window',
+      );
+    }
 
     const halfBinRatio = parsedStatus.data.tau_max / parsedStatus.data.delta_tau;
     const halfBinCount = Math.round(halfBinRatio);

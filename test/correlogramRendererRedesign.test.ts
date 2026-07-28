@@ -47,7 +47,7 @@ function correlogramOperation(result: ReturnType<typeof built>): Record<string, 
   return operations[0];
 }
 
-describe('unreleased correlogram renderer closes the revision-4 product', () => {
+describe('unreleased correlogram renderer closes the revision-5 product', () => {
   it('renders every living raw/pre-binned auto/cross example with the exact source table', () => {
     const expectedColumns = source.accessibility.tableColumns.map(({ key, header }) => ({ key, header }));
     for (let index = 0; index < source.examples.valid.length; index++) {

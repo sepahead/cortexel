@@ -411,7 +411,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.psth", "revision": 4 },
+  "renderer": { "id": "figure.psth", "revision": 5 },
 
   "budgets": {
     "maxObservations": 2000000,

@@ -48,6 +48,17 @@ describe('every stable family renders end to end', () => {
     expect(a.svg).not.toMatch(/\son\w+=/);
     expect(a.svg).not.toContain('<script');
     expect(a.svg).not.toContain('foreignObject');
+
+    const labelledBy = a.svg.match(/\baria-labelledby="([^"]+)"/u)?.[1]?.split(' ') ?? [];
+    const describedBy = a.svg.match(/\baria-describedby="([^"]+)"/u)?.[1]?.split(' ') ?? [];
+    expect(labelledBy, `${id} has no accessible name reference`).toHaveLength(1);
+    expect(describedBy.length, `${id} has no accessible description reference`).toBeGreaterThan(0);
+    for (const referencedId of [...labelledBy, ...describedBy]) {
+      expect(
+        a.svg.match(new RegExp(`\\bid="${referencedId}"`, 'gu')),
+        `${id} has a dangling or duplicate accessibility reference ${referencedId}`,
+      ).toHaveLength(1);
+    }
   });
 
   it('renders all 19 stable skills (no pending fallbacks)', () => {

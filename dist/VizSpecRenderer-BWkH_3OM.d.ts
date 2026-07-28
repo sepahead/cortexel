@@ -1,6 +1,6 @@
 import * as react from 'react';
 import { ReactNode } from 'react';
-import { S as SceneName, P as ProvenanceMetadata, a as SkillInvocationError } from './hostInvocation-DxxyBttn.js';
+import { S as SceneName, P as ProvenanceMetadata, a as SkillInvocationError } from './hostInvocation-DWfbQ71f.js';
 import { R as ReadonlySemanticPalette } from './colormaps-CZ6XejJa.js';
 
 type CameraHint = 'default' | 'top' | 'side' | 'close' | 'cinematic';

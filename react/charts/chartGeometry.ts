@@ -434,12 +434,17 @@ export function phasePlaneSamples(
   axisOrder: readonly [string, string],
   grid: Readonly<Record<string, readonly number[]>>,
   derivatives: Readonly<Record<string, readonly number[]>>,
+  derivativeTimeUnit: 'ms' | 's',
 ): PhasePlaneSample[] {
   const [xAxis, yAxis] = axisOrder;
   const xs = grid[xAxis] ?? [];
   const ys = grid[yAxis] ?? [];
   const dx = derivatives[xAxis] ?? [];
   const dy = derivatives[yAxis] ?? [];
+  // A shared positive time conversion preserves physical direction, but the
+  // presentation length below also depends on magnitude. One division defines
+  // the binary64 per-ms basis before either calculation; independently rounded
+  // source representations retain their own rounding.
   const samples = new Array<PhasePlaneSample>(xs.length * ys.length);
   let outputIndex = 0;
   for (let xIndex = 0; xIndex < xs.length; xIndex++) {
@@ -448,8 +453,12 @@ export function phasePlaneSamples(
       samples[outputIndex++] = {
         x: xs[xIndex],
         y: ys[yIndex],
-        dx: dx[index] ?? 0,
-        dy: dy[index] ?? 0,
+        dx: derivativeTimeUnit === 's'
+          ? (dx[index] ?? 0) / 1000
+          : (dx[index] ?? 0),
+        dy: derivativeTimeUnit === 's'
+          ? (dy[index] ?? 0) / 1000
+          : (dy[index] ?? 0),
         index,
       };
     }

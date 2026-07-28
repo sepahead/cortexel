@@ -237,10 +237,11 @@ completion, the still-live wrapper publishes a canonical result over a private p
 and then sends `SIGKILL` to its own group while its leader identity still pins the
 PGID. Timeout, output overflow, and handled `TERM`, `INT`, or `HUP` cancellation are
 likewise signaled only while the supervisor still observes that direct leader as
-live. No layer probes or signals the PGID after the wrapper leader has been reaped:
-POSIX exposes no portable closure receipt for a now-reusable process-group number.
-These anchored sweeps cover group members that retain the caller's signal authority;
-`EPERM` means that authority was lost and the evidence fails closed.
+live. No ordinary wrapper/supervisor path probes or signals the PGID after the
+wrapper leader has been reaped: POSIX exposes no portable closure receipt for a
+now-reusable process-group number. These anchored sweeps cover group members that
+retain the caller's signal authority; `EPERM` means that authority was lost and
+the evidence fails closed.
 
 If the supervisor fails after publication while the outer caller survives and the
 wrapper may have started reviewed code, the caller attempts one abnormal-only

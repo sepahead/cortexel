@@ -182,6 +182,7 @@ __export(core_exports, {
   synapseCollectionToDelayMatrixParams: () => synapseCollectionToDelayMatrixParams,
   synapseCollectionToInDegreeDistributionParams: () => synapseCollectionToInDegreeDistributionParams,
   synapseCollectionToOutDegreeDistributionParams: () => synapseCollectionToOutDegreeDistributionParams,
+  synapseCollectionToWeightHistogramParams: () => synapseCollectionToWeightHistogramParams,
   synapseCollectionToWeightMatrixParams: () => synapseCollectionToWeightMatrixParams,
   toPortableJsonSchema: () => toPortableJsonSchema,
   validateHostRendererInvocation: () => validateHostRendererInvocation,
@@ -870,7 +871,7 @@ function readOwnEnumerableDataProperty(input, key) {
 }
 
 // core/vizSpec.ts
-var CORTEXEL_SPEC_VERSION = "1.4.0";
+var CORTEXEL_SPEC_VERSION = "1.5.0";
 var CORTEXEL_JSON_LIMITS = Object.freeze({
   maxDepth: 32,
   maxNodes: 5e5,
@@ -3213,6 +3214,13 @@ var matrixBaseShape = {
   snapshot_scope: SnapshotScopeSchema
 };
 function refineSparseMatrix(value, ctx) {
+  if (value.snapshot_scope.kind === "mpi_target_rank_local") {
+    ctx.addIssue({
+      code: import_zod3.z.ZodIssueCode.custom,
+      path: ["snapshot_scope", "kind"],
+      message: "literal matrices require a complete single-process or all-ranks-merged snapshot"
+    });
+  }
   const sourceIds = new Set(value.source_ids);
   const targetIds = new Set(value.target_ids);
   if (sourceIds.size !== value.source_ids.length) {
@@ -3406,11 +3414,11 @@ function degreeDistributionSchema(direction) {
         message: "displayed degree probabilities must sum to one"
       });
     }
-    if (direction === "out" && value.snapshot_scope.kind === "mpi_target_rank_local") {
+    if (value.snapshot_scope.kind === "mpi_target_rank_local") {
       ctx.addIssue({
         code: import_zod3.z.ZodIssueCode.custom,
         path: ["snapshot_scope", "kind"],
-        message: "out-degree requires a complete single-process or all-ranks-merged snapshot"
+        message: `${direction}-degree requires a complete single-process or all-ranks-merged snapshot`
       });
     }
   });
@@ -3706,13 +3714,15 @@ var PlasticityParamsSchema = import_zod3.z.object({
   );
   requireMonotonic(value.times_ms, ctx, "times_ms");
 });
+var PhasePlaneDerivativeTimeUnitSchema = import_zod3.z.enum(["ms", "s"]);
 var PhasePlaneParamsSchema = import_zod3.z.object({
-  grid: import_zod3.z.record(normalizedRecordKey2, gpuArray.min(1)).refine((g) => Object.keys(g).length === 2, {
-    message: "phase-plane grid must declare exactly two non-empty state-variable axes"
+  grid: import_zod3.z.record(normalizedRecordKey2, gpuArray.min(2)).refine((g) => Object.keys(g).length === 2, {
+    message: "phase-plane grid must declare exactly two state-variable axes with at least two coordinates each"
   }),
   derivatives: import_zod3.z.record(normalizedRecordKey2, gpuArray.min(1)),
   axis_units: import_zod3.z.record(normalizedRecordKey2, units),
   derivative_units: import_zod3.z.record(normalizedRecordKey2, units),
+  derivative_time_unit: PhasePlaneDerivativeTimeUnitSchema,
   axis_order: import_zod3.z.tuple([normalizedRecordKey2, normalizedRecordKey2]).refine(([first, second]) => first !== second, {
     message: "axis_order must name two distinct state variables"
   }),
@@ -3720,6 +3730,9 @@ var PhasePlaneParamsSchema = import_zod3.z.object({
 }).strict().superRefine((value, ctx) => {
   const axes = Object.keys(value.grid);
   const derivativeNames = Object.keys(value.derivatives);
+  for (const axis of axes) {
+    requireStrictlyIncreasing(value.grid[axis], ctx, `grid.${axis}`);
+  }
   if (value.axis_order.some((axis) => !Object.hasOwn(value.grid, axis)) || axes.some((axis) => !value.axis_order.includes(axis))) {
     ctx.addIssue({
       code: import_zod3.z.ZodIssueCode.custom,
@@ -3747,6 +3760,35 @@ var PhasePlaneParamsSchema = import_zod3.z.object({
         message: `${field} must declare units for the same two state variables as grid`
       });
     }
+  }
+  for (const axis of axes) {
+    if (Object.hasOwn(value.axis_units, axis) && Object.hasOwn(value.derivative_units, axis)) {
+      const expected2 = `${value.axis_units[axis]}/${value.derivative_time_unit}`;
+      if (value.derivative_units[axis] !== expected2) {
+        ctx.addIssue({
+          code: import_zod3.z.ZodIssueCode.custom,
+          path: ["derivative_units", axis],
+          message: `derivative_units.${axis} must equal axis_units.${axis}/${value.derivative_time_unit}`
+        });
+      }
+    }
+  }
+  if (value.derivative_time_unit === "s") {
+    for (const axis of derivativeNames) {
+      for (let index = 0; index < value.derivatives[axis].length; index++) {
+        const derivative = value.derivatives[axis][index];
+        if (derivative !== 0 && derivative / 1e3 === 0) {
+          ctx.addIssue({
+            code: import_zod3.z.ZodIssueCode.custom,
+            path: ["derivatives", axis, index],
+            message: "a nonzero per-second derivative must remain nonzero after canonical per-ms conversion"
+          });
+        }
+      }
+    }
+  }
+  if (axes.length !== 2) {
+    return;
   }
   const expected = value.grid[axes[0]].length * value.grid[axes[1]].length;
   for (const axis of axes) {
@@ -5046,6 +5088,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
       },
       axis_units: { v: "mV", w: "1" },
       derivative_units: { v: "mV/ms", w: "1/ms" },
+      derivative_time_unit: "ms",
       axis_order: ["v", "w"],
       flattening: "row-major-last-axis-fastest"
     },
@@ -5356,7 +5399,7 @@ function externalProvenanceDisclosure(contract) {
   if (labels.length === 0) return null;
   return `Caller-declared provenance \u2014 Cortexel checked structure but could not verify against the checked payload or source: ${labels.join(", ")}.`;
 }
-var CORTEXEL_SKILL_VERSION = "1.7.0";
+var CORTEXEL_SKILL_VERSION = "1.8.0";
 var STRICT_INVOCATION_POLICY = Object.freeze({
   version: "3",
   externalSelection: "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present",
@@ -5371,7 +5414,7 @@ var STRICT_INVOCATION_POLICY = Object.freeze({
   provenanceVerification: "every allowed required or optional provenance key is classified exactly once as parameter/literal/derived-bound or an externally unverifiable caller claim with mandatory disclosure; all other declared keys reject"
 });
 var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: "10",
+  version: "11",
   pathSyntax: "dot-separated object keys",
   arrayWildcard: "[*]",
   objectValueWildcard: "*",
@@ -5418,6 +5461,7 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     "weight_histogram_consistency",
     "spatial_extent_bounds",
     "scope_compatibility",
+    "phase_plane_direction_basis",
     "acyclic"
   ]),
   semantics: Object.freeze({
@@ -5595,7 +5639,7 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
       pathRoles: "bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order",
       rule: "the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot",
       operationOrder: "probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity",
-      fixedSemantics: "aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin",
+      fixedSemantics: "aggregation=each_connection and binning=left_closed_right_open are checked literals; the advertised raw transform derives exactly one in-window weight per selected SynapseCollection entry, while a standalone serialized params object does not carry that derivation receipt",
       geometry: "a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance"
     }),
     spatial_extent_bounds: Object.freeze({
@@ -5606,7 +5650,12 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     scope_compatibility: Object.freeze({
       pathRoles: "scope object and optional degree direction in that order",
-      rule: "rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; out-degree forbids mpi_target_rank_local"
+      rule: "rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; when allowedFieldValues is present, scope.kind must occur in that closed set; legacy constraints without that field still forbid mpi_target_rank_local for out-degree"
+    }),
+    phase_plane_direction_basis: Object.freeze({
+      pathRoles: "grid object, derivative-array object, coordinate-unit object, derivative-unit object, and shared derivative-time-unit scalar in that order",
+      rule: 'grid has exactly two axes with at least two finite strictly increasing coordinates each; derivative and unit objects have exactly the grid keys; derivative_time_unit is ms or s; derivative_units[key] is exactly axis_units[key] + "/" + derivative_time_unit; a nonzero per-second component must remain nonzero after one binary64 division by 1000',
+      canonicalNumericBasis: "renderers perform one binary64 division by 1000 for per-second components before deriving arrow direction or presentation length; this is one declared rounding basis, not a universal claim that independently rounded ms/s source representations are byte-identical"
     }),
     acyclic: Object.freeze({
       pathRoles: "first path resolves node ids; second resolves each node parent id or null",
@@ -6288,7 +6337,12 @@ var NEST_SKILL_REGISTRY = {
     transform: {
       id: "synapseCollectionToAdjacencyMatrixParams",
       rawFields: ["source|sources", "target|targets"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope"],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope (not target-rank-local)"
+      ],
       outputSkill: "nest.adjacency_matrix"
     },
     requiredInputKeys: [
@@ -6372,8 +6426,8 @@ var NEST_SKILL_REGISTRY = {
         "sourceIds",
         "targetIds",
         "snapshotTimeMs",
-        "snapshotScope",
-        "synapseModelSemantics",
+        "snapshotScope (not target-rank-local)",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
         "weightUnits",
         "aggregation"
       ],
@@ -6462,8 +6516,8 @@ var NEST_SKILL_REGISTRY = {
         "sourceIds",
         "targetIds",
         "snapshotTimeMs",
-        "snapshotScope",
-        "synapseModelSemantics",
+        "snapshotScope (not target-rank-local)",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
         "delayUnits='ms'",
         "aggregation"
       ],
@@ -6543,7 +6597,13 @@ var NEST_SKILL_REGISTRY = {
     transform: {
       id: "synapseCollectionToInDegreeDistributionParams",
       rawFields: ["source|sources", "target|targets"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "normalization"],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope (not target-rank-local)",
+        "normalization"
+      ],
       outputSkill: "nest.in_degree_distribution"
     },
     requiredInputKeys: [
@@ -6622,7 +6682,7 @@ var NEST_SKILL_REGISTRY = {
       sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html",
       dataShape: "contiguous degree bins, exact node counts, and explicit zero-degree inclusion",
       output: "In-degree count or probability distribution",
-      note: "Each SynapseCollection entry counts, including multapses."
+      note: "Each SynapseCollection entry counts, including multapses; target-rank-local snapshots are rejected without exact target-ownership authority."
     }]
   },
   "nest.out_degree_distribution": {
@@ -6739,7 +6799,7 @@ var NEST_SKILL_REGISTRY = {
         "targetIds",
         "snapshotTimeMs",
         "snapshotScope",
-        "synapseModelSemantics",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
         "delayUnits='ms'",
         "binWidthMs",
         "windowStartMs",
@@ -6840,6 +6900,28 @@ var NEST_SKILL_REGISTRY = {
       bareFamilyCandidate: true,
       dataShapeKind: "weight_distribution"
     },
+    transform: {
+      id: "synapseCollectionToWeightHistogramParams",
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "weight|weights",
+        "synapse_model|synapse_models"
+      ],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
+        "weightUnits",
+        "binWidth",
+        "windowStart",
+        "windowStop",
+        "normalization"
+      ],
+      outputSkill: "nest.weight_histogram"
+    },
     requiredInputKeys: [
       "bin_centers",
       "weight_counts",
@@ -6878,6 +6960,9 @@ var NEST_SKILL_REGISTRY = {
       },
       synapse_model: {
         reason: "The aggregate weight params do not retain the snapshot synapse model."
+      },
+      parallel_edge_policy: {
+        reason: "The serialized histogram retains aggregate counts but no raw-entry derivation receipt from which to authenticate the claimed one-entry/one-observation mapping."
       }
     }),
     provenanceParamConstraints: [
@@ -6935,7 +7020,8 @@ var NEST_SKILL_REGISTRY = {
         kind: "equals_literal",
         provenanceKey: "parallel_edge_policy",
         value: "count_each_connection",
-        description: "Every selected SynapseCollection entry contributes one weight observation."
+        establishesBinding: false,
+        description: "The declared one-entry/one-observation policy must equal the contract literal; serialized aggregate params alone do not authenticate the raw mapping."
       }
     ],
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
@@ -6943,9 +7029,9 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Plot weight matrices example / SynapseCollection snapshot",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
-        dataShape: "raw per-bin connection counts from one typed complete GetConnections snapshot",
+        dataShape: "raw per-bin connection counts complete for one typed declared GetConnections snapshot scope",
         output: "Connection-weight count or probability histogram",
-        note: "Every selected connection contributes exactly one weight; weight_recorder update events are a different, biased sample."
+        note: "The advertised raw transform derives one observation per selected connection; a serialized params object carries no transform receipt, and weight_recorder update events are a different, biased sample."
       }
     ]
   },
@@ -7176,7 +7262,7 @@ var NEST_SKILL_REGISTRY = {
     id: "nest.phase_plane",
     version: CORTEXEL_SKILL_VERSION,
     title: "NEST phase-plane renderer",
-    description: "Render a checked Cartesian phase-plane vector field.",
+    description: "Render checked numeric derivative directions on a non-degenerate Cartesian phase-plane grid with one shared time basis.",
     deviceFamily: "computed",
     scene: "phase-plane",
     requiredInputKeys: [
@@ -7184,6 +7270,7 @@ var NEST_SKILL_REGISTRY = {
       "derivatives",
       "axis_units",
       "derivative_units",
+      "derivative_time_unit",
       "axis_order",
       "flattening"
     ],
@@ -7219,9 +7306,9 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/hh_phaseplane.html",
-        dataShape: "state-variable axes plus flattened derivative arrays and explicit ordering",
-        output: "Unit-labelled phase-plane vector field",
-        note: "No nullcline, trajectory, or equilibrium is present in this contract; do not invent one."
+        dataShape: "strictly increasing state-variable axes, flattened derivative arrays, one explicit shared derivative time unit, and explicit ordering",
+        output: "Unit-labelled numeric derivative directions normalized in plotted coordinate space",
+        note: "Arrow direction is derived after conversion to one shared per-ms numeric basis; arrow length is presentation-only and no nullcline, trajectory, or equilibrium is present."
       }
     ]
   },
@@ -7232,6 +7319,28 @@ var NEST_SKILL_REGISTRY = {
     description: "Render a symmetric correlation_detector lag histogram with explicit pair orientation, interval policy, counting window, zero-lag handling, and statistic semantics.",
     deviceFamily: "correlation_detector",
     scene: "correlogram",
+    transform: {
+      id: "correlationDetectorToCorrelogramParams",
+      rawFields: [
+        "delta_tau",
+        "tau_max",
+        "Tstart",
+        "Tstop",
+        "count_histogram"
+      ],
+      requiredOptions: [
+        "measurement='count_histogram'",
+        "referenceLabel",
+        "targetLabel",
+        "zeroLagPolicy='included'",
+        "sourceConfiguration.simulationResolutionMs",
+        "sourceConfiguration.simulationStartMs",
+        "sourceConfiguration.simulationStopMs",
+        "sourceConfiguration.referenceReceptorPort=0",
+        "sourceConfiguration.targetReceptorPort=1"
+      ],
+      outputSkill: "nest.correlogram"
+    },
     requiredInputKeys: [
       "lags_ms",
       "values",
@@ -7259,6 +7368,12 @@ var NEST_SKILL_REGISTRY = {
     externalProvenanceClaims: externalClaims({
       detector_id: {
         reason: "The source correlation-detector identity is not represented in correlogram params."
+      },
+      reference_population: {
+        reason: "The reference label is caller supplied and does not authenticate which external population was wired to detector receptor port 0."
+      },
+      target_population: {
+        reason: "The target label is caller supplied and does not authenticate which external population was wired to detector receptor port 1."
       }
     }),
     provenanceParamConstraints: [
@@ -7272,12 +7387,14 @@ var NEST_SKILL_REGISTRY = {
         kind: "equals_param_path",
         provenanceKey: "reference_population",
         paramPath: "pair.reference_label",
+        establishesBinding: false,
         description: "Declared reference population must match params.pair.reference_label."
       },
       {
         kind: "equals_param_path",
         provenanceKey: "target_population",
         paramPath: "pair.target_label",
+        establishesBinding: false,
         description: "Declared target population must match params.pair.target_label."
       },
       {
@@ -7312,7 +7429,7 @@ var NEST_SKILL_REGISTRY = {
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/cross_check_mip_corrdet.html",
         dataShape: "symmetric lag centers, values, bin/tau/counting-window semantics, oriented population pair, and discriminated statistic",
         output: "Canonical correlogram distinct from ISI and other time histograms",
-        note: "Positive lag means the target population spikes after the reference population; never infer orientation from a display label."
+        note: "The raw transform requires the documented port order, resolution, and simulation-window margins, but serialized labels/configuration remain source claims; positive lag means target follows reference."
       }
     ]
   },
@@ -7808,7 +7925,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope"],
-      description: "Snapshot MPI rank metadata must be internally valid."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Literal matrices require a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.weight_matrix": [
@@ -7820,7 +7941,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope"],
-      description: "Snapshot MPI rank metadata must be internally valid."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Literal matrices require a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.delay_matrix": [
@@ -7832,7 +7957,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope"],
-      description: "Snapshot MPI rank metadata must be internally valid."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Literal matrices require a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.in_degree_distribution": [
@@ -7857,7 +7986,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope", "direction"],
-      description: "In-degree accepts valid complete or target-rank-local snapshot scope."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "In-degree requires a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.out_degree_distribution": [
@@ -7882,7 +8015,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope", "direction"],
-      description: "Out-degree rejects target-rank-local evidence and validates merged-rank metadata."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Out-degree requires a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.delay_distribution": [
@@ -7985,6 +8122,17 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     }
   ],
   "nest.phase_plane": [
+    {
+      kind: "phase_plane_direction_basis",
+      paths: [
+        "grid",
+        "derivatives",
+        "axis_units",
+        "derivative_units",
+        "derivative_time_unit"
+      ],
+      description: "Both non-degenerate axes and both derivative components share one exact, machine-checkable time denominator before renderer normalization."
+    },
     {
       kind: "property_count",
       paths: ["grid"],
@@ -8861,6 +9009,7 @@ var ALLOWED_PARAM_FIELDS = Object.freeze({
     "derivatives",
     "axis_units",
     "derivative_units",
+    "derivative_time_unit",
     "axis_order",
     "flattening"
   ],
@@ -12105,14 +12254,75 @@ var PsthOptionsSchema = import_zod10.z.object({
   normalization: import_zod10.z.enum(["count", "count_per_trial", "rate_hz"]),
   alignmentEvent: displayText2(240)
 }).strict();
+var CorrelationDetectorSourceConfigurationSchema = import_zod10.z.object({
+  simulationResolutionMs: finite2.positive(),
+  simulationStartMs: finite2,
+  simulationStopMs: finite2,
+  referenceReceptorPort: import_zod10.z.literal(0),
+  targetReceptorPort: import_zod10.z.literal(1)
+}).strict().superRefine((value, ctx) => {
+  if (!(value.simulationStopMs > value.simulationStartMs)) {
+    ctx.addIssue({
+      code: import_zod10.z.ZodIssueCode.custom,
+      path: ["simulationStopMs"],
+      message: "simulationStopMs must be greater than simulationStartMs"
+    });
+  }
+});
 var CorrelationDetectorOptionsSchema = import_zod10.z.object({
   measurement: import_zod10.z.literal("count_histogram"),
   referenceLabel: displayText2(240),
   targetLabel: displayText2(240),
-  zeroLagPolicy: import_zod10.z.literal("included")
+  zeroLagPolicy: import_zod10.z.literal("included"),
+  sourceConfiguration: CorrelationDetectorSourceConfigurationSchema
 }).strict();
 function error(message) {
   return { ok: false, errors: [message] };
+}
+function canonicalDecimal(value) {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/.exec(
+    value.toString().toLowerCase()
+  );
+  if (!match) return null;
+  const fraction = match[3] ?? "";
+  const explicitExponent = match[4] === void 0 ? 0 : Number(match[4]);
+  if (!Number.isSafeInteger(explicitExponent)) return null;
+  const unsignedCoefficient = BigInt(`${match[2]}${fraction}`);
+  return {
+    coefficient: match[1] === "-" ? -unsignedCoefficient : unsignedCoefficient,
+    exponent10: explicitExponent - fraction.length
+  };
+}
+function powerOfTen(exponent) {
+  return 10n ** BigInt(exponent);
+}
+function exactCanonicalDecimalIntegerRatio(numeratorValue, denominatorValue) {
+  const numerator = canonicalDecimal(numeratorValue);
+  const denominator = canonicalDecimal(denominatorValue);
+  if (!numerator || !denominator || numerator.coefficient <= 0n || denominator.coefficient <= 0n) {
+    return null;
+  }
+  const exponentDifference = numerator.exponent10 - denominator.exponent10;
+  const scaledNumerator = exponentDifference >= 0 ? numerator.coefficient * powerOfTen(exponentDifference) : numerator.coefficient;
+  const scaledDenominator = exponentDifference >= 0 ? denominator.coefficient : denominator.coefficient * powerOfTen(-exponentDifference);
+  if (scaledNumerator % scaledDenominator !== 0n) return null;
+  return scaledNumerator / scaledDenominator;
+}
+function compareCanonicalDecimalSums(leftValues, rightValues) {
+  const left = leftValues.map(canonicalDecimal);
+  const right = rightValues.map(canonicalDecimal);
+  if (left.some((value) => value === null) || right.some((value) => value === null)) {
+    return null;
+  }
+  const decimals = [...left, ...right];
+  const commonExponent = Math.min(...decimals.map((value) => value.exponent10));
+  const sum = (values) => values.reduce(
+    (total, value) => total + value.coefficient * powerOfTen(value.exponent10 - commonExponent),
+    0n
+  );
+  const leftSum = sum(left);
+  const rightSum = sum(right);
+  return leftSum < rightSum ? -1 : leftSum > rightSum ? 1 : 0;
 }
 function validateOutput(schema, params) {
   const parsed = schema.safeParse(params);
@@ -12452,6 +12662,36 @@ function correlationDetectorToCorrelogramParams(status, options) {
     const opts = parsedOptions.data;
     const values = parsedStatus.data.count_histogram;
     if (!values) return error("count_histogram is absent from the detector status");
+    const resolutionMultiple = exactCanonicalDecimalIntegerRatio(
+      parsedStatus.data.delta_tau,
+      opts.sourceConfiguration.simulationResolutionMs
+    );
+    if (resolutionMultiple === null || resolutionMultiple < 1n || resolutionMultiple % 2n !== 1n) {
+      return error(
+        "delta_tau must be an exact positive odd integer multiple of sourceConfiguration.simulationResolutionMs"
+      );
+    }
+    const startMarginComparison = compareCanonicalDecimalSums(
+      [parsedStatus.data.Tstart],
+      [
+        opts.sourceConfiguration.simulationStartMs,
+        parsedStatus.data.tau_max
+      ]
+    );
+    if (startMarginComparison === null || startMarginComparison < 0) {
+      return error(
+        "Tstart must be at least sourceConfiguration.simulationStartMs + tau_max to exclude the detector start-edge window"
+      );
+    }
+    const stopMarginComparison = compareCanonicalDecimalSums(
+      [parsedStatus.data.Tstop, parsedStatus.data.tau_max],
+      [opts.sourceConfiguration.simulationStopMs]
+    );
+    if (stopMarginComparison === null || stopMarginComparison > 0) {
+      return error(
+        "Tstop + tau_max must be at most sourceConfiguration.simulationStopMs to exclude the detector stop-edge window"
+      );
+    }
     const halfBinRatio = parsedStatus.data.tau_max / parsedStatus.data.delta_tau;
     const halfBinCount = Math.round(halfBinRatio);
     const halfBinTolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(halfBinRatio), Math.abs(halfBinCount));
@@ -12610,6 +12850,7 @@ var NEST_TOPOLOGY_LIMITS = Object.freeze({
   maxMatrixCells: PARAM_LIMITS.maxSamples,
   maxDegreeBins: PARAM_LIMITS.maxSamples,
   maxDelayBins: PARAM_LIMITS.maxSamples,
+  maxWeightBins: PARAM_LIMITS.maxSamples,
   maxSpatialNodes: PARAM_LIMITS.maxSpatialObjects
 });
 var FLOAT32_MAX5 = 34028234663852886e22;
@@ -12832,6 +13073,15 @@ var DelayDistributionOptionsSchema = import_zod11.z.object({
   windowStopMs: finite3.positive(),
   normalization: import_zod11.z.enum(["count", "probability", "probability_density"])
 }).strict();
+var WeightHistogramOptionsSchema = import_zod11.z.object({
+  ...CommonConnectionOptionsShape,
+  synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
+  weightUnits: displayText3(80),
+  binWidth: finite3.positive(),
+  windowStart: finite3,
+  windowStop: finite3,
+  normalization: import_zod11.z.enum(["count", "probability"])
+}).strict();
 var SpatialMapOptionsSchema = import_zod11.z.object({
   nodeIds: import_zod11.z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes),
   coordinateUnits: displayText3(80),
@@ -13052,10 +13302,29 @@ function matrixCommon(context) {
     snapshot_scope: context.snapshotScope
   };
 }
+function rejectTargetRankLocalForCompleteView(context, output) {
+  return context.snapshotScope.kind === "mpi_target_rank_local" ? error2(
+    `${output} rejects snapshotScope.kind "mpi_target_rank_local": without an exact rank-owned targetIds universe and complete cross-rank edge authority, zero/absence claims are not recoverable`
+  ) : void 0;
+}
+function rejectMultipleObservedMeasurementModels(snapshot, output, measurement) {
+  if (snapshot.sources.length === 0 || snapshot.synapse_models === void 0) {
+    return void 0;
+  }
+  const models = [...new Set(snapshot.synapse_models)].sort();
+  return models.length > 1 ? error2(
+    `${output} rejects ${measurement} measurements from multiple observed synapse models (${models.map((model) => JSON.stringify(model)).join(", ")}): the current contract has no bound compatibility or unit-conversion authority for its global ${measurement} units claim`
+  ) : void 0;
+}
 function synapseCollectionToAdjacencyMatrixParams(input, options) {
   try {
     const context = parseConnectionContext(input, options, MatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      "adjacency matrix"
+    );
+    if (scopeError) return scopeError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -13082,6 +13351,11 @@ function synapseCollectionToWeightMatrixParams(input, options) {
   try {
     const context = parseConnectionContext(input, options, WeightMatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      "weight matrix"
+    );
+    if (scopeError) return scopeError;
     const weights = context.params.snapshot.weights;
     if (!weights) return error2("weight: weight matrix requires a complete weight channel");
     const opts = context.params.options;
@@ -13091,6 +13365,12 @@ function synapseCollectionToWeightMatrixParams(input, options) {
       ["weight"]
     );
     if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "weight matrix",
+      "weight"
+    );
+    if (modelError) return modelError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -13138,6 +13418,11 @@ function synapseCollectionToDelayMatrixParams(input, options) {
   try {
     const context = parseConnectionContext(input, options, DelayMatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      "delay matrix"
+    );
+    if (scopeError) return scopeError;
     const delays = context.params.snapshot.delays_ms;
     if (!delays) return error2("delay: delay matrix requires a complete delay channel");
     const opts = context.params.options;
@@ -13147,6 +13432,12 @@ function synapseCollectionToDelayMatrixParams(input, options) {
       ["delay"]
     );
     if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "delay matrix",
+      "delay"
+    );
+    if (modelError) return modelError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -13194,9 +13485,11 @@ function degreeDistribution(input, options, direction) {
   const context = parseConnectionContext(input, options, DegreeOptionsSchema);
   if (!context.ok) return context;
   const opts = context.params.options;
-  if (direction === "out" && context.params.snapshotScope.kind === "mpi_target_rank_local") {
-    return error2("out-degree cannot be recovered from a target-rank-local SynapseCollection snapshot");
-  }
+  const scopeError = rejectTargetRankLocalForCompleteView(
+    context.params,
+    `${direction}-degree distribution`
+  );
+  if (scopeError) return scopeError;
   const universe = direction === "in" ? context.params.targetIds : context.params.sourceIds;
   const degreeByNode = new Map(universe.map((id2) => [id2, 0]));
   const endpoints = direction === "in" ? context.params.snapshot.targets : context.params.snapshot.sources;
@@ -13235,16 +13528,20 @@ function synapseCollectionToInDegreeDistributionParams(input, options) {
 function synapseCollectionToOutDegreeDistributionParams(input, options) {
   return degreeDistribution(input, options, "out");
 }
-function exactBinCount2(start, stop, width) {
-  if (!(stop > start)) return error2("delay window: stop must be greater than start");
+function exactBinCount2(start, stop, width, measurement, maximum) {
+  if (!(stop > start)) {
+    return error2(`${measurement} window: stop must be greater than start`);
+  }
   const ratio = (stop - start) / width;
   const count = Math.round(ratio);
   const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(ratio), Math.abs(count));
   if (!Number.isSafeInteger(count) || count < 1 || !Number.isFinite(ratio) || Math.abs(ratio - count) > tolerance) {
-    return error2("delay window: duration must be an exact positive integer multiple of bin width");
+    return error2(
+      `${measurement} window: duration must be an exact positive integer multiple of bin width`
+    );
   }
-  if (count > NEST_TOPOLOGY_LIMITS.maxDelayBins) {
-    return error2(`delay distribution exceeds ${NEST_TOPOLOGY_LIMITS.maxDelayBins} bins`);
+  if (count > maximum) {
+    return error2(`${measurement} distribution exceeds ${maximum} bins`);
   }
   return { ok: true, count };
 }
@@ -13284,7 +13581,19 @@ function synapseCollectionToDelayDistributionParams(input, options) {
       ["delay"]
     );
     if (!semantics.ok) return semantics;
-    const geometry = exactBinCount2(opts.windowStartMs, opts.windowStopMs, opts.binWidthMs);
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "delay distribution",
+      "delay"
+    );
+    if (modelError) return modelError;
+    const geometry = exactBinCount2(
+      opts.windowStartMs,
+      opts.windowStopMs,
+      opts.binWidthMs,
+      "delay",
+      NEST_TOPOLOGY_LIMITS.maxDelayBins
+    );
     if (!geometry.ok) return geometry;
     if (delays.length === 0 && opts.normalization !== "count") {
       return error2("an empty delay snapshot cannot be probability-normalized");
@@ -13339,6 +13648,84 @@ function synapseCollectionToDelayDistributionParams(input, options) {
     });
   } catch {
     return error2("delay distribution transform could not safely inspect its inputs");
+  }
+}
+function synapseCollectionToWeightHistogramParams(input, options) {
+  try {
+    const context = parseConnectionContext(input, options, WeightHistogramOptionsSchema);
+    if (!context.ok) return context;
+    const weights = context.params.snapshot.weights;
+    if (!weights) return error2("weight: weight histogram requires a complete weight channel");
+    const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ["weight"]
+    );
+    if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "weight histogram",
+      "weight"
+    );
+    if (modelError) return modelError;
+    const geometry = exactBinCount2(
+      opts.windowStart,
+      opts.windowStop,
+      opts.binWidth,
+      "weight",
+      NEST_TOPOLOGY_LIMITS.maxWeightBins
+    );
+    if (!geometry.ok) return geometry;
+    if (weights.length === 0 && opts.normalization !== "count") {
+      return error2("an empty weight snapshot cannot be probability-normalized");
+    }
+    const counts = new Array(geometry.count).fill(0);
+    for (let index = 0; index < weights.length; index++) {
+      const bin = halfOpenBinIndex(
+        weights[index],
+        opts.windowStart,
+        opts.windowStop,
+        opts.binWidth,
+        geometry.count
+      );
+      if (bin === BIN_INDEX_INDETERMINATE2) {
+        return error2(
+          `weight.${index}: binary64 arithmetic cannot resolve a half-open bin boundary without guessing`
+        );
+      }
+      if (bin === BIN_INDEX_OUTSIDE2) {
+        return error2(
+          `weight.${index}: ${weights[index]} ${opts.weightUnits} lies outside [${opts.windowStart},${opts.windowStop})`
+        );
+      }
+      counts[bin] += 1;
+    }
+    const values = counts.map(
+      (count) => opts.normalization === "count" ? count : count / weights.length
+    );
+    return validateOutput2(WeightHistogramParamsSchema, {
+      bin_centers: Array.from(
+        { length: geometry.count },
+        (_, index) => opts.windowStart + (index + 0.5) * opts.binWidth
+      ),
+      weight_counts: counts,
+      values,
+      bin_width: opts.binWidth,
+      window_start: opts.windowStart,
+      window_stop: opts.windowStop,
+      weight_units: opts.weightUnits,
+      normalization: opts.normalization,
+      value_units: opts.normalization === "count" ? "count" : "probability",
+      aggregation: "each_connection",
+      binning: "left_closed_right_open",
+      sample_policy: "complete",
+      connection_count: weights.length,
+      snapshot_time_ms: context.params.snapshotTimeMs,
+      snapshot_scope: context.params.snapshotScope
+    });
+  } catch {
+    return error2("weight histogram transform could not safely inspect its inputs");
   }
 }
 var PositionListSchema = import_zod11.z.union([
@@ -13565,6 +13952,7 @@ function getPositionToSpatialMap2DParams(input, options) {
   synapseCollectionToDelayMatrixParams,
   synapseCollectionToInDegreeDistributionParams,
   synapseCollectionToOutDegreeDistributionParams,
+  synapseCollectionToWeightHistogramParams,
   synapseCollectionToWeightMatrixParams,
   toPortableJsonSchema,
   validateHostRendererInvocation,

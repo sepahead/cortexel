@@ -346,6 +346,21 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
     expect(html).toContain('data-mark="weight-line"');
   });
 
+  it('renders a visible measured mark for a singleton plasticity series', () => {
+    const spec = getExamplePayload('nest.plasticity_dynamics')!;
+    spec.params = {
+      ...spec.params,
+      times_ms: [10],
+      weights: [1.1],
+    };
+    const html = renderToStaticMarkup(<ReferenceVizSpecFigure spec={spec} />);
+    const pointPathAttributes =
+      html.match(/<path\b([^>]*data-mark="weight-points"[^>]*)>/u)?.[1] ?? '';
+    expect(html).not.toContain('Invalid skill invocation');
+    expect(pointPathAttributes).toContain('data-point-count="1"');
+    expect(pointPathAttributes).toMatch(/d="[^"]*[aA][^"]*"/u);
+  });
+
   it('renders the checked phase vector field in declared axis order only', () => {
     const html = renderSkill('nest.phase_plane');
     expect(html).toContain('Phase-plane vector field');
@@ -354,9 +369,32 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
     expect(html).toContain('2×2 grid');
     expect(html).toContain('row-major, last axis fastest');
     expect(html).toContain('data-vector-count="4"');
-    expect(html).toContain('vector units v: mV/ms; w: 1/ms');
+    expect(html).toContain('derivative units v: mV/ms; w: 1/ms');
     expect(html).toContain('Derivative units are mV/ms for v and 1/ms for w');
+    expect(html).toContain('shared ms denominator converted to a per-ms numeric basis');
+    expect(html).toContain('their length is presentation-only');
     expect(html).toContain('No trajectory, nullcline, or equilibrium is invented');
+  });
+
+  it('renders zero phase derivatives explicitly without claiming equilibria', () => {
+    const spec = getExamplePayload('nest.phase_plane')!;
+    spec.params = {
+      ...spec.params,
+      derivatives: {
+        v: [0, 0, 0, 0],
+        w: [0, 0, 0, 0],
+      },
+    };
+    const html = renderToStaticMarkup(<ReferenceVizSpecFigure spec={spec} />);
+    const zeroPathAttributes =
+      html.match(/<path\b([^>]*data-mark="phase-zero-vectors"[^>]*)>/u)?.[1] ??
+      '';
+    expect(html).not.toContain('Invalid skill invocation');
+    expect(zeroPathAttributes).toContain('data-zero-vector-count="4"');
+    expect(zeroPathAttributes).toMatch(/d="[^"]*[aA][^"]*"/u);
+    expect(html).toContain(
+      '4 zero-derivative samples are shown as rings; these marks are not certified equilibria',
+    );
   });
 
   it('uses the supplied active palette and clamps unsafe presentation dimensions', () => {
@@ -406,6 +444,15 @@ describe('ReferenceVizSpecFigure renders checked canonical SVG charts', () => {
     expect(html.indexOf('</figure>')).toBeLessThan(
       html.indexOf('class="cortexel-honesty-caption"'),
     );
+    const groupAttributes =
+      html.match(/<div class="cortexel-vizspec"([^>]*)>/u)?.[1] ?? '';
+    const captionId = html.match(
+      /<div id="([^"]+)" class="cortexel-honesty-caption"/u,
+    )?.[1];
+    expect(captionId).toBeDefined();
+    expect(groupAttributes).toContain('role="group"');
+    expect(groupAttributes).toContain(`aria-describedby="${captionId}"`);
+    expect(html.match(new RegExp(`id="${captionId}"`, 'gu'))).toHaveLength(1);
   });
 
   it('does not mutate agent-owned numeric arrays while ordering an F–I line', () => {
@@ -931,6 +978,7 @@ describe('reference chart geometry remains finite and literal-data preserving', 
         v: [10, 11, 12, 20, 21, 22],
         w: [-10, -11, -12, -20, -21, -22],
       },
+      'ms',
     );
     expect(samples).toEqual([
       { x: -70, y: 0, dx: 10, dy: -10, index: 0 },

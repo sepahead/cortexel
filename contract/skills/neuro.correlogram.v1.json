@@ -316,7 +316,7 @@
   ],
   "renderer": {
     "id": "figure.correlogram",
-    "revision": 4
+    "revision": 5
   },
   "budgets": {
     "maxObservations": 500000,

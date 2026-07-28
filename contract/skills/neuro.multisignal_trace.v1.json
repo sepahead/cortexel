@@ -795,7 +795,7 @@
   ],
   "renderer": {
     "id": "figure.multisignal_trace",
-    "revision": 4
+    "revision": 5
   },
   "budgets": {
     "maxObservations": 2000000,

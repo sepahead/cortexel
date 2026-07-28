@@ -54,7 +54,7 @@
       "The accepted quantity kinds are narrower than the registry's full set by ROUTING, not by omission. `synaptic_weight` belongs to `network.synaptic_weight_trace`: its samples are event-updated and its unit may be simulator-defined and therefore unconvertible.",
       "`firing_rate` and `count` belong to `neuro.population_rate`, which requires a declared denominator. Accepting them here would let a per-neuron claim be drawn with nothing to divide by.",
       "Window coverage may be partial: a series may begin after `window.start` or end before `window.stop`. The covered extent is recorded per series and the path is drawn only where samples exist. Cortexel does not extend, pad, or hold a trace to the window edge.",
-      "On a shared axis the palette must keep the series distinguishable. The palette registry's colour-vision-deficiency-safe set (Okabe-Ito) carries exactly 8 style tuples (`categoricalSeries.maxStableSeries`), so above 8 series on one axis the render plan refuses with RENDER_SERIES_LIMIT_EXCEEDED rather than minting a ninth indistinguishable colour; small multiples are the supported answer for more."
+      "On a shared axis Cortexel uses one of exactly 8 registered colour/dash/marker tuples (`categoricalSeries.maxStableSeries`) in declared order, so above 8 series the render plan refuses with RENDER_SERIES_LIMIT_EXCEEDED rather than minting a ninth unregistered style; small multiples are the supported answer for more. The tuple-uniqueness test is structural evidence only and does not establish colour-vision-deficiency, greyscale, or assistive-technology conformance."
     ],
     "uncertaintySupport": ["none", "standard_deviation", "standard_error", "confidence_interval", "quantile_interval", "ensemble_range"]
   },
@@ -284,7 +284,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.analog_trace", "revision": 4 },
+  "renderer": { "id": "figure.analog_trace", "revision": 5 },
 
   "budgets": {
     "maxObservations": 2000000,
@@ -533,7 +533,7 @@
     "Changing the shared-axis unit selection rule (declared `valueUnit`, else the first series in declared order) is MAJOR: it silently rescales every drawn value.",
     "Changing the default window boundary convention from half-open [start, stop) is MAJOR.",
     "Adding a compaction policy that does not preserve extrema is MAJOR, because it changes what a drawn shape is allowed to mean.",
-    "Raising the shared-axis series cap above the palette registry's `categoricalSeries.maxStableSeries` is MAJOR: it would mint colours outside the colour-vision-deficiency-safe set while the legend still claimed the series were distinguishable.",
+    "Raising the shared-axis series cap above the palette registry's `categoricalSeries.maxStableSeries` is MAJOR: it would mint a style outside the registered and structurally tested tuple set while the legend still claimed a distinct series identity.",
     "Adding a quantity kind to the accepted enum is MINOR.",
     "Adding an uncertainty variant to uncertaintySupport is MINOR.",
     "Changing the single-series binding rule for figure-level uncertainty is MAJOR: it changes which observations the declared uncertainty is allowed to qualify.",

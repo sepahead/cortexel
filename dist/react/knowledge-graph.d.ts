@@ -1,7 +1,7 @@
 import * as react from 'react';
 import * as THREE from 'three';
 import { R as ReadonlySemanticPalette } from '../colormaps-CZ6XejJa.js';
-import { K as KnowledgeGraph3DParams } from '../params-C973XJOY.js';
+import { K as KnowledgeGraph3DParams } from '../params-DOrQO4YT.js';
 import 'zod';
 
 type KnowledgeGraphNodeKind = 'paper' | 'model' | 'family';

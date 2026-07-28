@@ -35,7 +35,6 @@ import { buildFigure } from '../src/render/buildFigure.js';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const CONTRACT_SKILLS = path.join(REPO, 'contract/skills');
-const SCRATCH = path.join(REPO, 'node_modules/.cache/cortexel-parity');
 // These bounded proofs start an independent Python interpreter over the complete
 // living contract corpus. Under Vitest's file-parallel load they can legitimately
 // exceed the generic five-second unit-test default without being unbounded.
@@ -51,7 +50,9 @@ function python(
   input?: string,
   timeout = PARITY_PROOF_TIMEOUT_MS,
 ): string {
-  return execFileSync('python3', args, {
+  // Release verification runs against read-only candidate trees. Suppress Python's
+  // optional bytecode-cache writes so parity subprocesses only read that candidate.
+  return execFileSync('python3', ['-B', ...args], {
     cwd: REPO,
     encoding: 'utf8',
     input,
@@ -65,12 +66,6 @@ beforeAll(() => {
   try {
     python(['-c', 'import cortexel']);
     pythonAvailable = true;
-    readdirSync(REPO); // touch fs so SCRATCH parent exists
-    try {
-      execFileSync('mkdir', ['-p', SCRATCH]);
-    } catch {
-      /* best effort */
-    }
   } catch {
     pythonAvailable = false;
   }

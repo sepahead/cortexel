@@ -333,7 +333,7 @@ function histogramBarPath(centers, values, binWidth, xDomain, yDomain, frame) {
   }
   return path;
 }
-function phasePlaneSamples(axisOrder, grid, derivatives) {
+function phasePlaneSamples(axisOrder, grid, derivatives, derivativeTimeUnit) {
   const [xAxis, yAxis] = axisOrder;
   const xs = grid[xAxis] ?? [];
   const ys = grid[yAxis] ?? [];
@@ -347,8 +347,8 @@ function phasePlaneSamples(axisOrder, grid, derivatives) {
       samples[outputIndex++] = {
         x: xs[xIndex],
         y: ys[yIndex],
-        dx: dx[index] ?? 0,
-        dy: dy[index] ?? 0,
+        dx: derivativeTimeUnit === "s" ? (dx[index] ?? 0) / 1e3 : dx[index] ?? 0,
+        dy: derivativeTimeUnit === "s" ? (dy[index] ?? 0) / 1e3 : dy[index] ?? 0,
         index
       };
     }
@@ -2755,6 +2755,13 @@ var matrixBaseShape = {
   snapshot_scope: SnapshotScopeSchema
 };
 function refineSparseMatrix(value, ctx) {
+  if (value.snapshot_scope.kind === "mpi_target_rank_local") {
+    ctx.addIssue({
+      code: import_zod2.z.ZodIssueCode.custom,
+      path: ["snapshot_scope", "kind"],
+      message: "literal matrices require a complete single-process or all-ranks-merged snapshot"
+    });
+  }
   const sourceIds = new Set(value.source_ids);
   const targetIds = new Set(value.target_ids);
   if (sourceIds.size !== value.source_ids.length) {
@@ -2948,11 +2955,11 @@ function degreeDistributionSchema(direction) {
         message: "displayed degree probabilities must sum to one"
       });
     }
-    if (direction === "out" && value.snapshot_scope.kind === "mpi_target_rank_local") {
+    if (value.snapshot_scope.kind === "mpi_target_rank_local") {
       ctx.addIssue({
         code: import_zod2.z.ZodIssueCode.custom,
         path: ["snapshot_scope", "kind"],
-        message: "out-degree requires a complete single-process or all-ranks-merged snapshot"
+        message: `${direction}-degree requires a complete single-process or all-ranks-merged snapshot`
       });
     }
   });
@@ -3248,13 +3255,15 @@ var PlasticityParamsSchema = import_zod2.z.object({
   );
   requireMonotonic(value.times_ms, ctx, "times_ms");
 });
+var PhasePlaneDerivativeTimeUnitSchema = import_zod2.z.enum(["ms", "s"]);
 var PhasePlaneParamsSchema = import_zod2.z.object({
-  grid: import_zod2.z.record(normalizedRecordKey, gpuArray.min(1)).refine((g) => Object.keys(g).length === 2, {
-    message: "phase-plane grid must declare exactly two non-empty state-variable axes"
+  grid: import_zod2.z.record(normalizedRecordKey, gpuArray.min(2)).refine((g) => Object.keys(g).length === 2, {
+    message: "phase-plane grid must declare exactly two state-variable axes with at least two coordinates each"
   }),
   derivatives: import_zod2.z.record(normalizedRecordKey, gpuArray.min(1)),
   axis_units: import_zod2.z.record(normalizedRecordKey, units),
   derivative_units: import_zod2.z.record(normalizedRecordKey, units),
+  derivative_time_unit: PhasePlaneDerivativeTimeUnitSchema,
   axis_order: import_zod2.z.tuple([normalizedRecordKey, normalizedRecordKey]).refine(([first, second]) => first !== second, {
     message: "axis_order must name two distinct state variables"
   }),
@@ -3262,6 +3271,9 @@ var PhasePlaneParamsSchema = import_zod2.z.object({
 }).strict().superRefine((value, ctx) => {
   const axes = Object.keys(value.grid);
   const derivativeNames = Object.keys(value.derivatives);
+  for (const axis of axes) {
+    requireStrictlyIncreasing(value.grid[axis], ctx, `grid.${axis}`);
+  }
   if (value.axis_order.some((axis) => !Object.hasOwn(value.grid, axis)) || axes.some((axis) => !value.axis_order.includes(axis))) {
     ctx.addIssue({
       code: import_zod2.z.ZodIssueCode.custom,
@@ -3289,6 +3301,35 @@ var PhasePlaneParamsSchema = import_zod2.z.object({
         message: `${field} must declare units for the same two state variables as grid`
       });
     }
+  }
+  for (const axis of axes) {
+    if (Object.hasOwn(value.axis_units, axis) && Object.hasOwn(value.derivative_units, axis)) {
+      const expected2 = `${value.axis_units[axis]}/${value.derivative_time_unit}`;
+      if (value.derivative_units[axis] !== expected2) {
+        ctx.addIssue({
+          code: import_zod2.z.ZodIssueCode.custom,
+          path: ["derivative_units", axis],
+          message: `derivative_units.${axis} must equal axis_units.${axis}/${value.derivative_time_unit}`
+        });
+      }
+    }
+  }
+  if (value.derivative_time_unit === "s") {
+    for (const axis of derivativeNames) {
+      for (let index = 0; index < value.derivatives[axis].length; index++) {
+        const derivative = value.derivatives[axis][index];
+        if (derivative !== 0 && derivative / 1e3 === 0) {
+          ctx.addIssue({
+            code: import_zod2.z.ZodIssueCode.custom,
+            path: ["derivatives", axis, index],
+            message: "a nonzero per-second derivative must remain nonzero after canonical per-ms conversion"
+          });
+        }
+      }
+    }
+  }
+  if (axes.length !== 2) {
+    return;
   }
   const expected = value.grid[axes[0]].length * value.grid[axes[1]].length;
   for (const axis of axes) {
@@ -3866,7 +3907,7 @@ var SCENE_NAMES = Object.freeze([
 ]);
 
 // core/vizSpec.ts
-var CORTEXEL_SPEC_VERSION = "1.4.0";
+var CORTEXEL_SPEC_VERSION = "1.5.0";
 var CORTEXEL_JSON_LIMITS = Object.freeze({
   maxDepth: 32,
   maxNodes: 5e5,
@@ -4741,6 +4782,7 @@ var SKILL_EXAMPLE_PAYLOADS = {
       },
       axis_units: { v: "mV", w: "1" },
       derivative_units: { v: "mV/ms", w: "1/ms" },
+      derivative_time_unit: "ms",
       axis_order: ["v", "w"],
       flattening: "row-major-last-axis-fastest"
     },
@@ -5051,7 +5093,7 @@ function externalProvenanceDisclosure(contract) {
   if (labels.length === 0) return null;
   return `Caller-declared provenance \u2014 Cortexel checked structure but could not verify against the checked payload or source: ${labels.join(", ")}.`;
 }
-var CORTEXEL_SKILL_VERSION = "1.7.0";
+var CORTEXEL_SKILL_VERSION = "1.8.0";
 var STRICT_INVOCATION_POLICY = Object.freeze({
   version: "3",
   externalSelection: "validateSkillInvocation(id,payload): explicit id selects; payload.skill is optional but must match when present",
@@ -5066,7 +5108,7 @@ var STRICT_INVOCATION_POLICY = Object.freeze({
   provenanceVerification: "every allowed required or optional provenance key is classified exactly once as parameter/literal/derived-bound or an externally unverifiable caller claim with mandatory disclosure; all other declared keys reject"
 });
 var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: "10",
+  version: "11",
   pathSyntax: "dot-separated object keys",
   arrayWildcard: "[*]",
   objectValueWildcard: "*",
@@ -5113,6 +5155,7 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     "weight_histogram_consistency",
     "spatial_extent_bounds",
     "scope_compatibility",
+    "phase_plane_direction_basis",
     "acyclic"
   ]),
   semantics: Object.freeze({
@@ -5290,7 +5333,7 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
       pathRoles: "bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order",
       rule: "the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot",
       operationOrder: "probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity",
-      fixedSemantics: "aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin",
+      fixedSemantics: "aggregation=each_connection and binning=left_closed_right_open are checked literals; the advertised raw transform derives exactly one in-window weight per selected SynapseCollection entry, while a standalone serialized params object does not carry that derivation receipt",
       geometry: "a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance"
     }),
     spatial_extent_bounds: Object.freeze({
@@ -5301,7 +5344,12 @@ var PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     scope_compatibility: Object.freeze({
       pathRoles: "scope object and optional degree direction in that order",
-      rule: "rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; out-degree forbids mpi_target_rank_local"
+      rule: "rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; when allowedFieldValues is present, scope.kind must occur in that closed set; legacy constraints without that field still forbid mpi_target_rank_local for out-degree"
+    }),
+    phase_plane_direction_basis: Object.freeze({
+      pathRoles: "grid object, derivative-array object, coordinate-unit object, derivative-unit object, and shared derivative-time-unit scalar in that order",
+      rule: 'grid has exactly two axes with at least two finite strictly increasing coordinates each; derivative and unit objects have exactly the grid keys; derivative_time_unit is ms or s; derivative_units[key] is exactly axis_units[key] + "/" + derivative_time_unit; a nonzero per-second component must remain nonzero after one binary64 division by 1000',
+      canonicalNumericBasis: "renderers perform one binary64 division by 1000 for per-second components before deriving arrow direction or presentation length; this is one declared rounding basis, not a universal claim that independently rounded ms/s source representations are byte-identical"
     }),
     acyclic: Object.freeze({
       pathRoles: "first path resolves node ids; second resolves each node parent id or null",
@@ -5983,7 +6031,12 @@ var NEST_SKILL_REGISTRY = {
     transform: {
       id: "synapseCollectionToAdjacencyMatrixParams",
       rawFields: ["source|sources", "target|targets"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope"],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope (not target-rank-local)"
+      ],
       outputSkill: "nest.adjacency_matrix"
     },
     requiredInputKeys: [
@@ -6067,8 +6120,8 @@ var NEST_SKILL_REGISTRY = {
         "sourceIds",
         "targetIds",
         "snapshotTimeMs",
-        "snapshotScope",
-        "synapseModelSemantics",
+        "snapshotScope (not target-rank-local)",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
         "weightUnits",
         "aggregation"
       ],
@@ -6157,8 +6210,8 @@ var NEST_SKILL_REGISTRY = {
         "sourceIds",
         "targetIds",
         "snapshotTimeMs",
-        "snapshotScope",
-        "synapseModelSemantics",
+        "snapshotScope (not target-rank-local)",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
         "delayUnits='ms'",
         "aggregation"
       ],
@@ -6238,7 +6291,13 @@ var NEST_SKILL_REGISTRY = {
     transform: {
       id: "synapseCollectionToInDegreeDistributionParams",
       rawFields: ["source|sources", "target|targets"],
-      requiredOptions: ["sourceIds", "targetIds", "snapshotTimeMs", "snapshotScope", "normalization"],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope (not target-rank-local)",
+        "normalization"
+      ],
       outputSkill: "nest.in_degree_distribution"
     },
     requiredInputKeys: [
@@ -6317,7 +6376,7 @@ var NEST_SKILL_REGISTRY = {
       sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html",
       dataShape: "contiguous degree bins, exact node counts, and explicit zero-degree inclusion",
       output: "In-degree count or probability distribution",
-      note: "Each SynapseCollection entry counts, including multapses."
+      note: "Each SynapseCollection entry counts, including multapses; target-rank-local snapshots are rejected without exact target-ownership authority."
     }]
   },
   "nest.out_degree_distribution": {
@@ -6434,7 +6493,7 @@ var NEST_SKILL_REGISTRY = {
         "targetIds",
         "snapshotTimeMs",
         "snapshotScope",
-        "synapseModelSemantics",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
         "delayUnits='ms'",
         "binWidthMs",
         "windowStartMs",
@@ -6535,6 +6594,28 @@ var NEST_SKILL_REGISTRY = {
       bareFamilyCandidate: true,
       dataShapeKind: "weight_distribution"
     },
+    transform: {
+      id: "synapseCollectionToWeightHistogramParams",
+      rawFields: [
+        "source|sources",
+        "target|targets",
+        "weight|weights",
+        "synapse_model|synapse_models"
+      ],
+      requiredOptions: [
+        "sourceIds",
+        "targetIds",
+        "snapshotTimeMs",
+        "snapshotScope",
+        "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
+        "weightUnits",
+        "binWidth",
+        "windowStart",
+        "windowStop",
+        "normalization"
+      ],
+      outputSkill: "nest.weight_histogram"
+    },
     requiredInputKeys: [
       "bin_centers",
       "weight_counts",
@@ -6573,6 +6654,9 @@ var NEST_SKILL_REGISTRY = {
       },
       synapse_model: {
         reason: "The aggregate weight params do not retain the snapshot synapse model."
+      },
+      parallel_edge_policy: {
+        reason: "The serialized histogram retains aggregate counts but no raw-entry derivation receipt from which to authenticate the claimed one-entry/one-observation mapping."
       }
     }),
     provenanceParamConstraints: [
@@ -6630,7 +6714,8 @@ var NEST_SKILL_REGISTRY = {
         kind: "equals_literal",
         provenanceKey: "parallel_edge_policy",
         value: "count_each_connection",
-        description: "Every selected SynapseCollection entry contributes one weight observation."
+        establishesBinding: false,
+        description: "The declared one-entry/one-observation policy must equal the contract literal; serialized aggregate params alone do not authenticate the raw mapping."
       }
     ],
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
@@ -6638,9 +6723,9 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Plot weight matrices example / SynapseCollection snapshot",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
-        dataShape: "raw per-bin connection counts from one typed complete GetConnections snapshot",
+        dataShape: "raw per-bin connection counts complete for one typed declared GetConnections snapshot scope",
         output: "Connection-weight count or probability histogram",
-        note: "Every selected connection contributes exactly one weight; weight_recorder update events are a different, biased sample."
+        note: "The advertised raw transform derives one observation per selected connection; a serialized params object carries no transform receipt, and weight_recorder update events are a different, biased sample."
       }
     ]
   },
@@ -6871,7 +6956,7 @@ var NEST_SKILL_REGISTRY = {
     id: "nest.phase_plane",
     version: CORTEXEL_SKILL_VERSION,
     title: "NEST phase-plane renderer",
-    description: "Render a checked Cartesian phase-plane vector field.",
+    description: "Render checked numeric derivative directions on a non-degenerate Cartesian phase-plane grid with one shared time basis.",
     deviceFamily: "computed",
     scene: "phase-plane",
     requiredInputKeys: [
@@ -6879,6 +6964,7 @@ var NEST_SKILL_REGISTRY = {
       "derivatives",
       "axis_units",
       "derivative_units",
+      "derivative_time_unit",
       "axis_order",
       "flattening"
     ],
@@ -6914,9 +7000,9 @@ var NEST_SKILL_REGISTRY = {
       {
         nestExample: "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/hh_phaseplane.html",
-        dataShape: "state-variable axes plus flattened derivative arrays and explicit ordering",
-        output: "Unit-labelled phase-plane vector field",
-        note: "No nullcline, trajectory, or equilibrium is present in this contract; do not invent one."
+        dataShape: "strictly increasing state-variable axes, flattened derivative arrays, one explicit shared derivative time unit, and explicit ordering",
+        output: "Unit-labelled numeric derivative directions normalized in plotted coordinate space",
+        note: "Arrow direction is derived after conversion to one shared per-ms numeric basis; arrow length is presentation-only and no nullcline, trajectory, or equilibrium is present."
       }
     ]
   },
@@ -6927,6 +7013,28 @@ var NEST_SKILL_REGISTRY = {
     description: "Render a symmetric correlation_detector lag histogram with explicit pair orientation, interval policy, counting window, zero-lag handling, and statistic semantics.",
     deviceFamily: "correlation_detector",
     scene: "correlogram",
+    transform: {
+      id: "correlationDetectorToCorrelogramParams",
+      rawFields: [
+        "delta_tau",
+        "tau_max",
+        "Tstart",
+        "Tstop",
+        "count_histogram"
+      ],
+      requiredOptions: [
+        "measurement='count_histogram'",
+        "referenceLabel",
+        "targetLabel",
+        "zeroLagPolicy='included'",
+        "sourceConfiguration.simulationResolutionMs",
+        "sourceConfiguration.simulationStartMs",
+        "sourceConfiguration.simulationStopMs",
+        "sourceConfiguration.referenceReceptorPort=0",
+        "sourceConfiguration.targetReceptorPort=1"
+      ],
+      outputSkill: "nest.correlogram"
+    },
     requiredInputKeys: [
       "lags_ms",
       "values",
@@ -6954,6 +7062,12 @@ var NEST_SKILL_REGISTRY = {
     externalProvenanceClaims: externalClaims({
       detector_id: {
         reason: "The source correlation-detector identity is not represented in correlogram params."
+      },
+      reference_population: {
+        reason: "The reference label is caller supplied and does not authenticate which external population was wired to detector receptor port 0."
+      },
+      target_population: {
+        reason: "The target label is caller supplied and does not authenticate which external population was wired to detector receptor port 1."
       }
     }),
     provenanceParamConstraints: [
@@ -6967,12 +7081,14 @@ var NEST_SKILL_REGISTRY = {
         kind: "equals_param_path",
         provenanceKey: "reference_population",
         paramPath: "pair.reference_label",
+        establishesBinding: false,
         description: "Declared reference population must match params.pair.reference_label."
       },
       {
         kind: "equals_param_path",
         provenanceKey: "target_population",
         paramPath: "pair.target_label",
+        establishesBinding: false,
         description: "Declared target population must match params.pair.target_label."
       },
       {
@@ -7007,7 +7123,7 @@ var NEST_SKILL_REGISTRY = {
         sourceUrl: "https://nest-simulator.readthedocs.io/en/latest/auto_examples/cross_check_mip_corrdet.html",
         dataShape: "symmetric lag centers, values, bin/tau/counting-window semantics, oriented population pair, and discriminated statistic",
         output: "Canonical correlogram distinct from ISI and other time histograms",
-        note: "Positive lag means the target population spikes after the reference population; never infer orientation from a display label."
+        note: "The raw transform requires the documented port order, resolution, and simulation-window margins, but serialized labels/configuration remain source claims; positive lag means target follows reference."
       }
     ]
   },
@@ -7503,7 +7619,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope"],
-      description: "Snapshot MPI rank metadata must be internally valid."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Literal matrices require a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.weight_matrix": [
@@ -7515,7 +7635,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope"],
-      description: "Snapshot MPI rank metadata must be internally valid."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Literal matrices require a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.delay_matrix": [
@@ -7527,7 +7651,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope"],
-      description: "Snapshot MPI rank metadata must be internally valid."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Literal matrices require a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.in_degree_distribution": [
@@ -7552,7 +7680,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope", "direction"],
-      description: "In-degree accepts valid complete or target-rank-local snapshot scope."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "In-degree requires a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.out_degree_distribution": [
@@ -7577,7 +7709,11 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     {
       kind: "scope_compatibility",
       paths: ["snapshot_scope", "direction"],
-      description: "Out-degree rejects target-rank-local evidence and validates merged-rank metadata."
+      allowedFieldValues: [
+        "single_process_complete",
+        "mpi_all_ranks_merged"
+      ],
+      description: "Out-degree requires a complete single-process or all-ranks-merged snapshot."
     }
   ],
   "nest.delay_distribution": [
@@ -7680,6 +7816,17 @@ var PARAM_VALIDATION_CONSTRAINTS = {
     }
   ],
   "nest.phase_plane": [
+    {
+      kind: "phase_plane_direction_basis",
+      paths: [
+        "grid",
+        "derivatives",
+        "axis_units",
+        "derivative_units",
+        "derivative_time_unit"
+      ],
+      description: "Both non-degenerate axes and both derivative components share one exact, machine-checkable time denominator before renderer normalization."
+    },
     {
       kind: "property_count",
       paths: ["grid"],
@@ -8524,6 +8671,7 @@ var ALLOWED_PARAM_FIELDS = Object.freeze({
     "derivatives",
     "axis_units",
     "derivative_units",
+    "derivative_time_unit",
     "axis_order",
     "flattening"
   ],
@@ -10637,7 +10785,7 @@ function PlasticityChart(args, width, height, id2) {
   const yDomain = numericDomain(params.weights);
   const frame = makeFrame(width, height);
   const synapseModel = declaredInput(args, "synapse_model");
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     ChartShell,
     {
       id: id2,
@@ -10653,17 +10801,35 @@ function PlasticityChart(args, width, height, id2) {
       frame,
       colors: chartColors(args.palette, args.themeMode),
       sampleCount: params.weights.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "weight-line",
-          d: linePath(params.times_ms, params.weights, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.ltp,
-          strokeWidth: 2,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "weight-line",
+            d: linePath(params.times_ms, params.weights, xDomain, yDomain, frame),
+            fill: "none",
+            stroke: args.palette.ltp,
+            strokeWidth: 2,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        params.weights.length === 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "weight-points",
+            "data-point-count": 1,
+            d: pointPath(
+              params.times_ms,
+              params.weights,
+              xDomain,
+              yDomain,
+              frame,
+              3
+            ),
+            fill: args.palette.ltp
+          }
+        )
+      ]
     }
   );
 }
@@ -10678,17 +10844,22 @@ function PhasePlaneChart(args, width, height, id2) {
   const samples = phasePlaneSamples(
     params.axis_order,
     params.grid,
-    params.derivatives
+    params.derivatives,
+    params.derivative_time_unit
   );
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+  const zeroSamples = samples.filter(
+    (sample) => sample.dx === 0 && sample.dy === 0
+  );
+  const zeroVectorDisclosure = zeroSamples.length > 0 ? ` ${zeroSamples.length} zero-derivative ${zeroSamples.length === 1 ? "sample is" : "samples are"} shown as ${zeroSamples.length === 1 ? "a ring" : "rings"}; these marks are not certified equilibria.` : "";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     ChartShell,
     {
       id: id2,
       skill: args.skill,
       scene: args.scene,
       title: "Phase-plane vector field",
-      description: `${samples.length} derivative vectors on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}. Arrows are normalized in plotted coordinate space and do not encode an absolute integration timestep. No trajectory, nullcline, or equilibrium is invented.`,
-      metadata: `${xValues.length}\xD7${yValues.length} grid \u2022 vector units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} \u2022 row-major, last axis fastest`,
+      description: `${samples.length} numeric derivative directions on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}, with the shared ${params.derivative_time_unit} denominator converted to a per-ms numeric basis before plotting. Arrows are normalized in plotted coordinate space; their length is presentation-only and does not encode an integration timestep.${zeroVectorDisclosure} No trajectory, nullcline, or equilibrium is invented.`,
+      metadata: `${xValues.length}\xD7${yValues.length} grid \u2022 derivative units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} \u2022 canonical per-ms direction basis \u2022 row-major, last axis fastest`,
       xLabel: `${xAxis} (${params.axis_units[xAxis]})`,
       yLabel: `${yAxis} (${params.axis_units[yAxis]})`,
       xDomain,
@@ -10696,20 +10867,41 @@ function PhasePlaneChart(args, width, height, id2) {
       frame,
       colors: chartColors(args.palette, args.themeMode),
       sampleCount: samples.length,
-      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "path",
-        {
-          "data-mark": "phase-vectors",
-          "data-vector-count": samples.length,
-          d: phasePlaneArrowPath(samples, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.orange,
-          strokeWidth: 1.4,
-          strokeLinecap: "round",
-          strokeLinejoin: "round",
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "phase-vectors",
+            "data-vector-count": samples.length,
+            d: phasePlaneArrowPath(samples, xDomain, yDomain, frame),
+            fill: "none",
+            stroke: args.palette.orange,
+            strokeWidth: 1.4,
+            strokeLinecap: "round",
+            strokeLinejoin: "round",
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        zeroSamples.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "path",
+          {
+            "data-mark": "phase-zero-vectors",
+            "data-zero-vector-count": zeroSamples.length,
+            d: pointPath(
+              zeroSamples.map((sample) => sample.x),
+              zeroSamples.map((sample) => sample.y),
+              xDomain,
+              yDomain,
+              frame,
+              3
+            ),
+            fill: "none",
+            stroke: args.palette.orange,
+            strokeWidth: 1.4,
+            vectorEffect: "non-scaling-stroke"
+          }
+        )
+      ]
     }
   );
 }
@@ -11575,6 +11767,11 @@ function SceneFrame({
   active,
   renderScene
 }) {
+  const reactId = (0, import_react2.useId)();
+  const captionId = `cortexel-honesty-caption-${reactId.replace(
+    /[^a-zA-Z0-9_-]/g,
+    ""
+  )}`;
   if (mode === "export") {
     return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { role: "status", className: "cortexel-vizspec-export-unsupported", children: "Headless export rendering is not available in this build. Request an interactive render, or use the backend render endpoint once enabled." });
   }
@@ -11582,6 +11779,8 @@ function SceneFrame({
     "div",
     {
       className: "cortexel-vizspec",
+      role: caption ? "group" : void 0,
+      "aria-describedby": caption ? captionId : void 0,
       style: {
         position: "relative",
         width: "100%",
@@ -11601,6 +11800,7 @@ function SceneFrame({
         caption && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
           "div",
           {
+            id: captionId,
             className: "cortexel-honesty-caption",
             role: "note",
             "aria-live": "polite",

@@ -256,7 +256,7 @@
     { "id": "events.trial_universe_declared" }
   ],
 
-  "renderer": { "id": "figure.spike_raster", "revision": 4 },
+  "renderer": { "id": "figure.spike_raster", "revision": 5 },
 
   "budgets": {
     "maxObservations": 2000000,

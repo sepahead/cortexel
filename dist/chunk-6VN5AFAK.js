@@ -10,7 +10,7 @@ import {
   dimensionOf,
   divideExactIntegerByConvertedDifference,
   normalizeDerivativeByExactAxisExtent
-} from "./chunk-QD4CIX2J.js";
+} from "./chunk-23EH6LGQ.js";
 import {
   binary64RelativeDifferenceWithinTolerance,
   exactBinary64Mean,
@@ -20,7 +20,7 @@ import {
 import {
   finalizeErrors,
   makeError
-} from "./chunk-JRDY5D5C.js";
+} from "./chunk-JG4ZORSQ.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding
@@ -3429,4 +3429,4 @@ export {
   deriveWeightDistribution,
   verifyHistogramValues
 };
-//# sourceMappingURL=chunk-G2BUPERK.js.map
+//# sourceMappingURL=chunk-6VN5AFAK.js.map

@@ -114,7 +114,7 @@ declare const CAMERA_PRESETS: Record<CameraPresetName, CameraPreset>;
  *  skill-aware acceptance rules change in a way a host may need to migrate.
  *  A stored payload MAY omit `specVersion` for legacy compatibility; when
  *  stamped, the runtime enforces an exact match. */
-declare const CORTEXEL_SPEC_VERSION = "1.4.0";
+declare const CORTEXEL_SPEC_VERSION = "1.5.0";
 /** Resource ceilings for the plain-JSON envelope. Per-skill schemas impose
  *  tighter array limits where the renderer has a smaller practical budget. */
 declare const CORTEXEL_JSON_LIMITS: Readonly<{
@@ -265,7 +265,7 @@ declare const VizSpecSchema: z.ZodObject<{
         "knowledge-graph-3d": "knowledge-graph-3d";
     }>;
     skill: z.ZodOptional<z.ZodString>;
-    specVersion: z.ZodOptional<z.ZodLiteral<"1.4.0">>;
+    specVersion: z.ZodOptional<z.ZodLiteral<"1.5.0">>;
     params: z.ZodDefault<z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>>;
     mode: z.ZodDefault<z.ZodEnum<{
         interactive: "interactive";
@@ -417,7 +417,7 @@ declare function validateSkillInvocation(skillId: unknown, payload: unknown): Sk
 
 declare const HostRendererInvocationSchema: z.ZodObject<{
     skill: z.ZodString;
-    specVersion: z.ZodOptional<z.ZodLiteral<"1.4.0">>;
+    specVersion: z.ZodOptional<z.ZodLiteral<"1.5.0">>;
     params: z.ZodType<Record<string, unknown>, unknown, z.core.$ZodTypeInternals<Record<string, unknown>, unknown>>;
     provenance: z.ZodObject<{
         source: z.ZodString;

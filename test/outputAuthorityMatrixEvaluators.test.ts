@@ -672,12 +672,12 @@ describe('independent matrix OutputAuthority evaluators', () => {
     }
   });
 
-  it('pins matrix identities while the delay erratum leaves renderer revision 4', () => {
+  it('pins matrix identities while the global SVG change moves renderer revision 5', () => {
     for (const skillId of MATRIX_SKILLS) {
       const contract = source(skillId);
       const expectedSkillRevision = MATRIX_SKILL_REVISIONS[skillId];
       expect(contract.revision).toBe(expectedSkillRevision);
-      expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 4 });
+      expect(contract.renderer).toMatchObject({ id: 'figure.matrix', revision: 5 });
       expect(contract.outputAuthority.evaluator.id).toBe(
         `${skillId}.output_authority.v${expectedSkillRevision}`,
       );
@@ -707,7 +707,7 @@ describe('independent matrix OutputAuthority evaluators', () => {
     const matrixRenderer = renderers.renderers.find(
       (renderer: JsonRecord) => renderer.id === 'figure.matrix',
     );
-    expect(matrixRenderer.revision).toBe(4);
+    expect(matrixRenderer.revision).toBe(5);
     expect(matrixRenderer.notes).toContain(
       'not_observed is distinct from observed absence and is never drawn as absent',
     );

@@ -1194,6 +1194,21 @@ function PlasticityChart(
         strokeWidth={2}
         vectorEffect="non-scaling-stroke"
       />
+      {params.weights.length === 1 && (
+        <path
+          data-mark="weight-points"
+          data-point-count={1}
+          d={pointPath(
+            params.times_ms,
+            params.weights,
+            xDomain,
+            yDomain,
+            frame,
+            3,
+          )}
+          fill={args.palette.ltp}
+        />
+      )}
     </ChartShell>
   );
 }
@@ -1215,15 +1230,27 @@ function PhasePlaneChart(
     params.axis_order as readonly [string, string],
     params.grid,
     params.derivatives,
+    params.derivative_time_unit,
   );
+  const zeroSamples = samples.filter(
+    (sample) => sample.dx === 0 && sample.dy === 0,
+  );
+  const zeroVectorDisclosure =
+    zeroSamples.length > 0
+      ? ` ${zeroSamples.length} zero-derivative ${
+          zeroSamples.length === 1 ? 'sample is' : 'samples are'
+        } shown as ${
+          zeroSamples.length === 1 ? 'a ring' : 'rings'
+        }; these marks are not certified equilibria.`
+      : '';
   return (
     <ChartShell
       id={id}
       skill={args.skill!}
       scene={args.scene}
       title="Phase-plane vector field"
-      description={`${samples.length} derivative vectors on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}. Arrows are normalized in plotted coordinate space and do not encode an absolute integration timestep. No trajectory, nullcline, or equilibrium is invented.`}
-      metadata={`${xValues.length}×${yValues.length} grid • vector units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} • row-major, last axis fastest`}
+      description={`${samples.length} numeric derivative directions on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}, with the shared ${params.derivative_time_unit} denominator converted to a per-ms numeric basis before plotting. Arrows are normalized in plotted coordinate space; their length is presentation-only and does not encode an integration timestep.${zeroVectorDisclosure} No trajectory, nullcline, or equilibrium is invented.`}
+      metadata={`${xValues.length}×${yValues.length} grid • derivative units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} • canonical per-ms direction basis • row-major, last axis fastest`}
       xLabel={`${xAxis} (${params.axis_units[xAxis]})`}
       yLabel={`${yAxis} (${params.axis_units[yAxis]})`}
       xDomain={xDomain}
@@ -1243,6 +1270,24 @@ function PhasePlaneChart(
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
+      {zeroSamples.length > 0 && (
+        <path
+          data-mark="phase-zero-vectors"
+          data-zero-vector-count={zeroSamples.length}
+          d={pointPath(
+            zeroSamples.map((sample) => sample.x),
+            zeroSamples.map((sample) => sample.y),
+            xDomain,
+            yDomain,
+            frame,
+            3,
+          )}
+          fill="none"
+          stroke={args.palette.orange}
+          strokeWidth={1.4}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
     </ChartShell>
   );
 }

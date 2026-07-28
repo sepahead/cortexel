@@ -326,6 +326,13 @@ describe('analysis bin-boundary precision', () => {
 });
 
 describe('correlationDetectorToCorrelogramParams', () => {
+  const sourceConfiguration = {
+    simulationResolutionMs: 1,
+    simulationStartMs: 0,
+    simulationStopMs: 100,
+    referenceReceptorPort: 0 as const,
+    targetReceptorPort: 1 as const,
+  };
   const status = {
     delta_tau: 1,
     tau_max: 2,
@@ -338,6 +345,7 @@ describe('correlationDetectorToCorrelogramParams', () => {
     referenceLabel: 'E',
     targetLabel: 'I',
     zeroLagPolicy: 'included' as const,
+    sourceConfiguration,
   };
 
   it('builds the documented centered lag axis from typed raw counts', () => {
@@ -401,6 +409,169 @@ describe('correlationDetectorToCorrelogramParams', () => {
       { ...status, count_histogram: [1, 2, 3] },
       options,
     ).ok).toBe(false);
+  });
+
+  it('requires ordered simulation authority and the documented receptor-port orientation', () => {
+    const { sourceConfiguration: _sourceConfiguration, ...withoutConfiguration } = options;
+    expect(correlationDetectorToCorrelogramParams(status, withoutConfiguration).ok).toBe(false);
+    expect(correlationDetectorToCorrelogramParams(status, {
+      ...options,
+      sourceConfiguration: {
+        ...sourceConfiguration,
+        simulationStopMs: sourceConfiguration.simulationStartMs,
+      },
+    }).ok).toBe(false);
+    expect(correlationDetectorToCorrelogramParams(status, {
+      ...options,
+      sourceConfiguration: {
+        ...sourceConfiguration,
+        referenceReceptorPort: 1,
+        targetReceptorPort: 0,
+      },
+    }).ok).toBe(false);
+    expect(correlationDetectorToCorrelogramParams(status, {
+      ...options,
+      sourceConfiguration: {
+        ...sourceConfiguration,
+        targetReceptorPort: 2,
+      },
+    }).ok).toBe(false);
+  });
+
+  it('accepts only exact odd resolution multiples at decimal scale', () => {
+    const scaleCases = [
+      {
+        resolution: 1e-100,
+        delta: 3e-100,
+        tau: 6e-100,
+        simulationStart: -1e-99,
+        countingStart: -4e-100,
+        simulationStop: 1e-99,
+        countingStop: 4e-100,
+      },
+      {
+        resolution: 0.1,
+        delta: 0.3,
+        tau: 0.6,
+        simulationStart: -1,
+        countingStart: -0.4,
+        simulationStop: 1,
+        countingStop: 0.4,
+      },
+      {
+        resolution: 1,
+        delta: 3,
+        tau: 6,
+        simulationStart: -10,
+        countingStart: -4,
+        simulationStop: 10,
+        countingStop: 4,
+      },
+      {
+        resolution: 1e100,
+        delta: 3e100,
+        tau: 6e100,
+        simulationStart: -1e101,
+        countingStart: -4e100,
+        simulationStop: 1e101,
+        countingStop: 4e100,
+      },
+    ] as const;
+
+    for (const fixture of scaleCases) {
+      const result = correlationDetectorToCorrelogramParams({
+        delta_tau: fixture.delta,
+        tau_max: fixture.tau,
+        Tstart: fixture.countingStart,
+        Tstop: fixture.countingStop,
+        count_histogram: [1, 2, 3, 2, 1],
+      }, {
+        ...options,
+        sourceConfiguration: {
+          simulationResolutionMs: fixture.resolution,
+          simulationStartMs: fixture.simulationStart,
+          simulationStopMs: fixture.simulationStop,
+          referenceReceptorPort: 0,
+          targetReceptorPort: 1,
+        },
+      });
+      expect(result.ok, JSON.stringify(fixture)).toBe(true);
+    }
+
+    expect(correlationDetectorToCorrelogramParams({
+      delta_tau: 0.2,
+      tau_max: 0.4,
+      Tstart: 0.4,
+      Tstop: 9.6,
+      count_histogram: [1, 2, 3, 2, 1],
+    }, {
+      ...options,
+      sourceConfiguration: {
+        ...sourceConfiguration,
+        simulationResolutionMs: 0.1,
+        simulationStopMs: 10,
+      },
+    }).ok).toBe(false);
+    expect(correlationDetectorToCorrelogramParams({
+      delta_tau: 0.25,
+      tau_max: 0.5,
+      Tstart: 0.5,
+      Tstop: 9.5,
+      count_histogram: [1, 2, 3, 2, 1],
+    }, {
+      ...options,
+      sourceConfiguration: {
+        ...sourceConfiguration,
+        simulationResolutionMs: 0.1,
+        simulationStopMs: 10,
+      },
+    }).ok).toBe(false);
+  });
+
+  it('rejects adjacent binary64 values outside exact detector geometry', () => {
+    const adjacentPositive = (value: number, direction: -1 | 1): number => {
+      const view = new DataView(new ArrayBuffer(8));
+      view.setFloat64(0, value, false);
+      view.setBigUint64(0, view.getBigUint64(0, false) + BigInt(direction), false);
+      return view.getFloat64(0, false);
+    };
+    const decimalStatus = {
+      delta_tau: 0.3,
+      tau_max: 0.6,
+      Tstart: 0.6,
+      Tstop: 9.4,
+      count_histogram: [1, 2, 3, 2, 1],
+    };
+    const decimalOptions = {
+      ...options,
+      sourceConfiguration: {
+        ...sourceConfiguration,
+        simulationResolutionMs: 0.1,
+        simulationStopMs: 10,
+      },
+    };
+    expect(correlationDetectorToCorrelogramParams(decimalStatus, decimalOptions).ok).toBe(true);
+
+    for (const delta_tau of [
+      adjacentPositive(decimalStatus.delta_tau, -1),
+      adjacentPositive(decimalStatus.delta_tau, 1),
+    ]) {
+      const result = correlationDetectorToCorrelogramParams(
+        { ...decimalStatus, delta_tau },
+        decimalOptions,
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors[0]).toContain('odd integer multiple');
+    }
+
+    expect(correlationDetectorToCorrelogramParams({
+      ...decimalStatus,
+      Tstart: adjacentPositive(decimalStatus.Tstart, -1),
+    }, decimalOptions).ok).toBe(false);
+    expect(correlationDetectorToCorrelogramParams({
+      ...decimalStatus,
+      Tstop: adjacentPositive(decimalStatus.Tstop, 1),
+    }, decimalOptions).ok).toBe(false);
   });
 });
 
@@ -466,6 +637,44 @@ describe('NEST analysis trust boundary', () => {
       referenceLabel: 'a',
       targetLabel: 'b',
       zeroLagPolicy: 'included',
+      sourceConfiguration: {
+        simulationResolutionMs: 1,
+        simulationStartMs: 0,
+        simulationStopMs: 10,
+        referenceReceptorPort: 0,
+        targetReceptorPort: 1,
+      },
+    }).ok).toBe(false);
+    expect(reads).toBe(0);
+  });
+
+  it('rejects detector source-configuration accessors without invoking them', () => {
+    let reads = 0;
+    const sourceConfiguration: Record<string, unknown> = {
+      simulationStartMs: 0,
+      simulationStopMs: 10,
+      referenceReceptorPort: 0,
+      targetReceptorPort: 1,
+    };
+    Object.defineProperty(sourceConfiguration, 'simulationResolutionMs', {
+      enumerable: true,
+      get() {
+        reads += 1;
+        return 1;
+      },
+    });
+    expect(correlationDetectorToCorrelogramParams({
+      delta_tau: 1,
+      tau_max: 1,
+      Tstart: 1,
+      Tstop: 9,
+      count_histogram: [1, 2, 1],
+    }, {
+      measurement: 'count_histogram',
+      referenceLabel: 'a',
+      targetLabel: 'b',
+      zeroLagPolicy: 'included',
+      sourceConfiguration,
     }).ok).toBe(false);
     expect(reads).toBe(0);
   });

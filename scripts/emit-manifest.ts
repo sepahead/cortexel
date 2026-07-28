@@ -354,9 +354,9 @@ export function buildManifest(): SkillsManifest {
     64,
   );
   return {
-    // v10: the v8 topology/routing surface plus strict provenance closure,
-    // exact-match VizSpec 1.4, and raw-count weight-histogram semantics.
-    manifestVersion: '10',
+    // v11: the v10 provenance/topology surface plus a machine-checkable shared
+    // derivative time basis for non-degenerate legacy phase-plane directions.
+    manifestVersion: '11',
     skillAxisVersion: CORTEXEL_SKILL_VERSION,
     specVersion: CORTEXEL_SPEC_VERSION,
     vizRouterId: VIZ_ROUTER_ID,

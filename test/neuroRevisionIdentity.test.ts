@@ -13,16 +13,16 @@ type JsonRecord = Record<string, any>;
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const NEURO_SKILLS = [
-  ['neuro.analog_trace', 'figure.analog_trace', 4],
-  ['neuro.compartment_trace', 'figure.compartment_trace', 4],
-  ['neuro.correlogram', 'figure.correlogram', 4],
-  ['neuro.isi_distribution', 'figure.distribution', 4],
-  ['neuro.multisignal_trace', 'figure.multisignal_trace', 4],
-  ['neuro.phase_plane', 'figure.phase_plane', 5],
-  ['neuro.population_rate', 'figure.population_rate', 4],
-  ['neuro.psth', 'figure.psth', 4],
-  ['neuro.response_curve', 'figure.response_curve', 4],
-  ['neuro.spike_raster', 'figure.spike_raster', 4],
+  ['neuro.analog_trace', 4, 'figure.analog_trace', 5],
+  ['neuro.compartment_trace', 4, 'figure.compartment_trace', 5],
+  ['neuro.correlogram', 4, 'figure.correlogram', 5],
+  ['neuro.isi_distribution', 4, 'figure.distribution', 5],
+  ['neuro.multisignal_trace', 4, 'figure.multisignal_trace', 5],
+  ['neuro.phase_plane', 5, 'figure.phase_plane', 6],
+  ['neuro.population_rate', 4, 'figure.population_rate', 5],
+  ['neuro.psth', 4, 'figure.psth', 5],
+  ['neuro.response_curve', 4, 'figure.response_curve', 5],
+  ['neuro.spike_raster', 4, 'figure.spike_raster', 5],
 ] as const;
 
 function skillSource(skillId: string): JsonRecord {
@@ -50,18 +50,18 @@ describe('stable neuro revision identity alignment', () => {
   it('keeps source, OutputAuthority evaluator, and renderer identities coordinated', () => {
     const renderers = rendererRegistry();
 
-    for (const [skillId, rendererId, revision] of NEURO_SKILLS) {
+    for (const [skillId, skillRevision, rendererId, rendererRevision] of NEURO_SKILLS) {
       const source = skillSource(skillId);
-      expect(source.revision, skillId).toBe(revision);
-      expect(source.renderer, skillId).toEqual({ id: rendererId, revision });
+      expect(source.revision, skillId).toBe(skillRevision);
+      expect(source.renderer, skillId).toEqual({ id: rendererId, revision: rendererRevision });
       expect(source.outputAuthority.evaluator.id, skillId).toBe(
-        `${skillId}.output_authority.v${revision}`,
+        `${skillId}.output_authority.v${skillRevision}`,
       );
       expect(evaluatorIds.has(source.outputAuthority.evaluator.id), skillId).toBe(true);
 
       const matchingRenderers = renderers.filter((renderer) => renderer.id === rendererId);
       expect(matchingRenderers, rendererId).toHaveLength(1);
-      expect(matchingRenderers[0].revision, rendererId).toBe(revision);
+      expect(matchingRenderers[0].revision, rendererId).toBe(rendererRevision);
     }
 
     const phasePlane = renderers.find((renderer) => renderer.id === 'figure.phase_plane');
@@ -69,14 +69,14 @@ describe('stable neuro revision identity alignment', () => {
   });
 
   it('accepts current pins, emits their renderer revision, and refuses the immediately prior pin', () => {
-    for (const [skillId, rendererId, revision] of NEURO_SKILLS) {
+    for (const [skillId, skillRevision, rendererId, rendererRevision] of NEURO_SKILLS) {
       const source = skillSource(skillId);
 
       const current = structuredClone(source.examples.valid[0]);
-      current.skill.revision = revision;
+      current.skill.revision = skillRevision;
       const checked = validateRequestValue(current);
       expect(checked.ok, skillId).toBe(true);
-      if (checked.ok) expect(checked.request.skillRevision, skillId).toBe(revision);
+      if (checked.ok) expect(checked.request.skillRevision, skillId).toBe(skillRevision);
 
       const figure = buildFigure(current);
       expect(figure.ok, figure.ok ? skillId : JSON.stringify(figure.errors)).toBe(true);
@@ -86,11 +86,11 @@ describe('stable neuro revision identity alignment', () => {
           readonly rendererRevision: number;
         };
         expect(render.rendererId, skillId).toBe(rendererId);
-        expect(render.rendererRevision, skillId).toBe(revision);
+        expect(render.rendererRevision, skillId).toBe(rendererRevision);
       }
 
       const prior = structuredClone(source.examples.valid[0]);
-      prior.skill.revision = revision - 1;
+      prior.skill.revision = skillRevision - 1;
       const refused = validateRequestValue(prior);
       expect(refused.ok, skillId).toBe(false);
       if (!refused.ok) {

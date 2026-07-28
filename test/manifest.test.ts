@@ -872,6 +872,10 @@ function portableConstraintPass(
       const scope = asRecord(sequences[0][0]);
       const direction = sequences[1]?.[0];
       if (!scope || typeof scope.kind !== 'string') return false;
+      if (
+        constraint.allowedFieldValues !== undefined &&
+        !constraint.allowedFieldValues.includes(scope.kind)
+      ) return false;
       if (scope.kind === 'single_process_complete') return true;
       if (scope.kind === 'mpi_all_ranks_merged') {
         return typeof scope.world_size === 'number' && Number.isSafeInteger(scope.world_size) && scope.world_size > 0;
@@ -884,6 +888,54 @@ function portableConstraintPass(
           scope.world_size > 0 && scope.rank < scope.world_size;
       }
       return false;
+    }
+    case 'phase_plane_direction_basis': {
+      const grid = asRecord(resolvePath(params, constraint.paths[0])[0]);
+      const derivatives = asRecord(resolvePath(params, constraint.paths[1])[0]);
+      const axisUnits = asRecord(resolvePath(params, constraint.paths[2])[0]);
+      const derivativeUnits = asRecord(resolvePath(params, constraint.paths[3])[0]);
+      const timeUnit = sequences[4][0];
+      if (
+        !grid ||
+        !derivatives ||
+        !axisUnits ||
+        !derivativeUnits ||
+        (timeUnit !== 'ms' && timeUnit !== 's')
+      ) return false;
+      const gridKeys = Object.keys(grid).sort();
+      if (gridKeys.length !== 2) return false;
+      if (
+        JSON.stringify(Object.keys(derivatives).sort()) !== JSON.stringify(gridKeys) ||
+        JSON.stringify(Object.keys(axisUnits).sort()) !== JSON.stringify(gridKeys) ||
+        JSON.stringify(Object.keys(derivativeUnits).sort()) !== JSON.stringify(gridKeys)
+      ) return false;
+      return gridKeys.every((key) => {
+        const coordinates = grid[key];
+        const components = derivatives[key];
+        const axisUnit = axisUnits[key];
+        if (
+          !Array.isArray(coordinates) ||
+          coordinates.length < 2 ||
+          !Array.isArray(components) ||
+          typeof axisUnit !== 'string' ||
+          derivativeUnits[key] !== `${axisUnit}/${timeUnit}`
+        ) return false;
+        return coordinates.every(
+          (coordinate, index) =>
+            typeof coordinate === 'number' &&
+            Number.isFinite(coordinate) &&
+            (index === 0 || (coordinates[index - 1] as number) < coordinate),
+        ) && components.every(
+          (component) =>
+            typeof component === 'number' &&
+            Number.isFinite(component) &&
+            !(
+              timeUnit === 's' &&
+              component !== 0 &&
+              component / 1000 === 0
+            ),
+        );
+      });
     }
     case 'acyclic': {
       const ids = sequences[0];
@@ -1424,8 +1476,8 @@ const distManifest = join(here, '..', 'dist', 'skills.manifest.json');
 describe('skills manifest', () => {
   it('covers every skill id', () => {
     const m = buildManifest();
-    expect(m.skillAxisVersion).toBe('1.7.0');
-    expect(m.specVersion).toBe('1.4.0');
+    expect(m.skillAxisVersion).toBe('1.8.0');
+    expect(m.specVersion).toBe('1.5.0');
     expect(m.skills).toHaveLength(26);
     expect(m.skills.map((s) => s.id).sort()).toEqual([...NEST_SKILL_IDS].sort());
   });
@@ -1450,7 +1502,7 @@ describe('skills manifest', () => {
       routerEligibility: { bareFamilyCandidate: false },
     });
     const transformed = manifest.skills.filter((skill) => skill.transform);
-    expect(transformed).toHaveLength(8);
+    expect(transformed).toHaveLength(10);
     for (const skill of transformed) {
       expect(skill.transform!.outputSkill).toBe(skill.id);
       expect(skill.transform!.rawFields.length).toBeGreaterThan(0);
@@ -1546,6 +1598,35 @@ describe('skills manifest', () => {
     expect(byId['nest.phase_plane'].paramConstraints).toContainEqual(
       expect.objectContaining({ kind: 'property_count', min: 2, max: 2 }),
     );
+    expect(byId['nest.phase_plane'].paramConstraints).toContainEqual(
+      expect.objectContaining({
+        kind: 'phase_plane_direction_basis',
+        paths: [
+          'grid',
+          'derivatives',
+          'axis_units',
+          'derivative_units',
+          'derivative_time_unit',
+        ],
+      }),
+    );
+    for (const id of [
+      'nest.adjacency_matrix',
+      'nest.weight_matrix',
+      'nest.delay_matrix',
+      'nest.in_degree_distribution',
+      'nest.out_degree_distribution',
+    ]) {
+      expect(byId[id].paramConstraints).toContainEqual(
+        expect.objectContaining({
+          kind: 'scope_compatibility',
+          allowedFieldValues: [
+            'single_process_complete',
+            'mpi_all_ranks_merged',
+          ],
+        }),
+      );
+    }
     expect(byId['corpus.knowledge_graph'].paramConstraints.map((c) => c.kind)).toEqual(
       expect.arrayContaining([
         'unique_field',
@@ -1722,8 +1803,8 @@ describe('skills manifest', () => {
       'caller_note',
     ]);
     expect(manifest.honestyPolicy.templates.synthetic).toMatch(/^Schematic/);
-    expect(manifest.manifestVersion).toBe('10');
-    expect(manifest.paramConstraintLanguage.version).toBe('10');
+    expect(manifest.manifestVersion).toBe('11');
+    expect(manifest.paramConstraintLanguage.version).toBe('11');
     expect(manifest.provenanceParamConstraintLanguage.version).toBe('4');
     expect(
       manifest.provenanceParamConstraintLanguage.semantics
@@ -1734,6 +1815,12 @@ describe('skills manifest', () => {
         'candidateRoundoff when candidateRoundoff <= roundoffCap, otherwise 0',
     });
     expect(manifest.paramConstraintLanguage.semantics.strictly_increasing).toBeDefined();
+    expect(
+      manifest.paramConstraintLanguage.semantics.phase_plane_direction_basis,
+    ).toMatchObject({
+      canonicalNumericBasis:
+        'renderers perform one binary64 division by 1000 for per-second components before deriving arrow direction or presentation length; this is one declared rounding basis, not a universal claim that independently rounded ms/s source representations are byte-identical',
+    });
     expect(manifest.paramConstraintLanguage.semantics.references_exist).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.uniform_histogram_bins).toBeDefined();
     expect(manifest.paramConstraintLanguage.semantics.normalized_histogram_mass).toBeDefined();
@@ -2396,11 +2483,45 @@ describe('skills manifest', () => {
     rejectConstraint('nest.adjacency_matrix', 'scope_compatibility', (params) => {
       params.snapshot_scope = { kind: 'mpi_target_rank_local', rank: -0, world_size: 2 };
     });
+    rejectConstraint('nest.weight_matrix', 'scope_compatibility', (params) => {
+      params.snapshot_scope = { kind: 'mpi_target_rank_local', rank: 0, world_size: 2 };
+    });
+    rejectConstraint('nest.delay_matrix', 'scope_compatibility', (params) => {
+      params.snapshot_scope = { kind: 'mpi_target_rank_local', rank: 0, world_size: 2 };
+    });
+    rejectConstraint('nest.in_degree_distribution', 'scope_compatibility', (params) => {
+      params.snapshot_scope = { kind: 'mpi_target_rank_local', rank: 0, world_size: 2 };
+    });
     rejectConstraint('nest.out_degree_distribution', 'scope_compatibility', (params) => {
       params.snapshot_scope = { kind: 'mpi_target_rank_local', rank: 0, world_size: 2 };
     });
+    acceptConstraint('nest.connection_graph', 'scope_compatibility', (params) => {
+      params.snapshot_scope = {
+        kind: 'mpi_target_rank_local',
+        rank: 0,
+        world_size: 2,
+      };
+    });
     rejectConstraint('nest.phase_plane', 'property_count', (params) => {
       delete (params.grid as Record<string, unknown>).w;
+    });
+    rejectConstraint('nest.phase_plane', 'phase_plane_direction_basis', (params) => {
+      (params.grid as Record<string, unknown>).v = [-70, -70];
+    });
+    rejectConstraint('nest.phase_plane', 'phase_plane_direction_basis', (params) => {
+      (params.grid as Record<string, unknown>).w = [0];
+    });
+    rejectConstraint('nest.phase_plane', 'phase_plane_direction_basis', (params) => {
+      (params.derivative_units as Record<string, unknown>).w = '1/s';
+    });
+    rejectConstraint('nest.phase_plane', 'phase_plane_direction_basis', (params) => {
+      params.derivative_time_unit = 'minute';
+    });
+    rejectConstraint('nest.phase_plane', 'phase_plane_direction_basis', (params) => {
+      params.derivative_time_unit = 's';
+      (params.derivative_units as Record<string, unknown>).v = 'mV/s';
+      (params.derivative_units as Record<string, unknown>).w = '1/s';
+      ((params.derivatives as Record<string, number[]>).v)[0] = Number.MIN_VALUE;
     });
     rejectConstraint('corpus.knowledge_graph', 'unique_field', (params) => {
       const nodes = params.nodes as Array<Record<string, unknown>>;

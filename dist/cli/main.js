@@ -1,28 +1,28 @@
 #!/usr/bin/env node
 import {
   migrateLegacyRequest
-} from "../chunk-6MERKLKG.js";
+} from "../chunk-2YYBMHXX.js";
 import {
   buildFigureFromJson
-} from "../chunk-6KFEER4F.js";
-import "../chunk-UJXCRPI6.js";
+} from "../chunk-VEPECETX.js";
+import "../chunk-AVLFUCHM.js";
 import {
   parseJsonStrict
-} from "../chunk-73GOQEQ3.js";
-import "../chunk-G2BUPERK.js";
+} from "../chunk-HEEPK7X6.js";
+import "../chunk-6VN5AFAK.js";
 import {
   ERROR_STAGES,
   EXPERIMENTAL_CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS
-} from "../chunk-QD4CIX2J.js";
+} from "../chunk-23EH6LGQ.js";
 import "../chunk-XGABDL4O.js";
-import "../chunk-V5ZPIE2W.js";
+import "../chunk-X2A5HVBH.js";
 import {
   getBudgetLimits,
   getBuildIdentity,
   makeError
-} from "../chunk-JRDY5D5C.js";
+} from "../chunk-JG4ZORSQ.js";
 import {
   canonicalize
 } from "../chunk-ZYBCCIMH.js";

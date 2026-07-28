@@ -1,7 +1,7 @@
 import * as react from 'react';
-import { R as RenderSceneArgs } from '../VizSpecRenderer-C37ba2e-.js';
+import { R as RenderSceneArgs } from '../VizSpecRenderer-BWkH_3OM.js';
 import { R as ReadonlySemanticPalette } from '../colormaps-CZ6XejJa.js';
-import { a as SkillInvocationError } from '../hostInvocation-DxxyBttn.js';
+import { a as SkillInvocationError } from '../hostInvocation-DWfbQ71f.js';
 import 'zod';
 
 interface ChartDomain {
@@ -78,7 +78,7 @@ declare function stemPath(xs: readonly number[], ys: readonly number[], xDomain:
 declare function boundedStemPointPaths(xs: readonly number[], ys: readonly number[], xDomain: ChartDomain, yDomain: ChartDomain, frame: ChartFrame, maximumSamples?: number, radius?: number): BoundedStemPointPaths;
 declare function rasterTickPath(times: readonly number[], senders: readonly number[], xDomain: ChartDomain, yDomain: ChartDomain, frame: ChartFrame, halfHeight?: number): string;
 declare function histogramBarPath(centers: readonly number[], values: readonly number[], binWidth: number, xDomain: ChartDomain, yDomain: ChartDomain, frame: ChartFrame): string;
-declare function phasePlaneSamples(axisOrder: readonly [string, string], grid: Readonly<Record<string, readonly number[]>>, derivatives: Readonly<Record<string, readonly number[]>>): PhasePlaneSample[];
+declare function phasePlaneSamples(axisOrder: readonly [string, string], grid: Readonly<Record<string, readonly number[]>>, derivatives: Readonly<Record<string, readonly number[]>>, derivativeTimeUnit: 'ms' | 's'): PhasePlaneSample[];
 declare function phasePlaneArrowPath(samples: readonly PhasePlaneSample[], xDomain: ChartDomain, yDomain: ChartDomain, frame: ChartFrame): string;
 declare function tickValues(domain: ChartDomain, count?: number): number[];
 declare function formatChartNumber(value: number): string;

@@ -1,10 +1,10 @@
 import {
   VizSpecRenderer
-} from "../chunk-GMBKCI3R.js";
+} from "../chunk-4NHXLD46.js";
 import {
   getSkill,
   validateSkillParams
-} from "../chunk-VKPKMYSC.js";
+} from "../chunk-MEHRBBUS.js";
 import {
   safeDiagnosticText
 } from "../chunk-UEJPZXDX.js";
@@ -284,7 +284,7 @@ function histogramBarPath(centers, values, binWidth, xDomain, yDomain, frame) {
   }
   return path;
 }
-function phasePlaneSamples(axisOrder, grid, derivatives) {
+function phasePlaneSamples(axisOrder, grid, derivatives, derivativeTimeUnit) {
   const [xAxis, yAxis] = axisOrder;
   const xs = grid[xAxis] ?? [];
   const ys = grid[yAxis] ?? [];
@@ -298,8 +298,8 @@ function phasePlaneSamples(axisOrder, grid, derivatives) {
       samples[outputIndex++] = {
         x: xs[xIndex],
         y: ys[yIndex],
-        dx: dx[index] ?? 0,
-        dy: dy[index] ?? 0,
+        dx: derivativeTimeUnit === "s" ? (dx[index] ?? 0) / 1e3 : dx[index] ?? 0,
+        dy: derivativeTimeUnit === "s" ? (dy[index] ?? 0) / 1e3 : dy[index] ?? 0,
         index
       };
     }
@@ -1691,7 +1691,7 @@ function PlasticityChart(args, width, height, id) {
   const yDomain = numericDomain(params.weights);
   const frame = makeFrame(width, height);
   const synapseModel = declaredInput(args, "synapse_model");
-  return /* @__PURE__ */ jsx(
+  return /* @__PURE__ */ jsxs(
     ChartShell,
     {
       id,
@@ -1707,17 +1707,35 @@ function PlasticityChart(args, width, height, id) {
       frame,
       colors: chartColors(args.palette, args.themeMode),
       sampleCount: params.weights.length,
-      children: /* @__PURE__ */ jsx(
-        "path",
-        {
-          "data-mark": "weight-line",
-          d: linePath(params.times_ms, params.weights, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.ltp,
-          strokeWidth: 2,
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
+      children: [
+        /* @__PURE__ */ jsx(
+          "path",
+          {
+            "data-mark": "weight-line",
+            d: linePath(params.times_ms, params.weights, xDomain, yDomain, frame),
+            fill: "none",
+            stroke: args.palette.ltp,
+            strokeWidth: 2,
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        params.weights.length === 1 && /* @__PURE__ */ jsx(
+          "path",
+          {
+            "data-mark": "weight-points",
+            "data-point-count": 1,
+            d: pointPath(
+              params.times_ms,
+              params.weights,
+              xDomain,
+              yDomain,
+              frame,
+              3
+            ),
+            fill: args.palette.ltp
+          }
+        )
+      ]
     }
   );
 }
@@ -1732,17 +1750,22 @@ function PhasePlaneChart(args, width, height, id) {
   const samples = phasePlaneSamples(
     params.axis_order,
     params.grid,
-    params.derivatives
+    params.derivatives,
+    params.derivative_time_unit
   );
-  return /* @__PURE__ */ jsx(
+  const zeroSamples = samples.filter(
+    (sample) => sample.dx === 0 && sample.dy === 0
+  );
+  const zeroVectorDisclosure = zeroSamples.length > 0 ? ` ${zeroSamples.length} zero-derivative ${zeroSamples.length === 1 ? "sample is" : "samples are"} shown as ${zeroSamples.length === 1 ? "a ring" : "rings"}; these marks are not certified equilibria.` : "";
+  return /* @__PURE__ */ jsxs(
     ChartShell,
     {
       id,
       skill: args.skill,
       scene: args.scene,
       title: "Phase-plane vector field",
-      description: `${samples.length} derivative vectors on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}. Arrows are normalized in plotted coordinate space and do not encode an absolute integration timestep. No trajectory, nullcline, or equilibrium is invented.`,
-      metadata: `${xValues.length}\xD7${yValues.length} grid \u2022 vector units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} \u2022 row-major, last axis fastest`,
+      description: `${samples.length} numeric derivative directions on the Cartesian ${xAxis} by ${yAxis} grid. Derivative units are ${params.derivative_units[xAxis]} for ${xAxis} and ${params.derivative_units[yAxis]} for ${yAxis}, with the shared ${params.derivative_time_unit} denominator converted to a per-ms numeric basis before plotting. Arrows are normalized in plotted coordinate space; their length is presentation-only and does not encode an integration timestep.${zeroVectorDisclosure} No trajectory, nullcline, or equilibrium is invented.`,
+      metadata: `${xValues.length}\xD7${yValues.length} grid \u2022 derivative units ${xAxis}: ${params.derivative_units[xAxis]}; ${yAxis}: ${params.derivative_units[yAxis]} \u2022 canonical per-ms direction basis \u2022 row-major, last axis fastest`,
       xLabel: `${xAxis} (${params.axis_units[xAxis]})`,
       yLabel: `${yAxis} (${params.axis_units[yAxis]})`,
       xDomain,
@@ -1750,20 +1773,41 @@ function PhasePlaneChart(args, width, height, id) {
       frame,
       colors: chartColors(args.palette, args.themeMode),
       sampleCount: samples.length,
-      children: /* @__PURE__ */ jsx(
-        "path",
-        {
-          "data-mark": "phase-vectors",
-          "data-vector-count": samples.length,
-          d: phasePlaneArrowPath(samples, xDomain, yDomain, frame),
-          fill: "none",
-          stroke: args.palette.orange,
-          strokeWidth: 1.4,
-          strokeLinecap: "round",
-          strokeLinejoin: "round",
-          vectorEffect: "non-scaling-stroke"
-        }
-      )
+      children: [
+        /* @__PURE__ */ jsx(
+          "path",
+          {
+            "data-mark": "phase-vectors",
+            "data-vector-count": samples.length,
+            d: phasePlaneArrowPath(samples, xDomain, yDomain, frame),
+            fill: "none",
+            stroke: args.palette.orange,
+            strokeWidth: 1.4,
+            strokeLinecap: "round",
+            strokeLinejoin: "round",
+            vectorEffect: "non-scaling-stroke"
+          }
+        ),
+        zeroSamples.length > 0 && /* @__PURE__ */ jsx(
+          "path",
+          {
+            "data-mark": "phase-zero-vectors",
+            "data-zero-vector-count": zeroSamples.length,
+            d: pointPath(
+              zeroSamples.map((sample) => sample.x),
+              zeroSamples.map((sample) => sample.y),
+              xDomain,
+              yDomain,
+              frame,
+              3
+            ),
+            fill: "none",
+            stroke: args.palette.orange,
+            strokeWidth: 1.4,
+            vectorEffect: "non-scaling-stroke"
+          }
+        )
+      ]
     }
   );
 }

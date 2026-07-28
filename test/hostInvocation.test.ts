@@ -162,12 +162,12 @@ describe('scene-less skills keep the full honesty contract', () => {
     );
   });
 
-  it('refuses stamped 1.3.0 host envelopes instead of reinterpreting them', () => {
-    expect(CORTEXEL_SPEC_VERSION).toBe('1.4.0');
+  it('refuses stamped 1.4.0 host envelopes instead of reinterpreting them', () => {
+    expect(CORTEXEL_SPEC_VERSION).toBe('1.5.0');
     const example = structuredClone(
       HOST_RENDERER_EXAMPLE_PAYLOADS['nest.spatial_2d']!,
     );
-    example.specVersion = '1.3.0' as typeof example.specVersion;
+    example.specVersion = '1.4.0' as typeof example.specVersion;
     const result = validateHostRendererInvocation('nest.spatial_2d', example);
     expect(result.ok).toBe(false);
     if (!result.ok) {

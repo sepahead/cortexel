@@ -27,10 +27,11 @@ import {
   Rfc3339TimestampSchema,
   SnapshotScopeSchema,
   SpatialMap2DParamsSchema,
+  WeightHistogramParamsSchema,
   WeightMatrixParamsSchema,
   isSkillId,
   listSkills
-} from "./chunk-VKPKMYSC.js";
+} from "./chunk-MEHRBBUS.js";
 import {
   PUBLIC_DIAGNOSTIC_LIMITS,
   SAFE_DISPLAY_STRING_PATTERN,
@@ -2036,14 +2037,75 @@ var PsthOptionsSchema = z5.object({
   normalization: z5.enum(["count", "count_per_trial", "rate_hz"]),
   alignmentEvent: displayText(240)
 }).strict();
+var CorrelationDetectorSourceConfigurationSchema = z5.object({
+  simulationResolutionMs: finite.positive(),
+  simulationStartMs: finite,
+  simulationStopMs: finite,
+  referenceReceptorPort: z5.literal(0),
+  targetReceptorPort: z5.literal(1)
+}).strict().superRefine((value, ctx) => {
+  if (!(value.simulationStopMs > value.simulationStartMs)) {
+    ctx.addIssue({
+      code: z5.ZodIssueCode.custom,
+      path: ["simulationStopMs"],
+      message: "simulationStopMs must be greater than simulationStartMs"
+    });
+  }
+});
 var CorrelationDetectorOptionsSchema = z5.object({
   measurement: z5.literal("count_histogram"),
   referenceLabel: displayText(240),
   targetLabel: displayText(240),
-  zeroLagPolicy: z5.literal("included")
+  zeroLagPolicy: z5.literal("included"),
+  sourceConfiguration: CorrelationDetectorSourceConfigurationSchema
 }).strict();
 function error(message) {
   return { ok: false, errors: [message] };
+}
+function canonicalDecimal(value) {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/.exec(
+    value.toString().toLowerCase()
+  );
+  if (!match) return null;
+  const fraction = match[3] ?? "";
+  const explicitExponent = match[4] === void 0 ? 0 : Number(match[4]);
+  if (!Number.isSafeInteger(explicitExponent)) return null;
+  const unsignedCoefficient = BigInt(`${match[2]}${fraction}`);
+  return {
+    coefficient: match[1] === "-" ? -unsignedCoefficient : unsignedCoefficient,
+    exponent10: explicitExponent - fraction.length
+  };
+}
+function powerOfTen(exponent) {
+  return 10n ** BigInt(exponent);
+}
+function exactCanonicalDecimalIntegerRatio(numeratorValue, denominatorValue) {
+  const numerator = canonicalDecimal(numeratorValue);
+  const denominator = canonicalDecimal(denominatorValue);
+  if (!numerator || !denominator || numerator.coefficient <= 0n || denominator.coefficient <= 0n) {
+    return null;
+  }
+  const exponentDifference = numerator.exponent10 - denominator.exponent10;
+  const scaledNumerator = exponentDifference >= 0 ? numerator.coefficient * powerOfTen(exponentDifference) : numerator.coefficient;
+  const scaledDenominator = exponentDifference >= 0 ? denominator.coefficient : denominator.coefficient * powerOfTen(-exponentDifference);
+  if (scaledNumerator % scaledDenominator !== 0n) return null;
+  return scaledNumerator / scaledDenominator;
+}
+function compareCanonicalDecimalSums(leftValues, rightValues) {
+  const left = leftValues.map(canonicalDecimal);
+  const right = rightValues.map(canonicalDecimal);
+  if (left.some((value) => value === null) || right.some((value) => value === null)) {
+    return null;
+  }
+  const decimals = [...left, ...right];
+  const commonExponent = Math.min(...decimals.map((value) => value.exponent10));
+  const sum = (values) => values.reduce(
+    (total, value) => total + value.coefficient * powerOfTen(value.exponent10 - commonExponent),
+    0n
+  );
+  const leftSum = sum(left);
+  const rightSum = sum(right);
+  return leftSum < rightSum ? -1 : leftSum > rightSum ? 1 : 0;
 }
 function validateOutput(schema, params) {
   const parsed = schema.safeParse(params);
@@ -2383,6 +2445,36 @@ function correlationDetectorToCorrelogramParams(status, options) {
     const opts = parsedOptions.data;
     const values = parsedStatus.data.count_histogram;
     if (!values) return error("count_histogram is absent from the detector status");
+    const resolutionMultiple = exactCanonicalDecimalIntegerRatio(
+      parsedStatus.data.delta_tau,
+      opts.sourceConfiguration.simulationResolutionMs
+    );
+    if (resolutionMultiple === null || resolutionMultiple < 1n || resolutionMultiple % 2n !== 1n) {
+      return error(
+        "delta_tau must be an exact positive odd integer multiple of sourceConfiguration.simulationResolutionMs"
+      );
+    }
+    const startMarginComparison = compareCanonicalDecimalSums(
+      [parsedStatus.data.Tstart],
+      [
+        opts.sourceConfiguration.simulationStartMs,
+        parsedStatus.data.tau_max
+      ]
+    );
+    if (startMarginComparison === null || startMarginComparison < 0) {
+      return error(
+        "Tstart must be at least sourceConfiguration.simulationStartMs + tau_max to exclude the detector start-edge window"
+      );
+    }
+    const stopMarginComparison = compareCanonicalDecimalSums(
+      [parsedStatus.data.Tstop, parsedStatus.data.tau_max],
+      [opts.sourceConfiguration.simulationStopMs]
+    );
+    if (stopMarginComparison === null || stopMarginComparison > 0) {
+      return error(
+        "Tstop + tau_max must be at most sourceConfiguration.simulationStopMs to exclude the detector stop-edge window"
+      );
+    }
     const halfBinRatio = parsedStatus.data.tau_max / parsedStatus.data.delta_tau;
     const halfBinCount = Math.round(halfBinRatio);
     const halfBinTolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(halfBinRatio), Math.abs(halfBinCount));
@@ -2433,6 +2525,7 @@ var NEST_TOPOLOGY_LIMITS = Object.freeze({
   maxMatrixCells: PARAM_LIMITS.maxSamples,
   maxDegreeBins: PARAM_LIMITS.maxSamples,
   maxDelayBins: PARAM_LIMITS.maxSamples,
+  maxWeightBins: PARAM_LIMITS.maxSamples,
   maxSpatialNodes: PARAM_LIMITS.maxSpatialObjects
 });
 var FLOAT32_MAX3 = 34028234663852886e22;
@@ -2655,6 +2748,15 @@ var DelayDistributionOptionsSchema = z6.object({
   windowStopMs: finite2.positive(),
   normalization: z6.enum(["count", "probability", "probability_density"])
 }).strict();
+var WeightHistogramOptionsSchema = z6.object({
+  ...CommonConnectionOptionsShape,
+  synapseModelSemantics: boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
+  weightUnits: displayText2(80),
+  binWidth: finite2.positive(),
+  windowStart: finite2,
+  windowStop: finite2,
+  normalization: z6.enum(["count", "probability"])
+}).strict();
 var SpatialMapOptionsSchema = z6.object({
   nodeIds: z6.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes),
   coordinateUnits: displayText2(80),
@@ -2875,10 +2977,29 @@ function matrixCommon(context) {
     snapshot_scope: context.snapshotScope
   };
 }
+function rejectTargetRankLocalForCompleteView(context, output) {
+  return context.snapshotScope.kind === "mpi_target_rank_local" ? error2(
+    `${output} rejects snapshotScope.kind "mpi_target_rank_local": without an exact rank-owned targetIds universe and complete cross-rank edge authority, zero/absence claims are not recoverable`
+  ) : void 0;
+}
+function rejectMultipleObservedMeasurementModels(snapshot, output, measurement) {
+  if (snapshot.sources.length === 0 || snapshot.synapse_models === void 0) {
+    return void 0;
+  }
+  const models = [...new Set(snapshot.synapse_models)].sort();
+  return models.length > 1 ? error2(
+    `${output} rejects ${measurement} measurements from multiple observed synapse models (${models.map((model) => JSON.stringify(model)).join(", ")}): the current contract has no bound compatibility or unit-conversion authority for its global ${measurement} units claim`
+  ) : void 0;
+}
 function synapseCollectionToAdjacencyMatrixParams(input, options) {
   try {
     const context = parseConnectionContext(input, options, MatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      "adjacency matrix"
+    );
+    if (scopeError) return scopeError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -2905,6 +3026,11 @@ function synapseCollectionToWeightMatrixParams(input, options) {
   try {
     const context = parseConnectionContext(input, options, WeightMatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      "weight matrix"
+    );
+    if (scopeError) return scopeError;
     const weights = context.params.snapshot.weights;
     if (!weights) return error2("weight: weight matrix requires a complete weight channel");
     const opts = context.params.options;
@@ -2914,6 +3040,12 @@ function synapseCollectionToWeightMatrixParams(input, options) {
       ["weight"]
     );
     if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "weight matrix",
+      "weight"
+    );
+    if (modelError) return modelError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -2961,6 +3093,11 @@ function synapseCollectionToDelayMatrixParams(input, options) {
   try {
     const context = parseConnectionContext(input, options, DelayMatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      "delay matrix"
+    );
+    if (scopeError) return scopeError;
     const delays = context.params.snapshot.delays_ms;
     if (!delays) return error2("delay: delay matrix requires a complete delay channel");
     const opts = context.params.options;
@@ -2970,6 +3107,12 @@ function synapseCollectionToDelayMatrixParams(input, options) {
       ["delay"]
     );
     if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "delay matrix",
+      "delay"
+    );
+    if (modelError) return modelError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -3017,9 +3160,11 @@ function degreeDistribution(input, options, direction) {
   const context = parseConnectionContext(input, options, DegreeOptionsSchema);
   if (!context.ok) return context;
   const opts = context.params.options;
-  if (direction === "out" && context.params.snapshotScope.kind === "mpi_target_rank_local") {
-    return error2("out-degree cannot be recovered from a target-rank-local SynapseCollection snapshot");
-  }
+  const scopeError = rejectTargetRankLocalForCompleteView(
+    context.params,
+    `${direction}-degree distribution`
+  );
+  if (scopeError) return scopeError;
   const universe = direction === "in" ? context.params.targetIds : context.params.sourceIds;
   const degreeByNode = new Map(universe.map((id) => [id, 0]));
   const endpoints = direction === "in" ? context.params.snapshot.targets : context.params.snapshot.sources;
@@ -3058,16 +3203,20 @@ function synapseCollectionToInDegreeDistributionParams(input, options) {
 function synapseCollectionToOutDegreeDistributionParams(input, options) {
   return degreeDistribution(input, options, "out");
 }
-function exactBinCount2(start, stop, width) {
-  if (!(stop > start)) return error2("delay window: stop must be greater than start");
+function exactBinCount2(start, stop, width, measurement, maximum) {
+  if (!(stop > start)) {
+    return error2(`${measurement} window: stop must be greater than start`);
+  }
   const ratio = (stop - start) / width;
   const count = Math.round(ratio);
   const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE + HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE * Math.max(Math.abs(ratio), Math.abs(count));
   if (!Number.isSafeInteger(count) || count < 1 || !Number.isFinite(ratio) || Math.abs(ratio - count) > tolerance) {
-    return error2("delay window: duration must be an exact positive integer multiple of bin width");
+    return error2(
+      `${measurement} window: duration must be an exact positive integer multiple of bin width`
+    );
   }
-  if (count > NEST_TOPOLOGY_LIMITS.maxDelayBins) {
-    return error2(`delay distribution exceeds ${NEST_TOPOLOGY_LIMITS.maxDelayBins} bins`);
+  if (count > maximum) {
+    return error2(`${measurement} distribution exceeds ${maximum} bins`);
   }
   return { ok: true, count };
 }
@@ -3107,7 +3256,19 @@ function synapseCollectionToDelayDistributionParams(input, options) {
       ["delay"]
     );
     if (!semantics.ok) return semantics;
-    const geometry = exactBinCount2(opts.windowStartMs, opts.windowStopMs, opts.binWidthMs);
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "delay distribution",
+      "delay"
+    );
+    if (modelError) return modelError;
+    const geometry = exactBinCount2(
+      opts.windowStartMs,
+      opts.windowStopMs,
+      opts.binWidthMs,
+      "delay",
+      NEST_TOPOLOGY_LIMITS.maxDelayBins
+    );
     if (!geometry.ok) return geometry;
     if (delays.length === 0 && opts.normalization !== "count") {
       return error2("an empty delay snapshot cannot be probability-normalized");
@@ -3162,6 +3323,84 @@ function synapseCollectionToDelayDistributionParams(input, options) {
     });
   } catch {
     return error2("delay distribution transform could not safely inspect its inputs");
+  }
+}
+function synapseCollectionToWeightHistogramParams(input, options) {
+  try {
+    const context = parseConnectionContext(input, options, WeightHistogramOptionsSchema);
+    if (!context.ok) return context;
+    const weights = context.params.snapshot.weights;
+    if (!weights) return error2("weight: weight histogram requires a complete weight channel");
+    const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ["weight"]
+    );
+    if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      "weight histogram",
+      "weight"
+    );
+    if (modelError) return modelError;
+    const geometry = exactBinCount2(
+      opts.windowStart,
+      opts.windowStop,
+      opts.binWidth,
+      "weight",
+      NEST_TOPOLOGY_LIMITS.maxWeightBins
+    );
+    if (!geometry.ok) return geometry;
+    if (weights.length === 0 && opts.normalization !== "count") {
+      return error2("an empty weight snapshot cannot be probability-normalized");
+    }
+    const counts = new Array(geometry.count).fill(0);
+    for (let index = 0; index < weights.length; index++) {
+      const bin = halfOpenBinIndex(
+        weights[index],
+        opts.windowStart,
+        opts.windowStop,
+        opts.binWidth,
+        geometry.count
+      );
+      if (bin === BIN_INDEX_INDETERMINATE2) {
+        return error2(
+          `weight.${index}: binary64 arithmetic cannot resolve a half-open bin boundary without guessing`
+        );
+      }
+      if (bin === BIN_INDEX_OUTSIDE2) {
+        return error2(
+          `weight.${index}: ${weights[index]} ${opts.weightUnits} lies outside [${opts.windowStart},${opts.windowStop})`
+        );
+      }
+      counts[bin] += 1;
+    }
+    const values = counts.map(
+      (count) => opts.normalization === "count" ? count : count / weights.length
+    );
+    return validateOutput2(WeightHistogramParamsSchema, {
+      bin_centers: Array.from(
+        { length: geometry.count },
+        (_, index) => opts.windowStart + (index + 0.5) * opts.binWidth
+      ),
+      weight_counts: counts,
+      values,
+      bin_width: opts.binWidth,
+      window_start: opts.windowStart,
+      window_stop: opts.windowStop,
+      weight_units: opts.weightUnits,
+      normalization: opts.normalization,
+      value_units: opts.normalization === "count" ? "count" : "probability",
+      aggregation: "each_connection",
+      binning: "left_closed_right_open",
+      sample_policy: "complete",
+      connection_count: weights.length,
+      snapshot_time_ms: context.params.snapshotTimeMs,
+      snapshot_scope: context.params.snapshotScope
+    });
+  } catch {
+    return error2("weight histogram transform could not safely inspect its inputs");
   }
 }
 var PositionListSchema = z6.union([
@@ -3262,6 +3501,7 @@ export {
   synapseCollectionToInDegreeDistributionParams,
   synapseCollectionToOutDegreeDistributionParams,
   synapseCollectionToDelayDistributionParams,
+  synapseCollectionToWeightHistogramParams,
   getPositionToSpatialMap2DParams
 };
-//# sourceMappingURL=chunk-V6SUE45Z.js.map
+//# sourceMappingURL=chunk-FV7EIRJ4.js.map

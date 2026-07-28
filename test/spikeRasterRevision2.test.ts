@@ -43,14 +43,14 @@ function decodeXml(value: string): string {
 }
 
 describe('spike-raster revision 2 clock and render semantics', () => {
-  it('publishes coordinated skill and renderer revision 4 identities', () => {
+  it('publishes skill revision 4 and renderer revision 5 identities', () => {
     expect(contract.revision).toBe(4);
-    expect(contract.renderer).toEqual({ id: 'figure.spike_raster', revision: 4 });
+    expect(contract.renderer).toEqual({ id: 'figure.spike_raster', revision: 5 });
 
     const current = example();
     current.skill.revision = 4;
     expect(validateRequestValue(current).ok).toBe(true);
-    expect((built(current).artifact.render as any).rendererRevision).toBe(4);
+    expect((built(current).artifact.render as any).rendererRevision).toBe(5);
 
     const stale = example();
     stale.skill.revision = 3;

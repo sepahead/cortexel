@@ -83,6 +83,9 @@ describe('end-to-end render — population rate', () => {
     expect(result.svg).not.toContain(`aria-labelledby="${titleId} ${descriptionId}"`);
     expect(result.svg).toContain(`<title id="${titleId}">`);
     expect(result.svg).toContain(`<desc id="${descriptionId}">`);
+    for (const referencedId of [titleId, descriptionId]) {
+      expect(result.svg.match(new RegExp(`\\bid="${referencedId}"`, 'gu'))).toHaveLength(1);
+    }
   });
 
   it('rotates bounded left and right axis labels wholly within the SVG viewport', () => {

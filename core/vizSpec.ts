@@ -23,7 +23,7 @@ import {
  *  skill-aware acceptance rules change in a way a host may need to migrate.
  *  A stored payload MAY omit `specVersion` for legacy compatibility; when
  *  stamped, the runtime enforces an exact match. */
-export const CORTEXEL_SPEC_VERSION = '1.4.0';
+export const CORTEXEL_SPEC_VERSION = '1.5.0';
 
 /** Resource ceilings for the plain-JSON envelope. Per-skill schemas impose
  *  tighter array limits where the renderer has a smaller practical budget. */

@@ -106,7 +106,7 @@ function exactFloorBinary64ProductOracle(value: number, factor: number): number 
 }
 
 describe('response-curve derivation and rendering', () => {
-  it('publishes and enforces skill and renderer revision 4 identities', () => {
+  it('publishes skill revision 4 and renderer revision 5 identities', () => {
     const contract = JSON.parse(readFileSync(
       path.resolve(import.meta.dirname, '../contract/skills/neuro.response_curve.v1.json'),
       'utf8',
@@ -120,7 +120,7 @@ describe('response-curve derivation and rendering', () => {
     );
 
     expect(contract.revision).toBe(4);
-    expect(contract.renderer).toEqual({ id: 'figure.response_curve', revision: 4 });
+    expect(contract.renderer).toEqual({ id: 'figure.response_curve', revision: 5 });
     expect(registeredRenderer?.revision).toBe(contract.renderer.revision);
 
     const unpinned = validateRequestValue(examples()[0]);
@@ -131,7 +131,7 @@ describe('response-curve derivation and rendering', () => {
     pinnedCurrent.skill.revision = 4;
     expect(validateRequestValue(pinnedCurrent).ok).toBe(true);
     expect((built(pinnedCurrent).artifact.render as { rendererRevision: number }).rendererRevision)
-      .toBe(4);
+      .toBe(5);
 
     const pinnedPrior = structuredClone(examples()[0]);
     pinnedPrior.skill.revision = 3;
@@ -2114,6 +2114,19 @@ describe('response-curve derivation and rendering', () => {
     expect(result.plan.panels[0].noData).toEqual({
       reason: 'no declared condition has a usable response estimate',
     });
+    const summaryId = `${result.plan.figureId}-desc`;
+    const detailsId = `${result.plan.figureId}-details`;
+    expect(result.svg).toContain(`aria-describedby="${summaryId} ${detailsId}"`);
+    expect(result.svg).toContain(
+      `<desc id="${summaryId}">${result.plan.accessibility.summary}</desc>`,
+    );
+    const details = result.svg.match(
+      new RegExp(`<desc id="${detailsId}">([\\s\\S]*?)</desc>`, 'u'),
+    )?.[1] ?? '';
+    for (const panelStatement of result.plan.accessibility.panelSummaries) {
+      expect(details).toContain(panelStatement);
+    }
+    expect(details).toContain('Panel main: No data — no declared condition has a usable response estimate');
     expect(aggregateRows(result).map((row) => row[5])).toEqual([null, null, null]);
     expect(result.disclosures.find((entry) => entry.id === 'MISSING_VALUES_PRESENT')?.text)
       .toContain('Missing observations: 6');

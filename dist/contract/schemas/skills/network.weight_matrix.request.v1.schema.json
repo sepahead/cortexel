@@ -269,7 +269,7 @@
           "oneOf": [
             {
               "type": "object",
-              "description": "An ordered-magnitude map (perceptually uniform, monotonic lightness). The correct choice whenever the weight domain has no meaningful neutral point — for example a strictly non-negative conductance weight.",
+              "description": "An ordered-magnitude map. The correct choice whenever the weight domain has no meaningful neutral point — for example a strictly non-negative conductance weight. The palette registry records source-described perceptual properties separately; this discriminator does not establish perceptual or accessibility conformance.",
               "properties": {
                 "class": {
                   "const": "sequential"

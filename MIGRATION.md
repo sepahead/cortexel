@@ -1,5 +1,29 @@
 # Migration
 
+## Legacy VizSpec 1.4.0 to 1.5.0
+
+The pre-1.0 `VizSpec` line now stamps `specVersion: "1.5.0"` because its
+skill-aware acceptance rules changed. `nest.phase_plane` requires
+`derivative_time_unit: "ms" | "s"`, exact derivative-unit labels of
+`axis_unit/time_unit`, two strictly increasing coordinates per axis, and a
+non-underflowing one-division per-ms conversion. Literal connection matrices and
+both degree-distribution skills now refuse `mpi_target_rank_local`; the current
+contract cannot establish the exact rank-owned target universe and cross-rank
+edge authority needed for honest absence and zero-degree claims.
+
+The coordinated legacy identities are skill axis `1.8.0`, manifest and portable
+constraint language `11`, and spec `1.5.0`. The new raw correlogram and weight
+histogram transform metadata describe construction helpers, not receipts:
+serialized population labels, source configuration, and histogram raw-entry
+mapping retain their documented external-authority limits.
+
+A payload stamped `1.4.0` is not silently reinterpreted. Re-author from the
+original source through `buildVizSpec` or `buildHostRendererInvocation`; for a
+phase plane, explicitly recover the derivative time denominator from the model
+calculation rather than guessing from display labels. Do not edit or remove an
+old stamp to force acceptance. Retain archived development payloads with the
+runtime/manifest that originally accepted them.
+
 ## Legacy VizSpec 1.3.0 to 1.4.0
 
 The pre-1.0 `VizSpec` line now stamps `specVersion: "1.4.0"`. This version binds

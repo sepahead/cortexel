@@ -16,6 +16,13 @@
 > [`docs/SCOPE.md`](./docs/SCOPE.md). The two surfaces coexist during the migration;
 > [`docs/KNOWN_LIMITATIONS.md`](./docs/KNOWN_LIMITATIONS.md) tracks scientific and
 > release evidence that packaging alone does not establish.
+>
+> Do not transfer evidence between these surfaces. Stable-contract schemas,
+> OutputAuthority checks, receipts, and release-gate statuses apply only to the
+> named `FigureRequestV1` skill revision. The legacy `VizSpec` gates and manifest
+> v11 remain a separate migration surface: their structural checks do not inherit
+> stable-contract scientific evidence, and a legacy raw transform does not certify
+> a corresponding stable adapter.
 
 You hold the output of a neural simulation — a NEST device dump, arrays of spike
 times, a cross-paper corpus graph — and you want an **honest, render-ready figure**
@@ -217,6 +224,13 @@ Pass the `context` returned by `mapCorpusKnowledgeGraph` to
 `KnowledgeGraphLegend` so the graph id, source, immutable snapshot id, scope and
 generation time remain available in the DOM alongside the visual encoding.
 
+Legacy regressions bind a rendered honesty caption to its figure group and keep a
+singleton plasticity sample and zero-derivative phase-plane samples visible. Those
+are narrow DOM/mark checks, not whole-figure WCAG, grayscale,
+colour-vision-deficiency, browser, or assistive-technology conformance evidence.
+Host-page semantics remain the host's responsibility, and the required DOM
+companions above are still necessary.
+
 `VizSpecRenderer` is strict by default: a missing `skill` is an error, so deleting
 the discriminator cannot downgrade validation. Only a trusted host-authored
 showcase may opt into envelope-only rendering with `trustedEnvelope`; never use
@@ -280,7 +294,7 @@ JSON Schema per skill); the table is a quick reference.
 | `nest.spatial_map_2d` | get_position | spatial-map-2d | `nodes, coordinate_units, extent, center, edge_wrap, position_scope, marker_size` | node_ids, spatial_units, extent, position_scope |
 | `nest.spatial_3d` | get_position | network-topology | `objects, coordinate_units` | extent, spatial_units, projection_sample_policy |
 | `nest.plasticity_dynamics` | weight_recorder | stdp | `times_ms, weights, weight_units` | synapse_model, weight_units |
-| `nest.phase_plane` | computed | phase-plane | `grid, derivatives, axis_units, derivative_units, axis_order, flattening` | state_variables, derivation_method, model_context, fixed_parameters |
+| `nest.phase_plane` | computed | phase-plane | `grid, derivatives, axis_units, derivative_units, derivative_time_unit, axis_order, flattening` | state_variables, derivation_method, model_context, fixed_parameters |
 | `nest.correlogram` | correlation_detector | correlogram | `lags_ms, values, bin_width_ms, tau_max_ms, counting_start_ms, counting_stop_ms, pair, lag_convention, binning, zero_lag_policy, statistic` | detector_id, reference_population, target_population, bin_ms, correlation_normalization, correlation_units, lag_convention, binning_policy |
 | `nest.astrocyte_dynamics` ⚠ | multimeter | voltage-trace | `times_ms, ca_trace, units` | recorded_variable, units, time_units, sampling_interval |
 | `corpus.knowledge_graph` ⚠ | corpus | knowledge-graph-3d | `graph_id, graph_source, graph_snapshot_id, graph_scope, generated_at, nodes, edges` | graph_source, graph_snapshot_id, graph_scope, identity_advisory |
@@ -355,7 +369,19 @@ lag axis, bin width, τ range, counting window, pair orientation, zero-lag polic
 binning policy, statistic kind and units are all checked. Positive lag always
 means the target follows the reference. Raw counts, weighted sums, pair rates and
 Pearson coefficients have distinct discriminated domains and must never be
-silently interchanged.
+silently interchanged. These checks establish internal envelope consistency, not
+the identity of the two external detector pools. The raw
+`correlationDetectorToCorrelogramParams` transform additionally requires the
+documented receptor-port order, simulation resolution and simulation bounds; it
+checks that `delta_tau` is an exact positive odd resolution multiple and that the
+counting window retains the required `tau_max` margins. Those options are
+caller-supplied source configuration, not independently authenticated evidence,
+and the serialized params retain neither the configuration nor a transform
+receipt. The two population labels therefore remain contract-disclosed external
+claims. `excluded_self_pairs` likewise remains a caller/source claim; the raw
+transform emits only `included`. NEST documents the port-selected pools and the
+resolution / edge-window conditions in its
+[`correlation_detector` reference](https://nest-simulator.readthedocs.io/en/v3.2/models/correlation_detector.html).
 
 Connection snapshots are view-neutral evidence: the same SynapseCollection may
 feed a graph, three matrix skills, two degree skills, a weight histogram, or a
@@ -369,15 +395,51 @@ never guessed.
 
 Every new connection view carries `snapshot_time_ms` and typed snapshot scope.
 `mpi_target_rank_local` means only connections whose targets are owned by that
-rank are present: it may support a local in-degree view, but the out-degree gate
-rejects it because outgoing edges can terminate on other ranks. Use
-`mpi_all_ranks_merged` only after actually merging every rank. Degree distributions
-include the declared node universe, so degree-zero nodes cannot disappear, and
-the gate checks both the node-count sum and degree-weighted connection total.
-Weight histograms likewise preserve one raw integer `weight_counts` value per
-bin, the exact selected `connection_count`, complete-snapshot scope, and
-one-entry/one-observation semantics; displayed counts or probabilities are
-recovered from those integers rather than accepted as free-floating values.
+rank are present. The current adjacency/weight/delay-matrix and in/out-degree raw
+transforms and strict params gates reject that scope because their inputs do not bind an exact
+rank-owned target universe plus complete cross-rank edge authority; otherwise a
+missing edge or zero degree could be false. NEST likewise documents that
+`GetConnections()` returns only connections whose targets are on the executing
+MPI process in its
+[`GetConnections` API](https://nest-simulator.readthedocs.io/en/main/ref_material/pynest_api/nest.lib.hl_api_connections.html).
+Use `mpi_all_ranks_merged` only after actually merging every rank. Under an
+accepted complete scope, degree distributions include the declared node universe,
+so degree-zero nodes cannot disappear, and the gate checks both the node-count
+sum and degree-weighted connection total.
+
+Hand-authored legacy matrix cells are checked for schema, axis, sparsity,
+cardinality, numeric domains, and their declared aggregation kind, but the strict
+gate does not receive raw per-connection measurements and therefore cannot
+independently rederive their numeric aggregates. Use the raw SynapseCollection
+transforms when that derivation must be performed by Cortexel. Those transforms
+refuse a nonempty weight or delay aggregation spanning multiple observed synapse
+models: the current contract binds one global measurement unit but no cross-model
+compatibility or unit-conversion authority. Split models before transforming
+unless a future contract explicitly binds that authority.
+
+The legacy `synapseCollectionToWeightHistogramParams` transform derives bounded
+left-closed/right-open bins from a raw weight/model channel complete for the
+declared snapshot scope, preserves
+one integer observation per selected connection, refuses out-of-window values and
+mixed observed models, and revalidates the emitted params. A standalone serialized
+histogram preserves only `weight_counts`, `connection_count`, and normalization
+relations; it carries no raw-entry derivation receipt. Its
+one-entry/one-observation provenance therefore remains a contract-disclosed
+external claim even when a caller locally obtained it from the transform.
+
+The legacy phase-plane gate requires two distinct state-variable axes with at
+least two strictly increasing finite coordinates each, matching
+axis/derivative/unit key sets, and derivative-array cardinality equal to the full
+Cartesian grid. It also binds both derivative-unit declarations to their
+corresponding state-axis units and one common explicit time denominator. That
+structural dimensional relation does not authenticate the caller's unit claims or
+the model computation, and no integration step is inferred. Per-second
+components undergo one binary64 division by 1000 before plotting; a nonzero value
+that would underflow to zero is rejected. This fixes one numeric basis but does
+not claim that independently rounded ms/s source arrays are universally
+byte-identical. Zero-derivative
+samples are rendered explicitly and disclosed as samples, not certified
+equilibria, nullclines, or trajectories.
 
 `nest.spatial_map_2d` is only measured GetPosition data: identified x/y positions,
 units, center, extent, edge-wrap flag and completeness scope. It does not contain
@@ -443,8 +505,12 @@ For deterministic derived analyses, use `spikeRecorderToIsiParams`,
 NEST/NumPy-style arrays. They accept nonchronological recorder output, sort only
 within the scientific grouping that owns order, use exact half-open bins, preserve
 integer source counts, reject overlapping population selections, and never invoke
-accessors. Pass their successful `params` result to `buildVizSpec`; the transform
-does not invent provenance claims.
+accessors. The correlogram transform additionally requires
+`sourceConfiguration` with simulation resolution/bounds and literal receptor
+ports `0`/`1`; it validates their internal relation to detector status but cannot
+authenticate the caller-supplied configuration or population labels. Pass a
+successful `params` result to `buildVizSpec`; the transform does not invent
+provenance claims.
 
 For connection/spatial figures, use `normalizeSynapseCollectionSnapshot`,
 `synapseCollectionToConnectionGraphParams`,
@@ -453,7 +519,8 @@ For connection/spatial figures, use `normalizeSynapseCollectionSnapshot`,
 `synapseCollectionToDelayMatrixParams`,
 `synapseCollectionToInDegreeDistributionParams`,
 `synapseCollectionToOutDegreeDistributionParams`,
-`synapseCollectionToDelayDistributionParams`, and
+`synapseCollectionToDelayDistributionParams`,
+`synapseCollectionToWeightHistogramParams`, and
 `getPositionToSpatialMap2DParams`. SynapseCollection input may use official
 singular keys/scalars or canonical plural arrays, but never a mixture or implicit
 scalar broadcast. The connection graph requires complete parallel
@@ -461,9 +528,14 @@ scalar broadcast. The connection graph requires complete parallel
 as the SceneData adapter when it carries weight or delay; its endpoint-only path
 does not. Weight-matrix, delay-matrix, and delay-distribution transforms always
 require the corresponding measurement channel, complete model rows, and
-semantics. Adjacency and degree transforms do not require them because they
-consume endpoints only. Every connection transform requires explicit
-source/target universes, time and scope.
+semantics. A nonempty transform with more than one observed synapse model is
+refused for these measured aggregates because the legacy contract has no bound
+cross-model compatibility or unit-conversion authority. Adjacency and degree
+transforms do not require measurement semantics because they consume endpoints
+only. Adjacency/weight/delay matrices and both degree transforms also reject
+`mpi_target_rank_local` until an exact rank-owned target universe and sufficient
+cross-rank edge authority can be bound. Every connection transform requires
+explicit source/target universes, time and scope.
 For example:
 
 ```ts
@@ -515,7 +587,7 @@ tuple id; indistinguishable legacy duplicates fail instead of collapsing.
 the whole skill axis (ids, scenes, required params + provenance keys, renderer
 routes, worked examples) that carries a JSON Schema (`paramsJsonSchema`) for all
 **26 skills** plus portable `paramConstraints` for cross-field rules JSON Schema
-cannot express. Manifest v10 also publishes each skill's `deprecation`,
+cannot express. Manifest v11 also publishes each skill's `deprecation`,
 `routerEligibility` and raw-output `transform` metadata, plus the authoritative
 top-level `routingDiscriminators` family/shape map. It also contains the versioned constraint language, envelope
 schemas/default order, exact-JSON budgets and duplicate-member precondition,

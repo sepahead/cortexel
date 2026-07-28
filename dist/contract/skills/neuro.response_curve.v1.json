@@ -904,7 +904,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.response_curve", "revision": 4 },
+  "renderer": { "id": "figure.response_curve", "revision": 5 },
 
   "budgets": {
     "maxObservations": 20000,

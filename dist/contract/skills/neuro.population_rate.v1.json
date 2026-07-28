@@ -195,7 +195,7 @@
     { "id": "uncertainty.supported_variant" }
   ],
 
-  "renderer": { "id": "figure.population_rate", "revision": 4 },
+  "renderer": { "id": "figure.population_rate", "revision": 5 },
 
   "budgets": {
     "maxObservations": 2000000,

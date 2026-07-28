@@ -14,6 +14,7 @@ import {
   PositionScopeSchema,
   SnapshotScopeSchema,
   SpatialMap2DParamsSchema,
+  WeightHistogramParamsSchema,
   WeightMatrixParamsSchema,
   type AdjacencyMatrixParams,
   type ConnectionGraphParams,
@@ -24,6 +25,7 @@ import {
   type PositionScope,
   type SnapshotScope,
   type SpatialMap2DParams,
+  type WeightHistogramParams,
   type WeightMatrixParams,
 } from '../skills/params';
 import { NEST_INPUT_LIMITS } from './shapes';
@@ -49,6 +51,7 @@ export const NEST_TOPOLOGY_LIMITS = Object.freeze({
   maxMatrixCells: PARAM_LIMITS.maxSamples,
   maxDegreeBins: PARAM_LIMITS.maxSamples,
   maxDelayBins: PARAM_LIMITS.maxSamples,
+  maxWeightBins: PARAM_LIMITS.maxSamples,
   maxSpatialNodes: PARAM_LIMITS.maxSpatialObjects,
 });
 
@@ -344,6 +347,18 @@ const DelayDistributionOptionsSchema = z
     normalization: z.enum(['count', 'probability', 'probability_density']),
   })
   .strict();
+const WeightHistogramOptionsSchema = z
+  .object({
+    ...CommonConnectionOptionsShape,
+    synapseModelSemantics:
+      boundedSynapseModelMeasurementSemanticsSchema(NEST_TOPOLOGY_LIMITS.maxConnections),
+    weightUnits: displayText(80),
+    binWidth: finite.positive(),
+    windowStart: finite,
+    windowStop: finite,
+    normalization: z.enum(['count', 'probability']),
+  })
+  .strict();
 const SpatialMapOptionsSchema = z
   .object({
     nodeIds: z.array(nodeId).min(1).max(NEST_TOPOLOGY_LIMITS.maxSpatialNodes),
@@ -394,6 +409,15 @@ export interface DelayDistributionOptions extends ConnectionSnapshotOptions {
   windowStartMs: number;
   windowStopMs: number;
   normalization: 'count' | 'probability' | 'probability_density';
+}
+
+export interface WeightHistogramOptions extends ConnectionSnapshotOptions {
+  synapseModelSemantics: readonly SynapseModelMeasurementSemantics[];
+  weightUnits: string;
+  binWidth: number;
+  windowStart: number;
+  windowStop: number;
+  normalization: 'count' | 'probability';
 }
 
 export interface SpatialMap2DOptions {
@@ -695,6 +719,33 @@ function matrixCommon(context: ParsedConnectionContext) {
   };
 }
 
+function rejectTargetRankLocalForCompleteView(
+  context: ParsedConnectionContext,
+  output: string,
+): { ok: false; errors: string[] } | undefined {
+  return context.snapshotScope.kind === 'mpi_target_rank_local'
+    ? error(
+      `${output} rejects snapshotScope.kind "mpi_target_rank_local": without an exact rank-owned targetIds universe and complete cross-rank edge authority, zero/absence claims are not recoverable`,
+    )
+    : undefined;
+}
+
+function rejectMultipleObservedMeasurementModels(
+  snapshot: NormalizedSynapseCollectionSnapshot,
+  output: string,
+  measurement: 'weight' | 'delay',
+): { ok: false; errors: string[] } | undefined {
+  if (snapshot.sources.length === 0 || snapshot.synapse_models === undefined) {
+    return undefined;
+  }
+  const models = [...new Set(snapshot.synapse_models)].sort();
+  return models.length > 1
+    ? error(
+      `${output} rejects ${measurement} measurements from multiple observed synapse models (${models.map((model) => JSON.stringify(model)).join(', ')}): the current contract has no bound compatibility or unit-conversion authority for its global ${measurement} units claim`,
+    )
+    : undefined;
+}
+
 export function synapseCollectionToAdjacencyMatrixParams(
   input: unknown,
   options: ConnectionSnapshotOptions,
@@ -710,6 +761,11 @@ export function synapseCollectionToAdjacencyMatrixParams(
   try {
     const context = parseConnectionContext(input, options, MatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      'adjacency matrix',
+    );
+    if (scopeError) return scopeError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -748,6 +804,11 @@ export function synapseCollectionToWeightMatrixParams(
   try {
     const context = parseConnectionContext(input, options, WeightMatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      'weight matrix',
+    );
+    if (scopeError) return scopeError;
     const weights = context.params.snapshot.weights;
     if (!weights) return error('weight: weight matrix requires a complete weight channel');
     const opts = context.params.options;
@@ -757,6 +818,12 @@ export function synapseCollectionToWeightMatrixParams(
       ['weight'],
     );
     if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      'weight matrix',
+      'weight',
+    );
+    if (modelError) return modelError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -816,6 +883,11 @@ export function synapseCollectionToDelayMatrixParams(
   try {
     const context = parseConnectionContext(input, options, DelayMatrixOptionsSchema);
     if (!context.ok) return context;
+    const scopeError = rejectTargetRankLocalForCompleteView(
+      context.params,
+      'delay matrix',
+    );
+    if (scopeError) return scopeError;
     const delays = context.params.snapshot.delays_ms;
     if (!delays) return error('delay: delay matrix requires a complete delay channel');
     const opts = context.params.options;
@@ -825,6 +897,12 @@ export function synapseCollectionToDelayMatrixParams(
       ['delay'],
     );
     if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      'delay matrix',
+      'delay',
+    );
+    if (modelError) return modelError;
     const buckets = pairBuckets(
       context.params.snapshot,
       context.params.sourceIds,
@@ -877,9 +955,11 @@ function degreeDistribution(
   const context = parseConnectionContext(input, options, DegreeOptionsSchema);
   if (!context.ok) return context;
   const opts = context.params.options;
-  if (direction === 'out' && context.params.snapshotScope.kind === 'mpi_target_rank_local') {
-    return error('out-degree cannot be recovered from a target-rank-local SynapseCollection snapshot');
-  }
+  const scopeError = rejectTargetRankLocalForCompleteView(
+    context.params,
+    `${direction}-degree distribution`,
+  );
+  if (scopeError) return scopeError;
   const universe = direction === 'in' ? context.params.targetIds : context.params.sourceIds;
   const degreeByNode = new Map(universe.map((id) => [id, 0]));
   const endpoints = direction === 'in'
@@ -951,8 +1031,12 @@ function exactBinCount(
   start: number,
   stop: number,
   width: number,
+  measurement: 'delay' | 'weight',
+  maximum: number,
 ): { ok: true; count: number } | { ok: false; errors: string[] } {
-  if (!(stop > start)) return error('delay window: stop must be greater than start');
+  if (!(stop > start)) {
+    return error(`${measurement} window: stop must be greater than start`);
+  }
   const ratio = (stop - start) / width;
   const count = Math.round(ratio);
   const tolerance = HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE +
@@ -961,10 +1045,12 @@ function exactBinCount(
     !Number.isSafeInteger(count) || count < 1 || !Number.isFinite(ratio) ||
     Math.abs(ratio - count) > tolerance
   ) {
-    return error('delay window: duration must be an exact positive integer multiple of bin width');
+    return error(
+      `${measurement} window: duration must be an exact positive integer multiple of bin width`,
+    );
   }
-  if (count > NEST_TOPOLOGY_LIMITS.maxDelayBins) {
-    return error(`delay distribution exceeds ${NEST_TOPOLOGY_LIMITS.maxDelayBins} bins`);
+  if (count > maximum) {
+    return error(`${measurement} distribution exceeds ${maximum} bins`);
   }
   return { ok: true, count };
 }
@@ -1032,7 +1118,19 @@ export function synapseCollectionToDelayDistributionParams(
       ['delay'],
     );
     if (!semantics.ok) return semantics;
-    const geometry = exactBinCount(opts.windowStartMs, opts.windowStopMs, opts.binWidthMs);
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      'delay distribution',
+      'delay',
+    );
+    if (modelError) return modelError;
+    const geometry = exactBinCount(
+      opts.windowStartMs,
+      opts.windowStopMs,
+      opts.binWidthMs,
+      'delay',
+      NEST_TOPOLOGY_LIMITS.maxDelayBins,
+    );
     if (!geometry.ok) return geometry;
     if (delays.length === 0 && opts.normalization !== 'count') {
       return error('an empty delay snapshot cannot be probability-normalized');
@@ -1098,6 +1196,101 @@ export function synapseCollectionToDelayDistributionParams(
     });
   } catch {
     return error('delay distribution transform could not safely inspect its inputs');
+  }
+}
+
+/**
+ * Derive a legacy weight histogram complete for its declared snapshot scope from
+ * one raw measurement per selected SynapseCollection entry. No observation is
+ * clipped or discarded.
+ */
+export function synapseCollectionToWeightHistogramParams(
+  input: unknown,
+  options: WeightHistogramOptions,
+): NestTopologyResult<WeightHistogramParams>;
+export function synapseCollectionToWeightHistogramParams(
+  input: unknown,
+  options: unknown,
+): NestTopologyResult<WeightHistogramParams>;
+export function synapseCollectionToWeightHistogramParams(
+  input: unknown,
+  options: unknown,
+): NestTopologyResult<WeightHistogramParams> {
+  try {
+    const context = parseConnectionContext(input, options, WeightHistogramOptionsSchema);
+    if (!context.ok) return context;
+    const weights = context.params.snapshot.weights;
+    if (!weights) return error('weight: weight histogram requires a complete weight channel');
+    const opts = context.params.options;
+    const semantics = validateSynapseModelMeasurementSemantics(
+      context.params.snapshot.synapse_models,
+      opts.synapseModelSemantics,
+      ['weight'],
+    );
+    if (!semantics.ok) return semantics;
+    const modelError = rejectMultipleObservedMeasurementModels(
+      context.params.snapshot,
+      'weight histogram',
+      'weight',
+    );
+    if (modelError) return modelError;
+    const geometry = exactBinCount(
+      opts.windowStart,
+      opts.windowStop,
+      opts.binWidth,
+      'weight',
+      NEST_TOPOLOGY_LIMITS.maxWeightBins,
+    );
+    if (!geometry.ok) return geometry;
+    if (weights.length === 0 && opts.normalization !== 'count') {
+      return error('an empty weight snapshot cannot be probability-normalized');
+    }
+    const counts = new Array<number>(geometry.count).fill(0);
+    for (let index = 0; index < weights.length; index++) {
+      const bin = halfOpenBinIndex(
+        weights[index],
+        opts.windowStart,
+        opts.windowStop,
+        opts.binWidth,
+        geometry.count,
+      );
+      if (bin === BIN_INDEX_INDETERMINATE) {
+        return error(
+          `weight.${index}: binary64 arithmetic cannot resolve a half-open bin boundary without guessing`,
+        );
+      }
+      if (bin === BIN_INDEX_OUTSIDE) {
+        return error(
+          `weight.${index}: ${weights[index]} ${opts.weightUnits} lies outside [${opts.windowStart},${opts.windowStop})`,
+        );
+      }
+      counts[bin] += 1;
+    }
+    const values = counts.map((count) =>
+      opts.normalization === 'count' ? count : count / weights.length
+    );
+    return validateOutput(WeightHistogramParamsSchema, {
+      bin_centers: Array.from(
+        { length: geometry.count },
+        (_, index) => opts.windowStart + (index + 0.5) * opts.binWidth,
+      ),
+      weight_counts: counts,
+      values,
+      bin_width: opts.binWidth,
+      window_start: opts.windowStart,
+      window_stop: opts.windowStop,
+      weight_units: opts.weightUnits,
+      normalization: opts.normalization,
+      value_units: opts.normalization === 'count' ? 'count' : 'probability',
+      aggregation: 'each_connection',
+      binning: 'left_closed_right_open',
+      sample_policy: 'complete',
+      connection_count: weights.length,
+      snapshot_time_ms: context.params.snapshotTimeMs,
+      snapshot_scope: context.params.snapshotScope,
+    });
+  } catch {
+    return error('weight histogram transform could not safely inspect its inputs');
   }
 }
 

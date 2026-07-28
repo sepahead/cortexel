@@ -90,7 +90,8 @@ const ALLOWED_PARAM_FIELDS: Readonly<Record<string, readonly string[]>> = Object
   'nest.spatial_3d': ['objects', 'coordinate_units'],
   'nest.plasticity_dynamics': ['times_ms', 'weights', 'weight_units'],
   'nest.phase_plane': [
-    'grid', 'derivatives', 'axis_units', 'derivative_units', 'axis_order', 'flattening',
+    'grid', 'derivatives', 'axis_units', 'derivative_units',
+    'derivative_time_unit', 'axis_order', 'flattening',
   ],
   'nest.correlogram': [
     'lags_ms', 'values', 'bin_width_ms', 'tau_max_ms', 'counting_start_ms',

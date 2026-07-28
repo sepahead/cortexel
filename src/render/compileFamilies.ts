@@ -71,6 +71,9 @@ function accent(themeId: string): string {
 function gridColor(themeId: string): string {
   return (THEMES as Record<string, Record<string, string>>)[themeId]?.grid ?? '#e2e6ea';
 }
+function neutralDataStroke(themeId: string): string {
+  return (THEMES as Record<string, Record<string, string>>)[themeId]?.axis ?? '#3a4046';
+}
 function uncertaintyStroke(themeId: string): string {
   return (THEMES as Record<string, Record<string, string>>)[themeId]?.axis ?? '#3a4046';
 }
@@ -2149,7 +2152,7 @@ export function compileSpatialMapFigure(
           fill: '#00000000',
           authority: { tag: 'decorative_mark' },
         }],
-        stroke: gridColor(context.themeId),
+        stroke: neutralDataStroke(context.themeId),
       }],
     });
   }
@@ -2178,7 +2181,7 @@ export function compileSpatialMapFigure(
           : sequentialColor(colorT)
         : spec.connectionEncoding
           ? accent(context.themeId)
-          : gridColor(context.themeId);
+          : neutralDataStroke(context.themeId);
     const width = spec.connectionEncoding && value !== null &&
       (spec.connectionEncoding.channel === 'width' || spec.connectionEncoding.channel === 'width_and_color')
       ? 1 + 4 * magnitudeT
@@ -3155,7 +3158,7 @@ export function compilePhasePlaneFigure(
         x: origin.x + length * direction.ux / direction.magnitude,
         y: origin.y - length * direction.uy / direction.magnitude,
       };
-      const color = gridColor(context.themeId);
+      const color = neutralDataStroke(context.themeId);
       marks.push({
         type: 'group',
         id: `field-sample-${index}`,
@@ -3203,7 +3206,7 @@ export function compilePhasePlaneFigure(
         )} ${field.magnitudeUnit} maps to at most ${formatNumber(
           field.maxArrowLengthFraction * 100,
         )}% of the shorter plot axis`,
-      color: gridColor(context.themeId),
+      color: neutralDataStroke(context.themeId),
       glyph: 'series',
     });
   }
@@ -3679,7 +3682,7 @@ export function compileGraphFigure(
           : sequentialColor(colorT)
         : spec.edgeEncoding
           ? accent(context.themeId)
-          : gridColor(context.themeId);
+          : neutralDataStroke(context.themeId);
     const width = spec.edgeEncoding && value !== null &&
       (spec.edgeEncoding.channel === 'width' || spec.edgeEncoding.channel === 'width_and_color')
       ? 1 + 4 * magnitudeT

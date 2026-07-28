@@ -1,6 +1,6 @@
 import * as react from 'react';
-export { C as CameraHint, R as RenderSceneArgs, V as VizSpecRenderer, a as VizSpecRendererProps } from '../VizSpecRenderer-C37ba2e-.js';
-import '../hostInvocation-DxxyBttn.js';
+export { C as CameraHint, R as RenderSceneArgs, V as VizSpecRenderer, a as VizSpecRendererProps } from '../VizSpecRenderer-BWkH_3OM.js';
+import '../hostInvocation-DWfbQ71f.js';
 import 'zod';
 import '../colormaps-CZ6XejJa.js';
 

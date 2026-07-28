@@ -11,6 +11,12 @@ The machine-readable state of every release gate is in
 
 ## Scientific evidence
 
+- **Stable FigureRequest evidence and legacy VizSpec checks are separate.**
+  OutputAuthority comparisons, artifacts, evidence-ledger receipts, and a stable
+  skill's `releaseReady` state apply only to the named `FigureRequestV1` revision.
+  They do not certify the pre-1.0 `VizSpec` schemas, manifest v11, React charts, or
+  `core/nest` transforms. Conversely, the existence of a legacy transform does not
+  establish a stable NEST adapter or satisfy a stable skill's external-oracle gate.
 - **No pinned reference environment has been executed.** The independent oracle
   (`reference/`) is scaffolded but not run: NEST, Elephant, Neo, and PyNWB are not
   installed or executed anywhere in this repository. Every skill contract's
@@ -31,7 +37,55 @@ The machine-readable state of every release gate is in
   *Gates: R034, R036–R038, R053.*
 - **Multi-rank NEST topology is not certified.** The MPI scope rules are validated
   against hand vectors and the scope validator; they have not been run against a real
-  multi-rank NEST simulation. *Gates: R040–R045, R050–R051.*
+  multi-rank NEST simulation. In the legacy raw topology boundary, adjacency,
+  weight, and delay matrices plus both degree transforms and their strict params
+  gates now reject
+  `mpi_target_rank_local`: current options bind neither an exact rank-owned target
+  universe nor complete cross-rank edge authority, so absence and zero-degree
+  claims are unrecoverable. That restriction is consistent with NEST's documented
+  rule that
+  [`GetConnections()` returns only connections whose targets are on the executing MPI process](https://nest-simulator.readthedocs.io/en/main/ref_material/pynest_api/nest.lib.hl_api_connections.html).
+  It is a fail-closed limitation, not evidence that merged multi-rank results are
+  correct. *Gates: R040–R045, R050–R051.*
+- **Legacy topology aggregates have bounded but incomplete authority.** Nonempty
+  weight-matrix transforms reject more than one observed synapse model; delay-matrix
+  and delay-distribution transforms do the same. Their one global unit declaration
+  carries no bound cross-model compatibility or conversion rule. Endpoint-only
+  transforms remain model-agnostic where no measurement is aggregated. A
+  hand-authored matrix is checked for its closed shape, axes, sparse-cell rules,
+  counts, domains, and declared aggregation, but the strict gate has no raw
+  per-connection measurements from which to independently rederive each numeric
+  aggregate.
+- **Some legacy detector and histogram claims remain source-authored.** The
+  correlogram gate checks lag geometry, statistic domains, labels, counting-window
+  order, and declared zero-lag policy. Its raw transform requires literal receptor
+  ports `0`/`1`, a simulation resolution and simulation bounds, and checks the
+  exact odd resolution multiple plus both edge-window margins. Those inputs remain
+  caller-supplied configuration: the transform does not independently authenticate
+  external detector-pool identity, and serialized params contain no configuration
+  or transform receipt. Hand-authored `excluded_self_pairs` likewise remains a
+  source claim; the raw transform emits only `included`. NEST documents those
+  port and window semantics in the
+  [`correlation_detector` reference](https://nest-simulator.readthedocs.io/en/v3.2/models/correlation_detector.html).
+  The legacy weight-histogram raw transform now derives one bounded in-window
+  observation per selected connection from a weight/model channel complete for
+  the declared scope and
+  rejects mixed observed models. The serialized schema still contains only
+  aggregate integer counts, normalization, and totals—not a raw-entry receipt—so
+  the one-entry/one-observation provenance remains contract-disclosed external
+  authority.
+- **Legacy phase-plane structure is narrowed, not scientifically certified.** The
+  gate now requires exactly two distinct state axes with at least two strictly
+  increasing finite coordinates each, matching axis/derivative/unit key sets, one
+  derivative pair per Cartesian-grid sample, and derivative units expressed as
+  the corresponding state-axis unit over one common explicit time denominator.
+  Per-second components use one binary64 division by 1000, and a nonzero
+  component that would underflow is rejected; this does not make independently
+  rounded ms/s source representations universally byte-identical. That structural
+  dimension binding does not authenticate the supplied units or model computation
+  and does not infer an integration step. Zero-derivative
+  samples are visible and disclosed as samples, not promoted to certified
+  equilibria; nullclines and trajectories remain outside the claim.
 - **Analog response reductions are not a revision-2 response-curve method.** A scalar
   called “mean voltage”, “peak voltage”, or “mean state variable” is not auditable
   without the exact recorded channel, sender/compartment scope, sampling grid and
@@ -45,15 +99,20 @@ The machine-readable state of every release gate is in
 - **Accessibility conformance is not established.** Both SVG paths now reference
   `<title>` as the accessible name and `<desc>` as a separate description. Normative
   left/right axis labels are rotated around deterministic bounded pivots with bounded
-  serialized text lengths. Automated regressions establish those ARIA references and
-  headless SVG geometry only; they do not establish browser or assistive-technology
-  behavior. Registered/legacy palettes still contain role/surface pairs below their
-  stated contrast target; several
-  multi-series, matrix-sign, and phase-plane distinctions remain color-only; and
-  the legacy React surface lacks exact paginated DOM rows for ten of nineteen
-  supported skills. The new FigureRequest tables and mandatory disclosure footer
-  remain complete, but neither they nor existing unit tests establish WCAG
-  conformance. *Gates: R074–R079.*
+  serialized text lengths. Automated regressions establish those ARIA references,
+  exact named token pairs, selected owned-mark contrast conditions, and headless SVG
+  geometry only; they do not establish browser or assistive-technology behavior.
+  Uniqueness of categorical dash/marker tuples is structural evidence, not proof of
+  perceptual effectiveness in grayscale or under a colour-vision deficiency.
+  The legacy React path now associates its honesty caption with the containing
+  figure group and has visible-mark regressions for singleton plasticity and
+  zero-derivative phase samples. Those fixes likewise do not establish host-page,
+  focus-order, browser, assistive-technology, CVD, grayscale, or whole-figure WCAG
+  conformance. Several multi-series and matrix-sign distinctions remain
+  color-dependent, and the legacy React surface lacks exact paginated DOM rows for
+  ten of nineteen supported skills. The new FigureRequest tables and mandatory
+  disclosure footer remain complete, but broader DOM-companion and host integration
+  behavior remains uncertified. *Gates: R074–R079.*
 - **Digest-bound complete sidecars are not implemented.** The library returns an exact
   table for accepted figures, but the artifact currently binds only the SVG output; a
   CLI-written CSV was not a substitute for a library-owned canonical sidecar and has
@@ -129,11 +188,10 @@ The machine-readable state of every release gate is in
   points-with-guide, trajectory, graph). This is a different review surface from the
   one-compiler-per-contract gate and has not earned that gate.
 - **The visual system is functional, not yet publication-tuned.** Covered smoke examples
-  render with a single accent colour and fixed layout; that statement does not certify
-  their scientific derivations. The full versioned palette application (per-series
-  Okabe-Ito tuples, perceptual colour maps for matrices,
-  uncertainty bands), legends, and print/grayscale themes are specified in
-  `contract/registries/palettes.v1.json` but not yet fully applied by the compilers.
+  use a fixed layout, and some families apply categorical colour/dash/marker tuples;
+  those facts do not certify their scientific derivations or perceptual effectiveness.
+  Perceptual matrix colour maps, uncertainty bands, legends, and print/grayscale
+  behavior remain incomplete or uncertified.
   *Gates: R076–R077, R082–R083.*
 - **Accessibility summaries are exact source-template materializations, but their
   effectiveness is not certified.** Family compilers and request-only evaluators derive
@@ -292,13 +350,16 @@ The machine-readable state of every release gate is in
   ordinary path, the live wrapper group leader publishes the target result and
   self-sweeps its group; timeout, output overflow, and handled `TERM`/`INT`/`HUP`
   cancellation are also signaled only while that leader remains live. Cortexel does
-  not re-address the PGID after the leader is reaped, because POSIX provides no
-  portable closure receipt for a reusable numeric process-group id. These anchored
+  not re-address the PGID on the ordinary wrapper/supervisor path after the leader is
+  reaped, because POSIX provides no portable closure receipt for a reusable numeric
+  process-group id. If the supervisor exits abnormally after publication, the outer
+  caller makes one best-effort numeric-PGID fallback after leader identity may no
+  longer be pinned; that fallback retains a documented reuse race. These anchored
   sweeps cover members that retain the caller's signal authority, but same-UID
   signaling, deliberate re-grouping, a credential/security-label transition that
-  removes signal authority, the reuse race before an abnormal numeric-PGID fallback,
-  or simultaneous uncatchable death of the outer caller and supervisor require
-  external sandbox/cgroup containment. `EPERM` is cleanup-unproven and fails closed.
+  removes signal authority, the abnormal fallback race, or simultaneous uncatchable
+  death of the outer caller and supervisor require external sandbox/cgroup
+  containment. `EPERM` is cleanup-unproven and fails closed.
   The prepared
   workspace's root, parent ancestry, modes, topology, and bytes are change-bound,
   but mode hardening is not a substitute for an externally enforced read-only
@@ -329,10 +390,3 @@ The machine-readable state of every release gate is in
   name the same closed Node 22/24/26 major set, but this change has not yet produced
   an executed release receipt and does not establish OS or prerelease-runtime support.
   *Gates: R098, R103, R116, R134–R155.*
-
-## Flaky test
-
-- `test/coreIsHostAgnostic.test.ts` (a LEGACY test) spawns a subprocess import of the old
-  `core/` and can time out at 5 s under parallel load; it passes in isolation. Per the
-  blueprint a flaky test is a defect; removal of the legacy tree is not counted as a fix
-  until the relevant release check is rerun without quarantine or retry.

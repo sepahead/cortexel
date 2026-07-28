@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:976dc178bd6ca99bc5a57717bb2f2fae2cdb17f29f4bd18802d58032961113ec",
-  "catalogDigest": "sha256:e5eb3c383cb7593c3ed797733865b11f1f397dcfddce3e458e43be54834a4bca",
+  "contractDigest": "sha256:ef699776098d64ae1d64697eda339ce4459941f70dac3f7c3eb0720934284c8f",
+  "catalogDigest": "sha256:be2826569b51a0f933dca61c4b99fc85bea56c5ec8c382f64a4e0c67f72f41a9",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
     "packaged",
@@ -18,7 +18,7 @@
       "title": "Connection adjacency matrix (target rows, source columns)",
       "renderer": {
         "id": "figure.matrix",
-        "revision": 4,
+        "revision": 5,
         "axisOrder": "target_rows_source_columns"
       },
       "availability": "packaged",
@@ -355,7 +355,7 @@
       "title": "Directed connection graph of a declared network snapshot",
       "renderer": {
         "id": "figure.connection_graph",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -766,7 +766,7 @@
       "title": "In- and out-degree distribution over a declared node universe",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -1048,7 +1048,7 @@
       "title": "Synaptic delay distribution over a declared edge population",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -1412,7 +1412,7 @@
       "title": "Transmission-delay matrix over a declared target-row / source-column node universe",
       "renderer": {
         "id": "figure.matrix",
-        "revision": 4,
+        "revision": 5,
         "axisOrder": "target_rows_source_columns"
       },
       "availability": "packaged",
@@ -1767,7 +1767,7 @@
       "title": "Two-dimensional spatial map of declared node positions",
       "renderer": {
         "id": "figure.spatial_map_2d",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -2194,7 +2194,7 @@
       "title": "Synaptic weight over time, for identified synapses or a declared group",
       "renderer": {
         "id": "figure.synaptic_weight_trace",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -2699,7 +2699,7 @@
       "title": "Synaptic weight distribution over a declared edge population",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -3019,7 +3019,7 @@
       "title": "Synaptic weight matrix (target rows, source columns)",
       "renderer": {
         "id": "figure.matrix",
-        "revision": 4,
+        "revision": 5,
         "axisOrder": "target_rows_source_columns"
       },
       "availability": "packaged",
@@ -3381,7 +3381,7 @@
       "title": "Analog quantities over a declared time axis",
       "renderer": {
         "id": "figure.analog_trace",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -3740,7 +3740,7 @@
       "title": "Signal traces across the identified compartments of one cell",
       "renderer": {
         "id": "figure.compartment_trace",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -4121,7 +4121,7 @@
       "title": "Oriented lag correlogram between two event trains",
       "renderer": {
         "id": "figure.correlogram",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -4448,7 +4448,7 @@
       "title": "Inter-spike interval distribution",
       "renderer": {
         "id": "figure.distribution",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -4799,7 +4799,7 @@
       "title": "Multiple biologically distinct signals on one declared clock",
       "renderer": {
         "id": "figure.multisignal_trace",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -5282,7 +5282,7 @@
       "title": "Phase plane: trajectories and vector field in a two-dimensional state space",
       "renderer": {
         "id": "figure.phase_plane",
-        "revision": 5
+        "revision": 6
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -5630,7 +5630,7 @@
       "title": "Population firing rate over time",
       "renderer": {
         "id": "figure.population_rate",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -5894,7 +5894,7 @@
       "title": "Peri-event time histogram (trial-aligned event counts)",
       "renderer": {
         "id": "figure.psth",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -6380,7 +6380,7 @@
       "title": "Input-response curve across declared conditions",
       "renderer": {
         "id": "figure.response_curve",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -6864,7 +6864,7 @@
       "title": "Spike raster: event times by identified sender and trial",
       "renderer": {
         "id": "figure.spike_raster",
-        "revision": 4
+        "revision": 5
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -8295,11 +8295,11 @@
     },
     {
       "path": "contract/registries/palettes.v1.json",
-      "digest": "sha256:cf1c99e6b82b05c61d445fa395da59081f04ff546d9edce56a6849300bb19e60"
+      "digest": "sha256:d6034905d9877507f3d28a5cf2452558817b0be2b2be4f96caeb63393624e01d"
     },
     {
       "path": "contract/registries/renderers.v1.json",
-      "digest": "sha256:09786c9be5f5ad5e6bf266f712e178f4f0db081bad00014dcde5f525ab6b5516"
+      "digest": "sha256:b90033ff732ff04df55519320a708fa48425ec5cf5e4a50c368c5dcac6c4db46"
     },
     {
       "path": "contract/registries/semantic-validators.v1.json",
@@ -8323,7 +8323,7 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:b15ee1359751e584d4fceb549f8363045bee2be0779bf5fb4f24325a745cc140"
+      "digest": "sha256:91db8d26bda5abbba8d0f3d016cab26be2e7dc0e5607d24bc10404ccd1673645"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
@@ -8347,11 +8347,11 @@
     },
     {
       "path": "contract/schemas/skills/network.spatial_map_2d.request.v1.schema.json",
-      "digest": "sha256:803600e1925b4e4afd032bc1676b3837cd8deaf2e09bd5a0fc407919fd3f240f"
+      "digest": "sha256:72a0d85ac5f71abf9c04cb8dbea8a57228d4e094df91926a5cdee0f31a31a7a1"
     },
     {
       "path": "contract/schemas/skills/network.synaptic_weight_trace.request.v1.schema.json",
-      "digest": "sha256:b4bfa34c2d0466fa5c0eecfb83ed99ff918b7b06ebf8af449aa89b02fe9f4b76"
+      "digest": "sha256:3340b3b60a185ca7854dbc7aa8870c0224db88c1dce343b12454dd40cd4d11f0"
     },
     {
       "path": "contract/schemas/skills/network.weight_distribution.request.v1.schema.json",
@@ -8359,7 +8359,7 @@
     },
     {
       "path": "contract/schemas/skills/network.weight_matrix.request.v1.schema.json",
-      "digest": "sha256:7d9bba83942f89aebb0a501fcc397180115bb9becf92816fd7a3e15362043f62"
+      "digest": "sha256:cf93e47d4821354f52d1a45f6fee191882ac721e30b038cf51a7b5870e3f8825"
     },
     {
       "path": "contract/schemas/skills/neuro.analog_trace.request.v1.schema.json",
@@ -8411,79 +8411,79 @@
     },
     {
       "path": "contract/skills/network.adjacency_matrix.v1.json",
-      "digest": "sha256:342bd8b596bad9c7737836fe2381a5d28fe536d2821d31145089b0b41b8a8b1d"
+      "digest": "sha256:dade1a6a7aac2af4b4138860602f91d2b095bbef9660fe55369b40fc2bb94e59"
     },
     {
       "path": "contract/skills/network.connection_graph.v1.json",
-      "digest": "sha256:2cd85f5e2d0d8c6da4863777466809357f33e58b2dba6222af6325db94874052"
+      "digest": "sha256:971cc074b9a461b0122081339a9c1733e7274b9b08637e7b3c468af8b509ede1"
     },
     {
       "path": "contract/skills/network.degree_distribution.v1.json",
-      "digest": "sha256:0d05c3b1292381742a10fc66b99d35bc71d97d26b6ccfc9913681bacc8843039"
+      "digest": "sha256:abbc35396771df1efae16e8eae008c6bc5b7b4e5c36f2f00c7ab3372ff5cd16c"
     },
     {
       "path": "contract/skills/network.delay_distribution.v1.json",
-      "digest": "sha256:b17dff0bba41c32544586d933ea74e4baa3c19b004d53dd24b88a7b2ebe17786"
+      "digest": "sha256:2831a512dbf5bb4a0d78da0844d7d269bd425f49f9a8e4f597a2139144fab4e1"
     },
     {
       "path": "contract/skills/network.delay_matrix.v1.json",
-      "digest": "sha256:f41a383980edbc3e5cf0fe239bf4727fe11de4dea95f465a500852e609e382f7"
+      "digest": "sha256:c8acb8b1d73988d9f2090809fa86d3f340ec71a4e302615e8a032e60e2b3719b"
     },
     {
       "path": "contract/skills/network.spatial_map_2d.v1.json",
-      "digest": "sha256:63a431a5208ece9a97e8312bc734431e41aaf8ef517739bde827f070fa94b1a0"
+      "digest": "sha256:d02b35d9629394c2d4ebb531df360c9d983393ea038290f7bd6f9d897174b076"
     },
     {
       "path": "contract/skills/network.synaptic_weight_trace.v1.json",
-      "digest": "sha256:c590e5634c711ef933044f43ae86cd1ff356ee0f1c13c6f9f43ff6f3024b3888"
+      "digest": "sha256:63bedf6aa007ca917e8501484ed568e629f5a6dbdcb3da9fc032c6eaa24b41a7"
     },
     {
       "path": "contract/skills/network.weight_distribution.v1.json",
-      "digest": "sha256:529bcd659480237b6f46f09bd9d1149eafdab128a9b0514b79a1e78f49b883a6"
+      "digest": "sha256:c21bd79fb4f880ac87ee0e8d3610e5a7340fdf151e1fd9827e9235e1f116379a"
     },
     {
       "path": "contract/skills/network.weight_matrix.v1.json",
-      "digest": "sha256:012f7092c1955dc9453fd9777d6bed4a7be69bbe8312a794bfbbb7d4ab989772"
+      "digest": "sha256:5cde4b1becf12a8641c7a972a696d18921ad19e3cc92968aa461184888825a93"
     },
     {
       "path": "contract/skills/neuro.analog_trace.v1.json",
-      "digest": "sha256:de8bedd77d6edb0acc16d33f5d69d6df5ee8bd022cb6c8967dd13b4c8f7a3017"
+      "digest": "sha256:a4d07da24360b0c00883a2eba57e7060234e5a7552ecea2c469a2954f968daa6"
     },
     {
       "path": "contract/skills/neuro.compartment_trace.v1.json",
-      "digest": "sha256:f46a3548817db2b69c727bc5d90a1324b8b824fa4347e0841620336d46c6c868"
+      "digest": "sha256:820e1ba06b57e6fa974235f279df22de166898d4e702d7e6a19b92e300c2e6b4"
     },
     {
       "path": "contract/skills/neuro.correlogram.v1.json",
-      "digest": "sha256:edfcb90479b39f2d6fc6390c293025b8b1f4c1b9beb3cc765ad044063cd4c224"
+      "digest": "sha256:ff7a9485ad3adcd6566d53cabca888419cfd856da2759c40f8d8c9e40119e6ab"
     },
     {
       "path": "contract/skills/neuro.isi_distribution.v1.json",
-      "digest": "sha256:dd894a83e2622ad0e2f93f46c5e000ed9f2d17ebeeb3fe2b2e3b8203cf0495f4"
+      "digest": "sha256:b3ee05524788e663a185b3ab02ea95d3b1779260d3f66d2d52839fff0a2878c1"
     },
     {
       "path": "contract/skills/neuro.multisignal_trace.v1.json",
-      "digest": "sha256:ed4948d0e984e57cc18082f19df9231c8da157ee4db457ab6af7661399d4529f"
+      "digest": "sha256:b823eecb57154b90fa490ff3352c197def92efcbcd0b7306150ebb8ebbb36b31"
     },
     {
       "path": "contract/skills/neuro.phase_plane.v1.json",
-      "digest": "sha256:fb4b57804931bd7914f455fdeb09c1741555fdb2627984cdd691ba7544f64d6d"
+      "digest": "sha256:43c96a09c426662337686de36d09211d1f9e3a1a265e571554f6702a3ad85a1a"
     },
     {
       "path": "contract/skills/neuro.population_rate.v1.json",
-      "digest": "sha256:38a993b97e894d41aa6f0ccc459d491731f721dcfec7e94eaed5822fab439cdd"
+      "digest": "sha256:f00c993641d72ca0c5cc6bf03026daf2191e7c8699560faa1fd7a8e9e19dd0c6"
     },
     {
       "path": "contract/skills/neuro.psth.v1.json",
-      "digest": "sha256:9f0c52519936424ee0f2b307f8219526636c87a98bcf26dc96b1115e3fc4aa12"
+      "digest": "sha256:1e7878eb77fbdabb429ad460a7abb8cf41a891d911dc7e71abcd0eef6c3e6434"
     },
     {
       "path": "contract/skills/neuro.response_curve.v1.json",
-      "digest": "sha256:e0d712b96777364cb1bf83526b325f2ab5258c799d9c5635fef35f8fbe2e38cc"
+      "digest": "sha256:c003e849ce525bc38acb47fb2540ad8a88fada8555c54b58a47c2223bf659e7d"
     },
     {
       "path": "contract/skills/neuro.spike_raster.v1.json",
-      "digest": "sha256:5420142be29dc2dbf74404d9318a1ec9af5de0a728638f5da66b8c30ac7a6fc1"
+      "digest": "sha256:ba48e1e227b4656e1ccbd4ee3d5db354c0dbb26a9d41094933f4c157c0426270"
     }
   ],
   "notes": [

@@ -6065,7 +6065,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -6466,7 +6466,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -6966,7 +6966,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -7323,7 +7323,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -7760,7 +7760,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -8186,7 +8186,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -8707,7 +8707,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -9287,7 +9287,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -9678,7 +9678,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -10113,7 +10113,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -10596,7 +10596,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -11049,7 +11049,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -11426,7 +11426,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -11853,7 +11853,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -12491,7 +12491,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -12942,7 +12942,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -13269,7 +13269,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -13839,7 +13839,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -14404,7 +14404,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -15556,7 +15556,7 @@ var LEGACY_SKILL_MAP = freezeGenerated({
 var RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -15568,7 +15568,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -15580,7 +15580,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -15591,7 +15591,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rule",
@@ -15602,7 +15602,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "path",
@@ -15614,7 +15614,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -15626,7 +15626,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rule",
@@ -15638,7 +15638,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -15650,7 +15650,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "point",
@@ -15662,7 +15662,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "line",
@@ -15675,7 +15675,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -15688,7 +15688,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -15699,7 +15699,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "point",
@@ -15712,7 +15712,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "path",
@@ -20998,8 +20998,8 @@ function formatCoordinate(value) {
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:976dc178bd6ca99bc5a57717bb2f2fae2cdb17f29f4bd18802d58032961113ec";
-var CATALOG_DIGEST = "sha256:e5eb3c383cb7593c3ed797733865b11f1f397dcfddce3e458e43be54834a4bca";
+var CONTRACT_DIGEST = "sha256:ef699776098d64ae1d64697eda339ce4459941f70dac3f7c3eb0720934284c8f";
+var CATALOG_DIGEST = "sha256:be2826569b51a0f933dca61c4b99fc85bea56c5ec8c382f64a4e0c67f72f41a9";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
   return Object.freeze({
@@ -21559,10 +21559,28 @@ function countPlanResources(plan) {
   textCount += plan.legend?.length ?? 0;
   return { markCount, textCount };
 }
+function accessibleDetailText(plan) {
+  const seen = /* @__PURE__ */ new Set([plan.accessibility.summary.trim()]);
+  const details = [];
+  const add = (value) => {
+    const normalized = value.trim();
+    if (normalized.length === 0 || seen.has(normalized)) return;
+    seen.add(normalized);
+    details.push(normalized);
+  };
+  for (const summary of plan.accessibility.panelSummaries) add(summary);
+  for (const panel of plan.panels) {
+    if (!panel.noData) continue;
+    const panelName = panel.label?.trim() || panel.id;
+    add(`Panel ${panelName}: No data \u2014 ${panel.noData.reason}`);
+  }
+  return details.length > 0 ? details.join(" ") : null;
+}
 function renderSvg(plan, digestOf) {
   assertRenderPlanGeometry(plan);
   const colors = theme(plan.themeId);
   const writer = new SvgWriter();
+  const accessibilityDetails = accessibleDetailText(plan);
   writer.open("svg", [
     ["xmlns", "http://www.w3.org/2000/svg"],
     ["xmlns:cortexel", "urn:cortexel:metadata:1"],
@@ -21571,10 +21589,13 @@ function renderSvg(plan, digestOf) {
     ["height", plan.height],
     ["role", "img"],
     ["aria-labelledby", `${plan.figureId}-title`],
-    ["aria-describedby", `${plan.figureId}-desc`]
+    ["aria-describedby", accessibilityDetails === null ? `${plan.figureId}-desc` : `${plan.figureId}-desc ${plan.figureId}-details`]
   ]);
   writer.text("title", plan.title, [["id", `${plan.figureId}-title`]]);
   writer.text("desc", plan.accessibility.summary, [["id", `${plan.figureId}-desc`]]);
+  if (accessibilityDetails !== null) {
+    writer.text("desc", accessibilityDetails, [["id", `${plan.figureId}-details`]]);
+  }
   writer.open("metadata");
   writer.text("cortexel:contract", ARTIFACT_CONTRACT);
   writer.text("cortexel:skill", plan.skillId);
@@ -22356,6 +22377,9 @@ function accent(themeId) {
 }
 function gridColor(themeId) {
   return THEMES[themeId]?.grid ?? "#e2e6ea";
+}
+function neutralDataStroke(themeId) {
+  return THEMES[themeId]?.axis ?? "#3a4046";
 }
 function uncertaintyStroke(themeId) {
   return THEMES[themeId]?.axis ?? "#3a4046";
@@ -23837,7 +23861,7 @@ function compileSpatialMapFigure(context, spec, skillId) {
           fill: "#00000000",
           authority: { tag: "decorative_mark" }
         }],
-        stroke: gridColor(context.themeId)
+        stroke: neutralDataStroke(context.themeId)
       }]
     });
   }
@@ -23853,7 +23877,7 @@ function compileSpatialMapFigure(context, spec, skillId) {
     const magnitudeT = value !== null && pairMagnitudeExtent && pairMagnitudeExtent.max !== pairMagnitudeExtent.min ? (Math.abs(value) - pairMagnitudeExtent.min) / (pairMagnitudeExtent.max - pairMagnitudeExtent.min) : 0.5;
     const colorT = value !== null && pairExtent && pairExtent.max !== pairExtent.min ? (value - pairExtent.min) / (pairExtent.max - pairExtent.min) : 0.5;
     const connectionUsesColor = spec.connectionEncoding?.channel === "color" || spec.connectionEncoding?.channel === "width_and_color";
-    const color = spec.connectionEncoding && value === null ? missingColor(context.themeId) : connectionUsesColor && value !== null ? spec.connectionEncoding.colorKind === "diverging" ? divergingColor(value, pairExtent?.min ?? value, pairExtent?.max ?? value, spec.connectionEncoding.center ?? 0) : sequentialColor(colorT) : spec.connectionEncoding ? accent(context.themeId) : gridColor(context.themeId);
+    const color = spec.connectionEncoding && value === null ? missingColor(context.themeId) : connectionUsesColor && value !== null ? spec.connectionEncoding.colorKind === "diverging" ? divergingColor(value, pairExtent?.min ?? value, pairExtent?.max ?? value, spec.connectionEncoding.center ?? 0) : sequentialColor(colorT) : spec.connectionEncoding ? accent(context.themeId) : neutralDataStroke(context.themeId);
     const width = spec.connectionEncoding && value !== null && (spec.connectionEncoding.channel === "width" || spec.connectionEncoding.channel === "width_and_color") ? 1 + 4 * magnitudeT : 1.25;
     const pairMarks = [];
     if (physicalSourceId === physicalTargetId) {
@@ -24438,7 +24462,7 @@ function compilePhasePlaneFigure(context, spec, skillId) {
         x: origin.x + length * direction.ux / direction.magnitude,
         y: origin.y - length * direction.uy / direction.magnitude
       };
-      const color = gridColor(context.themeId);
+      const color = neutralDataStroke(context.themeId);
       marks.push({
         type: "group",
         id: `field-sample-${index}`,
@@ -24481,7 +24505,7 @@ function compilePhasePlaneFigure(context, spec, skillId) {
       )} ${field.magnitudeUnit} maps to at most ${formatNumber(
         field.maxArrowLengthFraction * 100
       )}% of the shorter plot axis`,
-      color: gridColor(context.themeId),
+      color: neutralDataStroke(context.themeId),
       glyph: "series"
     });
   }
@@ -24860,7 +24884,7 @@ function compileGraphFigure(context, spec, skillId) {
       valueExtent?.min ?? transformedValue,
       valueExtent?.max ?? transformedValue,
       spec.edgeEncoding.scale === "symlog" ? 0 : spec.edgeEncoding.center ?? 0
-    ) : sequentialColor(colorT) : spec.edgeEncoding ? accent(context.themeId) : gridColor(context.themeId);
+    ) : sequentialColor(colorT) : spec.edgeEncoding ? accent(context.themeId) : neutralDataStroke(context.themeId);
     const width = spec.edgeEncoding && value !== null && (spec.edgeEncoding.channel === "width" || spec.edgeEncoding.channel === "width_and_color") ? 1 + 4 * magnitudeT : 1.25;
     const edgeMarks = [];
     if (first.sourceId === first.targetId) {

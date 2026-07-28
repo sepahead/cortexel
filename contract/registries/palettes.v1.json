@@ -1,7 +1,7 @@
 {
   "registry": "cortexel-palettes",
   "version": "1.0",
-  "description": "The visual system. Not 'a nice-looking chart' — a set of measurable rules for encoding data without lying about it.\n\nColour-map CLASS is selected from declared data semantics, never from a skill name and never from fashion: sequential for ordered magnitude, diverging only when a meaningful reference centre exists, cyclic for phase, categorical for unordered groups. A diverging request with no centre is REFUSED, because a diverging map implies a symmetry the data may not have.\n\nCategorical identity is never carried by hue alone. Every series style is a TUPLE of colour, dash pattern, and marker shape, so the figure survives greyscale printing and colour-vision deficiency.",
+  "description": "The visual system. Not 'a nice-looking chart' — a set of measurable rules for encoding data without lying about it.\n\nColour-map CLASS is selected from declared data semantics, never from a skill name and never from fashion: sequential for ordered magnitude, diverging only when a meaningful reference centre exists, cyclic for phase, categorical for unordered groups. A diverging request with no centre is REFUSED, because a diverging map implies a symmetry the data may not have.\n\nCategorical identity is never carried by hue alone. Every series style is a TUPLE of colour, dash pattern, and marker shape designed to retain a non-colour distinction. This design intent is not evidence of greyscale, colour-vision-deficiency, or assistive-technology conformance.",
 
   "colormaps": [
     {
@@ -9,7 +9,7 @@
       "source": "Fabio Crameri, Scientific colour maps",
       "license": "MIT (colour map definitions); see THIRD_PARTY_NOTICES.md",
       "citation": "Crameri, F. (2018). Geodynamic diagnostics, scientific visualisation and StagLab 3.0. Geoscientific Model Development.",
-      "properties": ["perceptually uniform", "monotonic lightness", "readable in greyscale", "colour-vision-deficiency friendly"],
+      "properties": ["source-described perceptual uniformity", "source-described monotonic lightness", "source-described greyscale readability; not independently certified by Cortexel", "source-described colour-vision-deficiency friendliness; not conformance evidence"],
       "usedFor": ["ordered magnitude: delays, rates, densities, weights with no meaningful zero"],
       "default": true
     },
@@ -17,7 +17,7 @@
       "id": "vik", "class": "diverging",
       "source": "Fabio Crameri, Scientific colour maps",
       "license": "MIT (colour map definitions); see THIRD_PARTY_NOTICES.md",
-      "properties": ["perceptually uniform", "symmetric lightness about the centre", "colour-vision-deficiency friendly"],
+      "properties": ["source-described perceptual uniformity", "source-described symmetric lightness about the centre", "source-described colour-vision-deficiency friendliness; not conformance evidence"],
       "usedFor": ["signed values with a MEANINGFUL zero: excitatory/inhibitory weights, potentiation/depression"],
       "requiresCenter": true,
       "note": "Refused without an explicit centre: RENDER_DIVERGING_SCALE_NO_CENTER."
@@ -26,7 +26,7 @@
       "id": "romaO", "class": "cyclic",
       "source": "Fabio Crameri, Scientific colour maps",
       "license": "MIT (colour map definitions); see THIRD_PARTY_NOTICES.md",
-      "properties": ["perceptually uniform", "endpoint-continuous"],
+      "properties": ["source-described perceptual uniformity", "source-described endpoint continuity"],
       "usedFor": ["phase and angle, where 0 and 2*pi are the same value"],
       "requiresPeriod": true
     }
@@ -42,7 +42,7 @@
   ],
 
   "categoricalSeries": {
-    "source": "Okabe and Ito (2008), colour-vision-deficiency safe qualitative palette",
+    "source": "Colours derived from Okabe and Ito (2008), whose qualitative palette is source-described for colour-vision deficiency; Cortexel has not independently established conformance",
     "maxStableSeries": 8,
     "beyondCapacity": "Small multiples, explicit grouping, or a typed refusal (RENDER_SERIES_LIMIT_EXCEEDED). Cortexel does not mint dozens of indistinguishable colours and call it a legend.",
     "styles": [
@@ -55,7 +55,7 @@
       { "index": 6, "color": "#8a6d00", "dash": "4 2 1 2", "marker": "plus",     "label": "series 7" },
       { "index": 7, "color": "#000000", "dash": "3 3",     "marker": "hexagon",  "label": "series 8" }
     ],
-    "note": "Each style is a TUPLE. Two series remain distinguishable by dash pattern and marker shape with colour removed entirely — a test asserts exactly that, which is what makes the figure survive a greyscale printout."
+    "note": "Each style is a TUPLE. An executable registry test proves that every registered dash-and-marker pair remains unique when colour is removed. That structural result does not establish perceptual effectiveness in greyscale printing or for any colour-vision deficiency."
   },
 
   "themes": [
@@ -69,7 +69,7 @@
     "standard": "WCAG 2.2",
     "text": { "ratio": 4.5, "appliesTo": ["axis labels", "tick labels", "titles", "disclosures", "table text"] },
     "nonText": { "ratio": 3.0, "appliesTo": ["axis lines", "focus indicators", "selected states", "essential boundaries", "legend swatches"] },
-    "testedAgainst": "The FINAL token pairs actually used, not isolated palette swatches. A colour that passes in isolation can still fail on the background it is drawn on.",
+    "testedAgainst": "Conformance evidence must test the FINAL token pairs actually used, not isolated palette swatches. Current development evidence is limited to named token pairs and selected owned scientific marks; it is not whole-figure WCAG conformance evidence.",
     "scope": "These targets apply to the surfaces CORTEXEL OWNS. Cortexel makes no conformance claim about the host page it is embedded in — that would be a claim it has no way to support."
   },
 

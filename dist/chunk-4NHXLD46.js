@@ -5,13 +5,13 @@ import {
   validateSkillInvocation,
   validateSpec,
   validateVizSpec
-} from "./chunk-VKPKMYSC.js";
+} from "./chunk-MEHRBBUS.js";
 import {
   readOwnEnumerableDataProperty
 } from "./chunk-UEJPZXDX.js";
 
 // react/VizSpecRenderer.tsx
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 function cloneValidatedJson(value) {
   if (typeof globalThis.structuredClone === "function") {
@@ -156,6 +156,11 @@ function SceneFrame({
   active,
   renderScene
 }) {
+  const reactId = useId();
+  const captionId = `cortexel-honesty-caption-${reactId.replace(
+    /[^a-zA-Z0-9_-]/g,
+    ""
+  )}`;
   if (mode === "export") {
     return /* @__PURE__ */ jsx("div", { role: "status", className: "cortexel-vizspec-export-unsupported", children: "Headless export rendering is not available in this build. Request an interactive render, or use the backend render endpoint once enabled." });
   }
@@ -163,6 +168,8 @@ function SceneFrame({
     "div",
     {
       className: "cortexel-vizspec",
+      role: caption ? "group" : void 0,
+      "aria-describedby": caption ? captionId : void 0,
       style: {
         position: "relative",
         width: "100%",
@@ -182,6 +189,7 @@ function SceneFrame({
         caption && /* @__PURE__ */ jsx(
           "div",
           {
+            id: captionId,
             className: "cortexel-honesty-caption",
             role: "note",
             "aria-live": "polite",
@@ -214,4 +222,4 @@ function SceneFrame({
 export {
   VizSpecRenderer
 };
-//# sourceMappingURL=chunk-GMBKCI3R.js.map
+//# sourceMappingURL=chunk-4NHXLD46.js.map

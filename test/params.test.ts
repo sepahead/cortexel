@@ -40,6 +40,7 @@ describe('tightened param schemas reject structurally-broken data', () => {
         derivatives: { v: [1, 1, -1, -1], w: [-1, 1, -1, 1] },
         axis_units: { v: 'mV', w: '1' },
         derivative_units: { v: 'mV/ms', w: '1/ms' },
+        derivative_time_unit: 'ms',
         axis_order: ['v', 'w'],
         flattening: 'row-major-last-axis-fastest',
       }).success,

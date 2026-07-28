@@ -1,7 +1,7 @@
 {
-  "manifestVersion": "10",
-  "skillAxisVersion": "1.7.0",
-  "specVersion": "1.4.0",
+  "manifestVersion": "11",
+  "skillAxisVersion": "1.8.0",
+  "specVersion": "1.5.0",
   "vizRouterId": "nest.viz_router",
   "routingDiscriminators": {
     "spike_recorder": {
@@ -619,7 +619,7 @@
     "fallbackIsNotValidation": true
   },
   "paramConstraintLanguage": {
-    "version": "10",
+    "version": "11",
     "pathSyntax": "dot-separated object keys",
     "arrayWildcard": "[*]",
     "objectValueWildcard": "*",
@@ -666,6 +666,7 @@
       "weight_histogram_consistency",
       "spatial_extent_bounds",
       "scope_compatibility",
+      "phase_plane_direction_basis",
       "acyclic"
     ],
     "semantics": {
@@ -843,7 +844,7 @@
         "pathRoles": "bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order",
         "rule": "the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot",
         "operationOrder": "probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity",
-        "fixedSemantics": "aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin",
+        "fixedSemantics": "aggregation=each_connection and binning=left_closed_right_open are checked literals; the advertised raw transform derives exactly one in-window weight per selected SynapseCollection entry, while a standalone serialized params object does not carry that derivation receipt",
         "geometry": "a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance"
       },
       "spatial_extent_bounds": {
@@ -854,7 +855,12 @@
       },
       "scope_compatibility": {
         "pathRoles": "scope object and optional degree direction in that order",
-        "rule": "rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; out-degree forbids mpi_target_rank_local"
+        "rule": "rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; when allowedFieldValues is present, scope.kind must occur in that closed set; legacy constraints without that field still forbid mpi_target_rank_local for out-degree"
+      },
+      "phase_plane_direction_basis": {
+        "pathRoles": "grid object, derivative-array object, coordinate-unit object, derivative-unit object, and shared derivative-time-unit scalar in that order",
+        "rule": "grid has exactly two axes with at least two finite strictly increasing coordinates each; derivative and unit objects have exactly the grid keys; derivative_time_unit is ms or s; derivative_units[key] is exactly axis_units[key] + \"/\" + derivative_time_unit; a nonzero per-second component must remain nonzero after one binary64 division by 1000",
+        "canonicalNumericBasis": "renderers perform one binary64 division by 1000 for per-second components before deriving arrow direction or presentation length; this is one declared rounding basis, not a universal claim that independently rounded ms/s source representations are byte-identical"
       },
       "acyclic": {
         "pathRoles": "first path resolves node ids; second resolves each node parent id or null",
@@ -899,7 +905,7 @@
       },
       "specVersion": {
         "type": "string",
-        "const": "1.4.0"
+        "const": "1.5.0"
       },
       "params": {
         "type": "object",
@@ -1043,7 +1049,7 @@
       },
       "specVersion": {
         "type": "string",
-        "const": "1.4.0"
+        "const": "1.5.0"
       },
       "params": {
         "type": "object",
@@ -1168,7 +1174,7 @@
   "skills": [
     {
       "id": "nest.voltage_trace",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST voltage trace renderer",
       "description": "Render labeled multimeter/voltmeter series for one recorded variable and unit.",
       "deviceFamily": "multimeter",
@@ -1367,7 +1373,7 @@
           }
         },
         "skill": "nest.voltage_trace",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -1381,7 +1387,7 @@
     },
     {
       "id": "nest.spike_raster",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST spike raster renderer",
       "description": "Render exact spike_recorder event times and sender ids as a sender-time raster.",
       "deviceFamily": "spike_recorder",
@@ -1514,7 +1520,7 @@
           }
         },
         "skill": "nest.spike_raster",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -1528,7 +1534,7 @@
     },
     {
       "id": "nest.isi_distribution",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST inter-spike interval distribution renderer",
       "description": "Render an explicitly normalized histogram of within-sender or single-train inter-spike intervals.",
       "deviceFamily": "spike_recorder",
@@ -1807,7 +1813,7 @@
           }
         },
         "skill": "nest.isi_distribution",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -1821,7 +1827,7 @@
     },
     {
       "id": "nest.psth",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST peri-stimulus time histogram renderer",
       "description": "Render trial-aligned aggregate spike counts across selected senders, counts per trial, or firing rates around a declared event.",
       "deviceFamily": "spike_recorder",
@@ -2115,7 +2121,7 @@
           }
         },
         "skill": "nest.psth",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -2129,7 +2135,7 @@
     },
     {
       "id": "nest.population_rate",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST population-rate renderer",
       "description": "Render auditable mean firing-rate series derived from raw per-bin spike counts and the exact recorded-sender denominator.",
       "deviceFamily": "spike_recorder",
@@ -2461,7 +2467,7 @@
           }
         },
         "skill": "nest.population_rate",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -2475,7 +2481,7 @@
     },
     {
       "id": "nest.rate_response",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST rate / IF response renderer",
       "description": "Render firing-rate / IF response points against declared stimulus amplitudes.",
       "deviceFamily": "spike_recorder",
@@ -2611,7 +2617,7 @@
           }
         },
         "skill": "nest.rate_response",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -2625,7 +2631,7 @@
     },
     {
       "id": "nest.connectivity_matrix",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST connectivity edge-list topology renderer",
       "description": "Render SynapseCollection endpoint pairs and optional unit-bound weight and delay channels as schematic node-link topology (legacy skill id; not a literal matrix heatmap).",
       "deviceFamily": "get_connections",
@@ -2843,7 +2849,7 @@
           }
         },
         "skill": "nest.connectivity_matrix",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -2857,7 +2863,7 @@
     },
     {
       "id": "nest.connection_graph",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST connection topology graph renderer",
       "description": "Render a complete or explicitly deterministic sample of a SynapseCollection snapshot while preserving isolates, autapses, multapses, and measured channels.",
       "deviceFamily": "get_connections",
@@ -3325,7 +3331,7 @@
           }
         },
         "skill": "nest.connection_graph",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -3339,7 +3345,7 @@
     },
     {
       "id": "nest.adjacency_matrix",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST binary adjacency matrix renderer",
       "description": "Render sparse connection presence with target rows, source columns, and explicit multapse counts.",
       "deviceFamily": "get_connections",
@@ -3359,7 +3365,7 @@
           "sourceIds",
           "targetIds",
           "snapshotTimeMs",
-          "snapshotScope"
+          "snapshotScope (not target-rank-local)"
         ],
         "outputSkill": "nest.adjacency_matrix"
       },
@@ -3649,7 +3655,11 @@
           "paths": [
             "snapshot_scope"
           ],
-          "description": "Snapshot MPI rank metadata must be internally valid."
+          "allowedFieldValues": [
+            "single_process_complete",
+            "mpi_all_ranks_merged"
+          ],
+          "description": "Literal matrices require a complete single-process or all-ranks-merged snapshot."
         }
       ],
       "rendererRoutes": [
@@ -3707,7 +3717,7 @@
           }
         },
         "skill": "nest.adjacency_matrix",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -3721,7 +3731,7 @@
     },
     {
       "id": "nest.weight_matrix",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST connection-weight matrix renderer",
       "description": "Render explicitly aggregated SynapseCollection weights without conflating absent and zero-valued cells.",
       "deviceFamily": "get_connections",
@@ -3743,8 +3753,8 @@
           "sourceIds",
           "targetIds",
           "snapshotTimeMs",
-          "snapshotScope",
-          "synapseModelSemantics",
+          "snapshotScope (not target-rank-local)",
+          "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
           "weightUnits",
           "aggregation"
         ],
@@ -4062,7 +4072,11 @@
           "paths": [
             "snapshot_scope"
           ],
-          "description": "Snapshot MPI rank metadata must be internally valid."
+          "allowedFieldValues": [
+            "single_process_complete",
+            "mpi_all_ranks_merged"
+          ],
+          "description": "Literal matrices require a complete single-process or all-ranks-merged snapshot."
         }
       ],
       "rendererRoutes": [
@@ -4122,7 +4136,7 @@
           }
         },
         "skill": "nest.weight_matrix",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -4136,7 +4150,7 @@
     },
     {
       "id": "nest.delay_matrix",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST synaptic-delay matrix renderer",
       "description": "Render explicitly aggregated positive synaptic delays in milliseconds.",
       "deviceFamily": "get_connections",
@@ -4158,8 +4172,8 @@
           "sourceIds",
           "targetIds",
           "snapshotTimeMs",
-          "snapshotScope",
-          "synapseModelSemantics",
+          "snapshotScope (not target-rank-local)",
+          "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
           "delayUnits='ms'",
           "aggregation"
         ],
@@ -4472,7 +4486,11 @@
           "paths": [
             "snapshot_scope"
           ],
-          "description": "Snapshot MPI rank metadata must be internally valid."
+          "allowedFieldValues": [
+            "single_process_complete",
+            "mpi_all_ranks_merged"
+          ],
+          "description": "Literal matrices require a complete single-process or all-ranks-merged snapshot."
         }
       ],
       "rendererRoutes": [
@@ -4532,7 +4550,7 @@
           }
         },
         "skill": "nest.delay_matrix",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -4546,7 +4564,7 @@
     },
     {
       "id": "nest.in_degree_distribution",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST in-degree distribution renderer",
       "description": "Render the measured incoming-edge distribution over the complete declared target universe.",
       "deviceFamily": "get_connections",
@@ -4566,7 +4584,7 @@
           "sourceIds",
           "targetIds",
           "snapshotTimeMs",
-          "snapshotScope",
+          "snapshotScope (not target-rank-local)",
           "normalization"
         ],
         "outputSkill": "nest.in_degree_distribution"
@@ -4892,7 +4910,11 @@
             "snapshot_scope",
             "direction"
           ],
-          "description": "In-degree accepts valid complete or target-rank-local snapshot scope."
+          "allowedFieldValues": [
+            "single_process_complete",
+            "mpi_all_ranks_merged"
+          ],
+          "description": "In-degree requires a complete single-process or all-ranks-merged snapshot."
         }
       ],
       "rendererRoutes": [
@@ -4954,7 +4976,7 @@
           }
         },
         "skill": "nest.in_degree_distribution",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -4962,13 +4984,13 @@
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html",
           "dataShape": "contiguous degree bins, exact node counts, and explicit zero-degree inclusion",
           "output": "In-degree count or probability distribution",
-          "note": "Each SynapseCollection entry counts, including multapses."
+          "note": "Each SynapseCollection entry counts, including multapses; target-rank-local snapshots are rejected without exact target-ownership authority."
         }
       ]
     },
     {
       "id": "nest.out_degree_distribution",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST out-degree distribution renderer",
       "description": "Render the measured outgoing-edge distribution over the complete declared source universe.",
       "deviceFamily": "get_connections",
@@ -5314,7 +5336,11 @@
             "snapshot_scope",
             "direction"
           ],
-          "description": "Out-degree rejects target-rank-local evidence and validates merged-rank metadata."
+          "allowedFieldValues": [
+            "single_process_complete",
+            "mpi_all_ranks_merged"
+          ],
+          "description": "Out-degree requires a complete single-process or all-ranks-merged snapshot."
         }
       ],
       "rendererRoutes": [
@@ -5373,7 +5399,7 @@
           }
         },
         "skill": "nest.out_degree_distribution",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -5387,7 +5413,7 @@
     },
     {
       "id": "nest.delay_distribution",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST synaptic-delay distribution renderer",
       "description": "Render checked left-closed/right-open bins over one delay value per selected connection.",
       "deviceFamily": "get_connections",
@@ -5410,7 +5436,7 @@
           "targetIds",
           "snapshotTimeMs",
           "snapshotScope",
-          "synapseModelSemantics",
+          "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
           "delayUnits='ms'",
           "binWidthMs",
           "windowStartMs",
@@ -5828,7 +5854,7 @@
           }
         },
         "skill": "nest.delay_distribution",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -5842,7 +5868,7 @@
     },
     {
       "id": "nest.weight_histogram",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST connection-weight histogram renderer",
       "description": "Render the measured weight distribution of a declared GetConnections snapshot.",
       "deviceFamily": "get_connections",
@@ -5851,6 +5877,28 @@
       "routerEligibility": {
         "bareFamilyCandidate": true,
         "dataShapeKind": "weight_distribution"
+      },
+      "transform": {
+        "id": "synapseCollectionToWeightHistogramParams",
+        "rawFields": [
+          "source|sources",
+          "target|targets",
+          "weight|weights",
+          "synapse_model|synapse_models"
+        ],
+        "requiredOptions": [
+          "sourceIds",
+          "targetIds",
+          "snapshotTimeMs",
+          "snapshotScope",
+          "synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)",
+          "weightUnits",
+          "binWidth",
+          "windowStart",
+          "windowStop",
+          "normalization"
+        ],
+        "outputSkill": "nest.weight_histogram"
       },
       "requiredInputKeys": [
         "bin_centers",
@@ -5911,10 +5959,11 @@
           "kind": "param_bound"
         },
         "parallel_edge_policy": {
-          "kind": "literal_bound"
+          "kind": "external_claim",
+          "reason": "The serialized histogram retains aggregate counts but no raw-entry derivation receipt from which to authenticate the claimed one-entry/one-observation mapping."
         }
       },
-      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model.",
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: source ids, target ids, synapse model, parallel-edge handling policy.",
       "provenanceParamConstraints": [
         {
           "kind": "canonical_json_array_length_matches_param",
@@ -5970,7 +6019,8 @@
           "kind": "equals_literal",
           "provenanceKey": "parallel_edge_policy",
           "value": "count_each_connection",
-          "description": "Every selected SynapseCollection entry contributes one weight observation."
+          "establishesBinding": false,
+          "description": "The declared one-entry/one-observation policy must equal the contract literal; serialized aggregate params alone do not authenticate the raw mapping."
         }
       ],
       "paramsJsonSchema": {
@@ -6246,21 +6296,21 @@
           }
         },
         "skill": "nest.weight_histogram",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
           "nestExample": "Plot weight matrices example / SynapseCollection snapshot",
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html",
-          "dataShape": "raw per-bin connection counts from one typed complete GetConnections snapshot",
+          "dataShape": "raw per-bin connection counts complete for one typed declared GetConnections snapshot scope",
           "output": "Connection-weight count or probability histogram",
-          "note": "Every selected connection contributes exactly one weight; weight_recorder update events are a different, biased sample."
+          "note": "The advertised raw transform derives one observation per selected connection; a serialized params object carries no transform receipt, and weight_recorder update events are a different, biased sample."
         }
       ]
     },
     {
       "id": "nest.spatial_2d",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST legacy 2D position host envelope",
       "description": "Validate anonymous 2D position tuples and coordinate units for an explicitly selected host renderer; Cortexel supplies no scene.",
       "deviceFamily": "get_position",
@@ -6368,7 +6418,7 @@
       ],
       "examplePayload": {
         "skill": "nest.spatial_2d",
-        "specVersion": "1.4.0",
+        "specVersion": "1.5.0",
         "rendererRoute": "d3",
         "params": {
           "positions": [
@@ -6409,7 +6459,7 @@
     },
     {
       "id": "nest.spatial_map_2d",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST measured 2D spatial map renderer",
       "description": "Render identified 2D GetPosition coordinates inside the declared layer extent with explicit periodic-boundary and MPI completeness semantics.",
       "deviceFamily": "get_position",
@@ -6742,7 +6792,7 @@
           }
         },
         "skill": "nest.spatial_map_2d",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -6756,7 +6806,7 @@
     },
     {
       "id": "nest.spatial_3d",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST 3D spatial renderer",
       "description": "Render 3D population/node positions for spatial inspection.",
       "deviceFamily": "get_position",
@@ -6895,7 +6945,7 @@
           }
         },
         "skill": "nest.spatial_3d",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -6909,7 +6959,7 @@
     },
     {
       "id": "nest.plasticity_dynamics",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST plasticity dynamics renderer",
       "description": "Render recorded synaptic-weight samples over time.",
       "deviceFamily": "weight_recorder",
@@ -7035,7 +7085,7 @@
           }
         },
         "skill": "nest.plasticity_dynamics",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -7049,9 +7099,9 @@
     },
     {
       "id": "nest.phase_plane",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST phase-plane renderer",
-      "description": "Render a checked Cartesian phase-plane vector field.",
+      "description": "Render checked numeric derivative directions on a non-degenerate Cartesian phase-plane grid with one shared time basis.",
       "deviceFamily": "computed",
       "scene": "phase-plane",
       "weak": false,
@@ -7063,6 +7113,7 @@
         "derivatives",
         "axis_units",
         "derivative_units",
+        "derivative_time_unit",
         "axis_order",
         "flattening"
       ],
@@ -7124,7 +7175,7 @@
               "x-cortexel-normalize": "trim"
             },
             "additionalProperties": {
-              "minItems": 1,
+              "minItems": 2,
               "maxItems": 50000,
               "type": "array",
               "items": {
@@ -7217,6 +7268,13 @@
               "x-cortexel-max-utf16-code-units": 80
             }
           },
+          "derivative_time_unit": {
+            "type": "string",
+            "enum": [
+              "ms",
+              "s"
+            ]
+          },
           "axis_order": {
             "type": "array",
             "prefixItems": [
@@ -7267,12 +7325,24 @@
           "derivatives",
           "axis_units",
           "derivative_units",
+          "derivative_time_unit",
           "axis_order",
           "flattening"
         ],
         "additionalProperties": false
       },
       "paramConstraints": [
+        {
+          "kind": "phase_plane_direction_basis",
+          "paths": [
+            "grid",
+            "derivatives",
+            "axis_units",
+            "derivative_units",
+            "derivative_time_unit"
+          ],
+          "description": "Both non-degenerate axes and both derivative components share one exact, machine-checkable time denominator before renderer normalization."
+        },
         {
           "kind": "property_count",
           "paths": [
@@ -7362,6 +7432,7 @@
             "v": "mV/ms",
             "w": "1/ms"
           },
+          "derivative_time_unit": "ms",
           "axis_order": [
             "v",
             "w"
@@ -7384,21 +7455,21 @@
           }
         },
         "skill": "nest.phase_plane",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
           "nestExample": "Numerical phase-plane analysis of the Hodgkin-Huxley neuron",
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/hh_phaseplane.html",
-          "dataShape": "state-variable axes plus flattened derivative arrays and explicit ordering",
-          "output": "Unit-labelled phase-plane vector field",
-          "note": "No nullcline, trajectory, or equilibrium is present in this contract; do not invent one."
+          "dataShape": "strictly increasing state-variable axes, flattened derivative arrays, one explicit shared derivative time unit, and explicit ordering",
+          "output": "Unit-labelled numeric derivative directions normalized in plotted coordinate space",
+          "note": "Arrow direction is derived after conversion to one shared per-ms numeric basis; arrow length is presentation-only and no nullcline, trajectory, or equilibrium is present."
         }
       ]
     },
     {
       "id": "nest.correlogram",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST correlogram / synchrony renderer",
       "description": "Render a symmetric correlation_detector lag histogram with explicit pair orientation, interval policy, counting window, zero-lag handling, and statistic semantics.",
       "deviceFamily": "correlation_detector",
@@ -7406,6 +7477,28 @@
       "weak": false,
       "routerEligibility": {
         "bareFamilyCandidate": true
+      },
+      "transform": {
+        "id": "correlationDetectorToCorrelogramParams",
+        "rawFields": [
+          "delta_tau",
+          "tau_max",
+          "Tstart",
+          "Tstop",
+          "count_histogram"
+        ],
+        "requiredOptions": [
+          "measurement='count_histogram'",
+          "referenceLabel",
+          "targetLabel",
+          "zeroLagPolicy='included'",
+          "sourceConfiguration.simulationResolutionMs",
+          "sourceConfiguration.simulationStartMs",
+          "sourceConfiguration.simulationStopMs",
+          "sourceConfiguration.referenceReceptorPort=0",
+          "sourceConfiguration.targetReceptorPort=1"
+        ],
+        "outputSkill": "nest.correlogram"
       },
       "requiredInputKeys": [
         "lags_ms",
@@ -7438,10 +7531,12 @@
           "reason": "The source correlation-detector identity is not represented in correlogram params."
         },
         "reference_population": {
-          "kind": "param_bound"
+          "kind": "external_claim",
+          "reason": "The reference label is caller supplied and does not authenticate which external population was wired to detector receptor port 0."
         },
         "target_population": {
-          "kind": "param_bound"
+          "kind": "external_claim",
+          "reason": "The target label is caller supplied and does not authenticate which external population was wired to detector receptor port 1."
         },
         "bin_ms": {
           "kind": "param_bound"
@@ -7459,7 +7554,7 @@
           "kind": "param_bound"
         }
       },
-      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: correlation_detector id.",
+      "externalProvenanceDisclosure": "Caller-declared provenance — Cortexel checked structure but could not verify against the checked payload or source: correlation_detector id, correlogram reference population, correlogram target population.",
       "provenanceParamConstraints": [
         {
           "kind": "equals_param",
@@ -7471,12 +7566,14 @@
           "kind": "equals_param_path",
           "provenanceKey": "reference_population",
           "paramPath": "pair.reference_label",
+          "establishesBinding": false,
           "description": "Declared reference population must match params.pair.reference_label."
         },
         {
           "kind": "equals_param_path",
           "provenanceKey": "target_population",
           "paramPath": "pair.target_label",
+          "establishesBinding": false,
           "description": "Declared target population must match params.pair.target_label."
         },
         {
@@ -7807,7 +7904,7 @@
           }
         },
         "skill": "nest.correlogram",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -7815,13 +7912,13 @@
           "sourceUrl": "https://nest-simulator.readthedocs.io/en/latest/auto_examples/cross_check_mip_corrdet.html",
           "dataShape": "symmetric lag centers, values, bin/tau/counting-window semantics, oriented population pair, and discriminated statistic",
           "output": "Canonical correlogram distinct from ISI and other time histograms",
-          "note": "Positive lag means the target population spikes after the reference population; never infer orientation from a display label."
+          "note": "The raw transform requires the documented port order, resolution, and simulation-window margins, but serialized labels/configuration remain source claims; positive lag means target follows reference."
         }
       ]
     },
     {
       "id": "nest.stimulus_response",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST stimulus-response host envelope",
       "description": "Validate aligned time, stimulus, and response arrays for an explicitly selected host renderer; Cortexel supplies no scene.",
       "deviceFamily": "multimeter",
@@ -7928,7 +8025,7 @@
       ],
       "examplePayload": {
         "skill": "nest.stimulus_response",
-        "specVersion": "1.4.0",
+        "specVersion": "1.5.0",
         "rendererRoute": "matplotlib",
         "params": {
           "times_ms": [
@@ -7972,7 +8069,7 @@
     },
     {
       "id": "nest.astrocyte_dynamics",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST astrocyte concentration-trace renderer",
       "description": "Render one declared non-negative glial concentration trace carried as ca_trace.",
       "deviceFamily": "multimeter",
@@ -8142,7 +8239,7 @@
           }
         },
         "skill": "nest.astrocyte_dynamics",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {
@@ -8156,7 +8253,7 @@
     },
     {
       "id": "nest.compartmental_dynamics",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST compartment-tree trace host envelope",
       "description": "Validate an id/parent compartment topology and aligned per-compartment values for an explicitly selected host renderer.",
       "deviceFamily": "multimeter",
@@ -8340,7 +8437,7 @@
       ],
       "examplePayload": {
         "skill": "nest.compartmental_dynamics",
-        "specVersion": "1.4.0",
+        "specVersion": "1.5.0",
         "rendererRoute": "d3",
         "params": {
           "times_ms": [
@@ -8388,7 +8485,7 @@
     },
     {
       "id": "nest.animation_replay",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "NEST state replay / animation storyboard renderer",
       "description": "Render time-evolution storyboards and inspectable state replays.",
       "deviceFamily": "computed",
@@ -8493,7 +8590,7 @@
       ],
       "examplePayload": {
         "skill": "nest.animation_replay",
-        "specVersion": "1.4.0",
+        "specVersion": "1.5.0",
         "rendererRoute": "manim",
         "params": {
           "frames": [
@@ -8528,7 +8625,7 @@
     },
     {
       "id": "corpus.knowledge_graph",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "title": "Corpus knowledge-graph 3D renderer",
       "description": "Render a bounded, traceable cross-paper entity multigraph: paper/model/family nodes plus identified citation, instantiation, family and advisory identity assertions. Every element carries typed source evidence; every numeric score is discriminated and explicitly uncalibrated.",
       "deviceFamily": "corpus",
@@ -9814,7 +9911,7 @@
           }
         },
         "skill": "corpus.knowledge_graph",
-        "specVersion": "1.4.0"
+        "specVersion": "1.5.0"
       },
       "examples": [
         {

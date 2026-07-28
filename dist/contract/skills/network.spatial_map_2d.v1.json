@@ -51,8 +51,8 @@
       "multapse chords: connections sharing an unordered endpoint pair lie on the SAME canonically oriented chord, because the endpoints are measured places. They are never lane-offset — an offset chord passes through coordinates where nothing was measured. They are drawn as one chord with a count label; when a value is encoded, a declared aggregation is required (SCIENCE_AGGREGATION_REQUIRED). Sum and mean decode every finite binary64 contribution exactly, accumulate as integer arithmetic, and round once; min/max canonicalize zero. A non-finite or unrepresentable result is refused, and every result is invariant under source-row permutation.",
       "reciprocal pairs: A->B and B->A share the one unordered physical chord and BOTH arrowheads are drawn, one at each end, with per-direction counts. The reverse direction reverses the canonical segment sequence rather than selecting a second half-period image. A reciprocal pair is never collapsed into one double-headed line, which would hide the case where only one direction exists.",
       "autapse: drawn as a fixed screen-space loop anchored at the node, with an arrowhead. The loop is decoration; its radius is not a spatial extent.",
-      "direction: an arrowhead at the target end of every chord, always. Direction is never carried by colour, curvature, or motion, so a grayscale print, a still export, and a reduced-motion reader all read the same direction.",
-      "edge_value_scale: width encodes |value| over a bounded pixel range stated in the legend. A diverging colour scale requires an explicit centre (RENDER_DIVERGING_SCALE_NO_CENTER). When the encoded values carry BOTH signs, negative chords are additionally dashed — a colour-free sign encoding that survives a grayscale print.",
+      "direction: an arrowhead at the target end of every chord, always. Direction is never carried by colour, curvature, or motion, so its encoding remains present when colour or motion is unavailable. That structural fact is not evidence that every print process or reader perceives it.",
+      "edge_value_scale: width encodes |value| over a bounded pixel range stated in the legend. A diverging colour scale requires an explicit centre (RENDER_DIVERGING_SCALE_NO_CENTER). When the encoded values carry BOTH signs, negative chords are additionally dashed, retaining a non-colour sign encoding without claiming greyscale-print conformance.",
       "node_colour: group colour is always paired with a distinct marker shape, so group identity never depends on colour perception; more than 8 groups is refused (RENDER_SERIES_LIMIT_EXCEEDED). A value scale carries numeric legend ticks, and a symlog transform carries its declared linear threshold.",
       "encoding_channel_bound: an encoding may never name a channel the data does not carry. `nodeEncoding.mode = value` with no `positions.value` series, or `connectionDisplay.valueEncoding = weight | delay` with no matching connection series, is refused by the renderer (RENDER_NO_DATA) — never drawn as a uniform figure under a legend that claims a value nobody supplied. This bind is enforced at render time, not by a semantic validator.",
       "empty_result: a map with no connections is a VALID figure. A map in which no node is drawable is an explicit empty state with a reason (RENDER_NO_DATA), never an empty coordinate system that resembles a measured emptiness.",
@@ -359,7 +359,7 @@
             },
             {
               "type": "object",
-              "description": "A declared edge attribute encoded with COLOUR (alone or with width). The scale is required and never inferred: a diverging scale carries an explicit centre, and signed values are additionally dashed so the sign survives a grayscale print. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
+              "description": "A declared edge attribute encoded with COLOUR (alone or with width). The scale is required and never inferred: a diverging scale carries an explicit centre, and signed values are additionally dashed so a non-colour sign encoding remains present. This does not establish greyscale-print conformance. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
               "properties": {
                 "valueEncoding": { "type": "string", "enum": ["weight", "delay"] },
                 "channel": { "type": "string", "enum": ["color", "width_and_color"] },
@@ -447,7 +447,7 @@
     { "id": "uncertainty.supported_variant", "parameters": { "supported": ["none"] } }
   ],
 
-  "renderer": { "id": "figure.spatial_map_2d", "revision": 4 },
+  "renderer": { "id": "figure.spatial_map_2d", "revision": 5 },
 
   "budgets": {
     "maxObservations": 200000,

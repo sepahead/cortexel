@@ -76,7 +76,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -477,7 +477,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -977,7 +977,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -1334,7 +1334,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -1771,7 +1771,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -2197,7 +2197,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -2718,7 +2718,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -3298,7 +3298,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -3689,7 +3689,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -4124,7 +4124,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -4607,7 +4607,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -5060,7 +5060,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -5437,7 +5437,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -5864,7 +5864,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -6502,7 +6502,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -6953,7 +6953,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -7280,7 +7280,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -7850,7 +7850,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -8415,7 +8415,7 @@ export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freeze
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -9601,7 +9601,7 @@ export const LEGACY_SKILL_MAP: Readonly<Record<string, LegacyMapEntry>> = freeze
 export const RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -9613,7 +9613,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -9625,7 +9625,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -9636,7 +9636,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rule",
@@ -9647,7 +9647,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "path",
@@ -9659,7 +9659,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -9671,7 +9671,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rule",
@@ -9683,7 +9683,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -9695,7 +9695,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "point",
@@ -9707,7 +9707,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "line",
@@ -9720,7 +9720,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -9733,7 +9733,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -9744,7 +9744,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "point",
@@ -9757,7 +9757,7 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "path",

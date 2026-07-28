@@ -515,10 +515,10 @@ describe('strict envelope and version contract', () => {
     if (!result.ok) expect(result.errors[0].code).toBe('unsupported_spec_version');
   });
 
-  it('refuses stamped 1.3.0 scene envelopes under the tightened 1.4.0 rules', () => {
-    expect(CORTEXEL_SPEC_VERSION).toBe('1.4.0');
+  it('refuses stamped 1.4.0 scene envelopes under the tightened 1.5.0 rules', () => {
+    expect(CORTEXEL_SPEC_VERSION).toBe('1.5.0');
     const previous = structuredClone(getExamplePayload('nest.spike_raster')!);
-    previous.specVersion = '1.3.0' as typeof previous.specVersion;
+    previous.specVersion = '1.4.0' as typeof previous.specVersion;
     const result = validateSkillInvocation('nest.spike_raster', previous);
     expect(result.ok).toBe(false);
     if (!result.ok) {

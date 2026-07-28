@@ -630,6 +630,25 @@ export function countPlanResources(plan: RenderPlanV1): {
   return { markCount, textCount };
 }
 
+function accessibleDetailText(plan: RenderPlanV1): string | null {
+  const seen = new Set<string>([plan.accessibility.summary.trim()]);
+  const details: string[] = [];
+  const add = (value: string): void => {
+    const normalized = value.trim();
+    if (normalized.length === 0 || seen.has(normalized)) return;
+    seen.add(normalized);
+    details.push(normalized);
+  };
+
+  for (const summary of plan.accessibility.panelSummaries) add(summary);
+  for (const panel of plan.panels) {
+    if (!panel.noData) continue;
+    const panelName = panel.label?.trim() || panel.id;
+    add(`Panel ${panelName}: No data — ${panel.noData.reason}`);
+  }
+  return details.length > 0 ? details.join(' ') : null;
+}
+
 /**
  * Render a plan to normative SVG. Pure: no clock, no environment, no filesystem, no
  * network, no random state.
@@ -641,6 +660,7 @@ export function renderSvg(
   assertRenderPlanGeometry(plan);
   const colors = theme(plan.themeId);
   const writer = new SvgWriter();
+  const accessibilityDetails = accessibleDetailText(plan);
 
   writer.open('svg', [
     ['xmlns', 'http://www.w3.org/2000/svg'],
@@ -650,12 +670,17 @@ export function renderSvg(
     ['height', plan.height],
     ['role', 'img'],
     ['aria-labelledby', `${plan.figureId}-title`],
-    ['aria-describedby', `${plan.figureId}-desc`],
+    ['aria-describedby', accessibilityDetails === null
+      ? `${plan.figureId}-desc`
+      : `${plan.figureId}-desc ${plan.figureId}-details`],
   ]);
 
   // Figure-level title and description use distinct ARIA references.
   writer.text('title', plan.title, [['id', `${plan.figureId}-title`]]);
   writer.text('desc', plan.accessibility.summary, [['id', `${plan.figureId}-desc`]]);
+  if (accessibilityDetails !== null) {
+    writer.text('desc', accessibilityDetails, [['id', `${plan.figureId}-details`]]);
+  }
 
   // A compact, non-sensitive metadata block. Public identities only — no raw source
   // data, no local path, no token, no prompt.

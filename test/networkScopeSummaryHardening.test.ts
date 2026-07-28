@@ -169,7 +169,7 @@ describe('bounded NetworkScope authority summaries', () => {
       const contract = source(skillId);
       const expectedSkillRevision = skillId === 'network.delay_distribution' ? 5 : 4;
       expect(contract.revision, skillId).toBe(expectedSkillRevision);
-      expect(contract.renderer.revision, skillId).toBe(4);
+      expect(contract.renderer.revision, skillId).toBe(5);
       expect(contract.outputAuthority.evaluator.id, skillId)
         .toBe(`${skillId}.output_authority.v${expectedSkillRevision}`);
       const contractText = JSON.stringify(contract);
@@ -200,7 +200,7 @@ describe('bounded NetworkScope authority summaries', () => {
       'figure.spatial_map_2d',
       'figure.synaptic_weight_trace',
     ]) {
-      expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.revision, id).toBe(4);
+      expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.revision, id).toBe(5);
     }
     for (const id of ['figure.connection_graph', 'figure.spatial_map_2d']) {
       expect(registry.renderers.find((entry: JsonRecord) => entry.id === id)?.marks, id)

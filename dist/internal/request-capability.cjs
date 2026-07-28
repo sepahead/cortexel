@@ -4053,7 +4053,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -4454,7 +4454,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.connection_graph",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -4954,7 +4954,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -5311,7 +5311,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -5748,7 +5748,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -6174,7 +6174,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spatial_map_2d",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -6695,7 +6695,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.synaptic_weight_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -7275,7 +7275,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -7666,7 +7666,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.matrix",
-      "revision": 4,
+      "revision": 5,
       "axisOrder": "target_rows_source_columns"
     },
     "semanticValidators": [
@@ -8101,7 +8101,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.analog_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -8584,7 +8584,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.compartment_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -9037,7 +9037,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.correlogram",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -9414,7 +9414,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.distribution",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -9841,7 +9841,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.multisignal_trace",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -10479,7 +10479,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.phase_plane",
-      "revision": 5
+      "revision": 6
     },
     "semanticValidators": [
       {
@@ -10930,7 +10930,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.population_rate",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -11257,7 +11257,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.psth",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -11827,7 +11827,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.response_curve",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -12392,7 +12392,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 4
+      "revision": 5
     },
     "semanticValidators": [
       {
@@ -13544,7 +13544,7 @@ var LEGACY_SKILL_MAP = freezeGenerated({
 var RENDERERS = freezeGenerated({
   "figure.analog_trace": {
     "id": "figure.analog_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -13556,7 +13556,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.multisignal_trace": {
     "id": "figure.multisignal_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -13568,7 +13568,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.compartment_trace": {
     "id": "figure.compartment_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -13579,7 +13579,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rule",
@@ -13590,7 +13590,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "path",
@@ -13602,7 +13602,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.psth": {
     "id": "figure.psth",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -13614,7 +13614,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.correlogram": {
     "id": "figure.correlogram",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rule",
@@ -13626,7 +13626,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.distribution": {
     "id": "figure.distribution",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -13638,7 +13638,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.response_curve": {
     "id": "figure.response_curve",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "point",
@@ -13650,7 +13650,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.phase_plane": {
     "id": "figure.phase_plane",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "marks": [
       "line",
@@ -13663,7 +13663,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.connection_graph": {
     "id": "figure.connection_graph",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "line",
@@ -13676,7 +13676,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.matrix": {
     "id": "figure.matrix",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "rect",
@@ -13687,7 +13687,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spatial_map_2d": {
     "id": "figure.spatial_map_2d",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "point",
@@ -13700,7 +13700,7 @@ var RENDERERS = freezeGenerated({
   },
   "figure.synaptic_weight_trace": {
     "id": "figure.synaptic_weight_trace",
-    "revision": 4,
+    "revision": 5,
     "status": "stable",
     "marks": [
       "path",
@@ -23459,7 +23459,7 @@ function validateStructure(request, skillId) {
 // src/generated/identity.ts
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:976dc178bd6ca99bc5a57717bb2f2fae2cdb17f29f4bd18802d58032961113ec";
+var CONTRACT_DIGEST = "sha256:ef699776098d64ae1d64697eda339ce4459941f70dac3f7c3eb0720934284c8f";
 
 // src/core/contract-identity.ts
 var CONTRACT_VALUE = /^([a-z][a-z0-9-]*)\/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;

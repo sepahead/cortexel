@@ -7,7 +7,9 @@ import {
   DelayMatrixParamsSchema,
   InDegreeDistributionParamsSchema,
   NetworkParamsSchema,
+  OutDegreeDistributionParamsSchema,
   SpatialMap2DParamsSchema,
+  WeightHistogramParamsSchema,
   WeightMatrixParamsSchema,
 } from '../core/skills/params';
 import {
@@ -19,6 +21,7 @@ import {
   synapseCollectionToDelayMatrixParams,
   synapseCollectionToInDegreeDistributionParams,
   synapseCollectionToOutDegreeDistributionParams,
+  synapseCollectionToWeightHistogramParams,
   synapseCollectionToWeightMatrixParams,
   type NestTopologyResult,
 } from '../core/nest/topology';
@@ -33,6 +36,7 @@ import {
 } from '../core';
 import {
   normalizeSynapseCollectionSnapshot as normalizeFromNestIndex,
+  synapseCollectionToWeightHistogramParams as weightHistogramFromNestIndex,
 } from '../core/nest';
 
 function paramsOf<T>(result: NestTopologyResult<T>): T {
@@ -61,9 +65,12 @@ function semanticsFor(
 }
 
 describe('NEST topology exports and raw SynapseCollection normalization', () => {
-  it('exports the normalizer through both public core boundaries', () => {
+  it('exports topology entrypoints through the intended public boundaries', () => {
     expect(normalizeFromCore).toBe(normalizeSynapseCollectionSnapshot);
     expect(normalizeFromNestIndex).toBe(normalizeSynapseCollectionSnapshot);
+    expect(weightHistogramFromNestIndex).toBe(
+      synapseCollectionToWeightHistogramParams,
+    );
   });
 
   it('accepts documented singular keys, typed arrays, scalars, and the legacy plural family', () => {
@@ -584,6 +591,244 @@ describe('sparse connection matrices', () => {
     }
   });
 
+  it('rejects target-rank-local matrices and degrees without exact ownership authority', () => {
+    const input = { source: [1], target: [3] };
+    const localSnapshot = {
+      sourceIds: [1],
+      targetIds: [3, 4],
+      snapshotTimeMs: 10,
+      snapshotScope: { kind: 'mpi_target_rank_local', rank: 0, world_size: 2 } as const,
+    };
+    const expected = (output: string) => ({
+      ok: false,
+      errors: [
+        `${output} rejects snapshotScope.kind "mpi_target_rank_local": without an exact rank-owned targetIds universe and complete cross-rank edge authority, zero/absence claims are not recoverable`,
+      ],
+    });
+
+    expect(synapseCollectionToAdjacencyMatrixParams(
+      input,
+      localSnapshot,
+    )).toEqual(expected('adjacency matrix'));
+    expect(synapseCollectionToWeightMatrixParams({
+      ...input,
+      weight: [1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...localSnapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      weightUnits: 'nS',
+      aggregation: 'sum',
+    })).toEqual(expected('weight matrix'));
+    expect(synapseCollectionToDelayMatrixParams({
+      ...input,
+      delay: [1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...localSnapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      delayUnits: 'ms',
+      aggregation: 'mean',
+    })).toEqual(expected('delay matrix'));
+    expect(synapseCollectionToInDegreeDistributionParams(input, {
+      ...localSnapshot,
+      normalization: 'count',
+    })).toEqual(expected('in-degree distribution'));
+    expect(synapseCollectionToOutDegreeDistributionParams(input, {
+      ...localSnapshot,
+      normalization: 'count',
+    })).toEqual(expected('out-degree distribution'));
+
+    const completeOptions = {
+      ...localSnapshot,
+      snapshotScope: completeScope,
+    };
+    const adjacency = paramsOf(
+      synapseCollectionToAdjacencyMatrixParams(input, completeOptions),
+    );
+    const weight = paramsOf(synapseCollectionToWeightMatrixParams({
+      ...input,
+      weight: [1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...completeOptions,
+      synapseModelSemantics: staticEffectiveSemantics,
+      weightUnits: 'nS',
+      aggregation: 'sum',
+    }));
+    const delay = paramsOf(synapseCollectionToDelayMatrixParams({
+      ...input,
+      delay: [1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...completeOptions,
+      synapseModelSemantics: staticEffectiveSemantics,
+      delayUnits: 'ms',
+      aggregation: 'mean',
+    }));
+    expect(AdjacencyMatrixParamsSchema.safeParse({
+      ...adjacency,
+      snapshot_scope: localSnapshot.snapshotScope,
+    }).success).toBe(false);
+    expect(WeightMatrixParamsSchema.safeParse({
+      ...weight,
+      snapshot_scope: localSnapshot.snapshotScope,
+    }).success).toBe(false);
+    expect(DelayMatrixParamsSchema.safeParse({
+      ...delay,
+      snapshot_scope: localSnapshot.snapshotScope,
+    }).success).toBe(false);
+
+    const incoming = paramsOf(
+      synapseCollectionToInDegreeDistributionParams(input, {
+        ...completeOptions,
+        normalization: 'count',
+      }),
+    );
+    const outgoing = paramsOf(
+      synapseCollectionToOutDegreeDistributionParams(input, {
+        ...completeOptions,
+        normalization: 'count',
+      }),
+    );
+    expect(InDegreeDistributionParamsSchema.safeParse({
+      ...incoming,
+      snapshot_scope: localSnapshot.snapshotScope,
+    }).success).toBe(false);
+    expect(OutDegreeDistributionParamsSchema.safeParse({
+      ...outgoing,
+      snapshot_scope: localSnapshot.snapshotScope,
+    }).success).toBe(false);
+  });
+
+  it('refuses globally unit-labelled multi-model measurement views', () => {
+    const measured = {
+      source: [1, 2],
+      target: [3, 4],
+      weight: [1, 2],
+      delay: [1, 2],
+      synapse_model: ['static_synapse', 'stdp_synapse'],
+    };
+    const semantics = semanticsFor(
+      measured.synapse_model,
+      'effective',
+      'effective',
+    );
+    const expectedWeight = {
+      ok: false,
+      errors: [
+        'weight matrix rejects weight measurements from multiple observed synapse models ("static_synapse", "stdp_synapse"): the current contract has no bound compatibility or unit-conversion authority for its global weight units claim',
+      ],
+    };
+    const expectedDelayMatrix = {
+      ok: false,
+      errors: [
+        'delay matrix rejects delay measurements from multiple observed synapse models ("static_synapse", "stdp_synapse"): the current contract has no bound compatibility or unit-conversion authority for its global delay units claim',
+      ],
+    };
+    const expectedDelayDistribution = {
+      ok: false,
+      errors: [
+        'delay distribution rejects delay measurements from multiple observed synapse models ("static_synapse", "stdp_synapse"): the current contract has no bound compatibility or unit-conversion authority for its global delay units claim',
+      ],
+    };
+    const runWeight = (order: readonly number[]) =>
+      synapseCollectionToWeightMatrixParams({
+        source: order.map((index) => measured.source[index]),
+        target: order.map((index) => measured.target[index]),
+        weight: order.map((index) => measured.weight[index]),
+        synapse_model: order.map((index) => measured.synapse_model[index]),
+      }, {
+        ...snapshot,
+        synapseModelSemantics: semantics,
+        weightUnits: 'nS',
+        aggregation: 'sum',
+      });
+    const runDelayMatrix = (order: readonly number[]) =>
+      synapseCollectionToDelayMatrixParams({
+        source: order.map((index) => measured.source[index]),
+        target: order.map((index) => measured.target[index]),
+        delay: order.map((index) => measured.delay[index]),
+        synapse_model: order.map((index) => measured.synapse_model[index]),
+      }, {
+        ...snapshot,
+        synapseModelSemantics: semantics,
+        delayUnits: 'ms',
+        aggregation: 'mean',
+      });
+    const runDelayDistribution = (order: readonly number[]) =>
+      synapseCollectionToDelayDistributionParams({
+        source: order.map((index) => measured.source[index]),
+        target: order.map((index) => measured.target[index]),
+        delay: order.map((index) => measured.delay[index]),
+        synapse_model: order.map((index) => measured.synapse_model[index]),
+      }, {
+        ...snapshot,
+        synapseModelSemantics: semantics,
+        delayUnits: 'ms',
+        binWidthMs: 1,
+        windowStartMs: 1,
+        windowStopMs: 3,
+        normalization: 'count',
+      });
+
+    for (const order of [[0, 1], [1, 0]] as const) {
+      expect(runWeight(order)).toEqual(expectedWeight);
+      expect(runDelayMatrix(order)).toEqual(expectedDelayMatrix);
+      expect(runDelayDistribution(order)).toEqual(expectedDelayDistribution);
+    }
+
+    expect(synapseCollectionToAdjacencyMatrixParams(
+      measured,
+      snapshot,
+    ).ok).toBe(true);
+    expect(synapseCollectionToInDegreeDistributionParams(measured, {
+      ...snapshot,
+      normalization: 'count',
+    }).ok).toBe(true);
+    expect(synapseCollectionToOutDegreeDistributionParams(measured, {
+      ...snapshot,
+      normalization: 'count',
+    }).ok).toBe(true);
+
+    expect(synapseCollectionToWeightMatrixParams({
+      source: [1, 2],
+      target: [3, 4],
+      weight: [1, 2],
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      weightUnits: 'nS',
+      aggregation: 'sum',
+    }).ok).toBe(true);
+    expect(synapseCollectionToDelayMatrixParams({
+      source: [1, 2],
+      target: [3, 4],
+      delay: [1, 2],
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      delayUnits: 'ms',
+      aggregation: 'mean',
+    }).ok).toBe(true);
+    expect(synapseCollectionToDelayDistributionParams({
+      source: [1, 2],
+      target: [3, 4],
+      delay: [1, 2],
+      synapse_model: ['static_synapse', 'static_synapse'],
+    }, {
+      ...snapshot,
+      synapseModelSemantics: staticEffectiveSemantics,
+      delayUnits: 'ms',
+      binWidthMs: 1,
+      windowStartMs: 1,
+      windowStopMs: 3,
+      normalization: 'count',
+    }).ok).toBe(true);
+  });
+
   it('aggregates multapses without conflating absence with a zero weight', () => {
     const adjacency = paramsOf(synapseCollectionToAdjacencyMatrixParams({
       source: [1, 1, 2], target: [3, 3, 4],
@@ -945,6 +1190,297 @@ describe('degree and delay distributions', () => {
     ));
     expect(highIndex.delay_counts[49_998]).toBe(1);
     expect(highIndex.delay_counts[49_999]).toBe(0);
+  });
+});
+
+describe('raw SynapseCollection weight histogram transform', () => {
+  const base = {
+    sourceIds: [1],
+    targetIds: [2],
+    snapshotTimeMs: 5,
+    snapshotScope: completeScope,
+    synapseModelSemantics: staticEffectiveSemantics,
+    weightUnits: 'nS',
+    binWidth: 1,
+    windowStart: -2,
+    windowStop: 2,
+  };
+
+  it('bins signed weights at exact half-open boundaries and preserves every observation once', () => {
+    const input = {
+      source: new Array(6).fill(1),
+      target: new Array(6).fill(2),
+      weight: [-2, -1, -0.25, 0, 1, 1.999],
+      synapse_model: new Array(6).fill('static_synapse'),
+    };
+    const count = paramsOf(synapseCollectionToWeightHistogramParams(input, {
+      ...base,
+      normalization: 'count',
+    }));
+    expect(count).toEqual({
+      bin_centers: [-1.5, -0.5, 0.5, 1.5],
+      weight_counts: [1, 2, 1, 2],
+      values: [1, 2, 1, 2],
+      bin_width: 1,
+      window_start: -2,
+      window_stop: 2,
+      weight_units: 'nS',
+      normalization: 'count',
+      value_units: 'count',
+      aggregation: 'each_connection',
+      binning: 'left_closed_right_open',
+      sample_policy: 'complete',
+      connection_count: 6,
+      snapshot_time_ms: 5,
+      snapshot_scope: completeScope,
+    });
+    expect(count.weight_counts.reduce((sum, value) => sum + value, 0)).toBe(
+      count.connection_count,
+    );
+    expect(WeightHistogramParamsSchema.safeParse(count).success).toBe(true);
+
+    const probability = paramsOf(synapseCollectionToWeightHistogramParams(input, {
+      ...base,
+      normalization: 'probability',
+    }));
+    expect(probability.weight_counts).toEqual(count.weight_counts);
+    expect(probability.values).toEqual([1 / 6, 2 / 6, 1 / 6, 2 / 6]);
+    expect(probability.value_units).toBe('probability');
+
+    for (const weight of [-2.000_001, 2]) {
+      expect(synapseCollectionToWeightHistogramParams({
+        source: [1],
+        target: [2],
+        weight: [weight],
+        synapse_model: ['static_synapse'],
+      }, {
+        ...base,
+        normalization: 'count',
+      }).ok).toBe(false);
+    }
+    expect(paramsOf(synapseCollectionToWeightHistogramParams({
+      source: [1, 1, 1, 1],
+      target: [2, 2, 2, 2],
+      weight: [-2, -1, 0, 1],
+      synapse_model: new Array(4).fill('static_synapse'),
+    }, {
+      ...base,
+      normalization: 'count',
+    })).weight_counts).toEqual([1, 1, 1, 1]);
+  });
+
+  it('is permutation-invariant and preserves exact raw histogram mass', () => {
+    fc.assert(fc.property(
+      fc.array(fc.integer({ min: -20, max: 19 }), {
+        minLength: 1,
+        maxLength: 64,
+      }),
+      fc.nat({ max: 64 }),
+      (weights, shift) => {
+        const run = (ordered: readonly number[]) => paramsOf(
+          synapseCollectionToWeightHistogramParams({
+            source: new Array(ordered.length).fill(1),
+            target: new Array(ordered.length).fill(2),
+            weight: [...ordered],
+            synapse_model: new Array(ordered.length).fill('static_synapse'),
+          }, {
+            ...base,
+            windowStart: -20,
+            windowStop: 20,
+            normalization: 'count',
+          }),
+        );
+        const cut = shift % weights.length;
+        const rotated = [...weights.slice(cut), ...weights.slice(0, cut)];
+        const expectedCounts = new Array<number>(40).fill(0);
+        for (const weight of weights) expectedCounts[weight + 20] += 1;
+
+        const canonical = run(weights);
+        expect(canonical.weight_counts).toEqual(expectedCounts);
+        expect(canonical.values).toEqual(expectedCounts);
+        expect(canonical.connection_count).toBe(weights.length);
+        expect(canonical.weight_counts.reduce((sum, value) => sum + value, 0))
+          .toBe(weights.length);
+        expect(run([...weights].reverse())).toEqual(canonical);
+        expect(run(rotated)).toEqual(canonical);
+      },
+    ), { numRuns: 100 });
+  });
+
+  it('handles empty complete snapshots only for count normalization and bounds geometry', () => {
+    const empty = {
+      source: [],
+      target: [],
+      weight: [],
+      synapse_model: [],
+    };
+    const count = paramsOf(synapseCollectionToWeightHistogramParams(empty, {
+      ...base,
+      synapseModelSemantics: [],
+      normalization: 'count',
+    }));
+    expect(count).toMatchObject({
+      weight_counts: [0, 0, 0, 0],
+      values: [0, 0, 0, 0],
+      connection_count: 0,
+    });
+    expect(synapseCollectionToWeightHistogramParams(empty, {
+      ...base,
+      synapseModelSemantics: [],
+      normalization: 'probability',
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightHistogramParams({
+      source: [1],
+      target: [2],
+      weight: [0],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...base,
+      windowStart: 0,
+      windowStop: 2.5,
+      normalization: 'count',
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightHistogramParams({
+      source: [1],
+      target: [2],
+      weight: [0],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...base,
+      windowStart: 0,
+      windowStop: 50_001,
+      normalization: 'count',
+    }).ok).toBe(false);
+  });
+
+  it('requires complete model and weight authority and rejects mixed models', () => {
+    const measured = {
+      source: [1, 1],
+      target: [2, 2],
+      weight: [-1, 1],
+      synapse_model: ['static_synapse', 'stdp_synapse'],
+    };
+    expect(synapseCollectionToWeightHistogramParams(measured, {
+      ...base,
+      synapseModelSemantics: semanticsFor(
+        measured.synapse_model,
+        'effective',
+        'unknown',
+      ),
+      normalization: 'count',
+    })).toEqual({
+      ok: false,
+      errors: [
+        'weight histogram rejects weight measurements from multiple observed synapse models ("static_synapse", "stdp_synapse"): the current contract has no bound compatibility or unit-conversion authority for its global weight units claim',
+      ],
+    });
+    expect(synapseCollectionToWeightHistogramParams({
+      source: [1, 1],
+      target: [2, 2],
+      weight: [-1, 1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...base,
+      normalization: 'count',
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightHistogramParams({
+      source: [1],
+      target: [2],
+      weight: [1],
+    }, {
+      ...base,
+      normalization: 'count',
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightHistogramParams({
+      source: [1],
+      target: [2],
+      delay: [1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...base,
+      normalization: 'count',
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightHistogramParams({
+      source: [1],
+      target: [2],
+      weight: [1],
+      synapse_model: ['static_synapse'],
+    }, {
+      ...base,
+      synapseModelSemantics: [],
+      normalization: 'count',
+    }).ok).toBe(false);
+  });
+
+  it('rejects missing, unused, or accessor-bearing option authority without invoking getters', () => {
+    const input = {
+      source: [1],
+      target: [2],
+      weight: [0],
+      synapse_model: ['static_synapse'],
+    };
+    const { weightUnits: _weightUnits, ...withoutWeightUnits } = base;
+    expect(synapseCollectionToWeightHistogramParams(input, {
+      ...withoutWeightUnits,
+      normalization: 'count',
+    }).ok).toBe(false);
+    const { synapseModelSemantics: _semantics, ...withoutSemantics } = base;
+    expect(synapseCollectionToWeightHistogramParams(input, {
+      ...withoutSemantics,
+      normalization: 'count',
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightHistogramParams(input, {
+      ...base,
+      delayUnits: 'ms',
+      normalization: 'count',
+    }).ok).toBe(false);
+    expect(synapseCollectionToWeightHistogramParams({
+      source: [],
+      target: [],
+      weight: [],
+      synapse_model: [],
+    }, {
+      ...base,
+      synapseModelSemantics: staticEffectiveSemantics,
+      normalization: 'count',
+    }).ok).toBe(false);
+
+    let inputReads = 0;
+    const accessorInput: Record<string, unknown> = {
+      source: [1],
+      target: [2],
+      synapse_model: ['static_synapse'],
+    };
+    Object.defineProperty(accessorInput, 'weight', {
+      enumerable: true,
+      get() {
+        inputReads += 1;
+        return [0];
+      },
+    });
+    expect(synapseCollectionToWeightHistogramParams(accessorInput, {
+      ...base,
+      normalization: 'count',
+    }).ok).toBe(false);
+    expect(inputReads).toBe(0);
+
+    let optionReads = 0;
+    const accessorOptions: Record<string, unknown> = {
+      ...base,
+      normalization: 'count',
+    };
+    Object.defineProperty(accessorOptions, 'weightUnits', {
+      enumerable: true,
+      get() {
+        optionReads += 1;
+        return 'nS';
+      },
+    });
+    expect(synapseCollectionToWeightHistogramParams(
+      input,
+      accessorOptions,
+    ).ok).toBe(false);
+    expect(optionReads).toBe(0);
   });
 });
 

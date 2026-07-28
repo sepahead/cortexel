@@ -1,6 +1,6 @@
 import {
   parseJsonStrict
-} from "../chunk-73GOQEQ3.js";
+} from "../chunk-HEEPK7X6.js";
 import {
   DistributionDerivationError,
   MatrixDerivationError,
@@ -13,7 +13,7 @@ import {
   deriveWeightMatrix,
   validateStructure,
   verifyHistogramValues
-} from "../chunk-G2BUPERK.js";
+} from "../chunk-6VN5AFAK.js";
 import {
   LEGACY_SKILL_MAP,
   MAX_MATERIALIZED_BINS,
@@ -41,7 +41,7 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "../chunk-QD4CIX2J.js";
+} from "../chunk-23EH6LGQ.js";
 import {
   binary64RelativeDifferenceWithinEpsilons,
   binary64RelativeDifferenceWithinTolerance,
@@ -54,7 +54,7 @@ import {
 } from "../chunk-XGABDL4O.js";
 import {
   snapshotValue
-} from "../chunk-V5ZPIE2W.js";
+} from "../chunk-X2A5HVBH.js";
 import {
   CONTRACT_DIGEST,
   DEFAULT_PROFILE,
@@ -68,7 +68,7 @@ import {
   pointer,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-JRDY5D5C.js";
+} from "../chunk-JG4ZORSQ.js";
 import {
   canonicalDigest
 } from "../chunk-ZYBCCIMH.js";

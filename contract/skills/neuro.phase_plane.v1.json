@@ -1074,7 +1074,7 @@
   ],
   "renderer": {
     "id": "figure.phase_plane",
-    "revision": 5
+    "revision": 6
   },
   "budgets": {
     "maxObservations": 250000,

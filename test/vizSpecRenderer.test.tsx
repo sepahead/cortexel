@@ -36,6 +36,27 @@ describe('VizSpecRenderer binds the strict gate at the DOM boundary', () => {
     expect(html).toContain('role="note"');
     expect(html).toContain('Scientific provenance disclosure');
     expect(html).toContain('Schematic');
+    const groupAttributes =
+      html.match(/<div class="cortexel-vizspec"([^>]*)>/u)?.[1] ?? '';
+    const captionId = html.match(
+      /<div id="([^"]+)" class="cortexel-honesty-caption"/u,
+    )?.[1];
+    expect(captionId).toBeDefined();
+    expect(groupAttributes).toContain('role="group"');
+    expect(groupAttributes).toContain(`aria-describedby="${captionId}"`);
+    expect(html.match(new RegExp(`id="${captionId}"`, 'gu'))).toHaveLength(1);
+
+    const repeatedHtml = renderToStaticMarkup(
+      <VizSpecRenderer
+        spec={spec}
+        renderScene={(args) => <div data-scene={args.scene}>scene</div>}
+      />,
+    );
+    expect(
+      repeatedHtml.match(
+        /<div id="([^"]+)" class="cortexel-honesty-caption"/u,
+      )?.[1],
+    ).toBe(captionId);
   });
 
   it('shows actionable strict errors without calling host callbacks during render', () => {

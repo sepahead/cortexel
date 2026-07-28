@@ -4593,6 +4593,10 @@ const runtimeTopologyProbe = `
     delayUnits: 'ms',
     aggregation: 'mean',
   });
+  const inDegree = core.synapseCollectionToInDegreeDistributionParams(snapshot, {
+    ...common,
+    normalization: 'count',
+  });
   const localInDegree = core.synapseCollectionToInDegreeDistributionParams(snapshot, {
     ...common,
     snapshotScope: { kind: 'mpi_target_rank_local', rank: 0, world_size: 2 },
@@ -4697,8 +4701,8 @@ const runtimeTopologyProbe = `
       !weights.ok || weights.params.cells[0].value !== 0 ||
       weights.params.cells[0].connection_count !== 2 ||
       !delays.ok || delays.params.cells[0].value !== 1.5 ||
-      !localInDegree.ok || localInDegree.params.connection_count !== 3 ||
-      localOutDegree.ok || !delayDistribution.ok ||
+      !inDegree.ok || inDegree.params.connection_count !== 3 ||
+      localInDegree.ok || localOutDegree.ok || !delayDistribution.ok ||
       delayDistribution.params.delay_counts.join(',') !== '1,1,1' ||
       !spatial.ok || spatial.params.nodes.length !== 2 ||
       !preciseDelay.ok || preciseDelay.params.delay_counts.join(',') !== '1,0' ||
@@ -5100,7 +5104,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
           throw new Error('CJS core exports are incomplete');
         }
         if (!Array.isArray(manifest.skills) || manifest.skills.length !== ${NEST_SKILL_IDS.length} ||
-            manifest.manifestVersion !== '10' ||
+            manifest.manifestVersion !== '11' ||
             manifest.paramConstraintLanguage?.version !== ${JSON.stringify(PARAM_CONSTRAINT_LANGUAGE.version)} ||
             manifest.skillAxisVersion !== ${JSON.stringify(CORTEXEL_SKILL_VERSION)} ||
             manifest.specVersion !== ${JSON.stringify(CORTEXEL_SPEC_VERSION)} ||

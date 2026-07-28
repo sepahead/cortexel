@@ -24,7 +24,7 @@ function stableRenderers(): JsonRecord[] {
 }
 
 describe('global stable SVG output identity', () => {
-  it('isolates the phase-plane renderer revision and three revision-5 scientific contracts', () => {
+  it('moves every stable SVG renderer while preserving independent scientific revisions', () => {
     const skills = stableSkills();
     const renderers = stableRenderers();
     const rendererById = new Map(renderers.map((renderer) => [renderer.id, renderer]));
@@ -40,7 +40,7 @@ describe('global stable SVG output identity', () => {
         skill.id === 'network.delay_matrix' ||
         skill.id === 'neuro.phase_plane'
       ) ? 5 : 4;
-      const expectedRendererRevision = skill.id === 'neuro.phase_plane' ? 5 : 4;
+      const expectedRendererRevision = skill.id === 'neuro.phase_plane' ? 6 : 5;
       expect(skill.revision, skill.id).toBe(expectedSkillRevision);
       expect(skill.renderer?.revision, skill.id).toBe(expectedRendererRevision);
       expect(rendererById.get(skill.renderer?.id)?.revision, skill.renderer?.id)
@@ -53,7 +53,7 @@ describe('global stable SVG output identity', () => {
 
     for (const renderer of renderers) {
       expect(renderer.revision, renderer.id)
-        .toBe(renderer.id === 'figure.phase_plane' ? 5 : 4);
+        .toBe(renderer.id === 'figure.phase_plane' ? 6 : 5);
     }
   });
 });

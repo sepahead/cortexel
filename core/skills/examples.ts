@@ -450,6 +450,7 @@ export const SKILL_EXAMPLE_PAYLOADS: Partial<Record<NestSkillId, VizSpec>> = {
       },
       axis_units: { v: 'mV', w: '1' },
       derivative_units: { v: 'mV/ms', w: '1/ms' },
+      derivative_time_unit: 'ms',
       axis_order: ['v', 'w'],
       flattening: 'row-major-last-axis-fastest',
     },

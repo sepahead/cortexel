@@ -542,7 +542,7 @@
             },
             {
               "type": "object",
-              "description": "A declared edge attribute encoded with COLOUR (alone or with width). The scale is required and never inferred: a diverging scale carries an explicit centre, and signed values are additionally dashed so the sign survives a grayscale print. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
+              "description": "A declared edge attribute encoded with COLOUR (alone or with width). The scale is required and never inferred: a diverging scale carries an explicit centre, and signed values are additionally dashed so a non-colour sign encoding remains present. This does not establish greyscale-print conformance. Aggregation of a shared chord is declared at parameters.multapseAggregation.",
               "properties": {
                 "valueEncoding": {
                   "type": "string",

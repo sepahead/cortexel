@@ -1,12 +1,12 @@
 import {
   migrateLegacyRequest
-} from "../chunk-6MERKLKG.js";
+} from "../chunk-2YYBMHXX.js";
 import {
   deriveDisclosures
-} from "../chunk-UJXCRPI6.js";
+} from "../chunk-AVLFUCHM.js";
 import {
   parseJsonStrict
-} from "../chunk-73GOQEQ3.js";
+} from "../chunk-HEEPK7X6.js";
 import {
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
@@ -32,11 +32,11 @@ import {
   responseEventMembershipDigest,
   toSeconds,
   unitLabel
-} from "../chunk-QD4CIX2J.js";
+} from "../chunk-23EH6LGQ.js";
 import "../chunk-XGABDL4O.js";
 import {
   snapshotValue
-} from "../chunk-V5ZPIE2W.js";
+} from "../chunk-X2A5HVBH.js";
 import {
   ARTIFACT_CONTRACT,
   CATALOG_DIGEST,
@@ -55,7 +55,7 @@ import {
   safeText,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-JRDY5D5C.js";
+} from "../chunk-JG4ZORSQ.js";
 import {
   CanonicalizationError,
   canonicalDigest,

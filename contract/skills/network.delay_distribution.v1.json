@@ -499,7 +499,7 @@
   ],
   "renderer": {
     "id": "figure.distribution",
-    "revision": 4
+    "revision": 5
   },
   "budgets": {
     "maxObservations": 200000,

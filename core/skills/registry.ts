@@ -171,7 +171,7 @@ import {
 } from './params';
 import { getExamplePayload, getHostRendererExamplePayload } from './examples';
 
-export const CORTEXEL_SKILL_VERSION = '1.7.0';
+export const CORTEXEL_SKILL_VERSION = '1.8.0';
 
 export const STRICT_INVOCATION_POLICY = Object.freeze({
   version: '3',
@@ -241,6 +241,7 @@ export interface ParamValidationConstraint {
     | 'weight_histogram_consistency'
     | 'spatial_extent_bounds'
     | 'scope_compatibility'
+    | 'phase_plane_direction_basis'
     | 'acyclic';
   paths: readonly string[];
   field?: string;
@@ -340,7 +341,7 @@ export interface SkillContract {
  *  deliberately tiny JSONPath subset so non-TS hosts do not have to guess how
  *  `[*]`, `*`, or `?` are interpreted. */
 export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
-  version: '10',
+  version: '11',
   pathSyntax: 'dot-separated object keys',
   arrayWildcard: '[*]',
   objectValueWildcard: '*',
@@ -387,6 +388,7 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     'weight_histogram_consistency',
     'spatial_extent_bounds',
     'scope_compatibility',
+    'phase_plane_direction_basis',
     'acyclic',
   ] as const),
   semantics: Object.freeze({
@@ -564,7 +566,7 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
       pathRoles: 'bin centers, raw weight_counts, displayed values, bin width, connection_count, normalization, value units, weight units, aggregation, and binning in that order',
       rule: 'the three bin arrays have equal length; weight_counts are non-negative safe integers whose left-to-right safe-integer sum equals connection_count; displayed counts equal raw counts exactly; displayed probabilities are the exact published binary64 count/connection_count results; non-count normalization requires a non-empty snapshot',
       operationOrder: 'probability=count/connection_count using one IEEE-754 binary64 division; per-bin comparison uses exact Object.is-equivalent binary64 identity',
-      fixedSemantics: 'aggregation=each_connection; binning=left_closed_right_open; every selected SynapseCollection entry contributes exactly one weight to exactly one bin',
+      fixedSemantics: 'aggregation=each_connection and binning=left_closed_right_open are checked literals; the advertised raw transform derives exactly one in-window weight per selected SynapseCollection entry, while a standalone serialized params object does not carry that derivation receipt',
       geometry: 'a separate uniform_bin_window constraint publishes and evaluates [window_start,window_stop) bin geometry in weight_units within its bounded binary64 tolerance',
     }),
     spatial_extent_bounds: Object.freeze({
@@ -575,7 +577,12 @@ export const PARAM_CONSTRAINT_LANGUAGE = Object.freeze({
     }),
     scope_compatibility: Object.freeze({
       pathRoles: 'scope object and optional degree direction in that order',
-      rule: 'rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; out-degree forbids mpi_target_rank_local',
+      rule: 'rank-local scopes require integer 0<=rank<world_size; merged scopes require positive world_size; when allowedFieldValues is present, scope.kind must occur in that closed set; legacy constraints without that field still forbid mpi_target_rank_local for out-degree',
+    }),
+    phase_plane_direction_basis: Object.freeze({
+      pathRoles: 'grid object, derivative-array object, coordinate-unit object, derivative-unit object, and shared derivative-time-unit scalar in that order',
+      rule: 'grid has exactly two axes with at least two finite strictly increasing coordinates each; derivative and unit objects have exactly the grid keys; derivative_time_unit is ms or s; derivative_units[key] is exactly axis_units[key] + "/" + derivative_time_unit; a nonzero per-second component must remain nonzero after one binary64 division by 1000',
+      canonicalNumericBasis: 'renderers perform one binary64 division by 1000 for per-second components before deriving arrow direction or presentation length; this is one declared rounding basis, not a universal claim that independently rounded ms/s source representations are byte-identical',
     }),
     acyclic: Object.freeze({
       pathRoles: 'first path resolves node ids; second resolves each node parent id or null',
@@ -1263,7 +1270,12 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     transform: {
       id: 'synapseCollectionToAdjacencyMatrixParams',
       rawFields: ['source|sources', 'target|targets'],
-      requiredOptions: ['sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope'],
+      requiredOptions: [
+        'sourceIds',
+        'targetIds',
+        'snapshotTimeMs',
+        'snapshotScope (not target-rank-local)',
+      ],
       outputSkill: 'nest.adjacency_matrix',
     },
     requiredInputKeys: [
@@ -1328,8 +1340,11 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         'synapse_model|synapse_models',
       ],
       requiredOptions: [
-        'sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope',
-        'synapseModelSemantics', 'weightUnits', 'aggregation',
+        'sourceIds', 'targetIds', 'snapshotTimeMs',
+        'snapshotScope (not target-rank-local)',
+        'synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)',
+        'weightUnits',
+        'aggregation',
       ],
       outputSkill: 'nest.weight_matrix',
     },
@@ -1396,8 +1411,11 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         'synapse_model|synapse_models',
       ],
       requiredOptions: [
-        'sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope',
-        'synapseModelSemantics', "delayUnits='ms'", 'aggregation',
+        'sourceIds', 'targetIds', 'snapshotTimeMs',
+        'snapshotScope (not target-rank-local)',
+        'synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)',
+        "delayUnits='ms'",
+        'aggregation',
       ],
       outputSkill: 'nest.delay_matrix',
     },
@@ -1460,7 +1478,13 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     transform: {
       id: 'synapseCollectionToInDegreeDistributionParams',
       rawFields: ['source|sources', 'target|targets'],
-      requiredOptions: ['sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope', 'normalization'],
+      requiredOptions: [
+        'sourceIds',
+        'targetIds',
+        'snapshotTimeMs',
+        'snapshotScope (not target-rank-local)',
+        'normalization',
+      ],
       outputSkill: 'nest.in_degree_distribution',
     },
     requiredInputKeys: [
@@ -1522,7 +1546,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html',
       dataShape: 'contiguous degree bins, exact node counts, and explicit zero-degree inclusion',
       output: 'In-degree count or probability distribution',
-      note: 'Each SynapseCollection entry counts, including multapses.',
+      note: 'Each SynapseCollection entry counts, including multapses; target-rank-local snapshots are rejected without exact target-ownership authority.',
     }],
   },
   'nest.out_degree_distribution': {
@@ -1617,7 +1641,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       ],
       requiredOptions: [
         'sourceIds', 'targetIds', 'snapshotTimeMs', 'snapshotScope',
-        'synapseModelSemantics', "delayUnits='ms'", 'binWidthMs',
+        'synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)',
+        "delayUnits='ms'",
+        'binWidthMs',
         'windowStartMs', 'windowStopMs', 'normalization',
       ],
       outputSkill: 'nest.delay_distribution',
@@ -1696,6 +1722,28 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       bareFamilyCandidate: true,
       dataShapeKind: 'weight_distribution',
     },
+    transform: {
+      id: 'synapseCollectionToWeightHistogramParams',
+      rawFields: [
+        'source|sources',
+        'target|targets',
+        'weight|weights',
+        'synapse_model|synapse_models',
+      ],
+      requiredOptions: [
+        'sourceIds',
+        'targetIds',
+        'snapshotTimeMs',
+        'snapshotScope',
+        'synapseModelSemantics (exactly one observed model for a nonempty measured aggregate)',
+        'weightUnits',
+        'binWidth',
+        'windowStart',
+        'windowStop',
+        'normalization',
+      ],
+      outputSkill: 'nest.weight_histogram',
+    },
     requiredInputKeys: [
       'bin_centers',
       'weight_counts',
@@ -1734,6 +1782,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       },
       synapse_model: {
         reason: 'The aggregate weight params do not retain the snapshot synapse model.',
+      },
+      parallel_edge_policy: {
+        reason: 'The serialized histogram retains aggregate counts but no raw-entry derivation receipt from which to authenticate the claimed one-entry/one-observation mapping.',
       },
     }),
     provenanceParamConstraints: [
@@ -1791,7 +1842,8 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         kind: 'equals_literal',
         provenanceKey: 'parallel_edge_policy',
         value: 'count_each_connection',
-        description: 'Every selected SynapseCollection entry contributes one weight observation.',
+        establishesBinding: false,
+        description: 'The declared one-entry/one-observation policy must equal the contract literal; serialized aggregate params alone do not authenticate the raw mapping.',
       },
     ],
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
@@ -1800,9 +1852,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Plot weight matrices example / SynapseCollection snapshot',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/plot_weight_matrices.html',
-        dataShape: 'raw per-bin connection counts from one typed complete GetConnections snapshot',
+        dataShape: 'raw per-bin connection counts complete for one typed declared GetConnections snapshot scope',
         output: 'Connection-weight count or probability histogram',
-        note: 'Every selected connection contributes exactly one weight; weight_recorder update events are a different, biased sample.',
+        note: 'The advertised raw transform derives one observation per selected connection; a serialized params object carries no transform receipt, and weight_recorder update events are a different, biased sample.',
       },
     ],
   },
@@ -2037,7 +2089,8 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     id: 'nest.phase_plane',
     version: CORTEXEL_SKILL_VERSION,
     title: 'NEST phase-plane renderer',
-    description: 'Render a checked Cartesian phase-plane vector field.',
+    description:
+      'Render checked numeric derivative directions on a non-degenerate Cartesian phase-plane grid with one shared time basis.',
     deviceFamily: 'computed',
     scene: 'phase-plane',
     requiredInputKeys: [
@@ -2045,6 +2098,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'derivatives',
       'axis_units',
       'derivative_units',
+      'derivative_time_unit',
       'axis_order',
       'flattening',
     ],
@@ -2081,9 +2135,9 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         nestExample: 'Numerical phase-plane analysis of the Hodgkin-Huxley neuron',
         sourceUrl:
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/hh_phaseplane.html',
-        dataShape: 'state-variable axes plus flattened derivative arrays and explicit ordering',
-        output: 'Unit-labelled phase-plane vector field',
-        note: 'No nullcline, trajectory, or equilibrium is present in this contract; do not invent one.',
+        dataShape: 'strictly increasing state-variable axes, flattened derivative arrays, one explicit shared derivative time unit, and explicit ordering',
+        output: 'Unit-labelled numeric derivative directions normalized in plotted coordinate space',
+        note: 'Arrow direction is derived after conversion to one shared per-ms numeric basis; arrow length is presentation-only and no nullcline, trajectory, or equilibrium is present.',
       },
     ],
   },
@@ -2095,6 +2149,28 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       'Render a symmetric correlation_detector lag histogram with explicit pair orientation, interval policy, counting window, zero-lag handling, and statistic semantics.',
     deviceFamily: 'correlation_detector',
     scene: 'correlogram',
+    transform: {
+      id: 'correlationDetectorToCorrelogramParams',
+      rawFields: [
+        'delta_tau',
+        'tau_max',
+        'Tstart',
+        'Tstop',
+        'count_histogram',
+      ],
+      requiredOptions: [
+        "measurement='count_histogram'",
+        'referenceLabel',
+        'targetLabel',
+        "zeroLagPolicy='included'",
+        'sourceConfiguration.simulationResolutionMs',
+        'sourceConfiguration.simulationStartMs',
+        'sourceConfiguration.simulationStopMs',
+        'sourceConfiguration.referenceReceptorPort=0',
+        'sourceConfiguration.targetReceptorPort=1',
+      ],
+      outputSkill: 'nest.correlogram',
+    },
     requiredInputKeys: [
       'lags_ms',
       'values',
@@ -2123,6 +2199,12 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
       detector_id: {
         reason: 'The source correlation-detector identity is not represented in correlogram params.',
       },
+      reference_population: {
+        reason: 'The reference label is caller supplied and does not authenticate which external population was wired to detector receptor port 0.',
+      },
+      target_population: {
+        reason: 'The target label is caller supplied and does not authenticate which external population was wired to detector receptor port 1.',
+      },
     }),
     provenanceParamConstraints: [
       {
@@ -2135,12 +2217,14 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
         kind: 'equals_param_path',
         provenanceKey: 'reference_population',
         paramPath: 'pair.reference_label',
+        establishesBinding: false,
         description: 'Declared reference population must match params.pair.reference_label.',
       },
       {
         kind: 'equals_param_path',
         provenanceKey: 'target_population',
         paramPath: 'pair.target_label',
+        establishesBinding: false,
         description: 'Declared target population must match params.pair.target_label.',
       },
       {
@@ -2176,7 +2260,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
           'https://nest-simulator.readthedocs.io/en/latest/auto_examples/cross_check_mip_corrdet.html',
         dataShape: 'symmetric lag centers, values, bin/tau/counting-window semantics, oriented population pair, and discriminated statistic',
         output: 'Canonical correlogram distinct from ISI and other time histograms',
-        note: 'Positive lag means the target population spikes after the reference population; never infer orientation from a display label.',
+        note: 'The raw transform requires the documented port order, resolution, and simulation-window margins, but serialized labels/configuration remain source claims; positive lag means target follows reference.',
       },
     ],
   },
@@ -2681,7 +2765,11 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
     {
       kind: 'scope_compatibility',
       paths: ['snapshot_scope'],
-      description: 'Snapshot MPI rank metadata must be internally valid.',
+      allowedFieldValues: [
+        'single_process_complete',
+        'mpi_all_ranks_merged',
+      ],
+      description: 'Literal matrices require a complete single-process or all-ranks-merged snapshot.',
     },
   ],
   'nest.weight_matrix': [
@@ -2693,7 +2781,11 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
     {
       kind: 'scope_compatibility',
       paths: ['snapshot_scope'],
-      description: 'Snapshot MPI rank metadata must be internally valid.',
+      allowedFieldValues: [
+        'single_process_complete',
+        'mpi_all_ranks_merged',
+      ],
+      description: 'Literal matrices require a complete single-process or all-ranks-merged snapshot.',
     },
   ],
   'nest.delay_matrix': [
@@ -2705,7 +2797,11 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
     {
       kind: 'scope_compatibility',
       paths: ['snapshot_scope'],
-      description: 'Snapshot MPI rank metadata must be internally valid.',
+      allowedFieldValues: [
+        'single_process_complete',
+        'mpi_all_ranks_merged',
+      ],
+      description: 'Literal matrices require a complete single-process or all-ranks-merged snapshot.',
     },
   ],
   'nest.in_degree_distribution': [
@@ -2723,7 +2819,11 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
     {
       kind: 'scope_compatibility',
       paths: ['snapshot_scope', 'direction'],
-      description: 'In-degree accepts valid complete or target-rank-local snapshot scope.',
+      allowedFieldValues: [
+        'single_process_complete',
+        'mpi_all_ranks_merged',
+      ],
+      description: 'In-degree requires a complete single-process or all-ranks-merged snapshot.',
     },
   ],
   'nest.out_degree_distribution': [
@@ -2741,7 +2841,11 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
     {
       kind: 'scope_compatibility',
       paths: ['snapshot_scope', 'direction'],
-      description: 'Out-degree rejects target-rank-local evidence and validates merged-rank metadata.',
+      allowedFieldValues: [
+        'single_process_complete',
+        'mpi_all_ranks_merged',
+      ],
+      description: 'Out-degree requires a complete single-process or all-ranks-merged snapshot.',
     },
   ],
   'nest.delay_distribution': [
@@ -2837,6 +2941,17 @@ export const PARAM_VALIDATION_CONSTRAINTS: Readonly<
     },
   ],
   'nest.phase_plane': [
+    {
+      kind: 'phase_plane_direction_basis',
+      paths: [
+        'grid',
+        'derivatives',
+        'axis_units',
+        'derivative_units',
+        'derivative_time_unit',
+      ],
+      description: 'Both non-degenerate axes and both derivative components share one exact, machine-checkable time denominator before renderer normalization.',
+    },
     {
       kind: 'property_count',
       paths: ['grid'],
