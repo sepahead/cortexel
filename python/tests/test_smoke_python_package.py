@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 import copy
+import dis
 import errno
+import gc
 import gzip
 import hashlib
 import io
@@ -18,6 +20,7 @@ import tarfile
 import tempfile
 import time
 import unittest
+import weakref
 import zipfile
 import zlib
 from collections.abc import Sequence
@@ -472,6 +475,136 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             else:
                 self.fail("timed-out subprocess descendant survived its process group")
 
+    def test_cleanup_pipe_failures_drain_to_eof_before_raw_reap(self) -> None:
+        real_exited = smoke._UnreapedProcessExitObserver.exited
+        real_read = smoke.os.read
+        real_waitpid = smoke.os.waitpid
+
+        for mode in ("overflow", "read_error", "persistent_error"):
+            with self.subTest(mode=mode):
+                cleanup_phase = False
+                cleanup_started = 0.0
+                injected_error = False
+                data_observed = False
+                eof_descriptors: set[int] = set()
+                raw_reaps = 0
+
+                def await_terminal(
+                    observer: smoke._UnreapedProcessExitObserver,
+                ) -> bool:
+                    nonlocal cleanup_phase, cleanup_started
+                    cleanup_phase = True
+                    deadline = time.monotonic() + 5
+                    while not real_exited(observer):
+                        self.assertLess(time.monotonic(), deadline)
+                        time.sleep(0.01)
+                    cleanup_started = time.monotonic()
+                    return True
+
+                def controlled_read(file_descriptor: int, size: int) -> bytes:
+                    nonlocal data_observed, injected_error
+                    if cleanup_phase and mode == "persistent_error":
+                        injected_error = True
+                        raise RuntimeError("synthetic persistent cleanup read failure")
+                    if (
+                        cleanup_phase
+                        and mode == "read_error"
+                        and not injected_error
+                    ):
+                        injected_error = True
+                        raise RuntimeError("synthetic cleanup pipe read failure")
+                    chunk = real_read(file_descriptor, size)
+                    if cleanup_phase:
+                        if chunk:
+                            data_observed = True
+                        else:
+                            eof_descriptors.add(file_descriptor)
+                    return chunk
+
+                def ordered_raw_reap(
+                    process_id: int,
+                    options: int,
+                ) -> tuple[int, int]:
+                    nonlocal raw_reaps
+                    raw_reaps += 1
+                    if mode == "persistent_error":
+                        self.assertGreaterEqual(
+                            time.monotonic() - cleanup_started,
+                            0.04,
+                        )
+                    else:
+                        self.assertTrue(data_observed)
+                        self.assertEqual(len(eof_descriptors), 2)
+                    return real_waitpid(process_id, options)
+
+                expected_error = (
+                    "captured-output budget"
+                    if mode == "overflow"
+                    else (
+                        "synthetic cleanup pipe read failure"
+                        if mode == "read_error"
+                        else "synthetic persistent cleanup read failure"
+                    )
+                )
+                output_budget = 1 if mode == "overflow" else 1024
+                cleanup_timeout = (
+                    0.05
+                    if mode == "persistent_error"
+                    else smoke.PROCESS_CLEANUP_TIMEOUT_SECONDS
+                )
+                with (
+                    patch.object(
+                        smoke._UnreapedProcessExitObserver,
+                        "exited",
+                        autospec=True,
+                        side_effect=await_terminal,
+                    ),
+                    patch.object(smoke.os, "read", side_effect=controlled_read),
+                    patch.object(smoke.os, "waitpid", side_effect=ordered_raw_reap),
+                    patch.object(
+                        smoke.subprocess.Popen,
+                        "poll",
+                        autospec=True,
+                        side_effect=AssertionError("cleanup polled before draining"),
+                    ),
+                    patch.object(
+                        smoke.subprocess.Popen,
+                        "wait",
+                        autospec=True,
+                        side_effect=AssertionError("cleanup used Popen.wait"),
+                    ),
+                    patch.object(
+                        smoke,
+                        "MAX_SUBPROCESS_OUTPUT_BYTES",
+                        output_budget,
+                    ),
+                    patch.object(
+                        smoke,
+                        "PROCESS_CLEANUP_TIMEOUT_SECONDS",
+                        cleanup_timeout,
+                    ),
+                    self.assertRaisesRegex(RuntimeError, expected_error),
+                ):
+                    smoke.run_checked(
+                        [
+                            sys.executable,
+                            "-I",
+                            "-B",
+                            "-c",
+                            "import os; os.write(1, b'cleanup-output')",
+                        ],
+                        cwd=ROOT,
+                        environment={},
+                        timeout=5,
+                        label=f"cleanup-{mode} fixture",
+                        capture_output=True,
+                    )
+                self.assertTrue(cleanup_phase)
+                self.assertEqual(raw_reaps, 1)
+                if mode != "persistent_error":
+                    self.assertEqual(len(eof_descriptors), 2)
+                self.assertEqual(injected_error, mode != "overflow")
+
     def test_process_cleanup_signals_only_while_leader_is_unreaped(self) -> None:
         for return_code in (0, 17):
             with self.subTest(return_code=return_code):
@@ -480,14 +613,18 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 process_id = 123456789
 
                 class FakeProcess:
-                    pid = process_id
+                    _child_created = True
                     returncode: int | None = None
+                    pid_reads = 0
 
-                    def wait(self, *, timeout: float) -> int:
-                        self.assert_unreaped("wait")
-                        self.returncode = return_code
-                        state["reaped"] = True
-                        return return_code
+                    @property
+                    def pid(self) -> int:
+                        self.pid_reads += 1
+                        if self.pid_reads != 1:
+                            raise AssertionError(
+                                "sealed cleanup reread mutable process.pid"
+                            )
+                        return process_id
 
                     @staticmethod
                     def assert_unreaped(operation: str) -> None:
@@ -506,7 +643,28 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
 
                 process = FakeProcess()
                 observer = smoke._UnreapedProcessExitObserver("ordered fixture")
-                observer.bind(process_id)
+                observer.bind(process)  # type: ignore[arg-type]
+                with self.assertRaises(AttributeError):
+                    setattr(observer, "process_id", process_id + 1)
+                self.assertEqual(observer.process_id, process_id)
+                substitute = FakeProcess()
+                with self.assertRaisesRegex(RuntimeError, "substituted"):
+                    smoke._cleanup_private_process_group(
+                        substitute,  # type: ignore[arg-type]
+                        observer,
+                        label="ordered fixture",
+                    )
+                with self.assertRaisesRegex(RuntimeError, "substituted"):
+                    observer.bind(substitute)  # type: ignore[arg-type]
+                replay_observer = smoke._UnreapedProcessExitObserver(
+                    "replayed ordered fixture"
+                )
+                with self.assertRaisesRegex(RuntimeError, "already transferred"):
+                    replay_observer.bind(process)  # type: ignore[arg-type]
+                self.assertTrue(substitute._child_created)
+                self.assertEqual(substitute.pid_reads, 0)
+                self.assertIsNone(substitute.returncode)
+                self.assertEqual(process.pid_reads, 1)
 
                 def observe_child(*args: Any) -> SimpleNamespace:
                     process.assert_unreaped("waitid")
@@ -521,6 +679,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     return SimpleNamespace(
                         si_pid=process_id,
                         si_code=os.CLD_EXITED,
+                        si_status=return_code,
                     )
 
                 def signal_group(group_id: int, signal_number: int) -> None:
@@ -534,6 +693,12 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 def drain() -> None:
                     process.assert_unreaped("drain")
 
+                def raw_reap(target: int, options: int) -> tuple[int, int]:
+                    process.assert_unreaped("waitpid")
+                    self.assertEqual((target, options), (process_id, 0))
+                    state["reaped"] = True
+                    return process_id, return_code << 8
+
                 with (
                     patch.object(
                         smoke,
@@ -542,6 +707,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     patch.object(smoke.os, "waitid", side_effect=observe_child),
                     patch.object(smoke.os, "killpg", side_effect=signal_group),
                     patch.object(smoke.os, "kill", side_effect=direct_signal),
+                    patch.object(smoke.os, "waitpid", side_effect=raw_reap),
                 ):
                     self.assertEqual(
                         smoke._cleanup_private_process_group(
@@ -572,11 +738,20 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                         "waitid",
                         "drain",
                         "waitid",
-                        "wait",
+                        "waitpid",
                     ],
                 )
                 self.assertEqual(events, first_cleanup_events)
                 self.assertTrue(observer.reaped)
+                self.assertEqual(process.returncode, return_code)
+                with self.assertRaisesRegex(RuntimeError, "substituted"):
+                    smoke._cleanup_private_process_group(
+                        substitute,  # type: ignore[arg-type]
+                        observer,
+                        label="ordered fixture",
+                    )
+                self.assertTrue(substitute._child_created)
+                self.assertIsNone(substitute.returncode)
 
     @unittest.skipUnless(
         os.name == "posix"
@@ -604,14 +779,15 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     start_new_session=True,
                 )
                 observer = smoke._UnreapedProcessExitObserver("external-reaper fixture")
-                observer.bind(process.pid)
+                sealed_process_id = process.pid
+                observer.bind(process)
                 if observe_before_reap:
                     deadline = time.monotonic() + 5
                     while not observer.exited():
                         self.assertLess(time.monotonic(), deadline)
                         time.sleep(0.01)
-                reaped_pid, status = os.waitpid(process.pid, 0)
-                self.assertEqual(reaped_pid, process.pid)
+                reaped_pid, status = os.waitpid(sealed_process_id, 0)
+                self.assertEqual(reaped_pid, sealed_process_id)
                 try:
                     with (
                         patch.object(smoke.os, "killpg") as group_signal,
@@ -633,6 +809,289 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 finally:
                     process.returncode = os.waitstatus_to_exitcode(status)
 
+    def test_bound_popen_destructor_is_inert_after_external_reap(self) -> None:
+        process = subprocess.Popen(
+            [sys.executable, "-I", "-B", "-c", "raise SystemExit(31)"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+        )
+        sealed_process_id = process.pid
+        observer = smoke._UnreapedProcessExitObserver("external-reap-gc fixture")
+        observer.bind(process)
+        deadline = time.monotonic() + 5
+        while not observer.exited():
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
+        reaped_pid, raw_status = os.waitpid(sealed_process_id, 0)
+        self.assertEqual(reaped_pid, sealed_process_id)
+        self.assertEqual(os.waitstatus_to_exitcode(raw_status), 31)
+        with (
+            patch.object(smoke.os, "killpg") as group_signal,
+            patch.object(smoke.os, "waitpid") as second_reap,
+            self.assertRaisesRegex(smoke._ChildProcessAnchorLost, "reaped outside"),
+        ):
+            smoke._cleanup_private_process_group(
+                process,
+                observer,
+                label="external-reap-gc fixture",
+            )
+        group_signal.assert_not_called()
+        second_reap.assert_not_called()
+
+        process_reference = weakref.ref(process)
+        with patch.object(
+            subprocess.Popen,
+            "_internal_poll",
+            side_effect=AssertionError("Popen destructor probed an externally reaped PID"),
+        ) as destructor_poll:
+            del observer
+            del process
+            gc.collect()
+        self.assertIsNone(process_reference())
+        destructor_poll.assert_not_called()
+
+    def test_bound_popen_destructor_is_inert_after_early_observation_error(
+        self,
+    ) -> None:
+        process = subprocess.Popen(
+            [sys.executable, "-I", "-B", "-c", "raise SystemExit(37)"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+        )
+        sealed_process_id = process.pid
+        observer = smoke._UnreapedProcessExitObserver("observation-error-gc fixture")
+        observer.bind(process)
+        deadline = time.monotonic() + 5
+        while not observer.exited():
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
+
+        with (
+            patch.object(
+                smoke.os,
+                "waitid",
+                side_effect=ProcessLookupError(errno.ESRCH, "synthetic lookup loss"),
+            ),
+            patch.object(smoke.os, "killpg") as group_signal,
+            patch.object(smoke.os, "waitpid") as raw_reap,
+            self.assertRaisesRegex(RuntimeError, "cannot observe"),
+        ):
+            smoke._cleanup_private_process_group(
+                process,
+                observer,
+                label="observation-error-gc fixture",
+            )
+        group_signal.assert_not_called()
+        raw_reap.assert_not_called()
+
+        process_reference = weakref.ref(process)
+        with patch.object(
+            subprocess.Popen,
+            "_internal_poll",
+            side_effect=AssertionError("Popen destructor probed after anchor failure"),
+        ) as destructor_poll:
+            del observer
+            del process
+            gc.collect()
+        self.assertIsNone(process_reference())
+        destructor_poll.assert_not_called()
+        reaped_pid, raw_status = os.waitpid(sealed_process_id, 0)
+        self.assertEqual(reaped_pid, sealed_process_id)
+        self.assertEqual(os.waitstatus_to_exitcode(raw_status), 37)
+
+    def test_interrupted_binding_transitions_resume_exact_owned_process(
+        self,
+    ) -> None:
+        class BindingInterruption(BaseException):
+            pass
+
+        class InterruptingObserver(smoke._UnreapedProcessExitObserver):
+            def __init__(self, label: str, stage: str) -> None:
+                object.__setattr__(self, "_interrupt_stage", stage)
+                object.__setattr__(self, "_interrupt_armed", False)
+                object.__setattr__(self, "_interrupt_fired", False)
+                super().__init__(label)
+                object.__setattr__(self, "_interrupt_armed", True)
+
+            def _interrupt(self, stage: str) -> None:
+                if (
+                    self._interrupt_armed
+                    and not self._interrupt_fired
+                    and self._interrupt_stage == stage
+                ):
+                    object.__setattr__(self, "_interrupt_fired", True)
+                    raise BindingInterruption(stage)
+
+            def __setattr__(self, name: str, value: Any) -> None:
+                object.__setattr__(self, name, value)
+                if name == "_binding_state":
+                    self._interrupt(f"state:{value}")
+
+            def _publish_binding(
+                self,
+                binding: smoke._OwnedPopenBinding,
+            ) -> None:
+                self._interrupt("before:publish")
+                super()._publish_binding(binding)
+                self._interrupt("after:publish")
+
+            def _disarm_bound_popen(
+                self,
+                process: subprocess.Popen[bytes],
+            ) -> None:
+                self._interrupt("before:disarm")
+                super()._disarm_bound_popen(process)
+                self._interrupt("after:disarm")
+
+        stages = (
+            "before:publish",
+            "after:publish",
+            "state:published",
+            "before:disarm",
+            "after:disarm",
+            "state:disarmed",
+            "state:complete",
+        )
+        real_waitpid = smoke.os.waitpid
+        real_killpg = smoke.os.killpg
+        for stage in stages:
+            with self.subTest(stage=stage):
+                process = subprocess.Popen(
+                    [sys.executable, "-I", "-B", "-c", "import time; time.sleep(60)"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                    start_new_session=True,
+                )
+                cleanup_process: subprocess.Popen[bytes] | None = process
+                sealed_process_id = process.pid
+                observer = InterruptingObserver(
+                    f"binding-{stage} fixture",
+                    stage,
+                )
+                raw_reaps = 0
+
+                def tracked_raw_reap(
+                    process_id: int,
+                    options: int,
+                ) -> tuple[int, int]:
+                    nonlocal raw_reaps
+                    raw_reaps += 1
+                    self.assertEqual((process_id, options), (sealed_process_id, 0))
+                    return real_waitpid(process_id, options)
+
+                try:
+                    with (
+                        patch.object(
+                            smoke.os,
+                            "killpg",
+                            wraps=real_killpg,
+                        ) as group_signal,
+                        patch.object(
+                            smoke.os,
+                            "waitpid",
+                            side_effect=tracked_raw_reap,
+                        ),
+                        patch.object(
+                            process,
+                            "poll",
+                            side_effect=AssertionError("binding recovery polled"),
+                        ) as poll,
+                        patch.object(
+                            process,
+                            "wait",
+                            side_effect=AssertionError("binding recovery used wait"),
+                        ) as popen_wait,
+                    ):
+                        with self.assertRaises(BindingInterruption) as raised:
+                            observer.bind(process)
+                        self.assertEqual(raised.exception.args, (stage,))
+                        self.assertEqual(raw_reaps, 0)
+                        group_signal.assert_not_called()
+                        if stage == "before:publish":
+                            self.assertIsNone(observer.process_id)
+                            self.assertTrue(process._child_created)
+                        else:
+                            self.assertEqual(observer.process_id, sealed_process_id)
+                        if stage in {
+                            "after:publish",
+                            "state:published",
+                            "before:disarm",
+                        }:
+                            self.assertTrue(process._child_created)
+                        if stage in {
+                            "after:disarm",
+                            "state:disarmed",
+                            "state:complete",
+                        }:
+                            self.assertFalse(process._child_created)
+
+                        self.assertEqual(
+                            smoke._cleanup_private_process_group(
+                                process,
+                                observer,
+                                label=f"binding-{stage} fixture",
+                            ),
+                            -signal.SIGKILL,
+                        )
+                        self.assertTrue(observer.binding_complete)
+                        self.assertTrue(observer.reaped)
+                        self.assertEqual(raw_reaps, 1)
+                        self.assertEqual(
+                            sum(
+                                call.args[1] == signal.SIGKILL
+                                for call in group_signal.call_args_list
+                            ),
+                            1,
+                        )
+                        poll.assert_not_called()
+                        popen_wait.assert_not_called()
+
+                    process_reference = weakref.ref(process)
+                    observer_reference = weakref.ref(observer)
+                    cleanup_process = None
+                    with patch.object(
+                        subprocess.Popen,
+                        "_internal_poll",
+                        side_effect=AssertionError(
+                            "Popen destructor probed after binding recovery"
+                        ),
+                    ) as destructor_poll:
+                        del observer
+                        del process
+                        gc.collect()
+                    self.assertIsNone(observer_reference())
+                    self.assertIsNone(process_reference())
+                    destructor_poll.assert_not_called()
+                finally:
+                    if (
+                        cleanup_process is not None
+                        and cleanup_process.returncode is None
+                    ):
+                        try:
+                            os.killpg(sealed_process_id, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        try:
+                            waited_process_id, raw_status = real_waitpid(
+                                sealed_process_id,
+                                0,
+                            )
+                        except ChildProcessError:
+                            pass
+                        else:
+                            self.assertEqual(waited_process_id, sealed_process_id)
+                            cleanup_process.returncode = os.waitstatus_to_exitcode(
+                                raw_status
+                            )
+
     def test_process_cleanup_rechecks_ownership_after_group_signal_failure(
         self,
     ) -> None:
@@ -645,7 +1104,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             start_new_session=True,
         )
         observer = smoke._UnreapedProcessExitObserver("group-race fixture")
-        observer.bind(process.pid)
+        sealed_process_id = process.pid
+        observer.bind(process)
         deadline = time.monotonic() + 5
         while not observer.exited():
             self.assertLess(time.monotonic(), deadline)
@@ -654,8 +1114,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
 
         def reap_during_group_signal(_process_group_id: int) -> str:
             nonlocal reaped_status
-            reaped_pid, reaped_status = os.waitpid(process.pid, 0)
-            self.assertEqual(reaped_pid, process.pid)
+            reaped_pid, reaped_status = os.waitpid(sealed_process_id, 0)
+            self.assertEqual(reaped_pid, sealed_process_id)
             raise SystemExit(71)
 
         try:
@@ -698,36 +1158,48 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         observations = iter((False, False, False, True, True))
 
         class FakeProcess:
-            pid = process_id
+            _child_created = True
             returncode: int | None = None
+            pid_reads = 0
 
-            def wait(self, *, timeout: float) -> int:
-                events.append("wait")
-                self.returncode = 0
-                return 0
+            @property
+            def pid(self) -> int:
+                self.pid_reads += 1
+                if self.pid_reads != 1:
+                    raise AssertionError("sealed cleanup reread mutable process.pid")
+                return process_id
 
         process = FakeProcess()
         observer = smoke._UnreapedProcessExitObserver("direct-fallback fixture")
-        observer.bind(process_id)
+        observer.bind(process)  # type: ignore[arg-type]
 
         def observe_child(*_args: Any) -> SimpleNamespace | None:
-            if "wait" in events:
+            if "waitpid" in events:
                 raise AssertionError("waitid occurred after final reap began")
             exited = next(observations)
             events.append("waitid-exited" if exited else "waitid-running")
             if not exited:
                 return None
-            return SimpleNamespace(si_pid=process_id, si_code=os.CLD_KILLED)
+            return SimpleNamespace(
+                si_pid=process_id,
+                si_code=os.CLD_KILLED,
+                si_status=signal.SIGKILL,
+            )
 
         def fail_group_signal(_process_group_id: int) -> str:
             events.append("killpg-error")
             raise RuntimeError("synthetic group signal failure")
 
         def direct_signal(target: int, signal_number: int) -> None:
-            if "wait" in events:
+            if "waitpid" in events:
                 raise AssertionError("direct kill occurred after final reap began")
             self.assertEqual((target, signal_number), (process_id, signal.SIGKILL))
             events.append("direct-kill")
+
+        def raw_reap(target: int, options: int) -> tuple[int, int]:
+            self.assertEqual((target, options), (process_id, 0))
+            events.append("waitpid")
+            return process_id, signal.SIGKILL
 
         with (
             patch.object(smoke, "_assert_exclusive_child_reaper_authority"),
@@ -738,6 +1210,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 side_effect=fail_group_signal,
             ),
             patch.object(smoke.os, "kill", side_effect=direct_signal),
+            patch.object(smoke.os, "waitpid", side_effect=raw_reap),
             self.assertRaisesRegex(RuntimeError, "synthetic group signal failure"),
         ):
             smoke._cleanup_private_process_group(
@@ -757,10 +1230,11 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 "waitid-exited",
                 "drain",
                 "waitid-exited",
-                "wait",
+                "waitpid",
             ],
         )
         self.assertTrue(observer.reaped)
+        self.assertEqual(process.returncode, -signal.SIGKILL)
 
     def test_external_reap_during_pipe_drain_forbids_final_wait(self) -> None:
         process = subprocess.Popen(
@@ -772,7 +1246,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             start_new_session=True,
         )
         observer = smoke._UnreapedProcessExitObserver("drain-reaper fixture")
-        observer.bind(process.pid)
+        sealed_process_id = process.pid
+        observer.bind(process)
         deadline = time.monotonic() + 5
         while not observer.exited():
             self.assertLess(time.monotonic(), deadline)
@@ -781,8 +1256,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
 
         def reap_during_drain() -> None:
             nonlocal reaped_status
-            reaped_pid, reaped_status = os.waitpid(process.pid, 0)
-            self.assertEqual(reaped_pid, process.pid)
+            reaped_pid, reaped_status = os.waitpid(sealed_process_id, 0)
+            self.assertEqual(reaped_pid, sealed_process_id)
 
         try:
             with (
@@ -809,7 +1284,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     label="drain-reaper fixture",
                     before_reap=reap_during_drain,
                 )
-            group_signal.assert_called_once_with(process.pid)
+            group_signal.assert_called_once_with(sealed_process_id)
             raw_group_signal.assert_not_called()
             direct_signal.assert_not_called()
             final_wait.assert_not_called()
@@ -824,14 +1299,20 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         process_id = 123456789
 
         class FakeProcess:
-            pid = process_id
+            _child_created = True
+            returncode: int | None = None
+            pid_reads = 0
 
-            @staticmethod
-            def wait(*, timeout: float) -> int:
-                raise AssertionError("unsafe final wait after lost ownership proof")
+            @property
+            def pid(self) -> int:
+                self.pid_reads += 1
+                if self.pid_reads != 1:
+                    raise AssertionError("sealed cleanup reread mutable process.pid")
+                return process_id
 
+        process = FakeProcess()
         observer = smoke._UnreapedProcessExitObserver("lookup-error fixture")
-        observer.bind(process_id)
+        observer.bind(process)  # type: ignore[arg-type]
         with (
             patch.object(smoke, "_assert_exclusive_child_reaper_authority"),
             patch.object(
@@ -841,48 +1322,61 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             ),
             patch.object(smoke.os, "killpg") as group_signal,
             patch.object(smoke.os, "kill") as direct_signal,
-            self.assertRaisesRegex(RuntimeError, "could not be independently proved"),
+            patch.object(smoke.os, "waitpid") as raw_reap,
+            self.assertRaisesRegex(RuntimeError, "cannot observe"),
         ):
             smoke._cleanup_private_process_group(
-                FakeProcess(),  # type: ignore[arg-type]
+                process,  # type: ignore[arg-type]
                 observer,
                 label="lookup-error fixture",
             )
         group_signal.assert_not_called()
         direct_signal.assert_not_called()
+        raw_reap.assert_not_called()
+        self.assertFalse(observer.reap_started)
 
-    def test_process_cleanup_retries_only_reap_after_wait_interruption(self) -> None:
+    def test_raw_reap_exception_is_terminal_without_retry_or_numeric_action(
+        self,
+    ) -> None:
         events: list[str] = []
         process_id = 123456789
 
         class FakeProcess:
-            pid = process_id
+            _child_created = True
             returncode: int | None = None
-            wait_calls = 0
+            pid_reads = 0
 
-            def wait(self, *, timeout: float) -> int:
-                events.append("wait")
-                self.wait_calls += 1
-                if self.wait_calls == 1:
-                    raise SystemExit(41)
-                self.returncode = 0
-                return 0
+            @property
+            def pid(self) -> int:
+                self.pid_reads += 1
+                if self.pid_reads != 1:
+                    raise AssertionError("sealed cleanup reread mutable process.pid")
+                return process_id
 
         process = FakeProcess()
-        observer = smoke._UnreapedProcessExitObserver("interrupted-reap fixture")
-        observer.bind(process_id)
+        observer = smoke._UnreapedProcessExitObserver("failed-raw-reap fixture")
+        observer.bind(process)  # type: ignore[arg-type]
+        process.returncode = 77
 
         def observe_child(*_args: Any) -> SimpleNamespace:
-            if "wait" in events:
-                raise AssertionError("waitid occurred after final reap began")
+            if "waitpid" in events:
+                raise AssertionError("waitid occurred after raw reap began")
             events.append("waitid")
-            return SimpleNamespace(si_pid=process_id, si_code=os.CLD_EXITED)
+            return SimpleNamespace(
+                si_pid=process_id,
+                si_code=os.CLD_EXITED,
+                si_status=0,
+            )
 
         def signal_group(_group_id: int, signal_number: int) -> None:
-            if "wait" in events:
-                raise AssertionError("killpg occurred after final reap began")
+            if "waitpid" in events:
+                raise AssertionError("killpg occurred after raw reap began")
             self.assertEqual(signal_number, signal.SIGKILL)
             events.append("killpg")
+
+        def interrupted_raw_reap(_target: int, _options: int) -> tuple[int, int]:
+            events.append("waitpid")
+            raise InterruptedError(errno.EINTR, "synthetic raw reap interruption")
 
         with (
             patch.object(smoke, "_assert_exclusive_child_reaper_authority"),
@@ -893,83 +1387,245 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 "kill",
                 side_effect=AssertionError("direct signal was not required"),
             ),
-            self.assertRaisesRegex(SystemExit, "41"),
+            patch.object(smoke.os, "waitpid", side_effect=interrupted_raw_reap),
+            self.assertRaisesRegex(RuntimeError, "raw reap failed terminally"),
         ):
             smoke._cleanup_private_process_group(
                 process,  # type: ignore[arg-type]
                 observer,
-                label="interrupted-reap fixture",
+                label="failed-raw-reap fixture",
+            )
+            self.fail("terminal raw reap failure unexpectedly returned")
+        first_events = list(events)
+        with self.assertRaisesRegex(RuntimeError, "terminal reap boundary"):
+            smoke._cleanup_private_process_group(
+                process,  # type: ignore[arg-type]
+                observer,
+                label="failed-raw-reap fixture",
             )
         self.assertEqual(events.count("killpg"), 1)
-        self.assertEqual(events[-2:], ["wait", "wait"])
-        self.assertTrue(observer.reaped)
-        self.assertEqual(observer.return_code, 0)
+        self.assertEqual(events.count("waitpid"), 1)
+        self.assertEqual(events, first_events)
+        self.assertEqual(events[-1], "waitpid")
+        self.assertTrue(observer.reap_started)
+        self.assertFalse(observer.reaped)
+        self.assertEqual(process.returncode, 77)
 
-    def test_process_cleanup_retries_timeout_and_reaps_real_child(self) -> None:
+    def test_raw_reap_mismatches_are_terminal_without_post_reap_action(
+        self,
+    ) -> None:
+        process_id = 123456789
+        stopped_status = (signal.SIGSTOP << 8) | 0x7F
+        core_status = signal.SIGABRT | 0x80
+        self.assertTrue(os.WIFSTOPPED(stopped_status))
+        self.assertTrue(os.WCOREDUMP(core_status))
+        cases = (
+            (
+                "wrong_pid",
+                os.CLD_EXITED,
+                0,
+                process_id + 1,
+                0,
+                "changed child identity",
+                None,
+            ),
+            (
+                "nonterminal_status",
+                os.CLD_EXITED,
+                0,
+                process_id,
+                stopped_status,
+                "nonterminal status",
+                None,
+            ),
+            (
+                "exit_status_mismatch",
+                os.CLD_EXITED,
+                0,
+                process_id,
+                7 << 8,
+                "status mismatched",
+                7,
+            ),
+            (
+                "core_status_mismatch",
+                os.CLD_KILLED,
+                signal.SIGABRT,
+                process_id,
+                core_status,
+                "status mismatched",
+                -signal.SIGABRT,
+            ),
+        )
+        for (
+            case,
+            observed_code,
+            observed_status,
+            waited_process_id,
+            raw_status,
+            expected_error,
+            expected_cache,
+        ) in cases:
+            with self.subTest(case=case):
+                events: list[str] = []
+
+                class FakeProcess:
+                    _child_created = True
+                    returncode: int | None = None
+                    pid_reads = 0
+
+                    @property
+                    def pid(self) -> int:
+                        self.pid_reads += 1
+                        if self.pid_reads != 1:
+                            raise AssertionError(
+                                "sealed cleanup reread mutable process.pid"
+                            )
+                        return process_id
+
+                process = FakeProcess()
+                observer = smoke._UnreapedProcessExitObserver(
+                    f"{case}-raw-reap fixture"
+                )
+                observer.bind(process)  # type: ignore[arg-type]
+
+                def observe_child(*_args: Any) -> SimpleNamespace:
+                    if "waitpid" in events:
+                        raise AssertionError("waitid occurred after raw reap")
+                    events.append("waitid")
+                    return SimpleNamespace(
+                        si_pid=process_id,
+                        si_code=observed_code,
+                        si_status=observed_status,
+                    )
+
+                def signal_group(_group_id: int, _signal_number: int) -> None:
+                    if "waitpid" in events:
+                        raise AssertionError("killpg occurred after raw reap")
+                    events.append("killpg")
+
+                def mismatched_raw_reap(
+                    target: int,
+                    options: int,
+                ) -> tuple[int, int]:
+                    self.assertEqual((target, options), (process_id, 0))
+                    events.append("waitpid")
+                    return waited_process_id, raw_status
+
+                with (
+                    patch.object(
+                        smoke,
+                        "_assert_exclusive_child_reaper_authority",
+                    ),
+                    patch.object(smoke.os, "waitid", side_effect=observe_child),
+                    patch.object(smoke.os, "killpg", side_effect=signal_group),
+                    patch.object(
+                        smoke.os,
+                        "kill",
+                        side_effect=AssertionError("direct signal was not required"),
+                    ),
+                    patch.object(
+                        smoke.os,
+                        "waitpid",
+                        side_effect=mismatched_raw_reap,
+                    ),
+                    self.assertRaisesRegex(RuntimeError, expected_error),
+                ):
+                    smoke._cleanup_private_process_group(
+                        process,  # type: ignore[arg-type]
+                        observer,
+                        label=f"{case}-raw-reap fixture",
+                    )
+                first_events = list(events)
+                with self.assertRaisesRegex(RuntimeError, "terminal reap boundary"):
+                    smoke._cleanup_private_process_group(
+                        process,  # type: ignore[arg-type]
+                        observer,
+                        label=f"{case}-raw-reap fixture",
+                    )
+                self.assertEqual(events, first_events)
+                self.assertEqual(events[-1], "waitpid")
+                self.assertEqual(events.count("waitpid"), 1)
+                self.assertEqual(process.returncode, expected_cache)
+                self.assertTrue(observer.reap_started)
+                self.assertFalse(observer.reaped)
+
+    def test_real_zombie_reap_ignores_cache_and_sets_exact_local_result(self) -> None:
         process = subprocess.Popen(
-            [sys.executable, "-I", "-B", "-c", "import time; time.sleep(60)"],
+            [sys.executable, "-I", "-B", "-c", "raise SystemExit(23)"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             close_fds=True,
             start_new_session=True,
         )
-        observer = smoke._UnreapedProcessExitObserver("reap-timeout fixture")
-        observer.bind(process.pid)
-        real_wait = process.wait
+        sealed_process_id = process.pid
+        observer = smoke._UnreapedProcessExitObserver("real-zombie fixture")
+        observer.bind(process)
         real_waitid = smoke.os.waitid
-        real_killpg = smoke.os.killpg
-        wait_started = False
-        wait_calls = 0
-
-        def observed_waitid(*args: Any) -> Any:
-            if wait_started:
-                raise AssertionError("waitid occurred after final reap began")
-            return real_waitid(*args)
-
-        def observed_killpg(process_group_id: int, signal_number: int) -> None:
-            if wait_started:
-                raise AssertionError("killpg occurred after final reap began")
-            real_killpg(process_group_id, signal_number)
-
-        def interrupted_wait(*args: Any, **kwargs: Any) -> int:
-            nonlocal wait_calls, wait_started
-            wait_started = True
-            wait_calls += 1
-            if wait_calls == 1:
-                raise subprocess.TimeoutExpired(["fixture"], 0.01)
-            return real_wait(*args, **kwargs)
+        real_waitpid = smoke.os.waitpid
+        deadline = time.monotonic() + 5
+        while not observer.exited():
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
+        process.returncode = 91
 
         try:
             with (
-                patch.object(smoke.os, "waitid", side_effect=observed_waitid),
-                patch.object(smoke.os, "killpg", side_effect=observed_killpg),
+                patch.object(smoke.os, "waitid", wraps=real_waitid) as observations,
+                patch.object(smoke.os, "waitpid", wraps=real_waitpid) as raw_reap,
                 patch.object(
-                    smoke.os,
-                    "kill",
-                    side_effect=AssertionError("direct kill was not required"),
-                ),
-                patch.object(process, "wait", side_effect=interrupted_wait),
-                self.assertRaises(subprocess.TimeoutExpired),
-            ):
-                smoke._cleanup_private_process_group(
                     process,
-                    observer,
-                    label="reap-timeout fixture",
+                    "poll",
+                    side_effect=AssertionError("cleanup trusted Popen cache"),
+                ) as poll,
+                patch.object(
+                    process,
+                    "wait",
+                    side_effect=AssertionError("cleanup used Popen.wait"),
+                ) as popen_wait,
+            ):
+                self.assertEqual(
+                    smoke._cleanup_private_process_group(
+                        process,
+                        observer,
+                        label="real-zombie fixture",
+                    ),
+                    23,
                 )
-            self.assertEqual(wait_calls, 2)
+            raw_reap.assert_called_once_with(sealed_process_id, 0)
+            poll.assert_not_called()
+            popen_wait.assert_not_called()
+            self.assertGreaterEqual(observations.call_count, 4)
             self.assertTrue(observer.reaped)
-            self.assertIsNotNone(process.returncode)
+            self.assertEqual(process.returncode, 23)
+            self.assertEqual(
+                observer.final_exit_status,
+                smoke._UnreapedExitStatus(
+                    sealed_process_id,
+                    os.CLD_EXITED,
+                    23,
+                ),
+            )
         finally:
-            if process.returncode is None:
-                process.kill()
-                process.wait(timeout=5)
+            if not observer.reaped:
+                try:
+                    os.killpg(sealed_process_id, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    waited_process_id, raw_status = real_waitpid(sealed_process_id, 0)
+                except ChildProcessError:
+                    pass
+                else:
+                    self.assertEqual(waited_process_id, sealed_process_id)
+                    process.returncode = os.waitstatus_to_exitcode(raw_status)
 
     def test_real_process_lifecycle_has_no_post_reap_numeric_operation(self) -> None:
         real_waitid = smoke.os.waitid
         real_killpg = smoke.os.killpg
         real_kill = smoke.os.kill
-        real_wait = smoke.subprocess.Popen.wait
+        real_waitpid = smoke.os.waitpid
 
         for return_code in (0, 7):
             with self.subTest(return_code=return_code):
@@ -997,16 +1653,14 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     events.append("direct-kill")
                     real_kill(process_id, signal_number)
 
-                def observed_wait(
-                    process: subprocess.Popen[bytes],
-                    *args: Any,
-                    **kwargs: Any,
-                ) -> int:
+                def observed_waitpid(process_id: int, options: int) -> tuple[int, int]:
                     nonlocal reaped
-                    events.append("wait-enter")
-                    result = real_wait(process, *args, **kwargs)
+                    if reaped:
+                        raise AssertionError("second waitpid occurred after reap")
+                    events.append("waitpid-enter")
+                    result = real_waitpid(process_id, options)
                     reaped = True
-                    events.append("wait-return")
+                    events.append("waitpid-return")
                     return result
 
                 def forbidden_poll(
@@ -1020,11 +1674,12 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                     patch.object(smoke.os, "waitid", side_effect=observed_waitid),
                     patch.object(smoke.os, "killpg", side_effect=observed_killpg),
                     patch.object(smoke.os, "kill", side_effect=observed_kill),
+                    patch.object(smoke.os, "waitpid", side_effect=observed_waitpid),
                     patch.object(
                         smoke.subprocess.Popen,
                         "wait",
                         autospec=True,
-                        side_effect=observed_wait,
+                        side_effect=AssertionError("run_checked must not call Popen.wait"),
                     ),
                     patch.object(
                         smoke.subprocess.Popen,
@@ -1067,7 +1722,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 self.assertTrue(reaped)
                 self.assertEqual(events.count("killpg"), 1)
                 self.assertNotIn("direct-kill", events)
-                self.assertEqual(events[-2:], ["wait-enter", "wait-return"])
+                self.assertEqual(events.count("waitpid-enter"), 1)
+                self.assertEqual(events[-2:], ["waitpid-enter", "waitpid-return"])
 
     def test_success_cleanup_removes_same_group_pipe_holder(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1112,7 +1768,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
 
     def test_post_spawn_bind_interruption_still_cleans_and_reaps(self) -> None:
         real_bind = smoke._UnreapedProcessExitObserver.bind
-        real_wait = smoke.subprocess.Popen.wait
+        real_waitpid = smoke.os.waitpid
 
         for interrupt_after_bind in (False, True):
             with self.subTest(interrupt_after_bind=interrupt_after_bind):
@@ -1121,24 +1777,23 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
 
                 def interrupted_bind(
                     observer: smoke._UnreapedProcessExitObserver,
-                    process_id: int,
+                    process: subprocess.Popen[bytes],
                 ) -> None:
                     nonlocal bind_calls
                     bind_calls += 1
                     if bind_calls == 1:
                         if interrupt_after_bind:
-                            real_bind(observer, process_id)
+                            real_bind(observer, process)
                         raise SystemExit(64)
-                    real_bind(observer, process_id)
+                    real_bind(observer, process)
 
-                def tracked_wait(
-                    process: subprocess.Popen[bytes],
-                    *args: Any,
-                    **kwargs: Any,
-                ) -> int:
+                def tracked_waitpid(
+                    process_id: int,
+                    options: int,
+                ) -> tuple[int, int]:
                     nonlocal wait_calls
                     wait_calls += 1
-                    return real_wait(process, *args, **kwargs)
+                    return real_waitpid(process_id, options)
 
                 with (
                     patch.object(
@@ -1148,10 +1803,15 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                         side_effect=interrupted_bind,
                     ),
                     patch.object(
+                        smoke.os,
+                        "waitpid",
+                        side_effect=tracked_waitpid,
+                    ),
+                    patch.object(
                         smoke.subprocess.Popen,
                         "wait",
                         autospec=True,
-                        side_effect=tracked_wait,
+                        side_effect=AssertionError("cleanup used Popen.wait"),
                     ),
                     patch.object(smoke.os, "killpg", wraps=os.killpg) as group_signal,
                     self.assertRaisesRegex(SystemExit, "64"),
@@ -1180,17 +1840,13 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 )
 
     def test_selector_setup_interruption_still_cleans_and_reaps(self) -> None:
-        real_wait = smoke.subprocess.Popen.wait
+        real_waitpid = smoke.os.waitpid
         wait_calls = 0
 
-        def tracked_wait(
-            process: subprocess.Popen[bytes],
-            *args: Any,
-            **kwargs: Any,
-        ) -> int:
+        def tracked_waitpid(process_id: int, options: int) -> tuple[int, int]:
             nonlocal wait_calls
             wait_calls += 1
-            return real_wait(process, *args, **kwargs)
+            return real_waitpid(process_id, options)
 
         with (
             patch.object(
@@ -1199,10 +1855,15 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 side_effect=SystemExit(65),
             ),
             patch.object(
+                smoke.os,
+                "waitpid",
+                side_effect=tracked_waitpid,
+            ),
+            patch.object(
                 smoke.subprocess.Popen,
                 "wait",
                 autospec=True,
-                side_effect=tracked_wait,
+                side_effect=AssertionError("cleanup used Popen.wait"),
             ),
             patch.object(smoke.os, "killpg", wraps=os.killpg) as group_signal,
             self.assertRaisesRegex(SystemExit, "65"),
@@ -1220,6 +1881,249 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             sum(call.args[1] == signal.SIGKILL for call in group_signal.call_args_list),
             1,
         )
+
+    def test_popen_store_interruption_cleans_before_original_exception_escapes(
+        self,
+    ) -> None:
+        class PopenStoreInterruption(BaseException):
+            pass
+
+        target = smoke._run_checked_with_blocked_cancellation
+        instructions = list(dis.get_instructions(target))
+        process_stores = [
+            index
+            for index, instruction in enumerate(instructions)
+            if instruction.opname in {"STORE_DEREF", "STORE_FAST"}
+            and instruction.argval == "process"
+        ]
+        self.assertGreaterEqual(len(process_stores), 2)
+        launch_store_index = process_stores[-1]
+        self.assertLess(launch_store_index + 1, len(instructions))
+        post_store_offset = instructions[launch_store_index + 1].offset
+
+        real_popen = smoke.subprocess.Popen
+        real_killpg = smoke.os.killpg
+        real_read = smoke.os.read
+        real_waitid = smoke.os.waitid
+        real_waitpid = smoke.os.waitpid
+        launched: list[subprocess.Popen[bytes]] = []
+        launched_process_id: int | None = None
+        capture_file_descriptors: set[int] = set()
+        events: list[str] = []
+        eof_events: dict[int, int] = {}
+        terminal_waitid_events: list[int] = []
+        raw_wait_started = False
+        raw_wait_calls = 0
+        armed = True
+        interruption = PopenStoreInterruption("after Popen process store")
+
+        def launch(*args: Any, **kwargs: Any) -> subprocess.Popen[bytes]:
+            nonlocal launched_process_id
+            process = real_popen(*args, **kwargs)
+            launched.append(process)
+            launched_process_id = process.pid
+            if process.stdout is not None:
+                capture_file_descriptors.add(process.stdout.fileno())
+            if process.stderr is not None:
+                capture_file_descriptors.add(process.stderr.fileno())
+            return process
+
+        def inject_after_store(
+            frame: Any,
+            event: str,
+            _argument: Any,
+        ) -> Any:
+            nonlocal armed
+            if frame.f_code is target.__code__:
+                frame.f_trace_opcodes = True
+                if (
+                    armed
+                    and event == "opcode"
+                    and frame.f_lasti == post_store_offset
+                ):
+                    armed = False
+                    events.append("post-store-interruption")
+                    raise interruption
+            return inject_after_store
+
+        def observed_killpg(process_group_id: int, signal_number: int) -> None:
+            if raw_wait_started:
+                raise AssertionError("killpg occurred after raw reap began")
+            self.assertEqual(process_group_id, launched_process_id)
+            self.assertEqual(signal_number, signal.SIGKILL)
+            events.append("killpg")
+            real_killpg(process_group_id, signal_number)
+
+        def observed_read(file_descriptor: int, size: int) -> bytes:
+            chunk = real_read(file_descriptor, size)
+            if file_descriptor in capture_file_descriptors and not chunk:
+                events.append(f"eof:{file_descriptor}")
+                eof_events.setdefault(file_descriptor, len(events) - 1)
+            return chunk
+
+        def observed_waitid(*args: Any) -> Any:
+            if raw_wait_started:
+                raise AssertionError("waitid occurred after raw reap began")
+            self.assertIsNotNone(launched_process_id)
+            self.assertEqual(
+                args,
+                (
+                    os.P_PID,
+                    launched_process_id,
+                    os.WEXITED | os.WNOHANG | os.WNOWAIT,
+                ),
+            )
+            result = real_waitid(*args)
+            events.append("waitid")
+            if result is not None and result.si_pid != 0:
+                events.append("terminal-waitid")
+                terminal_waitid_events.append(len(events) - 1)
+            return result
+
+        def observed_waitpid(
+            process_id: int,
+            options: int,
+        ) -> tuple[int, int]:
+            nonlocal raw_wait_calls, raw_wait_started
+            if raw_wait_started:
+                raise AssertionError("second raw wait began")
+            raw_wait_started = True
+            raw_wait_calls += 1
+            self.assertEqual(process_id, launched_process_id)
+            self.assertEqual(options, 0)
+            self.assertEqual(len(eof_events), 2)
+            self.assertTrue(terminal_waitid_events)
+            self.assertGreater(
+                terminal_waitid_events[-1],
+                max(eof_events.values()),
+            )
+            events.append("waitpid")
+            return real_waitpid(process_id, options)
+
+        try:
+            with (
+                patch.object(smoke.subprocess, "Popen", side_effect=launch),
+                patch.object(smoke.os, "killpg", side_effect=observed_killpg),
+                patch.object(
+                    smoke.os,
+                    "kill",
+                    side_effect=AssertionError("direct PID signal was not required"),
+                ),
+                patch.object(smoke.os, "read", side_effect=observed_read),
+                patch.object(smoke.os, "waitid", side_effect=observed_waitid),
+                patch.object(smoke.os, "waitpid", side_effect=observed_waitpid),
+                patch.object(
+                    real_popen,
+                    "poll",
+                    autospec=True,
+                    side_effect=AssertionError("cleanup polled the Popen object"),
+                ) as popen_poll,
+                patch.object(
+                    real_popen,
+                    "wait",
+                    autospec=True,
+                    side_effect=AssertionError("cleanup used Popen.wait"),
+                ) as popen_wait,
+                self.assertRaises(PopenStoreInterruption) as raised,
+            ):
+                sys.settrace(inject_after_store)
+                try:
+                    smoke.run_checked(
+                        [
+                            sys.executable,
+                            "-I",
+                            "-B",
+                            "-c",
+                            "import time; time.sleep(60)",
+                        ],
+                        cwd=ROOT,
+                        environment={},
+                        timeout=5,
+                        label="post-Popen-store interruption fixture",
+                        capture_output=True,
+                    )
+                finally:
+                    sys.settrace(None)
+            self.assertIs(raised.exception, interruption)
+            self.assertFalse(armed)
+            self.assertEqual(events.count("post-store-interruption"), 1)
+            self.assertEqual(events.count("killpg"), 1)
+            self.assertEqual(raw_wait_calls, 1)
+            self.assertEqual(len(eof_events), 2)
+            self.assertGreater(
+                min(eof_events.values()),
+                events.index("killpg"),
+            )
+            self.assertEqual(events[-1], "waitpid")
+            popen_poll.assert_not_called()
+            popen_wait.assert_not_called()
+        finally:
+            sys.settrace(None)
+            if launched:
+                process = launched.pop()
+                if process.returncode is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except OSError as exc:
+                        if exc.errno not in {errno.ESRCH, errno.EPERM}:
+                            raise
+                    try:
+                        waited_process_id, raw_status = real_waitpid(process.pid, 0)
+                    except ChildProcessError:
+                        pass
+                    else:
+                        self.assertEqual(waited_process_id, process.pid)
+                        process.returncode = os.waitstatus_to_exitcode(raw_status)
+                    process._child_created = False
+                process_reference = weakref.ref(process)
+                with patch.object(
+                    real_popen,
+                    "_internal_poll",
+                    autospec=True,
+                    side_effect=AssertionError(
+                        "Popen destructor performed a hidden wait"
+                    ),
+                ) as destructor_poll:
+                    del process
+                    gc.collect()
+                self.assertIsNone(process_reference())
+                destructor_poll.assert_not_called()
+        self.assertFalse(launched)
+
+    def test_popen_failure_before_assignment_performs_no_numeric_cleanup(
+        self,
+    ) -> None:
+        launch_error = OSError(errno.ENOENT, "synthetic launch failure")
+        with (
+            patch.object(
+                smoke.subprocess,
+                "Popen",
+                side_effect=launch_error,
+            ) as launch,
+            patch.object(smoke.os, "killpg") as group_signal,
+            patch.object(smoke.os, "kill") as direct_signal,
+            patch.object(smoke.os, "waitid") as observe,
+            patch.object(smoke.os, "waitpid") as raw_reap,
+            patch.object(smoke.selectors, "DefaultSelector") as selector,
+            patch.object(smoke.selectors, "SelectSelector") as recovery_selector,
+            self.assertRaisesRegex(RuntimeError, "could not be launched") as raised,
+        ):
+            smoke.run_checked(
+                ["/missing/python", "-c", "raise SystemExit(0)"],
+                cwd=ROOT,
+                environment={},
+                timeout=1,
+                label="pre-assignment launch failure fixture",
+                capture_output=True,
+            )
+        self.assertIs(raised.exception.__cause__, launch_error)
+        launch.assert_called_once()
+        group_signal.assert_not_called()
+        direct_signal.assert_not_called()
+        observe.assert_not_called()
+        raw_reap.assert_not_called()
+        selector.assert_not_called()
+        recovery_selector.assert_not_called()
 
     def test_child_reaper_authority_failure_precedes_launch(self) -> None:
         with (
@@ -1286,22 +2190,21 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 sender: subprocess.Popen[bytes] | None = None
                 target_reaped = False
                 descendant_pid_path = Path(temporary) / "descendant.pid"
-                real_wait = smoke.subprocess.Popen.wait
+                real_waitpid = smoke.os.waitpid
 
                 def cancel(signal_number: int, _frame: Any) -> None:
                     if not target_reaped:
                         raise AssertionError("cancellation was delivered before reap")
                     raise Cancellation(signal_number)
 
-                def tracked_wait(
-                    process: subprocess.Popen[bytes],
-                    *args: Any,
-                    **kwargs: Any,
-                ) -> int:
+                def tracked_waitpid(
+                    process_id: int,
+                    options: int,
+                ) -> tuple[int, int]:
                     nonlocal target_reaped
-                    return_code = real_wait(process, *args, **kwargs)
+                    result = real_waitpid(process_id, options)
                     target_reaped = True
-                    return return_code
+                    return result
 
                 try:
                     signal.signal(cancellation_signal, cancel)
@@ -1328,10 +2231,15 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                             wraps=os.killpg,
                         ) as group_signal,
                         patch.object(
+                            smoke.os,
+                            "waitpid",
+                            side_effect=tracked_waitpid,
+                        ),
+                        patch.object(
                             smoke.subprocess.Popen,
                             "wait",
                             autospec=True,
-                            side_effect=tracked_wait,
+                            side_effect=AssertionError("cleanup used Popen.wait"),
                         ),
                         self.assertRaises(Cancellation) as raised,
                     ):
