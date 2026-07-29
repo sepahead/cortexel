@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import copy
-import dis
 import errno
 import gc
 import gzip
@@ -1888,20 +1887,8 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         class PopenStoreInterruption(BaseException):
             pass
 
-        target = smoke._run_checked_with_blocked_cancellation
-        instructions = list(dis.get_instructions(target))
-        process_stores = [
-            index
-            for index, instruction in enumerate(instructions)
-            if instruction.opname in {"STORE_DEREF", "STORE_FAST"}
-            and instruction.argval == "process"
-        ]
-        self.assertGreaterEqual(len(process_stores), 2)
-        launch_store_index = process_stores[-1]
-        self.assertLess(launch_store_index + 1, len(instructions))
-        post_store_offset = instructions[launch_store_index + 1].offset
-
         real_popen = smoke.subprocess.Popen
+        real_bind = smoke._UnreapedProcessExitObserver.bind
         real_killpg = smoke.os.killpg
         real_read = smoke.os.read
         real_waitid = smoke.os.waitid
@@ -1914,6 +1901,7 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         terminal_waitid_events: list[int] = []
         raw_wait_started = False
         raw_wait_calls = 0
+        bind_calls = 0
         armed = True
         interruption = PopenStoreInterruption("after Popen process store")
 
@@ -1928,23 +1916,22 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 capture_file_descriptors.add(process.stderr.fileno())
             return process
 
-        def inject_after_store(
-            frame: Any,
-            event: str,
-            _argument: Any,
-        ) -> Any:
-            nonlocal armed
-            if frame.f_code is target.__code__:
-                frame.f_trace_opcodes = True
-                if (
-                    armed
-                    and event == "opcode"
-                    and frame.f_lasti == post_store_offset
-                ):
-                    armed = False
-                    events.append("post-store-interruption")
-                    raise interruption
-            return inject_after_store
+        def interrupt_first_bind(
+            observer: Any,
+            process: subprocess.Popen[bytes],
+        ) -> None:
+            nonlocal armed, bind_calls
+            bind_calls += 1
+            self.assertTrue(launched)
+            self.assertIs(process, launched[-1])
+            # This is the first source-level consumer after the Popen result is
+            # assigned. Intercept it instead of relying on version-specific
+            # CPython opcode-tracing support to reach the same guarded seam.
+            if armed:
+                armed = False
+                events.append("post-store-interruption")
+                raise interruption
+            real_bind(observer, process)
 
         def observed_killpg(process_group_id: int, signal_number: int) -> None:
             if raw_wait_started:
@@ -2003,6 +1990,11 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
         try:
             with (
                 patch.object(smoke.subprocess, "Popen", side_effect=launch),
+                patch.object(
+                    smoke._UnreapedProcessExitObserver,
+                    "bind",
+                    new=interrupt_first_bind,
+                ),
                 patch.object(smoke.os, "killpg", side_effect=observed_killpg),
                 patch.object(
                     smoke.os,
@@ -2026,26 +2018,23 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 ) as popen_wait,
                 self.assertRaises(PopenStoreInterruption) as raised,
             ):
-                sys.settrace(inject_after_store)
-                try:
-                    smoke.run_checked(
-                        [
-                            sys.executable,
-                            "-I",
-                            "-B",
-                            "-c",
-                            "import time; time.sleep(60)",
-                        ],
-                        cwd=ROOT,
-                        environment={},
-                        timeout=5,
-                        label="post-Popen-store interruption fixture",
-                        capture_output=True,
-                    )
-                finally:
-                    sys.settrace(None)
+                smoke.run_checked(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-B",
+                        "-c",
+                        "import time; time.sleep(60)",
+                    ],
+                    cwd=ROOT,
+                    environment={},
+                    timeout=5,
+                    label="post-Popen-store interruption fixture",
+                    capture_output=True,
+                )
             self.assertIs(raised.exception, interruption)
             self.assertFalse(armed)
+            self.assertEqual(bind_calls, 2)
             self.assertEqual(events.count("post-store-interruption"), 1)
             self.assertEqual(events.count("killpg"), 1)
             self.assertEqual(raw_wait_calls, 1)
@@ -2058,7 +2047,6 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             popen_poll.assert_not_called()
             popen_wait.assert_not_called()
         finally:
-            sys.settrace(None)
             if launched:
                 process = launched.pop()
                 if process.returncode is None:
