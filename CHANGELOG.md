@@ -80,8 +80,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   authority fails closed. Kqueue process registration/readiness is never child
   ownership evidence; a kqueue-backed selector may still drain pipe descriptors.
 - Output pipes are drained under fixed bounds while the group leader remains
-  unreaped. Once final reaping begins, an interruption can retry only
-  `Popen.wait()`; no process/group signal or identity probe occurs afterward.
+  unreaped. The sole raw `waitpid` begins only after final `WNOWAIT` ownership
+  proof and pipe EOF; any `waitpid` exception is terminal, with no retry, signal,
+  identity probe, or second wait afterward.
   Regression controls cover normal success and failure, timeout, output
   overflow, deferred `INT`/`TERM`/`HUP`, post-spawn interruption, an inherited
   pipe held by a same-group descendant, external reaping before and after a

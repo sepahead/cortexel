@@ -211,8 +211,11 @@ ownership before any direct-PID fallback, performs a bounded pipe drain, and onl
 reaps. If a pre-signal, fallback, exit-confirmation, or final pre-reap observation
 reports lost ownership, or cannot ultimately prove current ownership, the gate performs
 no later numeric signal or `Popen.wait()` on that identity.
-Once final reaping starts, retries are reap-only. `INT`, `TERM`, and `HUP` are deferred
-until cleanup finishes; they are not forwarded to the reviewed command.
+The sole raw `waitpid` starts only after the final non-reaping ownership observation.
+Crossing that one-way boundary permits no retry, second wait, signal, identity probe,
+or `Popen` state query: a raw-wait exception is terminal, while a successful wait is
+followed only by local status validation and caching. `INT`, `TERM`, and `HUP` are
+deferred until cleanup finishes; they are not forwarded to the reviewed command.
 
 This boundary covers descendants only while they remain in that group and retain the
 caller's signal authority. It is not a hostile process sandbox and does not contain a

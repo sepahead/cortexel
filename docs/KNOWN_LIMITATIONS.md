@@ -370,7 +370,9 @@ The machine-readable state of every release gate is in
   non-reaping `waitid(..., WNOWAIT)` child-ownership proof before its sole group
   signal. It never interprets `ProcessLookupError` as proof of an unreaped zombie,
   and it performs no numeric signal or `Popen.wait()` after an observation reports
-  `ECHILD`. Linux requires readable `/proc/self/task`; Darwin requires the supported
+  `ECHILD`. Its sole raw `waitpid` is a one-way boundary: an exception is terminal,
+  with no retry, second wait, signal, or identity probe after the call begins. Linux
+  requires readable `/proc/self/task`; Darwin requires the supported
   `libproc` `proc_taskinfo` ABI. Kqueue process readiness is not ownership evidence.
   This prevents
   the reviewed cleanup path from knowingly addressing a PID/PGID after its leader
