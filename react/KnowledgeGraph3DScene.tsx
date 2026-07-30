@@ -22,8 +22,20 @@
 //     deterministic phyllotaxis seed and LCG. This does not claim byte-identical
 //     pixels across browsers, GPUs, fonts, or floating-point implementations.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  useFrame,
+  useThree,
+  type RootState,
+  type ThreeEvent,
+} from '@react-three/fiber';
 import * as THREE from 'three';
 import {
   forceSimulation,
@@ -32,7 +44,7 @@ import {
   forceCenter,
   forceCollide,
   type Simulation,
-  type SimNode,
+  type SimLink,
 } from 'd3-force-3d';
 import {
   advanceGraphLayoutClockInto,
@@ -43,15 +55,13 @@ import {
   assertUniqueGraphNodeIds,
   buildAdjacency,
   filterGraphEdges,
-  flowParticleCount,
   GRAPH_EDGE_CURVE_SEGMENTS,
   graphEdgeControlPointInto,
   graphEdgeCurvePointInto,
   graphEdgeMatchesQuery,
   graphCameraTargetDamping,
   graphQueryMatchIds,
-  graphSignature,
-  normalizeGraphNodeRadius,
+  MAX_KNOWLEDGE_GRAPH_SCENE_EDGES,
   normalizeGraphQuery,
   reducedMotionLayoutTickBudget,
   uniqueGraphTopologyLinks,
@@ -61,52 +71,81 @@ import {
   type KnowledgeGraphUncalibratedScore,
   type GraphEdgeLane,
 } from './knowledgeGraph';
+import {
+  planGraphLayoutCache,
+  publishGraphLayoutCache,
+  snapshotGraphLayoutInputs,
+  type GraphLayoutCacheBuffer,
+  type GraphLayoutNode,
+  type GraphLayoutPosition,
+} from './knowledgeGraphLayout.internal';
+import { installFocusLabelResource } from './focusLabelResource.internal';
+import {
+  assertKnowledgeGraphColor,
+  assertKnowledgeGraphNodeReference,
+  snapshotKnowledgeGraphPresentation,
+} from './knowledgeGraphPresentation.internal';
+import {
+  beginKnowledgeGraphRuntimeTransition,
+  handleKnowledgeGraphPointerOut,
+  synchronizeKnowledgeGraphControlsListener,
+} from './knowledgeGraphInteraction.internal';
+import { planFlowParticleDistribution } from './knowledgeGraphParticles.internal';
 import { safeDiagnosticText } from '../core/safeRuntime';
 
 export interface KnowledgeGraph3DNode {
-  id: string;
-  label: string;
-  detail?: string;
-  attributes?: Readonly<KnowledgeGraphAttributes>;
-  epistemic?: Readonly<KnowledgeGraphEpistemic>;
-  evidence?: readonly KnowledgeGraphEvidenceRef[];
-  uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
-  color: string; // hex string — the node carries its own color (not host palette)
-  radius: number; // invalid/out-of-range values fall back to a safe scene radius
+  readonly id: string;
+  readonly label: string;
+  readonly detail?: string;
+  readonly attributes?: Readonly<KnowledgeGraphAttributes>;
+  readonly epistemic?: Readonly<KnowledgeGraphEpistemic>;
+  readonly evidence?: readonly KnowledgeGraphEvidenceRef[];
+  readonly uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
+  readonly color: string; // hex string — the node carries its own color (not host palette)
+  readonly radius: number; // invalid/out-of-range values fall back to a safe scene radius
   /** Human-readable semantics for radius. Omitted means caller-defined visual size. */
-  radiusMeaning?: string;
-  kind: string; // 'paper' | 'model' | 'family' | …
+  readonly radiusMeaning?: string;
+  readonly kind: string; // 'paper' | 'model' | 'family' | …
 }
 
 export interface KnowledgeGraph3DEdge {
   /** Stable assertion identity. Distinct ids may share endpoints and kind. */
-  id?: string;
-  label?: string;
-  attributes?: Readonly<KnowledgeGraphAttributes>;
-  epistemic?: Readonly<KnowledgeGraphEpistemic>;
-  evidence?: readonly KnowledgeGraphEvidenceRef[];
-  uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
-  source: string;
-  target: string;
-  color: string; // hex string
+  readonly id?: string;
+  readonly label?: string;
+  readonly attributes?: Readonly<KnowledgeGraphAttributes>;
+  readonly epistemic?: Readonly<KnowledgeGraphEpistemic>;
+  readonly evidence?: readonly KnowledgeGraphEvidenceRef[];
+  readonly uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
+  readonly source: string;
+  readonly target: string;
+  readonly color: string; // hex string
   /** Directed edges receive a persistent arrowhead (including reduced motion). */
-  directed?: boolean;
-  kind: string;
+  readonly directed?: boolean;
+  readonly kind: string;
   /** Animate glowing particles flowing source→target (e.g. citations). */
-  particles?: boolean;
+  readonly particles?: boolean;
 }
 
 /** Minimal OrbitControls surface the scene needs for auto-frame + fly-to. The
  *  controls themselves stay host-side (Design Law #5); the host passes a ref. */
-export interface ControlsHandle {
+interface ControlsCore {
   target: THREE.Vector3;
   update: () => void;
+}
+
+interface ControlsStartEventSurface {
   /** Optional EventDispatcher surface (OrbitControls has it). When present, the
    *  scene cancels its own camera moves on 'start' (user grab: drag/zoom
    *  begin) — the user's hand always wins over auto-frame and fly-to. */
-  addEventListener?(type: 'start', listener: () => void): void;
-  removeEventListener?(type: 'start', listener: () => void): void;
+  addEventListener(type: 'start', listener: () => void): void;
+  removeEventListener(type: 'start', listener: () => void): void;
 }
+
+/** Controls either expose a complete removable start-event surface or none. */
+export type ControlsHandle = ControlsCore & (
+  | ControlsStartEventSurface
+  | { addEventListener?: never; removeEventListener?: never }
+);
 
 export interface KnowledgeGraph3DSceneProps {
   /** Caller-declared graph/snapshot cache namespace. Change it with declared graph
@@ -137,7 +176,10 @@ export interface KnowledgeGraph3DSceneProps {
 }
 
 const PARTICLES_PER_EDGE = 4;
-const MAX_PARTICLES = 4000;
+// The renderer admits at most this many edges. Keeping the particle cap bound to
+// the same authority guarantees that every valid all-flow graph retains at least
+// one visible flow marker if the scene budget changes in a future revision.
+const MAX_PARTICLES = MAX_KNOWLEDGE_GRAPH_SCENE_EDGES;
 const FALLBACK_COLOR = '#64748b'; // deterministic fallback for an unparseable hex
 // Cap the remembered-position cache so a long session streaming many distinct
 // graphs cannot grow it without bound (positions still persist across filter
@@ -158,6 +200,12 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _box = new THREE.Box3();
 const _sphere = new THREE.Sphere();
 const _layoutClockResult = { ticks: 0, remainderSeconds: 0 };
+
+// Stable selectors avoid subscribing the complete scene to unrelated R3F store
+// updates and avoid manufacturing selector closures on every React render.
+const selectCamera = (state: RootState) => state.camera;
+const selectRenderer = (state: RootState) => state.gl;
+const selectInvalidate = (state: RootState) => state.invalidate;
 
 /** Dev-only console warning (stripped by the consumer's production bundler). */
 function devWarn(msg: string): void {
@@ -183,46 +231,38 @@ function dim(hex: string, amount: number): THREE.Color {
 
 /** Network-free focus label. Drei/Troika's default Text path fetches fonts and
  *  unicode data from public CDNs; a CanvasTexture uses the host's system font
- *  and keeps Cortexel's no-implicit-network guarantee intact. */
-function FocusLabelSprite({ text, color }: { text: string; color: string }) {
+ *  and keeps Cortexel's no-implicit-network guarantee intact. GPU resources are
+ *  created only after commit so an abandoned concurrent render cannot leak a
+ *  texture whose cleanup effect never existed. */
+function FocusLabelSprite({
+  text,
+  color,
+  invalidate,
+}: {
+  text: string;
+  color: string;
+  invalidate: () => void;
+}) {
   const label = safeDiagnosticText(text, 120);
-  const rendered = useMemo(() => {
-    if (!label || typeof document === 'undefined') return null;
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (!context) return null;
+  const spriteRef = useRef<THREE.Sprite>(null);
+  const materialRef = useRef<THREE.SpriteMaterial>(null);
+  useLayoutEffect(() => {
+    const sprite = spriteRef.current;
+    const material = materialRef.current;
+    if (!sprite || !material) return undefined;
+    return installFocusLabelResource({
+      sprite,
+      material,
+      label,
+      color,
+      invalidate,
+    });
+  }, [label, color, invalidate]);
 
-    const fontSize = 42;
-    const paddingX = 24;
-    const paddingY = 14;
-    context.font = `600 ${fontSize}px system-ui, sans-serif`;
-    const measured = Math.ceil(context.measureText(label).width);
-    canvas.width = Math.min(1024, Math.max(96, measured + paddingX * 2));
-    canvas.height = fontSize + paddingY * 2;
-
-    context.font = `600 ${fontSize}px system-ui, sans-serif`;
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillStyle = 'rgba(3, 7, 17, 0.9)';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = '#e2e8f0';
-    context.fillStyle = color;
-    context.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - paddingX * 2);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.generateMipmaps = false;
-    return { texture, aspect: canvas.width / canvas.height };
-  }, [label, color]);
-
-  useEffect(() => () => rendered?.texture.dispose(), [rendered]);
-  if (!rendered) return null;
   return (
-    <sprite scale={[Math.min(160, rendered.aspect * 7), 7, 1]}>
+    <sprite ref={spriteRef} visible={false}>
       <spriteMaterial
-        map={rendered.texture}
+        ref={materialRef}
         transparent
         depthWrite={false}
         toneMapped={false}
@@ -231,9 +271,15 @@ function FocusLabelSprite({ text, color }: { text: string; color: string }) {
   );
 }
 
-interface SimGraphNode extends SimNode {
-  id: string;
-  r: number;
+type SimGraphNode = GraphLayoutNode;
+
+interface GraphLayoutRuntime {
+  graphKey: string;
+  reducedMotion: boolean;
+  sim: Simulation<SimGraphNode>;
+  nodes: SimGraphNode[];
+  cacheBuffers: readonly [GraphLayoutCacheBuffer, GraphLayoutCacheBuffer];
+  nextCacheBufferIndex: 0 | 1;
 }
 
 /** Populate the one shared quadratic path definition consumed by lines,
@@ -251,12 +297,25 @@ function setEdgeCurve(
 export function KnowledgeGraph3DScene(props: KnowledgeGraph3DSceneProps) {
   const { graphIdentity, nodes, edges } = props;
   assertKnowledgeGraphIdentity(graphIdentity);
+  assertKnowledgeGraphNodeReference(props.selectedId, 'knowledge-graph selected id');
+  assertKnowledgeGraphNodeReference(props.hoverId, 'knowledge-graph hover id');
+  assertKnowledgeGraphColor(props.labelColor, 'knowledge-graph label color');
+  assertKnowledgeGraphColor(props.particleColor, 'knowledge-graph particle color');
+  // Reject counts before the bounded deep snapshot does any proportional work.
   assertKnowledgeGraphBudget(nodes.length, edges.length);
-  assertUniqueGraphNodeIds(nodes);
-  assertRenderableGraphEdges(nodes, edges);
+  const snapshot = snapshotKnowledgeGraphPresentation(nodes, edges);
+  assertUniqueGraphNodeIds(snapshot.nodes);
+  assertRenderableGraphEdges(snapshot.nodes, snapshot.edges);
   // React's key boundary atomically remounts every position/camera/simulation ref
   // for a different declared graph namespace, while preserving same-key views.
-  return <KnowledgeGraph3DSceneInstance key={graphIdentity} {...props} />;
+  return (
+    <KnowledgeGraph3DSceneInstance
+      key={graphIdentity}
+      {...props}
+      nodes={snapshot.nodes}
+      edges={snapshot.edges}
+    />
+  );
 }
 
 function KnowledgeGraph3DSceneInstance({
@@ -280,17 +339,23 @@ function KnowledgeGraph3DSceneInstance({
   const particlesRef = useRef<THREE.InstancedMesh>(null);
   const arrowsRef = useRef<THREE.InstancedMesh>(null);
   const labelGroupRef = useRef<THREE.Group>(null);
-  const { camera, gl, invalidate } = useThree();
+  const sceneGroupRef = useRef<THREE.Group>(null);
+  const camera = useThree(selectCamera);
+  const gl = useThree(selectRenderer);
+  const invalidate = useThree(selectInvalidate);
 
   // The exported keyed wrapper remounts this instance for a different declared
   // graph namespace, so these refs persist only across same-key filters/views.
-  const posMap = useRef<Map<string, [number, number, number]>>(new Map());
+  const [posMap] = useState(() => ({
+    current: new Map<string, GraphLayoutPosition>(),
+  }));
+  const readyGraphKeyRef = useRef<string | null>(null);
   const framedRef = useRef(false);
   // The currently-selected node id the camera is easing toward (live-tracked, so
   // the pivot follows the node as the layout settles — not a stale snapshot).
   const flyToIdRef = useRef<string | null>(null);
   const onHoverRef = useRef(onHover);
-  useEffect(() => {
+  useLayoutEffect(() => {
     onHoverRef.current = onHover;
   }, [onHover]);
   useEffect(() => () => onHoverRef.current(null), []);
@@ -301,63 +366,51 @@ function KnowledgeGraph3DSceneInstance({
   // lazily in useFrame (hosts may mount controls after the scene) and
   // re-attached if the controls instance swaps.
   const attachedControlsRef = useRef<ControlsHandle | null>(null);
-  const onUserGrabRef = useRef(() => {
-    framedRef.current = true;
-    flyToIdRef.current = null;
-  });
+  const [onUserGrab] = useState(
+    () => () => {
+      framedRef.current = true;
+      flyToIdRef.current = null;
+    },
+  );
   useEffect(
     () => () => {
-      attachedControlsRef.current?.removeEventListener?.('start', onUserGrabRef.current);
-      attachedControlsRef.current = null;
+      synchronizeKnowledgeGraphControlsListener(
+        attachedControlsRef,
+        null,
+        onUserGrab,
+      );
     },
-    [],
+    [onUserGrab],
   );
 
   // Content signature of the graph: the simulation memo below is keyed on THIS,
   // not on array identity, so a host that rebuilds nodes/edges every render (the
   // common React pattern) never restarts a settled layout. Any renderer-relevant
   // change — structure, radius, edge styling — still yields a new key (warm restart).
-  const graphKey = useMemo(() => graphSignature(nodes, edges), [nodes, edges]);
+  const layoutInput = snapshotGraphLayoutInputs(nodes, edges);
+  const graphKey = layoutInput.graphKey;
   const normalizedQuery = useMemo(() => normalizeGraphQuery(query), [query]);
-  const queryMatchIds = useMemo(
-    () => graphQueryMatchIds(nodes, normalizedQuery, edges),
-    [nodes, edges, normalizedQuery],
-  );
+  const queryMatchIds = graphQueryMatchIds(nodes, normalizedQuery, edges);
   const queryActive = normalizedQuery.length > 0;
+  const visualNodes = nodes.map(({ id, label, color }) => ({ id, label, color }));
 
-  // Build simulation node/link arrays (seeded from remembered positions), the
-  // fast id→index map, and the VALID edge set (both endpoints present, no
-  // self-loops) that every render path shares. Recomputed only on CONTENT change.
-  const { simNodes, simLinks, validEdges, edgeLanes, index, warmStart } = useMemo(() => {
+  // Build immutable layout inputs, the fast id→index map, and the VALID edge set
+  // (both endpoints present, no self-loops) shared by every render path. This
+  // render-phase memo never reads or writes the persistent position ref. The
+  // committed simulation effect derives a detached warm-start plan from it.
+  const { layoutNodes, simLinks, validEdges, edgeLanes, index } = useMemo(() => {
     const index = new Map<string, number>();
-    let warmStart = false;
-    const simNodes: SimGraphNode[] = nodes.map((n, i) => {
+    const layoutNodes = layoutInput.nodes.map((n, i) => {
       index.set(n.id, i);
-      // Sanitize radius once: a non-finite/≤0 radius would write a NaN instance
-      // matrix and poison forceCollide, so fall back to a sane default here.
-      const r = normalizeGraphNodeRadius(n.radius);
-      const prev = posMap.current.get(n.id);
-      if (prev) warmStart = true;
-      else posMap.current.set(n.id, [0, 0, 0]);
-      // Remembered nodes keep their positions; NEW nodes stay unseeded so
-      // d3-force-3d places them on its deterministic phyllotaxis sphere.
-      return prev ? { id: n.id, r, x: prev[0], y: prev[1], z: prev[2] } : { id: n.id, r };
+      return { id: n.id, radius: n.radius };
     });
     // One valid-edge set for ALL paths (layout, adjacency, buffers, endpoints,
     // particles, emphasis) so their element counts can never disagree. Direct
     // inputs already failed closed above; the filter remains defensive/shared.
-    const validEdges = filterGraphEdges(new Set(index.keys()), edges);
+    const validEdges = filterGraphEdges(new Set(index.keys()), layoutInput.edges);
     const edgeLanes = assignGraphEdgeLanes(validEdges);
     const simLinks = uniqueGraphTopologyLinks(validEdges);
-    // Bound the remembered-position cache in long high-churn sessions (only prune
-    // ids no longer present, and only once the cache is large — so ordinary
-    // filter/toggle still restores positions).
-    if (posMap.current.size > MAX_REMEMBERED_POSITIONS) {
-      for (const key of posMap.current.keys()) {
-        if (!index.has(key)) posMap.current.delete(key);
-      }
-    }
-    return { simNodes, simLinks, validEdges, edgeLanes, index, warmStart };
+    return { layoutNodes, simLinks, validEdges, edgeLanes, index };
     // Keyed on content, not identity: content-equal snapshots are interchangeable
     // everywhere these outputs flow (graphSignature covers every field they use).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -390,16 +443,18 @@ function KnowledgeGraph3DSceneInstance({
     () => edgeLanes.filter(({ edge }) => edge.directed !== false),
     [edgeLanes],
   );
-  const particleCount = flowParticleCount(
+  const particleDistribution = planFlowParticleDistribution(
     flowEdges.length,
     PARTICLES_PER_EDGE,
     MAX_PARTICLES,
   );
+  const particleCount = particleDistribution.total;
   useEffect(() => {
     if (flowEdges.length * PARTICLES_PER_EDGE > MAX_PARTICLES) {
       devWarn(
         `KnowledgeGraph3DScene: ${flowEdges.length} flow edges exceed the ` +
-          `${MAX_PARTICLES}-particle cap; some citation flows are not animated.`,
+          `${MAX_PARTICLES}-particle cap at four markers each; marker density ` +
+          'is reduced evenly and every flow edge retains at least one marker.',
       );
     }
   }, [flowEdges.length]);
@@ -415,12 +470,22 @@ function KnowledgeGraph3DSceneInstance({
   );
 
   // (Re)create the 3D force simulation whenever the graph changes.
-  const simRef = useRef<Simulation<SimGraphNode> | null>(null);
+  const layoutRuntimeRef = useRef<GraphLayoutRuntime | null>(null);
   const layoutTickAccumulatorRef = useRef(0);
   const geometryDirtyRef = useRef(true);
   const flowTimeRef = useRef(0);
   useEffect(() => {
-    const linkForce = forceLink<SimGraphNode>(simLinks as never)
+    // Effects may be replayed by Strict Mode. Every setup therefore receives
+    // fresh d3-owned nodes and links; d3 never mutates a memoized render value.
+    // Remembered positions are copied into both nodes and unpublished slots.
+    const plan = planGraphLayoutCache(
+      layoutNodes,
+      posMap.current,
+      MAX_REMEMBERED_POSITIONS,
+    );
+    const simNodes = plan.nodes;
+    const runtimeLinks: SimLink[] = simLinks.map(({ source, target }) => ({ source, target }));
+    const linkForce = forceLink<SimGraphNode>(runtimeLinks)
       .id((d) => d.id)
       .distance(34)
       .strength(0.35);
@@ -432,7 +497,7 @@ function KnowledgeGraph3DSceneInstance({
       .force('link', linkForce)
       .force('center', forceCenter(0, 0, 0).strength(0.04))
       .force('collide', forceCollide((d) => (d as SimGraphNode).r + 3).iterations(2))
-      .alpha(warmStart ? 0.5 : 1)
+      .alpha(plan.warmStart ? 0.5 : 1)
       .alphaDecay(0.018)
       .velocityDecay(0.42)
       .stop();
@@ -446,7 +511,18 @@ function KnowledgeGraph3DSceneInstance({
       for (let i = 0; i < budget && sim.alpha() > 0.008; i++) sim.tick();
       sim.alpha(0);
     }
-    simRef.current = sim;
+    const runtime: GraphLayoutRuntime = {
+      graphKey,
+      reducedMotion,
+      sim,
+      nodes: simNodes,
+      cacheBuffers: plan.cacheBuffers,
+      nextCacheBufferIndex: 0,
+    };
+    // Publish atomically only after the complete simulation is initialized.
+    // Until its first actual frame, even a replayed effect cannot poison the
+    // persistent cache with placeholders or transient d3 state.
+    layoutRuntimeRef.current = runtime;
     layoutTickAccumulatorRef.current = 0;
     geometryDirtyRef.current = true;
     invalidate();
@@ -454,9 +530,22 @@ function KnowledgeGraph3DSceneInstance({
     // a filter/toggle never yanks the camera the user has positioned.
     return () => {
       sim.stop();
-      simRef.current = null;
+      if (layoutRuntimeRef.current === runtime) layoutRuntimeRef.current = null;
     };
-  }, [simNodes, simLinks, warmStart, reducedMotion, invalidate]);
+  }, [graphKey, layoutNodes, simLinks, reducedMotion, invalidate]);
+
+  // A graph-key or motion-policy change must never expose matrices from the
+  // preceding runtime under current click/hover identities. Hide before paint;
+  // the first successful current-runtime frame reveals the complete scene.
+  useLayoutEffect(() => {
+    beginKnowledgeGraphRuntimeTransition(
+      readyGraphKeyRef,
+      geometryDirtyRef,
+      sceneGroupRef.current,
+      invalidate,
+      () => onHoverRef.current(null),
+    );
+  }, [graphKey, reducedMotion, invalidate]);
 
   // Emphasis: bake node + link colors on discrete focus/query changes (not per frame).
   const applyEmphasis = useCallback(() => {
@@ -472,7 +561,7 @@ function KnowledgeGraph3DSceneInstance({
       return 0;
     };
     if (mesh) {
-      nodes.forEach((n, i) => {
+      visualNodes.forEach((n, i) => {
         mesh.setColorAt(i, dim(n.color, isDimmed(n.id)));
       });
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -513,7 +602,7 @@ function KnowledgeGraph3DSceneInstance({
       if (arrows.instanceColor) arrows.instanceColor.needsUpdate = true;
     }
   }, [
-    nodes,
+    visualNodes,
     validEdges,
     directedEdges,
     index,
@@ -549,17 +638,26 @@ function KnowledgeGraph3DSceneInstance({
   // The animation loop: settle the sim, stream positions into the GPU buffers,
   // advance flow particles, keep the label pinned, and ease the camera.
   useFrame((_, delta) => {
-    const sim = simRef.current;
+    const runtime = layoutRuntimeRef.current;
     const mesh = meshRef.current;
-    if (!sim || !mesh) return;
 
-    // Keep the user-grab cancel listener bound to the CURRENT controls instance.
+    // Keep the user-grab cancel listener bound to the CURRENT controls instance,
+    // including empty graph views where no node mesh exists.
     const controls = controlsRef?.current ?? null;
-    if (controls !== attachedControlsRef.current) {
-      attachedControlsRef.current?.removeEventListener?.('start', onUserGrabRef.current);
-      controls?.addEventListener?.('start', onUserGrabRef.current);
-      attachedControlsRef.current = controls;
-    }
+    synchronizeKnowledgeGraphControlsListener(
+      attachedControlsRef,
+      controls,
+      onUserGrab,
+    );
+
+    if (
+      !runtime ||
+      runtime.graphKey !== graphKey ||
+      runtime.reducedMotion !== reducedMotion ||
+      !mesh
+    ) return;
+    const sim = runtime.sim;
+    const simNodes = runtime.nodes;
 
     let positionsChanged = geometryDirtyRef.current;
     if (sim.alpha() > 0.008) {
@@ -581,19 +679,25 @@ function KnowledgeGraph3DSceneInstance({
     const raw = hoverId ?? selectedId;
     const focus = raw != null && index.has(raw) ? raw : null;
     const focusSet = focus ? neighbors.get(focus) : null;
+    const completedCacheBufferIndex = runtime.nextCacheBufferIndex;
     if (positionsChanged) {
+      // From the first CPU geometry mutation until final publication, neither
+      // raycasting nor the visible scene may claim current-runtime readiness.
+      // This also leaves a failed later tick safely hidden and noninteractive.
+      geometryDirtyRef.current = true;
+      const sceneGroup = sceneGroupRef.current;
+      if (sceneGroup) sceneGroup.visible = false;
+      const positionSlots = runtime.cacheBuffers[completedCacheBufferIndex].positionSlots;
       _dummy.quaternion.identity();
       for (let i = 0; i < simNodes.length; i++) {
         const n = simNodes[i];
         const x = n.x ?? 0;
         const y = n.y ?? 0;
         const z = n.z ?? 0;
-        const previous = posMap.current.get(n.id);
-        if (previous) {
-          previous[0] = x;
-          previous[1] = y;
-          previous[2] = z;
-        }
+        const remembered = positionSlots[i];
+        remembered[0] = x;
+        remembered[1] = y;
+        remembered[2] = z;
         _dummy.position.set(x, y, z);
         const pop = focus && (n.id === focus || focusSet?.has(n.id)) ? 1.28 : 1;
         _dummy.scale.setScalar(n.r * pop);
@@ -667,7 +771,6 @@ function KnowledgeGraph3DSceneInstance({
         arrows.instanceMatrix.needsUpdate = true;
         arrows.boundingSphere = null;
       }
-      geometryDirtyRef.current = false;
     }
 
     // Citation flow particles gliding along their edges.
@@ -702,8 +805,10 @@ function KnowledgeGraph3DSceneInstance({
         }
         // Golden-ratio phase per edge — flows don't pulse in lockstep.
         const phase = fe * 0.618034;
-        for (let q = 0; q < PARTICLES_PER_EDGE && p < particleCount; q++) {
-          const frac = (base + phase + q / PARTICLES_PER_EDGE) % 1;
+        const edgeParticleCount = particleDistribution.basePerEdge +
+          (fe < particleDistribution.extraEdgeCount ? 1 : 0);
+        for (let q = 0; q < edgeParticleCount && p < particleCount; q++) {
+          const frac = (base + phase + q / edgeParticleCount) % 1;
           graphEdgeCurvePointInto(_a, _curveControl, _b, frac, _dummy.position);
           _dummy.scale.setScalar(size);
           _dummy.updateMatrix();
@@ -736,7 +841,6 @@ function KnowledgeGraph3DSceneInstance({
       simNodes.length > 0 &&
       sim.alpha() < 0.25
     ) {
-      framedRef.current = true;
       _box.makeEmpty();
       for (let nodeIndex = 0; nodeIndex < simNodes.length; nodeIndex++) {
         const n = simNodes[nodeIndex];
@@ -747,6 +851,9 @@ function KnowledgeGraph3DSceneInstance({
       camera.position.set(sphere.center.x, sphere.center.y, sphere.center.z + dist);
       controls.target.copy(sphere.center);
       controls.update();
+      // A throwing host control remains retryable; user grabs still cancel
+      // eagerly because user intent, unlike programmatic framing, is final.
+      framedRef.current = true;
     }
 
     // Ease the camera target toward the selected node's LIVE position.
@@ -773,37 +880,86 @@ function KnowledgeGraph3DSceneInstance({
     ) {
       invalidate();
     }
+    // Do not publish remembered-position authority until every potentially
+    // throwing simulation and CPU-side matrix/buffer, particle, label, camera,
+    // controls, and invalidation step in this callback has completed. R3F submits
+    // the actual GPU render only after subscribers return, so this deliberately
+    // makes no claim about upload, shader, or draw success.
+    if (positionsChanged) {
+      publishGraphLayoutCache(posMap, runtime, completedCacheBufferIndex);
+      geometryDirtyRef.current = false;
+      readyGraphKeyRef.current = graphKey;
+      const group = sceneGroupRef.current;
+      if (group) group.visible = true;
+    }
   });
 
-  const focusLabel = useMemo(() => {
-    const raw = hoverId ?? selectedId;
-    const focus = raw != null && index.has(raw) ? raw : null;
-    const focusIndex = focus ? index.get(focus) : undefined;
-    return focusIndex == null ? '' : nodes[focusIndex]?.label ?? '';
-  }, [hoverId, selectedId, index, nodes]);
+  const focusLabelId = hoverId ?? selectedId;
+  const focusLabelIndex =
+    focusLabelId != null && index.has(focusLabelId)
+      ? index.get(focusLabelId)
+      : undefined;
+  const focusLabel = focusLabelIndex == null
+    ? ''
+    : visualNodes[focusLabelIndex]?.label ?? '';
 
   const handleMove = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
+      const runtime = layoutRuntimeRef.current;
+      if (
+        readyGraphKeyRef.current !== graphKey ||
+        geometryDirtyRef.current ||
+        runtime?.graphKey !== graphKey ||
+        runtime.reducedMotion !== reducedMotion
+      ) return;
+      if (e.instanceId == null || e.instanceId >= visualNodes.length) return;
+      // Three raycasting does not skip invisible ancestors. An unready mesh must
+      // not swallow events intended for another scene object.
       e.stopPropagation();
-      if (e.instanceId == null || e.instanceId >= nodes.length) return;
-      const id = nodes[e.instanceId].id;
+      const id = visualNodes[e.instanceId].id;
       // Fire only on CHANGE — pointermove is per-frame, and an unguarded call
       // would re-render a state-holding host on every mouse twitch.
       if (id !== hoverId) onHover(id);
     },
-    [nodes, onHover, hoverId],
+    [graphKey, reducedMotion, visualNodes, onHover, hoverId],
   );
-  const handleOut = useCallback(() => onHover(null), [onHover]);
+  const handleOut = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      const runtime = layoutRuntimeRef.current;
+      const ready = !(
+        readyGraphKeyRef.current !== graphKey ||
+        geometryDirtyRef.current ||
+        runtime?.graphKey !== graphKey ||
+        runtime.reducedMotion !== reducedMotion
+      );
+      handleKnowledgeGraphPointerOut(
+        ready,
+        () => e.stopPropagation(),
+        () => onHover(null),
+      );
+    },
+    [graphKey, reducedMotion, onHover],
+  );
   const handleClick = useCallback(
     (e: ThreeEvent<MouseEvent>) => {
-      e.stopPropagation();
-      if (e.instanceId != null && e.instanceId < nodes.length) onSelect(nodes[e.instanceId].id);
+      const runtime = layoutRuntimeRef.current;
+      if (
+        readyGraphKeyRef.current !== graphKey ||
+        geometryDirtyRef.current ||
+        runtime?.graphKey !== graphKey ||
+        runtime.reducedMotion !== reducedMotion
+      ) return;
+      if (e.instanceId != null && e.instanceId < visualNodes.length) {
+        e.stopPropagation();
+        onSelect(visualNodes[e.instanceId].id);
+      }
     },
-    [nodes, onSelect],
+    [graphKey, reducedMotion, visualNodes, onSelect],
   );
 
   return (
     <>
+      <group key={`graph-${graphKey}`} ref={sceneGroupRef} visible={false}>
       {/* Nodes — one instanced, unlit, additively-bloomed sphere per record.
           frustumCulled off: instance matrices stream every frame, and three's
           once-cached bounding sphere would blink drifted nodes out mid-orbit.
@@ -877,7 +1033,12 @@ function KnowledgeGraph3DSceneInstance({
 
       {/* Floating label for the focused node. */}
       <group ref={labelGroupRef} visible={false}>
-        <FocusLabelSprite text={focusLabel} color={labelColor} />
+        <FocusLabelSprite
+          text={focusLabel}
+          color={labelColor}
+          invalidate={invalidate}
+        />
+      </group>
       </group>
     </>
   );

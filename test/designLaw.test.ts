@@ -59,6 +59,130 @@ function useFrameAllocations(src: string, file: string): string[] {
   return allocations;
 }
 
+function enclosingLifecycleHook(node: ts.Node): string | null {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (
+      ts.isCallExpression(current) &&
+      ts.isIdentifier(current.expression) &&
+      (
+        current.expression.text === 'useEffect' ||
+        current.expression.text === 'useLayoutEffect' ||
+        current.expression.text === 'useFrame'
+      )
+    ) {
+      return current.expression.text;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+/** Locate the exact render-purity-sensitive operations in the graph scene and
+ * report the lifecycle boundary lexically containing each one. */
+function knowledgeGraphLifecycleOperations(src: string, file: string): string[] {
+  const source = ts.createSourceFile(
+    file,
+    src,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const operations: string[] = [];
+  function visit(node: ts.Node): void {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'posMap' &&
+      node.name.text === 'current'
+    ) {
+      operations.push(`position-ref:${enclosingLifecycleHook(node) ?? 'render'}`);
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'installFocusLabelResource'
+    ) {
+      operations.push(`label-resource-install:${enclosingLifecycleHook(node) ?? 'render'}`);
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'publishGraphLayoutCache'
+    ) {
+      operations.push(`cache-publish:${enclosingLifecycleHook(node) ?? 'render'}`);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return operations;
+}
+
+/** Calls/new/throws after cache publication would invalidate the rule that a
+ * callback failure leaves the prior cache authority untouched. Inspect every
+ * remaining sibling statement up through the containing useFrame callback. */
+function knowledgeGraphPostPublishFallibleOperations(
+  src: string,
+  file: string,
+): string[] {
+  const source = ts.createSourceFile(
+    file,
+    src,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const offenders: string[] = [];
+
+  function inspect(node: ts.Node): void {
+    if (ts.isCallExpression(node)) offenders.push('call');
+    if (ts.isNewExpression(node)) offenders.push('new');
+    if (ts.isThrowStatement(node)) offenders.push('throw');
+    if (ts.isAwaitExpression(node)) offenders.push('await');
+    if (ts.isYieldExpression(node)) offenders.push('yield');
+    ts.forEachChild(node, inspect);
+  }
+
+  function inspectAfterPublication(node: ts.CallExpression): void {
+    let cursor: ts.Node = node;
+    while (cursor.parent) {
+      const parent = cursor.parent;
+      if (ts.isBlock(parent)) {
+        const containingIndex = parent.statements.findIndex(
+          (statement) => statement === cursor ||
+            (statement.pos <= cursor.pos && statement.end >= cursor.end),
+        );
+        if (containingIndex >= 0) {
+          for (let index = containingIndex + 1; index < parent.statements.length; index++) {
+            inspect(parent.statements[index]);
+          }
+        }
+        const owner = parent.parent;
+        if (
+          (ts.isArrowFunction(owner) || ts.isFunctionExpression(owner)) &&
+          ts.isCallExpression(owner.parent) &&
+          ts.isIdentifier(owner.parent.expression) &&
+          owner.parent.expression.text === 'useFrame'
+        ) return;
+      }
+      cursor = parent;
+    }
+  }
+
+  function visit(node: ts.Node): void {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'publishGraphLayoutCache'
+    ) {
+      inspectAfterPublication(node);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return offenders;
+}
+
 describe('design law (executable)', () => {
   const files = walk(reactDir);
 
@@ -70,6 +194,69 @@ describe('design law (executable)', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('keeps knowledge-graph position authority and label allocation out of render', () => {
+    const file = join(reactDir, 'KnowledgeGraph3DScene.tsx');
+    const source = readFileSync(file, 'utf8');
+    const operations = knowledgeGraphLifecycleOperations(source, file);
+    expect(operations).toContain('position-ref:useEffect');
+    expect(operations).not.toContain('position-ref:useFrame');
+    expect(operations).toContain('cache-publish:useFrame');
+    expect(operations).toContain('label-resource-install:useLayoutEffect');
+    expect(operations.filter((operation) => operation.endsWith(':render'))).toEqual([]);
+    expect(knowledgeGraphPostPublishFallibleOperations(source, file)).toEqual([]);
+
+    const helper = readFileSync(
+      join(reactDir, 'focusLabelResource.internal.ts'),
+      'utf8',
+    );
+    expect(helper).toContain("document.createElement('canvas')");
+    expect(helper).toContain('new THREE.CanvasTexture(canvas)');
+    expect(helper).toContain('texture.dispose()');
+  });
+
+  it('orders graph readiness, event interception, and auto-frame commitment safely', () => {
+    const source = readFileSync(
+      join(reactDir, 'KnowledgeGraph3DScene.tsx'),
+      'utf8',
+    );
+    const geometryStart = source.indexOf('    if (positionsChanged) {');
+    const firstMatrixWrite = source.indexOf('mesh.setMatrixAt', geometryStart);
+    const dirtyBeforeWrite = source.indexOf(
+      'geometryDirtyRef.current = true;',
+      geometryStart,
+    );
+    const hideBeforeWrite = source.indexOf('sceneGroup.visible = false;', geometryStart);
+    expect(geometryStart).toBeGreaterThanOrEqual(0);
+    expect(dirtyBeforeWrite).toBeGreaterThan(geometryStart);
+    expect(hideBeforeWrite).toBeGreaterThan(geometryStart);
+    expect(dirtyBeforeWrite).toBeLessThan(firstMatrixWrite);
+    expect(hideBeforeWrite).toBeLessThan(firstMatrixWrite);
+
+    const moveStart = source.indexOf('  const handleMove = useCallback(');
+    const moveEnd = source.indexOf('  const handleOut = useCallback(', moveStart);
+    const move = source.slice(moveStart, moveEnd);
+    expect(move.indexOf('e.stopPropagation()')).toBeGreaterThan(
+      move.indexOf('if (e.instanceId == null'),
+    );
+
+    const clickStart = source.indexOf('  const handleClick = useCallback(');
+    const clickEnd = source.indexOf('\n\n  return (', clickStart);
+    const click = source.slice(clickStart, clickEnd);
+    expect(click.indexOf('e.stopPropagation()')).toBeGreaterThan(
+      click.indexOf('if (e.instanceId != null'),
+    );
+
+    const autoFrameStart = source.indexOf('      autoFrame &&');
+    const autoFrameEnd = source.indexOf(
+      '    // Ease the camera target',
+      autoFrameStart,
+    );
+    const autoFrame = source.slice(autoFrameStart, autoFrameEnd);
+    expect(autoFrame.indexOf('framedRef.current = true;')).toBeGreaterThan(
+      autoFrame.indexOf('controls.update();'),
+    );
   });
 
   it('shipped React code has no implicit network/worker loader path', () => {

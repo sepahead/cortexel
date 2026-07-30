@@ -1,7 +1,7 @@
 import * as react from 'react';
 import * as THREE from 'three';
 import { R as ReadonlySemanticPalette } from '../colormaps-CZ6XejJa.cjs';
-import { K as KnowledgeGraph3DParams } from '../params-DOrQO4YT.cjs';
+import { K as KnowledgeGraph3DParams } from '../params-BDdHygs4.cjs';
 import 'zod';
 
 type KnowledgeGraphNodeKind = 'paper' | 'model' | 'family';
@@ -266,47 +266,54 @@ declare function KnowledgeGraphA11yList(props: KnowledgeGraphA11yListProps): rea
 declare function KnowledgeGraphLegend({ nodes, edges, context, className, label, }: KnowledgeGraphLegendProps): react.JSX.Element;
 
 interface KnowledgeGraph3DNode {
-    id: string;
-    label: string;
-    detail?: string;
-    attributes?: Readonly<KnowledgeGraphAttributes>;
-    epistemic?: Readonly<KnowledgeGraphEpistemic>;
-    evidence?: readonly KnowledgeGraphEvidenceRef[];
-    uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
-    color: string;
-    radius: number;
+    readonly id: string;
+    readonly label: string;
+    readonly detail?: string;
+    readonly attributes?: Readonly<KnowledgeGraphAttributes>;
+    readonly epistemic?: Readonly<KnowledgeGraphEpistemic>;
+    readonly evidence?: readonly KnowledgeGraphEvidenceRef[];
+    readonly uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
+    readonly color: string;
+    readonly radius: number;
     /** Human-readable semantics for radius. Omitted means caller-defined visual size. */
-    radiusMeaning?: string;
-    kind: string;
+    readonly radiusMeaning?: string;
+    readonly kind: string;
 }
 interface KnowledgeGraph3DEdge {
     /** Stable assertion identity. Distinct ids may share endpoints and kind. */
-    id?: string;
-    label?: string;
-    attributes?: Readonly<KnowledgeGraphAttributes>;
-    epistemic?: Readonly<KnowledgeGraphEpistemic>;
-    evidence?: readonly KnowledgeGraphEvidenceRef[];
-    uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
-    source: string;
-    target: string;
-    color: string;
+    readonly id?: string;
+    readonly label?: string;
+    readonly attributes?: Readonly<KnowledgeGraphAttributes>;
+    readonly epistemic?: Readonly<KnowledgeGraphEpistemic>;
+    readonly evidence?: readonly KnowledgeGraphEvidenceRef[];
+    readonly uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
+    readonly source: string;
+    readonly target: string;
+    readonly color: string;
     /** Directed edges receive a persistent arrowhead (including reduced motion). */
-    directed?: boolean;
-    kind: string;
+    readonly directed?: boolean;
+    readonly kind: string;
     /** Animate glowing particles flowing source→target (e.g. citations). */
-    particles?: boolean;
+    readonly particles?: boolean;
 }
 /** Minimal OrbitControls surface the scene needs for auto-frame + fly-to. The
  *  controls themselves stay host-side (Design Law #5); the host passes a ref. */
-interface ControlsHandle {
+interface ControlsCore {
     target: THREE.Vector3;
     update: () => void;
+}
+interface ControlsStartEventSurface {
     /** Optional EventDispatcher surface (OrbitControls has it). When present, the
      *  scene cancels its own camera moves on 'start' (user grab: drag/zoom
      *  begin) — the user's hand always wins over auto-frame and fly-to. */
-    addEventListener?(type: 'start', listener: () => void): void;
-    removeEventListener?(type: 'start', listener: () => void): void;
+    addEventListener(type: 'start', listener: () => void): void;
+    removeEventListener(type: 'start', listener: () => void): void;
 }
+/** Controls either expose a complete removable start-event surface or none. */
+type ControlsHandle = ControlsCore & (ControlsStartEventSurface | {
+    addEventListener?: never;
+    removeEventListener?: never;
+});
 interface KnowledgeGraph3DSceneProps {
     /** Caller-declared graph/snapshot cache namespace. Change it with declared graph
      * context; keep it stable for filters. It is not a content digest or proof. */

@@ -10,6 +10,9 @@
 
 import { z } from 'zod';
 import { SAFE_DISPLAY_STRING_PATTERN } from '../safeRuntime';
+import { KNOWLEDGE_GRAPH_LIMITS } from './knowledgeGraphLimits';
+
+export { KNOWLEDGE_GRAPH_LIMITS } from './knowledgeGraphLimits';
 
 /** Public validation budgets. Hosts with larger corpora should pass handles or
  *  pre-aggregate instead of sending an unbounded inline payload to a browser. */
@@ -1872,16 +1875,6 @@ export const CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS = [
   'belongs_to_family',
 ] as const;
 
-export const KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
-  maxAttributes: 24,
-  maxAttributeArrayItems: 16,
-  maxEvidenceRefsPerElement: 8,
-  maxParallelEdgesPerPair: 9,
-  maxDetailLength: 1_000,
-  maxAttributeStringLength: 500,
-  maxExcerptLength: 1_000,
-});
-
 const KnowledgeGraphAttributeScalarSchema = z.union([
   z
     .string()
@@ -1902,8 +1895,12 @@ const KnowledgeGraphAttributeValueSchema = z.union([
     .max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems),
 ]);
 
+const KnowledgeGraphAttributeKeySchema = normalizedRecordKey.max(
+  KNOWLEDGE_GRAPH_LIMITS.maxAttributeKeyLength,
+);
+
 const KnowledgeGraphAttributesSchema = z
-  .record(normalizedRecordKey, KnowledgeGraphAttributeValueSchema)
+  .record(KnowledgeGraphAttributeKeySchema, KnowledgeGraphAttributeValueSchema)
   .superRefine((value, ctx) => {
     if (Object.keys(value).length > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
       ctx.addIssue({
@@ -1917,38 +1914,38 @@ const KnowledgeGraphEvidenceRefSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('graph_snapshot_record'),
-      evidence_id: displayText(384),
-      record_id: displayText(320),
-      locator: displayText(240).optional(),
+      evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+      record_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxRecordIdLength),
+      locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal('graph_node'),
-      evidence_id: displayText(384),
-      node_id: displayText(120),
-      locator: displayText(240).optional(),
+      evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+      node_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
+      locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
       excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal('citation'),
-      evidence_id: displayText(384),
-      paper_id: displayText(160),
-      citation_id: displayText(160),
+      evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+      paper_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxPaperIdLength),
+      citation_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxCitationIdLength),
       page: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
-      locator: displayText(240).optional(),
+      locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
       excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
-      doi: displayText(240).optional(),
+      doi: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDoiLength).optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal('external_source'),
-      evidence_id: displayText(384),
-      source_id: displayText(240),
-      locator: displayText(240).optional(),
+      evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+      source_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxSourceIdLength),
+      locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
       excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
     })
     .strict(),
@@ -1998,9 +1995,9 @@ const DerivedAdvisoryEpistemicSchema = z
 
 const KnowledgeGraphNodeSchema = z
   .object({
-    id: displayText(120),
+    id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
     kind: z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
-    label: displayText(240),
+    label: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeLabelLength),
     detail: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDetailLength).optional(),
     attributes: KnowledgeGraphAttributesSchema,
     epistemic: DerivedAdvisoryEpistemicSchema,
@@ -2011,11 +2008,11 @@ const KnowledgeGraphNodeSchema = z
 
 const KnowledgeGraphEdgeSchema = z
   .object({
-    id: displayText(320),
-    source: displayText(120),
-    target: displayText(120),
+    id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEdgeIdLength),
+    source: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
+    target: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
     kind: z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
-    label: displayText(160),
+    label: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEdgeLabelLength),
     attributes: KnowledgeGraphAttributesSchema,
     epistemic: DerivedAdvisoryEpistemicSchema,
     evidence: KnowledgeGraphEvidenceRefsSchema,

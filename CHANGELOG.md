@@ -183,6 +183,35 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed — renderer accessibility and perception evidence
 
+- The experimental legacy knowledge-graph scene no longer reads or mutates its
+  remembered-position authority during React render. A committed effect builds
+  detached d3 node/link state plus two bounded cache buffers. Every
+  position-changing callback fills only the non-authoritative buffer and swaps the
+  complete Map after its simulation, CPU-side matrix/buffer, camera, controls, and
+  invalidation steps complete. This is intentionally not evidence that R3F's later
+  GPU upload or draw succeeded. Abandoned renders, replayed Strict effects, and
+  callback failures therefore cannot seed a later layout with partial or placeholder
+  positions, while same-snapshot
+  filters retain deterministic warm-start continuity. A changed graph remains
+  hidden and its handlers refuse to intercept events until the first complete
+  current-runtime CPU preparation callback.
+- Knowledge-graph focus-label canvas/GPU resources are now created after commit,
+  invalidated for demand rendering, and disposed exactly once by the matching
+  layout-effect cleanup or by setup rollback. A throwing host invalidator cannot
+  leave a texture attached or skip disposal. R3F store subscriptions select only
+  the camera, renderer, and invalidator. Optional host-control cancellation now
+  attaches only when an exact add/remove event pair exists, retains cleanup authority
+  across throws, and rolls back a partially failed attachment.
+- Direct knowledge-graph scene, DOM-list, and legend inputs are budget-checked before
+  being copied into detached presentation records; public record fields are readonly.
+  The runtime still re-derives content after same-array JavaScript mutations instead
+  of retaining stale WebGL identities or DOM relationships. Relationship paging is
+  retained across content-equal parent rerenders and clamps synchronously when a live
+  graph shrinks, so assistive technology never receives an empty out-of-range page.
+- The bounded flow-particle budget is distributed across every marked relationship
+  instead of assigning four markers only to the first edges under the cap. At the
+  maximum 4,000-edge browser budget every flow edge retains one static/animated cue,
+  so the text legend no longer promises a marker that the scene omitted.
 - The experimental legacy knowledge-graph memo signature now uses
   type-and-presence-tagged length framing. An absent optional assertion id, kind, or
   color can no longer collide with an explicit empty string and retain stale

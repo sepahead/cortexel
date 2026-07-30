@@ -2406,6 +2406,34 @@ function provenanceParamConstraintError(constraint, params, declared) {
 
 // core/skills/params.ts
 var import_zod3 = require("zod");
+
+// core/skills/knowledgeGraphLimits.ts
+var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
+  maxNodeIdLength: 120,
+  maxNodeLabelLength: 240,
+  maxEdgeIdLength: 320,
+  maxEdgeLabelLength: 160,
+  maxKindLength: 80,
+  maxColorLength: 64,
+  maxRadiusMeaningLength: 400,
+  maxAttributes: 24,
+  maxAttributeKeyLength: 80,
+  maxAttributeArrayItems: 16,
+  maxEvidenceRefsPerElement: 8,
+  maxEvidenceIdLength: 384,
+  maxRecordIdLength: 320,
+  maxLocatorLength: 240,
+  maxPaperIdLength: 160,
+  maxCitationIdLength: 160,
+  maxSourceIdLength: 240,
+  maxDoiLength: 240,
+  maxParallelEdgesPerPair: 9,
+  maxDetailLength: 1e3,
+  maxAttributeStringLength: 500,
+  maxExcerptLength: 1e3
+});
+
+// core/skills/params.ts
 var PARAM_LIMITS = Object.freeze({
   // Inline JSON is defensively cloned and schema-validated more than once at
   // the trust boundary. Larger recordings must be decimated/aggregated or
@@ -3840,15 +3868,6 @@ var CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS = [
   "instantiates",
   "belongs_to_family"
 ];
-var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
-  maxAttributes: 24,
-  maxAttributeArrayItems: 16,
-  maxEvidenceRefsPerElement: 8,
-  maxParallelEdgesPerPair: 9,
-  maxDetailLength: 1e3,
-  maxAttributeStringLength: 500,
-  maxExcerptLength: 1e3
-});
 var KnowledgeGraphAttributeScalarSchema = import_zod3.z.union([
   import_zod3.z.string().max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength).regex(
     SAFE_DISPLAY_STRING_PATTERN,
@@ -3862,7 +3881,10 @@ var KnowledgeGraphAttributeValueSchema = import_zod3.z.union([
   KnowledgeGraphAttributeScalarSchema,
   import_zod3.z.array(KnowledgeGraphAttributeScalarSchema).max(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems)
 ]);
-var KnowledgeGraphAttributesSchema = import_zod3.z.record(normalizedRecordKey2, KnowledgeGraphAttributeValueSchema).superRefine((value, ctx) => {
+var KnowledgeGraphAttributeKeySchema = normalizedRecordKey2.max(
+  KNOWLEDGE_GRAPH_LIMITS.maxAttributeKeyLength
+);
+var KnowledgeGraphAttributesSchema = import_zod3.z.record(KnowledgeGraphAttributeKeySchema, KnowledgeGraphAttributeValueSchema).superRefine((value, ctx) => {
   if (Object.keys(value).length > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
     ctx.addIssue({
       code: import_zod3.z.ZodIssueCode.custom,
@@ -3873,32 +3895,32 @@ var KnowledgeGraphAttributesSchema = import_zod3.z.record(normalizedRecordKey2, 
 var KnowledgeGraphEvidenceRefSchema = import_zod3.z.discriminatedUnion("kind", [
   import_zod3.z.object({
     kind: import_zod3.z.literal("graph_snapshot_record"),
-    evidence_id: displayText(384),
-    record_id: displayText(320),
-    locator: displayText(240).optional()
+    evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+    record_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxRecordIdLength),
+    locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional()
   }).strict(),
   import_zod3.z.object({
     kind: import_zod3.z.literal("graph_node"),
-    evidence_id: displayText(384),
-    node_id: displayText(120),
-    locator: displayText(240).optional(),
+    evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+    node_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
+    locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
   }).strict(),
   import_zod3.z.object({
     kind: import_zod3.z.literal("citation"),
-    evidence_id: displayText(384),
-    paper_id: displayText(160),
-    citation_id: displayText(160),
+    evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+    paper_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxPaperIdLength),
+    citation_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxCitationIdLength),
     page: import_zod3.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
-    locator: displayText(240).optional(),
+    locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
-    doi: displayText(240).optional()
+    doi: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDoiLength).optional()
   }).strict(),
   import_zod3.z.object({
     kind: import_zod3.z.literal("external_source"),
-    evidence_id: displayText(384),
-    source_id: displayText(240),
-    locator: displayText(240).optional(),
+    evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
+    source_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxSourceIdLength),
+    locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional()
   }).strict()
 ]);
@@ -3928,9 +3950,9 @@ var DerivedAdvisoryEpistemicSchema = import_zod3.z.object({
   calibrated_posterior: import_zod3.z.literal(false)
 }).strict();
 var KnowledgeGraphNodeSchema = import_zod3.z.object({
-  id: displayText(120),
+  id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
   kind: import_zod3.z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
-  label: displayText(240),
+  label: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeLabelLength),
   detail: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDetailLength).optional(),
   attributes: KnowledgeGraphAttributesSchema,
   epistemic: DerivedAdvisoryEpistemicSchema,
@@ -3938,11 +3960,11 @@ var KnowledgeGraphNodeSchema = import_zod3.z.object({
   uncalibrated_score: KnowledgeGraphUncalibratedScoreSchema.optional()
 }).strict();
 var KnowledgeGraphEdgeSchema = import_zod3.z.object({
-  id: displayText(320),
-  source: displayText(120),
-  target: displayText(120),
+  id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEdgeIdLength),
+  source: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
+  target: displayText(KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength),
   kind: import_zod3.z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
-  label: displayText(160),
+  label: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEdgeLabelLength),
   attributes: KnowledgeGraphAttributesSchema,
   epistemic: DerivedAdvisoryEpistemicSchema,
   evidence: KnowledgeGraphEvidenceRefsSchema,

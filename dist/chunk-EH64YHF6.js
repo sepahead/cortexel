@@ -12,7 +12,6 @@ import {
   InDegreeDistributionParamsSchema,
   IsiDistributionParamsSchema,
   JsonParamsSchema,
-  KNOWLEDGE_GRAPH_LIMITS,
   KnowledgeGraph3DParamsSchema,
   NEST_DEVICE_FAMILIES,
   NEST_SKILL_REGISTRY,
@@ -28,8 +27,9 @@ import {
   WeightMatrixParamsSchema,
   isSkillId,
   listSkills
-} from "./chunk-2LPWJD5A.js";
+} from "./chunk-THDKGZIE.js";
 import {
+  KNOWLEDGE_GRAPH_LIMITS,
   PUBLIC_DIAGNOSTIC_LIMITS,
   SAFE_DISPLAY_STRING_PATTERN,
   formatValidationIssues,
@@ -37,7 +37,7 @@ import {
   safeDiagnosticText,
   safeErrorMessage,
   safePrimitiveDiagnostic
-} from "./chunk-UEJPZXDX.js";
+} from "./chunk-AHFTSYTV.js";
 import {
   exactBinary64Mean,
   exactBinary64Sum
@@ -3483,4 +3483,4 @@ export {
   synapseCollectionToWeightHistogramParams,
   getPositionToSpatialMap2DParams
 };
-//# sourceMappingURL=chunk-EBZ3RSEL.js.map
+//# sourceMappingURL=chunk-EH64YHF6.js.map

@@ -18,6 +18,10 @@ import type {
   KnowledgeGraph3DNode,
   KnowledgeGraph3DEdge,
 } from './KnowledgeGraph3DScene';
+import {
+  canonicalGraphNodePair,
+  graphEdgeIdentityKey,
+} from './knowledgeGraphIdentity.internal';
 
 export type KnowledgeGraphNodeKind = 'paper' | 'model' | 'family';
 export type KnowledgeGraphEdgeKind =
@@ -140,23 +144,6 @@ export interface GraphEdgeIdentity {
   uncalibrated_score?: Readonly<KnowledgeGraphUncalibratedScore>;
 }
 
-function canonicalPair(
-  source: string,
-  target: string,
-): readonly [source: string, target: string] {
-  return source <= target ? [source, target] : [target, source];
-}
-
-function graphEdgeIdentityKey(edge: GraphEdgeIdentity): string {
-  if (typeof edge.id === 'string') return JSON.stringify(['id', edge.id]);
-  const kind = typeof edge.kind === 'string' ? edge.kind : '';
-  if (edge.directed === false) {
-    const [source, target] = canonicalPair(edge.source, edge.target);
-    return JSON.stringify(['legacy-undirected', source, target, kind]);
-  }
-  return JSON.stringify(['legacy-directed', edge.source, edge.target, kind]);
-}
-
 /** Direct React entrypoints must not silently discard scientific relationships.
  * Identified edges are distinct assertions and therefore deduplicate by id;
  * legacy id-less edges use source/target/kind plus their effective direction.
@@ -188,7 +175,7 @@ export function assertRenderableGraphEdges(
       throw new Error(`knowledge graph edge ${identity} is duplicated at index ${index}`);
     }
     relationships.add(key);
-    const [source, target] = canonicalPair(edge.source, edge.target);
+    const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
     const pairKey = JSON.stringify([source, target]);
     const pairCount = (pairCounts.get(pairKey) ?? 0) + 1;
     if (pairCount > MAX_GRAPH_PARALLEL_EDGES) {
@@ -481,7 +468,7 @@ export function assignGraphEdgeLanes<E extends GraphEdgeIdentity>(
   const bundles = new Map<string, GraphEdgeLaneCandidate<E>[]>();
   for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
     const edge = edges[edgeIndex];
-    const [source, target] = canonicalPair(edge.source, edge.target);
+    const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
     const pairKey = JSON.stringify([source, target]);
     const semanticKey = JSON.stringify([
       graphEdgeIdentityKey(edge),
@@ -541,7 +528,7 @@ export function uniqueGraphTopologyLinks(
   for (let index = 0; index < edges.length; index++) {
     const edge = edges[index];
     if (edge.source === edge.target) continue;
-    const [source, target] = canonicalPair(edge.source, edge.target);
+    const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
     const key = JSON.stringify([source, target]);
     if (seen.has(key)) continue;
     seen.add(key);

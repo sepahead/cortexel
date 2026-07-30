@@ -37,7 +37,7 @@ import {
   synapseCollectionToWeightHistogramParams,
   synapseCollectionToWeightMatrixParams,
   weightRecorderToSceneData
-} from "../chunk-EBZ3RSEL.js";
+} from "../chunk-EH64YHF6.js";
 import {
   AXIS_COLORS,
   AdjacencyMatrixParamsSchema,
@@ -75,7 +75,6 @@ import {
   JSON_BUDGET_SEMANTICS,
   JSON_PARAMS_PORTABLE_SCHEMA,
   JsonParamsSchema,
-  KNOWLEDGE_GRAPH_LIMITS,
   KnowledgeGraph3DParamsSchema,
   NEST_DEVICE_FAMILIES,
   NEST_SKILL_IDS,
@@ -174,8 +173,10 @@ import {
   validateSkillParams,
   validateSpec,
   validateVizSpec
-} from "../chunk-2LPWJD5A.js";
-import "../chunk-UEJPZXDX.js";
+} from "../chunk-THDKGZIE.js";
+import {
+  KNOWLEDGE_GRAPH_LIMITS
+} from "../chunk-AHFTSYTV.js";
 import "../chunk-XGABDL4O.js";
 import "../chunk-ZYBCCIMH.js";
 export {

@@ -3,7 +3,7 @@
 // disclosure below) the Canvas so node identity and directed-edge semantics are
 // present outside pointer-hover and colour encodings.
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type {
   KnowledgeGraph3DEdge,
   KnowledgeGraph3DNode,
@@ -20,6 +20,11 @@ import {
   type KnowledgeGraphContext,
 } from './knowledgeGraph';
 import { safeDiagnosticText } from '../core/safeRuntime';
+import {
+  assertKnowledgeGraphNodeReference,
+  snapshotKnowledgeGraphPresentation,
+} from './knowledgeGraphPresentation.internal';
+import { graphEdgeIdentityKey } from './knowledgeGraphIdentity.internal';
 
 const INLINE_RELATION_LIMIT = 8;
 const RELATION_PAGE_SIZE = 25;
@@ -283,10 +288,20 @@ function relationshipText(
 export function KnowledgeGraphA11yList(props: KnowledgeGraphA11yListProps) {
   const { graphIdentity, nodes, edges } = props;
   assertKnowledgeGraphIdentity(graphIdentity);
+  assertKnowledgeGraphNodeReference(props.selectedId, 'knowledge-graph selected id');
+  // Reject counts before the bounded deep snapshot does any proportional work.
   assertKnowledgeGraphBudget(nodes.length, edges.length);
-  assertUniqueGraphNodeIds(nodes);
-  assertRenderableGraphEdges(nodes, edges);
-  return <KnowledgeGraphA11yListInstance key={graphIdentity} {...props} />;
+  const snapshot = snapshotKnowledgeGraphPresentation(nodes, edges);
+  assertUniqueGraphNodeIds(snapshot.nodes);
+  assertRenderableGraphEdges(snapshot.nodes, snapshot.edges);
+  return (
+    <KnowledgeGraphA11yListInstance
+      key={graphIdentity}
+      {...props}
+      nodes={snapshot.nodes}
+      edges={snapshot.edges}
+    />
+  );
 }
 
 function KnowledgeGraphA11yListInstance({
@@ -303,34 +318,30 @@ function KnowledgeGraphA11yListInstance({
   const safePageSize = Number.isSafeInteger(nodePageSize)
     ? Math.min(MAX_A11Y_NODE_PAGE_SIZE, Math.max(1, nodePageSize))
     : DEFAULT_A11Y_NODE_PAGE_SIZE;
-  const { rows, validEdges, byId } = useMemo<{
-    rows: AccessibleNode[];
-    validEdges: KnowledgeGraph3DEdge[];
-    byId: Map<string, KnowledgeGraph3DNode>;
-  }>(() => {
-    const byId = new Map(nodes.map((node) => [node.id, node]));
-    const validEdges = filterGraphEdges(new Set(byId.keys()), edges);
-    const relations = new Map<string, number[]>();
-    for (const node of nodes) relations.set(node.id, []);
-    for (let index = 0; index < validEdges.length; index++) {
-      const edge = validEdges[index];
-      const source = byId.get(edge.source);
-      const target = byId.get(edge.target);
-      if (!source || !target || source.id === target.id) continue;
-      relations.get(source.id)?.push(index);
-      relations.get(target.id)?.push(index);
-    }
-    const normalizedQuery = normalizeGraphQuery(query);
-    const matchingNodeIds = graphQueryMatchIds(nodes, normalizedQuery, validEdges);
-    const rows = nodes
-      .filter(
-        (node) =>
-          node.id === selectedId ||
-          matchingNodeIds.has(node.id),
-      )
-      .map((node) => ({ node, relationIndexes: relations.get(node.id) ?? [] }));
-    return { rows, validEdges, byId };
-  }, [nodes, edges, query, selectedId]);
+  // These props are already detached by the public wrapper. Derive from their
+  // contents on every render so untyped same-array mutations cannot strand stale
+  // DOM relationships or query results behind an identity-based memo.
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const validEdges = filterGraphEdges(new Set(byId.keys()), edges);
+  const relations = new Map<string, number[]>();
+  for (const node of nodes) relations.set(node.id, []);
+  for (let index = 0; index < validEdges.length; index++) {
+    const edge = validEdges[index];
+    const source = byId.get(edge.source);
+    const target = byId.get(edge.target);
+    if (!source || !target || source.id === target.id) continue;
+    relations.get(source.id)?.push(index);
+    relations.get(target.id)?.push(index);
+  }
+  const normalizedQuery = normalizeGraphQuery(query);
+  const matchingNodeIds = graphQueryMatchIds(nodes, normalizedQuery, validEdges);
+  const rows: AccessibleNode[] = nodes
+    .filter(
+      (node) =>
+        node.id === selectedId ||
+        matchingNodeIds.has(node.id),
+    )
+    .map((node) => ({ node, relationIndexes: relations.get(node.id) ?? [] }));
   const [nodePage, setNodePage] = useState(() => {
     const selectedIndex = rows.findIndex(({ node }) => node.id === selectedId);
     return selectedIndex < 0 ? 0 : Math.floor(selectedIndex / safePageSize);
@@ -341,12 +352,12 @@ function KnowledgeGraphA11yListInstance({
     currentNodePage * safePageSize,
     (currentNodePage + 1) * safePageSize,
   );
-  useEffect(() => setNodePage(0), [query, safePageSize]);
+  const selectedIndex = rows.findIndex(({ node }) => node.id === selectedId);
+  useEffect(() => setNodePage(0), [normalizedQuery, safePageSize]);
   useEffect(() => {
-    const selectedIndex = rows.findIndex(({ node }) => node.id === selectedId);
     if (selectedIndex >= 0) setNodePage(Math.floor(selectedIndex / safePageSize));
     else setNodePage((page) => Math.min(page, nodePageCount - 1));
-  }, [rows, selectedId, safePageSize, nodePageCount]);
+  }, [selectedIndex, safePageSize, nodePageCount]);
 
   return (
     <section className={className} aria-label={safeDiagnosticText(label, 240)}>
@@ -455,13 +466,17 @@ export function KnowledgeGraphLegend({
   className,
   label = 'Knowledge graph legend',
 }: KnowledgeGraphLegendProps) {
+  // Reject counts before the bounded deep snapshot does any proportional work.
   assertKnowledgeGraphBudget(nodes.length, edges.length);
-  assertUniqueGraphNodeIds(nodes);
-  assertRenderableGraphEdges(nodes, edges);
-  const { nodeEntries, edgeEntries } = useMemo(() => {
+  const snapshot = snapshotKnowledgeGraphPresentation(nodes, edges);
+  assertUniqueGraphNodeIds(snapshot.nodes);
+  assertRenderableGraphEdges(snapshot.nodes, snapshot.edges);
+  const nodeEntries: NodeLegendEntry[] = [];
+  const edgeEntries: EdgeLegendEntry[] = [];
+  {
     const nodeGroups = new Map<string, NodeLegendEntry>();
-    for (let index = 0; index < nodes.length; index++) {
-      const node = nodes[index];
+    for (let index = 0; index < snapshot.nodes.length; index++) {
+      const node = snapshot.nodes[index];
       const radius = normalizeGraphNodeRadius(node.radius);
       const radiusMeaning = radiusMeaningText(node);
       const key = JSON.stringify([node.kind, node.color, radiusMeaning]);
@@ -482,7 +497,10 @@ export function KnowledgeGraphLegend({
       }
     }
     const edgeGroups = new Map<string, EdgeLegendEntry>();
-    const validEdges = filterGraphEdges(new Set(nodes.map(({ id }) => id)), edges);
+    const validEdges = filterGraphEdges(
+      new Set(snapshot.nodes.map(({ id }) => id)),
+      snapshot.edges,
+    );
     for (let index = 0; index < validEdges.length; index++) {
       const edge = validEdges[index];
       const directed = edge.directed !== false;
@@ -500,17 +518,16 @@ export function KnowledgeGraphLegend({
         });
       }
     }
-    const nodeEntries = [...nodeGroups.values()].sort((a, b) =>
+    nodeEntries.push(...[...nodeGroups.values()].sort((a, b) =>
       compareLegendEntries(a, b) ||
       (a.radiusMeaning === b.radiusMeaning
         ? 0
-        : a.radiusMeaning < b.radiusMeaning ? -1 : 1));
-    const edgeEntries = [...edgeGroups.values()].sort((a, b) =>
+        : a.radiusMeaning < b.radiusMeaning ? -1 : 1)));
+    edgeEntries.push(...[...edgeGroups.values()].sort((a, b) =>
       compareLegendEntries(a, b) ||
       Number(a.directed) - Number(b.directed) ||
-      Number(a.particles) - Number(b.particles));
-    return { nodeEntries, edgeEntries };
-  }, [nodes, edges]);
+      Number(a.particles) - Number(b.particles)));
+  }
   const swatchStyle = (color: string) => ({
     display: 'inline-block',
     width: 16,
@@ -591,9 +608,19 @@ function RelationshipPager({
   byId: ReadonlyMap<string, KnowledgeGraph3DNode>;
 }) {
   const [page, setPage] = useState(0);
-  const pageCount = Math.ceil(relationIndexes.length / RELATION_PAGE_SIZE);
-  useEffect(() => setPage(0), [nodeId, relationIndexes]);
-  const start = page * RELATION_PAGE_SIZE;
+  const pageCount = Math.max(1, Math.ceil(relationIndexes.length / RELATION_PAGE_SIZE));
+  // Clamp during render and converge stored page state after commit. If a live
+  // graph loses relationships while its pager is on the last page, the DOM never
+  // exposes a transient empty/out-of-range page to assistive technology.
+  const currentPage = Math.min(page, pageCount - 1);
+  // Same-node relationship views retain the user's page. Render-time clamping
+  // handles shrinkage; the keyed graph boundary handles a new graph namespace.
+  useEffect(() => setPage(0), [nodeId]);
+  useEffect(
+    () => setPage((current) => Math.min(current, pageCount - 1)),
+    [pageCount],
+  );
+  const start = currentPage * RELATION_PAGE_SIZE;
   return (
     <details>
       <summary style={{ minHeight: 44 }}>
@@ -602,19 +629,23 @@ function RelationshipPager({
       <ul>
         {relationIndexes.slice(start, start + RELATION_PAGE_SIZE).map((edgeIndex) => {
           const edge = edges[edgeIndex];
-          const edgeLabel = edge.id ?? `${edge.kind} relationship`;
+          const humanLabel = edge.label ?? edge.kind;
+          const edgeLabel = edge.id === undefined
+            ? `${humanLabel} relationship`
+            : `${humanLabel} [${edge.id}]`;
+          const relationshipKey = graphEdgeIdentityKey(edge);
           return (
-            <li key={`${edgeIndex}-${nodeId}`}>
+            <li key={JSON.stringify([nodeId, relationshipKey])}>
               {relationshipText(nodeId, edge, byId)}
               <MetadataDisclosure value={edge} label={`relationship ${edgeLabel}`} />
             </li>
           );
         })}
       </ul>
-      <p aria-live="polite">Page {page + 1} of {pageCount}</p>
+      <p aria-live="polite">Page {currentPage + 1} of {pageCount}</p>
       <button
         type="button"
-        disabled={page === 0}
+        disabled={currentPage === 0}
         onClick={() => setPage((current) => Math.max(0, current - 1))}
         style={{ minWidth: 44, minHeight: 44 }}
       >
@@ -622,7 +653,7 @@ function RelationshipPager({
       </button>
       <button
         type="button"
-        disabled={page + 1 >= pageCount}
+        disabled={currentPage + 1 >= pageCount}
         onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
         style={{ minWidth: 44, minHeight: 44 }}
       >

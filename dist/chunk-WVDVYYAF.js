@@ -5,10 +5,10 @@ import {
   validateSkillInvocation,
   validateSpec,
   validateVizSpec
-} from "./chunk-2LPWJD5A.js";
+} from "./chunk-THDKGZIE.js";
 import {
   readOwnEnumerableDataProperty
-} from "./chunk-UEJPZXDX.js";
+} from "./chunk-AHFTSYTV.js";
 
 // react/VizSpecRenderer.tsx
 import { useEffect, useId, useMemo, useRef } from "react";
@@ -222,4 +222,4 @@ function SceneFrame({
 export {
   VizSpecRenderer
 };
-//# sourceMappingURL=chunk-UMWORBYH.js.map
+//# sourceMappingURL=chunk-WVDVYYAF.js.map

@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createElement } from 'react';
+import { createElement, Profiler } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act, create } from 'react-test-renderer';
+import * as THREE from 'three';
 import { CORTEXEL_PALETTE } from '../core/colormaps';
 import {
   assignGraphEdgeLanes,
@@ -40,6 +41,20 @@ import {
   mapCorpusKnowledgeGraph,
 } from '../react/knowledgeGraph';
 import {
+  planGraphLayoutCache,
+  publishGraphLayoutCache,
+  snapshotGraphLayoutInputs,
+} from '../react/knowledgeGraphLayout.internal';
+import { installFocusLabelResource } from '../react/focusLabelResource.internal';
+import { snapshotKnowledgeGraphPresentation } from '../react/knowledgeGraphPresentation.internal';
+import {
+  beginKnowledgeGraphRuntimeTransition,
+  handleKnowledgeGraphPointerOut,
+  synchronizeKnowledgeGraphControlsListener,
+} from '../react/knowledgeGraphInteraction.internal';
+import { graphEdgeIdentityKey } from '../react/knowledgeGraphIdentity.internal';
+import { planFlowParticleDistribution } from '../react/knowledgeGraphParticles.internal';
+import {
   KnowledgeGraph3DScene,
   KnowledgeGraphA11yList,
   KnowledgeGraphLegend,
@@ -55,7 +70,471 @@ const P = CORTEXEL_PALETTE;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+function makeFocusLabelCanvas() {
+  let effectiveFillStyle = '';
+  let fillTextStyle = '';
+  const context = {
+    font: '',
+    textAlign: 'start',
+    textBaseline: 'alphabetic',
+    get fillStyle() {
+      return effectiveFillStyle;
+    },
+    set fillStyle(value: string) {
+      // Model CanvasRenderingContext2D's invalid-assignment behavior for the
+      // explicit hostile-color negative control below.
+      if (value !== 'definitely-not-a-css-color') effectiveFillStyle = value;
+    },
+    measureText: () => ({ width: 120 }),
+    fillRect: () => {},
+    fillText: () => {
+      fillTextStyle = effectiveFillStyle;
+    },
+  } as unknown as CanvasRenderingContext2D;
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: (kind: string) => kind === '2d' ? context : null,
+  } as unknown as HTMLCanvasElement;
+  return {
+    canvas,
+    fillTextStyle: () => fillTextStyle,
+  };
+}
+
+function makeFocusLabelTargets() {
+  const material = new THREE.SpriteMaterial();
+  const sprite = new THREE.Sprite(material);
+  const texture = new THREE.Texture();
+  const dispose = vi.spyOn(texture, 'dispose');
+  return { material, sprite, texture, dispose };
+}
+
+function testRendererText(value: unknown): string {
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (Array.isArray(value)) return value.map(testRendererText).join('');
+  if (value === null || typeof value !== 'object') return '';
+  return testRendererText((value as { children?: unknown }).children);
+}
+
 describe('graph helpers', () => {
+  it('owns, invalidates, and disposes a focus-label texture exactly once', () => {
+    const canvas = makeFocusLabelCanvas();
+    const targets = makeFocusLabelTargets();
+    const invalidate = vi.fn();
+    const cleanup = installFocusLabelResource({
+      sprite: targets.sprite,
+      material: targets.material,
+      label: 'Model A',
+      color: '#ffffff',
+      invalidate,
+      createCanvas: () => canvas.canvas,
+      createTexture: () => targets.texture,
+    });
+
+    expect(cleanup).toBeTypeOf('function');
+    expect(targets.material.map).toBe(targets.texture);
+    expect(targets.sprite.visible).toBe(true);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    cleanup!();
+    expect(targets.material.map).toBeNull();
+    expect(targets.sprite.visible).toBe(false);
+    expect(targets.dispose).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    cleanup!();
+    expect(targets.dispose).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(2);
+    targets.material.dispose();
+  });
+
+  it('rolls back and disposes when focus-label setup invalidation throws', () => {
+    const canvas = makeFocusLabelCanvas();
+    const targets = makeFocusLabelTargets();
+    const failure = new Error('host invalidation failed');
+
+    expect(() => installFocusLabelResource({
+      sprite: targets.sprite,
+      material: targets.material,
+      label: 'Model A',
+      color: '#ffffff',
+      invalidate: () => {
+        throw failure;
+      },
+      createCanvas: () => canvas.canvas,
+      createTexture: () => targets.texture,
+    })).toThrow(failure);
+    expect(targets.material.map).toBeNull();
+    expect(targets.sprite.visible).toBe(false);
+    expect(targets.dispose).toHaveBeenCalledTimes(1);
+    targets.material.dispose();
+  });
+
+  it('disposes before propagating a cleanup invalidation failure', () => {
+    const canvas = makeFocusLabelCanvas();
+    const targets = makeFocusLabelTargets();
+    const failure = new Error('cleanup invalidation failed');
+    let invalidations = 0;
+    const cleanup = installFocusLabelResource({
+      sprite: targets.sprite,
+      material: targets.material,
+      label: 'Model A',
+      color: '#ffffff',
+      invalidate: () => {
+        invalidations += 1;
+        if (invalidations === 2) throw failure;
+      },
+      createCanvas: () => canvas.canvas,
+      createTexture: () => targets.texture,
+    });
+
+    expect(() => cleanup!()).toThrow(failure);
+    expect(targets.material.map).toBeNull();
+    expect(targets.sprite.visible).toBe(false);
+    expect(targets.dispose).toHaveBeenCalledTimes(1);
+    expect(() => cleanup!()).not.toThrow();
+    expect(targets.dispose).toHaveBeenCalledTimes(1);
+    targets.material.dispose();
+  });
+
+  it('cannot let stale focus-label cleanup hide or detach a replacement', () => {
+    const canvas = makeFocusLabelCanvas();
+    const material = new THREE.SpriteMaterial();
+    const sprite = new THREE.Sprite(material);
+    const firstTexture = new THREE.Texture();
+    const secondTexture = new THREE.Texture();
+    const firstDispose = vi.spyOn(firstTexture, 'dispose');
+    const secondDispose = vi.spyOn(secondTexture, 'dispose');
+    const firstCleanup = installFocusLabelResource({
+      sprite,
+      material,
+      label: 'First',
+      color: '#ffffff',
+      invalidate: () => {},
+      createCanvas: () => canvas.canvas,
+      createTexture: () => firstTexture,
+    })!;
+    const secondCleanup = installFocusLabelResource({
+      sprite,
+      material,
+      label: 'Second',
+      color: '#ffffff',
+      invalidate: () => {},
+      createCanvas: () => canvas.canvas,
+      createTexture: () => secondTexture,
+    })!;
+
+    firstCleanup();
+    expect(firstDispose).toHaveBeenCalledTimes(1);
+    expect(material.map).toBe(secondTexture);
+    expect(sprite.visible).toBe(true);
+    secondCleanup();
+    expect(secondDispose).toHaveBeenCalledTimes(1);
+    expect(material.map).toBeNull();
+    expect(sprite.visible).toBe(false);
+    material.dispose();
+  });
+
+  it('keeps focus-label text readable when Canvas rejects a caller color', () => {
+    const canvas = makeFocusLabelCanvas();
+    const targets = makeFocusLabelTargets();
+    const cleanup = installFocusLabelResource({
+      sprite: targets.sprite,
+      material: targets.material,
+      label: 'Model A',
+      color: 'definitely-not-a-css-color',
+      invalidate: () => {},
+      createCanvas: () => canvas.canvas,
+      createTexture: () => targets.texture,
+    });
+
+    expect(canvas.fillTextStyle()).toBe('#e2e8f0');
+    cleanup!();
+    targets.material.dispose();
+  });
+
+  it('deeply detaches every mutable knowledge-graph presentation container', () => {
+    const attributes = { aliases: ['A', 'Alpha'] };
+    const epistemic = {
+      status: 'derived_advisory' as const,
+      advisory_only: true as const,
+      is_paper_local_evidence: false as const,
+      calibrated_posterior: false as const,
+    };
+    const evidence = [{
+      kind: 'external_source' as const,
+      evidence_id: 'evidence:1',
+      source_id: 'source:1',
+      excerpt: 'original excerpt',
+    }];
+    const score = {
+      kind: 'extraction_confidence' as const,
+      value: 0.5,
+      calibrated_posterior: false as const,
+    };
+    const nodes = [{
+      id: 'a',
+      label: 'Model A',
+      kind: 'model',
+      color: '#ffffff',
+      radius: 4,
+      attributes,
+      epistemic,
+      evidence,
+      uncalibrated_score: score,
+    }];
+    const snapshot = snapshotKnowledgeGraphPresentation(nodes, []);
+
+    attributes.aliases[0] = 'MUTATED';
+    epistemic.status = 'derived_advisory';
+    evidence[0].excerpt = 'mutated excerpt';
+    score.value = 0.9;
+    nodes[0].label = 'Mutated label';
+
+    expect(snapshot.nodes[0].label).toBe('Model A');
+    expect(snapshot.nodes[0].attributes).toEqual({ aliases: ['A', 'Alpha'] });
+    expect(snapshot.nodes[0].attributes?.aliases).not.toBe(attributes.aliases);
+    expect(snapshot.nodes[0].epistemic).not.toBe(epistemic);
+    expect(snapshot.nodes[0].evidence).not.toBe(evidence);
+    expect(snapshot.nodes[0].evidence?.[0]).not.toBe(evidence[0]);
+    expect(snapshot.nodes[0].evidence?.[0]).toMatchObject({
+      excerpt: 'original excerpt',
+    });
+    expect(snapshot.nodes[0].uncalibrated_score).not.toBe(score);
+    expect(snapshot.nodes[0].uncalibrated_score?.value).toBe(0.5);
+  });
+
+  it('fails closed on oversized, sparse, or accessor-backed presentation metadata', () => {
+    const node = (metadata: Partial<KnowledgeGraph3DNode>) => [{
+      id: 'a',
+      label: 'Model A',
+      kind: 'model',
+      color: '#ffffff',
+      radius: 4,
+      ...metadata,
+    }];
+    const tooManyAttributes = Object.fromEntries(
+      Array.from(
+        { length: KNOWLEDGE_GRAPH_LIMITS.maxAttributes + 1 },
+        (_, index) => [`attribute:${index}`, index],
+      ),
+    );
+    expect(() => snapshotKnowledgeGraphPresentation(
+      node({ attributes: tooManyAttributes }),
+      [],
+    )).toThrow(/at most 24 keys/);
+    expect(() => snapshotKnowledgeGraphPresentation(
+      node({
+        attributes: {
+          values: new Array(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems + 1).fill(0),
+        },
+      }),
+      [],
+    )).toThrow(/at most 16 items/);
+    expect(() => snapshotKnowledgeGraphPresentation(
+      node({
+        evidence: new Array(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement + 1).fill({
+          kind: 'external_source',
+          evidence_id: 'e',
+          source_id: 's',
+        }),
+      }),
+      [],
+    )).toThrow(/at most 8 references/);
+
+    const attributeGetter = vi.fn(() => 'forbidden');
+    const accessorAttributes = Object.defineProperty({}, 'claim', {
+      enumerable: true,
+      get: attributeGetter,
+    });
+    expect(() => snapshotKnowledgeGraphPresentation(
+      node({ attributes: accessorAttributes }),
+      [],
+    )).toThrow(/accessors are not supported/);
+    expect(attributeGetter).not.toHaveBeenCalled();
+    expect(() => snapshotKnowledgeGraphPresentation(
+      node({ attributes: { values: new Array(1) } }),
+      [],
+    )).toThrow(/dense data arrays/);
+
+    const evidenceGetter = vi.fn(() => ({
+      kind: 'external_source',
+      evidence_id: 'e',
+      source_id: 's',
+    }));
+    const accessorEvidence = Object.defineProperty([], '0', {
+      enumerable: true,
+      configurable: true,
+      get: evidenceGetter,
+    });
+    Object.defineProperty(accessorEvidence, 'length', { value: 1 });
+    expect(() => snapshotKnowledgeGraphPresentation(
+      node({ evidence: accessorEvidence }),
+      [],
+    )).toThrow(/dense data array/);
+    expect(evidenceGetter).not.toHaveBeenCalled();
+    expect(() => snapshotKnowledgeGraphPresentation(
+      node({ evidence: new Array(1) }),
+      [],
+    )).toThrow(/dense data array/);
+  });
+
+  it('hides and gates stale graph geometry before a throwing host hover callback', () => {
+    const ready = { current: 'old-key' as string | null };
+    const dirty = { current: false };
+    const group = { visible: true };
+    const order: string[] = [];
+    const failure = new Error('host hover callback failed');
+
+    expect(() => beginKnowledgeGraphRuntimeTransition(
+      ready,
+      dirty,
+      group,
+      () => order.push(`invalidate:${String(group.visible)}`),
+      () => {
+        order.push(`hover:${String(group.visible)}`);
+        throw failure;
+      },
+    )).toThrow(failure);
+    expect(ready.current).toBeNull();
+    expect(dirty.current).toBe(true);
+    expect(group.visible).toBe(false);
+    expect(order).toEqual(['invalidate:false', 'hover:false']);
+  });
+
+  it('attempts hover cleanup even when graph invalidation throws', () => {
+    const ready = { current: 'old-key' as string | null };
+    const dirty = { current: false };
+    const group = { visible: true };
+    const clearHover = vi.fn();
+    const failure = new Error('host invalidation failed');
+
+    expect(() => beginKnowledgeGraphRuntimeTransition(
+      ready,
+      dirty,
+      group,
+      () => {
+        throw failure;
+      },
+      clearHover,
+    )).toThrow(failure);
+    expect(clearHover).toHaveBeenCalledTimes(1);
+    expect(ready.current).toBeNull();
+    expect(dirty.current).toBe(true);
+    expect(group.visible).toBe(false);
+  });
+
+  it('clears pointer hover while dirty without swallowing another object event', () => {
+    const stopPropagation = vi.fn();
+    const clearHover = vi.fn();
+    handleKnowledgeGraphPointerOut(false, stopPropagation, clearHover);
+    expect(stopPropagation).not.toHaveBeenCalled();
+    expect(clearHover).toHaveBeenCalledTimes(1);
+
+    handleKnowledgeGraphPointerOut(true, stopPropagation, clearHover);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(clearHover).toHaveBeenCalledTimes(2);
+  });
+
+  it('attaches controls listeners only when exact cleanup authority exists', () => {
+    const authority = { current: null as null | {
+      addEventListener?(type: 'start', listener: () => void): void;
+      removeEventListener?(type: 'start', listener: () => void): void;
+    } };
+    const listener = vi.fn();
+    const addOnly = { addEventListener: vi.fn() };
+    synchronizeKnowledgeGraphControlsListener(authority, addOnly, listener);
+    expect(addOnly.addEventListener).not.toHaveBeenCalled();
+    expect(authority.current).toBeNull();
+
+    const first = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    const second = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    synchronizeKnowledgeGraphControlsListener(authority, first, listener);
+    synchronizeKnowledgeGraphControlsListener(authority, first, listener);
+    expect(first.addEventListener).toHaveBeenCalledTimes(1);
+    expect(first.removeEventListener).not.toHaveBeenCalled();
+    synchronizeKnowledgeGraphControlsListener(authority, second, listener);
+    expect(first.removeEventListener).toHaveBeenCalledTimes(1);
+    expect(second.addEventListener).toHaveBeenCalledTimes(1);
+    synchronizeKnowledgeGraphControlsListener(authority, null, listener);
+    expect(second.removeEventListener).toHaveBeenCalledTimes(1);
+    expect(authority.current).toBeNull();
+
+    // Strict-effect replay has one removal for every accepted attachment.
+    synchronizeKnowledgeGraphControlsListener(authority, first, listener);
+    synchronizeKnowledgeGraphControlsListener(authority, null, listener);
+    synchronizeKnowledgeGraphControlsListener(authority, first, listener);
+    synchronizeKnowledgeGraphControlsListener(authority, null, listener);
+    expect(first.addEventListener).toHaveBeenCalledTimes(3);
+    expect(first.removeEventListener).toHaveBeenCalledTimes(3);
+  });
+
+  it('retains or rolls back controls-listener authority when host methods throw', () => {
+    const listener = vi.fn();
+    const removalFailure = new Error('remove failed');
+    const previous = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(() => {
+        throw removalFailure;
+      }),
+    };
+    const replacement = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    const authority = { current: previous as typeof previous | typeof replacement | null };
+    expect(() => synchronizeKnowledgeGraphControlsListener(
+      authority,
+      replacement,
+      listener,
+    )).toThrow(removalFailure);
+    expect(authority.current).toBe(previous);
+    expect(replacement.addEventListener).not.toHaveBeenCalled();
+
+    const attached = new Set<() => void>();
+    const addFailure = new Error('add failed after registration');
+    const registerThenThrow = {
+      addEventListener: vi.fn((_type: 'start', callback: () => void) => {
+        attached.add(callback);
+        throw addFailure;
+      }),
+      removeEventListener: vi.fn((_type: 'start', callback: () => void) => {
+        attached.delete(callback);
+      }),
+    };
+    const emptyAuthority = { current: null as typeof registerThenThrow | null };
+    expect(() => synchronizeKnowledgeGraphControlsListener(
+      emptyAuthority,
+      registerThenThrow,
+      listener,
+    )).toThrow(addFailure);
+    expect(registerThenThrow.removeEventListener).toHaveBeenCalledTimes(1);
+    expect(attached.size).toBe(0);
+    expect(emptyAuthority.current).toBeNull();
+
+    const rollbackFailure = new Error('rollback failed');
+    const dualFailure = {
+      addEventListener: vi.fn(() => {
+        throw addFailure;
+      }),
+      removeEventListener: vi.fn(() => {
+        throw rollbackFailure;
+      }),
+    };
+    const retainedAuthority = { current: null as typeof dualFailure | null };
+    expect(() => synchronizeKnowledgeGraphControlsListener(
+      retainedAuthority,
+      dualFailure,
+      listener,
+    )).toThrow(AggregateError);
+    expect(retainedAuthority.current).toBe(dualFailure);
+  });
+
   it('filterGraphEdges drops dangling endpoints AND self-loops', () => {
     const ids = new Set(['a', 'b']);
     const edges = [
@@ -218,6 +697,27 @@ describe('graph helpers', () => {
     expect(flowParticleCount(5000, 4, 4000)).toBe(4000);
     expect(flowParticleCount(-1, 4, 4000)).toBe(0);
     expect(flowParticleCount(0, 4, 4000)).toBe(0);
+  });
+
+  it('balances a capped flow-marker budget across every renderable relationship', () => {
+    expect(planFlowParticleDistribution(0, 4, 4_000)).toEqual({
+      total: 0,
+      basePerEdge: 0,
+      extraEdgeCount: 0,
+    });
+    expect(planFlowParticleDistribution(1_001, 4, 4_000)).toEqual({
+      total: 4_000,
+      basePerEdge: 3,
+      extraEdgeCount: 997,
+    });
+    expect(planFlowParticleDistribution(4_000, 4, 4_000)).toEqual({
+      total: 4_000,
+      basePerEdge: 1,
+      extraEdgeCount: 0,
+    });
+    expect(() => planFlowParticleDistribution(4_001, 4, 4_000)).toThrow(
+      /at least one marker per edge/,
+    );
   });
 
   it('bounds and normalizes free-text graph queries', () => {
@@ -561,6 +1061,189 @@ describe('graph helpers', () => {
     );
   });
 
+  it('keeps discarded layout plans deeply detached from persistent position authority', () => {
+    const cached = Object.freeze([11, 12, 13] as const);
+    const remembered = new Map<string, readonly [number, number, number]>([
+      ['cached', cached],
+      ['old:1', Object.freeze([1, 2, 3] as const)],
+      ['old:2', Object.freeze([4, 5, 6] as const)],
+      ['old:3', Object.freeze([7, 8, 9] as const)],
+    ]);
+    const before = [...remembered.entries()];
+    const discarded = planGraphLayoutCache(
+      [
+        { id: 'cached', radius: 7 },
+        { id: 'new', radius: Number.NaN },
+      ],
+      remembered,
+      3,
+    );
+
+    expect(discarded.warmStart).toBe(true);
+    expect(discarded.nodes[0]).toMatchObject({
+      id: 'cached',
+      r: 7,
+      x: 11,
+      y: 12,
+      z: 13,
+    });
+    expect(discarded.nodes[1]).toEqual({
+      id: 'new',
+      r: normalizeGraphNodeRadius(Number.NaN),
+    });
+    expect(Object.hasOwn(discarded.nodes[1], 'x')).toBe(false);
+    const firstBuffer = discarded.cacheBuffers[0];
+    const secondBuffer = discarded.cacheBuffers[1];
+    expect(firstBuffer.positionSlots[0]).toEqual(cached);
+    expect(firstBuffer.positionSlots[0]).not.toBe(cached);
+    expect(firstBuffer.positionSlots[0]).not.toBe(secondBuffer.positionSlots[0]);
+    expect([...firstBuffer.cache.keys()]).toEqual(['old:3', 'cached', 'new']);
+    expect([...secondBuffer.cache.keys()]).toEqual(['old:3', 'cached', 'new']);
+
+    // Even hostile post-plan mutation cannot reach a remembered tuple. This is
+    // the render-abort negative control: discarding the plan has no authority.
+    discarded.nodes[0].x = 999;
+    firstBuffer.positionSlots[0][0] = 999;
+    firstBuffer.positionSlots[1][0] = 999;
+    firstBuffer.cache.get('cached')![0] = 777;
+    firstBuffer.cache.delete('old:3');
+    expect([...remembered.entries()]).toEqual(before);
+    expect(remembered.has('new')).toBe(false);
+    expect(secondBuffer.cache.get('cached')).toEqual(cached);
+
+    const retry = planGraphLayoutCache(
+      [{ id: 'new', radius: 4 }],
+      remembered,
+      3,
+    );
+    const replay = planGraphLayoutCache(
+      [{ id: 'new', radius: 4 }],
+      remembered,
+      3,
+    );
+    expect(retry.warmStart).toBe(false);
+    expect(Object.hasOwn(retry.nodes[0], 'x')).toBe(false);
+    expect(replay.nodes[0]).not.toBe(retry.nodes[0]);
+    expect(replay.cacheBuffers[0].positionSlots[0])
+      .not.toBe(retry.cacheBuffers[0].positionSlots[0]);
+
+    const exactlyFull = new Map<string, readonly [number, number, number]>([
+      ['inactive:1', [1, 1, 1]],
+      ['inactive:2', [2, 2, 2]],
+    ]);
+    expect(planGraphLayoutCache(
+      [{ id: 'new', radius: 4 }],
+      exactlyFull,
+      2,
+    ).cacheBuffers[0].cache).toEqual(new Map([
+      ['inactive:2', [2, 2, 2]],
+      ['new', [0, 0, 0]],
+    ]));
+  });
+
+  it('snapshots same-identity caller mutations before deriving the layout key', () => {
+    const nodes = [{ id: 'a', radius: 4 }];
+    const edges = [{
+      id: 'edge:1',
+      source: 'a',
+      target: 'a',
+      color: '#ffffff',
+      kind: 'same_as',
+      directed: false,
+      particles: false,
+    }];
+    const first = snapshotGraphLayoutInputs(nodes, edges);
+    nodes[0].id = 'b';
+    nodes[0].radius = 8;
+    edges[0].source = 'b';
+    edges[0].target = 'b';
+    edges[0].color = '#000000';
+    const second = snapshotGraphLayoutInputs(nodes, edges);
+
+    expect(second.graphKey).not.toBe(first.graphKey);
+    expect(first.nodes).toEqual([{ id: 'a', radius: 4 }]);
+    expect(first.edges[0]).toMatchObject({
+      source: 'a',
+      target: 'a',
+      color: '#ffffff',
+    });
+    expect(second.nodes).toEqual([{ id: 'b', radius: 8 }]);
+    expect(second.edges[0]).toMatchObject({
+      source: 'b',
+      target: 'b',
+      color: '#000000',
+    });
+    expect(first.nodes[0]).not.toBe(second.nodes[0]);
+    expect(first.edges[0]).not.toBe(second.edges[0]);
+  });
+
+  it('publishes a complete layout cache only after the frame transaction succeeds', () => {
+    const original = new Map<string, [number, number, number]>([
+      ['old', [1, 2, 3]],
+    ]);
+    const authority = { current: original };
+    const plan = planGraphLayoutCache(
+      [{ id: 'new', radius: 4 }],
+      original,
+      1,
+    );
+    const buffered = {
+      cacheBuffers: plan.cacheBuffers,
+      nextCacheBufferIndex: 0 as const,
+    };
+    const originalSlot = original.get('old');
+
+    expect(() => {
+      plan.cacheBuffers[0].positionSlots[0][0] = 42;
+      throw new Error('simulated CPU matrix failure before publication');
+    }).toThrow('simulated CPU matrix failure before publication');
+    expect(authority.current).toBe(original);
+    expect(authority.current).toEqual(new Map([['old', [1, 2, 3]]]));
+    expect(authority.current.get('old')).toBe(originalSlot);
+    expect(buffered.nextCacheBufferIndex).toBe(0);
+
+    publishGraphLayoutCache(authority, buffered, 0);
+    expect(authority.current).toBe(plan.cacheBuffers[0].cache);
+    expect(authority.current).toEqual(new Map([['new', [42, 0, 0]]]));
+    expect(buffered.nextCacheBufferIndex).toBe(1);
+
+    // A later-frame failure mutates only the other, unpublished buffer. Neither
+    // the published Map identity nor any tuple reachable from it can change.
+    const firstPublished = authority.current;
+    const firstPublishedSlot = authority.current.get('new');
+    expect(() => {
+      plan.cacheBuffers[1].positionSlots[0][0] = 84;
+      throw new Error('simulated later CPU buffer failure before publication');
+    }).toThrow('simulated later CPU buffer failure before publication');
+    expect(authority.current).toBe(firstPublished);
+    expect(authority.current.get('new')).toBe(firstPublishedSlot);
+    expect(authority.current).toEqual(new Map([['new', [42, 0, 0]]]));
+
+    publishGraphLayoutCache(authority, buffered, 1);
+    expect(authority.current).toBe(plan.cacheBuffers[1].cache);
+    expect(authority.current).toEqual(new Map([['new', [84, 0, 0]]]));
+    expect(buffered.nextCacheBufferIndex).toBe(0);
+
+    // A repeated or stale publication fails before replacing newer authority.
+    const published = authority.current;
+    expect(() => publishGraphLayoutCache(authority, buffered, 1))
+      .toThrow('publication is out of sequence');
+    expect(authority.current).toBe(published);
+  });
+
+  it('refuses an undersized cache or duplicate active ids before planning', () => {
+    expect(() => planGraphLayoutCache(
+      [{ id: 'a', radius: 4 }],
+      new Map(),
+      0,
+    )).toThrow('at least as large as the active graph');
+    expect(() => planGraphLayoutCache(
+      [{ id: 'a', radius: 4 }, { id: 'a', radius: 4 }],
+      new Map(),
+      2,
+    )).toThrow('node ids must be unique');
+  });
+
   it('schedules a fixed 60-Hz layout clock at 30, 60, and 144 FPS', () => {
     const elapsedByRate: number[] = [];
     for (const refreshRate of [30, 60, 144]) {
@@ -638,6 +1321,217 @@ describe('graph helpers', () => {
     }));
     expect(html).toContain('<summary style="min-height:44px">');
     expect(html).toContain('Browse all 9 relationships');
+  });
+
+  it('never exposes an out-of-range relationship page when a live view shrinks', async () => {
+    const nodes = [
+      { id: 'hub', label: 'Hub', kind: 'paper', color: '#fff', radius: 4 },
+      ...Array.from({ length: 30 }, (_, index) => ({
+        id: `paper:${index}`,
+        label: `Paper ${index}`,
+        kind: 'paper',
+        color: '#fff',
+        radius: 4,
+      })),
+    ];
+    const edges = nodes.slice(1).map((node, index) => ({
+      id: `citation:${index}`,
+      source: 'hub',
+      target: node.id,
+      kind: 'cites',
+      color: '#fff',
+      directed: true,
+    }));
+    const props = {
+      graphIdentity: 'graph:test',
+      nodes,
+      edges,
+      selectedId: 'hub',
+      onSelect: () => {},
+    };
+    let renderer!: ReturnType<typeof create>;
+    let captureCommit = false;
+    const committedTrees: string[] = [];
+    const committedPageTexts: string[] = [];
+    const pageText = () => renderer.root.findByProps({
+      'aria-live': 'polite',
+    }).children.join('');
+    const tree = (nextEdges: typeof edges) => createElement(
+      Profiler,
+      {
+        id: 'relationship-pager',
+        onRender: () => {
+          if (captureCommit && renderer) {
+            committedTrees.push(JSON.stringify(renderer.toJSON()));
+            committedPageTexts.push(pageText());
+          }
+        },
+      },
+      createElement(KnowledgeGraphA11yList, { ...props, edges: nextEdges }),
+    );
+    await act(async () => {
+      renderer = create(tree(edges));
+    });
+    const next = renderer.root.findAllByType('button').find(
+      (button) => button.children.join('') === 'Next relationships',
+    )!;
+    await act(async () => next.props.onClick());
+    expect(pageText()).toBe('Page 2 of 2');
+    await act(async () => {
+      renderer.update(tree(edges.map((edge) => ({ ...edge }))));
+    });
+    expect(pageText()).toBe('Page 2 of 2');
+    captureCommit = true;
+    await act(async () => {
+      renderer.update(tree(edges.slice(0, 2)));
+    });
+    captureCommit = false;
+    expect(committedTrees.length).toBeGreaterThan(0);
+    // Profiler fires after the commit but before passive effects. The first tree
+    // therefore proves render-time clamping rather than the post-commit state clamp.
+    expect(committedPageTexts[0]).toBe('Page 1 of 1');
+    expect(committedTrees[0]).toContain('citation:0');
+    expect(committedTrees[0]).toContain('citation:1');
+    expect(pageText()).toBe('Page 1 of 1');
+    expect(JSON.stringify(renderer.toJSON())).toContain('citation:0');
+    expect(JSON.stringify(renderer.toJSON())).toContain('citation:1');
+    await act(async () => {
+      renderer.update(tree(edges));
+    });
+    expect(pageText()).toBe('Page 1 of 2');
+    await act(async () => renderer.unmount());
+  });
+
+  it('refreshes accessible relationships and legend groups after same-array mutation', async () => {
+    const nodes = [
+      { id: 'a', label: 'Model A', kind: 'model', color: '#ffffff', radius: 4 },
+      { id: 'b', label: 'Model B', kind: 'model', color: '#ffffff', radius: 4 },
+      { id: 'c', label: 'Model C', kind: 'model', color: '#ffffff', radius: 4 },
+    ];
+    const edges = [{
+      id: 'claim:1',
+      source: 'a',
+      target: 'b',
+      kind: 'cites',
+      color: '#00ffff',
+      directed: true,
+    }];
+    const a11yProps = {
+      graphIdentity: 'graph:mutable',
+      nodes,
+      edges,
+      selectedId: 'a',
+      onSelect: () => {},
+    };
+    let a11y!: ReturnType<typeof create>;
+    let legend!: ReturnType<typeof create>;
+    await act(async () => {
+      a11y = create(createElement(KnowledgeGraphA11yList, a11yProps));
+      legend = create(createElement(KnowledgeGraphLegend, { nodes, edges }));
+    });
+    expect(testRendererText(a11y.toJSON())).toContain('points to Model B');
+    expect(testRendererText(legend.toJSON())).toContain('cites: 1 relationship; directed');
+
+    // Reuse both arrays and records, as an untyped mutable host might.
+    edges[0].target = 'c';
+    edges[0].kind = 'variant_of';
+    edges[0].directed = false;
+    nodes[0].kind = 'family';
+    nodes[0].color = '#ff00ff';
+    await act(async () => {
+      a11y.update(createElement(KnowledgeGraphA11yList, a11yProps));
+      legend.update(createElement(KnowledgeGraphLegend, { nodes, edges }));
+    });
+
+    const accessibleText = testRendererText(a11y.toJSON());
+    const legendText = testRendererText(legend.toJSON());
+    expect(accessibleText).toContain('connected to Model C');
+    expect(accessibleText).not.toContain('points to Model B');
+    expect(legendText).toContain('family: 1 node; color #ff00ff');
+    expect(legendText).toContain('variant_of: 1 relationship; undirected');
+    expect(legendText).not.toContain('cites: 1 relationship; directed');
+    await act(async () => {
+      a11y.unmount();
+      legend.unmount();
+    });
+  });
+
+  it('keeps expanded metadata bound to its exact assertion across edge reorder', async () => {
+    const nodes = [
+      { id: 'a', label: 'Model A', kind: 'model', color: '#fff', radius: 4 },
+      { id: 'b', label: 'Model B', kind: 'model', color: '#fff', radius: 4 },
+      { id: 'c', label: 'Model C', kind: 'model', color: '#fff', radius: 4 },
+    ];
+    const oldLegacyFallback = JSON.stringify(['a', 'c', 'variant_of', false]);
+    const evidence = (id: string, excerpt: string) => [{
+      kind: 'external_source' as const,
+      evidence_id: `evidence:${id}`,
+      source_id: `source:${id}`,
+      excerpt,
+    }];
+    const identified = {
+      id: oldLegacyFallback,
+      source: 'a',
+      target: 'b',
+      kind: 'cites',
+      label: 'Identified assertion',
+      color: '#fff',
+      directed: true,
+      evidence: evidence('identified', 'IDENTIFIED FULL EXCERPT'),
+    };
+    const legacy = {
+      source: 'a',
+      target: 'c',
+      kind: 'variant_of',
+      label: 'Legacy assertion',
+      color: '#fff',
+      directed: false,
+      evidence: evidence('legacy', 'LEGACY FULL EXCERPT'),
+    };
+    // This exact text collided under the old untagged React-key fallback.
+    expect(identified.id).toBe(oldLegacyFallback);
+    expect(graphEdgeIdentityKey(identified)).not.toBe(graphEdgeIdentityKey(legacy));
+    expect(graphEdgeIdentityKey(legacy)).toBe(graphEdgeIdentityKey({
+      ...legacy,
+      source: legacy.target,
+      target: legacy.source,
+    }));
+
+    const edges = [identified, legacy];
+    const props = {
+      graphIdentity: 'graph:assertion-key',
+      nodes,
+      edges,
+      selectedId: 'a',
+      onSelect: () => {},
+    };
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(createElement(KnowledgeGraphA11yList, props));
+    });
+    const findMetadata = (needle: string) => renderer.root
+      .findAllByType('details')
+      .find((details) => details.findAllByType('summary', { deep: false })[0]
+        ?.children.join('').includes(needle));
+    await act(async () => {
+      findMetadata('Identified assertion')!.props.onToggle({
+        currentTarget: { open: true },
+      });
+    });
+    expect(testRendererText(findMetadata('Identified assertion')!.children))
+      .toContain('IDENTIFIED FULL EXCERPT');
+    expect(testRendererText(findMetadata('Legacy assertion relationship')!.children))
+      .not.toContain('LEGACY FULL EXCERPT');
+
+    edges.reverse();
+    await act(async () => {
+      renderer.update(createElement(KnowledgeGraphA11yList, props));
+    });
+    expect(testRendererText(findMetadata('Identified assertion')!.children))
+      .toContain('IDENTIFIED FULL EXCERPT');
+    expect(testRendererText(findMetadata('Legacy assertion relationship')!.children))
+      .not.toContain('LEGACY FULL EXCERPT');
+    await act(async () => renderer.unmount());
   });
 
   it('exposes every identified parallel assertion in accessible relationship detail', () => {
@@ -813,7 +1707,9 @@ describe('graph helpers', () => {
       return summary?.children.join('').includes(text);
     });
     const nodeDisclosure = findDisclosure('Browse full metadata for node Model A');
-    const edgeDisclosure = findDisclosure('Browse full metadata for relationship claim-last');
+    const edgeDisclosure = findDisclosure(
+      'Browse full metadata for relationship Variant assertion [claim-last]',
+    );
     expect(nodeDisclosure).toBeDefined();
     expect(edgeDisclosure).toBeDefined();
     await act(async () => {
@@ -908,6 +1804,32 @@ describe('graph helpers', () => {
     expect(() => assertKnowledgeGraphBudget(0, 4_001)).toThrow(RangeError);
     expect(reducedMotionLayoutTickBudget(1_000, 4_000)).toBe(2);
     expect(reducedMotionLayoutTickBudget(100, 400)).toBe(8);
+  });
+
+  it('rejects oversized direct graphs before reading or snapshotting any record', () => {
+    let recordReads = 0;
+    const poisonousNode = Object.defineProperties({}, {
+      id: { enumerable: true, get: () => { recordReads += 1; throw new Error('read id'); } },
+      label: { enumerable: true, get: () => { recordReads += 1; throw new Error('read label'); } },
+    }) as KnowledgeGraph3DNode;
+    const nodes = new Array<KnowledgeGraph3DNode>(
+      MAX_KNOWLEDGE_GRAPH_SCENE_NODES + 1,
+    ).fill(poisonousNode);
+    const sceneProps = {
+      graphIdentity: 'graph:oversized',
+      nodes,
+      edges: [],
+      selectedId: null,
+      query: '',
+      onSelect: () => {},
+      hoverId: null,
+      onHover: () => {},
+    };
+
+    expect(() => KnowledgeGraph3DScene(sceneProps)).toThrow(RangeError);
+    expect(() => KnowledgeGraphA11yList(sceneProps)).toThrow(RangeError);
+    expect(() => KnowledgeGraphLegend({ nodes, edges: [] })).toThrow(RangeError);
+    expect(recordReads).toBe(0);
   });
 
   it('uses a frame-rate-independent fixed-target damping coefficient and snaps for reduced motion', () => {

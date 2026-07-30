@@ -127,6 +127,32 @@ function readOwnEnumerableDataProperty(input, key) {
   return "value" in descriptor && descriptor.enumerable ? { kind: "value", value: descriptor.value } : { kind: "invalid" };
 }
 
+// core/skills/knowledgeGraphLimits.ts
+var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
+  maxNodeIdLength: 120,
+  maxNodeLabelLength: 240,
+  maxEdgeIdLength: 320,
+  maxEdgeLabelLength: 160,
+  maxKindLength: 80,
+  maxColorLength: 64,
+  maxRadiusMeaningLength: 400,
+  maxAttributes: 24,
+  maxAttributeKeyLength: 80,
+  maxAttributeArrayItems: 16,
+  maxEvidenceRefsPerElement: 8,
+  maxEvidenceIdLength: 384,
+  maxRecordIdLength: 320,
+  maxLocatorLength: 240,
+  maxPaperIdLength: 160,
+  maxCitationIdLength: 160,
+  maxSourceIdLength: 240,
+  maxDoiLength: 240,
+  maxParallelEdgesPerPair: 9,
+  maxDetailLength: 1e3,
+  maxAttributeStringLength: 500,
+  maxExcerptLength: 1e3
+});
+
 export {
   safeErrorMessage,
   PUBLIC_DIAGNOSTIC_LIMITS,
@@ -136,6 +162,7 @@ export {
   safePrimitiveDiagnostic,
   boundValidationIssue,
   formatValidationIssues,
-  readOwnEnumerableDataProperty
+  readOwnEnumerableDataProperty,
+  KNOWLEDGE_GRAPH_LIMITS
 };
-//# sourceMappingURL=chunk-UEJPZXDX.js.map
+//# sourceMappingURL=chunk-AHFTSYTV.js.map
