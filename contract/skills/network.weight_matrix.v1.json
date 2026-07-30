@@ -477,29 +477,115 @@
 
   "adapters": [
     {
-      "system": "nest.SynapseCollection",
-      "status": "supported",
-      "notes": "GetConnections plus get(['source', 'target', 'weight', 'synapse_model']). The adapter must additionally supply what a SynapseCollection cannot express: the complete node universe (an empty target row is invisible to a connection query), the scope, and the snapshot time. It accepts the official singular/scalar form or canonical plural arrays, never both; it never broadcasts a scalar weight across rows; and it never deduplicates multapses. Accessor-bearing input is rejected before any getter can run."
+      "mappingId": "nest-synapsecollection",
+      "sources": [
+        {
+          "system": "nest.SynapseCollection",
+          "role": "primary",
+          "notes": "Supplies GetConnections plus get(['source', 'target', 'weight', 'synapse_model']). It accepts the official singular/scalar form or canonical plural arrays, never both; it never broadcasts a scalar weight across rows; and it never deduplicates multapses. Accessor-bearing input is rejected before any getter can run. It cannot express an empty selected target row, so the separately named NodeCollection source is mandatory; scope, snapshot time and weight semantics remain explicit mapping authority rather than properties inferred from the rows.",
+          "sourceId": "nest-synapsecollection"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies the complete selected node universe, including isolates and targets with zero incoming connections. The matrix uses that one retained universe for both target rows and source columns and never reconstructs it from the endpoints that happen to occur.",
+          "sourceId": "nest-selected-node-universe"
+        },
+        {
+          "system": "host-retained NEST synapse/postsynaptic model semantics",
+          "role": "required_companion",
+          "notes": "Candidate declaration binding every observed synapse model and target neuron model to the exact producing runtime/build, weight quantity and unit, and any cross-model comparability claim. Connection rows cannot establish target-model physics, and Cortexel defines no normative semantics receipt yet.",
+          "sourceId": "host-nest-weight-semantics"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nest.GetConnections under MPI (target-rank-local)",
-      "status": "partial",
-      "notes": "Produces `mpi_target_rank_local` only with localTargetUniverseComplete: true and the exact owned observedTargetIds set. Empty owned rows are observed absence; non-owned rows are not_observed; every returned edge target must be owned. The adapter never merges ranks implicitly."
+      "mappingId": "nest-getconnections-under-mpi-target-rank-local",
+      "sources": [
+        {
+          "system": "nest.GetConnections under MPI (target-rank-local)",
+          "role": "primary",
+          "notes": "Supplies rank-local connection rows only. The profile produces `mpi_target_rank_local`, never an implicit merge: empty owned rows are observed absence, non-owned rows are not_observed, and every returned edge target must be owned. The exact selected universe and locally owned selected targets come from the separately named NodeCollection companion, not from rows that happen to exist.",
+          "sourceId": "nest-getconnections-under-mpi-target-rank-local"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies the complete selected node universe and the local-membership mask of the selected target NodeCollection. `observedTargetIds` is exactly the selected targets whose pinned NEST 3.10 `NodeCollection.local` value is true, including locally owned targets with no incoming rows; localTargetUniverseComplete may be true only for that exact set.",
+          "sourceId": "nest-selected-node-and-target-locality"
+        },
+        {
+          "system": "host-retained NEST synapse/postsynaptic model semantics",
+          "role": "required_companion",
+          "notes": "Candidate declaration binding every observed synapse model and target neuron model to the exact producing runtime/build, weight quantity and unit, and any cross-model comparability claim. Connection rows cannot establish target-model physics, and Cortexel defines no normative semantics receipt yet.",
+          "sourceId": "host-nest-weight-semantics"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "connectome edge table (source, target, weight, model)",
-      "status": "partial",
-      "notes": "Accepted only when the table is accompanied by the complete node universe, a scope, a snapshot time, and a declared weight quantity. A bare edge table cannot establish an isolate, a target with no input, or the difference between an absent cell and a measured zero."
+      "mappingId": "connectome-edge-table-source-target-weight-model",
+      "sources": [
+        {
+          "system": "connectome edge table (source, target, weight, model)",
+          "role": "primary",
+          "notes": "Accepted only when the table is accompanied by the complete node universe, a scope, a snapshot time, and a declared weight quantity. A bare edge table cannot establish an isolate, a target with no input, or the difference between an absent cell and a measured zero.",
+          "sourceId": "connectome-edge-table-source-target-weight-model"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "scipy.sparse / dense NumPy weight matrix",
-      "status": "rejected",
-      "notes": "Not an input. A COO/CSR/dense matrix has already destroyed the facts this contract requires: duplicate entries were summed (or not) under no recorded policy, an absent cell and a zero weight have both become 0.0, and the contributing edge identities are gone. A matrix is an OUTPUT of this figure, never an input to it."
+      "mappingId": "scipy-sparse-dense-numpy-weight-matrix",
+      "sources": [
+        {
+          "system": "scipy.sparse / dense NumPy weight matrix",
+          "role": "primary",
+          "notes": "Not an input. A COO/CSR/dense matrix has already destroyed the facts this contract requires: duplicate entries were summed (or not) under no recorded policy, an absent cell and a zero weight have both become 0.0, and the contributing edge identities are gone. A matrix is an OUTPUT of this figure, never an input to it.",
+          "sourceId": "scipy-sparse-dense-numpy-weight-matrix"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     },
     {
-      "system": "brian2.Synapses",
-      "status": "planned",
-      "notes": "Weight arrays are per-synapse and multapses are representable, so the mapping is mechanical. It is not certified until a version matrix and fixtures exist."
+      "mappingId": "brian2-synapses",
+      "sources": [
+        {
+          "system": "brian2.Synapses",
+          "role": "primary",
+          "notes": "Weight arrays are per-synapse and multapses are representable, so the mapping is mechanical. It is not certified until a version matrix and fixtures exist.",
+          "sourceId": "brian2-synapses"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     }
   ],
 
@@ -533,6 +619,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

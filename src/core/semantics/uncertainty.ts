@@ -38,7 +38,7 @@ import {
   type PeakBasisVerification,
   type RateAuthorityResult,
 } from '../response-curve-basis.js';
-import { SKILL_CATALOG } from '../../generated/catalog.js';
+import { lookupSkillCatalogEntry } from '../../generated/catalog.js';
 import {
   asArray,
   asNumber,
@@ -268,7 +268,7 @@ export const uncertaintySupportedVariant: SemanticValidator = (
   const kind = asString(node.kind);
   if (!kind) return [];
 
-  const catalog = SKILL_CATALOG[context.skillId];
+  const catalog = lookupSkillCatalogEntry(context.skillId);
   if (!catalog) return [];
 
   const supported = catalog.uncertaintySupport;

@@ -5,6 +5,7 @@ import { sha256Digest } from '../../src/core/sha256.js';
 import { canonicalizationEntryDigest } from './canonicalization-source.js';
 import { resolveContractIdentitySource } from './identity-source.js';
 import { compareNormativePathsUtf8 } from './normative-source-files.js';
+import { buildPublicStableCatalogIdentity } from './stable-catalog.js';
 
 type JsonRecord = Record<string, any>;
 
@@ -23,6 +24,7 @@ export interface ContractManifestInputs {
   readonly canonicalizations: JsonRecord;
   readonly disclosures: JsonRecord;
   readonly identity: JsonRecord;
+  readonly stableSchemaResources: readonly JsonRecord[];
   readonly normativeSources: readonly ManifestSourceRecord[];
 }
 
@@ -58,13 +60,14 @@ export function buildContractManifest(inputs: ContractManifestInputs): JsonRecor
     capabilityRecords.flatMap((capability) =>
       typeof capability.id === 'string' ? [[capability.id, capability] as const] : []),
   );
-  const stableCatalogView = stableSkills.map((skill) => ({
-    id: skill.id,
-    revision: skill.revision,
-    renderer: skill.renderer,
-  }));
+  const stableCatalogIdentity = buildPublicStableCatalogIdentity(
+    stableSkills,
+    capabilityRecords,
+    contractIdentity,
+    inputs.stableSchemaResources,
+  );
   const contractDigest = sha256Digest(canonicalize(normativeSources as never));
-  const catalogDigest = sha256Digest(canonicalize(stableCatalogView as never));
+  const catalogDigest = sha256Digest(canonicalize(stableCatalogIdentity as never));
   const canonicalizationAlgorithms = Array.isArray(inputs.canonicalizations.algorithms)
     ? inputs.canonicalizations.algorithms as JsonRecord[]
     : [];
@@ -83,6 +86,7 @@ export function buildContractManifest(inputs: ContractManifestInputs): JsonRecor
     artifactContract: contractIdentity.artifact.value,
     contractDigest,
     catalogDigest,
+    catalogDigestDomain: contractIdentity.catalogDigestDomain,
     stableSkillCount: stableSkills.length,
     capabilityAvailabilities: Object.keys(inputs.capabilities.availabilities ?? {}).sort(),
     stableSkills: stableSkills.map((skill) => {
@@ -104,6 +108,7 @@ export function buildContractManifest(inputs: ContractManifestInputs): JsonRecor
         evidence: skill.evidence,
         accessibility: skill.accessibility,
         outputAuthority: skill.outputAuthority,
+        adapters: skill.adapters,
         legacyIds: skill.migration.legacyIds,
       };
     }),
@@ -142,8 +147,10 @@ export function buildContractManifest(inputs: ContractManifestInputs): JsonRecor
     notes: [
       'GENERATED. Never edit by hand.',
       'contractDigest covers the canonicalized normative source set, excluding this file (it cannot contain its own hash) and excluding the conformance corpus (vectors test the contract; they are not the contract).',
-      'catalogDigest covers the STABLE catalog only, so editing an experimental capability cannot change the stable identity.',
+      'catalogDigest uses catalogDigestDomain cortexel-public-stable-catalog.v2 and covers the exact public stable discovery-and-authoring projection for every stable skill, sorted by id, plus its versioned schema-compilation profile and shared structural schema resources. The projection merges compact SkillCatalogEntry metadata with the paired SkillAuthoringEntry schema and synthetic fixture. It includes scientific and accessibility claims, source mappings, availability, evidence boundaries, limits, and known limitations; it excludes experimental capabilities, implementation bytes, mutable ledgers, and repository prose.',
       'Capability status is contract maturity; availability independently states packaged, source-only, or unavailable. Neither field establishes release readiness.',
+      'Skill adapter records are composite mappings. Feasibility assessment, normative definition, structured external authority, and implementation availability are independent; mutable certification status and receipts remain solely in the release ledger.',
+      'Mutable audit ledgers, including official-example execution and certification state, remain outside the normative contract, generated catalogs, package manifest, and build identities.',
       'releaseReady is false for every skill: the pinned scientific reference environment has not been executed, so no external-oracle evidence exists yet.',
       'Authored skill.revision is an optional narrowing pin. Identity resolution refuses a mismatched pin before canonicalization; every accepted canonical request materializes the resolved installed revision at skill.revision, so omitted and explicit-current pins have identical canonical bytes and request digests.',
     ],

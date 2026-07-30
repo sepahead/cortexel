@@ -54,8 +54,23 @@ import { CORTEXEL_SPEC_VERSION } from '../core/vizSpec';
 import { canonicalize } from '../src/core/canonicalize';
 import { getBudgetLimits } from '../src/core/limits';
 import { parseJsonStrict, type JsonValue } from '../src/core/parse-json';
+import {
+  SKILL_AUTHORING as SOURCE_SKILL_AUTHORING,
+  STABLE_SKILL_IDS as SOURCE_STABLE_SKILL_IDS,
+} from '../src/generated';
 import { serializeManifest } from './emit-manifest';
 import { packagedContractRelativeFiles } from './lib/contract-package';
+import {
+  REVIEWED_NODE_COMMAND_HANDSHAKE_SCHEMA as COMMAND_HANDSHAKE_SCHEMA,
+  REVIEWED_NODE_COMMAND_RESULT_SCHEMA as COMMAND_RESULT_SCHEMA,
+  REVIEWED_NODE_COMMAND_TEST_HOOK_SCHEMA as COMMAND_TEST_HOOK_SCHEMA,
+  REVIEWED_NODE_GUARDIAN_PAYLOAD_ENV,
+  REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV,
+  REVIEWED_NODE_SUPERVISOR_GRACE_MS as COMMAND_SUPERVISOR_GRACE_MS,
+  REVIEWED_NODE_SUPERVISOR_SOURCE as REVIEWED_NODE_SUPERVISOR,
+  REVIEWED_NODE_TEST_HOOK_ENV as COMMAND_TEST_HOOK_ENVIRONMENT,
+  REVIEWED_NODE_WORKER_PAYLOAD_ENV,
+} from './lib/reviewed-node-supervisor';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
@@ -80,19 +95,12 @@ const NPM_TREE_SCHEMA = 'cortexel-package-smoke-npm-tree.v1' as const;
 const RUNTIME_TREE_HASH_DOMAIN = 'cortexel-package-smoke-npm-tree-v1\0';
 const RUNTIME_ANCESTRY_HASH_DOMAIN = 'cortexel-package-smoke-path-ancestry-v1\0';
 const MAX_RUNTIME_EXECUTABLE_BYTES = 256 * 1024 * 1024;
-const COMMAND_RESULT_SCHEMA = 'cortexel-package-smoke-command.v1' as const;
-const COMMAND_HANDSHAKE_SCHEMA = 'cortexel-package-smoke-command-handshake.v1' as const;
-const COMMAND_TARGET_COMPLETION_SCHEMA =
-  'cortexel-package-smoke-target-completion.v1' as const;
-const COMMAND_TEST_HOOK_SCHEMA = 'cortexel-package-smoke-command-test-hook.v1' as const;
-const COMMAND_TEST_HOOK_ENVIRONMENT = 'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK';
 const DEFAULT_COMMAND_TIMEOUT_MS = 5 * 60_000;
 const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024;
 const MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES = 4_096;
 const MAX_COMMAND_PAYLOAD_BYTES = 256 * 1024;
 const MAX_COMMAND_ARGUMENTS = 1_024;
 const MAX_COMMAND_ARGUMENT_BYTES = 128 * 1024;
-const COMMAND_SUPERVISOR_GRACE_MS = 10_000;
 const SUPPORTED_NODE_MAJORS = new Set([22, 24, 26]);
 export const PACKAGE_TARBALL_LIMITS = Object.freeze({
   compressedBytes: 128 * 1024 * 1024,
@@ -133,10 +141,9 @@ let commandNodeAuthority: NodeExecutableFileAuthority | undefined;
 let commandRuntimeAuthority: PackageRuntimeAuthority | undefined;
 
 export interface ReviewedNodeCommandResult {
-  readonly groupKillCount: number;
+  readonly guardianSweepIntentCount: number;
   readonly status: number;
   readonly signal: NodeJS.Signals | null;
-  readonly processGroupId: number | null;
   readonly stdout: string;
   readonly stderr: string;
   readonly timedOut: boolean;
@@ -144,390 +151,33 @@ export interface ReviewedNodeCommandResult {
 }
 
 export interface ReviewedNodeCommandTestHook {
-  readonly phase: 'wrapper-spawned-before-handshake' | 'handshake-published-before-go';
+  readonly phase:
+    | 'worker-ready-before-handshake'
+    | 'handshake-published-before-go'
+    | 'go-sent'
+    | 'guardian-swept-before-result';
   readonly readyPath: string;
 }
 
 /*
  * The synchronous child_process timeout waits for a signal-resistant target and
  * for descendant-held pipes. The exact reviewed Node therefore supervises a
- * trusted gated wrapper in a fresh POSIX process group. The supervisor publishes
- * that PGID to the outer caller before opening the wrapper's stdin gate; only then
- * may the wrapper spawn reviewed code in its own group. Both supervisor and outer
- * caller can therefore apply the terminal SIGKILL sweep. On normal completion
- * the wrapper publishes the target status through a private pipe and signals its
- * own group while its live leader identity still pins the PGID. No trusted layer
- * re-addresses that number after the leader is reaped. Abnormal parent death can
- * only use a reusable numeric fallback and therefore still requires an external
- * lifetime authority against hostile code. Bun's synchronous child API does not
- * expose fd 3, so the outer bounded protocol uses two stdout lines; the inner
- * supervisor-to-wrapper boundary may use its own private fd 3.
+ * trusted gated guardian in a fresh POSIX session/process group. The guardian is
+ * the live group leader and is the only production process allowed to address the
+ * group: it writes one bounded sweep intent and then calls
+ * one self-addressed negative-PID SIGKILL while its own live identity pins the
+ * PGID. The supervisor owns the guardian's exclusive control-pipe writer; EOF
+ * therefore triggers the same anchored self-sweep if the supervisor dies at any
+ * point. A non-leader worker sits between guardian and reviewed target so a target
+ * that kills its immediate parent cannot kill the group anchor.
+ *
+ * The outer synchronous caller receives only an unforgeable-for-cleanup boolean
+ * armed handshake, never a PID/PGID, and performs no numeric fallback after
+ * supervisor completion. Deliberate regrouping/detachment, discovery and killing
+ * of the guardian, or hostile signal-authority changes still require an external
+ * cgroup/sandbox/Job Object; uncertain cleanup fails without signalling a reusable
+ * numeric identity.
  */
-const REVIEWED_NODE_TARGET_WRAPPER = String.raw`'use strict';
-const childProcess = require('node:child_process');
-const fs = require('node:fs');
-const payloadName = 'CORTEXEL_PACKAGE_SMOKE_WRAPPER_PAYLOAD';
-const targetCompletionSchema = ${JSON.stringify(COMMAND_TARGET_COMPLETION_SCHEMA)};
-let payload;
-try {
-  payload = JSON.parse(process.env[payloadName] || 'null');
-} catch {
-  process.exit(70);
-}
-delete process.env[payloadName];
-const publishCompletionAndSweep = (status, signal) => {
-  const validStatus = Number.isInteger(status) && status >= 0 && status <= 255;
-  const validSignal = typeof signal === 'string' && /^SIG[A-Z0-9]+$/.test(signal);
-  if (validStatus === validSignal) process.exit(70);
-  const record = Buffer.from(JSON.stringify({
-    schema: targetCompletionSchema,
-    signal: validSignal ? signal : null,
-    status: validStatus ? status : null,
-  }) + '\n', 'utf8');
-  try {
-    if (fs.writeSync(3, record) !== record.length) process.exit(70);
-  } catch {
-    process.exit(70);
-  }
-  try {
-    // The destructive signal is issued while this live group leader still
-    // authenticates the numeric PGID. A successful call covers members for
-    // which this process retains signal authority; it is not a hostile sandbox.
-    process.kill(-process.pid, 'SIGKILL');
-  } catch (error) {
-    try {
-      fs.writeSync(
-        2,
-        'reviewed Node wrapper process-group sweep unproven: signal authority lost (' +
-          String(error && error.code ? error.code : 'unknown') + ')\n',
-      );
-    } catch {
-      // The nonzero exit remains fail-closed if the diagnostic write fails.
-    }
-  }
-  process.exit(70);
-};
-let gate = '';
-let gated = false;
-const gateTimer = setTimeout(() => process.exit(70), 5000);
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', (chunk) => {
-  gate += chunk;
-  if (gate.length > 3) process.exit(70);
-});
-process.stdin.once('end', () => {
-  if (gated || gate !== 'GO\n') process.exit(70);
-  gated = true;
-  clearTimeout(gateTimer);
-  let target;
-  try {
-    target = childProcess.spawn(process.execPath, payload.args, {
-      cwd: payload.cwd,
-      detached: false,
-      env: payload.environment,
-      stdio: ['ignore', 'inherit', 'inherit'],
-      windowsHide: true,
-    });
-  } catch {
-    process.exit(70);
-  }
-  target.once('error', () => process.exit(70));
-  target.once('close', publishCompletionAndSweep);
-});
-process.stdin.once('error', () => process.exit(70));
-`;
-
-const REVIEWED_NODE_SUPERVISOR = String.raw`'use strict';
-const childProcess = require('node:child_process');
-const fs = require('node:fs');
-const payloadName = 'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD';
-const wrapperPayloadName = 'CORTEXEL_PACKAGE_SMOKE_WRAPPER_PAYLOAD';
-const testHookPayloadName = 'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK';
-const wrapperSource = ${JSON.stringify(REVIEWED_NODE_TARGET_WRAPPER)};
-const targetCompletionSchema = ${JSON.stringify(COMMAND_TARGET_COMPLETION_SCHEMA)};
-let payload;
-let trustedTestHook = null;
-try {
-  payload = JSON.parse(process.env[payloadName] || 'null');
-  const rawTestHook = process.env[testHookPayloadName];
-  if (rawTestHook !== undefined) {
-    trustedTestHook = JSON.parse(rawTestHook);
-    const keys = trustedTestHook && typeof trustedTestHook === 'object' &&
-      !Array.isArray(trustedTestHook) ? Object.keys(trustedTestHook).sort() : [];
-    if (
-      JSON.stringify(keys) !== '["phase","readyPath","schema"]' ||
-      trustedTestHook.schema !== 'cortexel-package-smoke-command-test-hook.v1' ||
-      !['wrapper-spawned-before-handshake', 'handshake-published-before-go']
-        .includes(trustedTestHook.phase) ||
-      typeof trustedTestHook.readyPath !== 'string'
-    ) {
-      throw new Error('invalid trusted command test hook');
-    }
-  }
-} catch (error) {
-  fs.writeSync(1, JSON.stringify({
-    groupKillCount: 0,
-    outputOverflow: false,
-    processGroupId: null,
-    schema: 'cortexel-package-smoke-command.v1',
-    signal: null,
-    spawnError: 'invalid supervisor payload: ' + String(error),
-    status: null,
-    stderrBase64: '',
-    stdoutBase64: '',
-    timedOut: false,
-  }) + '\n');
-  process.exit(0);
-}
-delete process.env[payloadName];
-delete process.env[testHookPayloadName];
-const chunks = { stdout: [], stderr: [] };
-let capturedBytes = 0;
-let outputOverflow = false;
-let timedOut = false;
-let settled = false;
-let goSent = false;
-let child;
-let childLeaderLive = false;
-let groupKillStarted = false;
-let cancellationStarted = false;
-let cancellationExitCode = null;
-let timer;
-let testHookTimer;
-let targetCompletion = null;
-const targetCompletionChunks = [];
-let targetCompletionBytes = 0;
-const failUnprovenGroupSweep = (stage) => {
-  try {
-    fs.writeSync(
-      2,
-      'reviewed Node process-group sweep unproven: signal authority lost (' +
-        stage + ': EPERM)\n',
-    );
-  } catch {
-    // The stable exit status still fails closed if the diagnostic descriptor failed.
-  }
-  process.exit(70);
-};
-const finish = (status, signal, spawnError, bindProcessGroup = true) => {
-  if (settled) return;
-  settled = true;
-  clearTimeout(timer);
-  clearTimeout(testHookTimer);
-  const stdoutBase64 = Buffer.concat(chunks.stdout).toString('base64');
-  const stderrBase64 = Buffer.concat(chunks.stderr).toString('base64');
-  fs.writeSync(1, JSON.stringify({
-    groupKillCount: groupKillStarted ? 1 : 0,
-    outputOverflow,
-    processGroupId: bindProcessGroup && child && Number.isSafeInteger(child.pid) ? child.pid : null,
-    schema: 'cortexel-package-smoke-command.v1',
-    signal,
-    spawnError,
-    status,
-    stderrBase64,
-    stdoutBase64,
-    timedOut,
-  }) + '\n');
-};
-const hardKill = () => {
-  if (!child || !Number.isSafeInteger(child.pid) || groupKillStarted) return;
-  if (!childLeaderLive) {
-    try {
-      fs.writeSync(
-        2,
-        'reviewed Node process-group sweep refused after its leader was reaped\n',
-      );
-    } catch {
-      // The nonzero exit remains fail-closed if the diagnostic write fails.
-    }
-    process.exit(70);
-  }
-  groupKillStarted = true;
-  try {
-    process.kill(-child.pid, 'SIGKILL');
-  } catch (error) {
-    if (error && error.code === 'ESRCH') return;
-    if (error && error.code === 'EPERM') {
-      failUnprovenGroupSweep('SIGKILL');
-      return;
-    }
-    throw error;
-  }
-};
-const cancelSupervisor = (exitCode) => {
-  if (cancellationStarted) return;
-  if (settled) {
-    process.exit(exitCode);
-    return;
-  }
-  cancellationStarted = true;
-  cancellationExitCode = exitCode;
-  if (timer) clearTimeout(timer);
-  if (testHookTimer) clearTimeout(testHookTimer);
-  try {
-    hardKill();
-  } catch {
-    process.exit(70);
-    return;
-  }
-  if (!child || !Number.isSafeInteger(child.pid)) {
-    process.exit(exitCode);
-    return;
-  }
-  testHookTimer = setTimeout(() => process.exit(70), 2000);
-};
-const stopAtTrustedTestHook = (phase) => {
-  if (!trustedTestHook || trustedTestHook.phase !== phase) return false;
-  const ready = JSON.stringify({
-    phase,
-    processGroupId: child.pid,
-    schema: 'cortexel-package-smoke-command-test-hook.v1',
-    supervisorPid: process.pid,
-  }) + '\n';
-  fs.writeFileSync(trustedTestHook.readyPath, ready, { flag: 'wx', mode: 0o600 });
-  testHookTimer = setTimeout(() => cancelSupervisor(70), 4000);
-  return true;
-};
-for (const [signal, exitCode] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) {
-  process.on(signal, () => cancelSupervisor(exitCode));
-}
-process.on('uncaughtException', () => cancelSupervisor(70));
-process.on('unhandledRejection', () => cancelSupervisor(70));
-const capture = (stream) => (chunk) => {
-  if (settled || outputOverflow) return;
-  const remaining = payload.outputLimitBytes - capturedBytes;
-  if (chunk.length > remaining) {
-    if (remaining > 0) chunks[stream].push(chunk.subarray(0, remaining));
-    capturedBytes += Math.max(remaining, 0);
-    outputOverflow = true;
-    hardKill();
-    return;
-  }
-  chunks[stream].push(chunk);
-  capturedBytes += chunk.length;
-};
-const captureTargetCompletion = (chunk) => {
-  if (targetCompletion !== null || cancellationStarted) return;
-  targetCompletionBytes += chunk.length;
-  if (targetCompletionBytes > 512) process.exit(70);
-  targetCompletionChunks.push(chunk);
-};
-const acceptTargetCompletion = () => {
-  if (
-    !goSent ||
-    targetCompletion !== null ||
-    cancellationStarted ||
-    timedOut ||
-    outputOverflow ||
-    groupKillStarted
-  ) return;
-  const raw = Buffer.concat(targetCompletionChunks);
-  let value;
-  try {
-    value = JSON.parse(raw.toString('utf8'));
-  } catch {
-    process.exit(70);
-  }
-  const keys = value && typeof value === 'object' && !Array.isArray(value)
-    ? Object.keys(value).sort()
-    : [];
-  const validStatus = value && Number.isInteger(value.status) &&
-    value.status >= 0 && value.status <= 255;
-  const validSignal = value && typeof value.signal === 'string' &&
-    /^SIG[A-Z0-9]+$/.test(value.signal);
-  const canonical = value && JSON.stringify({
-    schema: value.schema,
-    signal: value.signal,
-    status: value.status,
-  }) + '\n';
-  if (
-    JSON.stringify(keys) !== '["schema","signal","status"]' ||
-    value.schema !== targetCompletionSchema ||
-    validStatus === validSignal ||
-    typeof canonical !== 'string' ||
-    !raw.equals(Buffer.from(canonical, 'utf8'))
-  ) {
-    process.exit(70);
-  }
-  targetCompletion = value;
-  clearTimeout(timer);
-};
-try {
-  child = childProcess.spawn(process.execPath, ['-e', wrapperSource], {
-    cwd: payload.cwd,
-    detached: true,
-    env: { ...process.env, [wrapperPayloadName]: JSON.stringify(payload) },
-    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
-  childLeaderLive = Number.isSafeInteger(child.pid);
-} catch (error) {
-  child = null;
-}
-timer = setTimeout(() => {
-  timedOut = true;
-  hardKill();
-}, payload.timeoutMs);
-if (!child) {
-  finish(null, null, 'reviewed Node target could not be spawned');
-} else {
-  child.stdout.on('data', capture('stdout'));
-  child.stderr.on('data', capture('stderr'));
-  child.stdio[3].on('data', captureTargetCompletion);
-  child.stdio[3].once('end', acceptTargetCompletion);
-  child.once('spawn', () => {
-    childLeaderLive = true;
-    if (stopAtTrustedTestHook('wrapper-spawned-before-handshake')) return;
-    const handshake = Buffer.from(JSON.stringify({
-      processGroupId: child.pid,
-      schema: 'cortexel-package-smoke-command-handshake.v1',
-    }) + '\n', 'utf8');
-    if (fs.writeSync(1, handshake) !== handshake.length) {
-      throw new Error('process-group handshake was not published atomically');
-    }
-    if (stopAtTrustedTestHook('handshake-published-before-go')) return;
-    goSent = true;
-    child.stdin.end('GO\n');
-  });
-  child.once('error', (error) => finish(null, null, String(error), false));
-  child.once('exit', () => {
-    childLeaderLive = false;
-    clearTimeout(timer);
-  });
-  child.once('close', (status, signal) => {
-    childLeaderLive = false;
-    clearTimeout(timer);
-    clearTimeout(testHookTimer);
-    if (cancellationStarted) {
-      process.exit(cancellationExitCode === null ? 70 : cancellationExitCode);
-      return;
-    }
-    if (
-      targetCompletion !== null &&
-      !timedOut &&
-      !outputOverflow &&
-      !groupKillStarted
-    ) {
-      if (status !== null || signal !== 'SIGKILL') process.exit(70);
-      groupKillStarted = true;
-      finish(targetCompletion.status, targetCompletion.signal, null);
-      return;
-    }
-    if (groupKillStarted) {
-      finish(status, signal, null);
-      return;
-    }
-    if (!goSent) {
-      finish(null, null, 'reviewed Node wrapper exited before its GO gate', false);
-      return;
-    }
-    // An uncommanded wrapper death cannot safely return a receipt. The outer
-    // caller will reject this abnormal supervisor completion and may apply its
-    // explicitly reuse-limited one-shot fallback when a PGID was published.
-    process.exit(70);
-  });
-}
-`;
 
 function activeCommandEnvironment(): NodeJS.ProcessEnv {
   if (commandEnvironment === undefined) fail('package-smoke command environment is not initialized');
@@ -715,12 +365,12 @@ export function runReviewedNodeCommand(
     readonly timeoutMs?: number;
     readonly outputLimitBytes?: number;
     readonly nodeAuthority?: NodeExecutableFileAuthority;
-    /** Host-controlled regression rendezvous; never copied into the wrapper or target environment. */
+    /** Host-controlled regression rendezvous; never copied into guardian, worker, or target input. */
     readonly trustedTestHook?: ReviewedNodeCommandTestHook;
   } = {},
 ): ReviewedNodeCommandResult {
-  if (process.platform === 'win32') {
-    fail('reviewed Node command supervision currently requires POSIX process-group semantics');
+  if (process.platform !== 'darwin' && process.platform !== 'linux') {
+    fail('reviewed Node command supervision is implemented only for reviewed macOS/Linux semantics');
   }
   const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   const outputLimitBytes = options.outputLimitBytes ?? MAX_COMMAND_OUTPUT_BYTES;
@@ -740,8 +390,10 @@ export function runReviewedNodeCommand(
   if (options.trustedTestHook !== undefined) {
     const hook = options.trustedTestHook;
     if (
-      hook.phase !== 'wrapper-spawned-before-handshake' &&
-      hook.phase !== 'handshake-published-before-go'
+      hook.phase !== 'worker-ready-before-handshake' &&
+      hook.phase !== 'handshake-published-before-go' &&
+      hook.phase !== 'go-sent' &&
+      hook.phase !== 'guardian-swept-before-result'
     ) {
       fail('reviewed Node command test hook has an invalid phase');
     }
@@ -795,8 +447,9 @@ export function runReviewedNodeCommand(
       .filter((entry): entry is [string, string] => entry[1] !== undefined),
   );
   for (const reserved of [
-    'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD',
-    'CORTEXEL_PACKAGE_SMOKE_WRAPPER_PAYLOAD',
+    REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV,
+    REVIEWED_NODE_GUARDIAN_PAYLOAD_ENV,
+    REVIEWED_NODE_WORKER_PAYLOAD_ENV,
     COMMAND_TEST_HOOK_ENVIRONMENT,
   ]) {
     if (Object.hasOwn(targetEnvironment, reserved)) {
@@ -822,9 +475,14 @@ export function runReviewedNodeCommand(
   if (Buffer.byteLength(payload, 'utf8') > MAX_COMMAND_PAYLOAD_BYTES) {
     fail('reviewed Node command payload exceeds its environment-safe byte budget');
   }
-  const supervisorEnvironment = { ...targetEnvironment };
-  delete supervisorEnvironment.NODE_OPTIONS;
-  supervisorEnvironment.CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD = payload;
+  // Control-plane processes receive a fresh closed environment. In particular,
+  // arbitrary target loader/runtime variables (LD_PRELOAD, DYLD_*, NODE_OPTIONS,
+  // and future equivalents) must never execute before the supervisor/guardian
+  // JavaScript can enforce its protocol. The exact target environment travels
+  // only as bounded JSON and is installed by the worker for the reviewed target.
+  const supervisorEnvironment: NodeJS.ProcessEnv = {
+    [REVIEWED_NODE_SUPERVISOR_PAYLOAD_ENV]: payload,
+  };
   if (trustedTestHookPayload !== undefined) {
     supervisorEnvironment[COMMAND_TEST_HOOK_ENVIRONMENT] = trustedTestHookPayload;
   }
@@ -841,7 +499,7 @@ export function runReviewedNodeCommand(
     windowsHide: true,
   });
   const outerStdout = Buffer.isBuffer(outer.stdout) ? outer.stdout : Buffer.alloc(0);
-  let publishedProcessGroupId: number | null = null;
+  let guardianArmed = false;
   let resultRaw = outerStdout;
   const firstLineEnd = outerStdout.indexOf(0x0a);
   if (firstLineEnd >= 0 && firstLineEnd + 1 <= MAX_COMMAND_PROTOCOL_OVERHEAD_BYTES) {
@@ -854,64 +512,42 @@ export function runReviewedNodeCommand(
     if (isRecord(firstValue) && firstValue.schema === COMMAND_HANDSHAKE_SCHEMA) {
       exactKeys(
         firstValue,
-        ['processGroupId', 'schema'],
+        ['guardianArmed', 'schema'],
         'reviewed Node command handshake',
       );
-      if (
-        typeof firstValue.processGroupId !== 'number' ||
-        !Number.isSafeInteger(firstValue.processGroupId) ||
-        firstValue.processGroupId <= 0
-      ) {
-        fail('reviewed Node command handshake has an invalid process group');
+      if (firstValue.guardianArmed !== true) {
+        fail('reviewed Node command handshake did not arm its private guardian');
       }
-      publishedProcessGroupId = firstValue.processGroupId;
+      guardianArmed = true;
       resultRaw = outerStdout.subarray(firstLineEnd + 1);
     }
   }
-  const supervisorCompletedAbnormally =
-    outer.error !== undefined || outer.status !== 0 || outer.signal !== null;
-  let outerCleanupFailure: string | null = null;
-  if (supervisorCompletedAbnormally && publishedProcessGroupId !== null) {
-    // Clean completion never reaches this reusable numeric identifier after the
-    // wrapper leader is reaped. Abnormal supervisor death has no portable identity
-    // handle, so this one-shot fallback retains a documented PGID-reuse race and
-    // cannot replace external process-lifetime containment.
-    try {
-      process.kill(-publishedProcessGroupId, 'SIGKILL');
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'EPERM') {
-        outerCleanupFailure =
-          'process-group cleanup unproven: signal authority lost (outer SIGKILL: EPERM)';
-      } else if (code !== 'ESRCH') {
-        throw error;
-      }
-    }
-  }
-  const outerCleanupSuffix = outerCleanupFailure === null ? '' : `; ${outerCleanupFailure}`;
+  // The production handshake deliberately carries no numeric cleanup handle.
+  // Abnormal supervisor completion fails here without signalling or probing a
+  // potentially reusable PID/PGID; the exclusive guardian-lease writer closes
+  // with the supervisor and the still-live guardian self-sweeps its own group.
   assertNodeExecutableAuthority(expectedNodeAuthority, 'post-command');
   if (outer.error !== undefined) {
     const code = (outer.error as NodeJS.ErrnoException).code;
     if (code === 'ENOBUFS') {
-      fail(`reviewed Node command supervisor crossed its outer output bound${outerCleanupSuffix}`);
+      fail('reviewed Node command supervisor crossed its outer output bound');
     }
     if (code === 'ETIMEDOUT') {
-      fail(`reviewed Node command supervisor crossed its outer hard timeout${outerCleanupSuffix}`);
+      fail('reviewed Node command supervisor crossed its outer hard timeout');
     }
-    fail(
-      `reviewed Node command supervisor failed: ${code ?? 'unknown error'}` +
-      outerCleanupSuffix,
-    );
+    fail(`reviewed Node command supervisor failed: ${code ?? 'unknown error'}`);
   }
   if (outer.status !== 0 || outer.signal !== null) {
     const detail = Buffer.isBuffer(outer.stderr) && outer.stderr.byteLength > 0
       ? decodeUtf8Fatal(outer.stderr, 'reviewed Node supervisor stderr').slice(0, 2_048).trimEnd()
       : '';
+    const summary = outer.signal === 'SIGKILL'
+      ? 'reviewed Node command supervisor was terminated by SIGKILL without a valid result'
+      : 'reviewed Node command supervisor failed without a valid result';
     fail(
-      `reviewed Node command supervisor failed its outer SIGKILL boundary` +
+      summary +
       ` (status ${String(outer.status)}, signal ${String(outer.signal)})` +
-      (detail ? `: ${detail}` : '') +
-      outerCleanupSuffix,
+      (detail ? `: ${detail}` : ''),
     );
   }
   const outerStderr = Buffer.isBuffer(outer.stderr) ? outer.stderr : Buffer.alloc(0);
@@ -930,9 +566,8 @@ export function runReviewedNodeCommand(
   exactKeys(
     record,
     [
+      'guardianSweepIntentCount',
       'outputOverflow',
-      'groupKillCount',
-      'processGroupId',
       'schema',
       'signal',
       'spawnError',
@@ -948,20 +583,19 @@ export function runReviewedNodeCommand(
   const validStatus = record.status === null ||
     (typeof record.status === 'number' && Number.isSafeInteger(record.status) &&
       record.status >= 0 && record.status <= 255);
-  const validProcessGroupId = record.processGroupId === null ||
-    (typeof record.processGroupId === 'number' && Number.isSafeInteger(record.processGroupId) &&
-      record.processGroupId > 0);
   if (
     record.schema !== COMMAND_RESULT_SCHEMA ||
-    (record.groupKillCount !== 0 && record.groupKillCount !== 1) ||
+    (record.guardianSweepIntentCount !== 0 && record.guardianSweepIntentCount !== 1) ||
     typeof record.outputOverflow !== 'boolean' ||
     typeof record.timedOut !== 'boolean' ||
-    (record.spawnError !== null && typeof record.spawnError !== 'string') ||
+    (record.spawnError !== null &&
+      (typeof record.spawnError !== 'string' ||
+        record.spawnError.length === 0 ||
+        record.spawnError.length > 256)) ||
     typeof record.stderrBase64 !== 'string' ||
     typeof record.stdoutBase64 !== 'string' ||
     !validSignal ||
-    !validStatus ||
-    !validProcessGroupId
+    !validStatus
   ) {
     fail('reviewed Node command supervisor returned an invalid result record');
   }
@@ -970,20 +604,21 @@ export function runReviewedNodeCommand(
   const hasStatus = typeof record.status === 'number';
   const hasSignal = typeof record.signal === 'string';
   if (hasSpawnError) {
-    if (hasStatus || hasSignal || wasHardStopped || record.processGroupId !== null ||
-        record.groupKillCount !== 0) {
+    if (
+      hasStatus ||
+      hasSignal ||
+      wasHardStopped ||
+      (record.guardianSweepIntentCount === 0) === guardianArmed
+    ) {
       fail('reviewed Node command spawn failure has an impossible completion state');
     }
     fail(`reviewed Node target spawn failed: ${record.spawnError}`);
   }
-  if (
-    publishedProcessGroupId === null ||
-    record.processGroupId !== publishedProcessGroupId
-  ) {
-    fail('reviewed Node command result does not match its pre-execution process-group handshake');
+  if (!guardianArmed) {
+    fail('reviewed Node command result has no pre-execution guardian handshake');
   }
-  if (record.groupKillCount !== 1) {
-    fail('reviewed Node command did not apply exactly one process-group SIGKILL sweep');
+  if (record.guardianSweepIntentCount !== 1) {
+    fail('reviewed Node command did not publish exactly one guardian sweep intent');
   }
   if (wasHardStopped) {
     if (hasStatus || record.signal !== 'SIGKILL') {
@@ -992,13 +627,9 @@ export function runReviewedNodeCommand(
   } else if (hasStatus === hasSignal) {
     fail('reviewed Node command completion must have exactly one status discriminator');
   }
-  if (record.processGroupId === null) {
-    fail('reviewed Node command did not bind its POSIX process group');
-  }
-  // Normal completion is accepted only after the wrapper published the target
-  // result and terminated by its anchored group SIGKILL. Timeout/overflow paths
-  // likewise signal while the direct wrapper leader is live. Never turn the
-  // reaped leader's reusable PGID into a later closure claim.
+  // Normal completion is accepted only after the gated worker published the
+  // target result, the live guardian published one intent, and the guardian
+  // closed by SIGKILL. No numeric group identity crosses this boundary.
   const decodeCanonicalBase64 = (value: string, label: string): Buffer => {
     if (value.length % 4 !== 0) {
       fail(`${label} is not canonical base64`);
@@ -1032,10 +663,9 @@ export function runReviewedNodeCommand(
   const stdout = decodeUtf8Fatal(stdoutRaw, 'reviewed Node command stdout');
   const stderr = decodeUtf8Fatal(stderrRaw, 'reviewed Node command stderr');
   return {
-    groupKillCount: record.groupKillCount as number,
+    guardianSweepIntentCount: record.guardianSweepIntentCount as number,
     status: typeof record.status === 'number' ? record.status : -1,
     signal: record.signal as NodeJS.Signals | null,
-    processGroupId: record.processGroupId as number | null,
     stdout,
     stderr,
     timedOut: record.timedOut,
@@ -1050,11 +680,87 @@ function runResult(command: string, args: string[], cwd: string): ReviewedNodeCo
   return result;
 }
 
+const REVIEWED_COMMAND_DIAGNOSTIC_LIMITS = Object.freeze({
+  commandEncodedBytes: 1_024,
+  channelEncodedBytes: 3_072,
+});
+
+function jsonDiagnosticString(
+  value: string,
+  encodedByteLimit: number,
+): { readonly encoded: string; readonly truncated: boolean } {
+  let body = '';
+  let encodedBytes = 2; // Opening and closing JSON quotes.
+  let consumedUtf16Units = 0;
+
+  for (const character of value) {
+    let fragment: string;
+    if (
+      /\p{Cc}|\p{Cf}/u.test(character) ||
+      character === '\u2028' ||
+      character === '\u2029'
+    ) {
+      fragment = '';
+      for (let index = 0; index < character.length; index += 1) {
+        fragment += `\\u${character.charCodeAt(index).toString(16).padStart(4, '0')}`;
+      }
+    } else {
+      // JSON.stringify escapes quotes, backslashes, and the remaining JSON controls.
+      fragment = JSON.stringify(character).slice(1, -1);
+    }
+
+    const fragmentBytes = Buffer.byteLength(fragment);
+    if (encodedBytes + fragmentBytes > encodedByteLimit) {
+      return { encoded: `"${body}"`, truncated: true };
+    }
+    body += fragment;
+    encodedBytes += fragmentBytes;
+    consumedUtf16Units += character.length;
+  }
+
+  return {
+    encoded: `"${body}"`,
+    truncated: consumedUtf16Units !== value.length,
+  };
+}
+
+export function formatReviewedNodeCommandFailure(
+  command: string,
+  result: Pick<ReviewedNodeCommandResult, 'status' | 'signal' | 'stdout' | 'stderr'>,
+): string {
+  const encodedCommand = jsonDiagnosticString(
+    command,
+    REVIEWED_COMMAND_DIAGNOSTIC_LIMITS.commandEncodedBytes,
+  );
+  const encodedStdout = jsonDiagnosticString(
+    result.stdout,
+    REVIEWED_COMMAND_DIAGNOSTIC_LIMITS.channelEncodedBytes,
+  );
+  const encodedStderr = jsonDiagnosticString(
+    result.stderr,
+    REVIEWED_COMMAND_DIAGNOSTIC_LIMITS.channelEncodedBytes,
+  );
+  return (
+    'reviewed Node command failed: {' +
+    `"command":${encodedCommand.encoded},` +
+    `"commandTruncated":${String(encodedCommand.truncated)},` +
+    `"status":${String(result.status)},` +
+    `"signal":${result.signal === null ? 'null' : JSON.stringify(result.signal)},` +
+    `"stdout":${encodedStdout.encoded},` +
+    `"stdoutTruncated":${String(encodedStdout.truncated)},` +
+    `"stderr":${encodedStderr.encoded},` +
+    `"stderrTruncated":${String(encodedStderr.truncated)}` +
+    '}'
+  );
+}
+
 function run(command: string, args: string[], cwd: string): string {
   const result = runResult(command, args, cwd);
   if (result.status !== 0 || result.signal !== null) {
-    const detail = result.stderr.trim();
-    fail(`${command} failed${detail ? `: ${detail.slice(0, 8_192)}` : ''}`);
+    // Many CLIs (including TypeScript) report diagnostics on stdout. Preserve both
+    // channels without argv/environment, and encode them for one bounded terminal-safe
+    // diagnostic rather than allowing child output to forge report structure.
+    fail(formatReviewedNodeCommandFailure(command, result));
   }
   return result.stdout.trim();
 }
@@ -1245,7 +951,7 @@ interface PreparedState {
   readonly readOnlyWorkspace: boolean;
 }
 
-export interface PackageSmokePhaseOutput {
+export interface PackageSmokePhaseSuccessOutput {
   readonly schema: typeof PHASE_OUTPUT_SCHEMA;
   readonly phase: SmokePhase;
   readonly status: 'prepared' | 'passed';
@@ -1258,6 +964,23 @@ export interface PackageSmokePhaseOutput {
   readonly nodeModules: readonly [string, string, string];
   readonly workspaceSeal: string;
 }
+
+export interface PackageSmokePhaseFailureOutput {
+  readonly schema: typeof PHASE_OUTPUT_SCHEMA;
+  readonly phase: SmokePhase;
+  readonly status: 'failed';
+  readonly code: 'PACKAGE_SMOKE_FAILED';
+  readonly message: string;
+}
+
+/**
+ * Canonical CLI transport/status union. This is intentionally not named or
+ * represented as a durable execution receipt: it does not bind the harness source
+ * closure or retain each internal reviewed-command lifecycle/result record.
+ */
+export type PackageSmokePhaseOutput =
+  | PackageSmokePhaseSuccessOutput
+  | PackageSmokePhaseFailureOutput;
 
 function fail(message: string): never {
   throw new Error(message);
@@ -4461,7 +4184,7 @@ function phaseOutput(
   status: 'prepared' | 'passed',
   state: PreparedState,
   stateDigest: string,
-): PackageSmokePhaseOutput {
+): PackageSmokePhaseSuccessOutput {
   return {
     schema: PHASE_OUTPUT_SCHEMA,
     phase,
@@ -4741,12 +4464,28 @@ const runtimeFigureContractProbe = `
       identity.sourceRevision !== 'unreleased-worktree' || identity.release !== false ||
       identity.contractDigest !== contractManifest.contractDigest ||
       identity.catalogDigest !== contractManifest.catalogDigest ||
+      authoring.CATALOG_DIGEST_DOMAIN !== contractManifest.catalogDigestDomain ||
+      authoring.CATALOG_DIGEST !== contractManifest.catalogDigest ||
       identity.stableSkillCount !== contractManifest.stableSkillCount) {
     throw new Error('packed FigureRequest identity is incoherent');
   }
+  const authoringExportNames = Object.keys(authoring).sort();
+  if (JSON.stringify(authoringExportNames) !== JSON.stringify([
+      'AUTHORING_SCHEMA_COMPILATION_PROFILE_V1',
+      'CATALOG_DIGEST',
+      'CATALOG_DIGEST_DOMAIN',
+      'SKILL_AUTHORING',
+      'SKILL_CATALOG',
+      'STABLE_CATALOG_SCHEMA_RESOURCES',
+      'STABLE_SKILL_IDS',
+      'isStableSkillId',
+      'lookupSkillCatalogEntry',
+    ])) {
+    throw new Error('packed authoring entry exposes an unexpected runtime surface: ' +
+      JSON.stringify(authoringExportNames));
+  }
 
   const inventory = [];
-  const stableSkillSources = [];
   for (const record of contractManifest.normativeSources) {
     if (!record.path.startsWith('contract/')) throw new Error('unsafe contract inventory path');
     const relative = record.path.slice('contract/'.length);
@@ -4757,17 +4496,43 @@ const runtimeFigureContractProbe = `
     const digest = figure.sha256Digest(figure.canonicalize(value));
     if (digest !== record.digest) throw new Error('shipped contract file digest mismatch: ' + relative);
     inventory.push({ path: record.path, digest });
-    if (relative.startsWith('skills/') && value.status === 'stable') stableSkillSources.push(value);
   }
   if (figure.sha256Digest(figure.canonicalize(inventory)) !== contractManifest.contractDigest) {
     throw new Error('shipped contract inventory does not reproduce contractDigest');
   }
-  stableSkillSources.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-  const catalogView = stableSkillSources.map((skill) => ({
-    id: skill.id, revision: skill.revision, renderer: skill.renderer,
-  }));
+  const stableIds = [...figure.STABLE_SKILL_IDS].sort();
+  if (JSON.stringify([...authoring.STABLE_SKILL_IDS].sort()) !==
+      JSON.stringify(stableIds) ||
+      JSON.stringify(authoring.SKILL_CATALOG) !== JSON.stringify(figure.SKILL_CATALOG)) {
+    throw new Error('packed authoring discovery metadata differs from figure');
+  }
+  for (const id of stableIds) {
+    if (!authoring.isStableSkillId(id) ||
+        !figure.isStableSkillId(id) ||
+        authoring.lookupSkillCatalogEntry(id) !== authoring.SKILL_CATALOG[id] ||
+        figure.lookupSkillCatalogEntry(id) !== figure.SKILL_CATALOG[id]) {
+      throw new Error('packed stable catalog guard or lookup disagrees with its finite map');
+    }
+  }
+  for (const id of ['', 'not.a.skill', '__proto__', 'constructor']) {
+    if (authoring.isStableSkillId(id) ||
+        figure.isStableSkillId(id) ||
+        authoring.lookupSkillCatalogEntry(id) !== undefined ||
+        figure.lookupSkillCatalogEntry(id) !== undefined) {
+      throw new Error('packed stable catalog lookup admitted an unknown or prototype key');
+    }
+  }
+  const catalogView = {
+    domain: authoring.CATALOG_DIGEST_DOMAIN,
+    schemaCompilationProfile: authoring.AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+    schemaResources: authoring.STABLE_CATALOG_SCHEMA_RESOURCES,
+    skills: stableIds.map((id) => ({
+      ...figure.SKILL_CATALOG[id],
+      ...authoring.SKILL_AUTHORING[id],
+    })),
+  };
   if (figure.sha256Digest(figure.canonicalize(catalogView)) !== contractManifest.catalogDigest) {
-    throw new Error('shipped skill bytes do not reproduce catalogDigest');
+    throw new Error('packed public discovery and authoring bytes do not reproduce catalogDigest');
   }
   if (!contractManifest.stableSkills.every((skill) =>
       skill.availability === 'packaged' && skill.releaseReady === false)) {
@@ -4793,7 +4558,50 @@ const runtimeFigureContractProbe = `
       record_to: 'memory', time_in_steps: false, origin: 100.25, start: 0.5,
       stop: 10.75, n_events: 1, events: { senders: [1], times: [111] },
     },
-    { recordedSenderIds: [1, 2], nestVersion: '3.10.0', runId: 'smoke', recorderId: 'sr' },
+    {
+      recordedSenderIds: [1, 2],
+      nestVersion: '3.10.0',
+      captureAuthority: {
+        kind: 'caller_declaration',
+        profile: 'cortexel-nest-memory-spike-capture-authority.v1',
+        runtimeStatus: {
+          nestVersion: '3.10.0',
+          statusReadMethod:
+            'pynest_single_spike_recorder_get_status_plain_projection_v1',
+          executionScope: {
+            kind: 'single_process',
+            numProcesses: 1,
+            rank: 0,
+            localNumThreads: 1,
+          },
+          resolutionMs: 0.125,
+          ticsPerMs: '1000',
+          resolutionTics: '125',
+          captureBiologicalTimeTics: '111000',
+          captureBoundary: 'after_successful_simulate_or_run_return',
+        },
+        recordingGrid: {
+          originTics: '100250',
+          startTics: '500',
+          stopTics: '10750',
+        },
+        bufferEpoch: {
+          beganBy: 'recorder_creation',
+          beganAtBiologicalTimeTics: '100250',
+        },
+        recordingPlan: {
+          lastMutationAtBiologicalTimeTics: '100750',
+          scope: 'window_backend_time_encoding_and_sender_wiring',
+          senderUniverseBinding:
+            'recorded_sender_ids_exactly_equal_full_window_connected_source_universe',
+        },
+        clockEpochContinuity:
+          'biological_time_monotonic_since_last_kernel_initialization',
+        eventCompleteness: 'complete_for_recorded_senders',
+      },
+      runId: 'smoke',
+      recorderId: 'sr',
+    },
   );
   if (!adapted.ok || !figure.validateRequestValue(adapted.request).ok) {
     throw new Error('packed NEST adapter output does not pass the packed validator');
@@ -5003,6 +4811,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         const root = await import('cortexel');
         const core = await import('cortexel/core');
         const figure = await import('cortexel/figure');
+        const authoring = await import('cortexel/authoring');
         const renderSvg = await import('cortexel/render-svg');
         const nestAdapter = await import('cortexel/adapters/nest');
         const manifest = (await import('cortexel/skills.manifest.json', {
@@ -5048,6 +4857,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             typeof core.synapseCollectionToConnectionGraphParams !== 'function' ||
             typeof core.getPositionToSpatialMap2DParams !== 'function' ||
             typeof figure.parseAndValidateRequest !== 'function' ||
+            typeof authoring.SKILL_AUTHORING !== 'object' ||
             typeof renderSvg.buildFigure !== 'function' ||
             typeof nestAdapter.nestSpikeRecorderToRaster !== 'function' ||
             packageMetadata.name !== 'cortexel' ||
@@ -5070,6 +4880,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         const root = require('cortexel');
         const core = require('cortexel/core');
         const figure = require('cortexel/figure');
+        const authoring = require('cortexel/authoring');
         const renderSvg = require('cortexel/render-svg');
         const nestAdapter = require('cortexel/adapters/nest');
         const manifest = require('cortexel/skills.manifest.json');
@@ -5097,6 +4908,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             typeof core.synapseCollectionToConnectionGraphParams !== 'function' ||
             typeof core.getPositionToSpatialMap2DParams !== 'function' ||
             typeof figure.parseAndValidateRequest !== 'function' ||
+            typeof authoring.SKILL_AUTHORING !== 'object' ||
             typeof renderSvg.buildFigure !== 'function' ||
             typeof nestAdapter.nestSpikeRecorderToRaster !== 'function' ||
             packageMetadata.name !== 'cortexel' ||
@@ -5282,6 +5094,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     join(consumer, 'import-cli.cjs'),
     `require(${JSON.stringify(installedCliCjs)});\nprocess.stdout.write('imported\\n');\n`,
   );
+  const authoringFixturePaths = new Map<string, string>();
+  for (const skillId of SOURCE_STABLE_SKILL_IDS) {
+    const authoringPath = join(unrelated, `authoring-${skillId}.json`);
+    phaseWriteFile(
+      authoringPath,
+      `${canonicalize(SOURCE_SKILL_AUTHORING[skillId].authoringExample)}\n`,
+    );
+    authoringFixturePaths.set(skillId, authoringPath);
+  }
   if (phase === 'execute') {
     for (const importer of ['import-cli.mjs', 'import-cli.cjs']) {
       const imported = runResult(nodeExecutable, [join(consumer, importer)], unrelated);
@@ -5294,7 +5115,9 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     if (identityResult.status !== 0 || identityResult.stderr !== '') {
       throw new Error('packed CLI identity command failed');
     }
-    const cliIdentity = JSON.parse(identityResult.stdout) as Record<string, unknown>;
+    const cliIdentityValue = strictJson(identityResult.stdout, 'installed CLI identity');
+    if (!isRecord(cliIdentityValue)) throw new Error('packed CLI identity is not an object');
+    const cliIdentity = cliIdentityValue;
     const installedContractManifest = JSON.parse(readUtf8RegularFileStable(
       join(installedRoot, 'dist', 'contract', 'manifest.v1.json'),
       'installed contract manifest',
@@ -5312,10 +5135,158 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       cliIdentity.packageVersion !== installedPackage.version ||
       cliIdentity.contractDigest !== installedContractManifest.contractDigest ||
       cliIdentity.catalogDigest !== installedContractManifest.catalogDigest ||
+      cliIdentity.catalogDigestDomain !== installedContractManifest.catalogDigestDomain ||
       cliIdentity.sourceRevision !== 'unreleased-worktree' ||
       cliIdentity.release !== false
     ) {
       throw new Error('packed CLI identity differs from shipped package/contract bytes');
+    }
+
+    const catalogResult = runInstalledCli(['catalog', '--json']);
+    if (catalogResult.status !== 0 || catalogResult.stderr !== '') {
+      throw new Error('packed CLI catalog command failed');
+    }
+    const cliCatalog = strictJson(catalogResult.stdout, 'installed CLI catalog');
+    if (
+      !isRecord(cliCatalog) ||
+      cliCatalog.protocol !== 'cortexel-cli-catalog' ||
+      cliCatalog.protocolVersion !== 1 ||
+      !Array.isArray(cliCatalog.skills)
+    ) {
+      throw new Error('packed CLI catalog protocol is malformed');
+    }
+    const catalogIds = cliCatalog.skills.map((candidate) =>
+      isRecord(candidate) && typeof candidate.id === 'string' ? candidate.id : null
+    );
+    const manifestSkills = installedContractManifest.stableSkills;
+    if (!Array.isArray(manifestSkills)) {
+      throw new Error('installed contract manifest stableSkills is malformed');
+    }
+    const manifestIds = manifestSkills.map((candidate) =>
+      isRecord(candidate) && typeof candidate.id === 'string' ? candidate.id : null
+    ).sort();
+    if (
+      catalogIds.some((id) => id === null) ||
+      JSON.stringify([...catalogIds].sort()) !== JSON.stringify(manifestIds) ||
+      catalogIds.length !== 19
+    ) {
+      throw new Error('packed CLI catalog does not enumerate the exact stable manifest ids');
+    }
+
+    let discoveryCompilationProfile: Record<string, JsonValue> | undefined;
+    let discoveryResources: JsonValue[] | undefined;
+    const discoverySkills: Record<string, JsonValue>[] = [];
+    for (const skillId of catalogIds as string[]) {
+      const describeResult = runInstalledCli([
+        'describe',
+        skillId,
+        '--json',
+        '--section',
+        'all',
+      ]);
+      if (describeResult.status !== 0 || describeResult.stderr !== '') {
+        throw new Error(`packed CLI describe failed for ${skillId}`);
+      }
+      const described = strictJson(
+        describeResult.stdout,
+        `installed CLI describe ${skillId}`,
+      );
+      if (
+        !isRecord(described) ||
+        described.protocol !== 'cortexel-cli-describe' ||
+        described.protocolVersion !== 1 ||
+        described.section !== 'all' ||
+        !isRecord(described.buildIdentity) ||
+        described.buildIdentity.catalogDigest !== installedContractManifest.catalogDigest ||
+        !isRecord(described.skill) ||
+        described.skill.id !== skillId ||
+        !isRecord(described.requestSchema) ||
+        !isRecord(described.authoringExample) ||
+        !isRecord(described.schemaCompilationProfile) ||
+        !Array.isArray(described.schemaResources)
+      ) {
+        throw new Error(`packed CLI describe protocol is malformed for ${skillId}`);
+      }
+      if (
+        !isRecord(described.authoringExample.source) ||
+        described.authoringExample.source.kind !== 'synthetic_fixture'
+      ) {
+        throw new Error(`packed CLI authoring fixture is not synthetic for ${skillId}`);
+      }
+      if (discoveryResources === undefined) {
+        discoveryResources = described.schemaResources;
+      } else if (
+        canonicalize(discoveryResources) !== canonicalize(described.schemaResources)
+      ) {
+        throw new Error('packed CLI describe schema resources differ between skills');
+      }
+      if (discoveryCompilationProfile === undefined) {
+        discoveryCompilationProfile = described.schemaCompilationProfile;
+      } else if (
+        canonicalize(discoveryCompilationProfile) !==
+          canonicalize(described.schemaCompilationProfile)
+      ) {
+        throw new Error('packed CLI describe schema compilation profiles differ between skills');
+      }
+      discoverySkills.push({
+        ...described.skill,
+        requestSchema: described.requestSchema,
+        authoringExample: described.authoringExample,
+      });
+
+      const authoringPath = authoringFixturePaths.get(skillId);
+      if (authoringPath === undefined) {
+        throw new Error(`packed CLI described an unprepared stable skill ${skillId}`);
+      }
+      if (
+        readUtf8RegularFileStable(
+          authoringPath,
+          `prepared authoring fixture ${skillId}`,
+          MAX_JSON_BYTES,
+        ) !== `${canonicalize(described.authoringExample)}\n`
+      ) {
+        throw new Error(`packed CLI authoring fixture differs from prepared source for ${skillId}`);
+      }
+      const validateResult = runInstalledCli(['validate', authoringPath]);
+      if (validateResult.status !== 0 || validateResult.stderr !== '') {
+        throw new Error(`packed CLI rejected its own authoring fixture for ${skillId}`);
+      }
+    }
+    discoverySkills.sort((left, right) =>
+      String(left.id) < String(right.id) ? -1 : String(left.id) > String(right.id) ? 1 : 0
+    );
+    if (
+      discoveryResources === undefined ||
+      discoveryCompilationProfile === undefined ||
+      sha256(canonicalize({
+        domain: installedContractManifest.catalogDigestDomain,
+        schemaCompilationProfile: discoveryCompilationProfile,
+        schemaResources: discoveryResources,
+        skills: discoverySkills,
+      })) !== installedContractManifest.catalogDigest
+    ) {
+      throw new Error('packed CLI discovery bytes do not reproduce catalogDigest');
+    }
+
+    const unknownResult = runInstalledCli([
+      'describe',
+      'neuro.reponse_curve',
+      '--json',
+    ]);
+    const unknownPayload = strictJson(
+      unknownResult.stderr,
+      'installed CLI unknown-skill error',
+    );
+    if (
+      unknownResult.status !== 2 ||
+      unknownResult.stdout !== '' ||
+      !isRecord(unknownPayload) ||
+      unknownPayload.protocol !== 'cortexel-cli-error' ||
+      !isRecord(unknownPayload.error) ||
+      unknownPayload.error.code !== 'CLI_UNKNOWN_STABLE_SKILL' ||
+      unknownPayload.error.didYouMean !== 'neuro.response_curve'
+    ) {
+      throw new Error('packed CLI unknown-skill protocol is malformed');
     }
   }
 
@@ -5472,6 +5443,18 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         type ValidatedRequest,
       } from 'cortexel/figure';
       import {
+        AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+        CATALOG_DIGEST as AUTHORING_CATALOG_DIGEST,
+        lookupSkillCatalogEntry as lookupAuthoringSkillCatalogEntry,
+        SKILL_AUTHORING,
+        SKILL_CATALOG as AUTHORING_SKILL_CATALOG,
+        STABLE_CATALOG_SCHEMA_RESOURCES,
+        STABLE_SKILL_IDS as AUTHORING_STABLE_SKILL_IDS,
+        type SkillAuthoringEntry,
+        type SkillCatalogEntry,
+        type StableSkillId,
+      } from 'cortexel/authoring';
+      import {
         buildFigure,
         buildFigureFromJson,
         buildFigureFromValidated,
@@ -5548,6 +5531,10 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const topologyResult = {} as NestTopologyResult<WeightMatrixParams>;
       const assurance = {} as InputAssurance;
       const validatedRequest = {} as ValidatedRequest;
+      const authoringSkillId: StableSkillId = 'neuro.spike_raster';
+      const authoringEntry: SkillAuthoringEntry = SKILL_AUTHORING[authoringSkillId];
+      const authoringCatalogEntry: SkillCatalogEntry =
+        AUTHORING_SKILL_CATALOG[authoringSkillId];
       const figureResult = {} as FigureResult;
       const figureFailure = {} as FigureFailure;
       const nestExport = {} as NestSpikeExport;
@@ -5596,6 +5583,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      // @ts-expect-error unknown stable skill ids are rejected by the authoring map
+      void SKILL_AUTHORING['not.a.skill'];
+      const unknownCatalogEntry: SkillCatalogEntry | undefined =
+        lookupAuthoringSkillCatalogEntry('not.a.skill');
+      // @ts-expect-error an untrusted catalog lookup cannot be assumed present
+      const requiredUnknownCatalogEntry: SkillCatalogEntry =
+        lookupAuthoringSkillCatalogEntry('not.a.skill');
+      // @ts-expect-error unknown literals are not keys of the finite catalog
+      void AUTHORING_SKILL_CATALOG['not.a.skill'];
       void [
         authored,
         getBuildIdentity,
@@ -5606,6 +5602,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         nestSpikeRecorderToRaster,
         assurance,
         validatedRequest,
+        AUTHORING_CATALOG_DIGEST,
+        AUTHORING_SCHEMA_COMPILATION_PROFILE_V1.options.strictRequired,
+        AUTHORING_STABLE_SKILL_IDS,
+        STABLE_CATALOG_SCHEMA_RESOURCES,
+        authoringEntry.requestSchema,
+        authoringEntry.authoringExample,
+        authoringCatalogEntry.id,
+        unknownCatalogEntry,
+        requiredUnknownCatalogEntry,
         figureResult,
         figureFailure,
         nestExport,
@@ -5655,6 +5660,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       import cortexel = require('cortexel');
       import core = require('cortexel/core');
       import figure = require('cortexel/figure');
+      import authoring = require('cortexel/authoring');
       import renderSvg = require('cortexel/render-svg');
       import nestAdapter = require('cortexel/adapters/nest');
       import react = require('cortexel/react');
@@ -5669,6 +5675,11 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const topologyResult = {} as core.NestTopologyResult<core.WeightMatrixParams>;
       const assurance = {} as figure.InputAssurance;
       const validatedRequest = {} as figure.ValidatedRequest;
+      const authoringSkillId: authoring.StableSkillId = 'neuro.spike_raster';
+      const authoringEntry: authoring.SkillAuthoringEntry =
+        authoring.SKILL_AUTHORING[authoringSkillId];
+      const authoringCatalogEntry: authoring.SkillCatalogEntry =
+        authoring.SKILL_CATALOG[authoringSkillId];
       const figureResult = {} as renderSvg.FigureResult;
       const figureFailure = {} as renderSvg.FigureFailure;
       const nestExport = {} as nestAdapter.NestSpikeExport;
@@ -5719,6 +5730,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      // @ts-expect-error unknown stable skill ids are rejected by the authoring map
+      void authoring.SKILL_AUTHORING['not.a.skill'];
+      const unknownCatalogEntry: authoring.SkillCatalogEntry | undefined =
+        authoring.lookupSkillCatalogEntry('not.a.skill');
+      // @ts-expect-error an untrusted catalog lookup cannot be assumed present
+      const requiredUnknownCatalogEntry: authoring.SkillCatalogEntry =
+        authoring.lookupSkillCatalogEntry('not.a.skill');
+      // @ts-expect-error unknown literals are not keys of the finite catalog
+      void authoring.SKILL_CATALOG['not.a.skill'];
       void [
         build,
         figure.getBuildIdentity,
@@ -5729,6 +5749,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         nestAdapter.nestSpikeRecorderToRaster,
         assurance,
         validatedRequest,
+        authoring.CATALOG_DIGEST,
+        authoring.AUTHORING_SCHEMA_COMPILATION_PROFILE_V1.options.strictRequired,
+        authoring.STABLE_SKILL_IDS,
+        authoring.STABLE_CATALOG_SCHEMA_RESOURCES,
+        authoringEntry.requestSchema,
+        authoringEntry.authoringExample,
+        authoringCatalogEntry.id,
+        unknownCatalogEntry,
+        requiredUnknownCatalogEntry,
         figureResult,
         figureFailure,
         nestExport,
@@ -5799,7 +5828,7 @@ export function preparePackageSmokeWorkspace(options: {
   readonly workspace: string;
   readonly nodeExecutable?: string;
   readonly npmExecutable?: string;
-}): PackageSmokePhaseOutput {
+}): PackageSmokePhaseSuccessOutput {
   if (process.platform === 'win32') {
     fail('package smoke currently requires POSIX process-group semantics');
   }
@@ -6018,7 +6047,7 @@ export function executePackageSmokeWorkspace(options: {
   readonly workspace: string;
   readonly expectedStateDigest: string;
   readonly nodeExecutable?: string;
-}): PackageSmokePhaseOutput {
+}): PackageSmokePhaseSuccessOutput {
   if (process.platform === 'win32') {
     fail('package smoke currently requires POSIX process-group semantics');
   }
@@ -6136,13 +6165,14 @@ if (isDirectInvocation()) {
     if (requestedPhase === 'all') {
       console.error(`[cortexel] package smoke failed: ${message}`);
     } else {
-      process.stderr.write(`${canonicalize({
+      const failure: PackageSmokePhaseFailureOutput = {
         schema: PHASE_OUTPUT_SCHEMA,
         phase: requestedPhase,
         status: 'failed',
         code: 'PACKAGE_SMOKE_FAILED',
         message: message.slice(0, 8_192),
-      })}\n`);
+      };
+      process.stderr.write(`${canonicalize(failure)}\n`);
     }
     process.exitCode = 1;
   }

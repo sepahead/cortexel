@@ -192,6 +192,17 @@
             "type": "object",
             "properties": { "notes": { "$ref": "#/$defs/nonblankTrimmed4096" } }
           }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": { "status": { "const": "BLOCKED" } },
+            "required": ["status"]
+          },
+          "then": {
+            "type": "object",
+            "properties": { "notes": { "$ref": "#/$defs/nonblankTrimmed4096" } }
+          }
         }
       ],
       "additionalProperties": false

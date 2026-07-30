@@ -40,7 +40,13 @@ import { parseJsonStrict, type JsonValue } from './parse-json.js';
 import { snapshotValue } from './safe-snapshot.js';
 import { checkCallerAuthority, runSemanticValidators } from './semantics/index.js';
 import { validateStructure } from './structural-validator.js';
-import { SKILL_CATALOG, LEGACY_SKILL_MAP } from '../generated/catalog.js';
+import {
+  isStableSkillId,
+  lookupSkillCatalogEntry,
+  SKILL_CATALOG,
+  LEGACY_SKILL_MAP,
+  type StableSkillId,
+} from '../generated/catalog.js';
 import { CONTRACT_DIGEST, REQUEST_CONTRACT } from '../generated/identity.js';
 import { REQUEST_CONTRACT_IDENTITY } from './contract-identity.js';
 
@@ -68,7 +74,7 @@ const VALIDATED_REQUESTS = new WeakSet<object>();
  */
 export interface ValidatedRequest {
   readonly [VALIDATED]: true;
-  readonly skillId: string;
+  readonly skillId: StableSkillId;
   readonly skillRevision: number;
   readonly canonicalRequest: Record<string, unknown>;
   readonly inputAssurance: InputAssurance;
@@ -244,7 +250,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
     ];
   }
 
-  const entry = SKILL_CATALOG[skillId];
+  const entry = lookupSkillCatalogEntry(skillId);
 
   if (entry && entry.status === 'stable') return [];
 
@@ -361,7 +367,21 @@ function validateSnapshot(
 
   const skillId = readSkillId(request);
   const skillErrors = checkSkill(skillId);
-  if (skillErrors.length > 0 || skillId === undefined) return fail(skillErrors, assurance);
+  if (skillErrors.length > 0) return fail(skillErrors, assurance);
+  if (skillId === undefined || !isStableSkillId(skillId)) {
+    return fail(
+      [
+        makeError({
+          code: 'INTERNAL_INVARIANT_VIOLATED',
+          stage: 'internal',
+          instancePath: '/skill/id',
+          message:
+            'skill identity checking accepted an id outside the generated stable catalog. Cortexel refused to mint a validated request.',
+        }),
+      ],
+      assurance,
+    );
+  }
 
   const catalog = SKILL_CATALOG[skillId];
 

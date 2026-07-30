@@ -669,10 +669,78 @@
   },
 
   "adapters": [
-    { "system": "nest.spike_recorder", "status": "partial", "notes": "Events and senders map directly. NEST has no concept of a trial: events mode still requires caller-supplied alignment times and the complete trial universe, and asserts every declared trial covered the full relative window. Partial coverage or exclusions require caller-derived prebinned counts and denominators. The adapter blocks with ADAPTER_MAPPING_REQUIRED rather than treating each simulation as one implicit trial." },
-    { "system": "neo.Segment", "status": "partial", "notes": "One Segment may map to one events-mode trial only when every selected Segment covers the complete relative window. The alignment time must be an explicitly selected Event: a Segment's t_start is a recording boundary, not a stimulus onset, and is never used as an alignment reference by default. Unequal coverage requires prebinned mode." },
-    { "system": "nwb.TimeIntervals", "status": "partial", "notes": "The alignment column must be named explicitly; start_time is not assumed to be the aligning event. Events mode supports only a selected set of full-window trials. Exclusions or unequal trial coverage must be transformed to prebinned exact counts plus covering-trial denominators before authoring this request." },
-    { "system": "nwb.Units.spike_times", "status": "partial", "notes": "The caller must select the unit rows explicitly; the selected-sender universe is the selection, not every unit in the file." }
+    {
+      "mappingId": "nest-spike-recorder",
+      "sources": [
+        {
+          "system": "nest.spike_recorder",
+          "role": "primary",
+          "notes": "Supplies only event times and sender ids. NEST has no trial or alignment-event abstraction, so the recorder cannot establish trial identity, coverage, exclusions or exposure. The adapter blocks with ADAPTER_MAPPING_REQUIRED rather than treating each simulation as one implicit trial.",
+          "sourceId": "nest-spike-recorder"
+        },
+        {
+          "system": "host-retained NEST trial and alignment protocol",
+          "role": "required_companion",
+          "notes": "Supplies the complete trial universe, one explicit alignment coordinate per trial, selected-sender universe, relative measurement window, per-trial coverage and every exclusion. Events mode is allowed only when this record establishes full coverage of every declared trial; partial coverage or exclusions require caller-derived prebinned counts and exact denominators. The protocol is external authority and is never reconstructed from recorder boundaries.",
+          "sourceId": "host-nest-trial-alignment-protocol"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, every recorder id/status/backend, selected sender universe, origin/start/stop, biological export time, rank/world scope, and detached event-buffer digest. It must bind each export exactly once to the separately declared trial protocol.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo-segment",
+      "sources": [
+        {
+          "system": "neo.Segment",
+          "role": "primary",
+          "notes": "One Segment may map to one events-mode trial only when every selected Segment covers the complete relative window. The alignment time must be an explicitly selected Event: a Segment's t_start is a recording boundary, not a stimulus onset, and is never used as an alignment reference by default. Unequal coverage requires prebinned mode.",
+          "sourceId": "neo-segment"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-timeintervals",
+      "sources": [
+        {
+          "system": "nwb.TimeIntervals",
+          "role": "primary",
+          "notes": "The alignment column must be named explicitly; start_time is not assumed to be the aligning event. Events mode supports only a selected set of full-window trials. Exclusions or unequal trial coverage must be transformed to prebinned exact counts plus covering-trial denominators before authoring this request.",
+          "sourceId": "nwb-timeintervals"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-units-spike-times",
+      "sources": [
+        {
+          "system": "nwb.Units.spike_times",
+          "role": "primary",
+          "notes": "The caller must select the unit rows explicitly; the selected-sender universe is the selection, not every unit in the file.",
+          "sourceId": "nwb-units-spike-times"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    }
   ],
 
   "migration": {
@@ -711,6 +779,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

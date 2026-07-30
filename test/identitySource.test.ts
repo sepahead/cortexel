@@ -44,6 +44,7 @@ function minimalManifestInputs(registry: JsonRecord) {
     canonicalizations: { algorithms: [] },
     disclosures: { rules: [] },
     identity: registry,
+    stableSchemaResources: [],
     normativeSources: [],
   };
 }
@@ -63,8 +64,18 @@ describe('normative contract identity source', () => {
         name: 'cortexel-figure-artifact',
         version: '1.0',
       },
+      catalogDigestDomain: 'cortexel-public-stable-catalog.v2',
     });
     expect(contractIdentitySourceProblems(identity, consumers)).toEqual([]);
+  });
+
+  it('binds the public stable-catalog digest domain to the normative registry', () => {
+    const changed = structuredClone(identity);
+    changed.axes.find((axis: JsonRecord) => axis.id === 'catalogDigest').domain =
+      'cortexel-public-stable-catalog.v3';
+    expect(contractIdentitySourceProblems(changed).join('\n')).toContain(
+      'identity.axes.catalogDigest.domain',
+    );
   });
 
   it('makes registry drift fail every authored consumer instead of silently changing only the digest', () => {

@@ -378,9 +378,57 @@
   },
 
   "adapters": [
-    { "system": "nest.spike_recorder", "status": "supported", "notes": "Events plus the recorded sender universe. The adapter must supply the RECORDED senders, which NEST knows and the event list does not." },
-    { "system": "neo.SpikeTrain", "status": "supported", "notes": "t_start/t_stop map to the window; the unit is taken from the quantity, never guessed." },
-    { "system": "nwb.Units.spike_times", "status": "partial", "notes": "The caller must select the unit rows explicitly." }
+    {
+      "mappingId": "nest-spike-recorder",
+      "sources": [
+        {
+          "system": "nest.spike_recorder",
+          "role": "primary",
+          "notes": "Events plus the recorded sender universe. The adapter must supply the RECORDED senders, which NEST knows and the event list does not.",
+          "sourceId": "nest-spike-recorder"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, complete recorded sender universe, origin/start/stop and biological export time, rank/world scope, and detached event-buffer digest. Event rows cannot authenticate silent senders, exposure or completeness.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo-spiketrain",
+      "sources": [
+        {
+          "system": "neo.SpikeTrain",
+          "role": "primary",
+          "notes": "t_start/t_stop map to the window; the unit is taken from the quantity, never guessed.",
+          "sourceId": "neo-spiketrain"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-units-spike-times",
+      "sources": [
+        {
+          "system": "nwb.Units.spike_times",
+          "role": "primary",
+          "notes": "The caller must select the unit rows explicitly.",
+          "sourceId": "nwb-units-spike-times"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    }
   ],
 
   "migration": {
@@ -404,6 +452,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

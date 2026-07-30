@@ -41,6 +41,7 @@ const sourceEntryFiles = [
   'src/index.ts',
   'src/core/index.ts',
   'src/figure/index.ts',
+  'src/authoring/index.ts',
   'src/render/index.ts',
   'src/adapters/nest/index.ts',
 ];
@@ -101,6 +102,7 @@ describe('capability maturity and concrete availability', () => {
   it('binds the exact command tuple bidirectionally to CLI capabilities', () => {
     expect([...evidence.implementedCliIds].sort()).toEqual([
       'cli.catalog',
+      'cli.describe',
       'cli.identity',
       'cli.inspect',
       'cli.migrate',
@@ -123,6 +125,7 @@ describe('capability maturity and concrete availability', () => {
     const expected = [
       'cortexel',
       'cortexel/adapters/nest',
+      'cortexel/authoring',
       'cortexel/contract',
       'cortexel/core',
       'cortexel/figure',

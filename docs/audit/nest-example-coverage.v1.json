@@ -1,0 +1,196 @@
+{
+  "registry": "cortexel-nest-official-example-coverage",
+  "version": "0.1-draft",
+  "description": "A provisional, fail-honest external audit skeleton for future Cortexel coverage of official NEST Simulator v3.10 examples. It is deliberately outside the normative package contract because execution, assessment, and certification state can change after a package candidate is built. It pins an immutable upstream tree, documentation index, and CMake orchestration context, but it does not yet define an accepted assessment-row contract. Python-path, raw documentation-directive, and visual-asset counts are not entrypoint, visual-output, mapping, rendering, execution, or certification coverage. This skeleton admits only coverageClaim none.",
+  "upstream": {
+    "project": "NEST Simulator",
+    "release": "v3.10",
+    "repository": "https://github.com/nest/nest-simulator",
+    "commit": "acca9704da248750219a027db99fec6cd1f9052a",
+    "rootTreeGitSha1": "7f6f4f0407c4000cded433b86d658191dd82cd79",
+    "documentationIndexPath": "doc/htmldoc/examples/index.rst",
+    "documentationIndexGitBlobSha1": "2965669bd03f128478fa107779485ad5934b73c5",
+    "documentationIndexGitMode": "100644",
+    "orchestrationCmakePath": "pynest/examples/CMakeLists.txt",
+    "orchestrationCmakeGitBlobSha1": "b1c834a050be5562edb54218d960fcf255ecd8ea",
+    "orchestrationCmakeGitMode": "100644",
+    "orchestrationCmakeRole": "installs_run_examples_shell_only_not_entrypoint_authority",
+    "exampleTreePath": "pynest/examples",
+    "treeApiUrl": "https://api.github.com/repos/nest/nest-simulator/git/trees/acca9704da248750219a027db99fec6cd1f9052a?recursive=1"
+  },
+  "sourceUniverse": {
+    "rule": "recursive_git_tree_entries_ending_dot_py_split_by_git_mode",
+    "pythonPathEntryCount": 112,
+    "regularPythonFileCount": 109,
+    "pythonSymlinkCount": 3,
+    "regularExecutablePythonFileCount": 13,
+    "regularNonExecutablePythonFileCount": 96,
+    "repositoryRecursiveTreeApiEntryCount": 1972,
+    "repositoryRecursiveTreeApiEntryKinds": "trees_and_blobs",
+    "repositoryLeafEntryCount": 1835,
+    "repositoryRecursiveTreeApiResponseTruncated": false,
+    "pythonPathInventoryStatus": "count_only",
+    "officialEntrypointInventoryStatus": "not_inventoried",
+    "documentationIndexDirectiveOccurrences": {
+      "doc": 94,
+      "imgTop": 33
+    },
+    "documentationIndexNormalizationStatus": "not_inventoried",
+    "visualAssetPathEntryCount": 12,
+    "visualAssetCountsByExtension": {
+      "png": 9,
+      "gif": 2,
+      "svg": 1
+    },
+    "visualAssetInventoryStatus": "count_only",
+    "notes": "The pinned recursive-root Git tree API response was not truncated. Its 1,972 entries include trees/directories as well as blobs; the same commit has 1,835 leaf entries, so 1,972 is not a file count. Below pynest/examples, 112 path entries end in .py: 109 are regular files (96 mode 100644 and 13 mode 100755) and 3 are Git symlinks (mode 120000). The symlinks are orchestration aliases, not additional executable Python source bodies. The example subtree also contains 12 PNG/GIF/SVG path entries. The pinned documentation index contains 94 raw :doc: references and 33 raw :img-top: occurrences, including repeated, shared, and external entries; those directives have not been normalized into entrypoint or asset identities. The pinned CMake file installs only run_examples.sh and is orchestration context, not entrypoint authority. Individual paths, symlink targets, official entrypoints, source roles, asset roles, and emitted visual outputs have not yet been admitted, so none of these counts is a coverage denominator."
+  },
+  "stateDefinitions": {
+    "inventoried": "The named layer has a complete machine-readable inventory for the ledger's declared scope. It does not inherit evidence from later layers.",
+    "partial": "Some capability exists, but the declared scope is not closed and must not be read as complete coverage.",
+    "unsupported": "The current stable-contract package has no executable capability for the named interface.",
+    "not_assessed": "No bounded review has classified the declared scope against this layer.",
+    "not_run": "No execution receipt exists for this pinned upstream identity."
+  },
+  "layers": [
+    {
+      "id": "upstream_source_inventory",
+      "state": "partial",
+      "notes": "The pinned recursive Git tree, exact authority files, and count-only observations are recorded, but individual source paths, asset paths, normalized documentation entries, and source roles are not yet in the ledger."
+    },
+    {
+      "id": "visual_output_inventory",
+      "state": "not_assessed",
+      "notes": "Official entrypoints and the plotting calls, panels, overlays, saved artifacts, animations, tables, interactive surfaces, and no-output cases reachable from each bounded invocation have not yet been inventoried."
+    },
+    {
+      "id": "stable_contract_mapping",
+      "state": "not_assessed",
+      "notes": "No inventoried official-example visual output has been assigned a complete, conditional, experimental, planned, or infeasible FigureRequestV1 mapping."
+    },
+    {
+      "id": "packaged_adapter_implementation",
+      "state": "partial",
+      "notes": "The package implements one detached adapter that accepts the caller-declared shape of an exact-NEST-3.10.0 in-memory spike-recorder profile. It does not perform or authenticate a live PyNEST capture, and no real-runtime profile receipt exists. No official example has been assessed as satisfying that profile, and all other stable NEST mappings remain unimplemented."
+    },
+    {
+      "id": "renderer_coverage",
+      "state": "not_assessed",
+      "notes": "Stable renderers have not been compared output by output with the visual semantics of a normalized official-entrypoint inventory."
+    },
+    {
+      "id": "upstream_execution",
+      "state": "not_run",
+      "notes": "Cortexel has no bounded official-entrypoint execution receipts or captured outputs for the pinned NEST v3.10 identity."
+    },
+    {
+      "id": "scientific_certification",
+      "state": "not_run",
+      "notes": "No exact official-example visual output has a pinned adapter/renderer differential-oracle receipt. Source inspection and repository-local fixtures are not certification."
+    }
+  ],
+  "knownUnsupportedInterfaces": [
+    {
+      "id": "live_pynest_capture",
+      "state": "unsupported",
+      "notes": "Neither the TypeScript package nor the independent Python reader starts or introspects a live PyNEST simulation."
+    },
+    {
+      "id": "figure_request_v1_multimeter_adapter",
+      "state": "unsupported",
+      "notes": "Stable contracts describe multimeter mappings, but the package ships no executable V1 multimeter adapter."
+    },
+    {
+      "id": "figure_request_v1_connection_adapter",
+      "state": "unsupported",
+      "notes": "Stable contracts describe GetConnections mappings, but the package ships no executable V1 connection adapter."
+    },
+    {
+      "id": "figure_request_v1_position_adapter",
+      "state": "unsupported",
+      "notes": "Stable contracts describe GetPosition mappings, but the package ships no executable V1 position adapter."
+    },
+    {
+      "id": "spike_recorder_step_offset_clock",
+      "state": "unsupported",
+      "notes": "The packaged spike-recorder adapter rejects time_in_steps true because the stable request does not preserve NEST's step-plus-offset clock authority."
+    },
+    {
+      "id": "spike_recorder_nonmemory_backends",
+      "state": "unsupported",
+      "notes": "ASCII, screen, MPI, and SIONlib recorder outputs are outside the one packaged plain-data adapter profile."
+    }
+  ],
+  "reservedAssessmentModel": {
+    "status": "not_defined",
+    "sourceRoles": [
+      "official_entrypoint",
+      "support_module",
+      "orchestration_alias",
+      "nonvisual_source",
+      "unknown"
+    ],
+    "visualOutputKinds": [
+      "static_figure",
+      "multi_panel_figure",
+      "overlay",
+      "table",
+      "animation",
+      "interactive",
+      "other"
+    ],
+    "compositionKinds": [
+      "standalone",
+      "panel",
+      "overlay_layer",
+      "table_only",
+      "animation_sequence",
+      "interactive_surface",
+      "other"
+    ],
+    "requiredSourceFields": [
+      "sourcePath",
+      "gitMode",
+      "gitBlobSha1",
+      "sourceRole",
+      "officialEntrypointIds",
+      "visualOutputs"
+    ],
+    "requiredVisualOutputFields": [
+      "outputId",
+      "callsiteOrOrdinal",
+      "outputKind",
+      "compositionKind",
+      "mappingStatus",
+      "implementationAvailability",
+      "rendererCoverage",
+      "upstreamExecution",
+      "scientificCertification"
+    ],
+    "rules": [
+      "Every inventoried path has exactly one explicit sourceRole.",
+      "An official entrypoint enumerates every visual output, panel, overlay, table, animation, and interactive surface it can emit under the bounded reviewed invocation.",
+      "Every visual output has a stable identity within its pinned source path; one status tuple per file is forbidden.",
+      "A support module or orchestration alias is not an independent official visualization entrypoint.",
+      "Source paths, harness candidate entrypoints, harness-executed entrypoints, documented examples, assets, and per-invocation visual outputs are distinct universes and distinct denominators.",
+      "A no-output classification is explicit and is valid only after the source path and all official entrypoints that import or invoke it are reviewed.",
+      "Upstream execution is independent of Cortexel mapping, adapter, and renderer availability.",
+      "Scientific certification requires inventoried visual semantics, mapping, executable adapter, renderer, upstream execution, and a pinned comparison receipt for that exact output.",
+      "A future complete claim quantifies over every pinned official entrypoint and every inventoried visual output, not over a Python-path count."
+    ],
+    "notes": "This is reserved vocabulary, not an accepted row schema. A reviewed successor must bind the complete source/asset/entrypoint universe, define stable output identity and conditional invocation scope, encode per-output implications without transferring evidence between axes, and add negative controls before any assessment is admitted."
+  },
+  "assessments": [],
+  "summary": {
+    "classifiedPathCount": 0,
+    "classifiedOfficialEntrypointCount": 0,
+    "inventoriedVisualOutputCount": 0,
+    "mappedVisualOutputCount": 0,
+    "executableVisualOutputCount": 0,
+    "renderedVisualOutputCount": 0,
+    "upstreamExecutedVisualOutputCount": 0,
+    "certifiedVisualOutputCount": 0,
+    "coverageClaim": "none",
+    "notes": "No source path, official entrypoint, visual asset role, or emitted visual output has an accepted assessment. The provisional skeleton is infrastructure for future exhaustive work, not evidence that Cortexel can visualize any or all NEST examples."
+  }
+}

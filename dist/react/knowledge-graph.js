@@ -24,7 +24,20 @@ var GRAPH_EDGE_CURVE_SEGMENTS = 4;
 var GRAPH_EDGE_LANE_SPACING = 6;
 var MAX_GRAPH_PARALLEL_EDGES = 9;
 var MAX_GRAPH_EDGE_LANE_OFFSET = (MAX_GRAPH_PARALLEL_EDGES - 1) / 2 * GRAPH_EDGE_LANE_SPACING;
-var CORPUS_GRAPH_RADIUS_MEANING = "Schematic sqrt(rendered relationship degree) scaling; not quantitative evidence.";
+var DEFAULT_CORPUS_GRAPH_BASE_RADIUS = 4;
+var DEFAULT_CORPUS_GRAPH_DEGREE_SCALE = 1.4;
+var DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP = 8;
+function corpusGraphRadiusMeaning(baseRadius, degreeScale, maxRadiusBump) {
+  if (degreeScale === 0 || maxRadiusBump === 0) {
+    return `Constant schematic radius ${String(baseRadius)} world units; relationship degree is not encoded; not quantitative evidence.`;
+  }
+  return `Schematic radius = ${String(baseRadius)} + min(${String(maxRadiusBump)}, sqrt(relationship degree in the complete mapped snapshot before host-side view filters) \xD7 ${String(degreeScale)}) world units; not quantitative evidence.`;
+}
+var CORPUS_GRAPH_RADIUS_MEANING = corpusGraphRadiusMeaning(
+  DEFAULT_CORPUS_GRAPH_BASE_RADIUS,
+  DEFAULT_CORPUS_GRAPH_DEGREE_SCALE,
+  DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP
+);
 function assertKnowledgeGraphBudget(nodeCount, edgeCount) {
   if (!Number.isSafeInteger(nodeCount) || nodeCount < 0 || nodeCount > MAX_KNOWLEDGE_GRAPH_SCENE_NODES) {
     throw new RangeError(
@@ -34,6 +47,13 @@ function assertKnowledgeGraphBudget(nodeCount, edgeCount) {
   if (!Number.isSafeInteger(edgeCount) || edgeCount < 0 || edgeCount > MAX_KNOWLEDGE_GRAPH_SCENE_EDGES) {
     throw new RangeError(
       `knowledge graph edges must be a non-negative integer <= ${MAX_KNOWLEDGE_GRAPH_SCENE_EDGES}`
+    );
+  }
+}
+function assertKnowledgeGraphIdentity(graphIdentity) {
+  if (typeof graphIdentity !== "string" || graphIdentity.length < 1 || graphIdentity.length > 1024) {
+    throw new Error(
+      "knowledge graph identity must be a non-empty string <= 1024 characters"
     );
   }
 }
@@ -53,9 +73,9 @@ function canonicalPair(source, target) {
 function graphEdgeIdentityKey(edge) {
   if (typeof edge.id === "string") return JSON.stringify(["id", edge.id]);
   const kind = typeof edge.kind === "string" ? edge.kind : "";
-  if (kind === "same_as") {
+  if (edge.directed === false) {
     const [source, target] = canonicalPair(edge.source, edge.target);
-    return JSON.stringify(["legacy-symmetric", source, target, kind]);
+    return JSON.stringify(["legacy-undirected", source, target, kind]);
   }
   return JSON.stringify(["legacy-directed", edge.source, edge.target, kind]);
 }
@@ -71,6 +91,11 @@ function assertRenderableGraphEdges(nodes, edges) {
     }
     if (edge.source === edge.target) {
       throw new Error(`knowledge graph edge at index ${index} is a self-loop`);
+    }
+    if (edge.directed === false && edge.particles === true) {
+      throw new Error(
+        `knowledge graph edge at index ${index} is undirected but carries directional particles`
+      );
     }
     const key = graphEdgeIdentityKey(edge);
     if (relationships.has(key)) {
@@ -93,6 +118,11 @@ function reducedMotionLayoutTickBudget(nodeCount, edgeCount) {
   assertKnowledgeGraphBudget(nodeCount, edgeCount);
   const estimatedWork = Math.max(1, nodeCount + Math.ceil(edgeCount / 4));
   return Math.min(8, Math.max(2, Math.floor(2e3 / estimatedWork)));
+}
+function graphCameraTargetDamping(deltaSeconds, reducedMotion) {
+  if (reducedMotion) return 1;
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return 0;
+  return -Math.expm1(-3 * deltaSeconds);
 }
 function normalizeGraphQuery(query) {
   return query.slice(0, MAX_GRAPH_QUERY_LENGTH).trim().toLowerCase();
@@ -332,8 +362,10 @@ function flowParticleCount(flowEdgeCount, perEdge, max) {
 }
 function graphSignature(nodes, edges) {
   const field = (value) => {
-    const text = value === void 0 ? "" : String(value);
-    return `${text.length}:${text}`;
+    if (value === void 0) return "u;";
+    const type = typeof value === "string" ? "s" : typeof value === "number" ? "n" : "b";
+    const text = typeof value === "number" && Object.is(value, -0) ? "-0" : String(value);
+    return `${type}${text.length}:${text}`;
   };
   let s = "";
   for (const n of nodes) s += `N${field(n.id)}${field(n.radius)}`;
@@ -364,17 +396,138 @@ function defaultEdgeStyles(palette) {
     variant_of: { color: palette.pink, directed: true, particles: false }
   };
 }
+var MAP_CORPUS_GRAPH_OPTION_KEYS = /* @__PURE__ */ new Set([
+  "baseRadius",
+  "degreeScale",
+  "maxRadiusBump",
+  "nodeColors",
+  "edgeColors"
+]);
+var KNOWLEDGE_GRAPH_NODE_KINDS = /* @__PURE__ */ new Set([
+  "paper",
+  "model",
+  "family"
+]);
+var KNOWLEDGE_GRAPH_EDGE_KINDS = /* @__PURE__ */ new Set([
+  "cites",
+  "same_as",
+  "variant_of",
+  "instantiates",
+  "belongs_to_family"
+]);
+var HEX_COLOR = /^#[0-9a-f]{6}$/iu;
+function ownDataRecord(value, label, allowedKeys) {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  const result = /* @__PURE__ */ Object.create(null);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string" || !allowedKeys.has(key)) {
+      throw new TypeError(`${label} contains an unknown member`);
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new TypeError(`${label}.${key} must be an enumerable data property`);
+    }
+    result[key] = descriptor.value;
+  }
+  return result;
+}
+function finiteRadiusOption(options, key, fallback, strictlyPositive) {
+  const value = options[key];
+  if (value === void 0) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value) || Object.is(value, -0) || (strictlyPositive ? value <= 0 : value < 0)) {
+    const domain = strictlyPositive ? "positive" : "non-negative";
+    throw new RangeError(`mapCorpusKnowledgeGraph ${key} must be a finite ${domain} number`);
+  }
+  return value;
+}
+function normalizeHexColor(value, label) {
+  if (typeof value !== "string" || !HEX_COLOR.test(value)) {
+    throw new TypeError(`${label} must be an exact #rrggbb hex color`);
+  }
+  return value.toLowerCase();
+}
+function colorOverrides(value, label, allowedKeys) {
+  if (value === void 0) return {};
+  const record = ownDataRecord(value, label, allowedKeys);
+  const result = {};
+  for (const [key, color] of Object.entries(record)) {
+    result[key] = normalizeHexColor(color, `${label}.${key}`);
+  }
+  return result;
+}
+function corpusGraphInstanceIdentity(context) {
+  const field = (value) => `${value.length}:${value}`;
+  return `cortexel-corpus-graph-instance.v1:${field(context.graph_id)}${field(
+    context.graph_source
+  )}${field(context.graph_snapshot_id)}${field(context.graph_scope)}${field(
+    context.generated_at
+  )}`;
+}
 function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
   assertKnowledgeGraphBudget(params.nodes.length, params.edges.length);
-  const baseRadius = Number.isFinite(opts.baseRadius) && opts.baseRadius > 0 ? opts.baseRadius : 4;
-  const degreeScale = Number.isFinite(opts.degreeScale) && opts.degreeScale >= 0 ? opts.degreeScale : 1.4;
-  const maxRadiusBump = Number.isFinite(opts.maxRadiusBump) && opts.maxRadiusBump >= 0 ? opts.maxRadiusBump : 8;
-  const nodeColors = { ...defaultNodeColors(palette), ...opts.nodeColors };
-  const edgeStyles = { ...defaultEdgeStyles(palette), ...opts.edgeStyles };
-  const ids = new Set(params.nodes.map((n) => n.id));
-  const validEdges = filterGraphEdges(ids, params.edges);
+  assertUniqueGraphNodeIds(params.nodes);
+  assertRenderableGraphEdges(params.nodes, params.edges);
+  const optionValues = ownDataRecord(
+    opts,
+    "mapCorpusKnowledgeGraph options",
+    MAP_CORPUS_GRAPH_OPTION_KEYS
+  );
+  const baseRadius = finiteRadiusOption(
+    optionValues,
+    "baseRadius",
+    DEFAULT_CORPUS_GRAPH_BASE_RADIUS,
+    true
+  );
+  const degreeScale = finiteRadiusOption(
+    optionValues,
+    "degreeScale",
+    DEFAULT_CORPUS_GRAPH_DEGREE_SCALE,
+    false
+  );
+  const maxRadiusBump = finiteRadiusOption(
+    optionValues,
+    "maxRadiusBump",
+    DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP,
+    false
+  );
+  if (baseRadius + maxRadiusBump > MAX_GRAPH_NODE_RADIUS) {
+    throw new RangeError(
+      `mapCorpusKnowledgeGraph baseRadius + maxRadiusBump must be <= ${MAX_GRAPH_NODE_RADIUS}`
+    );
+  }
+  const nodeColorOverrides = colorOverrides(
+    optionValues.nodeColors,
+    "mapCorpusKnowledgeGraph nodeColors",
+    KNOWLEDGE_GRAPH_NODE_KINDS
+  );
+  const edgeColorOverrides = colorOverrides(
+    optionValues.edgeColors,
+    "mapCorpusKnowledgeGraph edgeColors",
+    KNOWLEDGE_GRAPH_EDGE_KINDS
+  );
+  const nodeColors = {
+    ...Object.fromEntries(
+      Object.entries(defaultNodeColors(palette)).map(([kind, color]) => [
+        kind,
+        normalizeHexColor(color, `palette node color ${kind}`)
+      ])
+    ),
+    ...nodeColorOverrides
+  };
+  const edgeStyles = defaultEdgeStyles(palette);
+  for (const [kind, style] of Object.entries(edgeStyles)) {
+    style.color = normalizeHexColor(style.color, `palette edge color ${kind}`);
+  }
+  const radiusMeaning = corpusGraphRadiusMeaning(
+    baseRadius,
+    degreeScale,
+    maxRadiusBump
+  );
+  const renderableEdges = params.edges;
   const degree = /* @__PURE__ */ new Map();
-  for (const e of validEdges) {
+  for (const e of renderableEdges) {
     degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
     degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
   }
@@ -391,11 +544,11 @@ function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
       ...n.uncalibrated_score === void 0 ? {} : { uncalibrated_score: n.uncalibrated_score },
       color: nodeColors[n.kind] ?? palette.inkDim,
       radius,
-      radiusMeaning: CORPUS_GRAPH_RADIUS_MEANING,
+      radiusMeaning,
       kind: n.kind
     };
   });
-  const edges = validEdges.map((e) => {
+  const edges = renderableEdges.map((e) => {
     const style = edgeStyles[e.kind] ?? {
       color: palette.inkFaint,
       directed: true,
@@ -411,12 +564,13 @@ function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
       ...e.uncalibrated_score === void 0 ? {} : { uncalibrated_score: e.uncalibrated_score },
       source: e.source,
       target: e.target,
-      color: style.color,
+      color: edgeColorOverrides[e.kind] ?? style.color,
       directed: style.directed,
       kind: e.kind,
       particles: style.particles
     };
   });
+  assertRenderableGraphEdges(nodes, edges);
   return {
     context: {
       graph_id: params.graph_id,
@@ -425,6 +579,13 @@ function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
       graph_scope: params.graph_scope,
       generated_at: params.generated_at
     },
+    graphIdentity: corpusGraphInstanceIdentity({
+      graph_id: params.graph_id,
+      graph_source: params.graph_source,
+      graph_snapshot_id: params.graph_snapshot_id,
+      graph_scope: params.graph_scope,
+      generated_at: params.generated_at
+    }),
     nodes,
     edges
   };
@@ -592,7 +753,15 @@ function relationshipText(nodeId, edge, byId) {
   const metadata = metadataSummary(edge);
   return `${label}${assertion}: ${direction} ${safeDiagnosticText(other.label, 240)} (node id ${safeDiagnosticText(other.id, 120)})` + (metadata ? `. ${metadata}` : "");
 }
-function KnowledgeGraphA11yList({
+function KnowledgeGraphA11yList(props) {
+  const { graphIdentity, nodes, edges } = props;
+  assertKnowledgeGraphIdentity(graphIdentity);
+  assertKnowledgeGraphBudget(nodes.length, edges.length);
+  assertUniqueGraphNodeIds(nodes);
+  assertRenderableGraphEdges(nodes, edges);
+  return /* @__PURE__ */ jsx(KnowledgeGraphA11yListInstance, { ...props }, graphIdentity);
+}
+function KnowledgeGraphA11yListInstance({
   nodes,
   edges,
   selectedId,
@@ -602,9 +771,6 @@ function KnowledgeGraphA11yList({
   label = "Knowledge graph nodes",
   nodePageSize = DEFAULT_A11Y_NODE_PAGE_SIZE
 }) {
-  assertKnowledgeGraphBudget(nodes.length, edges.length);
-  assertUniqueGraphNodeIds(nodes);
-  assertRenderableGraphEdges(nodes, edges);
   const instanceId = useId().replace(/:/g, "");
   const safePageSize = Number.isSafeInteger(nodePageSize) ? Math.min(MAX_A11Y_NODE_PAGE_SIZE, Math.max(1, nodePageSize)) : DEFAULT_A11Y_NODE_PAGE_SIZE;
   const { rows, validEdges, byId } = useMemo(() => {
@@ -973,7 +1139,16 @@ function setEdgeCurve(source, target, lane) {
   _b.set(target.x ?? 0, target.y ?? 0, target.z ?? 0);
   graphEdgeControlPointInto(_a, _b, lane, _curveControl);
 }
-function KnowledgeGraph3DScene({
+function KnowledgeGraph3DScene(props) {
+  const { graphIdentity, nodes, edges } = props;
+  assertKnowledgeGraphIdentity(graphIdentity);
+  assertKnowledgeGraphBudget(nodes.length, edges.length);
+  assertUniqueGraphNodeIds(nodes);
+  assertRenderableGraphEdges(nodes, edges);
+  return /* @__PURE__ */ jsx2(KnowledgeGraph3DSceneInstance, { ...props }, graphIdentity);
+}
+function KnowledgeGraph3DSceneInstance({
+  graphIdentity,
   nodes,
   edges,
   selectedId,
@@ -988,9 +1163,6 @@ function KnowledgeGraph3DScene({
   particleColor = "#8fd3ff",
   reducedMotion = false
 }) {
-  assertKnowledgeGraphBudget(nodes.length, edges.length);
-  assertUniqueGraphNodeIds(nodes);
-  assertRenderableGraphEdges(nodes, edges);
   const meshRef = useRef(null);
   const linesRef = useRef(null);
   const particlesRef = useRef(null);
@@ -1174,7 +1346,7 @@ function KnowledgeGraph3DScene({
   useEffect2(() => {
     flyToIdRef.current = flyToSelection && selectedId && index.has(selectedId) ? selectedId : null;
     if (flyToIdRef.current) invalidate();
-  }, [selectedId, index, flyToSelection, invalidate]);
+  }, [graphIdentity, selectedId, index, flyToSelection, invalidate]);
   useFrame((_, delta) => {
     const sim = simRef.current;
     const mesh = meshRef.current;
@@ -1347,7 +1519,7 @@ function KnowledgeGraph3DScene({
       } else if (controls) {
         const n = simNodes[fi];
         _a.set(n.x ?? 0, n.y ?? 0, n.z ?? 0);
-        controls.target.lerp(_a, reducedMotion ? 1 : Math.min(1, delta * 3));
+        controls.target.lerp(_a, graphCameraTargetDamping(delta, reducedMotion));
         controls.update();
         if (controls.target.distanceTo(_a) < 0.5) flyToIdRef.current = null;
       } else {
@@ -1475,14 +1647,18 @@ export {
   advanceGraphLayoutClock,
   advanceGraphLayoutClockInto,
   assertKnowledgeGraphBudget,
+  assertKnowledgeGraphIdentity,
   assertRenderableGraphEdges,
   assertUniqueGraphNodeIds,
   assignGraphEdgeLanes,
   buildAdjacency,
+  corpusGraphInstanceIdentity,
+  corpusGraphRadiusMeaning,
   defaultEdgeStyles,
   defaultNodeColors,
   filterGraphEdges,
   flowParticleCount,
+  graphCameraTargetDamping,
   graphEdgeControlPointInto,
   graphEdgeCurvePointInto,
   graphEdgeMatchesQuery,

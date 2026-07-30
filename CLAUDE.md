@@ -54,7 +54,8 @@ The legacy entrypoints ascend in dependency weight: `cortexel/core` (zod only) �
 (+ react/react-dom/three/r3f) → `cortexel/react/knowledge-graph` (+ d3-force-3d).
 The root `cortexel` re-exports **only** `core`, so a server import never pulls in
 React or Three. Additive FigureRequestV1 capabilities live at `cortexel/figure`,
-`cortexel/render-svg`, and `cortexel/adapters/nest`; none loads React/Three/R3F/D3.
+`cortexel/authoring`, `cortexel/render-svg`, and `cortexel/adapters/nest`; none loads
+React/Three/R3F/D3.
 Normative JSON is exported under `cortexel/contract/*`, and the `cortexel` bin is
 offline. Do not replace or silently redirect a legacy path during the migration.
 
@@ -67,8 +68,10 @@ These are the things a change most easily breaks. Treat them as hard constraints
 Git-dependency consumers install without a build step, so `dist/` is checked in and
 **CI fails if it drifts from source** (`git diff --exit-code -- dist`). After any
 change under `core/`, `react/`, `src/`, `index.ts`, `scripts/`, or `tsup.config.ts`, run
-`bun run build` and stage the regenerated `dist/`. The build is deterministic —
-building twice yields byte-identical output.
+`bun run build` and stage the regenerated `dist/`. Contract generation is checked in
+two independent zero-state trees for byte-identical output. Do not generalize that
+evidence to the complete compiled package: clean-tree, toolchain-pinned tarball
+reproducibility remains a separate release gate until it has a retained receipt.
 
 ### 2. Honesty fails closed — and it is a security property
 

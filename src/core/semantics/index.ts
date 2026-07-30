@@ -12,7 +12,10 @@
  */
 
 import { SEMANTIC_VALIDATOR_IDS } from '../../generated/registry.js';
-import { SKILL_CATALOG } from '../../generated/catalog.js';
+import {
+  SKILL_CATALOG,
+  type StableSkillId,
+} from '../../generated/catalog.js';
 import { finalizeErrors, type CortexelError } from '../errors.js';
 
 import type { SemanticContext, SemanticValidator } from './types.js';
@@ -146,10 +149,9 @@ assertValidatorsImplemented();
 /** Run every semantic validator this skill's contract declares. */
 export function runSemanticValidators(
   request: Record<string, unknown>,
-  skillId: string,
+  skillId: StableSkillId,
 ): CortexelError[] {
   const catalog = SKILL_CATALOG[skillId];
-  if (!catalog) return [];
 
   const errors: CortexelError[] = [];
 

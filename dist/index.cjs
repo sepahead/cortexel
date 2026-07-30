@@ -4345,6 +4345,7 @@ var safeCount = import_zod4.z.number().int().nonnegative().max(Number.MAX_SAFE_I
 var unitInterval = import_zod4.z.number().min(0).max(1).refine((value) => !Object.is(value, -0), "scores must not be negative zero");
 var boundedSourceText = (max) => import_zod4.z.string().trim().min(1).max(max);
 var nullableAttributeText = import_zod4.z.string().max(200).nullable().optional();
+var EngramEvidenceSchema = import_zod4.z.array(JsonParamsSchema).min(1).max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement);
 var EngramNodeSchema = import_zod4.z.object({
   id: boundedSourceText(120),
   kind: import_zod4.z.enum(CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS),
@@ -4356,14 +4357,20 @@ var EngramNodeSchema = import_zod4.z.object({
   paper_count: safeCount,
   n_neurons: safeCount,
   n_synapses: safeCount,
-  pagerank: unitInterval.nullable().optional()
+  pagerank: unitInterval.nullable().optional(),
+  evidence: EngramEvidenceSchema
 }).strict();
 var EngramEdgeSchema = import_zod4.z.object({
   id: boundedSourceText(320).optional(),
   source: boundedSourceText(120),
   target: boundedSourceText(120),
   kind: import_zod4.z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
-  confidence: unitInterval.nullable().optional()
+  uncalibrated_score: import_zod4.z.object({
+    kind: import_zod4.z.enum(["citation_resolution_confidence", "structural_similarity"]),
+    value: unitInterval,
+    calibrated_posterior: import_zod4.z.literal(false)
+  }).strict().nullable().optional(),
+  evidence: EngramEvidenceSchema
 }).strict();
 var EngramGraphSchema = import_zod4.z.object({
   nodes: import_zod4.z.array(EngramNodeSchema).max(PARAM_LIMITS.maxGraphNodes),
@@ -4430,29 +4437,8 @@ function nodeDetail(node) {
 }
 function legacyEdgeId(edge) {
   const field = (value) => `${value.length}:${value}`;
-  return `edge:${field(edge.source)}${field(edge.kind)}${field(edge.target)}`;
-}
-function edgeScore(edge) {
-  if (edge.confidence === void 0 || edge.confidence === null) return void 0;
-  if (edge.kind === "cites") {
-    return {
-      kind: "citation_resolution_confidence",
-      value: edge.confidence,
-      calibrated_posterior: false
-    };
-  }
-  if (edge.kind === "same_as" || edge.kind === "variant_of") {
-    return {
-      kind: "structural_similarity",
-      value: edge.confidence,
-      calibrated_posterior: false
-    };
-  }
-  return {
-    kind: "unsupported_membership_confidence",
-    value: edge.confidence,
-    calibrated_posterior: false
-  };
+  const [source, target] = edge.kind === "same_as" && edge.target < edge.source ? [edge.target, edge.source] : [edge.source, edge.target];
+  return `edge:${field(source)}${field(edge.kind)}${field(target)}`;
 }
 function summaryErrors(graph) {
   const nodeCounts = /* @__PURE__ */ new Map([
@@ -4555,16 +4541,12 @@ function adaptEngramCorpusEntityGraph(graph, options) {
             pagerank: node.pagerank ?? null
           },
           epistemic: { ...DERIVED_ADVISORY },
-          evidence: [{
-            kind: "graph_snapshot_record",
-            evidence_id: `snapshot-node:${node.id}`,
-            record_id: `node:${node.id}`
-          }]
+          evidence: node.evidence
         };
       }),
       edges: graphValue.edges.map((edge) => {
         const id2 = edge.id ?? legacyEdgeId(edge);
-        const score = edgeScore(edge);
+        const score = edge.uncalibrated_score;
         return {
           id: id2,
           source: edge.source,
@@ -4573,11 +4555,7 @@ function adaptEngramCorpusEntityGraph(graph, options) {
           label: EDGE_LABELS[edge.kind],
           attributes: {},
           epistemic: { ...DERIVED_ADVISORY },
-          evidence: [{
-            kind: "graph_snapshot_record",
-            evidence_id: `snapshot-edge:${id2}`,
-            record_id: id2
-          }],
+          evidence: edge.evidence,
           ...score ? { uncalibrated_score: score } : {}
         };
       })
@@ -6320,7 +6298,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.model_graph", "d3"],
     examples: [{
       nestExample: "SynapseCollection connection inspection",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/synapses/synapse_specification.html#inspecting-connections",
       dataShape: "explicit node universe plus one preserved graph edge per selected SynapseCollection entry",
       output: "Schematic directed topology graph with disclosed completeness and snapshot scope",
       note: "Circle placement is schematic; complete and deterministic samples are never conflated."
@@ -6400,7 +6378,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [{
       nestExample: "Explicit adjacency representation",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html#explicit-connections",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/synapses/connectivity_concepts.html#explicit-connections",
       dataShape: "ordered source/target axes plus sparse positive connection-count cells",
       output: "Binary adjacency heatmap with target rows and source columns",
       note: "Absent cells mean no connection; multapses remain visible through connection_count."
@@ -6490,7 +6468,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [{
       nestExample: "Plot weight matrices example",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/auto_examples/plot_weight_matrices.html",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/auto_examples/plot_weight_matrices.html",
       dataShape: "ordered node axes plus sparse measured-weight cells and multapse counts",
       output: "Unit-labelled weight heatmap",
       note: "A present zero/cancelled cell remains distinct from an absent connection."
@@ -6580,7 +6558,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [{
       nestExample: "SynapseCollection delay inspection",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/synapses/synapse_specification.html#inspecting-connections",
       dataShape: "ordered node axes plus sparse positive delay cells and multapse counts",
       output: "Millisecond delay heatmap",
       note: "Parallel-delay aggregation is always explicit."
@@ -6679,7 +6657,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [{
       nestExample: "Directed connectivity degree concepts",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/synapses/connectivity_concepts.html",
       dataShape: "contiguous degree bins, exact node counts, and explicit zero-degree inclusion",
       output: "In-degree count or probability distribution",
       note: "Each SynapseCollection entry counts, including multapses; target-rank-local snapshots are rejected without exact target-ownership authority."
@@ -6772,7 +6750,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [{
       nestExample: "Directed connectivity degree concepts",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/synapses/connectivity_concepts.html",
       dataShape: "contiguous degree bins, exact node counts, and explicit zero-degree inclusion",
       output: "Out-degree count or probability distribution",
       note: "Target-rank-local GetConnections evidence is rejected for out-degree."
@@ -6883,7 +6861,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.trace_figure", "matplotlib", "d3"],
     examples: [{
       nestExample: "SynapseCollection delay inspection",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/synapses/synapse_specification.html#inspecting-connections",
       dataShape: "one positive millisecond delay per selected connection in checked uniform bins",
       output: "Delay count, probability, or probability-density histogram",
       note: "Out-of-window delays are transform errors, never silently discarded."
@@ -7165,7 +7143,7 @@ var NEST_SKILL_REGISTRY = {
     rendererRoutes: ["media.model_graph", "d3"],
     examples: [{
       nestExample: "Spatial layer and GetPosition",
-      sourceUrl: "https://nest-simulator.readthedocs.io/en/stable/ref_material/pynest_api/nest.lib.hl_api_spatial.html#nest.lib.hl_api_spatial.GetPosition",
+      sourceUrl: "https://nest-simulator.readthedocs.io/en/v3.10/ref_material/pynest_api/nest.lib.hl_api_spatial.html#nest.lib.hl_api_spatial.GetPosition",
       dataShape: "identified x/y coordinates plus layer extent, center, edge-wrap, units, and completeness scope",
       output: "Equal-aspect measured spatial node map",
       note: "Masks and probability kernels are separate analyses and are not invented from GetPosition."

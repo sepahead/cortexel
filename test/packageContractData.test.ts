@@ -126,6 +126,77 @@ describe('packaged normative contract', () => {
     }
   }, 30_000);
 
+  it('fails the v2 catalog digest for every stable discovery-and-authoring axis', () => {
+    const expectCatalogDigestFailure = (
+      relative: string,
+      mutate: (value: any) => void,
+    ): void => {
+      withContractCopy((temporary) => {
+        const target = path.join(temporary, ...relative.split('/'));
+        const value = JSON.parse(readFileSync(target, 'utf8'));
+        mutate(value);
+        writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+        expect(contractPackageProblems(temporary), relative).toContain(
+          'manifest.catalogDigest does not match the shipped public stable catalog',
+        );
+      });
+    };
+
+    expectCatalogDigestFailure(
+      'skills/neuro.response_curve.v1.json',
+      (value) => {
+        value.adapters[0].notes += ' changed';
+      },
+    );
+    expectCatalogDigestFailure(
+      'skills/neuro.response_curve.v1.json',
+      (value) => {
+        value.knownLimitations[0] += ' changed';
+      },
+    );
+    expectCatalogDigestFailure(
+      'skills/neuro.response_curve.v1.json',
+      (value) => {
+        const index = value.examples.authoring.baseValidExampleIndex;
+        value.examples.valid[index].parameters.curveLabel += ' changed';
+      },
+    );
+    expectCatalogDigestFailure(
+      'schemas/skills/neuro.response_curve.request.v1.schema.json',
+      (value) => {
+        value.description += ' changed';
+      },
+    );
+    expectCatalogDigestFailure(
+      'registries/capabilities.v1.json',
+      (value) => {
+        const capability = value.capabilities.find(
+          (candidate: any) => candidate.id === 'neuro.response_curve',
+        );
+        capability.availability = 'source_only';
+      },
+    );
+  }, 30_000);
+
+  it('does not transfer an experimental-only mutation into the stable catalog digest', () => {
+    withContractCopy((temporary) => {
+      const target = path.join(temporary, 'registries', 'capabilities.v1.json');
+      const value = JSON.parse(readFileSync(target, 'utf8'));
+      const experimental = value.capabilities.find(
+        (candidate: any) => candidate.id === 'cortexel/react/knowledge-graph',
+      );
+      experimental.limitations[0] += ' experimental-only change';
+      writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+      const problems = contractPackageProblems(temporary);
+      expect(problems).toContain(
+        'manifest.contractDigest does not match the shipped normative bytes',
+      );
+      expect(problems).not.toContain(
+        'manifest.catalogDigest does not match the shipped public stable catalog',
+      );
+    });
+  });
+
   it('fails closed on a malformed or indirect manifest without throwing', () => {
     withContractCopy((temporary) => {
       writeFileSync(path.join(temporary, 'manifest.v1.json'), 'null\n');

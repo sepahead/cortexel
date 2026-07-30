@@ -1253,7 +1253,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.model_graph', 'd3'],
     examples: [{
       nestExample: 'SynapseCollection connection inspection',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/synapses/synapse_specification.html#inspecting-connections',
       dataShape: 'explicit node universe plus one preserved graph edge per selected SynapseCollection entry',
       output: 'Schematic directed topology graph with disclosed completeness and snapshot scope',
       note: 'Circle placement is schematic; complete and deterministic samples are never conflated.',
@@ -1319,7 +1319,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [{
       nestExample: 'Explicit adjacency representation',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html#explicit-connections',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/synapses/connectivity_concepts.html#explicit-connections',
       dataShape: 'ordered source/target axes plus sparse positive connection-count cells',
       output: 'Binary adjacency heatmap with target rows and source columns',
       note: 'Absent cells mean no connection; multapses remain visible through connection_count.',
@@ -1390,7 +1390,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [{
       nestExample: 'Plot weight matrices example',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/auto_examples/plot_weight_matrices.html',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/auto_examples/plot_weight_matrices.html',
       dataShape: 'ordered node axes plus sparse measured-weight cells and multapse counts',
       output: 'Unit-labelled weight heatmap',
       note: 'A present zero/cancelled cell remains distinct from an absent connection.',
@@ -1461,7 +1461,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [{
       nestExample: 'SynapseCollection delay inspection',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/synapses/synapse_specification.html#inspecting-connections',
       dataShape: 'ordered node axes plus sparse positive delay cells and multapse counts',
       output: 'Millisecond delay heatmap',
       note: 'Parallel-delay aggregation is always explicit.',
@@ -1543,7 +1543,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [{
       nestExample: 'Directed connectivity degree concepts',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/synapses/connectivity_concepts.html',
       dataShape: 'contiguous degree bins, exact node counts, and explicit zero-degree inclusion',
       output: 'In-degree count or probability distribution',
       note: 'Each SynapseCollection entry counts, including multapses; target-rank-local snapshots are rejected without exact target-ownership authority.',
@@ -1619,7 +1619,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [{
       nestExample: 'Directed connectivity degree concepts',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/connectivity_concepts.html',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/synapses/connectivity_concepts.html',
       dataShape: 'contiguous degree bins, exact node counts, and explicit zero-degree inclusion',
       output: 'Out-degree count or probability distribution',
       note: 'Target-rank-local GetConnections evidence is rejected for out-degree.',
@@ -1704,7 +1704,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.trace_figure', 'matplotlib', 'd3'],
     examples: [{
       nestExample: 'SynapseCollection delay inspection',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/synapses/synapse_specification.html#inspecting-connections',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/synapses/synapse_specification.html#inspecting-connections',
       dataShape: 'one positive millisecond delay per selected connection in checked uniform bins',
       output: 'Delay count, probability, or probability-density histogram',
       note: 'Out-of-window delays are transform errors, never silently discarded.',
@@ -1990,7 +1990,7 @@ export const NEST_SKILL_REGISTRY: Record<NestSkillId, SkillContract> = {
     rendererRoutes: ['media.model_graph', 'd3'],
     examples: [{
       nestExample: 'Spatial layer and GetPosition',
-      sourceUrl: 'https://nest-simulator.readthedocs.io/en/stable/ref_material/pynest_api/nest.lib.hl_api_spatial.html#nest.lib.hl_api_spatial.GetPosition',
+      sourceUrl: 'https://nest-simulator.readthedocs.io/en/v3.10/ref_material/pynest_api/nest.lib.hl_api_spatial.html#nest.lib.hl_api_spatial.GetPosition',
       dataShape: 'identified x/y coordinates plus layer extent, center, edge-wrap, units, and completeness scope',
       output: 'Equal-aspect measured spatial node map',
       note: 'Masks and probability kernels are separate analyses and are not invented from GetPosition.',

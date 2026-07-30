@@ -620,29 +620,91 @@
   },
   "adapters": [
     {
-      "system": "nest.spike_recorder",
-      "status": "supported",
-      "notes": "Two selected trains plus their declared sender universes. The adapter must state which senders were pooled into each train; it may never infer a train's universe from the senders that happened to spike."
+      "mappingId": "nest-spike-recorder",
+      "sources": [
+        {
+          "system": "nest.spike_recorder",
+          "role": "primary",
+          "notes": "Two selected trains plus their declared sender universes. The adapter must state which senders were pooled into each train; it may never infer a train's universe from the senders that happened to spike.",
+          "sourceId": "nest-spike-recorder"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, both recorder identities/statuses/backends, exact disjoint sender-pool universes, observation windows, biological export time, rank/world scope, and detached event-buffer digests. Event rows alone cannot authenticate pool identity or completeness.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nest.correlation_detector",
-      "status": "partial",
-      "notes": "Current NEST documentation (https://nest-simulator.readthedocs.io/en/stable/models/correlation_detector.html) defines receptor_port 0 as source 1/reference, receptor_port 1 as source 2/target, lag as target minus reference, and all bins as left-closed/right-open, so the positive outer edge is excluded. The legacy adapter accepts only an explicit `measurement: count_histogram` and `zeroLagPolicy: included`; it emits raw_pair_count and never claims that same-event self-pairs were excluded. The weighted `histogram` is rejected because it is a Kahan sum of products of incoming connection weights and revision 4 has no weight-product quantity/unit or upstream per-event weight authority."
+      "mappingId": "nest-correlation-detector",
+      "sources": [
+        {
+          "system": "nest.correlation_detector",
+          "role": "primary",
+          "notes": "Pinned NEST 3.10 documentation (https://nest-simulator.readthedocs.io/en/v3.10/models/correlation_detector.html) defines receptor_port 0 as source 1/reference, receptor_port 1 as source 2/target, lag as target minus reference, and all bins as left-closed/right-open, so the positive outer edge is excluded. The legacy adapter accepts only an explicit `measurement: count_histogram` and `zeroLagPolicy: included`; it emits raw_pair_count and never claims that same-event self-pairs were excluded. The weighted `histogram` is rejected because it is a Kahan sum of products of incoming connection weights and revision 4 has no weight-product quantity/unit or upstream per-event weight authority.",
+          "sourceId": "nest-correlation-detector"
+        },
+        {
+          "system": "host-retained NEST correlation configuration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, detector status, exact reference/target sender pools and receptor-port connections, simulation resolution/bounds, delta_tau and counting window, biological export time, rank/world scope, and histogram digest. Detector output alone cannot authenticate pool identity or caller-supplied kernel configuration.",
+          "sourceId": "host-nest-correlation-configuration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "neo.SpikeTrain",
-      "status": "supported",
-      "notes": "t_start/t_stop map to the shared window and the unit is taken from the quantity, never guessed. Two SpikeTrains recorded over different intervals must be intersected by the caller first."
+      "mappingId": "neo-spiketrain",
+      "sources": [
+        {
+          "system": "neo.SpikeTrain",
+          "role": "primary",
+          "notes": "t_start/t_stop map to the shared window and the unit is taken from the quantity, never guessed. Two SpikeTrains recorded over different intervals must be intersected by the caller first.",
+          "sourceId": "neo-spiketrain"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nwb.Units.spike_times",
-      "status": "partial",
-      "notes": "The caller must select the unit rows for each train explicitly and declare the recording interval; NWB does not state which units were pooled into an analysis."
+      "mappingId": "nwb-units-spike-times",
+      "sources": [
+        {
+          "system": "nwb.Units.spike_times",
+          "role": "primary",
+          "notes": "The caller must select the unit rows for each train explicitly and declare the recording interval; NWB does not state which units were pooled into an analysis.",
+          "sourceId": "nwb-units-spike-times"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "elephant.cross_correlation_histogram",
-      "status": "rejected",
-      "notes": "There is no adapter that imports an Elephant CCH as authoritative. Elephant output may enter only through an explicit pre-binned auto or cross product, with role containers, lag axis, orientation, self-pair treatment, exact pair counts and any required reference-event denominators declared; otherwise Elephant defaults would silently become Cortexel semantics."
+      "mappingId": "elephant-cross-correlation-histogram",
+      "sources": [
+        {
+          "system": "elephant.cross_correlation_histogram",
+          "role": "primary",
+          "notes": "There is no adapter that imports an Elephant CCH as authoritative. Elephant output may enter only through an explicit pre-binned auto or cross product, with role containers, lag axis, orientation, self-pair treatment, exact pair counts and any required reference-event denominators declared; otherwise Elephant defaults would silently become Cortexel semantics.",
+          "sourceId": "elephant-cross-correlation-histogram"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     }
   ],
   "migration": {
@@ -675,6 +737,7 @@
     "Raw auto and cross inputs are separate products. events_auto has one train in both roles; events_cross has explicit referenceTrain and targetTrain containers with disjoint complete sender universes. Event counts and duration are derived from those role-local arrays and the shared typed window, never supplied twice."
   ],
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": {

@@ -30,7 +30,7 @@ export const OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
   'neuro.population_rate.output_authority.v4',
   'neuro.psth.output_authority.v4',
   'neuro.response_curve.output_authority.v4',
-  'neuro.spike_raster.output_authority.v4',
+  'neuro.spike_raster.output_authority.v5',
 ] as const);
 
 export type OutputAuthorityImplementationIdV1 =

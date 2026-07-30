@@ -1,0 +1,405 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cortexel.dev/schema/audit/nest-example-coverage.skeleton.v0.1.json",
+  "title": "Cortexel provisional NEST official-example coverage ledger skeleton",
+  "type": "object",
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "enum": [
+            "upstream_source_inventory",
+            "visual_output_inventory",
+            "stable_contract_mapping",
+            "packaged_adapter_implementation",
+            "renderer_coverage",
+            "upstream_execution",
+            "scientific_certification"
+          ]
+        },
+        "state": {
+          "enum": ["inventoried", "partial", "unsupported", "not_assessed", "not_run"]
+        },
+        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": ["id", "state", "notes"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "registry": { "const": "cortexel-nest-official-example-coverage" },
+    "version": { "const": "0.1-draft" },
+    "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "upstream": {
+      "type": "object",
+      "properties": {
+        "project": { "const": "NEST Simulator" },
+        "release": { "const": "v3.10" },
+        "repository": { "const": "https://github.com/nest/nest-simulator" },
+        "commit": { "const": "acca9704da248750219a027db99fec6cd1f9052a" },
+        "rootTreeGitSha1": {
+          "const": "7f6f4f0407c4000cded433b86d658191dd82cd79"
+        },
+        "documentationIndexPath": { "const": "doc/htmldoc/examples/index.rst" },
+        "documentationIndexGitBlobSha1": {
+          "const": "2965669bd03f128478fa107779485ad5934b73c5"
+        },
+        "documentationIndexGitMode": { "const": "100644" },
+        "orchestrationCmakePath": { "const": "pynest/examples/CMakeLists.txt" },
+        "orchestrationCmakeGitBlobSha1": {
+          "const": "b1c834a050be5562edb54218d960fcf255ecd8ea"
+        },
+        "orchestrationCmakeGitMode": { "const": "100644" },
+        "orchestrationCmakeRole": {
+          "const": "installs_run_examples_shell_only_not_entrypoint_authority"
+        },
+        "exampleTreePath": { "const": "pynest/examples" },
+        "treeApiUrl": {
+          "const": "https://api.github.com/repos/nest/nest-simulator/git/trees/acca9704da248750219a027db99fec6cd1f9052a?recursive=1"
+        }
+      },
+      "required": [
+        "project",
+        "release",
+        "repository",
+        "commit",
+        "rootTreeGitSha1",
+        "documentationIndexPath",
+        "documentationIndexGitBlobSha1",
+        "documentationIndexGitMode",
+        "orchestrationCmakePath",
+        "orchestrationCmakeGitBlobSha1",
+        "orchestrationCmakeGitMode",
+        "orchestrationCmakeRole",
+        "exampleTreePath",
+        "treeApiUrl"
+      ],
+      "additionalProperties": false
+    },
+    "sourceUniverse": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "const": "recursive_git_tree_entries_ending_dot_py_split_by_git_mode"
+        },
+        "pythonPathEntryCount": { "const": 112 },
+        "regularPythonFileCount": { "const": 109 },
+        "pythonSymlinkCount": { "const": 3 },
+        "regularExecutablePythonFileCount": { "const": 13 },
+        "regularNonExecutablePythonFileCount": { "const": 96 },
+        "repositoryRecursiveTreeApiEntryCount": { "const": 1972 },
+        "repositoryRecursiveTreeApiEntryKinds": { "const": "trees_and_blobs" },
+        "repositoryLeafEntryCount": { "const": 1835 },
+        "repositoryRecursiveTreeApiResponseTruncated": { "const": false },
+        "pythonPathInventoryStatus": { "const": "count_only" },
+        "officialEntrypointInventoryStatus": { "const": "not_inventoried" },
+        "documentationIndexDirectiveOccurrences": {
+          "type": "object",
+          "properties": {
+            "doc": { "const": 94 },
+            "imgTop": { "const": 33 }
+          },
+          "required": ["doc", "imgTop"],
+          "additionalProperties": false
+        },
+        "documentationIndexNormalizationStatus": { "const": "not_inventoried" },
+        "visualAssetPathEntryCount": { "const": 12 },
+        "visualAssetCountsByExtension": {
+          "type": "object",
+          "properties": {
+            "png": { "const": 9 },
+            "gif": { "const": 2 },
+            "svg": { "const": 1 }
+          },
+          "required": ["png", "gif", "svg"],
+          "additionalProperties": false
+        },
+        "visualAssetInventoryStatus": { "const": "count_only" },
+        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": [
+        "rule",
+        "pythonPathEntryCount",
+        "regularPythonFileCount",
+        "pythonSymlinkCount",
+        "regularExecutablePythonFileCount",
+        "regularNonExecutablePythonFileCount",
+        "repositoryRecursiveTreeApiEntryCount",
+        "repositoryRecursiveTreeApiEntryKinds",
+        "repositoryLeafEntryCount",
+        "repositoryRecursiveTreeApiResponseTruncated",
+        "pythonPathInventoryStatus",
+        "officialEntrypointInventoryStatus",
+        "documentationIndexDirectiveOccurrences",
+        "documentationIndexNormalizationStatus",
+        "visualAssetPathEntryCount",
+        "visualAssetCountsByExtension",
+        "visualAssetInventoryStatus",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "stateDefinitions": {
+      "type": "object",
+      "properties": {
+        "inventoried": {
+          "const": "The named layer has a complete machine-readable inventory for the ledger's declared scope. It does not inherit evidence from later layers."
+        },
+        "partial": {
+          "const": "Some capability exists, but the declared scope is not closed and must not be read as complete coverage."
+        },
+        "unsupported": {
+          "const": "The current stable-contract package has no executable capability for the named interface."
+        },
+        "not_assessed": {
+          "const": "No bounded review has classified the declared scope against this layer."
+        },
+        "not_run": {
+          "const": "No execution receipt exists for this pinned upstream identity."
+        }
+      },
+      "required": ["inventoried", "partial", "unsupported", "not_assessed", "not_run"],
+      "additionalProperties": false
+    },
+    "layers": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/layer" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "upstream_source_inventory" },
+                "state": { "const": "partial" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/layer" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "visual_output_inventory" },
+                "state": { "const": "not_assessed" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/layer" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "stable_contract_mapping" },
+                "state": { "const": "not_assessed" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/layer" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "packaged_adapter_implementation" },
+                "state": { "const": "partial" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/layer" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "renderer_coverage" },
+                "state": { "const": "not_assessed" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/layer" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "upstream_execution" },
+                "state": { "const": "not_run" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/layer" },
+            {
+              "type": "object",
+              "properties": {
+                "id": { "const": "scientific_certification" },
+                "state": { "const": "not_run" }
+              }
+            }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "knownUnsupportedInterfaces": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "state": { "const": "unsupported" },
+          "notes": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        },
+        "required": ["id", "state", "notes"],
+        "additionalProperties": false
+      }
+    },
+    "reservedAssessmentModel": {
+      "description": "Vocabulary reserved for the future reviewed ledger schema. It is not an accepted assessment format in this provisional skeleton.",
+      "type": "object",
+      "properties": {
+        "status": { "const": "not_defined" },
+        "sourceRoles": {
+          "const": [
+            "official_entrypoint",
+            "support_module",
+            "orchestration_alias",
+            "nonvisual_source",
+            "unknown"
+          ]
+        },
+        "visualOutputKinds": {
+          "const": [
+            "static_figure",
+            "multi_panel_figure",
+            "overlay",
+            "table",
+            "animation",
+            "interactive",
+            "other"
+          ]
+        },
+        "compositionKinds": {
+          "const": [
+            "standalone",
+            "panel",
+            "overlay_layer",
+            "table_only",
+            "animation_sequence",
+            "interactive_surface",
+            "other"
+          ]
+        },
+        "requiredSourceFields": {
+          "const": [
+            "sourcePath",
+            "gitMode",
+            "gitBlobSha1",
+            "sourceRole",
+            "officialEntrypointIds",
+            "visualOutputs"
+          ]
+        },
+        "requiredVisualOutputFields": {
+          "const": [
+            "outputId",
+            "callsiteOrOrdinal",
+            "outputKind",
+            "compositionKind",
+            "mappingStatus",
+            "implementationAvailability",
+            "rendererCoverage",
+            "upstreamExecution",
+            "scientificCertification"
+          ]
+        },
+        "rules": {
+          "const": [
+            "Every inventoried path has exactly one explicit sourceRole.",
+            "An official entrypoint enumerates every visual output, panel, overlay, table, animation, and interactive surface it can emit under the bounded reviewed invocation.",
+            "Every visual output has a stable identity within its pinned source path; one status tuple per file is forbidden.",
+            "A support module or orchestration alias is not an independent official visualization entrypoint.",
+            "Source paths, harness candidate entrypoints, harness-executed entrypoints, documented examples, assets, and per-invocation visual outputs are distinct universes and distinct denominators.",
+            "A no-output classification is explicit and is valid only after the source path and all official entrypoints that import or invoke it are reviewed.",
+            "Upstream execution is independent of Cortexel mapping, adapter, and renderer availability.",
+            "Scientific certification requires inventoried visual semantics, mapping, executable adapter, renderer, upstream execution, and a pinned comparison receipt for that exact output.",
+            "A future complete claim quantifies over every pinned official entrypoint and every inventoried visual output, not over a Python-path count."
+          ]
+        },
+        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": [
+        "status",
+        "sourceRoles",
+        "visualOutputKinds",
+        "compositionKinds",
+        "requiredSourceFields",
+        "requiredVisualOutputFields",
+        "rules",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "assessments": {
+      "description": "No assessment row shape is admitted by this provisional skeleton. A reviewed successor schema must implement the reserved per-output model first.",
+      "const": []
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "classifiedPathCount": { "const": 0 },
+        "classifiedOfficialEntrypointCount": { "const": 0 },
+        "inventoriedVisualOutputCount": { "const": 0 },
+        "mappedVisualOutputCount": { "const": 0 },
+        "executableVisualOutputCount": { "const": 0 },
+        "renderedVisualOutputCount": { "const": 0 },
+        "upstreamExecutedVisualOutputCount": { "const": 0 },
+        "certifiedVisualOutputCount": { "const": 0 },
+        "coverageClaim": { "const": "none" },
+        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      },
+      "required": [
+        "classifiedPathCount",
+        "classifiedOfficialEntrypointCount",
+        "inventoriedVisualOutputCount",
+        "mappedVisualOutputCount",
+        "executableVisualOutputCount",
+        "renderedVisualOutputCount",
+        "upstreamExecutedVisualOutputCount",
+        "certifiedVisualOutputCount",
+        "coverageClaim",
+        "notes"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "registry",
+    "version",
+    "description",
+    "upstream",
+    "sourceUniverse",
+    "stateDefinitions",
+    "layers",
+    "knownUnsupportedInterfaces",
+    "reservedAssessmentModel",
+    "assessments",
+    "summary"
+  ],
+  "additionalProperties": false
+}

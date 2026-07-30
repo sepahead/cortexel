@@ -11,7 +11,11 @@ import {
 } from '../src/core/canonicalize.js';
 import { validateRequestValue } from '../src/core/request.js';
 import { validateStructure } from '../src/core/structural-validator.js';
-import { SKILL_CATALOG, STABLE_SKILL_IDS } from '../src/generated/catalog.js';
+import {
+  SKILL_CATALOG,
+  STABLE_SKILL_IDS,
+  type StableSkillId,
+} from '../src/generated/catalog.js';
 import { buildFigure } from '../src/render/buildFigure.js';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -49,7 +53,7 @@ function makeArtifactValidator() {
 const validateArtifact = makeArtifactValidator();
 
 interface SkillCase {
-  readonly id: string;
+  readonly id: StableSkillId;
   readonly revision: number;
   readonly request: Record<string, unknown>;
 }

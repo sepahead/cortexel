@@ -27,8 +27,13 @@ declare const GRAPH_EDGE_LANE_SPACING = 6;
  * but an unbounded bundle is neither readable nor cheap to route interactively. */
 declare const MAX_GRAPH_PARALLEL_EDGES = 9;
 declare const MAX_GRAPH_EDGE_LANE_OFFSET: number;
-declare const CORPUS_GRAPH_RADIUS_MEANING = "Schematic sqrt(rendered relationship degree) scaling; not quantitative evidence.";
+/** Exact disclosure for the radius mapping actually returned to the scene. */
+declare function corpusGraphRadiusMeaning(baseRadius: number, degreeScale: number, maxRadiusBump: number): string;
+declare const CORPUS_GRAPH_RADIUS_MEANING: string;
 declare function assertKnowledgeGraphBudget(nodeCount: number, edgeCount: number): void;
+/** Validate the caller-declared namespace used to remount stateful graph surfaces.
+ * The value is a cache boundary only; validation does not authenticate it. */
+declare function assertKnowledgeGraphIdentity(graphIdentity: unknown): asserts graphIdentity is string;
 /** Direct React entrypoints share the strict skill contract's identity invariant:
  * duplicate ids make edge endpoints, selection, and accessible controls ambiguous,
  * so they fail closed instead of choosing an arbitrary occurrence. */
@@ -40,6 +45,8 @@ interface GraphEdgeIdentity {
     source: string;
     target: string;
     kind?: string;
+    directed?: boolean;
+    particles?: boolean;
     label?: string;
     attributes?: Readonly<KnowledgeGraphAttributes>;
     epistemic?: Readonly<KnowledgeGraphEpistemic>;
@@ -48,13 +55,17 @@ interface GraphEdgeIdentity {
 }
 /** Direct React entrypoints must not silently discard scientific relationships.
  * Identified edges are distinct assertions and therefore deduplicate by id;
- * legacy id-less edges retain the historical source/target/kind identity. */
+ * legacy id-less edges use source/target/kind plus their effective direction.
+ * Undirected identity is endpoint-order invariant; directed identity is not. */
 declare function assertRenderableGraphEdges(nodes: readonly {
     id: string;
 }[], edges: readonly GraphEdgeIdentity[]): void;
 /** Tiny synchronous refinement used only for reduced motion. Dense maximum
  * graphs get two ticks so mounting does not become a long main-thread task. */
 declare function reducedMotionLayoutTickBudget(nodeCount: number, edgeCount: number): number;
+/** Frame-rate-independent exponential damping for a host-owned camera target.
+ * Invalid or non-positive frame intervals make no movement; reduced motion snaps. */
+declare function graphCameraTargetDamping(deltaSeconds: number, reducedMotion: boolean): number;
 declare function normalizeGraphQuery(query: string): string;
 /** Shared visual/DOM search semantics. Pass a query normalized with
  * `normalizeGraphQuery` so both surfaces reveal and dim the same nodes.
@@ -148,14 +159,15 @@ declare function buildAdjacency(ids: ReadonlySet<string>, edges: readonly {
 /** Particle instance count for `flowEdgeCount` flow edges, capped so a dense
  *  graph never blows the instanced particle buffer. Never negative. */
 declare function flowParticleCount(flowEdgeCount: number, perEdge: number, max: number): number;
-/** Order-sensitive content signature of a graph. Two content-equal nodes/edges
+/** Order-sensitive renderer-state signature of a graph. Two renderer-equivalent
+ *  nodes/edges
  *  arrays produce the SAME string even when their identities differ, so the
  *  scene keys its simulation memo on this instead of array identity — a host
  *  that rebuilds the arrays every render (the common React pattern) never
- *  restarts a settled layout. Node `id`/`radius` and the FULL edge content are
- *  covered, including stable edge ids (they feed the memoized sim/edge snapshots);
- *  node color/label are
- *  deliberately excluded — they restyle live without a layout restart. */
+ *  restarts a settled layout. Node `id`/`radius` and every edge field consumed by
+ *  memoized renderer state are covered, including stable edge ids. Node
+ *  color/label and evidence metadata are deliberately excluded because they
+ *  restyle or describe live without changing that state. */
 declare function graphSignature(nodes: readonly {
     id: string;
     radius?: number;
@@ -179,6 +191,8 @@ interface EdgeStyle {
  *  flow); `same_as` is undirected (symmetric advisory identity). */
 declare function defaultEdgeStyles(palette: ReadonlySemanticPalette): Record<KnowledgeGraphEdgeKind, EdgeStyle>;
 interface MapCorpusGraphOptions {
+    /** All options are trusted host-authored configuration, never raw graph or agent
+     * payload. A Proxy is not an inert data boundary and must not be supplied here. */
     /** Sphere radius for a degree-0 node (world units). Default 4. */
     baseRadius?: number;
     /** Extra radius per unit of sqrt(degree), capped by `maxRadiusBump`. Default 1.4. */
@@ -187,11 +201,13 @@ interface MapCorpusGraphOptions {
     maxRadiusBump?: number;
     /** Override node colors per kind (defaults derive from the palette). */
     nodeColors?: Partial<Record<KnowledgeGraphNodeKind, string>>;
-    /** Override edge styles per kind (defaults derive from the palette). */
-    edgeStyles?: Partial<Record<KnowledgeGraphEdgeKind, EdgeStyle>>;
+    /** Override edge colors only. Direction and flow are contract-owned by kind. */
+    edgeColors?: Partial<Record<KnowledgeGraphEdgeKind, string>>;
 }
 interface MappedCorpusGraph {
     context: KnowledgeGraphContext;
+    /** Caller-declared layout/cache namespace, not a content digest or authentication. */
+    graphIdentity: string;
     nodes: KnowledgeGraph3DNode[];
     edges: KnowledgeGraph3DEdge[];
 }
@@ -202,13 +218,20 @@ interface KnowledgeGraphContext {
     graph_scope: string;
     generated_at: string;
 }
+/** Collision-free encoding of the caller-declared graph context for layout/cache
+ * continuity. Filtering one declared snapshot keeps this value. This is neither
+ * a graph-content digest nor independent authentication of any context field. */
+declare function corpusGraphInstanceIdentity(context: KnowledgeGraphContext): string;
 /**
  * Map validated `corpus.knowledge_graph` params → KnowledgeGraph3DScene props.
- * Node color derives from kind; radius grows gently with degree so a highly-cited
- * paper reads as a hub. Edge color/direction/particles derive from kind (only
- * `cites` flows particles). The strict gate rejects dangling/self-loop edges;
- * this mapper defensively drops them for legacy programmatic callers so its
- * degree/radius calculation still matches the rendered edge set.
+ * Node color derives from kind; radius grows gently with total relationship degree
+ * so a highly connected entity reads as a hub. Edge color/direction/particles derive from kind (only
+ * `cites` flows particles). This public bridge rechecks duplicate nodes and every
+ * edge's renderability. It refuses rather than discarding a dangling, self-loop,
+ * or duplicate scientific assertion, then preserves the complete accepted edge
+ * sequence.
+ * `opts` is trusted host configuration. Validate or materialize any untrusted value
+ * before this call; JavaScript Proxy traps are executable behavior, not plain data.
  * The honesty boundary (same_as/variant_of are advisory, not certified sameness)
  * is enforced upstream at the skill gate, not here.
  */
@@ -217,6 +240,8 @@ declare function mapCorpusKnowledgeGraph(params: KnowledgeGraph3DParams, palette
 declare const DEFAULT_A11Y_NODE_PAGE_SIZE = 100;
 declare const MAX_A11Y_NODE_PAGE_SIZE = 200;
 interface KnowledgeGraphA11yListProps {
+    /** Same caller-declared cache namespace passed to KnowledgeGraph3DScene. */
+    graphIdentity: string;
     nodes: readonly KnowledgeGraph3DNode[];
     edges: readonly KnowledgeGraph3DEdge[];
     selectedId: string | null;
@@ -235,7 +260,7 @@ interface KnowledgeGraphLegendProps {
     className?: string;
     label?: string;
 }
-declare function KnowledgeGraphA11yList({ nodes, edges, selectedId, onSelect, query, className, label, nodePageSize, }: KnowledgeGraphA11yListProps): react.JSX.Element;
+declare function KnowledgeGraphA11yList(props: KnowledgeGraphA11yListProps): react.JSX.Element;
 /** Canvas-external decoding companion for interactive views and DOM-inclusive
  * still captures. Text redundantly carries kind, color, direction, and count. */
 declare function KnowledgeGraphLegend({ nodes, edges, context, className, label, }: KnowledgeGraphLegendProps): react.JSX.Element;
@@ -283,6 +308,9 @@ interface ControlsHandle {
     removeEventListener?(type: 'start', listener: () => void): void;
 }
 interface KnowledgeGraph3DSceneProps {
+    /** Caller-declared graph/snapshot cache namespace. Change it with declared graph
+     * context; keep it stable for filters. It is not a content digest or proof. */
+    graphIdentity: string;
     nodes: readonly KnowledgeGraph3DNode[];
     edges: readonly KnowledgeGraph3DEdge[];
     selectedId: string | null;
@@ -302,10 +330,10 @@ interface KnowledgeGraph3DSceneProps {
     /** Citation-flow particle color (a single visual language for flow). */
     particleColor?: string;
     /** Host-detected `prefers-reduced-motion` (same contract as the Expandable*
-     *  scenes): the layout appears pre-settled instead of swirling into place,
-     *  flow particles hold still, and the fly-to snaps instead of easing. */
+     *  scenes): run a bounded static refinement from the deterministic seed,
+     *  hold flow particles still, and snap fly-to instead of easing. */
     reducedMotion?: boolean;
 }
-declare function KnowledgeGraph3DScene({ nodes, edges, selectedId, query, onSelect, hoverId, onHover, controlsRef, autoFrame, flyToSelection, labelColor, particleColor, reducedMotion, }: KnowledgeGraph3DSceneProps): react.JSX.Element;
+declare function KnowledgeGraph3DScene(props: KnowledgeGraph3DSceneProps): react.JSX.Element;
 
-export { CORPUS_GRAPH_RADIUS_MEANING, type ControlsHandle, DEFAULT_A11Y_NODE_PAGE_SIZE, DEFAULT_GRAPH_NODE_RADIUS, GRAPH_EDGE_CURVE_SEGMENTS, GRAPH_EDGE_LANE_SPACING, GRAPH_LAYOUT_TICK_SECONDS, type GraphEdgeIdentity, type GraphEdgeLane, type GraphLayoutClockResult, type GraphPoint3, type GraphSearchNode, type GraphTopologyLink, type KnowledgeGraph3DEdge, type KnowledgeGraph3DNode, KnowledgeGraph3DScene, type KnowledgeGraph3DSceneProps, KnowledgeGraphA11yList, type KnowledgeGraphA11yListProps, type KnowledgeGraphAttributes, type KnowledgeGraphContext, type KnowledgeGraphEdgeKind, type KnowledgeGraphEpistemic, type KnowledgeGraphEvidenceRef, KnowledgeGraphLegend, type KnowledgeGraphLegendProps, type KnowledgeGraphNodeKind, type KnowledgeGraphUncalibratedScore, MAX_A11Y_NODE_PAGE_SIZE, MAX_GRAPH_EDGE_LANE_OFFSET, MAX_GRAPH_LAYOUT_TICKS_PER_FRAME, MAX_GRAPH_NODE_RADIUS, MAX_GRAPH_PARALLEL_EDGES, MAX_GRAPH_QUERY_LENGTH, MAX_KNOWLEDGE_GRAPH_SCENE_EDGES, MAX_KNOWLEDGE_GRAPH_SCENE_NODES, type MapCorpusGraphOptions, type MappedCorpusGraph, advanceGraphLayoutClock, advanceGraphLayoutClockInto, assertKnowledgeGraphBudget, assertRenderableGraphEdges, assertUniqueGraphNodeIds, assignGraphEdgeLanes, buildAdjacency, defaultEdgeStyles, defaultNodeColors, filterGraphEdges, flowParticleCount, graphEdgeControlPointInto, graphEdgeCurvePointInto, graphEdgeMatchesQuery, graphQueryMatchIds, graphSignature, mapCorpusKnowledgeGraph, matchesGraphQuery, normalizeGraphNodeRadius, normalizeGraphQuery, reducedMotionLayoutTickBudget, uniqueGraphTopologyLinks };
+export { CORPUS_GRAPH_RADIUS_MEANING, type ControlsHandle, DEFAULT_A11Y_NODE_PAGE_SIZE, DEFAULT_GRAPH_NODE_RADIUS, GRAPH_EDGE_CURVE_SEGMENTS, GRAPH_EDGE_LANE_SPACING, GRAPH_LAYOUT_TICK_SECONDS, type GraphEdgeIdentity, type GraphEdgeLane, type GraphLayoutClockResult, type GraphPoint3, type GraphSearchNode, type GraphTopologyLink, type KnowledgeGraph3DEdge, type KnowledgeGraph3DNode, KnowledgeGraph3DScene, type KnowledgeGraph3DSceneProps, KnowledgeGraphA11yList, type KnowledgeGraphA11yListProps, type KnowledgeGraphAttributes, type KnowledgeGraphContext, type KnowledgeGraphEdgeKind, type KnowledgeGraphEpistemic, type KnowledgeGraphEvidenceRef, KnowledgeGraphLegend, type KnowledgeGraphLegendProps, type KnowledgeGraphNodeKind, type KnowledgeGraphUncalibratedScore, MAX_A11Y_NODE_PAGE_SIZE, MAX_GRAPH_EDGE_LANE_OFFSET, MAX_GRAPH_LAYOUT_TICKS_PER_FRAME, MAX_GRAPH_NODE_RADIUS, MAX_GRAPH_PARALLEL_EDGES, MAX_GRAPH_QUERY_LENGTH, MAX_KNOWLEDGE_GRAPH_SCENE_EDGES, MAX_KNOWLEDGE_GRAPH_SCENE_NODES, type MapCorpusGraphOptions, type MappedCorpusGraph, advanceGraphLayoutClock, advanceGraphLayoutClockInto, assertKnowledgeGraphBudget, assertKnowledgeGraphIdentity, assertRenderableGraphEdges, assertUniqueGraphNodeIds, assignGraphEdgeLanes, buildAdjacency, corpusGraphInstanceIdentity, corpusGraphRadiusMeaning, defaultEdgeStyles, defaultNodeColors, filterGraphEdges, flowParticleCount, graphCameraTargetDamping, graphEdgeControlPointInto, graphEdgeCurvePointInto, graphEdgeMatchesQuery, graphQueryMatchIds, graphSignature, mapCorpusKnowledgeGraph, matchesGraphQuery, normalizeGraphNodeRadius, normalizeGraphQuery, reducedMotionLayoutTickBudget, uniqueGraphTopologyLinks };

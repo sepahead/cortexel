@@ -234,29 +234,39 @@ therefore fails closed on Windows; a Windows boundary needs a separately reviewe
 Job Object/process-tree implementation. Release harnesses on macOS or Linux must
 keep the two phases explicit:
 
-The supervisor starts a trusted gated wrapper in a new process group. It publishes
-the group identifier before the wrapper can start reviewed code. On ordinary target
-completion, the still-live wrapper publishes a canonical result over a private pipe
-and then sends `SIGKILL` to its own group while its leader identity still pins the
-PGID. Timeout, output overflow, and handled `TERM`, `INT`, or `HUP` cancellation are
-likewise signaled only while the supervisor still observes that direct leader as
-live. No ordinary wrapper/supervisor path probes or signals the PGID after the
-wrapper leader has been reaped: POSIX exposes no portable closure receipt for a
-now-reusable process-group number. These anchored sweeps cover group members that
-retain the caller's signal authority; `EPERM` means that authority was lost and
-the evidence fails closed.
+The outer synchronous caller starts a supervisor with a fresh closed environment.
+That supervisor creates a detached guardian as the live leader of a new POSIX
+session/process group; the guardian creates a gated non-leader worker, and only the
+worker may start the reviewed target. The outer caller receives a boolean
+`guardianArmed` handshake, never a PID or PGID. Target loader/runtime variables are
+carried as bounded JSON and installed only for the target, so they cannot preload
+the supervisor, guardian, or worker.
 
-If the supervisor fails after publication while the outer caller survives and the
-wrapper may have started reviewed code, the caller attempts one abnormal-only
-terminal sweep and rejects the command. That fallback necessarily addresses a
-numeric PGID and retains a residual reuse race. The boundary does not prevent a
-same-UID process from signaling its parents, deliberately creating another session
-or process group, or changing credentials or a security label so group cleanup no
-longer reaches it.
-Simultaneous uncatchable death of both the outer caller and supervisor can also
-leave the detached group without a sweeper. Use an external OS sandbox/cgroup (or
-equivalent process-lifetime authority) when the release threat model includes
-those capabilities.
+The supervisor is the sole writer of the guardian's control lease. A worker target
+completion or guardian-local worker/protocol failure makes the guardian sweep
+directly. Timeout, output overflow, handled `TERM`/`INT`/`HUP`, or supervisor death
+closes the lease, whose EOF makes the guardian take the same path. The still-live
+guardian first writes one bounded sweep-intent frame and then makes the sole
+explicit production process-group signaling call:
+`process.kill(-process.pid, "SIGKILL")`. Its own unreaped leader identity pins that
+group number at the call. A non-leader worker remains the target's immediate parent,
+so killing the immediate parent does not remove the group anchor.
+
+The supervisor observes the guardian's exit exactly once, performs no signal or
+identity probe after that reap, and separately gives stdout, stderr, and the private
+status pipe a bounded interval to reach EOF. It accepts a result only after one
+canonical intent, guardian termination by `SIGKILL`, complete protocol framing, and
+clean pipe EOF. A retained pipe instead produces a bounded failure. The outer caller
+has no numeric fallback on either success or failure. `EPERM`, `ESRCH`, direct
+guardian death, malformed protocol, or uncertain cleanup therefore fail closed
+without signaling a potentially reused PID/PGID.
+
+This is bounded same-authority group cleanup, not hostile containment. A same-UID
+target can discover or signal the guardian; a target can create another session or
+process group, retain inherited pipes, or change credentials/security labels so the
+guardian's sweep no longer reaches it. Killing the guardian before its self-sweep
+also removes the only in-process cleanup authority. Use an external cgroup, sandbox,
+VM, or equivalent lifetime primitive when those capabilities are in scope.
 
 ```bash
 bun scripts/smoke-package.ts prepare \
@@ -273,6 +283,17 @@ bun scripts/smoke-package.ts execute \
   --expected-state-digest sha256:PREPARE_OUTPUT_STATE_DIGEST \
   --node-executable /absolute/reviewed/node
 ```
+
+`cortexel-package-smoke-phase.v2` is a canonical, status-discriminated transport
+envelope: `prepared`/`passed` is written to stdout on exit 0, while `failed` is
+written to stderr on exit 1 with the closed `PACKAGE_SMOKE_FAILED` shape. It is not
+a durable cleanup or release receipt. In particular, it does not embed the
+internal command-v2 guardian records, a digest of every reviewed command result, or
+the complete harness-source/dependency identity. A release system may retain and
+hash the success envelope as one input, but must also bind the exact Cortexel
+commit/harness bytes, process exit, logs, inspected workspace, and external
+containment evidence required by its threat model. Consumers must branch on
+`status`; they must not parse a failure record as the success shape.
 
 The execute phase never installs or materializes files. It fails if the prepared
 state, package artifact, lock-bound consumer trees, filesystem topology, modes, or

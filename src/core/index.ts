@@ -13,6 +13,7 @@ export {
   ARTIFACT_CONTRACT,
   CONTRACT_DIGEST,
   CATALOG_DIGEST,
+  CATALOG_DIGEST_DOMAIN,
   STABLE_SKILL_COUNT,
   getBuildIdentity,
   type BuildIdentity,
@@ -20,12 +21,15 @@ export {
 
 // The catalog
 export {
+  isStableSkillId,
+  lookupSkillCatalogEntry,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
   EXPERIMENTAL_CAPABILITY_IDS,
   REMOVED_CAPABILITY_IDS,
   LEGACY_SKILL_MAP,
   type SkillCatalogEntry,
+  type AdapterCatalogEntry,
   type StableSkillId,
   type LegacyMapEntry,
 } from '../generated/catalog.js';

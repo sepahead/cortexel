@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.spike_raster.request.v1.schema.json",
   "title": "neuro.spike_raster request",
-  "description": "GENERATED from contract/skills/neuro.spike_raster.v1.json. The acceptance authority for this skill.",
+  "description": "GENERATED from contract/skills/neuro.spike_raster.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -161,6 +161,185 @@
                 },
                 "timeEncoding": {
                   "const": "native_binary64_ms"
+                },
+                "captureAuthority": {
+                  "type": "object",
+                  "description": "Caller-declared authority needed to interpret a retained NEST memory status as a complete raster. Cortexel checks this declaration for internal consistency and binds it into the request; it does not authenticate the runtime, buffer history, recorder mutations, sender wiring, or process scope.",
+                  "properties": {
+                    "kind": {
+                      "const": "caller_declaration",
+                      "description": "This detached JSON is an attributable caller claim, never a live-capture attestation."
+                    },
+                    "profile": {
+                      "const": "cortexel-nest-memory-spike-capture-authority.v1"
+                    },
+                    "runtimeStatus": {
+                      "type": "object",
+                      "properties": {
+                        "nestVersion": {
+                          "const": "3.10.0"
+                        },
+                        "statusReadMethod": {
+                          "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
+                        },
+                        "executionScope": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "const": "single_process"
+                            },
+                            "numProcesses": {
+                              "const": 1
+                            },
+                            "rank": {
+                              "const": 0
+                            },
+                            "localNumThreads": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1000000
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "numProcesses",
+                            "rank",
+                            "localNumThreads"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resolutionMs": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "ticsPerMs": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        "resolutionTics": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        "captureBiologicalTimeTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "captureBoundary": {
+                          "const": "after_successful_simulate_or_run_return"
+                        }
+                      },
+                      "required": [
+                        "nestVersion",
+                        "statusReadMethod",
+                        "executionScope",
+                        "resolutionMs",
+                        "ticsPerMs",
+                        "resolutionTics",
+                        "captureBiologicalTimeTics",
+                        "captureBoundary"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "recordingGrid": {
+                      "type": "object",
+                      "description": "Exact NEST integer-tic preimages of the serialized origin/start/stop millisecond fields. These preserve grid authority that binary64 millisecond values alone cannot establish.",
+                      "properties": {
+                        "originTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "startTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "stopTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        }
+                      },
+                      "required": [
+                        "originTics",
+                        "startTics",
+                        "stopTics"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "bufferEpoch": {
+                      "type": "object",
+                      "description": "The most recent creation or n_events=0 clear of this recorder's memory buffer.",
+                      "properties": {
+                        "beganBy": {
+                          "type": "string",
+                          "enum": [
+                            "recorder_creation",
+                            "n_events_zero"
+                          ]
+                        },
+                        "beganAtBiologicalTimeTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        }
+                      },
+                      "required": [
+                        "beganBy",
+                        "beganAtBiologicalTimeTics"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "recordingPlan": {
+                      "type": "object",
+                      "description": "The most recent mutation of the recorder window/backend/time encoding or sender wiring.",
+                      "properties": {
+                        "lastMutationAtBiologicalTimeTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "scope": {
+                          "const": "window_backend_time_encoding_and_sender_wiring"
+                        },
+                        "senderUniverseBinding": {
+                          "const": "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+                        }
+                      },
+                      "required": [
+                        "lastMutationAtBiologicalTimeTics",
+                        "scope",
+                        "senderUniverseBinding"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "clockEpochContinuity": {
+                      "const": "biological_time_monotonic_since_last_kernel_initialization",
+                      "description": "Caller declaration that biological_time remained monotonic from the most recent process initialization or ResetKernel through capture. SetKernelStatus({biological_time: 0}) can preserve a recorder and its old memory while restarting the clock; NEST 3.10.0 marks that operation incompletely supported, so clearing n_events afterward does not restore this certified profile."
+                    },
+                    "eventCompleteness": {
+                      "const": "complete_for_recorded_senders"
+                    },
+                    "adapterInputDigest": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+                      "description": "Domain-separated digest over the detached plain-data status projection and every normalized adapter option. This is content identity, not source authentication or projection attestation."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "profile",
+                    "runtimeStatus",
+                    "recordingGrid",
+                    "bufferEpoch",
+                    "recordingPlan",
+                    "clockEpochContinuity",
+                    "eventCompleteness",
+                    "adapterInputDigest"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [
@@ -171,7 +350,8 @@
                 "unit",
                 "boundary",
                 "recordingBackend",
-                "timeEncoding"
+                "timeEncoding",
+                "captureAuthority"
               ],
               "additionalProperties": false
             }
@@ -198,7 +378,7 @@
           "enum": [
             "complete_for_recorded_senders"
           ],
-          "description": "An explicit assertion that every event of every declared sender inside the window is present. There is deliberately no `sampled` value: no disclosure rule exists that could mark a sampled raster honestly, and a raster whose ticks are a sample cannot be read — every gap becomes ambiguous between `did not fire` and `was not sampled`. Revision 2 refuses a raster too large to draw exactly; caller-side sampling is not an accepted workaround."
+          "description": "An explicit assertion that every event of every declared sender inside the window is present. There is deliberately no `sampled` value: no disclosure rule exists that could mark a sampled raster honestly, and a raster whose ticks are a sample cannot be read — every gap becomes ambiguous between `did not fire` and `was not sampled`. This revision refuses a raster too large to draw exactly; caller-side sampling is not an accepted workaround."
         }
       },
       "required": [
@@ -308,7 +488,7 @@
           "enum": [
             "refuse"
           ],
-          "description": "Revision 2 fails with RESOURCE_MARKS_EXCEEDED when the event count exceeds the visible-mark budget. No compaction implementation or digest-bound complete-table sidecar is shipped, so an aggregation choice would be a false capability claim."
+          "description": "This revision fails with RESOURCE_MARKS_EXCEEDED when the event count exceeds the visible-mark budget. No compaction implementation or digest-bound complete-table sidecar is shipped, so an aggregation choice would be a false capability claim."
         }
       },
       "required": [

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sepahead.github.io/cortexel/schemas/v1/meta/adapter-conformance-profiles.v1.schema.json",
+  "title": "Cortexel adapter conformance profiles v1",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "../meta/adapter-conformance-profiles.schema.json" },
+    "registry": { "const": "cortexel-adapter-conformance-profiles" },
+    "version": { "const": "1.0" },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "maxLength": 96
+          },
+          "adapter": {
+            "type": "string",
+            "pattern": "^[a-z][A-Za-z0-9./_-]*#[A-Za-z][A-Za-z0-9]*$",
+            "maxLength": 256
+          },
+          "adapterRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "upstream": {
+            "type": "object",
+            "properties": {
+              "system": { "const": "NEST" },
+              "version": { "const": "3.10.0" },
+              "sourceCommit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            },
+            "required": ["system", "version", "sourceCommit"],
+            "additionalProperties": false
+          },
+          "inputDigestDomain": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9.-]+$",
+            "maxLength": 160
+          },
+          "captureAuthorityProfile": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9.-]+$",
+            "maxLength": 160
+          },
+          "admittedStatus": {
+            "type": "object",
+            "properties": {
+              "recordTo": { "const": "memory" },
+              "timeInSteps": { "const": false },
+              "statusReadMethod": {
+                "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
+              },
+              "executionScope": { "const": "single_process" },
+              "eventBoundary": { "const": "(origin+start,origin+stop]" },
+              "captureHorizon": {
+                "const": "origin+stop_after_successful_return"
+              }
+            },
+            "required": [
+              "recordTo",
+              "timeInSteps",
+              "statusReadMethod",
+              "executionScope",
+              "eventBoundary",
+              "captureHorizon"
+            ],
+            "additionalProperties": false
+          },
+          "authorityFields": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/check" }
+          },
+          "positiveCases": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/check" }
+          },
+          "negativeCases": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/check" }
+          },
+          "evidenceBoundary": { "$ref": "#/$defs/trimmedText" }
+        },
+        "required": [
+          "id",
+          "adapter",
+          "adapterRevision",
+          "upstream",
+          "inputDigestDomain",
+          "captureAuthorityProfile",
+          "admittedStatus",
+          "authorityFields",
+          "positiveCases",
+          "negativeCases",
+          "evidenceBoundary"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["$schema", "registry", "version", "profiles"],
+  "additionalProperties": false,
+  "$defs": {
+    "check": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+    },
+    "trimmedText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+    }
+  }
+}

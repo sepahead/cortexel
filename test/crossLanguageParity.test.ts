@@ -789,6 +789,7 @@ describe('cross-language parity — TypeScript vs Python', () => {
         'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
         'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
         'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
+        'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
       ],
       [
         'SCIENCE_EVENT_OUT_OF_WINDOW',
@@ -796,6 +797,233 @@ describe('cross-language parity — TypeScript vs Python', () => {
       ],
     ]);
     expect(pythonErrorCodes(cases)).toEqual(ts);
+  }, PARITY_PROOF_TIMEOUT_MS);
+
+  it('agrees on the complete NEST capture-authority tic and history diagnostic matrix', () => {
+    if (!pythonAvailable) return;
+
+    const contract = contracts.find(({ id }) => id === 'neuro.spike_raster');
+    if (!contract) throw new Error('neuro.spike_raster contract not found');
+
+    const fresh = (): Record<string, any> =>
+      structuredClone(contract.examples.valid[0]) as Record<string, any>;
+    const science = (instancePath: string): PortableDiagnosticRecord => ({
+      code: 'SCIENCE_WINDOW_INVALID',
+      stage: 'science',
+      instancePath,
+    });
+    const structural = (
+      code: string,
+      instancePath: string,
+    ): PortableDiagnosticRecord => ({
+      code,
+      stage: 'structural',
+      instancePath,
+    });
+
+    const exactThirdTicClock = fresh();
+    Object.assign(exactThirdTicClock.data.window.captureAuthority.runtimeStatus, {
+      resolutionMs: 1 / 3,
+      ticsPerMs: '3',
+      resolutionTics: '1',
+      captureBiologicalTimeTics: '30',
+    });
+    Object.assign(exactThirdTicClock.data.window.captureAuthority.recordingGrid, {
+      originTics: '0',
+      startTics: '0',
+      stopTics: '30',
+    });
+
+    const adjacentThirdProjection = structuredClone(exactThirdTicClock);
+    adjacentThirdProjection.data.window.captureAuthority.runtimeStatus.resolutionMs =
+      0.33333333333333337;
+
+    const mismatchedTicsPerMs = fresh();
+    mismatchedTicsPerMs.data.window.captureAuthority.runtimeStatus.ticsPerMs = '2000';
+
+    const mismatchedStopProjection = fresh();
+    mismatchedStopProjection.data.window.captureAuthority.recordingGrid.stopTics = '9875';
+
+    // The extra tic is far below one binary64 ulp at 10 ms, so its exact rational
+    // projection still rounds to 10. Grid membership must therefore be checked as
+    // an independent integer relation rather than inferred from projection equality.
+    const offGridButSameProjection = fresh();
+    Object.assign(offGridButSameProjection.data.window.captureAuthority.runtimeStatus, {
+      resolutionMs: 1e-16,
+      ticsPerMs: '100000000000000000',
+      resolutionTics: '10',
+      captureBiologicalTimeTics: '1000000000000000010',
+    });
+    Object.assign(offGridButSameProjection.data.window.captureAuthority.recordingGrid, {
+      originTics: '0',
+      startTics: '0',
+      stopTics: '1000000000000000001',
+    });
+
+    const beforeClosedStop = fresh();
+    beforeClosedStop.data.window.captureAuthority.runtimeStatus
+      .captureBiologicalTimeTics = '9875';
+
+    const resetAtWindowStart = fresh();
+    resetAtWindowStart.data.window.captureAuthority.bufferEpoch.beganBy = 'n_events_zero';
+
+    const resetAfterWindowStart = structuredClone(resetAtWindowStart);
+    resetAfterWindowStart.data.window.captureAuthority.bufferEpoch
+      .beganAtBiologicalTimeTics = '125';
+
+    const planMutationAfterWindowStart = fresh();
+    planMutationAfterWindowStart.data.window.captureAuthority.recordingPlan
+      .lastMutationAtBiologicalTimeTics = '125';
+
+    const multithreadedSingleProcess = fresh();
+    multithreadedSingleProcess.data.window.captureAuthority.runtimeStatus.executionScope
+      .localNumThreads = 8;
+
+    const mpiScope = fresh();
+    mpiScope.data.window.captureAuthority.runtimeStatus.executionScope.numProcesses = 2;
+
+    const independentlyInvalid = fresh();
+    independentlyInvalid.data.window.captureAuthority.runtimeStatus.ticsPerMs = '2000';
+    independentlyInvalid.data.window.captureAuthority.runtimeStatus
+      .captureBiologicalTimeTics = '9875';
+    independentlyInvalid.data.window.captureAuthority.bufferEpoch.beganBy = 'n_events_zero';
+    independentlyInvalid.data.window.captureAuthority.bufferEpoch
+      .beganAtBiologicalTimeTics = '125';
+    independentlyInvalid.data.window.captureAuthority.recordingPlan
+      .lastMutationAtBiologicalTimeTics = '125';
+    independentlyInvalid.source.system = 'nest';
+
+    const capturePath =
+      '/data/window/captureAuthority/runtimeStatus/captureBiologicalTimeTics';
+    const resolutionPath =
+      '/data/window/captureAuthority/runtimeStatus/resolutionMs';
+    const stopTicsPath =
+      '/data/window/captureAuthority/recordingGrid/stopTics';
+    const bufferPath =
+      '/data/window/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics';
+    const planPath =
+      '/data/window/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics';
+    const cases: readonly {
+      readonly name: string;
+      readonly request: Record<string, any>;
+      readonly expected: readonly PortableDiagnosticRecord[];
+    }[] = [
+      {
+        name: 'one-third millisecond is the exact rational projection of one of three tics',
+        request: exactThirdTicClock,
+        expected: [],
+      },
+      {
+        name: 'the adjacent binary64 value is not the exact rational tic projection',
+        request: adjacentThirdProjection,
+        expected: [science(resolutionPath)],
+      },
+      {
+        name: 'ticsPerMs remains the shared projection denominator',
+        request: mismatchedTicsPerMs,
+        expected: [science(stopTicsPath), science(resolutionPath)],
+      },
+      {
+        name: 'an on-grid stop preimage must project back to the serialized stop',
+        request: mismatchedStopProjection,
+        expected: [science(stopTicsPath)],
+      },
+      {
+        name: 'binary64 projection equality cannot conceal an off-grid tic',
+        request: offGridButSameProjection,
+        expected: [science(stopTicsPath)],
+      },
+      {
+        name: 'capture exactly at the closed stop is sufficient',
+        request: fresh(),
+        expected: [],
+      },
+      {
+        name: 'capture one resolution tick before the closed stop is insufficient',
+        request: beforeClosedStop,
+        expected: [science(capturePath)],
+      },
+      {
+        name: 'an n_events reset exactly at the open window start is sufficient',
+        request: resetAtWindowStart,
+        expected: [],
+      },
+      {
+        name: 'an n_events reset after the window start invalidates buffer history',
+        request: resetAfterWindowStart,
+        expected: [science(bufferPath)],
+      },
+      {
+        name: 'a recording-plan mutation after the window start invalidates plan history',
+        request: planMutationAfterWindowStart,
+        expected: [science(planPath)],
+      },
+      {
+        name: 'multiple local threads remain within one declared process',
+        request: multithreadedSingleProcess,
+        expected: [],
+      },
+      {
+        name: 'a multi-process execution scope is refused structurally',
+        request: mpiScope,
+        expected: [
+          structural('SCHEMA_ENUM_MISMATCH', '/data/window/boundary'),
+          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/captureAuthority'),
+          structural(
+            'SCHEMA_ENUM_MISMATCH',
+            '/data/window/captureAuthority/runtimeStatus/executionScope/numProcesses',
+          ),
+          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/kind'),
+          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/origin'),
+          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/recordingBackend'),
+          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/timeEncoding'),
+        ],
+      },
+      {
+        name: 'independent capture, projection, history, and provenance errors stay ordered',
+        request: independentlyInvalid,
+        expected: [
+          science(bufferPath),
+          science(stopTicsPath),
+          science(planPath),
+          science(capturePath),
+          science(resolutionPath),
+          {
+            code: 'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
+            stage: 'provenance',
+            instancePath: '/source/system',
+          },
+        ],
+      },
+    ];
+
+    const typescript = cases.map(({ request }) => {
+      const result = validateRequestValue(request);
+      return {
+        valid: result.ok,
+        diagnostics: result.ok
+          ? []
+          : result.errors.map(({ code, stage, instancePath }) => ({
+              code,
+              stage,
+              instancePath,
+            })),
+      };
+    });
+    const pythonValidity = pythonValid(cases.map(({ request }) => request));
+    const pythonResults = pythonDiagnostics(cases.map(({ request }) => request));
+
+    cases.forEach(({ name, expected }, index) => {
+      const expectedValidity = expected.length === 0;
+      expect(typescript[index].valid, `${name}: TypeScript validity`).toBe(expectedValidity);
+      expect(pythonValidity[index], `${name}: Python validity`).toBe(expectedValidity);
+      expect(typescript[index].diagnostics, `${name}: TypeScript diagnostics`).toEqual(expected);
+      expect(pythonResults[index], `${name}: Python diagnostic parity`).toEqual(expected);
+      expect(
+        pythonResults[index],
+        `${name}: code, stage, path, and ordering diverged`,
+      ).toEqual(typescript[index].diagnostics);
+    });
   }, PARITY_PROOF_TIMEOUT_MS);
 
   it('matches the detached materialized-value snapshot domain before validation', () => {

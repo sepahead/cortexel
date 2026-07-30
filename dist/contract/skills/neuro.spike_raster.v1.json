@@ -1,6 +1,6 @@
 {
   "id": "neuro.spike_raster",
-  "revision": 4,
+  "revision": 5,
   "status": "stable",
   "releaseReady": false,
   "title": "Spike raster: event times by identified sender and trial",
@@ -34,7 +34,7 @@
       "Below the mark budget a raster performs NO aggregation: each accepted event becomes exactly one mark at (time, rowIndex). The invariant is count preservation — drawnMarkCount == acceptedEventCount — and it is asserted in the artifact rather than assumed.",
       "Row assignment: the row key is `senderId`, or (`senderId`, `trialId`) when trials are declared. Rows are the full declared product of `recordedSenderIds` x `trialIds`. A sender that never fired and a trial in which nothing happened each keep their row: that is the one thing a raster shows which a rate curve cannot, and it is destroyed the moment rows are inferred from the events.",
       "Row order: `as_declared` uses the order of `recordedSenderIds`; `canonical_sender_id` sorts by the canonical id string in Unicode code-point order; `grouped_by_population` emits population blocks in first-appearance order and orders senders inside a block by `recordedSenderIds`. Trials are always ordered by the declared `trialIds` order within a sender. Every tie-break is total and deterministic.",
-      "Revision 2 performs no visual compaction. If accepted events exceed the visible-mark budget, rendering fails with RESOURCE_MARKS_EXCEEDED before geometry is allocated. It never truncates, samples, prefix-slices, or silently substitutes a density estimate.",
+      "This revision performs no visual compaction. If accepted events exceed the visible-mark budget, rendering fails with RESOURCE_MARKS_EXCEEDED before geometry is allocated. It never truncates, samples, prefix-slices, or silently substitutes a density estimate.",
       "Window membership is decided by exact rational comparison of the received finite binary64 quantities, with no tolerance and no intermediate unit-conversion rounding. For a NEST origin-relative declaration the two bounds are the exact sums origin + start and origin + stop. Rendering correctly rounds each exact bound once into the event-time unit and refuses if binary64 cannot keep the display interval strictly ordered.",
       "Window VALIDITY is a precondition of window MEMBERSHIP: `window.valid` is evaluated first, and a degenerate or inverted window fails with SCIENCE_WINDOW_INVALID alone. `events.within_window` does not also run, because an event cannot be reported as outside a bound that is not a bound — that would return one error per event for a single authoring mistake.",
       "Complexity: O(n log n) in events for the stable sort, O(n) for mark emission, and O(|recordedSenderIds| * |trialIds|) for row allocation, all behind bounded preflight."
@@ -124,7 +124,168 @@
                 "unit": { "const": "ms" },
                 "boundary": { "const": "(origin+start,origin+stop]" },
                 "recordingBackend": { "const": "memory" },
-                "timeEncoding": { "const": "native_binary64_ms" }
+                "timeEncoding": { "const": "native_binary64_ms" },
+                "captureAuthority": {
+                  "type": "object",
+                  "description": "Caller-declared authority needed to interpret a retained NEST memory status as a complete raster. Cortexel checks this declaration for internal consistency and binds it into the request; it does not authenticate the runtime, buffer history, recorder mutations, sender wiring, or process scope.",
+                  "properties": {
+                    "kind": {
+                      "const": "caller_declaration",
+                      "description": "This detached JSON is an attributable caller claim, never a live-capture attestation."
+                    },
+                    "profile": {
+                      "const": "cortexel-nest-memory-spike-capture-authority.v1"
+                    },
+                    "runtimeStatus": {
+                      "type": "object",
+                      "properties": {
+                        "nestVersion": { "const": "3.10.0" },
+                        "statusReadMethod": {
+                          "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
+                        },
+                        "executionScope": {
+                          "type": "object",
+                          "properties": {
+                            "kind": { "const": "single_process" },
+                            "numProcesses": { "const": 1 },
+                            "rank": { "const": 0 },
+                            "localNumThreads": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1000000
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "numProcesses",
+                            "rank",
+                            "localNumThreads"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "resolutionMs": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "ticsPerMs": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        "resolutionTics": {
+                          "type": "string",
+                          "pattern": "^[1-9][0-9]*$",
+                          "maxLength": 32
+                        },
+                        "captureBiologicalTimeTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "captureBoundary": {
+                          "const": "after_successful_simulate_or_run_return"
+                        }
+                      },
+                      "required": [
+                        "nestVersion",
+                        "statusReadMethod",
+                        "executionScope",
+                        "resolutionMs",
+                        "ticsPerMs",
+                        "resolutionTics",
+                        "captureBiologicalTimeTics",
+                        "captureBoundary"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "recordingGrid": {
+                      "type": "object",
+                      "description": "Exact NEST integer-tic preimages of the serialized origin/start/stop millisecond fields. These preserve grid authority that binary64 millisecond values alone cannot establish.",
+                      "properties": {
+                        "originTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "startTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "stopTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        }
+                      },
+                      "required": ["originTics", "startTics", "stopTics"],
+                      "additionalProperties": false
+                    },
+                    "bufferEpoch": {
+                      "type": "object",
+                      "description": "The most recent creation or n_events=0 clear of this recorder's memory buffer.",
+                      "properties": {
+                        "beganBy": {
+                          "type": "string",
+                          "enum": ["recorder_creation", "n_events_zero"]
+                        },
+                        "beganAtBiologicalTimeTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        }
+                      },
+                      "required": ["beganBy", "beganAtBiologicalTimeTics"],
+                      "additionalProperties": false
+                    },
+                    "recordingPlan": {
+                      "type": "object",
+                      "description": "The most recent mutation of the recorder window/backend/time encoding or sender wiring.",
+                      "properties": {
+                        "lastMutationAtBiologicalTimeTics": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]*)$",
+                          "maxLength": 32
+                        },
+                        "scope": {
+                          "const": "window_backend_time_encoding_and_sender_wiring"
+                        },
+                        "senderUniverseBinding": {
+                          "const": "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+                        }
+                      },
+                      "required": [
+                        "lastMutationAtBiologicalTimeTics",
+                        "scope",
+                        "senderUniverseBinding"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "clockEpochContinuity": {
+                      "const": "biological_time_monotonic_since_last_kernel_initialization",
+                      "description": "Caller declaration that biological_time remained monotonic from the most recent process initialization or ResetKernel through capture. SetKernelStatus({biological_time: 0}) can preserve a recorder and its old memory while restarting the clock; NEST 3.10.0 marks that operation incompletely supported, so clearing n_events afterward does not restore this certified profile."
+                    },
+                    "eventCompleteness": {
+                      "const": "complete_for_recorded_senders"
+                    },
+                    "adapterInputDigest": {
+                      "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+                      "description": "Domain-separated digest over the detached plain-data status projection and every normalized adapter option. This is content identity, not source authentication or projection attestation."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "profile",
+                    "runtimeStatus",
+                    "recordingGrid",
+                    "bufferEpoch",
+                    "recordingPlan",
+                    "clockEpochContinuity",
+                    "eventCompleteness",
+                    "adapterInputDigest"
+                  ],
+                  "additionalProperties": false
+                }
               },
               "required": [
                 "kind",
@@ -134,7 +295,8 @@
                 "unit",
                 "boundary",
                 "recordingBackend",
-                "timeEncoding"
+                "timeEncoding",
+                "captureAuthority"
               ],
               "additionalProperties": false
             }
@@ -156,7 +318,7 @@
         "eventCompleteness": {
           "type": "string",
           "enum": ["complete_for_recorded_senders"],
-          "description": "An explicit assertion that every event of every declared sender inside the window is present. There is deliberately no `sampled` value: no disclosure rule exists that could mark a sampled raster honestly, and a raster whose ticks are a sample cannot be read — every gap becomes ambiguous between `did not fire` and `was not sampled`. Revision 2 refuses a raster too large to draw exactly; caller-side sampling is not an accepted workaround."
+          "description": "An explicit assertion that every event of every declared sender inside the window is present. There is deliberately no `sampled` value: no disclosure rule exists that could mark a sampled raster honestly, and a raster whose ticks are a sample cannot be read — every gap becomes ambiguous between `did not fire` and `was not sampled`. This revision refuses a raster too large to draw exactly; caller-side sampling is not an accepted workaround."
         }
       },
       "required": [
@@ -223,7 +385,7 @@
         "aboveMarkBudget": {
           "type": "string",
           "enum": ["refuse"],
-          "description": "Revision 2 fails with RESOURCE_MARKS_EXCEEDED when the event count exceeds the visible-mark budget. No compaction implementation or digest-bound complete-table sidecar is shipped, so an aggregation choice would be a false capability claim."
+          "description": "This revision fails with RESOURCE_MARKS_EXCEEDED when the event count exceeds the visible-mark budget. No compaction implementation or digest-bound complete-table sidecar is shipped, so an aggregation choice would be a false capability claim."
         }
       },
       "required": ["rowOrder", "outOfWindowPolicy", "aboveMarkBudget"],
@@ -256,7 +418,7 @@
     { "id": "events.trial_universe_declared" }
   ],
 
-  "renderer": { "id": "figure.spike_raster", "revision": 5 },
+  "renderer": { "id": "figure.spike_raster", "revision": 6 },
 
   "budgets": {
     "maxObservations": 2000000,
@@ -287,7 +449,7 @@
     "version": 1,
     "evaluator": {
       "tag": "registered_evaluator",
-      "id": "neuro.spike_raster.output_authority.v4"
+      "id": "neuro.spike_raster.output_authority.v5"
     },
     "requestPaths": [
       {
@@ -453,15 +615,99 @@
       "name": "nest-simulator spike_recorder",
       "version": "3.10.0",
       "status": "not_run",
-      "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, and duplicate rows. NEST 3.9 and 3.10 source were inspected for this repair, but the pinned executable reference environment has not been run here; status therefore remains not_run and no oracle-agreement claim is made."
+      "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
     }
   },
 
   "adapters": [
-    { "system": "nest.spike_recorder", "status": "partial", "notes": "Revision 2 supports complete NEST 3.9/3.10 memory-recorder status exports only when `time_in_steps` is explicitly false, origin/start/stop are finite, and the event arrays carry native binary64 milliseconds. It preserves the recorded sender universe supplied by the host, nonchronological order, duplicates, origin, and the native (origin+start,origin+stop] boundary. Step/offset, ASCII, MPI, and SIONlib inputs fail closed rather than being relabelled or approximately reconstructed." },
-    { "system": "neo.SpikeTrain", "status": "supported", "notes": "One SpikeTrain per sender; t_start/t_stop map to the window and the unit is taken from the quantity, never guessed. Neo has no concept of `recorded but silent`, so the caller must supply the full sender selection explicitly — a list of SpikeTrains alone cannot produce the empty rows." },
-    { "system": "nwb.Units.spike_times", "status": "partial", "notes": "The ragged spike_times/spike_times_index pair maps to the parallel arrays, but the caller must select the unit rows explicitly. The selected rows become recordedSenderIds and senderUniverseComplete is false unless the caller selected every unit." },
-    { "system": "ncp", "status": "planned", "notes": "Not certified for 1.0. Until a mapping for the recorded-sender universe exists, an NCP payload cannot produce the empty rows and would silently become a raster of only the neurons that fired." }
+    {
+      "mappingId": "nest-spike-recorder",
+      "sources": [
+        {
+          "system": "nest.spike_recorder",
+          "role": "primary",
+          "notes": "Adapter revision 3 supports only an exact NEST 3.10.0 memory-recorder status profile when `time_in_steps` is explicitly false, the named plain-data projection preserves NumPy event-array values and order, origin/start/stop carry exact on-grid integer-tic preimages, and a closed `kind: caller_declaration` record binds the single-process runtime, successful-return closed-stop endpoint, monotonic kernel clock epoch, most recent buffer epoch, most recent recording-plan mutation, and exact sender universe. It preserves nonchronological order, duplicates, origin, and the native (origin+start,origin+stop] boundary. It does not introspect PyNEST or authenticate any declared capture fact. NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
+          "sourceId": "nest-spike-recorder"
+        },
+        {
+          "system": "host-declared NEST runtime profile",
+          "role": "required_companion",
+          "notes": "The packaged adapter requires literal `nestVersion: 3.10.0`, but this value is caller-declared rather than read from or attested by a live simulator. R049 must execute the adapter against a pinned real runtime before release certification; local structural acceptance alone is not runtime provenance.",
+          "sourceId": "host-nest-runtime-declaration"
+        },
+        {
+          "system": "host-declared NEST recorder export context",
+          "role": "required_companion",
+          "notes": "The host supplies the complete recorded sender universe, capture history and process scope, and may supply run/recorder ids. The source digest binds the detached plain-data status projection; a separate domain-separated adapter-input digest binds that projection to every normalized option. Neither digest authenticates the projection, recorder wiring, silent-sender completeness, clock or buffer resets, configuration history, run identity, process scope or export custody. Those remain attributable caller declarations until an isolated live-capture receipt exists.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "packaged",
+      "certificationRequirement": {
+        "ledger": "cortexel-release-evidence-ledger.v1",
+        "gate": {
+          "id": "R049",
+          "section": "Adapters and ecosystem",
+          "requirement": "NEST recorder adapters are tested against real supported NEST output and do not assume chronological events.",
+          "releaseBlocking": true
+        },
+        "conformanceProfile": {
+          "registry": "cortexel-adapter-conformance-profiles.v1",
+          "id": "nest-spike-recorder.v3",
+          "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
+          "digest": "sha256:9bf23e63c51b23239cf0438fa770323b65d58cd29ff7d25ed5c7626a9e1f2be4"
+        }
+      },
+      "notes": "Executable code exists for this bounded profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
+    },
+    {
+      "mappingId": "neo-spiketrain",
+      "sources": [
+        {
+          "system": "neo.SpikeTrain",
+          "role": "primary",
+          "notes": "One SpikeTrain per sender; t_start/t_stop map to the window and the unit is taken from the quantity, never guessed. Neo has no concept of `recorded but silent`, so the caller must supply the full sender selection explicitly — a list of SpikeTrains alone cannot produce the empty rows.",
+          "sourceId": "neo-spiketrain"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-units-spike-times",
+      "sources": [
+        {
+          "system": "nwb.Units.spike_times",
+          "role": "primary",
+          "notes": "The ragged spike_times/spike_times_index pair maps to the parallel arrays, but the caller must select the unit rows explicitly. The selected rows become recordedSenderIds and senderUniverseComplete is false unless the caller selected every unit.",
+          "sourceId": "nwb-units-spike-times"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "ncp",
+      "sources": [
+        {
+          "system": "ncp",
+          "role": "primary",
+          "notes": "Not certified for 1.0. Until a mapping for the recorded-sender universe exists, an NCP payload cannot produce the empty rows and would silently become a raster of only the neurons that fired.",
+          "sourceId": "ncp"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    }
   ],
 
   "migration": {
@@ -486,14 +732,15 @@
     "NODE_UNIVERSE_INCOMPLETE is the nearest existing rule to that gap, but its text is about edges and degree and would be false on a raster, so it is deliberately not emitted. A wrong disclosure is worse than a missing one.",
     "There is likewise no disclosure id for a caller-sampled event set. Rather than emit a rule that does not fit, the contract refuses the sampled value outright.",
     "Cortexel verifies that every event's sender is in the declared universe. It cannot verify that the recorder observed every spike of those senders, so an empty row is evidence of no RECORDED event; reading it as silence rests on the recorder, not on Cortexel.",
-    "For a NEST origin-relative window, exact comparisons are exact over the exported finite binary64 millisecond values. Cortexel does not inspect NEST's hidden integer-tic state, prove that the serialized status came from NEST, or recover pre-serialization timing; the mandatory NEST clock-boundary disclosure states this on every such figure.",
-    "NEST `time_in_steps:true` is deliberately unsupported in revision 2. A step index plus offset is a different canonical clock representation, not a millisecond array; support requires preserving the raw pair and NEST grid authority rather than reconstructing and discarding it.",
+    "For a NEST origin-relative window, exact comparisons are exact over the exported finite binary64 millisecond values and declared integer-tic preimages. The required `kind: caller_declaration` capture record also binds the named plain-data projection, successful-return closed-stop endpoint, monotonic kernel clock epoch, buffer epoch, recording-plan history, sender universe, runtime profile and single-process scope. Cortexel checks those declarations for internal consistency but cannot observe or authenticate them; the mandatory NEST capture-boundary disclosure states that limitation on every such figure.",
+    "NEST `time_in_steps:true` is deliberately unsupported in revision 3. A step index plus offset is a different canonical clock representation, not a millisecond array; support requires preserving the raw pair and NEST grid authority rather than reconstructing and discarding it.",
     "Below the mark budget every event is drawn, but two events closer than one device pixel overlap. The table count is authoritative; the visible tick count is not, and no figure caption can make it so.",
-    "No raster compaction or complete-table sidecar is implemented in revision 2. Requests over the exact-mark or complete-returned-table budget fail closed; the registered future raster_density_bins policy is not advertised by this skill until both surfaces exist.",
+    "No raster compaction or complete-table sidecar is implemented in revision 3. Requests over the exact-mark or complete-returned-table budget fail closed; the registered future raster_density_bins policy is not advertised by this skill until both surfaces exist.",
     "No uncertainty variant is renderable. An event is an observation, not an estimate, and a band drawn around one would be a fabrication."
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 1, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },
@@ -511,7 +758,43 @@
             "unit": "ms",
             "boundary": "(origin+start,origin+stop]",
             "recordingBackend": "memory",
-            "timeEncoding": "native_binary64_ms"
+            "timeEncoding": "native_binary64_ms",
+            "captureAuthority": {
+              "kind": "caller_declaration",
+              "profile": "cortexel-nest-memory-spike-capture-authority.v1",
+              "runtimeStatus": {
+                "nestVersion": "3.10.0",
+                "statusReadMethod": "pynest_single_spike_recorder_get_status_plain_projection_v1",
+                "executionScope": {
+                  "kind": "single_process",
+                  "numProcesses": 1,
+                  "rank": 0,
+                  "localNumThreads": 1
+                },
+                "resolutionMs": 0.125,
+                "ticsPerMs": "1000",
+                "resolutionTics": "125",
+                "captureBiologicalTimeTics": "10000",
+                "captureBoundary": "after_successful_simulate_or_run_return"
+              },
+              "recordingGrid": {
+                "originTics": "0",
+                "startTics": "0",
+                "stopTics": "10000"
+              },
+              "bufferEpoch": {
+                "beganBy": "recorder_creation",
+                "beganAtBiologicalTimeTics": "0"
+              },
+              "recordingPlan": {
+                "lastMutationAtBiologicalTimeTics": "0",
+                "scope": "window_backend_time_encoding_and_sender_wiring",
+                "senderUniverseBinding": "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+              },
+              "clockEpochContinuity": "biological_time_monotonic_since_last_kernel_initialization",
+              "eventCompleteness": "complete_for_recorded_senders",
+              "adapterInputDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
           },
           "timeBase": "absolute_clock",
           "senderUniverseComplete": true,
@@ -577,6 +860,44 @@
     ],
 
     "invalid": [
+      {
+        "why": "A detached final NEST status cannot prove that the memory buffer was not cleared after the window opened, that window/backend/time-encoding/sender wiring stayed fixed, that the successful Simulate or Run return reached the closed-stop endpoint, that biological_time remained monotonic in the current kernel epoch, or that the status covers one complete process rather than one MPI rank. Revision 5 therefore requires an explicit caller-declaration record; n_events and array lengths alone establish only internal status consistency.",
+        "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
+        "request": {
+          "contract": { "name": "cortexel-figure-request", "version": "1.0" },
+          "skill": { "id": "neuro.spike_raster" },
+          "data": {
+            "eventTimes": { "kind": "time", "unit": "ms", "values": [1] },
+            "eventSenderIds": ["1"],
+            "recordedSenderIds": ["1", "2"],
+            "window": {
+              "kind": "nest_recording_device_origin_relative",
+              "origin": 0,
+              "start": 0,
+              "stop": 10,
+              "unit": "ms",
+              "boundary": "(origin+start,origin+stop]",
+              "recordingBackend": "memory",
+              "timeEncoding": "native_binary64_ms"
+            },
+            "timeBase": "absolute_clock",
+            "senderUniverseComplete": true,
+            "eventCompleteness": "complete_for_recorded_senders"
+          },
+          "parameters": {
+            "rowOrder": "canonical_sender_id",
+            "markStyle": "tick",
+            "outOfWindowPolicy": "reject",
+            "aboveMarkBudget": "refuse"
+          },
+          "source": {
+            "kind": "simulation",
+            "system": "NEST",
+            "systemVersion": "3.10.0",
+            "sourceDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      },
       {
         "why": "The recorded-sender universe is absent, so the rows can only come from the events. Here senders 1, 2 and 3 fired and sender 4 did not: inferring the rows deletes sender 4 entirely, and a raster of 4 recorded neurons of which 1 was silent becomes a raster of 3 neurons of which none was. The negative evidence — the empty row — is the one thing this figure exists to show, and it is exactly what inference destroys.",
         "expectedCode": "SCHEMA_REQUIRED_PROPERTY_MISSING",
@@ -712,7 +1033,7 @@
         }
       },
       {
-        "why": "The caller declares that the events are a sample. There is no such value: a raster whose ticks are a subset cannot be read, because every gap is then ambiguous between `this neuron did not fire` and `this spike was not sampled`, and no legend can repair that. Revision 2 refuses an over-budget complete raster instead of accepting a sampled substitute, and no disclosure rule exists that could make the subset honest.",
+        "why": "The caller declares that the events are a sample. There is no such value: a raster whose ticks are a subset cannot be read, because every gap is then ambiguous between `this neuron did not fire` and `this spike was not sampled`, and no legend can repair that. This revision refuses an over-budget complete raster instead of accepting a sampled substitute, and no disclosure rule exists that could make the subset honest.",
         "expectedCode": "SCHEMA_ENUM_MISMATCH",
         "request": {
           "contract": { "name": "cortexel-figure-request", "version": "1.0" },

@@ -69,6 +69,16 @@
         "default": "./dist/figure/index.cjs"
       }
     },
+    "./authoring": {
+      "import": {
+        "types": "./dist/authoring/index.d.ts",
+        "default": "./dist/authoring/index.js"
+      },
+      "require": {
+        "types": "./dist/authoring/index.d.cts",
+        "default": "./dist/authoring/index.cjs"
+      }
+    },
     "./render-svg": {
       "import": {
         "types": "./dist/render-svg/index.d.ts",

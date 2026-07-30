@@ -439,11 +439,78 @@
   },
 
   "adapters": [
-    { "system": "nest.GetConnections", "status": "supported", "notes": "Supplies the connection rows, preserving every multapse as its own row. Under MPI the returned rows are the ones whose TARGET the rank owns, so the adapter must emit an mpi_target_rank_local scope, declare the rank's targets as observedTargetIds, and the out-degree route is then closed." },
-    { "system": "nest.NodeCollection", "status": "supported", "notes": "Supplies the complete node universe including isolated and silent nodes. This is the fact GetConnections structurally cannot provide, and without it the zero bin is empty by construction rather than by observation." },
-    { "system": "networkx.MultiDiGraph", "status": "partial", "notes": "G.nodes gives the universe and retains isolates. The counting policy must match the graph class: a DiGraph has already collapsed parallel edges, so `count_edges` is refused for it rather than approximated from a collapsed graph." },
-    { "system": "neo.Block", "status": "rejected", "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it can be mapped to a degree." },
-    { "system": "nwb.core", "status": "planned", "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today." }
+    {
+      "mappingId": "nest-getconnections",
+      "sources": [
+        {
+          "system": "nest.GetConnections",
+          "role": "primary",
+          "notes": "Supplies the connection rows, preserving every multapse as its own row. Under MPI the returned rows are the ones whose TARGET the rank owns, so the adapter must emit an mpi_target_rank_local scope and declare the rank's targets as observedTargetIds. That scope supports only complete local in-degree; out-degree is rejected with SCOPE_OUT_DEGREE_FROM_RANK_LOCAL because outgoing edges can terminate on other ranks.",
+          "sourceId": "nest-getconnections"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies the complete node universe including isolated and silent nodes. Under `mpi_target_rank_local`, this profile also retains the exact local-membership mask of the selected target NodeCollection, so `observedTargetIds` includes locally owned targets with zero incoming rows. GetConnections structurally provides neither fact; without them the zero bin is empty by construction rather than by observation.",
+          "sourceId": "nest-nodecollection"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "networkx-multidigraph",
+      "sources": [
+        {
+          "system": "networkx.MultiDiGraph",
+          "role": "primary",
+          "notes": "G.nodes gives the universe and retains isolates. The counting policy must match the graph class: a DiGraph has already collapsed parallel edges, so `count_edges` is refused for it rather than approximated from a collapsed graph.",
+          "sourceId": "networkx-multidigraph"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo-block",
+      "sources": [
+        {
+          "system": "neo.Block",
+          "role": "primary",
+          "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it can be mapped to a degree.",
+          "sourceId": "neo-block"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
+    },
+    {
+      "mappingId": "nwb-core",
+      "sources": [
+        {
+          "system": "nwb.core",
+          "role": "primary",
+          "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today.",
+          "sourceId": "nwb-core"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
+    }
   ],
 
   "migration": {
@@ -479,6 +546,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

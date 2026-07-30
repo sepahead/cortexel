@@ -4,11 +4,12 @@
 > to turn simulation output into figures. If you are modifying Cortexel itself
 > (build, tests, design laws, conventions), read [CLAUDE.md](./CLAUDE.md) instead.
 
-> **0.9.0 direction note.** The sections below document the pre-1.0 `VizSpec` API that
-> ships in the current `core/` build. The 0.9.0 line introduces the versioned
+> **Pre-1.0 migration note.** Version `0.9.0` is the last tagged development release.
+> The current unreleased `0.10.0-dev.0` working tree keeps the pre-1.0 `VizSpec` API in
+> `core/` while adding the versioned
 > **`FigureRequestV1` / `FigureArtifactV1`** contract under `contract/` and `src/`,
 > with a strict validation pipeline, a deterministic SVG renderer, additive packaged
-> subpaths (`cortexel/figure`, `cortexel/render-svg`, `cortexel/adapters/nest`,
+> subpaths (`cortexel/figure`, `cortexel/authoring`, `cortexel/render-svg`, `cortexel/adapters/nest`,
 > `cortexel/contract/*`), and the offline `cortexel` bin.
 > The defining rule of
 > the new contract: **a caller declares what its data *is*, never what Cortexel
@@ -24,6 +25,67 @@
 > stable-contract scientific evidence, and a legacy raw transform does not certify
 > a corresponding stable adapter.
 
+## Start here for FigureRequestV1
+
+For new agent integrations, use the stable FigureRequestV1 surface before the legacy
+guide below. Discovery is offline and versioned:
+
+```bash
+cortexel catalog --json
+cortexel describe neuro.spike_raster --json --section example
+cortexel describe neuro.spike_raster --json --section schema
+cortexel validate request.json
+cortexel render request.json --output figure.svg
+```
+
+`--section example` is the recommended prompt-budget starting point. It returns an envelope whose
+`authoringExample` is synthetic and already passes the complete TypeScript pipeline.
+Copy that field, then replace its data and complete source declaration with truthful
+caller-owned values. `--section schema` returns `requestSchema` plus the two offline
+resources and the versioned, catalog-digest-bound Ajv 8 compile profile needed to
+compile it; `--section all` returns both, while `summary` returns metadata only.
+Structural success is not acceptance—always call `validate`.
+The `summary`, `example`, and `schema` sections carry only compact skill identity,
+renderer, availability, and adapter-status metadata; only `all` includes the full
+scientific/evidence/authority catalog record.
+
+The same resources are importable without a subprocess:
+
+```ts
+import {
+  SKILL_AUTHORING,
+} from 'cortexel/authoring';
+import { validateRequestValue } from 'cortexel/figure';
+
+const draft = structuredClone(
+  SKILL_AUTHORING['neuro.spike_raster'].authoringExample,
+);
+const result = validateRequestValue(draft);
+if (!result.ok) repair(result.errors);
+```
+
+The compile profile intentionally disables Ajv's `strictRequired` and `strictTypes`
+lints. Cortexel's generator applies context-aware equivalents because mechanically
+satisfying those lints inside conditional/negative schemas can change their meaning.
+Coercion, defaults, and removal of unknown properties remain disabled.
+
+Do not infer executable support from a source mapping. `feasibilityStatus` is only a
+bounded assessment, and `implementationAvailability` is the executable axis. Today the
+only packaged stable NEST mapping is the bounded plain-data shape of a
+caller-declared exact NEST 3.10.0 memory spike-recorder profile at
+`cortexel/adapters/nest`. Adapter revision 3 requires the host to declare that it
+applied the named projection preserving every NumPy event-array value and its order,
+plus a `kind: caller_declaration` capture record
+for the successful-return closed-stop endpoint, exact integer-tic grid, buffer and
+recording-plan history, monotonic kernel clock epoch, exact sender
+universe, and single-process scope. Cortexel digest-binds the detached projection and
+normalized options but does not authenticate the producing simulator, process topology,
+buffer resets, configuration or wiring history, sender-universe completeness, or export
+custody, and it does not start PyNEST.
+Every other NEST mapping remains nonexecutable unless its exact record says otherwise.
+Python exposes `list_skills()` and `describe_skill()`, but its semantic port is
+explicitly partial and refuses to issue a full validity certificate.
+
 You hold the output of a neural simulation — a NEST device dump, arrays of spike
 times, a cross-paper corpus graph — and you want an **honest, render-ready figure**
 without hand-rolling validation, provenance, or a WebGL scene. Cortexel is the
@@ -31,7 +93,8 @@ contract that gets you there: you emit a declarative **`VizSpec`** (plain JSON),
 Cortexel validates it fail-closed and hands the host a checked payload plus a
 mandatory honesty caption. **You never touch three.js.**
 
-Everything here is in `cortexel/core` — zero dependencies beyond `zod`, safe to run
+Everything below is the legacy surface in `cortexel/core` — zero dependencies beyond
+`zod`, safe to run
 inside a Node/Python-adjacent backend or an agent tool. Import the react layer only
 if your agent also owns the render surface.
 
@@ -222,7 +285,18 @@ Interactive WebGL meshes are not accessibility controls. Pair
 `NeuronA11yPager`; render these DOM companions outside the Canvas.
 Pass the `context` returned by `mapCorpusKnowledgeGraph` to
 `KnowledgeGraphLegend` so the graph id, source, immutable snapshot id, scope and
-generation time remain available in the DOM alongside the visual encoding.
+generation time remain available in the DOM alongside the visual encoding. Pass
+the returned `graphIdentity` to both `KnowledgeGraph3DScene` and
+`KnowledgeGraphA11yList`; retain it across filters
+of that snapshot and change it when declared graph context changes. That remounts
+scene-owned layout positions, framing status, pending camera intent, and
+accessible pager/disclosure state. The host still owns the actual camera/controls
+target plus controlled selection and hover; reset or reframe those when cross-graph
+isolation requires it. This identity is a
+caller-context cache namespace, not a graph-content digest or independent
+authentication. The strict bound honesty caption must
+remain visibly expanded adjacent to the figure; a collapsed metadata disclosure
+does not satisfy that display obligation.
 
 Legacy regressions bind a rendered honesty caption to its figure group and keep a
 singleton plasticity sample and zero-derivative phase-plane samples visible. Those
@@ -320,8 +394,15 @@ and non-paper-local. `generated_at` is RFC 3339. At most nine identified
 assertions may share an unordered node pair; put multiple supporting sources in
 the edge's evidence array rather than creating an unreadable bundle. Use the
 complete descriptor example as the copyable schema guide.
+“Direct” here is a closed legacy discriminator, not authentication: this surface has
+no top-level evidence-record inventory, so it cannot resolve or prove a supplied
+record, citation, or external-source identifier.
 
-An Engram `CorpusEntityGraphResponse` can be projected without guessing:
+An Engram `CorpusEntityGraphResponse` can be projected without guessing only when
+every upstream node and assertion already carries its typed `evidence` array.
+Cortexel retains and validates those references; it never manufactures a snapshot
+record from an entity id. `graphSnapshotId` is likewise an unauthenticated
+caller-supplied namespace until a future receipt-bearing stable contract exists:
 
 ```ts
 import { adaptEngramCorpusEntityGraph, buildVizSpec } from 'cortexel/core';
@@ -381,7 +462,7 @@ receipt. The two population labels therefore remain contract-disclosed external
 claims. `excluded_self_pairs` likewise remains a caller/source claim; the raw
 transform emits only `included`. NEST documents the port-selected pools and the
 resolution / edge-window conditions in its
-[`correlation_detector` reference](https://nest-simulator.readthedocs.io/en/v3.2/models/correlation_detector.html).
+[`correlation_detector` reference](https://nest-simulator.readthedocs.io/en/v3.10/models/correlation_detector.html).
 
 Connection snapshots are view-neutral evidence: the same SynapseCollection may
 feed a graph, three matrix skills, two degree skills, a weight histogram, or a
@@ -401,7 +482,7 @@ rank-owned target universe plus complete cross-rank edge authority; otherwise a
 missing edge or zero degree could be false. NEST likewise documents that
 `GetConnections()` returns only connections whose targets are on the executing
 MPI process in its
-[`GetConnections` API](https://nest-simulator.readthedocs.io/en/main/ref_material/pynest_api/nest.lib.hl_api_connections.html).
+[`GetConnections` API](https://nest-simulator.readthedocs.io/en/v3.10/ref_material/pynest_api/nest.lib.hl_api_connections.html).
 Use `mpi_all_ranks_merged` only after actually merging every rank. Under an
 accepted complete scope, degree distributions include the declared node universe,
 so degree-zero nodes cannot disappear, and the gate checks both the node-count
@@ -450,6 +531,11 @@ tolerance plus a bounded binary64 allowance; a large absolute coordinate origin
 cannot make an out-of-layer point pass.
 
 ## Adapters — from simulator/corpus output to renderable data
+
+> **Legacy `VizSpec` surface only.** The adapters below do not create
+> `FigureRequestV1` evidence, satisfy stable-contract adapter profiles, or inherit
+> stable release-gate status. Use the stable catalog's exact
+> `implementationAvailability` field for `FigureRequestV1` capability.
 
 If you hold a raw NEST device dict rather than clean arrays, the host-agnostic
 adapters normalize it (dense sender re-indexing, axis invariants, Float64 time
@@ -578,8 +664,10 @@ For an Engram `CorpusEntityGraphResponse`, use
 `adaptEngramCorpusEntityGraph` as shown above. The adapter is a no-throw JSON
 boundary: it checks array/property budgets, exact response fields, redundant
 counts/kind tallies, conservative flags, finite metric domains and options before
-mapping any record. Legacy edges without ids receive a collision-free canonical
-tuple id; indistinguishable legacy duplicates fail instead of collapsing.
+mapping any record. Every node and assertion must supply at least one structurally
+valid evidence reference, which is retained rather than inferred. Legacy edges
+without ids receive a collision-free canonical tuple id; indistinguishable legacy
+duplicates fail instead of collapsing.
 
 ## Non-TypeScript hosts
 

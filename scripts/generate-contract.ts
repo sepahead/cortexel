@@ -15,7 +15,13 @@
  *
  *   bun run generate
  */
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+} from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -57,13 +63,38 @@ import {
   OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1,
   outputAuthorityImplementationInventoryProblemsV1,
 } from '../src/authority/evaluators/implementation-ids.js';
+import {
+  ADAPTER_IMPLEMENTATIONS_V1,
+} from '../src/adapters/implementation-inventory.js';
 import { parseJsonSourceStrict } from './lib/strict-json-source.js';
+import { readDirectRepositoryFile } from './lib/direct-repository-file.js';
+import { deriveAdapterCertificationRequirementV1 } from './lib/adapter-certification.js';
+import {
+  resolveAdapterConformanceProfileV1,
+} from './lib/adapter-conformance-profile.js';
+import {
+  adapterSourceIdentityProblems,
+} from './lib/adapter-source-identity.js';
+import { validateLedger } from './check-evidence-ledger.js';
 import { CLI_COMMANDS } from '../src/cli/commands.js';
 import { buildContractManifest } from './lib/contract-manifest.js';
+import {
+  AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+  buildPublicAuthoringExample,
+  buildPublicSkillAuthoringEntry,
+  buildPublicSkillCatalogEntry,
+  composeSkillRequestSchema,
+} from './lib/stable-catalog.js';
 import {
   enumerateNormativeContractFiles,
   NORMATIVE_CONTRACT_INCLUDE_PATTERNS,
 } from './lib/normative-source-files.js';
+import {
+  assertGeneratedOutputDirectoryPath,
+  assertGeneratedOutputFilePath,
+  directRepositoryDirectoryExists,
+  ensureGeneratedOutputDirectory,
+} from './lib/generated-output-authority.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACT = path.join(ROOT, 'contract');
@@ -83,8 +114,10 @@ function readJson<T = any>(file: string): T {
   return parseJsonSourceStrict<T>(readFileSync(file), path.relative(ROOT, file));
 }
 
-function ensureDir(dir: string): void {
-  mkdirSync(dir, { recursive: true });
+function removeGeneratedPath(target: string): void {
+  assertGeneratedOutputDirectoryPath(ROOT, target);
+  if (!directRepositoryDirectoryExists(ROOT, path.dirname(target))) return;
+  rmSync(target, { recursive: true, force: true });
 }
 
 function decimalPowerExponent(value: unknown): number | null {
@@ -95,10 +128,68 @@ function decimalPowerExponent(value: unknown): number | null {
   return null;
 }
 
+/**
+ * Emit a deterministic Python literal without rewriting token-shaped text inside strings.
+ *
+ * The former JSON-stringify-then-regex path changed prose such as `time_in_steps:true`
+ * into `time_in_steps:True`. That made the Python projection differ from its normative
+ * source while remaining syntactically valid. Recursing by JSON value keeps structural
+ * booleans/null Python-native and leaves every string byte semantically intact.
+ */
+function pythonLiteral(value: unknown, depth = 0): string {
+  if (value === null) return 'None';
+  if (typeof value === 'boolean') return value ? 'True' : 'False';
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    const encoded = JSON.stringify(value);
+    if (encoded === undefined) throw new Error('cannot emit non-JSON number as Python');
+    return encoded;
+  }
+  const indentation = ' '.repeat(depth * 4);
+  const childIndentation = ' '.repeat((depth + 1) * 4);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    return '[\n' +
+      value.map((item) => `${childIndentation}${pythonLiteral(item, depth + 1)}`).join(',\n') +
+      `\n${indentation}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return '{}';
+    return '{\n' +
+      entries.map(([key, item]) =>
+        `${childIndentation}${JSON.stringify(key)}: ${pythonLiteral(item, depth + 1)}`
+      ).join(',\n') +
+      `\n${indentation}}`;
+  }
+  throw new Error(`cannot emit ${typeof value} as a Python literal`);
+}
+
 function writeIfChanged(file: string, content: string): boolean {
-  const existing = existsSync(file) ? readFileSync(file, 'utf8') : null;
+  assertGeneratedOutputFilePath(ROOT, file);
+  let existing: string | null = null;
+  const parent = path.dirname(file);
+  const parentExists = directRepositoryDirectoryExists(ROOT, parent);
+  if (parentExists) {
+    try {
+      const existingStat = lstatSync(file);
+      if (existingStat.isFile() && !existingStat.isSymbolicLink()) {
+        if (existingStat.nlink !== 1) {
+          throw new Error(`generated output file is hard-linked: ${file}`);
+        }
+        existing = readFileSync(file, 'utf8');
+      } else {
+        throw new Error(`generated output file is not a direct regular file: ${file}`);
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  } else {
+    // A missing direct parent proves the file is absent. Creation remains gated below.
+    existing = null;
+  }
   if (existing === content) return false;
-  ensureDir(path.dirname(file));
+  if (!parentExists) ensureGeneratedOutputDirectory(ROOT, parent);
   writeFileSync(file, content);
   return true;
 }
@@ -138,7 +229,21 @@ const contractSourceSchema = readJson(path.join(CONTRACT, 'meta', 'contract-sour
 const canonicalizationRegistrySchema = readJson(
   path.join(CONTRACT, 'meta', 'canonicalization-registry.schema.json'),
 );
+const adapterConformanceProfiles = readJson(
+  path.join(CONTRACT, 'registries', 'adapter-conformance-profiles.v1.json'),
+);
+const adapterConformanceProfilesSchema = readJson(
+  path.join(CONTRACT, 'meta', 'adapter-conformance-profiles.schema.json'),
+);
 const packageJson = readJson(path.join(ROOT, 'package.json'));
+const releaseEvidenceLedger = parseJsonSourceStrict<any>(
+  readDirectRepositoryFile(ROOT, 'docs/release/evidence-ledger.v1.json'),
+  'docs/release/evidence-ledger.v1.json',
+);
+const releaseEvidenceLedgerSchema = parseJsonSourceStrict<any>(
+  readDirectRepositoryFile(ROOT, 'docs/release/evidence-ledger.schema.json'),
+  'docs/release/evidence-ledger.schema.json',
+);
 const pythonProject = parsePythonProjectMetadata(
   readFileSync(path.join(ROOT, 'python', 'pyproject.toml'), 'utf8'),
 );
@@ -149,6 +254,7 @@ const skills = skillFiles.map((file) => readJson(path.join(CONTRACT, file)));
 skills.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
 const stableSkills = skills.filter((s) => s.status === 'stable');
+const MAX_DISCLOSURE_TEXT_LENGTH = 400;
 
 // ---------------------------------------------------------------------------
 // Integrity checks. The generator refuses to emit an incoherent contract — a
@@ -156,6 +262,16 @@ const stableSkills = skills.filter((s) => s.status === 'stable');
 // ---------------------------------------------------------------------------
 
 const problems: string[] = [];
+const releaseEvidenceLedgerValidation = validateLedger(
+  releaseEvidenceLedger,
+  releaseEvidenceLedgerSchema,
+);
+for (const error of releaseEvidenceLedgerValidation.errors) {
+  problems.push(`release evidence ledger: ${error}`);
+}
+const releaseEvidenceGates = Array.isArray(releaseEvidenceLedger.gates)
+  ? releaseEvidenceLedger.gates
+  : [];
 
 problems.push(...sourceKindDisclosureSourceProblems(
   disclosures,
@@ -257,6 +373,17 @@ assertUniqueMapKeys(units.units, 'code', 'units.units');
 assertUniqueMapKeys(units.quantityKinds, 'kind', 'units.quantityKinds');
 assertUniqueMapKeys(semanticValidators.validators, 'id', 'semantic-validators.validators');
 assertUniqueMapKeys(disclosures.rules, 'id', 'disclosures.rules');
+for (const [index, rule] of disclosures.rules.entries()) {
+  if (
+    typeof rule.text !== 'string' ||
+    rule.text.length < 1 ||
+    rule.text.length > MAX_DISCLOSURE_TEXT_LENGTH
+  ) {
+    problems.push(
+      `disclosures.rules[${index}].text: expected 1..${MAX_DISCLOSURE_TEXT_LENGTH} UTF-16 code units`,
+    );
+  }
+}
 assertUniqueMapKeys(budgets.profiles, 'id', 'budget-profiles.profiles');
 assertUniqueMapKeys(budgets.compactionPolicies, 'id', 'budget-profiles.compactionPolicies');
 assertUniqueMapKeys(capabilities.capabilities, 'id', 'capabilities.capabilities');
@@ -267,6 +394,12 @@ assertUniqueMapKeys(palettes.uncertaintyStyles, 'kind', 'palettes.uncertaintySty
 assertUniqueMapKeys(numericPolicies.algorithms, 'id', 'numeric-policies.algorithms');
 assertUniqueMapKeys(numericPolicies.policies, 'id', 'numeric-policies.policies');
 assertUniqueMapKeys(canonicalizations.algorithms, 'id', 'canonicalizations.algorithms');
+assertUniqueMapKeys(
+  adapterConformanceProfiles.profiles,
+  'id',
+  'adapter-conformance-profiles.profiles',
+);
+assertUniqueMapKeys(releaseEvidenceGates, 'id', 'release evidence ledger gates');
 assertUniqueMapKeys(skills, 'id', 'contract/skills');
 assertUniqueStrings(uncertaintyKinds, 'common.$defs.uncertainty kinds');
 assertUniqueStrings(metaUncertaintyKinds, 'contract-source uncertainty kinds');
@@ -304,6 +437,7 @@ for (const [where, value] of [
   ['palettes', palettes],
   ['numeric-policies', numericPolicies],
   ['canonicalizations', canonicalizations],
+  ['adapter-conformance-profiles', adapterConformanceProfiles],
 ] as const) {
   assertNoDangerousObjectKeys(value, where);
 }
@@ -377,11 +511,130 @@ const canonicalizationIds = new Set<string>(
 );
 const compactionIds = new Set<string>(budgets.compactionPolicies.map((p: any) => p.id));
 const capabilityIds = new Map<string, any>(capabilities.capabilities.map((c: any) => [c.id, c]));
+const releaseEvidenceGateById = new Map<string, any>(
+  releaseEvidenceGates.map((gate: any) => [gate.id, gate]),
+);
+
+const adapterImplementationKey = (skillId: string, mappingId: string): string =>
+  `${skillId}\u0000${mappingId}`;
+const adapterImplementationByKey = new Map<
+  string,
+  (typeof ADAPTER_IMPLEMENTATIONS_V1)[number]
+>();
+const adapterCertificationRequirementByKey = new Map<string, any>();
+for (const implementation of ADAPTER_IMPLEMENTATIONS_V1) {
+  const key = adapterImplementationKey(implementation.skillId, implementation.mappingId);
+  if (adapterImplementationByKey.has(key)) {
+    problems.push(
+      `adapter implementation inventory: duplicate ${implementation.skillId}/${implementation.mappingId}`,
+    );
+    continue;
+  }
+  adapterImplementationByKey.set(key, implementation);
+
+  const capability = capabilityIds.get(implementation.packageCapability);
+  if (!capability) {
+    problems.push(
+      `adapter implementation inventory: ${implementation.skillId}/${implementation.mappingId} ` +
+        `names unknown capability "${implementation.packageCapability}"`,
+    );
+  } else if (capability.availability !== implementation.implementationAvailability) {
+    problems.push(
+      `adapter implementation inventory: ${implementation.skillId}/${implementation.mappingId} ` +
+        `availability "${implementation.implementationAvailability}" disagrees with capability ` +
+        `"${implementation.packageCapability}" availability "${String(capability.availability)}"`,
+    );
+  }
+
+  const certificationGateId = implementation.certificationRequirement.gate.id;
+  const certificationGate = releaseEvidenceGateById.get(certificationGateId);
+  const certificationProjection = deriveAdapterCertificationRequirementV1(
+    implementation,
+    certificationGate,
+  );
+  for (const problem of certificationProjection.problems) {
+    problems.push(`adapter implementation inventory: ${problem}`);
+  }
+  if (certificationProjection.requirement !== null) {
+    adapterCertificationRequirementByKey.set(key, certificationProjection.requirement);
+  }
+
+  const conformanceProjection = resolveAdapterConformanceProfileV1(
+    implementation.certificationRequirement.conformanceProfile,
+    adapterConformanceProfiles,
+  );
+  for (const problem of conformanceProjection.problems) {
+    problems.push(
+      `adapter implementation inventory: ${implementation.skillId}/${implementation.mappingId}: ${problem}`,
+    );
+  }
+  const conformanceProfile = conformanceProjection.profile as any;
+  if (conformanceProfile !== null) {
+    const implementationProfile = implementation.adapterProfile;
+    const expectedAdapter =
+      `${implementation.packageCapability}#${implementation.exportName}`;
+    for (const [valid, relation] of [
+      [
+        conformanceProfile.adapter === expectedAdapter,
+        `profile adapter must equal ${JSON.stringify(expectedAdapter)}`,
+      ],
+      [
+        conformanceProfile.adapterRevision === implementationProfile.adapterRevision,
+        'profile adapterRevision must equal the implementation-owned revision',
+      ],
+      [
+        conformanceProfile.upstream?.version === implementationProfile.nestVersion,
+        'profile upstream version must equal the implementation-owned NEST version',
+      ],
+      [
+        conformanceProfile.upstream?.sourceCommit ===
+          implementationProfile.upstreamSourceCommit,
+        'profile upstream source commit must equal the implementation-owned source commit',
+      ],
+      [
+        conformanceProfile.inputDigestDomain === implementationProfile.inputDigestDomain,
+        'profile inputDigestDomain must equal the implementation-owned digest domain',
+      ],
+      [
+        conformanceProfile.captureAuthorityProfile ===
+          implementationProfile.captureAuthorityProfile,
+        'profile captureAuthorityProfile must equal the implementation-owned authority profile',
+      ],
+      [
+        conformanceProfile.admittedStatus?.statusReadMethod ===
+          implementationProfile.statusReadMethod,
+        'profile statusReadMethod must equal the implementation-owned projection method',
+      ],
+    ] as const) {
+      if (!valid) {
+        problems.push(
+          `adapter implementation inventory: ${implementation.skillId}/${implementation.mappingId}: ${relation}`,
+        );
+      }
+    }
+  }
+
+  const source = path.join(ROOT, implementation.sourcePath);
+  if (!existsSync(source)) {
+    problems.push(
+      `adapter implementation inventory: source does not exist: ${implementation.sourcePath}`,
+    );
+  }
+
+  const publicEntry = path.join(ROOT, implementation.publicEntryPath);
+  if (!existsSync(publicEntry)) {
+    problems.push(
+      `adapter implementation inventory: public entry does not exist: ` +
+        `${implementation.publicEntryPath}`,
+    );
+  }
+}
 
 const sourceEntryFiles = [
   path.join(ROOT, 'src', 'index.ts'),
   path.join(ROOT, 'src', 'core', 'index.ts'),
   path.join(ROOT, 'src', 'figure', 'index.ts'),
+  path.join(ROOT, 'src', 'authoring', 'index.ts'),
   path.join(ROOT, 'src', 'render', 'index.ts'),
   path.join(ROOT, 'src', 'adapters', 'nest', 'index.ts'),
 ];
@@ -450,6 +703,19 @@ if (!validateCanonicalizationRegistry(canonicalizations)) {
   }
 }
 
+const adapterConformanceAjv = new Ajv2020({ allErrors: true, strict: true });
+const validateAdapterConformanceProfiles = adapterConformanceAjv.compile(
+  adapterConformanceProfilesSchema,
+);
+if (!validateAdapterConformanceProfiles(adapterConformanceProfiles)) {
+  for (const error of validateAdapterConformanceProfiles.errors ?? []) {
+    problems.push(
+      `adapter conformance profiles meta-schema ${error.instancePath || '/'} ` +
+        `${error.message ?? 'validation failed'}`,
+    );
+  }
+}
+
 // The skill meta-schema is an executable source boundary, not documentation. Every
 // normative skill file must satisfy it before any digest or generated output is
 // produced. Previously the schema claimed this invariant but generation never ran it,
@@ -501,10 +767,126 @@ function assertKnownCanonicalizationReferences(value: unknown, where: string): v
 // registry-integrity check vacuous for every shared canonicalization declaration.
 assertKnownCanonicalizationReferences(commonSchema, 'contract/schemas/common.v1.schema.json');
 
+const matchedAdapterImplementations = new Set<string>();
 for (const skill of skills) {
   const where = `skill ${skill.id}`;
 
   problems.push(...outputAuthoritySourceProblems(skill));
+
+  const adapterMappingIds = new Set<string>();
+  for (const [adapterIndex, adapter] of (skill.adapters ?? []).entries()) {
+    const adapterWhere = `${where} adapters[${adapterIndex}]`;
+    const mappingId = String(adapter.mappingId);
+    if (adapterMappingIds.has(mappingId)) {
+      problems.push(`${adapterWhere}: duplicate mappingId "${mappingId}"`);
+    }
+    adapterMappingIds.add(mappingId);
+    problems.push(...adapterSourceIdentityProblems(adapter, adapterWhere));
+
+    let primarySourceCount = 0;
+    for (const source of adapter.sources ?? []) {
+      if (source.role === 'primary') primarySourceCount += 1;
+    }
+    if (primarySourceCount !== 1) {
+      problems.push(`${adapterWhere}: composite mapping requires exactly one primary source`);
+    }
+
+    if (adapter.feasibilityStatus === 'assessed_infeasible') {
+      if (
+        adapter.definitionStatus !== 'not_applicable' ||
+        adapter.authorityRequirements !== null ||
+        adapter.implementationAvailability !== 'not_applicable'
+      ) {
+        problems.push(
+          `${adapterWhere}: assessed-infeasible mappings require not_applicable definition ` +
+            'and implementation with null authority requirements',
+        );
+      }
+    } else if (adapter.feasibilityStatus === 'not_assessed') {
+      if (
+        adapter.definitionStatus !== 'not_specified' ||
+        adapter.authorityRequirements !== null ||
+        adapter.implementationAvailability !== 'not_implemented'
+      ) {
+        problems.push(
+          `${adapterWhere}: unassessed mappings require not_specified definition, ` +
+            'not_implemented availability, and null authority requirements',
+        );
+      }
+    } else if (adapter.feasibilityStatus === 'assessed_feasible') {
+      if (
+        adapter.definitionStatus !== 'not_specified' ||
+        adapter.implementationAvailability === 'not_applicable'
+      ) {
+        problems.push(
+          `${adapterWhere}: assessed-feasible mapping has incompatible definition or ` +
+            'implementation state',
+        );
+      }
+    }
+
+    if (adapter.authorityRequirements !== null) {
+      problems.push(
+        `${adapterWhere}: contract source v1 reserves authorityRequirements as null ` +
+          'until a closed normative mapping-definition authority exists',
+      );
+    }
+
+    const implementation = adapterImplementationByKey.get(
+      adapterImplementationKey(skill.id, mappingId),
+    );
+    const implementationPresent =
+      adapter.implementationAvailability === 'packaged' ||
+      adapter.implementationAvailability === 'source_only';
+
+    if (implementationPresent) {
+      if (!implementation) {
+        problems.push(
+          `${adapterWhere}: claims ${String(adapter.implementationAvailability)} implementation ` +
+            'without an entry in ADAPTER_IMPLEMENTATIONS_V1',
+        );
+      } else {
+        const expectedCertificationRequirement =
+          adapterCertificationRequirementByKey.get(
+            adapterImplementationKey(skill.id, mappingId),
+          );
+        matchedAdapterImplementations.add(
+          adapterImplementationKey(skill.id, mappingId),
+        );
+        if (
+          implementation.implementationAvailability !== adapter.implementationAvailability
+        ) {
+          problems.push(
+            `${adapterWhere}: implementation availability disagrees with ` +
+              'ADAPTER_IMPLEMENTATIONS_V1',
+          );
+        }
+        if (
+          expectedCertificationRequirement === undefined ||
+          adapter.certificationRequirement === undefined ||
+          canonicalize(adapter.certificationRequirement as never) !==
+            canonicalize(expectedCertificationRequirement as never)
+        ) {
+          problems.push(
+            `${adapterWhere}: certificationRequirement does not exactly bind immutable ` +
+              `release evidence gate ${implementation.certificationRequirement.gate.id}`,
+          );
+        }
+      }
+    } else {
+      if (implementation) {
+        problems.push(
+          `${adapterWhere}: hides implementation inventory entry as ` +
+            `${String(adapter.implementationAvailability)}`,
+        );
+      }
+      if (Object.hasOwn(adapter, 'certificationRequirement')) {
+        problems.push(
+          `${adapterWhere}: a mapping with no implementation cannot name a certification requirement`,
+        );
+      }
+    }
+  }
 
   const declaredNumericPolicies = new Set<string>();
   collectPropertyConstValues(skill.requestSchema, 'tilingPolicy', declaredNumericPolicies);
@@ -590,6 +972,15 @@ for (const skill of skills) {
       continue;
     }
     assertClosed(schema, `${where} requestSchema.${key}`, problems);
+  }
+}
+
+for (const [key, implementation] of adapterImplementationByKey) {
+  if (!matchedAdapterImplementations.has(key)) {
+    problems.push(
+      `adapter implementation inventory: ${implementation.skillId}/${implementation.mappingId} ` +
+        'has no matching executable adapter declaration in its skill contract',
+    );
   }
 }
 
@@ -891,7 +1282,11 @@ const enumSchema = {
         properties: {
           id: { const: rule.id },
           severity: { const: rule.severity },
-          text: { type: 'string', minLength: 1, maxLength: 400 },
+          text: {
+            type: 'string',
+            minLength: 1,
+            maxLength: MAX_DISCLOSURE_TEXT_LENGTH,
+          },
         },
         required: ['id', 'severity', 'text'],
         additionalProperties: false,
@@ -941,54 +1336,6 @@ const enumSchema = {
 // composing with allOf would leave `unevaluatedProperties` subtleties that can
 // quietly re-open a closed object. Inlining keeps every level provably closed.
 // ---------------------------------------------------------------------------
-
-const COMMON = 'https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs';
-
-function composeRequestSchema(skill: any): object {
-  return {
-    $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: `https://sepahead.github.io/cortexel/schemas/v1/skills/${skill.id}.request.v1.schema.json`,
-    title: `${skill.id} request`,
-    description: `GENERATED from contract/skills/${skill.id}.v1.json. The acceptance authority for this skill.`,
-    type: 'object',
-    properties: {
-      $schema: { type: 'string' },
-      contract: {
-        type: 'object',
-        properties: {
-          name: { const: contractIdentity.request.name },
-          version: { type: 'string', enum: [contractIdentity.request.version] },
-        },
-        required: ['name', 'version'],
-        additionalProperties: false,
-      },
-      contractDigest: { $ref: `${COMMON}/sha256` },
-      skill: {
-        type: 'object',
-        properties: {
-          id: { const: skill.id },
-          revision: {
-            type: 'integer',
-            minimum: 1,
-            description:
-              'Optional in an authored request. A mismatched pin is refused before canonicalization. Every accepted canonical request materializes the resolved installed revision here, making an omitted pin and an explicit-current pin canonically identical.',
-          },
-        },
-        required: ['id'],
-        additionalProperties: false,
-      },
-      data: skill.requestSchema.data,
-      parameters: skill.requestSchema.parameters,
-      source: { $ref: `${COMMON}/sourceDeclaration` },
-      presentation: { $ref: `${COMMON}/presentation` },
-    },
-    required: ['contract', 'skill', 'data', 'parameters', 'source'],
-    additionalProperties: false,
-    ...(skill.requestSchema.envelopeConstraints
-      ? { allOf: [skill.requestSchema.envelopeConstraints] }
-      : {}),
-  };
-}
 
 // ---------------------------------------------------------------------------
 // src/generated/*.ts
@@ -1166,6 +1513,48 @@ export const CAPABILITY_AVAILABILITIES = freezeGenerated(${JSON.stringify(
 )} as const);
 export type CapabilityAvailability = (typeof CAPABILITY_AVAILABILITIES)[number];
 
+export interface AdapterSourceEntry {
+  /** Stable mapping role/profile identity; not a runtime instance id. */
+  readonly sourceId: string;
+  /** Provider/profile class; may repeat across role-distinct sourceIds. */
+  readonly system: string;
+  readonly role: 'primary' | 'required_companion' | 'optional_companion';
+  readonly notes: string;
+}
+
+export interface AdapterCatalogEntry {
+  readonly mappingId: string;
+  readonly sources: readonly AdapterSourceEntry[];
+  /** Bounded feasibility assessment; never an implementation or certification claim. */
+  readonly feasibilityStatus: 'assessed_feasible' | 'assessed_infeasible' | 'not_assessed';
+  /** V1 has no closed normative mapping-definition authority. */
+  readonly definitionStatus: 'not_specified' | 'not_applicable';
+  /** Reserved as null until such an authority exists. */
+  readonly authorityRequirements: null;
+  /** Executable availability; independent of definitionStatus. */
+  readonly implementationAvailability: 'packaged' | 'source_only' | 'not_implemented' | 'not_applicable';
+  /**
+   * Immutable release-ledger gate definition. Mutable status, evidence, and receipts
+   * remain solely in the external ledger. Absent when no implementation exists.
+   */
+  readonly certificationRequirement?: {
+    readonly ledger: 'cortexel-release-evidence-ledger.v1';
+    readonly gate: {
+      readonly id: string;
+      readonly section: string;
+      readonly requirement: string;
+      readonly releaseBlocking: true;
+    };
+    readonly conformanceProfile: {
+      readonly registry: 'cortexel-adapter-conformance-profiles.v1';
+      readonly id: string;
+      readonly digestAlgorithm: 'cortexel_adapter_conformance_profile_rfc8785_sha256_v1';
+      readonly digest: \`sha256:\${string}\`;
+    };
+  };
+  readonly notes?: string;
+}
+
 export interface SkillCatalogEntry {
   readonly id: string;
   readonly revision: number;
@@ -1199,41 +1588,37 @@ export interface SkillCatalogEntry {
   };
   readonly outputAuthority: OutputAuthorityV1;
   readonly evidence: { readonly handVectors: boolean; readonly externalOracle: unknown };
+  readonly adapters: readonly AdapterCatalogEntry[];
   readonly legacyIds: readonly string[];
   readonly owner: string;
   readonly knownLimitations: readonly string[];
 }
 
-export const SKILL_CATALOG: Readonly<Record<string, SkillCatalogEntry>> = freezeGenerated(${JSON.stringify(
+/** Stable skill ids in deterministic lexicographic order. */
+export const STABLE_SKILL_IDS = freezeGenerated(${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 2)} as const);
+export type StableSkillId = (typeof STABLE_SKILL_IDS)[number];
+
+// The catalog is a finite total map. Raw agent/CLI strings cross the explicit
+// isStableSkillId / lookupSkillCatalogEntry boundary instead of acquiring a false
+// compile-time guarantee that every string is present.
+export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> = freezeGenerated(${JSON.stringify(
   Object.fromEntries(
-    skills.map((s) => [
+    stableSkills.map((s) => [
       s.id,
-      {
-        id: s.id,
-        revision: s.revision,
-        status: s.status,
-        availability: capabilityIds.get(s.id).availability,
-        releaseReady: s.releaseReady,
-        title: s.title,
-        canonicalQuestion: s.purpose.canonicalQuestion,
-        cannotEstablish: s.purpose.cannotEstablish,
-        renderer: s.renderer,
-        semanticValidators: s.semanticValidators,
-        disclosures: s.disclosures,
-        budgets: s.budgets,
-        uncertaintySupport: s.science.uncertaintySupport,
-        accessibility: s.accessibility,
-        outputAuthority: s.outputAuthority,
-        evidence: s.evidence,
-        legacyIds: s.migration.legacyIds,
-        owner: s.owner,
-        knownLimitations: s.knownLimitations,
-      },
+      buildPublicSkillCatalogEntry(s, capabilityIds.get(s.id)),
     ]),
   ),
   null,
   2,
 )});
+
+export function isStableSkillId(value: string): value is StableSkillId {
+  return Object.hasOwn(SKILL_CATALOG, value);
+}
+
+export function lookupSkillCatalogEntry(value: string): SkillCatalogEntry | undefined {
+  return isStableSkillId(value) ? SKILL_CATALOG[value] : undefined;
+}
 
 export interface CapabilityCatalogEntry {
   readonly id: string;
@@ -1252,10 +1637,6 @@ export const CAPABILITY_CATALOG: Readonly<Record<string, CapabilityCatalogEntry>
   null,
   2,
 )});
-
-/** The stable catalog, in a deliberate discovery order: traces, events, distributions, topology, spatial. */
-export const STABLE_SKILL_IDS = freezeGenerated(${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 2)} as const);
-export type StableSkillId = (typeof STABLE_SKILL_IDS)[number];
 
 export const EXPERIMENTAL_CAPABILITY_IDS = freezeGenerated(${JSON.stringify(
   capabilities.capabilities
@@ -1330,6 +1711,43 @@ export const UNCERTAINTY_STYLES_BY_KIND: Readonly<Record<UncertaintyKind, Uncert
 export const MAX_STABLE_SERIES = ${palettes.categoricalSeries.maxStableSeries};
 `;
 
+const authoringTs = `${BANNER('contract/skills/, contract/schemas/, and contract/registries/')}
+import { freezeGenerated } from '../core/deep-freeze.js';
+import type { StableSkillId } from './catalog.js';
+
+export interface SkillAuthoringEntry {
+  /** Complete structural request schema. Full Cortexel validation remains authoritative. */
+  readonly requestSchema: Readonly<Record<string, unknown>>;
+  /** Synthetic, copyable fixture selected normatively from the living conformance set. */
+  readonly authoringExample: Readonly<Record<string, unknown>>;
+}
+
+/** Versioned Ajv compile profile bound by catalogDigest. */
+export const AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 =
+  freezeGenerated(${JSON.stringify(AUTHORING_SCHEMA_COMPILATION_PROFILE_V1, null, 2)});
+
+/** Shared offline resources required to compile every generated per-skill schema. */
+export const STABLE_CATALOG_SCHEMA_RESOURCES:
+  readonly Readonly<Record<string, unknown>>[] = freezeGenerated(${JSON.stringify(
+    [commonSchema, enumSchema].sort((left, right) =>
+      left.$id < right.$id ? -1 : left.$id > right.$id ? 1 : 0),
+    null,
+    2,
+  )});
+
+export const SKILL_AUTHORING: Readonly<Record<StableSkillId, SkillAuthoringEntry>> =
+  freezeGenerated(${JSON.stringify(
+    Object.fromEntries(
+      stableSkills.map((skill) => [
+        skill.id,
+        buildPublicSkillAuthoringEntry(skill, contractIdentity),
+      ]),
+    ),
+    null,
+    2,
+  )});
+`;
+
 // ---------------------------------------------------------------------------
 // The contract digest.
 //
@@ -1362,10 +1780,10 @@ function collectNormativeFiles(): { path: string; digest: string }[] {
 // The generated schemas participate in the digest, so they must exist before it
 // is computed. Clear first: a stale skill schema left behind by a renamed skill
 // would silently join the digest and make it wrong.
-rmSync(GENERATED_SCHEMAS, { recursive: true, force: true });
-rmSync(GENERATED_SKILL_SCHEMAS, { recursive: true, force: true });
-ensureDir(GENERATED_SCHEMAS);
-ensureDir(GENERATED_SKILL_SCHEMAS);
+removeGeneratedPath(GENERATED_SCHEMAS);
+removeGeneratedPath(GENERATED_SKILL_SCHEMAS);
+ensureGeneratedOutputDirectory(ROOT, GENERATED_SCHEMAS);
+ensureGeneratedOutputDirectory(ROOT, GENERATED_SKILL_SCHEMAS);
 
 writeIfChanged(
   path.join(GENERATED_SCHEMAS, 'registry-enums.v1.schema.json'),
@@ -1375,7 +1793,7 @@ writeIfChanged(
 for (const skill of skills) {
   writeIfChanged(
     path.join(GENERATED_SKILL_SCHEMAS, `${skill.id}.request.v1.schema.json`),
-    `${JSON.stringify(composeRequestSchema(skill), null, 2)}\n`,
+    `${JSON.stringify(composeSkillRequestSchema(skill, contractIdentity), null, 2)}\n`,
   );
 }
 
@@ -1404,6 +1822,7 @@ const manifest = buildContractManifest({
   canonicalizations,
   disclosures,
   identity,
+  stableSchemaResources: [commonSchema, enumSchema],
   normativeSources: sources,
 });
 const { contractDigest, catalogDigest, stableSkillCount } = manifest;
@@ -1421,6 +1840,7 @@ export const REQUEST_CONTRACT = ${JSON.stringify(contractIdentity.request.value)
 export const ARTIFACT_CONTRACT = ${JSON.stringify(contractIdentity.artifact.value)};
 export const CONTRACT_DIGEST = ${JSON.stringify(contractDigest)};
 export const CATALOG_DIGEST = ${JSON.stringify(catalogDigest)};
+export const CATALOG_DIGEST_DOMAIN = ${JSON.stringify(contractIdentity.catalogDigestDomain)};
 export const STABLE_SKILL_COUNT = ${stableSkillCount};
 
 export interface BuildIdentity {
@@ -1475,34 +1895,54 @@ REQUEST_CONTRACT: str = ${JSON.stringify(contractIdentity.request.value)}
 ARTIFACT_CONTRACT: str = ${JSON.stringify(contractIdentity.artifact.value)}
 CONTRACT_DIGEST: str = ${JSON.stringify(contractDigest)}
 CATALOG_DIGEST: str = ${JSON.stringify(catalogDigest)}
-
-STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze(${JSON.stringify(stableSkills.map((s) => s.id).sort(), null, 4)})
-
-SKILL_REVISIONS: Final[Mapping[str, int]] = _freeze(${JSON.stringify(
-  Object.fromEntries(stableSkills.map((skill) => [skill.id, skill.revision])),
-  null,
-  4,
+CATALOG_DIGEST_DOMAIN: str = ${JSON.stringify(contractIdentity.catalogDigestDomain)}
+AUTHORING_SCHEMA_COMPILATION_PROFILE_V1: Final[Mapping[str, Any]] = _freeze(${pythonLiteral(
+  AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
 )})
 
-CAPABILITY_AVAILABILITY: Final[Mapping[str, str]] = _freeze(${JSON.stringify(
+STABLE_SKILL_IDS: Final[tuple[str, ...]] = _freeze(${pythonLiteral(stableSkills.map((s) => s.id).sort())})
+
+SKILL_CATALOG: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${pythonLiteral(
+  Object.fromEntries(
+    stableSkills.map((skill) => [
+      skill.id,
+      buildPublicSkillCatalogEntry(skill, capabilityIds.get(skill.id)),
+    ]),
+  ),
+)})
+
+SKILL_AUTHORING_EXAMPLES: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${pythonLiteral(
+  Object.fromEntries(
+    stableSkills.map((skill) => [
+      skill.id,
+      buildPublicAuthoringExample(skill),
+    ]),
+  ),
+)})
+
+SKILL_REVISIONS: Final[Mapping[str, int]] = _freeze(${pythonLiteral(
+  Object.fromEntries(stableSkills.map((skill) => [skill.id, skill.revision])),
+)})
+
+SKILL_ADAPTERS: Final[Mapping[str, tuple[Mapping[str, Any], ...]]] = _freeze(${pythonLiteral(
+  Object.fromEntries(stableSkills.map((skill) => [skill.id, skill.adapters])),
+)})
+
+CAPABILITY_AVAILABILITY: Final[Mapping[str, str]] = _freeze(${pythonLiteral(
   Object.fromEntries(
     capabilities.capabilities.map((capability: any) => [capability.id, capability.availability]),
   ),
-  null,
-  4,
 )})
 
-CAPABILITY_AVAILABILITIES: Final[tuple[str, ...]] = _freeze(${JSON.stringify(
+CAPABILITY_AVAILABILITIES: Final[tuple[str, ...]] = _freeze(${pythonLiteral(
   Object.keys(capabilities.availabilities).sort(),
-  null,
-  4,
 )})
 
-ERROR_CODES: Final[tuple[str, ...]] = _freeze(${JSON.stringify([...errorCodeIds].sort(), null, 4)})
+ERROR_CODES: Final[tuple[str, ...]] = _freeze(${pythonLiteral([...errorCodeIds].sort())})
 
-ERROR_STAGES: Final[tuple[str, ...]] = _freeze(${JSON.stringify(errorCodes.stages, null, 4)})
+ERROR_STAGES: Final[tuple[str, ...]] = _freeze(${pythonLiteral(errorCodes.stages)})
 
-UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
+UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${pythonLiteral(
   Object.fromEntries(
     units.units.map((u: any) => [
       u.code,
@@ -1515,11 +1955,9 @@ UNITS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
       },
     ]),
   ),
-  null,
-  4,
 )})
 
-UNIT_ALIASES: Final[Mapping[str, str]] = _freeze(${JSON.stringify(
+UNIT_ALIASES: Final[Mapping[str, str]] = _freeze(${pythonLiteral(
   Object.fromEntries(
     units.units.flatMap((u: any) =>
       (u.aliases ?? [])
@@ -1527,35 +1965,25 @@ UNIT_ALIASES: Final[Mapping[str, str]] = _freeze(${JSON.stringify(
         .map((alias: string) => [alias, u.code]),
     ),
   ),
-  null,
-  4,
 )})
 
-QUANTITY_KIND_DIMENSIONS: Final[Mapping[str, tuple[str, ...]]] = _freeze(${JSON.stringify(
+QUANTITY_KIND_DIMENSIONS: Final[Mapping[str, tuple[str, ...]]] = _freeze(${pythonLiteral(
   Object.fromEntries(units.quantityKinds.map((q: any) => [q.kind, q.dimensions])),
-  null,
-  4,
 )})
 
-NUMERIC_ALGORITHMS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
+NUMERIC_ALGORITHMS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${pythonLiteral(
   Object.fromEntries(numericPolicies.algorithms.map((algorithm: any) => [algorithm.id, algorithm])),
-  null,
-  4,
 )})
 
-NUMERIC_POLICIES: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
+NUMERIC_POLICIES: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${pythonLiteral(
   Object.fromEntries(numericPolicies.policies.map((policy: any) => [policy.id, policy])),
-  null,
-  4,
 )})
 
-CANONICALIZATION_ALGORITHMS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${JSON.stringify(
+CANONICALIZATION_ALGORITHMS: Final[Mapping[str, Mapping[str, Any]]] = _freeze(${pythonLiteral(
   canonicalizationAlgorithmsWithDigests,
-  null,
-  4,
 )})
 
-BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze(${JSON.stringify(
+BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze(${pythonLiteral(
   Object.fromEntries(
     budgets.profiles.map((profile: any) => [
       profile.id,
@@ -1564,10 +1992,8 @@ BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze(${JSON.stringi
       ),
     ]),
   ),
-  null,
-  4,
 )})
-`.replace(/\bnull\b/g, 'None').replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False');
+`;
 
 const written: string[] = [];
 const record = (file: string, content: string): void => {
@@ -1578,7 +2004,7 @@ const record = (file: string, content: string): void => {
 // Project only the schema resources it executes into the Python package, preserving
 // their exact normative bytes. The entire destination is generator-owned so a renamed
 // skill cannot leave a stale schema in a future wheel.
-rmSync(GENERATED_PY_CONTRACT, { recursive: true, force: true });
+removeGeneratedPath(GENERATED_PY_CONTRACT);
 const pythonSchemaResources = [
   'schemas/common.v1.schema.json',
   'schemas/generated/registry-enums.v1.schema.json',
@@ -1594,11 +2020,13 @@ for (const relative of pythonSchemaResources) {
 record(path.join(GENERATED_TS, 'registry.ts'), registryTs);
 record(path.join(GENERATED_TS, 'budgets.ts'), budgetsTs);
 record(path.join(GENERATED_TS, 'catalog.ts'), catalogTs);
+record(path.join(GENERATED_TS, 'authoring.ts'), authoringTs);
 record(path.join(GENERATED_TS, 'identity.ts'), identityTs);
 record(path.join(GENERATED_TS, 'index.ts'), `${BANNER('contract/')}
 export * from './registry.js';
 export * from './budgets.js';
 export * from './catalog.js';
+export * from './authoring.js';
 export * from './identity.js';
 `);
 record(path.join(CONTRACT, 'manifest.v1.json'), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -1611,8 +2039,13 @@ from .catalog import (
     ARTIFACT_CONTRACT,
     CONTRACT_DIGEST,
     CATALOG_DIGEST,
+    CATALOG_DIGEST_DOMAIN,
+    AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
     STABLE_SKILL_IDS,
+    SKILL_CATALOG,
+    SKILL_AUTHORING_EXAMPLES,
     SKILL_REVISIONS,
+    SKILL_ADAPTERS,
     CAPABILITY_AVAILABILITY,
     CAPABILITY_AVAILABILITIES,
     ERROR_CODES,
@@ -1633,8 +2066,13 @@ __all__ = [
     "ARTIFACT_CONTRACT",
     "CONTRACT_DIGEST",
     "CATALOG_DIGEST",
+    "CATALOG_DIGEST_DOMAIN",
+    "AUTHORING_SCHEMA_COMPILATION_PROFILE_V1",
     "STABLE_SKILL_IDS",
+    "SKILL_CATALOG",
+    "SKILL_AUTHORING_EXAMPLES",
     "SKILL_REVISIONS",
+    "SKILL_ADAPTERS",
     "CAPABILITY_AVAILABILITY",
     "CAPABILITY_AVAILABILITIES",
     "ERROR_CODES",

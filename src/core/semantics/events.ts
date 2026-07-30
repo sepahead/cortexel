@@ -382,7 +382,191 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
     }
   }
 
-  return [];
+  if (!originRelative || !unit || dimensionOf(unit) !== 'time') return [];
+
+  const captureAuthority = asRecord(window.captureAuthority);
+  const runtimeStatus = asRecord(captureAuthority?.runtimeStatus);
+  const recordingGrid = asRecord(captureAuthority?.recordingGrid);
+  const bufferEpoch = asRecord(captureAuthority?.bufferEpoch);
+  const recordingPlan = asRecord(captureAuthority?.recordingPlan);
+  const resolutionMs = asNumber(runtimeStatus?.resolutionMs);
+  const ticText = [
+    asString(runtimeStatus?.ticsPerMs),
+    asString(runtimeStatus?.resolutionTics),
+    asString(runtimeStatus?.captureBiologicalTimeTics),
+    asString(recordingGrid?.originTics),
+    asString(recordingGrid?.startTics),
+    asString(recordingGrid?.stopTics),
+    asString(bufferEpoch?.beganAtBiologicalTimeTics),
+    asString(recordingPlan?.lastMutationAtBiologicalTimeTics),
+  ] as const;
+  if (
+    resolutionMs === undefined ||
+    ticText.some((value) => value === undefined)
+  ) {
+    // The closed schema owns missing or malformed capture-authority members.
+    return [];
+  }
+
+  const canonicalTic = /^(?:0|[1-9][0-9]*)$/u;
+  if (ticText.some(
+    (value) =>
+      value === undefined ||
+      value.length === 0 ||
+      value.length > 32 ||
+      !canonicalTic.test(value),
+  )) {
+    // The closed schema owns malformed decimal strings.
+    return [];
+  }
+  const [
+    ticsPerMs,
+    resolutionTics,
+    captureBiologicalTimeTics,
+    originTics,
+    startTics,
+    stopTics,
+    beganAtBiologicalTimeTics,
+    lastMutationAtBiologicalTimeTics,
+  ] = ticText.map((value) => BigInt(value!));
+  if (ticsPerMs === 0n || resolutionTics === 0n) return [];
+
+  const errors: CortexelError[] = [];
+  for (const [tics, milliseconds, instancePath, label] of [
+    [
+      resolutionTics,
+      resolutionMs,
+      `${at}/captureAuthority/runtimeStatus/resolutionMs`,
+      'resolutionMs',
+    ],
+    [
+      originTics,
+      origin!,
+      `${at}/captureAuthority/recordingGrid/originTics`,
+      'origin',
+    ],
+    [
+      startTics,
+      start,
+      `${at}/captureAuthority/recordingGrid/startTics`,
+      'start',
+    ],
+    [
+      stopTics,
+      stop,
+      `${at}/captureAuthority/recordingGrid/stopTics`,
+      'stop',
+    ],
+  ] as const) {
+    let projected: number;
+    try {
+      projected = exactRationalToBinary64(tics, ticsPerMs);
+    } catch {
+      projected = Number.NaN;
+    }
+    if (!Object.is(projected, milliseconds)) {
+      errors.push(
+        makeError({
+          code: 'SCIENCE_WINDOW_INVALID',
+          stage: 'science',
+          instancePath,
+          validatorId: 'window.valid',
+          message:
+            `${label} is not the correctly rounded binary64 millisecond projection of its declared NEST integer-tic preimage.`,
+        }),
+      );
+    }
+  }
+
+  for (const [tics, instancePath, label] of [
+    [
+      originTics,
+      `${at}/captureAuthority/recordingGrid/originTics`,
+      'originTics',
+    ],
+    [
+      startTics,
+      `${at}/captureAuthority/recordingGrid/startTics`,
+      'startTics',
+    ],
+    [
+      stopTics,
+      `${at}/captureAuthority/recordingGrid/stopTics`,
+      'stopTics',
+    ],
+    [
+      captureBiologicalTimeTics,
+      `${at}/captureAuthority/runtimeStatus/captureBiologicalTimeTics`,
+      'captureBiologicalTimeTics',
+    ],
+    [
+      beganAtBiologicalTimeTics,
+      `${at}/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics`,
+      'beganAtBiologicalTimeTics',
+    ],
+    [
+      lastMutationAtBiologicalTimeTics,
+      `${at}/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics`,
+      'lastMutationAtBiologicalTimeTics',
+    ],
+  ] as const) {
+    if (tics % resolutionTics !== 0n) {
+      errors.push(
+        makeError({
+          code: 'SCIENCE_WINDOW_INVALID',
+          stage: 'science',
+          instancePath,
+          validatorId: 'window.valid',
+          message:
+            `${label} is not on the declared NEST runtime resolution grid.`,
+        }),
+      );
+    }
+  }
+
+  const absoluteStartTics = originTics + startTics;
+  const absoluteStopTics = originTics + stopTics;
+  if (captureBiologicalTimeTics < absoluteStopTics) {
+    errors.push(
+      makeError({
+        code: 'SCIENCE_WINDOW_INVALID',
+        stage: 'science',
+        instancePath:
+          `${at}/captureAuthority/runtimeStatus/captureBiologicalTimeTics`,
+        validatorId: 'window.valid',
+        message:
+          'the NEST capture time is earlier than originTics + stopTics. The final status must be read only after the Simulate or Run call that reached the closed-stop endpoint returned successfully.',
+      }),
+    );
+  }
+  if (beganAtBiologicalTimeTics > absoluteStartTics) {
+    errors.push(
+      makeError({
+        code: 'SCIENCE_WINDOW_INVALID',
+        stage: 'science',
+        instancePath:
+          `${at}/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics`,
+        validatorId: 'window.valid',
+        message:
+          'the most recent NEST recorder creation or n_events=0 clear occurred after originTics + startTics, so the retained buffer cannot substantiate the complete window.',
+      }),
+    );
+  }
+  if (lastMutationAtBiologicalTimeTics > absoluteStartTics) {
+    errors.push(
+      makeError({
+        code: 'SCIENCE_WINDOW_INVALID',
+        stage: 'science',
+        instancePath:
+          `${at}/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics`,
+        validatorId: 'window.valid',
+        message:
+          'the most recent NEST recorder-window, backend, time-encoding, or sender-wiring mutation occurred after originTics + startTics, so one plan did not govern the complete window.',
+      }),
+    );
+  }
+
+  return errors;
 };
 
 /**
@@ -543,7 +727,7 @@ export const eventsWithinWindow: SemanticValidator = (
 
 /**
  * Bind the source-specific NEST clock declaration to the only serialized clock
- * profile admitted by revision 2. This is an internal-consistency check, not an
+ * profile admitted by revision 3. This is an internal-consistency check, not an
  * authenticity claim and not a reconstruction of NEST's hidden integer tics.
  */
 export const eventsSourceClockDeclared: SemanticValidator = (
@@ -557,6 +741,9 @@ export const eventsSourceClockDeclared: SemanticValidator = (
   const eventTimes = asRecord(data.eventTimes);
   const version = asString(source?.systemVersion);
   const digest = asString(source?.sourceDigest);
+  const captureAuthority = asRecord(window.captureAuthority);
+  const runtimeStatus = asRecord(captureAuthority?.runtimeStatus);
+  const captureVersion = asString(runtimeStatus?.nestVersion);
   const checks: readonly {
     readonly valid: boolean;
     readonly path: readonly (string | number)[];
@@ -573,9 +760,14 @@ export const eventsSourceClockDeclared: SemanticValidator = (
       message: 'a NEST origin-relative event clock requires source.system = NEST exactly.',
     },
     {
-      valid: version !== undefined && /^3\.(?:9|10)(?:\.[0-9]+)?$/u.test(version),
+      valid: version === '3.10.0',
       path: ['source', 'systemVersion'],
-      message: 'the revision-2 serialized clock profile admits only NEST 3.9, 3.9.x, 3.10, or 3.10.x without a prerelease suffix.',
+      message: 'the revision-3 serialized clock profile admits only the exact pinned NEST 3.10.0 runtime declaration.',
+    },
+    {
+      valid: captureVersion === version,
+      path: ['data', 'window', 'captureAuthority', 'runtimeStatus', 'nestVersion'],
+      message: 'the capture-authority runtime version must exactly equal source.systemVersion.',
     },
     {
       valid: digest !== undefined && /^sha256:[0-9a-f]{64}$/u.test(digest),
@@ -585,12 +777,12 @@ export const eventsSourceClockDeclared: SemanticValidator = (
     {
       valid: asString(window.recordingBackend) === 'memory',
       path: ['data', 'window', 'recordingBackend'],
-      message: 'revision 2 admits only the NEST memory recording backend.',
+      message: 'revision 3 admits only the NEST memory recording backend.',
     },
     {
       valid: asString(window.timeEncoding) === 'native_binary64_ms',
       path: ['data', 'window', 'timeEncoding'],
-      message: 'revision 2 admits only native_binary64_ms (time_in_steps=false), not reconstructed step/offset clocks.',
+      message: 'revision 3 admits only native_binary64_ms (time_in_steps=false), not reconstructed step/offset clocks.',
     },
     {
       valid: asString(eventTimes?.unit) === 'ms',

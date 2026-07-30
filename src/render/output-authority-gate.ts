@@ -10,10 +10,7 @@
  * accessibility effectiveness, or any persisted assurance.
  */
 
-import {
-  interpretOutputAuthorityModelV1,
-  type OutputAuthorityV1,
-} from '../core/output-authority.js';
+import { interpretOutputAuthorityModelV1 } from '../core/output-authority.js';
 import { deriveDisclosures } from '../core/disclosures.js';
 import { canonicalize } from '../core/canonicalize.js';
 import { deriveCallerSourceStatements } from '../core/source-statements.js';
@@ -24,7 +21,7 @@ import {
 } from '../core/limits.js';
 import type { JsonValue } from '../core/parse-json.js';
 import { isValidatedRequest, type ValidatedRequest } from '../core/request.js';
-import { SKILL_CATALOG, type SkillCatalogEntry } from '../generated/catalog.js';
+import { SKILL_CATALOG } from '../generated/catalog.js';
 import { resolveOutputAuthorityEvaluatorV1 } from '../authority/evaluators/registry.js';
 import { extractObservedOutputAuthorityV1 } from './output-authority-extract.js';
 import type { RenderPlanV1 } from './model/renderPlan.js';
@@ -142,13 +139,8 @@ export function checkOutputAuthorityEmissionV1(
       ],
     };
   }
-  const catalog = SKILL_CATALOG[validated.skillId] as SkillCatalogEntry & {
-    readonly outputAuthority?: OutputAuthorityV1;
-  };
-  const authority = catalog?.outputAuthority;
-  if (!authority) {
-    return { tag: 'refused', messages: ['stable skill has no generated OutputAuthority declaration'] };
-  }
+  const catalog = SKILL_CATALOG[validated.skillId];
+  const authority = catalog.outputAuthority;
   if (
     plan.sourceRequestDigest !== validated.requestDigest ||
     plan.skillId !== validated.skillId ||

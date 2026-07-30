@@ -36,7 +36,7 @@ describe('matrix-axis attribution', () => {
     );
     expect(adjacency?.notes).toMatch(/SynapseCollection is an edge list/iu);
     expect(adjacency?.notes).toContain(
-      'https://nest-simulator.readthedocs.io/en/v3.0/auto_examples/synapsecollection.html',
+      'https://nest-simulator.readthedocs.io/en/v3.10/auto_examples/synapsecollection.html',
     );
   });
 

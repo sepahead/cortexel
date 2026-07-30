@@ -80,7 +80,7 @@
     { "legacyId": "nest.adjacency_matrix", "outcome": "migrate", "targetId": "network.adjacency_matrix",
       "transform": "adjacencyToAdjacencyMatrix",
       "transformExecution": "report_only",
-      "notes": "The target contract freezes Cortexel's target-row / source-column display convention and states it on the axes, in the table, and in the caption. The current report-only path copies no matrix data. A NEST SynapseCollection is an edge list rather than a matrix-axis authority; the official NEST plotting example uses source rows and target columns, so Cortexel does not attribute its transposed display convention to NEST (https://nest-simulator.readthedocs.io/en/v3.0/auto_examples/synapsecollection.html).",
+      "notes": "The target contract freezes Cortexel's target-row / source-column display convention and states it on the axes, in the table, and in the caption. The current report-only path copies no matrix data. A NEST SynapseCollection is an edge list rather than a matrix-axis authority; the official NEST 3.10 plotting example uses source rows and target columns, so Cortexel does not attribute its transposed display convention to NEST (https://nest-simulator.readthedocs.io/en/v3.10/auto_examples/synapsecollection.html).",
       "requires": ["complete row (target) and column (source) universes", "a cell mode", "a network scope"] },
 
     { "legacyId": "nest.weight_matrix", "outcome": "migrate", "targetId": "network.weight_matrix",

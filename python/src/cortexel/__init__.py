@@ -24,10 +24,13 @@ from .canonicalize import (
 from .parse_json import parse_json_strict, JsonParseError
 from .validate import validate_request, validate_request_partial, is_valid, CortexelError
 from .identity import get_build_identity
+from .discovery import describe_skill, list_skills
 from .generated.catalog import (
+    AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
     PACKAGE_VERSION,
     CONTRACT_DIGEST,
     CATALOG_DIGEST,
+    CATALOG_DIGEST_DOMAIN,
     STABLE_SKILL_IDS,
 )
 
@@ -45,8 +48,12 @@ __all__ = [
     "is_valid",
     "CortexelError",
     "get_build_identity",
+    "list_skills",
+    "describe_skill",
+    "AUTHORING_SCHEMA_COMPILATION_PROFILE_V1",
     "PACKAGE_VERSION",
     "CONTRACT_DIGEST",
     "CATALOG_DIGEST",
+    "CATALOG_DIGEST_DOMAIN",
     "STABLE_SKILL_IDS",
 ]

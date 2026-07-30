@@ -83,10 +83,14 @@ the four properties above.
 
 - **Not a storage or interchange format.** Cortexel is not NWB, Neo, HDF5, or a
   database. It reads adapter input and emits a figure artifact; it is not a place to
-  persist recordings. Skill contracts record intended, partial, or rejected
-  interoperability mappings for NEST/Neo/NWB/NCP; those records are not adapter
-  implementations or capability declarations. Only the narrow packaged NEST path exists
-  today — see [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).)
+  persist recordings. Skill contracts record composite NEST/Neo/NWB/NCP mappings
+  with independent feasibility, normative-definition, structured-authority, and
+  implementation boundaries. Executable mappings bind an immutable external release
+  gate, while mutable status and receipts remain in the release ledger. An assessed
+  feasible profile does not imply code; packaged code implies neither an independent
+  normative mapping definition nor certification.
+  Only the narrow packaged NEST path exists today — see
+  [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).
 
 - **Not a simulator.** Cortexel runs no neural model, integrates no equations, and
   generates no data. It draws what a simulator or recorder already produced.
@@ -187,11 +191,20 @@ is the part callers most often assume they are getting and are not.
   mirrors, or invents a lag-zero bin.
 - **Records:** the denominator, each analysis's declared bin/event boundary, displayed
   vs. total counts, zero-lag policy, and normalization kind. Generic raster windows admit
-  `[start, stop)`, `[start, stop]`, or `(start, stop]`. A NEST 3.9/3.10 memory export in
-  the revision-2-admitted profile, with `time_in_steps: false`, retains
+  `[start, stop)`, `[start, stop]`, or `(start, stop]`. The request gate admits declared
+  exact NEST 3.10.0 native-memory clock profile; the separately bounded packaged adapter
+  accepts only revision 3's caller-declared exact NEST 3.10.0 memory export plus its
+  required `kind: caller_declaration` capture record. The literal version, exact
+  integer-tic grid, successful-return closed-stop capture endpoint, named
+  plain-data projection, buffer and recorder-plan history, monotonic kernel clock
+  epoch, single-process scope, and complete sender universe remain caller
+  declarations, not live-simulator attestations. The
+  `time_in_steps: false` export retains
   `(origin + start, origin + stop]`; Cortexel
-  checks exact relations among the serialized binary64 values and discloses that it did
-  not inspect hidden integer tics or establish source authenticity.
+  checks exact relations among the serialized binary64 values and declared capture facts,
+  then discloses that it did not observe or authenticate the declared integer tics,
+  projection, runtime, process topology, clock or buffer resets,
+  configuration/wiring history, or source export.
 - **Does not establish:** population size from the neurons that happened to spike (a
   silent neuron is still a recorded neuron; `SCIENCE_DENOMINATOR_INVALID`), that a
   correlation coefficient exists where only a scaled pair count was supplied

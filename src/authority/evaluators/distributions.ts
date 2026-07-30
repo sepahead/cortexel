@@ -810,7 +810,7 @@ function rasterModel(requestValue: JsonValue): AuthorityModel {
 }
 
 const RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.spike_raster', 4),
+  authorityEvaluatorId('neuro.spike_raster', 5),
   (request) => modelFields(rasterModel(request)),
 );
 

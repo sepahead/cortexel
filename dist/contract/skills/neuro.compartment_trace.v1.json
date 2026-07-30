@@ -556,10 +556,78 @@
   },
 
   "adapters": [
-    { "system": "nest.multimeter.cm_default", "status": "partial", "notes": "NEST exposes compartment state under positional keys (v_comp0, v_comp1, ...). The adapter REQUIRES an explicit key-to-compartmentId mapping and fails with ADAPTER_MAPPING_REQUIRED rather than assuming index order: a model assembled in a different order would otherwise attach the tuft's trace to the soma's row and no validator could see it. Accessor-bearing input is rejected before any getter runs." },
-    { "system": "neuron.Vector", "status": "planned", "notes": "NEURON records at (section, seg.x), where seg.x is a normalized position within a section rather than a global compartment identity. The caller must supply the (section, position) to compartment-id mapping; it is not derivable from the recorded arrays." },
-    { "system": "neo.AnalogSignal", "status": "partial", "notes": "Neo has no compartment concept. The caller must map each channel to a compartment id explicitly; a channel index is not a compartment id." },
-    { "system": "nwb.icephys", "status": "rejected", "notes": "An NWB intracellular series describes an ELECTRODE, not a compartment of a model tree. A single-electrode recording is `neuro.analog_trace`. Presenting it here would imply a compartmental model that does not exist." }
+    {
+      "mappingId": "nest-multimeter-cm-default",
+      "sources": [
+        {
+          "system": "nest.multimeter.cm_default",
+          "role": "primary",
+          "notes": "NEST exposes compartment state under positional keys (v_comp0, v_comp1, ...). The adapter REQUIRES an explicit key-to-compartmentId mapping and fails with ADAPTER_MAPPING_REQUIRED rather than assuming index order: a model assembled in a different order would otherwise attach the tuft's trace to the soma's row and no validator could see it. Accessor-bearing input is rejected before any getter runs.",
+          "sourceId": "nest-multimeter-cm-default"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. A bare multimeter event dictionary cannot authenticate these facts, and Cortexel defines no normative receipt yet.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        },
+        {
+          "system": "host-retained NEST compartment/model semantics",
+          "role": "required_companion",
+          "notes": "Candidate exact binding from every positional recordable key to one compartment identity, model morphology, quantity and unit in the producing runtime/build. Neither key order nor a `cm_default` model name authenticates morphology or scientific meaning; no normative mapping receipt exists yet.",
+          "sourceId": "host-nest-compartment-model-semantics"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neuron-vector",
+      "sources": [
+        {
+          "system": "neuron.Vector",
+          "role": "primary",
+          "notes": "NEURON records at (section, seg.x), where seg.x is a normalized position within a section rather than a global compartment identity. The caller must supply the (section, position) to compartment-id mapping; it is not derivable from the recorded arrays.",
+          "sourceId": "neuron-vector"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo-analogsignal",
+      "sources": [
+        {
+          "system": "neo.AnalogSignal",
+          "role": "primary",
+          "notes": "Neo has no compartment concept. The caller must map each channel to a compartment id explicitly; a channel index is not a compartment id.",
+          "sourceId": "neo-analogsignal"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-icephys",
+      "sources": [
+        {
+          "system": "nwb.icephys",
+          "role": "primary",
+          "notes": "An NWB intracellular series describes an ELECTRODE, not a compartment of a model tree. A single-electrode recording is `neuro.analog_trace`. Presenting it here would imply a compartmental model that does not exist.",
+          "sourceId": "nwb-icephys"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
+    }
   ],
 
   "migration": {
@@ -590,6 +658,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

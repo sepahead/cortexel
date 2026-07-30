@@ -123,7 +123,7 @@
       "id": "NEST_SERIALIZED_CLOCK_BOUNDARY",
       "severity": "important",
       "trigger": "the event window uses the NEST origin-relative serialized clock",
-      "text": "NEST clock boundary — Cortexel checked origin, start, stop, and event times as the exported binary64 millisecond values. It did not inspect NEST's hidden integer-tic state or establish the source export's authenticity; pre-serialization timing remains caller-declared."
+      "text": "NEST capture declaration — Cortexel checked the declared plain-data projection, integer-tic grid, successful-return endpoint, buffer/plan history, clock-epoch continuity, sender universe, and single-process scope only for internal consistency. It did not observe or authenticate the runtime, projection, topology, resets, history, wiring, sender universe, or export; all remain caller claims."
     },
     {
       "id": "MISSING_VALUES_PRESENT",

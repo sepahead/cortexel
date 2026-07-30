@@ -14,7 +14,7 @@ defect.
 
 | Path | Role |
 |---|---|
-| `meta/contract-source.schema.json` | The meta-schema every skill definition must satisfy. |
+| `meta/contract-source.schema.json` | The meta-schema every skill definition must satisfy, including the independent adapter mapping/implementation/certification axes. |
 | `meta/canonicalization-registry.schema.json` | The meta-schema for the closed canonical identifier-set registry and its executable conformance corpus. |
 | `registries/` | Closed registries: capabilities, units, error codes, semantic validators, numeric policies, disclosures, budget profiles, legacy skill map. |
 | `schemas/` | Reviewed shared/request/artifact schemas plus generated registry enums, the stable per-skill request union, and composed per-skill schemas. |
@@ -36,8 +36,42 @@ may be hand-edited:
 
 Generation first validates every `contract/skills/*.json` file against
 `meta/contract-source.schema.json`; a schema that is merely documented but never run is
-not a boundary. `bun run check:generated` then checks committed output drift.
+not a boundary. Mutable audit evidence is deliberately not a contract input.
+`bun run check:ledger` separately validates the external zero-claim NEST example
+audit under `docs/audit/`; its execution and certification states are never derived
+into language catalogs, the package manifest, or build identities.
+`bun run check:generated` then checks committed output drift.
 Generation is deterministic: running it twice produces byte-identical output.
+
+`manifest.catalogDigestDomain` is the registry-owned
+`cortexel-public-stable-catalog.v2`. Its canonical preimage includes that literal,
+the versioned schema-compilation profile, the two shared offline structural-schema
+resources, and the exact generated public
+discovery-and-authoring projection for every stable skill sorted by id. That projection
+merges compact `SkillCatalogEntry` metadata with the paired `SkillAuthoringEntry`
+schema and synthetic fixture. The 0.9 line and early 0.10 development builds used an
+implicit tuple-only projection; verifiers must not infer a digest domain from
+`manifestVersion` or the repeatedly reused development package version.
+
+Each adapter entry is one composite mapping with exactly one primary source and any
+required or optional companion sources. `feasibilityStatus` records only the bounded
+assessment outcome; `definitionStatus` distinguishes `not_specified` from
+`not_applicable`; and `implementationAvailability` says whether Cortexel ships that
+exact `mappingId`. A `sourceId` identifies a stable mapping role/profile, not a
+runtime instance. Role-distinct sources may share one `system` provider class.
+Contract source v1 deliberately has no `specified` value and requires
+`authorityRequirements: null`: no closed, independently reviewable mapping-definition
+authority exists yet. Adding an enum value plus prose, request pointers, executable
+code, or a release gate would not create one. A future non-null authority model must
+first ship a closed normative definition inventory with reverse closure and
+independent validation.
+
+The generator compares every executable claim with the closed source implementation
+inventory and checks its immutable `certificationRequirement` against the exact
+release-ledger gate definition. Mutable gate status, evidence, receipts, and tested
+commit identities remain in the release ledger. They are deliberately absent from
+the contract, catalog, and manifest so evidence-only release authorization cannot
+change the semantics of the package candidate that was tested.
 
 ## Packaged copy
 

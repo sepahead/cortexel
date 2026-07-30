@@ -470,7 +470,7 @@
       "releaseBlocking": true,
       "status": "NOT_RUN",
       "evidence": null,
-      "notes": "The receipt is unrelated to adapters and contains no real NEST fixture or supported-version execution; it tests hand-authored population-rate arithmetic."
+      "notes": "No exact NEST 3.10.0 execution receipt exists for adapter revision 3. Certification must exercise the complete versioned capture-authority conformance profile, including the named NumPy-to-plain-data projection, nonchronological events, duplicates, native fractional milliseconds, non-zero origin, exact integer-tic projections and grid alignment, exact open-start/closed-stop behavior, capture at the closed-stop endpoint after successful Run/Simulate return, one- and multi-thread single-process status merging, buffer/configuration/wiring history, monotonic biological_time since kernel initialization, sender-universe binding, and fail-closed MPI or unsupported-runtime declarations. Ad hoc source inspection or local oracle probes do not satisfy this gate."
     },
     {
       "id": "R050",

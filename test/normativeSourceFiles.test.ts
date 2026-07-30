@@ -42,8 +42,14 @@ describe('closed recursive normative-source inventory', () => {
   it('is sorted, recursive, and explicitly excludes only root metadata/corpus entries', () => {
     const files = enumerateNormativeContractFiles(SOURCE);
     expect(files).toEqual([...files].sort());
-    expect(files).toHaveLength(58);
+    expect(files).toHaveLength(60);
+    expect(files).toContain('meta/adapter-conformance-profiles.schema.json');
     expect(files).toContain('meta/contract-source.schema.json');
+    expect(files).toContain(
+      'registries/adapter-conformance-profiles.v1.json',
+    );
+    expect(files).not.toContain('meta/nest-example-coverage.schema.json');
+    expect(files).not.toContain('registries/nest-example-coverage.v1.json');
     expect(files).toContain('schemas/skills/neuro.psth.request.v1.schema.json');
     expect(files).not.toContain('manifest.v1.json');
     expect(files).not.toContain('README.md');

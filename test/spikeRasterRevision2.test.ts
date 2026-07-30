@@ -43,17 +43,17 @@ function decodeXml(value: string): string {
 }
 
 describe('spike-raster revision 2 clock and render semantics', () => {
-  it('publishes skill revision 4 and renderer revision 5 identities', () => {
-    expect(contract.revision).toBe(4);
-    expect(contract.renderer).toEqual({ id: 'figure.spike_raster', revision: 5 });
+  it('publishes skill revision 5 and renderer revision 6 identities', () => {
+    expect(contract.revision).toBe(5);
+    expect(contract.renderer).toEqual({ id: 'figure.spike_raster', revision: 6 });
 
     const current = example();
-    current.skill.revision = 4;
+    current.skill.revision = 5;
     expect(validateRequestValue(current).ok).toBe(true);
-    expect((built(current).artifact.render as any).rendererRevision).toBe(5);
+    expect((built(current).artifact.render as any).rendererRevision).toBe(6);
 
     const stale = example();
-    stale.skill.revision = 3;
+    stale.skill.revision = 4;
     const result = validateRequestValue(stale);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -72,6 +72,17 @@ describe('spike-raster revision 2 clock and render semantics', () => {
       start: 0.5,
       stop: 10.75,
     };
+    atStop.data.window.captureAuthority.runtimeStatus
+      .captureBiologicalTimeTics = '111000';
+    atStop.data.window.captureAuthority.recordingGrid = {
+      originTics: '100250',
+      startTics: '500',
+      stopTics: '10750',
+    };
+    atStop.data.window.captureAuthority.bufferEpoch
+      .beganAtBiologicalTimeTics = '100250';
+    atStop.data.window.captureAuthority.recordingPlan
+      .lastMutationAtBiologicalTimeTics = '100750';
     atStop.data.eventTimes.values = [111];
     atStop.data.eventSenderIds = ['1'];
     expect(validateRequestValue(atStop).ok).toBe(true);

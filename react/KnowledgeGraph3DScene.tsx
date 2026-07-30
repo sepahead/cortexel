@@ -18,9 +18,9 @@
 //   • Nodes are one instancedMesh (unlit, additively-bloomed spheres); edges are
 //     one additive lineSegments; citation flow is one instanced particle cloud.
 //   • useFrame is allocation-free — module-scope scratch objects only.
-//   • Layout is deterministic: unseeded nodes get d3-force-3d's golden-ratio
-//     phyllotaxis placement and its forces use a seeded LCG, so the same graph
-//     lays out identically on every mount (reproducible reading/screenshots).
+//   • Within the pinned JS/runtime, identical ordered inputs use d3-force-3d's
+//     deterministic phyllotaxis seed and LCG. This does not claim byte-identical
+//     pixels across browsers, GPUs, fonts, or floating-point implementations.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
@@ -38,6 +38,7 @@ import {
   advanceGraphLayoutClockInto,
   assignGraphEdgeLanes,
   assertKnowledgeGraphBudget,
+  assertKnowledgeGraphIdentity,
   assertRenderableGraphEdges,
   assertUniqueGraphNodeIds,
   buildAdjacency,
@@ -47,6 +48,7 @@ import {
   graphEdgeControlPointInto,
   graphEdgeCurvePointInto,
   graphEdgeMatchesQuery,
+  graphCameraTargetDamping,
   graphQueryMatchIds,
   graphSignature,
   normalizeGraphNodeRadius,
@@ -107,6 +109,9 @@ export interface ControlsHandle {
 }
 
 export interface KnowledgeGraph3DSceneProps {
+  /** Caller-declared graph/snapshot cache namespace. Change it with declared graph
+   * context; keep it stable for filters. It is not a content digest or proof. */
+  graphIdentity: string;
   nodes: readonly KnowledgeGraph3DNode[];
   edges: readonly KnowledgeGraph3DEdge[];
   selectedId: string | null;
@@ -126,8 +131,8 @@ export interface KnowledgeGraph3DSceneProps {
   /** Citation-flow particle color (a single visual language for flow). */
   particleColor?: string;
   /** Host-detected `prefers-reduced-motion` (same contract as the Expandable*
-   *  scenes): the layout appears pre-settled instead of swirling into place,
-   *  flow particles hold still, and the fly-to snaps instead of easing. */
+   *  scenes): run a bounded static refinement from the deterministic seed,
+   *  hold flow particles still, and snap fly-to instead of easing. */
   reducedMotion?: boolean;
 }
 
@@ -243,7 +248,19 @@ function setEdgeCurve(
   graphEdgeControlPointInto(_a, _b, lane, _curveControl);
 }
 
-export function KnowledgeGraph3DScene({
+export function KnowledgeGraph3DScene(props: KnowledgeGraph3DSceneProps) {
+  const { graphIdentity, nodes, edges } = props;
+  assertKnowledgeGraphIdentity(graphIdentity);
+  assertKnowledgeGraphBudget(nodes.length, edges.length);
+  assertUniqueGraphNodeIds(nodes);
+  assertRenderableGraphEdges(nodes, edges);
+  // React's key boundary atomically remounts every position/camera/simulation ref
+  // for a different declared graph namespace, while preserving same-key views.
+  return <KnowledgeGraph3DSceneInstance key={graphIdentity} {...props} />;
+}
+
+function KnowledgeGraph3DSceneInstance({
+  graphIdentity,
   nodes,
   edges,
   selectedId,
@@ -258,9 +275,6 @@ export function KnowledgeGraph3DScene({
   particleColor = '#8fd3ff',
   reducedMotion = false,
 }: KnowledgeGraph3DSceneProps) {
-  assertKnowledgeGraphBudget(nodes.length, edges.length);
-  assertUniqueGraphNodeIds(nodes);
-  assertRenderableGraphEdges(nodes, edges);
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
   const particlesRef = useRef<THREE.InstancedMesh>(null);
@@ -268,8 +282,8 @@ export function KnowledgeGraph3DScene({
   const labelGroupRef = useRef<THREE.Group>(null);
   const { camera, gl, invalidate } = useThree();
 
-  // Persist positions across data updates so filtering/toggling never
-  // re-scatters the layout the user has been reading.
+  // The exported keyed wrapper remounts this instance for a different declared
+  // graph namespace, so these refs persist only across same-key filters/views.
   const posMap = useRef<Map<string, [number, number, number]>>(new Map());
   const framedRef = useRef(false);
   // The currently-selected node id the camera is easing toward (live-tracked, so
@@ -301,8 +315,8 @@ export function KnowledgeGraph3DScene({
 
   // Content signature of the graph: the simulation memo below is keyed on THIS,
   // not on array identity, so a host that rebuilds nodes/edges every render (the
-  // common React pattern) never restarts a settled layout. Any REAL change —
-  // structure, radius, edge styling — still yields a new key (warm restart).
+  // common React pattern) never restarts a settled layout. Any renderer-relevant
+  // change — structure, radius, edge styling — still yields a new key (warm restart).
   const graphKey = useMemo(() => graphSignature(nodes, edges), [nodes, edges]);
   const normalizedQuery = useMemo(() => normalizeGraphQuery(query), [query]);
   const queryMatchIds = useMemo(
@@ -436,8 +450,8 @@ export function KnowledgeGraph3DScene({
     layoutTickAccumulatorRef.current = 0;
     geometryDirtyRef.current = true;
     invalidate();
-    // NOTE: framedRef is intentionally NOT reset here. Auto-frame is once per
-    // mount, so a filter/toggle never yanks the camera the user has positioned.
+    // The keyed wrapper remounts for a new graph identity. Within this instance,
+    // a filter/toggle never yanks the camera the user has positioned.
     return () => {
       sim.stop();
       simRef.current = null;
@@ -530,7 +544,7 @@ export function KnowledgeGraph3DScene({
     flyToIdRef.current =
       flyToSelection && selectedId && index.has(selectedId) ? selectedId : null;
     if (flyToIdRef.current) invalidate();
-  }, [selectedId, index, flyToSelection, invalidate]);
+  }, [graphIdentity, selectedId, index, flyToSelection, invalidate]);
 
   // The animation loop: settle the sim, stream positions into the GPU buffers,
   // advance flow particles, keep the label pinned, and ease the camera.
@@ -744,7 +758,7 @@ export function KnowledgeGraph3DScene({
         const n = simNodes[fi];
         _a.set(n.x ?? 0, n.y ?? 0, n.z ?? 0);
         // Reduced motion: snap the pivot instead of easing it.
-        controls.target.lerp(_a, reducedMotion ? 1 : Math.min(1, delta * 3));
+        controls.target.lerp(_a, graphCameraTargetDamping(delta, reducedMotion));
         controls.update();
         if (controls.target.distanceTo(_a) < 0.5) flyToIdRef.current = null;
       } else {

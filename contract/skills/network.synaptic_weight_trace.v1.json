@@ -1546,29 +1546,97 @@
   },
   "adapters": [
     {
-      "system": "nest.weight_recorder",
-      "status": "partial",
-      "notes": "The device records one event per transmitted spike per plastic synapse, carrying the sender, the target, the time (ms) and the weight (`nest:weight`). Two limits make this PARTIAL rather than supported. First, the record carries no stable per-synapse identity, so two parallel synapses (a multapse) between the same pair cannot be told apart: the adapter must refuse to mint an edge id that would merge or split them, and it proceeds only when the caller declares that at most one synapse exists per (source, target) pair. Second, whether the written weight precedes or follows the update triggered by that spike is a property of the synapse model's send() in the exact NEST version; the adapter NEVER assumes it and requires `observation.updateSemantics` to be declared. It also requires the recorded interval (the device's start/stop), the synapse model, and the scope, none of which the event stream contains. Under MPI the device is rank-local: a rank holds the synapses whose TARGET it owns, so the adapter emits `mpi_target_rank_local` and never a global claim."
+      "mappingId": "nest-weight-recorder",
+      "sources": [
+        {
+          "system": "nest.weight_recorder",
+          "role": "primary",
+          "notes": "Exact NEST 3.10 weight_recorder output includes sender, target, receptor, port, time and weight. The upstream test suite distinguishes same-pair multapses by (source,target,port), so Cortexel must not claim the device lacks all per-synapse discrimination. That tuple is still not a self-authenticating global edge id: a future mapping must bind it to the exact post-prepare connection inventory, recorder and synapse-model/port namespace from the same run. Whether the written weight precedes or follows the update triggered by a spike is a property of the exact synapse implementation/runtime and must also be bound rather than guessed. No such normative receipt or adapter exists, so this candidate mapping remains not_assessed.",
+          "sourceId": "nest-weight-recorder"
+        },
+        {
+          "system": "nest.SynapseCollection post-prepare inventory",
+          "role": "required_companion",
+          "notes": "Candidate authority for binding each recorded (source,target,port,receptor) tuple to one exact connection after recorder preparation. It must preserve same-pair multapses and bind the exact run, biological time, query, synapse model and port namespace. A final free-floating row list is insufficient, and Cortexel does not yet define or consume this receipt.",
+          "sourceId": "nest-weight-recorder-connection-inventory"
+        },
+        {
+          "system": "host-retained NEST recorder/runtime declaration",
+          "role": "required_companion",
+          "notes": "Candidate authority for the producing runtime/build, recorder identity and interval, synapse-model namespace, rank/world scope and model-specific pre/post-update convention. Until a closed digest-bound receipt exists, these remain caller declarations rather than authenticated NEST evidence.",
+          "sourceId": "host-nest-weight-recorder-context"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nest.GetConnections polling",
-      "status": "partial",
-      "notes": "Repeatedly calling GetConnections(...).get('weight') at declared times yields `point_sample` observations of the STORED weight. Two facts must travel with them. NEST's STDP synapses are updated lazily, only at a presynaptic spike, so a poll returns the last APPLIED weight and not one that includes plasticity pending from postsynaptic activity since. And a poll sees only the moments it looked: an update and a counter-update that both fall between two polls cancel and leave no trace, so a polled trace can never establish that a synapse was quiet."
+      "mappingId": "nest-getconnections-polling",
+      "sources": [
+        {
+          "system": "nest.GetConnections polling",
+          "role": "primary",
+          "notes": "Repeatedly calling GetConnections(...).get('weight') at declared times yields `point_sample` observations of the STORED weight. Two facts must travel with them. NEST's STDP synapses are updated lazily, only at a presynaptic spike, so a poll returns the last APPLIED weight and not one that includes plasticity pending from postsynaptic activity since. And a poll sees only the moments it looked: an update and a counter-update that both fall between two polls cancel and leave no trace, so a polled trace can never establish that a synapse was quiet.",
+          "sourceId": "nest-getconnections-polling"
+        },
+        {
+          "system": "host-retained NEST weight-polling receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound receipt for the producing runtime/build and run, exact connection inventory and model/port namespace, each biological poll coordinate, query/filter/rank scope, and every returned-row digest. It must bind the same connection identity across polls and disclose model-specific lazy-update semantics. No normative receipt or adapter exists, so this mapping remains not_assessed.",
+          "sourceId": "host-nest-weight-polling-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "brian2.StateMonitor over Synapses",
-      "status": "planned",
-      "notes": "Brian records synaptic variables on a regular clock. For an event-driven (on_pre / on_post) rule the underlying variable is piecewise-constant between events while the monitor samples it on the clock, so the samples are point samples OF a step function: joining them with straight segments invents ramps that the model never had, and the mapping must therefore either declare `point_sample` honestly or reconstruct the update events. Not certified until a version matrix and fixtures exist."
+      "mappingId": "brian2-statemonitor-over-synapses",
+      "sources": [
+        {
+          "system": "brian2.StateMonitor over Synapses",
+          "role": "primary",
+          "notes": "Brian records synaptic variables on a regular clock. For an event-driven (on_pre / on_post) rule the underlying variable is piecewise-constant between events while the monitor samples it on the clock, so the samples are point samples OF a step function: joining them with straight segments invents ramps that the model never had, and the mapping must therefore either declare `point_sample` honestly or reconstruct the update events. Not certified until a version matrix and fixtures exist.",
+          "sourceId": "brian2-statemonitor-over-synapses"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "neo / nwb",
-      "status": "rejected",
-      "notes": "Neither models a synaptic weight. Forcing a weight trace into a Neo AnalogSignal or an NWB TimeSeries would lose the synapse identity, the update semantics, and the simulator-defined unit, and would present a lazily-updated step function as a regularly sampled continuous signal. A weight trace is not an analog trace: `neuro.analog_trace` closes its quantity-kind enum against `synaptic_weight` for exactly this reason."
+      "mappingId": "neo-nwb",
+      "sources": [
+        {
+          "system": "neo / nwb",
+          "role": "primary",
+          "notes": "Neither models a synaptic weight. Forcing a weight trace into a Neo AnalogSignal or an NWB TimeSeries would lose the synapse identity, the update semantics, and the simulator-defined unit, and would present a lazily-updated step function as a regularly sampled continuous signal. A weight trace is not an analog trace: `neuro.analog_trace` closes its quantity-kind enum against `synaptic_weight` for exactly this reason.",
+          "sourceId": "neo-nwb"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     },
     {
-      "system": "ncp.observation",
-      "status": "planned",
-      "notes": "An NCP adapter must consume an already-authenticated, already-admitted observation from an immutable pinned NCP release. NCP's declarations are carried, never upgraded: `is_simulation_output=true` becomes `source.kind: simulation`, and an absent calibrated-posterior claim stays absent."
+      "mappingId": "ncp-observation",
+      "sources": [
+        {
+          "system": "ncp.observation",
+          "role": "primary",
+          "notes": "An NCP adapter must consume an already-authenticated, already-admitted observation from an immutable pinned NCP release. NCP's declarations are carried, never upgraded: `is_simulation_output=true` becomes `source.kind: simulation`, and an absent calibrated-posterior claim stays absent.",
+          "sourceId": "ncp-observation"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     }
   ],
   "migration": {
@@ -1594,7 +1662,7 @@
   ],
   "knownLimitations": [
     "Cortexel cannot verify the update convention. It records the caller's `updateSemantics` and draws it. A wrong declaration produces a fully plausible figure whose every step edge is displaced by one inter-update interval, and no validator can detect it from the numbers.",
-    "NEST's weight recorder exposes no per-synapse identity, so parallel synapses between one pair cannot be separated from recorder output alone. This is a limit of the source, not of the contract, and the adapter refuses rather than inventing an edge id.",
+    "Exact NEST 3.10 weight_recorder output carries port and receptor fields, and upstream tests distinguish same-pair multapses by (source,target,port). Cortexel has not established the namespace/lifetime needed to promote that tuple to a stable edge id across recorder, model and run boundaries; a future adapter therefore needs an exact post-prepare connection inventory and runtime/recorder receipt rather than either discarding the fields or treating them as globally unique.",
     "Cross-dimension pooling on the value axis IS enforced: `trace.axis_dimension_compatible` reads `data.series[].values.unit` and refuses two synapses of different dimensions (for example `nest:weight` and `nS`) on one axis, because this figure declares no small-multiples layout.",
     "Duplicate carrier times are checked across every edge by the generic policy validator and the weight-specific coherence boundary. Revision 2 refuses every actual `keep_replicates` duplicate: event rows lack same-time side/event identity, repeated point samples would become an invented vertical trajectory, and two reconstruction values at one time are not a function. Point-sample and linear-reconstruction duplicates may instead use a named aggregate because raw edge uncertainty is fixed to none; shared-grid pairing of unresolved replicates remains refused because cross-member replicate identity is absent.",
     "Cortexel-derived hold aggregates support only `value_after_update` and half-open recorded intervals in revision 2. Side-qualified denominator transitions and a terminal value-before carrier are not present in Artifact 1.0. Individual and caller-declared preaggregated traces still honor both update conventions and their registered recorded/window closure directly.",
@@ -1606,6 +1674,7 @@
     "Cortexel can verify that a weight's unit dimension matches its kind. It cannot verify that two models' weights are truly comparable, that a `nest:weight` means what the caller believes, or that a declared bound is the model's."
   ],
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": {

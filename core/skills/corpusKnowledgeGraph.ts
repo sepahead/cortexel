@@ -9,6 +9,7 @@ import { JsonParamsSchema } from '../vizSpec';
 import {
   CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS,
   CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS,
+  KNOWLEDGE_GRAPH_LIMITS,
   KnowledgeGraph3DParamsSchema,
   PARAM_LIMITS,
   Rfc3339TimestampSchema,
@@ -19,6 +20,8 @@ export type EngramCorpusEntityNodeKind =
   (typeof CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS)[number];
 export type EngramCorpusEntityEdgeKind =
   (typeof CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS)[number];
+export type EngramCorpusEvidenceReference =
+  KnowledgeGraph3DParams['nodes'][number]['evidence'][number];
 
 export interface EngramCorpusEntityNode {
   id: string;
@@ -32,6 +35,8 @@ export interface EngramCorpusEntityNode {
   n_neurons: number;
   n_synapses: number;
   pagerank?: number | null;
+  /** Upstream-supplied references retained exactly; Cortexel never invents anchors. */
+  evidence: readonly EngramCorpusEvidenceReference[];
 }
 
 export interface EngramCorpusEntityEdge {
@@ -41,7 +46,14 @@ export interface EngramCorpusEntityEdge {
   source: string;
   target: string;
   kind: EngramCorpusEntityEdgeKind;
-  confidence?: number | null;
+  /** Optional upstream-declared score meaning. A naked `confidence` is rejected. */
+  uncalibrated_score?: {
+    kind: 'citation_resolution_confidence' | 'structural_similarity';
+    value: number;
+    calibrated_posterior: false;
+  } | null;
+  /** Upstream-supplied references retained exactly; Cortexel never invents anchors. */
+  evidence: readonly EngramCorpusEvidenceReference[];
 }
 
 export interface EngramCorpusEntityGraphResponse {
@@ -82,6 +94,10 @@ const unitInterval = z
   .refine((value) => !Object.is(value, -0), 'scores must not be negative zero');
 const boundedSourceText = (max: number) => z.string().trim().min(1).max(max);
 const nullableAttributeText = z.string().max(200).nullable().optional();
+const EngramEvidenceSchema = z
+  .array(JsonParamsSchema)
+  .min(1)
+  .max(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement);
 
 const EngramNodeSchema = z
   .object({
@@ -96,6 +112,7 @@ const EngramNodeSchema = z
     n_neurons: safeCount,
     n_synapses: safeCount,
     pagerank: unitInterval.nullable().optional(),
+    evidence: EngramEvidenceSchema,
   })
   .strict();
 
@@ -105,7 +122,16 @@ const EngramEdgeSchema = z
     source: boundedSourceText(120),
     target: boundedSourceText(120),
     kind: z.enum(CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS),
-    confidence: unitInterval.nullable().optional(),
+    uncalibrated_score: z
+      .object({
+        kind: z.enum(['citation_resolution_confidence', 'structural_similarity']),
+        value: unitInterval,
+        calibrated_posterior: z.literal(false),
+      })
+      .strict()
+      .nullable()
+      .optional(),
+    evidence: EngramEvidenceSchema,
   })
   .strict();
 
@@ -200,32 +226,10 @@ function nodeDetail(node: CheckedEngramNode): string | undefined {
 /** Collision-free tuple encoding under the published UTF-16 length model. */
 function legacyEdgeId(edge: CheckedEngramEdge): string {
   const field = (value: string): string => `${value.length}:${value}`;
-  return `edge:${field(edge.source)}${field(edge.kind)}${field(edge.target)}`;
-}
-
-function edgeScore(edge: CheckedEngramEdge): Record<string, unknown> | undefined {
-  if (edge.confidence === undefined || edge.confidence === null) return undefined;
-  if (edge.kind === 'cites') {
-    return {
-      kind: 'citation_resolution_confidence',
-      value: edge.confidence,
-      calibrated_posterior: false,
-    };
-  }
-  if (edge.kind === 'same_as' || edge.kind === 'variant_of') {
-    return {
-      kind: 'structural_similarity',
-      value: edge.confidence,
-      calibrated_posterior: false,
-    };
-  }
-  // This intentionally fails the downstream closed score discriminator: a
-  // membership confidence has no declared meaning in the Engram response.
-  return {
-    kind: 'unsupported_membership_confidence',
-    value: edge.confidence,
-    calibrated_posterior: false,
-  };
+  const [source, target] = edge.kind === 'same_as' && edge.target < edge.source
+    ? [edge.target, edge.source]
+    : [edge.source, edge.target];
+  return `edge:${field(source)}${field(edge.kind)}${field(target)}`;
 }
 
 function summaryErrors(graph: CheckedEngramGraph): string[] {
@@ -356,16 +360,12 @@ export function adaptEngramCorpusEntityGraph(
             pagerank: node.pagerank ?? null,
           },
           epistemic: { ...DERIVED_ADVISORY },
-          evidence: [{
-            kind: 'graph_snapshot_record',
-            evidence_id: `snapshot-node:${node.id}`,
-            record_id: `node:${node.id}`,
-          }],
+          evidence: node.evidence,
         };
       }),
       edges: graphValue.edges.map((edge) => {
         const id = edge.id ?? legacyEdgeId(edge);
-        const score = edgeScore(edge);
+        const score = edge.uncalibrated_score;
         return {
           id,
           source: edge.source,
@@ -374,11 +374,7 @@ export function adaptEngramCorpusEntityGraph(
           label: EDGE_LABELS[edge.kind],
           attributes: {},
           epistemic: { ...DERIVED_ADVISORY },
-          evidence: [{
-            kind: 'graph_snapshot_record',
-            evidence_id: `snapshot-edge:${id}`,
-            record_id: id,
-          }],
+          evidence: edge.evidence,
           ...(score ? { uncalibrated_score: score } : {}),
         };
       }),

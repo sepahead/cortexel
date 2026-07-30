@@ -1,6 +1,6 @@
 import {
   parseJsonStrict
-} from "../chunk-HEEPK7X6.js";
+} from "../chunk-3OPWOH6Z.js";
 import {
   DistributionDerivationError,
   MatrixDerivationError,
@@ -13,12 +13,10 @@ import {
   deriveWeightMatrix,
   validateStructure,
   verifyHistogramValues
-} from "../chunk-6VN5AFAK.js";
+} from "../chunk-L6Q7RZCU.js";
 import {
-  LEGACY_SKILL_MAP,
   MAX_MATERIALIZED_BINS,
   SEMANTIC_VALIDATOR_IDS,
-  SKILL_CATALOG,
   axesAreCompatible,
   checkQuantityUnit,
   compareExactUnitArraySumToDifference,
@@ -41,7 +39,27 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "../chunk-23EH6LGQ.js";
+} from "../chunk-6FUWJQMA.js";
+import {
+  LEGACY_SKILL_MAP,
+  SKILL_CATALOG,
+  isStableSkillId,
+  lookupSkillCatalogEntry
+} from "../chunk-6VUQLANI.js";
+import {
+  snapshotValue
+} from "../chunk-IPFP7NAU.js";
+import {
+  DEFAULT_PROFILE,
+  MAX_ERROR_RECORDS,
+  REQUEST_CONTRACT_IDENTITY,
+  finalizeErrors,
+  isSafeDisplayString,
+  makeError,
+  pointer,
+  tryGetBudgetLimits,
+  trySelectTighterBudgetProfile
+} from "../chunk-VHSQP47Z.js";
 import {
   binary64RelativeDifferenceWithinEpsilons,
   binary64RelativeDifferenceWithinTolerance,
@@ -53,25 +71,13 @@ import {
   isRoundedMeanOfSafeNonnegativeIntegers
 } from "../chunk-XGABDL4O.js";
 import {
-  snapshotValue
-} from "../chunk-X2A5HVBH.js";
-import {
-  CONTRACT_DIGEST,
-  DEFAULT_PROFILE,
-  MAX_ERROR_RECORDS,
-  REQUEST_CONTRACT,
-  REQUEST_CONTRACT_IDENTITY,
-  deepFreeze,
-  finalizeErrors,
-  isSafeDisplayString,
-  makeError,
-  pointer,
-  tryGetBudgetLimits,
-  trySelectTighterBudgetProfile
-} from "../chunk-JG4ZORSQ.js";
-import {
   canonicalDigest
 } from "../chunk-ZYBCCIMH.js";
+import {
+  CONTRACT_DIGEST,
+  REQUEST_CONTRACT,
+  deepFreeze
+} from "../chunk-WQLKPQUW.js";
 
 // src/core/semantics/provenance.ts
 var LIBRARY_AUTHORED_FIELDS = /* @__PURE__ */ new Set([
@@ -1033,7 +1039,168 @@ var windowValid = (context) => {
       ];
     }
   }
-  return [];
+  if (!originRelative || !unit || dimensionOf(unit) !== "time") return [];
+  const captureAuthority = asRecord(window.captureAuthority);
+  const runtimeStatus = asRecord(captureAuthority?.runtimeStatus);
+  const recordingGrid = asRecord(captureAuthority?.recordingGrid);
+  const bufferEpoch = asRecord(captureAuthority?.bufferEpoch);
+  const recordingPlan = asRecord(captureAuthority?.recordingPlan);
+  const resolutionMs = asNumber(runtimeStatus?.resolutionMs);
+  const ticText = [
+    asString(runtimeStatus?.ticsPerMs),
+    asString(runtimeStatus?.resolutionTics),
+    asString(runtimeStatus?.captureBiologicalTimeTics),
+    asString(recordingGrid?.originTics),
+    asString(recordingGrid?.startTics),
+    asString(recordingGrid?.stopTics),
+    asString(bufferEpoch?.beganAtBiologicalTimeTics),
+    asString(recordingPlan?.lastMutationAtBiologicalTimeTics)
+  ];
+  if (resolutionMs === void 0 || ticText.some((value) => value === void 0)) {
+    return [];
+  }
+  const canonicalTic = /^(?:0|[1-9][0-9]*)$/u;
+  if (ticText.some(
+    (value) => value === void 0 || value.length === 0 || value.length > 32 || !canonicalTic.test(value)
+  )) {
+    return [];
+  }
+  const [
+    ticsPerMs,
+    resolutionTics,
+    captureBiologicalTimeTics,
+    originTics,
+    startTics,
+    stopTics,
+    beganAtBiologicalTimeTics,
+    lastMutationAtBiologicalTimeTics
+  ] = ticText.map((value) => BigInt(value));
+  if (ticsPerMs === 0n || resolutionTics === 0n) return [];
+  const errors = [];
+  for (const [tics, milliseconds, instancePath, label] of [
+    [
+      resolutionTics,
+      resolutionMs,
+      `${at}/captureAuthority/runtimeStatus/resolutionMs`,
+      "resolutionMs"
+    ],
+    [
+      originTics,
+      origin,
+      `${at}/captureAuthority/recordingGrid/originTics`,
+      "origin"
+    ],
+    [
+      startTics,
+      start,
+      `${at}/captureAuthority/recordingGrid/startTics`,
+      "start"
+    ],
+    [
+      stopTics,
+      stop,
+      `${at}/captureAuthority/recordingGrid/stopTics`,
+      "stop"
+    ]
+  ]) {
+    let projected;
+    try {
+      projected = exactRationalToBinary64(tics, ticsPerMs);
+    } catch {
+      projected = Number.NaN;
+    }
+    if (!Object.is(projected, milliseconds)) {
+      errors.push(
+        makeError({
+          code: "SCIENCE_WINDOW_INVALID",
+          stage: "science",
+          instancePath,
+          validatorId: "window.valid",
+          message: `${label} is not the correctly rounded binary64 millisecond projection of its declared NEST integer-tic preimage.`
+        })
+      );
+    }
+  }
+  for (const [tics, instancePath, label] of [
+    [
+      originTics,
+      `${at}/captureAuthority/recordingGrid/originTics`,
+      "originTics"
+    ],
+    [
+      startTics,
+      `${at}/captureAuthority/recordingGrid/startTics`,
+      "startTics"
+    ],
+    [
+      stopTics,
+      `${at}/captureAuthority/recordingGrid/stopTics`,
+      "stopTics"
+    ],
+    [
+      captureBiologicalTimeTics,
+      `${at}/captureAuthority/runtimeStatus/captureBiologicalTimeTics`,
+      "captureBiologicalTimeTics"
+    ],
+    [
+      beganAtBiologicalTimeTics,
+      `${at}/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics`,
+      "beganAtBiologicalTimeTics"
+    ],
+    [
+      lastMutationAtBiologicalTimeTics,
+      `${at}/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics`,
+      "lastMutationAtBiologicalTimeTics"
+    ]
+  ]) {
+    if (tics % resolutionTics !== 0n) {
+      errors.push(
+        makeError({
+          code: "SCIENCE_WINDOW_INVALID",
+          stage: "science",
+          instancePath,
+          validatorId: "window.valid",
+          message: `${label} is not on the declared NEST runtime resolution grid.`
+        })
+      );
+    }
+  }
+  const absoluteStartTics = originTics + startTics;
+  const absoluteStopTics = originTics + stopTics;
+  if (captureBiologicalTimeTics < absoluteStopTics) {
+    errors.push(
+      makeError({
+        code: "SCIENCE_WINDOW_INVALID",
+        stage: "science",
+        instancePath: `${at}/captureAuthority/runtimeStatus/captureBiologicalTimeTics`,
+        validatorId: "window.valid",
+        message: "the NEST capture time is earlier than originTics + stopTics. The final status must be read only after the Simulate or Run call that reached the closed-stop endpoint returned successfully."
+      })
+    );
+  }
+  if (beganAtBiologicalTimeTics > absoluteStartTics) {
+    errors.push(
+      makeError({
+        code: "SCIENCE_WINDOW_INVALID",
+        stage: "science",
+        instancePath: `${at}/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics`,
+        validatorId: "window.valid",
+        message: "the most recent NEST recorder creation or n_events=0 clear occurred after originTics + startTics, so the retained buffer cannot substantiate the complete window."
+      })
+    );
+  }
+  if (lastMutationAtBiologicalTimeTics > absoluteStartTics) {
+    errors.push(
+      makeError({
+        code: "SCIENCE_WINDOW_INVALID",
+        stage: "science",
+        instancePath: `${at}/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics`,
+        validatorId: "window.valid",
+        message: "the most recent NEST recorder-window, backend, time-encoding, or sender-wiring mutation occurred after originTics + startTics, so one plan did not govern the complete window."
+      })
+    );
+  }
+  return errors;
 };
 var eventsWithinWindow = (context) => {
   const data = getData(context);
@@ -1132,6 +1299,9 @@ var eventsSourceClockDeclared = (context) => {
   const eventTimes = asRecord(data.eventTimes);
   const version = asString(source?.systemVersion);
   const digest = asString(source?.sourceDigest);
+  const captureAuthority = asRecord(window.captureAuthority);
+  const runtimeStatus = asRecord(captureAuthority?.runtimeStatus);
+  const captureVersion = asString(runtimeStatus?.nestVersion);
   const checks = [
     {
       valid: asString(source?.kind) === "simulation",
@@ -1144,9 +1314,14 @@ var eventsSourceClockDeclared = (context) => {
       message: "a NEST origin-relative event clock requires source.system = NEST exactly."
     },
     {
-      valid: version !== void 0 && /^3\.(?:9|10)(?:\.[0-9]+)?$/u.test(version),
+      valid: version === "3.10.0",
       path: ["source", "systemVersion"],
-      message: "the revision-2 serialized clock profile admits only NEST 3.9, 3.9.x, 3.10, or 3.10.x without a prerelease suffix."
+      message: "the revision-3 serialized clock profile admits only the exact pinned NEST 3.10.0 runtime declaration."
+    },
+    {
+      valid: captureVersion === version,
+      path: ["data", "window", "captureAuthority", "runtimeStatus", "nestVersion"],
+      message: "the capture-authority runtime version must exactly equal source.systemVersion."
     },
     {
       valid: digest !== void 0 && /^sha256:[0-9a-f]{64}$/u.test(digest),
@@ -1156,12 +1331,12 @@ var eventsSourceClockDeclared = (context) => {
     {
       valid: asString(window.recordingBackend) === "memory",
       path: ["data", "window", "recordingBackend"],
-      message: "revision 2 admits only the NEST memory recording backend."
+      message: "revision 3 admits only the NEST memory recording backend."
     },
     {
       valid: asString(window.timeEncoding) === "native_binary64_ms",
       path: ["data", "window", "timeEncoding"],
-      message: "revision 2 admits only native_binary64_ms (time_in_steps=false), not reconstructed step/offset clocks."
+      message: "revision 3 admits only native_binary64_ms (time_in_steps=false), not reconstructed step/offset clocks."
     },
     {
       valid: asString(eventTimes?.unit) === "ms",
@@ -3858,7 +4033,7 @@ var uncertaintySupportedVariant = (context) => {
   const { node, path } = found;
   const kind = asString(node.kind);
   if (!kind) return [];
-  const catalog = SKILL_CATALOG[context.skillId];
+  const catalog = lookupSkillCatalogEntry(context.skillId);
   if (!catalog) return [];
   const supported = catalog.uncertaintySupport;
   const errors = [];
@@ -6776,7 +6951,6 @@ function assertValidatorsImplemented() {
 assertValidatorsImplemented();
 function runSemanticValidators(request, skillId) {
   const catalog = SKILL_CATALOG[skillId];
-  if (!catalog) return [];
   const errors = [];
   for (const declared of catalog.semanticValidators) {
     const validator = SEMANTIC_VALIDATORS[declared.id];
@@ -6920,7 +7094,7 @@ function checkSkill(skillId) {
       })
     ];
   }
-  const entry = SKILL_CATALOG[skillId];
+  const entry = lookupSkillCatalogEntry(skillId);
   if (entry && entry.status === "stable") return [];
   const legacy = LEGACY_SKILL_MAP[skillId];
   if (legacy) {
@@ -6996,7 +7170,20 @@ function validateSnapshot(value, assurance) {
   if (identityErrors.length > 0) return fail(identityErrors, assurance);
   const skillId = readSkillId(request);
   const skillErrors = checkSkill(skillId);
-  if (skillErrors.length > 0 || skillId === void 0) return fail(skillErrors, assurance);
+  if (skillErrors.length > 0) return fail(skillErrors, assurance);
+  if (skillId === void 0 || !isStableSkillId(skillId)) {
+    return fail(
+      [
+        makeError({
+          code: "INTERNAL_INVARIANT_VIOLATED",
+          stage: "internal",
+          instancePath: "/skill/id",
+          message: "skill identity checking accepted an id outside the generated stable catalog. Cortexel refused to mint a validated request."
+        })
+      ],
+      assurance
+    );
+  }
   const catalog = SKILL_CATALOG[skillId];
   const requestedRevision = request.skill.revision;
   if (typeof requestedRevision === "number" && requestedRevision !== catalog.revision) {

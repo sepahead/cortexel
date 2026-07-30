@@ -4,6 +4,14 @@ import {
   type EngramCorpusEntityGraphResponse,
 } from '../core/skills/corpusKnowledgeGraph';
 
+function evidence(evidenceId: string, recordId: string) {
+  return [{
+    kind: 'graph_snapshot_record' as const,
+    evidence_id: evidenceId,
+    record_id: recordId,
+  }];
+}
+
 function response(): EngramCorpusEntityGraphResponse {
   return {
     nodes: [
@@ -18,6 +26,7 @@ function response(): EngramCorpusEntityGraphResponse {
         n_neurons: 2,
         n_synapses: 1,
         pagerank: null,
+        evidence: evidence('source:paper:p1', 'record:paper:p1'),
       },
       {
         id: 'model:m1',
@@ -29,6 +38,7 @@ function response(): EngramCorpusEntityGraphResponse {
         n_neurons: 0,
         n_synapses: 0,
         pagerank: 0.5,
+        evidence: evidence('source:model:m1', 'record:model:m1'),
       },
       {
         id: 'family:f1',
@@ -38,6 +48,7 @@ function response(): EngramCorpusEntityGraphResponse {
         paper_count: 1,
         n_neurons: 0,
         n_synapses: 0,
+        evidence: evidence('source:family:f1', 'record:family:f1'),
       },
     ],
     edges: [
@@ -45,11 +56,13 @@ function response(): EngramCorpusEntityGraphResponse {
         source: 'paper:p1',
         target: 'model:m1',
         kind: 'instantiates',
+        evidence: evidence('source:instantiates:p1:m1', 'record:instantiates:p1:m1'),
       },
       {
         source: 'model:m1',
         target: 'family:f1',
         kind: 'belongs_to_family',
+        evidence: evidence('source:family:m1:f1', 'record:family:m1:f1'),
       },
     ],
     paper_count: 1,
@@ -71,7 +84,7 @@ const options = {
 };
 
 describe('adaptEngramCorpusEntityGraph', () => {
-  it('projects every Engram entity field and binds each record to the snapshot', () => {
+  it('projects every Engram entity field and retains upstream evidence without invention', () => {
     const result = adaptEngramCorpusEntityGraph(response(), options);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -95,7 +108,8 @@ describe('adaptEngramCorpusEntityGraph', () => {
     expect(result.params.nodes[0].evidence).toEqual([
       expect.objectContaining({
         kind: 'graph_snapshot_record',
-        record_id: 'node:paper:p1',
+        evidence_id: 'source:paper:p1',
+        record_id: 'record:paper:p1',
       }),
     ]);
     expect(result.params.edges[0]).toMatchObject({
@@ -109,7 +123,21 @@ describe('adaptEngramCorpusEntityGraph', () => {
     });
   });
 
-  it('maps only meaningful Engram confidence fields into discriminated scores', () => {
+  it('fails closed when upstream omits an element evidence anchor', () => {
+    const missingNodeEvidence = response() as unknown as {
+      nodes: Array<Record<string, unknown>>;
+    };
+    delete missingNodeEvidence.nodes[0].evidence;
+    expect(adaptEngramCorpusEntityGraph(missingNodeEvidence, options).ok).toBe(false);
+
+    const missingEdgeEvidence = response() as unknown as {
+      edges: Array<Record<string, unknown>>;
+    };
+    delete missingEdgeEvidence.edges[0].evidence;
+    expect(adaptEngramCorpusEntityGraph(missingEdgeEvidence, options).ok).toBe(false);
+  });
+
+  it('requires Engram to declare an exact score discriminator', () => {
     const graph = response();
     graph.nodes = [...graph.nodes, {
       id: 'paper:p2',
@@ -119,13 +147,19 @@ describe('adaptEngramCorpusEntityGraph', () => {
       paper_count: 0,
       n_neurons: 0,
       n_synapses: 0,
+      evidence: evidence('source:paper:p2', 'record:paper:p2'),
     }];
     graph.paper_count = 2;
     graph.edges = [...graph.edges, {
       source: 'paper:p1',
       target: 'paper:p2',
       kind: 'cites',
-      confidence: 0.81,
+      uncalibrated_score: {
+        kind: 'citation_resolution_confidence',
+        value: 0.81,
+        calibrated_posterior: false,
+      },
+      evidence: evidence('source:cites:p1:p2', 'record:cites:p1:p2'),
     }];
     graph.edge_counts = { ...graph.edge_counts, cites: 1 };
     const result = adaptEngramCorpusEntityGraph(graph, options);
@@ -137,8 +171,19 @@ describe('adaptEngramCorpusEntityGraph', () => {
       calibrated_posterior: false,
     });
 
-    graph.edges[0].confidence = 0.9;
-    expect(adaptEngramCorpusEntityGraph(graph, options).ok).toBe(false);
+    const naked = response() as unknown as {
+      edges: Array<Record<string, unknown>>;
+    };
+    naked.edges[0].confidence = 0.9;
+    expect(adaptEngramCorpusEntityGraph(naked, options).ok).toBe(false);
+
+    const wrongMeaning = response();
+    wrongMeaning.edges[0].uncalibrated_score = {
+      kind: 'structural_similarity',
+      value: 0.9,
+      calibrated_posterior: false,
+    };
+    expect(adaptEngramCorpusEntityGraph(wrongMeaning, options).ok).toBe(false);
   });
 
   it('preserves explicit parallel assertion ids and rejects indistinguishable legacy duplicates', () => {
@@ -149,12 +194,14 @@ describe('adaptEngramCorpusEntityGraph', () => {
         source: 'paper:p1',
         target: 'model:m1',
         kind: 'instantiates',
+        evidence: evidence('source:cluster:a', 'record:cluster:a'),
       },
       {
         id: 'membership-from-cluster-b',
         source: 'paper:p1',
         target: 'model:m1',
         kind: 'instantiates',
+        evidence: evidence('source:cluster:b', 'record:cluster:b'),
       },
     ];
     graph.edge_counts = { instantiates: 2 };
@@ -172,6 +219,79 @@ describe('adaptEngramCorpusEntityGraph', () => {
     const legacy = adaptEngramCorpusEntityGraph(graph, options);
     expect(legacy.ok).toBe(false);
     if (!legacy.ok) expect(legacy.errors.join(' ')).toMatch(/duplicate edge id/);
+
+    const symmetric = response();
+    symmetric.nodes = [
+      {
+        id: 'model:a',
+        kind: 'model',
+        label: 'Model A',
+        family: 'LIF',
+        paper_count: 0,
+        n_neurons: 0,
+        n_synapses: 0,
+        evidence: evidence('source:model:a', 'record:model:a'),
+      },
+      {
+        id: 'model:b',
+        kind: 'model',
+        label: 'Model B',
+        family: 'LIF',
+        paper_count: 0,
+        n_neurons: 0,
+        n_synapses: 0,
+        evidence: evidence('source:model:b', 'record:model:b'),
+      },
+    ];
+    symmetric.edges = [
+      {
+        source: 'model:a',
+        target: 'model:b',
+        kind: 'same_as',
+        evidence: evidence('source:same:a:b', 'record:same:a:b'),
+      },
+      {
+        source: 'model:b',
+        target: 'model:a',
+        kind: 'same_as',
+        evidence: evidence('source:same:b:a', 'record:same:b:a'),
+      },
+    ];
+    symmetric.paper_count = 0;
+    symmetric.model_count = 2;
+    symmetric.family_count = 0;
+    symmetric.edge_counts = { same_as: 2 };
+    symmetric.kinds = ['model'];
+    const reverseLegacySameAs = adaptEngramCorpusEntityGraph(symmetric, options);
+    expect(reverseLegacySameAs.ok).toBe(false);
+    if (!reverseLegacySameAs.ok) {
+      expect(reverseLegacySameAs.errors.join(' ')).toMatch(/duplicate edge id/);
+    }
+
+    symmetric.edges = [
+      {
+        id: 'claim:a',
+        source: 'model:a',
+        target: 'model:b',
+        kind: 'same_as',
+        evidence: evidence('source:claim:a', 'record:claim:a'),
+      },
+      {
+        id: 'claim:b',
+        source: 'model:b',
+        target: 'model:a',
+        kind: 'same_as',
+        evidence: evidence('source:claim:b', 'record:claim:b'),
+      },
+    ];
+    const explicitReverseSameAs = adaptEngramCorpusEntityGraph(symmetric, options);
+    expect(explicitReverseSameAs.ok).toBe(true);
+    if (explicitReverseSameAs.ok) {
+      expect(explicitReverseSameAs.params.edges.map((edge) => edge.id)).toEqual([
+        'claim:a',
+        'claim:b',
+      ]);
+    }
   });
 
   it('fails closed on dishonest flags and inconsistent redundant summaries', () => {
@@ -288,10 +408,19 @@ describe('adaptEngramCorpusEntityGraph', () => {
     badConfidence.nodes = [...badConfidence.nodes, {
       id: 'paper:p2', kind: 'paper', label: 'P2', family: 'LIF', paper_count: 0,
       n_neurons: 0, n_synapses: 0,
+      evidence: evidence('source:paper:p2', 'record:paper:p2'),
     }];
     badConfidence.paper_count = 2;
     badConfidence.edges = [...badConfidence.edges, {
-      source: 'paper:p1', target: 'paper:p2', kind: 'cites', confidence: 1.1,
+      source: 'paper:p1',
+      target: 'paper:p2',
+      kind: 'cites',
+      uncalibrated_score: {
+        kind: 'citation_resolution_confidence',
+        value: 1.1,
+        calibrated_posterior: false,
+      },
+      evidence: evidence('source:cites:p1:p2', 'record:cites:p1:p2'),
     }];
     badConfidence.edge_counts = { ...badConfidence.edge_counts, cites: 1 };
     expect(adaptEngramCorpusEntityGraph(badConfidence, options).ok).toBe(false);
@@ -306,13 +435,24 @@ describe('adaptEngramCorpusEntityGraph', () => {
       paper_count: 0,
       n_neurons: 0,
       n_synapses: 0,
+      evidence: evidence(`source:${id}`, `record:${id}`),
     });
     const graph: EngramCorpusEntityGraphResponse = {
       ...response(),
       nodes: [node('a->cites->b'), node('c'), node('a'), node('b->cites->c')],
       edges: [
-        { source: 'a->cites->b', target: 'c', kind: 'cites' },
-        { source: 'a', target: 'b->cites->c', kind: 'cites' },
+        {
+          source: 'a->cites->b',
+          target: 'c',
+          kind: 'cites',
+          evidence: evidence('source:first', 'record:first'),
+        },
+        {
+          source: 'a',
+          target: 'b->cites->c',
+          kind: 'cites',
+          evidence: evidence('source:second', 'record:second'),
+        },
       ],
       paper_count: 4,
       model_count: 0,

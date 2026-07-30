@@ -38,6 +38,7 @@ import {
   CATEGORICAL_SERIES_STYLES,
   SKILL_CATALOG,
   UNCERTAINTY_STYLES_BY_KIND,
+  type StableSkillId,
 } from '../generated/catalog.js';
 import {
   axisNormalizedDerivativeConversionReceipt,
@@ -485,7 +486,7 @@ type TableCell = string | number | null;
 function withContractTable(
   plan: RenderPlanV1,
   _context: CompileContext,
-  skillId: string,
+  skillId: StableSkillId,
   rows: readonly (readonly TableCell[])[],
 ): RenderPlanV1 {
   const columns = SKILL_CATALOG[skillId].accessibility.tableColumns.map(
@@ -561,7 +562,7 @@ function countExplicitNulls(values: readonly unknown[]): number {
 
 /** Bind named evidence cells to the generated contract's exact current column order. */
 function contractOrderedTableRow(
-  skillId: string,
+  skillId: StableSkillId,
   values: Readonly<Record<string, TableCell>>,
 ): TableCell[] {
   return SKILL_CATALOG[skillId].accessibility.tableColumns.map(({ key }) => {
@@ -1269,7 +1270,7 @@ function traceCell(values: readonly (string | number | null)[]): string | number
  * refusal, never something this boundary sanitizes into a different scientific claim.
  */
 function traceCompilerSourceSummary(
-  skillId: string,
+  skillId: StableSkillId,
   facts: Readonly<Record<string, string>>,
 ): string {
   const template = SKILL_CATALOG[skillId].accessibility.summaryTemplate;
@@ -1308,7 +1309,7 @@ function traceCompilerSourceSummary(
 
 function traceCompilerContext(
   base: CompileContext,
-  skillId: string,
+  skillId: StableSkillId,
   facts: Readonly<Record<string, string>>,
 ): CompileContext {
   return { ...base, summary: traceCompilerSourceSummary(skillId, facts) };
@@ -1319,7 +1320,7 @@ function traceCompilerContext(
  * This deliberately does not import or consult the request-only authority evaluator.
  */
 function distributionCompilerSourceSummary(
-  skillId: string,
+  skillId: StableSkillId,
   facts: Readonly<Record<string, string>>,
 ): string {
   const template = SKILL_CATALOG[skillId].accessibility.summaryTemplate;
@@ -1362,7 +1363,7 @@ function distributionCompilerSourceSummary(
 
 function distributionCompilerContext(
   base: CompileContext,
-  skillId: string,
+  skillId: StableSkillId,
   facts: Readonly<Record<string, string>>,
 ): CompileContext {
   return { ...base, summary: distributionCompilerSourceSummary(skillId, facts) };
@@ -1376,7 +1377,7 @@ function distributionCompilerContext(
  * separate derivation and the final frozen-plan gate requires byte-exact agreement.
  */
 function topologyDynamicsCompilerSourceSummary(
-  skillId: string,
+  skillId: StableSkillId,
   facts: Readonly<Record<string, string>>,
 ): string {
   const template = SKILL_CATALOG[skillId].accessibility.summaryTemplate;
@@ -1427,7 +1428,7 @@ function topologyDynamicsCompilerSourceSummary(
 
 function topologyDynamicsCompilerContext(
   base: CompileContext,
-  skillId: string,
+  skillId: StableSkillId,
   facts: Readonly<Record<string, string>>,
 ): CompileContext {
   return { ...base, summary: topologyDynamicsCompilerSourceSummary(skillId, facts) };
@@ -1900,7 +1901,7 @@ function traceUncertaintyValidationError(
   uncertainty: Record<string, unknown> | undefined,
   valueUnit: string,
   sourceValues: readonly (number | null)[],
-  skillId: string,
+  skillId: StableSkillId,
   instancePath: string,
 ): CortexelError | undefined {
   const kind = typeof uncertainty?.kind === 'string' ? uncertainty.kind : 'none';

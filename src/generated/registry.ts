@@ -912,7 +912,7 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "stage": "adapter",
     "severity": "error",
     "summary": "The NEST recorder time encoding is absent or cannot be represented losslessly by this adapter revision.",
-    "correctiveAction": "For revision 2, configure the memory recorder with time_in_steps=false before Simulate and export its complete status. Raw step/offset support remains fail-closed until the downstream contract preserves that pair as the canonical clock."
+    "correctiveAction": "For adapter revision 3, configure the memory recorder with time_in_steps=false before Simulate, preserve the exact NEST integer-tic preimages and runtime grid, retain the required capture history and single-process declaration, read status only after a successful Run/Simulate return at or beyond originTics+stopTics, and apply the named lossless plain-data projection. Raw step/offset support remains fail-closed until the downstream contract preserves that pair as the canonical clock."
   },
   "ADAPTER_UNSUPPORTED_VERSION": {
     "stage": "adapter",
@@ -1726,7 +1726,7 @@ export const DISCLOSURE_RULES: readonly { readonly id: string; readonly severity
   {
     "id": "NEST_SERIALIZED_CLOCK_BOUNDARY",
     "severity": "important",
-    "text": "NEST clock boundary — Cortexel checked origin, start, stop, and event times as the exported binary64 millisecond values. It did not inspect NEST's hidden integer-tic state or establish the source export's authenticity; pre-serialization timing remains caller-declared."
+    "text": "NEST capture declaration — Cortexel checked the declared plain-data projection, integer-tic grid, successful-return endpoint, buffer/plan history, clock-epoch continuity, sender universe, and single-process scope only for internal consistency. It did not observe or authenticate the runtime, projection, topology, resets, history, wiring, sender universe, or export; all remain caller claims."
   },
   {
     "id": "MISSING_VALUES_PRESENT",

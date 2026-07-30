@@ -83,10 +83,15 @@ the three React subpaths, and `cortexel/skills.manifest.json`) and adds explicit
 FigureRequestV1 capabilities alongside them:
 
 - `cortexel/figure` — validation, canonicalization, identity, provenance, and migration;
+- `cortexel/authoring` — exact stable discovery metadata, complete offline structural
+  schemas, their versioned digest-bound Ajv compile profile, and one synthetic
+  full-pipeline-valid fixture per skill;
 - `cortexel/render-svg` — deterministic headless SVG + complete returned table;
-- `cortexel/adapters/nest` — narrow plain-data NEST adapter profiles that strict
-  validation resolves against the installed contract revision (not upstream
-  certification);
+- `cortexel/adapters/nest` — currently one narrow plain-data NEST 3.10.0
+  memory-spike-recorder adapter. It requires caller-retained capture history and
+  single-process scope and strict validation resolves its output against the installed
+  contract revision; it is not a live PyNEST bridge, broad NEST coverage, or upstream
+  certification;
 - `cortexel/contract/manifest.json` and `cortexel/contract/*` — the exact normative
   registries, schemas, and skill sources copied once under `dist/contract`;
 - `cortexel` (bin) — the offline CLI.
@@ -96,6 +101,31 @@ module-relative packaged contract files; it never resolves a schema from the wor
 directory or network. **Packaged** describes the output of this repository's build and
 tarball. It does not mean the package has been published, and it does not make any
 skill `releaseReady`; all nineteen remain `releaseReady: false`.
+
+The stable skill catalog reports source interoperability as composite mappings.
+`feasibilityStatus` records only a bounded assessment,
+`definitionStatus` distinguishes a feasible but non-normative profile from an
+inapplicable one, and
+`implementationAvailability` says whether Cortexel ships executable code. Each
+executable mapping names one immutable `certificationRequirement`; mutable gate
+status, evidence, and receipts remain solely in the release ledger and are never
+copied into package semantics. A `sourceId` names a stable mapping role/profile,
+not a runtime object instance; role-distinct sources may share one `system` class.
+Executable code also does not imply that a separate normative source-to-request
+mapping definition exists: the packaged raster adapter remains
+`definitionStatus: not_specified`. Contract source v1 deliberately cannot encode
+`specified`, and fixes `authorityRequirements` to `null`, because Cortexel does not
+yet ship a closed mapping-definition authority. Prose, pointers, code, schemas and
+release gates cannot be combined to counterfeit one.
+For `not_assessed` mappings, the named sources are only a provisional candidate
+roster; neither completeness nor sufficiency has been established.
+The only packaged FigureRequestV1 NEST mapping is the bounded plain-data
+`nest.spike_recorder` → `neuro.spike_raster` shape profile for a caller-declared
+exact NEST 3.10.0 memory export. The adapter digest-binds the detached plain-data
+projection and checks its declared integer-tic, capture, and history relations; it
+does not authenticate the NumPy projection, producing runtime, kernel clock,
+recorder wiring, sender-universe completeness, or export custody. Neither
+JavaScript nor the current Python package starts a live PyNEST simulator.
 
 ## Offline CLI
 
@@ -108,6 +138,15 @@ cortexel identity --json
 
 # List the 19 stable figure contracts (experiments are hidden unless asked).
 cortexel catalog
+
+# Start with the small synthetic request fixture. Ask for the large schema only
+# when repair or code generation needs it.
+cortexel describe neuro.spike_raster --json --section example
+cortexel describe neuro.spike_raster --json --section schema
+
+# The closed sections are summary, example, schema, and all. Omitting --section
+# with --json retains the complete bundle.
+cortexel describe neuro.spike_raster --json --section all
 
 # Validate a request from a file or stdin. Exit code 0 = valid.
 cortexel validate request.json
@@ -131,7 +170,36 @@ decoding, malformed UTF-8 and a BOM are rejected rather than normalized, and dup
 JSON members remain observable to the strict parser. If a writer crashes while holding
 the lock, recovery is deliberately manual: remove `.cortexel.figure-emission.lock` only
 after establishing that no publisher is alive. `validate` and `render` accept
-`--format json`; `migrate` is always JSON.
+`--format json`; `migrate` is always JSON. `catalog --json` is the compact discovery
+surface. For prompt-budgeted agents, `describe <id> --json --section example` is the
+recommended first request; non-`all` sections keep catalog metadata compact. `schema`
+supplies its complete schema, versioned compiler profile, and reference resources,
+while `all` returns the complete scientific/evidence/authority bundle. Its example
+illustrates the structural schema—it
+neither adapts a live source nor proves the truth of external provenance claims.
+Schema success is not acceptance; run
+`cortexel validate` to execute the identity, semantic, scientific, provenance, budget,
+and derivation gates.
+
+Programmatic agents can load the same immutable resources without invoking a process:
+
+```ts
+import { SKILL_AUTHORING } from 'cortexel/authoring';
+import { validateRequestValue } from 'cortexel/figure';
+
+const request = structuredClone(
+  SKILL_AUTHORING['neuro.spike_raster'].authoringExample,
+);
+// Replace the synthetic data/source with truthful caller-owned declarations.
+const checked = validateRequestValue(request);
+if (!checked.ok) throw new Error(checked.errors.map(({ code }) => code).join(', '));
+```
+
+The fixture is a copyable shape, not simulator evidence. A mapping marked feasible or
+not implemented does not become a live NEST adapter. The only packaged stable NEST
+adapter currently accepts the bounded plain-data shape of a caller-declared exact
+NEST 3.10.0 memory spike-recorder profile documented above. Structural acceptance
+is not simulator attestation.
 
 ## The semantically stable packaged catalog
 

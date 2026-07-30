@@ -7,7 +7,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN,
   nestSpikeRecorderToRaster,
+  type NestSpikeCaptureAuthorityInputV1,
   type NestSpikeOptions,
 } from '../src/adapters/nest/index.js';
 import { canonicalDigest } from '../src/core/canonicalize.js';
@@ -29,9 +31,69 @@ const validExport = {
   },
 };
 
+function ticsForMilliseconds(value: number): string {
+  const tics = value * 1000;
+  if (!Number.isSafeInteger(tics) || tics < 0) {
+    throw new Error(`test fixture ${value} ms has no exact 1000-tics/ms preimage`);
+  }
+  return String(tics);
+}
+
+function captureAuthorityFor(
+  origin: number,
+  start: number,
+  stop: number,
+  localNumThreads = 1,
+): NestSpikeCaptureAuthorityInputV1 {
+  return {
+    kind: 'caller_declaration',
+    profile: 'cortexel-nest-memory-spike-capture-authority.v1',
+    runtimeStatus: {
+      nestVersion: '3.10.0',
+      statusReadMethod:
+        'pynest_single_spike_recorder_get_status_plain_projection_v1',
+      executionScope: {
+        kind: 'single_process',
+        numProcesses: 1,
+        rank: 0,
+        localNumThreads,
+      },
+      resolutionMs: 0.125,
+      ticsPerMs: '1000',
+      resolutionTics: '125',
+      captureBiologicalTimeTics: ticsForMilliseconds(origin + stop),
+      captureBoundary: 'after_successful_simulate_or_run_return',
+    },
+    recordingGrid: {
+      originTics: ticsForMilliseconds(origin),
+      startTics: ticsForMilliseconds(start),
+      stopTics: ticsForMilliseconds(stop),
+    },
+    bufferEpoch: {
+      beganBy: 'recorder_creation',
+      beganAtBiologicalTimeTics: ticsForMilliseconds(origin),
+    },
+    recordingPlan: {
+      lastMutationAtBiologicalTimeTics:
+        ticsForMilliseconds(origin + start),
+      scope: 'window_backend_time_encoding_and_sender_wiring',
+      senderUniverseBinding:
+        'recorded_sender_ids_exactly_equal_full_window_connected_source_universe',
+    },
+    clockEpochContinuity:
+      'biological_time_monotonic_since_last_kernel_initialization',
+    eventCompleteness: 'complete_for_recorded_senders',
+  };
+}
+
 const options: NestSpikeOptions = {
   recordedSenderIds: [1, '2', 3, '9007199254740992'],
   nestVersion: '3.10.0',
+  captureAuthority: captureAuthorityFor(
+    validExport.origin,
+    validExport.start,
+    validExport.stop,
+  ),
   runId: 'run-a',
   recorderId: 'sr-1',
 };
@@ -97,6 +159,17 @@ describe('NEST spike-recorder adapter', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
+    const expectedInputDigest = canonicalDigest({
+      domain: NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN,
+      exportedStatus: validExport,
+      options: {
+        recordedSenderIds: ['1', '2', '3', '9007199254740992'],
+        nestVersion: '3.10.0',
+        captureAuthority: options.captureAuthority,
+        runId: 'run-a',
+        recorderId: 'sr-1',
+      },
+    });
     expect((result.request.data as { window: unknown }).window).toEqual({
       kind: 'nest_recording_device_origin_relative',
       origin: 100.25,
@@ -106,6 +179,10 @@ describe('NEST spike-recorder adapter', () => {
       boundary: '(origin+start,origin+stop]',
       recordingBackend: 'memory',
       timeEncoding: 'native_binary64_ms',
+      captureAuthority: {
+        ...options.captureAuthority,
+        adapterInputDigest: expectedInputDigest,
+      },
     });
   });
 
@@ -187,7 +264,8 @@ describe('NEST spike-recorder adapter', () => {
     };
     const mutableOptions = {
       recordedSenderIds: [1, 2],
-      nestVersion: '3.9.4',
+      nestVersion: '3.10.0' as const,
+      captureAuthority: captureAuthorityFor(0, 0, 10),
     };
     const digestBeforeMutation = canonicalDigest(mutableExport);
     const result = nestSpikeRecorderToRaster(mutableExport, mutableOptions);
@@ -197,6 +275,11 @@ describe('NEST spike-recorder adapter', () => {
     mutableExport.events.times[0] = 9;
     mutableExport.events.senders[0] = 2;
     mutableOptions.recordedSenderIds[0] = 2;
+    (
+      mutableOptions.captureAuthority.runtimeStatus as {
+        captureBiologicalTimeTics: string;
+      }
+    ).captureBiologicalTimeTics = '99000';
 
     const data = result.request.data as {
       eventTimes: { values: number[] };
@@ -207,20 +290,39 @@ describe('NEST spike-recorder adapter', () => {
     expect(data.eventSenderIds).toEqual(['1', '2']);
     expect(data.recordedSenderIds).toEqual(['1', '2']);
     expect((result.request.source as { sourceDigest: string }).sourceDigest).toBe(digestBeforeMutation);
+    expect(
+      (result.request.data as {
+        window: {
+          captureAuthority: {
+            runtimeStatus: { captureBiologicalTimeTics: string };
+          };
+        };
+      }).window.captureAuthority.runtimeStatus.captureBiologicalTimeTics,
+    ).toBe('10000');
   });
 
-  it.each(['3.9', '3.9.0', '3.9.17', '3.10', '3.10.0', '3.10.23'])(
-    'accepts revision-2-admitted NEST version declaration %s',
-    (nestVersion) => {
-      const result = nestSpikeRecorderToRaster(validExport, { ...options, nestVersion });
-      expect(result.ok).toBe(true);
-    },
-  );
+  it('accepts only the exact pinned NEST 3.10.0 declaration', () => {
+    const result = nestSpikeRecorderToRaster(validExport, options);
+    expect(result.ok).toBe(true);
+  });
 
-  it.each(['', '3.8.9', '3.11', '4.0', '3.10.0rc1', 'v3.10.0', '3.10.0.1'])(
-    'rejects a NEST version declaration outside the revision-2 profile: %s',
+  it.each([
+    '',
+    '3.8.9',
+    '3.9',
+    '3.9.0',
+    '3.9.17',
+    '3.10',
+    '3.10.23',
+    '3.11',
+    '4.0',
+    '3.10.0rc1',
+    'v3.10.0',
+    '3.10.0.1',
+  ])(
+    'rejects a NEST version declaration outside the revision-3 profile: %s',
     (nestVersion) => {
-      const result = nestSpikeRecorderToRaster(validExport, { ...options, nestVersion });
+      const result = withRuntimeOptions({ ...options, nestVersion });
       expect(result.ok).toBe(false);
       expect(errorCodes(result)).toContain('ADAPTER_UNSUPPORTED_VERSION');
     },
@@ -231,6 +333,273 @@ describe('NEST spike-recorder adapter', () => {
     const result = withRuntimeOptions(missingVersion);
     expect(result.ok).toBe(false);
     expect(errorCodes(result)).toContain('ADAPTER_UNSUPPORTED_VERSION');
+  });
+
+  it('requires capture history rather than inferring completeness from final n_events', () => {
+    const { captureAuthority: _omitted, ...missingAuthority } = options;
+    const result = withRuntimeOptions(missingAuthority);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'ADAPTER_MAPPING_REQUIRED',
+        instancePath: '/captureAuthority',
+      });
+    }
+  });
+
+  it('requires the explicit unauthenticated clock-epoch continuity declaration', () => {
+    const captureAuthority = structuredClone(
+      options.captureAuthority,
+    ) as unknown as Record<string, unknown>;
+    delete captureAuthority.clockEpochContinuity;
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'ADAPTER_MAPPING_REQUIRED',
+        instancePath: '/captureAuthority/clockEpochContinuity',
+      });
+    }
+  });
+
+  it('accepts capture exactly at the closed stop after successful return and local thread-sibling merge authority', () => {
+    const captureAuthority = captureAuthorityFor(
+      validExport.origin,
+      validExport.start,
+      validExport.stop,
+      8,
+    );
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects capture one resolution step before the recorder stop', () => {
+    const captureAuthority = structuredClone(options.captureAuthority);
+    (
+      captureAuthority.runtimeStatus as {
+        captureBiologicalTimeTics: string;
+      }
+    ).captureBiologicalTimeTics = '110875';
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'ADAPTER_MAPPING_REQUIRED',
+        instancePath:
+          '/captureAuthority/runtimeStatus/captureBiologicalTimeTics',
+      });
+    }
+  });
+
+  it('rejects a memory-buffer clear after the recording window opened', () => {
+    const captureAuthority = structuredClone(options.captureAuthority);
+    (
+      captureAuthority.bufferEpoch as {
+        beganBy: 'n_events_zero';
+        beganAtBiologicalTimeTics: string;
+      }
+    ).beganBy = 'n_events_zero';
+    (
+      captureAuthority.bufferEpoch as {
+        beganAtBiologicalTimeTics: string;
+      }
+    ).beganAtBiologicalTimeTics = '100875';
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.instancePath).toBe(
+        '/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics',
+      );
+    }
+  });
+
+  it('rejects recorder configuration or sender-wiring mutation after window open', () => {
+    const captureAuthority = structuredClone(options.captureAuthority);
+    (
+      captureAuthority.recordingPlan as {
+        lastMutationAtBiologicalTimeTics: string;
+      }
+    ).lastMutationAtBiologicalTimeTics = '100875';
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.instancePath).toBe(
+        '/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics',
+      );
+    }
+  });
+
+  it.each([
+    {
+      field: 'origin' as const,
+      milliseconds: 100.251,
+      tics: '100251',
+      path: '/captureAuthority/recordingGrid/originTics',
+    },
+    {
+      field: 'start' as const,
+      milliseconds: 0.501,
+      tics: '501',
+      path: '/captureAuthority/recordingGrid/startTics',
+    },
+    {
+      field: 'stop' as const,
+      milliseconds: 10.751,
+      tics: '10751',
+      path: '/captureAuthority/recordingGrid/stopTics',
+    },
+  ])('rejects off-grid exported $field with an exact tic preimage', ({
+    field,
+    milliseconds,
+    tics,
+    path,
+  }) => {
+    const captureAuthority = structuredClone(options.captureAuthority);
+    const ticField = `${field}Tics` as
+      | 'originTics'
+      | 'startTics'
+      | 'stopTics';
+    (
+      captureAuthority.recordingGrid as Record<
+        typeof ticField,
+        string
+      >
+    )[ticField] = tics;
+    const result = nestSpikeRecorderToRaster(
+      { ...validExport, [field]: milliseconds },
+      { ...options, captureAuthority },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED',
+        instancePath: path,
+      });
+    }
+  });
+
+  it('rejects a capture time that is not on the runtime resolution grid', () => {
+    const captureAuthority = structuredClone(options.captureAuthority);
+    (
+      captureAuthority.runtimeStatus as {
+        captureBiologicalTimeTics: string;
+      }
+    ).captureBiologicalTimeTics = '111001';
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED',
+        instancePath:
+          '/captureAuthority/runtimeStatus/captureBiologicalTimeTics',
+      });
+    }
+  });
+
+  it('rejects a tic preimage whose binary64 projection does not equal the exported status', () => {
+    const captureAuthority = structuredClone(options.captureAuthority);
+    (
+      captureAuthority.recordingGrid as { originTics: string }
+    ).originTics = '100375';
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED',
+        instancePath: '/captureAuthority/recordingGrid/originTics',
+      });
+    }
+  });
+
+  it.each([
+    {
+      executionScope: {
+        kind: 'mpi_rank_local',
+        numProcesses: 2,
+        rank: 0,
+        localNumThreads: 1,
+      },
+      label: 'rank-local MPI',
+    },
+    {
+      executionScope: {
+        kind: 'single_process',
+        numProcesses: 2,
+        rank: 0,
+        localNumThreads: 1,
+      },
+      label: 'contradictory process count',
+    },
+    {
+      executionScope: {
+        kind: 'single_process',
+        numProcesses: 1,
+        rank: 1,
+        localNumThreads: 1,
+      },
+      label: 'contradictory rank',
+    },
+  ])('rejects $label capture authority', ({ executionScope }) => {
+    const captureAuthority = structuredClone(options.captureAuthority) as {
+      runtimeStatus: { executionScope: unknown };
+    };
+    captureAuthority.runtimeStatus.executionScope = executionScope;
+    const result = withRuntimeOptions({ ...options, captureAuthority });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]?.instancePath).toBe(
+        '/captureAuthority/runtimeStatus/executionScope',
+      );
+    }
+  });
+
+  it('rejects unknown authority and option members instead of silently omitting them from the digest', () => {
+    const authorityResult = withRuntimeOptions({
+      ...options,
+      captureAuthority: {
+        ...options.captureAuthority,
+        premergedMpi: true,
+      },
+    });
+    expect(authorityResult.ok).toBe(false);
+    if (!authorityResult.ok) {
+      expect(authorityResult.errors[0]?.instancePath).toBe(
+        '/captureAuthority/premergedMpi',
+      );
+    }
+
+    const optionResult = withRuntimeOptions({ ...options, authorityNote: 'trust me' });
+    expect(optionResult.ok).toBe(false);
+    if (!optionResult.ok) {
+      expect(optionResult.errors[0]?.instancePath).toBe('/authorityNote');
+    }
+  });
+
+  it('binds every normalized capture option into the adapter-input digest', () => {
+    const first = nestSpikeRecorderToRaster(validExport, options);
+    const second = nestSpikeRecorderToRaster(validExport, {
+      ...options,
+      captureAuthority: captureAuthorityFor(
+        validExport.origin,
+        validExport.start,
+        validExport.stop,
+        2,
+      ),
+    });
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    const firstDigest = (
+      first.request.data as {
+        window: { captureAuthority: { adapterInputDigest: string } };
+      }
+    ).window.captureAuthority.adapterInputDigest;
+    const secondDigest = (
+      second.request.data as {
+        window: { captureAuthority: { adapterInputDigest: string } };
+      }
+    ).window.captureAuthority.adapterInputDigest;
+    expect(firstDigest).not.toBe(secondDigest);
   });
 
   it('requires the recorded sender universe rather than inferring it', () => {
@@ -355,6 +724,27 @@ describe('NEST spike-recorder adapter', () => {
     expect(errorCodes(result)).toContain('SNAPSHOT_NON_FINITE_NUMBER');
   });
 
+  it('rejects raw typed event arrays because revision 3 requires the named plain-data projection', () => {
+    const result = nestSpikeRecorderToRaster(
+      {
+        ...validExport,
+        n_events: 2,
+        events: {
+          senders: new BigInt64Array([1n, 2n]),
+          times: new Float64Array([101, 102]),
+        },
+      },
+      options,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'SNAPSHOT_NON_PLAIN_OBJECT',
+        instancePath: '/events/senders',
+      });
+    }
+  });
+
   it.each([
     { bounds: { origin: -1, start: 0, stop: 10 }, path: '/origin' },
     { bounds: { origin: '0', start: 0, stop: 10 }, path: '/origin' },
@@ -444,7 +834,10 @@ describe('NEST spike-recorder adapter', () => {
       nestVersion: '3.10.0',
     };
 
-    const result = nestSpikeRecorderToRaster(hostileExport, hostileOptions as NestSpikeOptions);
+    const result = nestSpikeRecorderToRaster(
+      hostileExport,
+      hostileOptions as unknown as NestSpikeOptions,
+    );
     expect(result.ok).toBe(false);
     expect(errorCodes(result)).toContain('ADAPTER_ACCESSOR_INPUT_REJECTED');
     if (!result.ok) expect(result.errors[0]?.instancePath).toBe('/events');
@@ -461,7 +854,10 @@ describe('NEST spike-recorder adapter', () => {
       },
       nestVersion: '3.10.0',
     };
-    const result = nestSpikeRecorderToRaster(validExport, hostileOptions as NestSpikeOptions);
+    const result = nestSpikeRecorderToRaster(
+      validExport,
+      hostileOptions as unknown as NestSpikeOptions,
+    );
     expect(result.ok).toBe(false);
     expect(errorCodes(result)).toContain('ADAPTER_ACCESSOR_INPUT_REJECTED');
     if (!result.ok) expect(result.errors[0]?.instancePath).toBe('/recordedSenderIds');

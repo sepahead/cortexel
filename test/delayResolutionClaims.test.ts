@@ -39,9 +39,17 @@ interface DelayContract {
   id: string;
   revision: number;
   adapters: Array<{
-    notes: string;
-    status: string;
-    system: string;
+    mappingId: string;
+    sources: Array<{
+      sourceId: string;
+      system: string;
+      role: 'primary' | 'required_companion' | 'optional_companion';
+      notes: string;
+    }>;
+    feasibilityStatus: string;
+    definitionStatus: string;
+    authorityRequirements: null;
+    implementationAvailability: string;
   }>;
   examples: {
     valid: DelayExample[];
@@ -170,19 +178,44 @@ describe('model-conditioned NEST delay-resolution claims', () => {
     }
   });
 
-  it('labels NEST entries as unimplemented mapping recipes', () => {
-    const nestAdapters = contracts.flatMap(({ relativePath, contract }) =>
+  it('labels provisional NEST candidates as unassessed, unspecified, and unimplemented', () => {
+    const nestMappings = contracts.flatMap(({ relativePath, contract }) =>
       contract.adapters
-        .filter((adapter) => adapter.system.startsWith('nest.'))
+        .filter((adapter) =>
+          adapter.sources.some(({ system }) => system.startsWith('nest.')))
         .map((adapter) => ({ ...adapter, relativePath })));
 
-    expect(nestAdapters).toHaveLength(3);
-    for (const adapter of nestAdapters) {
-      expect(adapter.status, `${adapter.relativePath}:${adapter.system}`).toBe('planned');
-      expect(adapter.notes).toMatch(/mapping recipe only/i);
-      expect(adapter.notes).toMatch(
+    expect(nestMappings).toHaveLength(2);
+    for (const mapping of nestMappings) {
+      const label = `${mapping.relativePath}:${mapping.mappingId}`;
+      expect(mapping.feasibilityStatus, label).toBe('not_assessed');
+      expect(mapping.definitionStatus, label).toBe('not_specified');
+      expect(mapping.authorityRequirements, label).toBeNull();
+      expect(mapping.implementationAvailability, label).toBe('not_implemented');
+      expect(mapping.sources[0]?.role, label).toBe('primary');
+      expect(mapping.sources[0]?.notes, label).toMatch(/provisional source candidate only/i);
+      expect(mapping.sources[0]?.notes, label).toMatch(
         /does not currently ship an executable V1 NEST connection adapter/i,
       );
+      expect(mapping.sources).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            sourceId: 'nest-synapse-model-defaults',
+            system: 'nest.GetDefaults(synapse_model)',
+            role: 'required_companion',
+          }),
+          expect.objectContaining({
+            sourceId: 'host-nest-runtime-identity',
+            role: 'required_companion',
+          }),
+          expect.objectContaining({
+            sourceId: 'host-nest-connection-snapshot-receipt',
+            role: 'required_companion',
+          }),
+        ]),
+      );
+      expect(mapping.sources.map(({ sourceId }) => sourceId))
+        .not.toContain('host-nest-connection-history');
     }
   });
 

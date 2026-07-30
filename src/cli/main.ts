@@ -38,11 +38,30 @@ import { parseAndValidateRequest } from '../core/request.js';
 import { parseJsonStrict } from '../core/parse-json.js';
 import { getBudgetLimits } from '../core/limits.js';
 import { migrateLegacyRequest } from '../core/migrate-v0.js';
-import { getBuildIdentity } from '../generated/identity.js';
-import { SKILL_CATALOG, STABLE_SKILL_IDS, EXPERIMENTAL_CAPABILITY_IDS } from '../generated/catalog.js';
+import {
+  CATALOG_DIGEST_DOMAIN,
+  getBuildIdentity,
+} from '../generated/identity.js';
+import {
+  EXPERIMENTAL_CAPABILITY_IDS,
+  isStableSkillId,
+  SKILL_CATALOG,
+  STABLE_SKILL_IDS,
+  type SkillCatalogEntry,
+} from '../generated/catalog.js';
+import {
+  AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+  SKILL_AUTHORING,
+  STABLE_CATALOG_SCHEMA_RESOURCES,
+} from '../generated/authoring.js';
 import { ERROR_STAGES } from '../generated/registry.js';
 import { buildFigureFromJson } from '../render/buildFigure.js';
-import { makeError, type CortexelError } from '../core/errors.js';
+import {
+  makeError,
+  safeText,
+  UNSAFE_DISPLAY_PATTERN_SOURCE,
+  type CortexelError,
+} from '../core/errors.js';
 import { CLI_COMMANDS, type CliCommand } from './commands.js';
 
 export { CLI_COMMANDS } from './commands.js';
@@ -104,6 +123,34 @@ export function exitCodeForErrors(errors: readonly CortexelError[]): number {
 
 const CLI_INPUT_BYTE_LIMIT = getBudgetLimits('standard').rawInputBytes;
 const INPUT_READ_CHUNK_BYTES = 64 * 1024;
+const CLI_UNSAFE_DISPLAY_REGEX = new RegExp(UNSAFE_DISPLAY_PATTERN_SOURCE, 'gu');
+
+/**
+ * Preserve exact parsed JSON values while preventing bidi/control code points from
+ * reaching a terminal literally. JSON.stringify already escapes JSON controls; this
+ * closes the additional display-spoofing set used by Cortexel diagnostics.
+ */
+export function serializeCliJson(value: unknown): string {
+  return JSON.stringify(value, null, 2).replace(
+    CLI_UNSAFE_DISPLAY_REGEX,
+    (character) => {
+      // JSON.stringify has already escaped every C0 character that occurs inside a
+      // key or string value. A literal C0 match here is therefore pretty-printing
+      // whitespace outside a JSON token and must be retained. C1, bidi, zero-width,
+      // XML-forbidden U+FFFE/U+FFFF code points and line separators can still occur
+      // literally inside string tokens; spelling them as JSON escapes preserves
+      // their parsed value exactly.
+      if (character.charCodeAt(0) <= 0x1f) return character;
+      return [...character]
+        .map((part) => `\\u${part.charCodeAt(0).toString(16).padStart(4, '0')}`)
+        .join('');
+    },
+  );
+}
+
+function writeCliJson(value: unknown, stream: NodeJS.WriteStream = process.stdout): void {
+  stream.write(`${serializeCliJson(value)}\n`);
+}
 
 type CliInputBoundaryKind = 'bytes-exceeded' | 'invalid-utf8';
 
@@ -181,7 +228,7 @@ function inputBoundaryErrors(error: unknown): readonly CortexelError[] | undefin
 
 function printDiagnostics(errors: readonly CortexelError[], asJson: boolean): void {
   if (asJson) {
-    process.stderr.write(`${JSON.stringify({ ok: false, errors }, null, 2)}\n`);
+    writeCliJson({ ok: false, errors }, process.stderr);
     return;
   }
   for (const error of errors) {
@@ -207,13 +254,13 @@ function writeInputIoDiagnostic(asJson = false): void {
   // interpolated into a terminal or agent-visible diagnostic.
   const message = 'unable to read the selected input';
   if (asJson) {
-    process.stderr.write(`${JSON.stringify({
+    writeCliJson({
       ok: false,
       cliError: {
         kind: 'input_io',
         message,
       },
-    }, null, 2)}\n`);
+    }, process.stderr);
   } else {
     process.stderr.write(`I/O error: ${message}\n`);
   }
@@ -238,13 +285,13 @@ function outputIoMessage(error: unknown): string {
 function writeOutputIoDiagnostic(error: unknown, asJson = false): void {
   const message = outputIoMessage(error);
   if (asJson) {
-    process.stderr.write(`${JSON.stringify({
+    writeCliJson({
       ok: false,
       cliError: {
         kind: 'output_io',
         message,
       },
-    }, null, 2)}\n`);
+    }, process.stderr);
   } else {
     process.stderr.write(`I/O error: ${message}\n`);
   }
@@ -658,12 +705,94 @@ function validateJsonFormat(parsed: ParsedArguments): boolean {
   return false;
 }
 
+function discoveryIdentity(): ReturnType<typeof getBuildIdentity> & {
+  readonly catalogDigestDomain: typeof CATALOG_DIGEST_DOMAIN;
+} {
+  return {
+    ...getBuildIdentity(),
+    catalogDigestDomain: CATALOG_DIGEST_DOMAIN,
+  };
+}
+
+/** Explicit v1 top-level projection; nested records are the versioned public catalog types. */
+function describeSkillProjection(skill: SkillCatalogEntry): SkillCatalogEntry {
+  return {
+    id: skill.id,
+    revision: skill.revision,
+    status: skill.status,
+    availability: skill.availability,
+    releaseReady: skill.releaseReady,
+    title: skill.title,
+    canonicalQuestion: skill.canonicalQuestion,
+    cannotEstablish: skill.cannotEstablish,
+    renderer: skill.renderer,
+    semanticValidators: skill.semanticValidators,
+    disclosures: skill.disclosures,
+    budgets: skill.budgets,
+    uncertaintySupport: skill.uncertaintySupport,
+    accessibility: skill.accessibility,
+    outputAuthority: skill.outputAuthority,
+    evidence: skill.evidence,
+    adapters: skill.adapters,
+    legacyIds: skill.legacyIds,
+    owner: skill.owner,
+    knownLimitations: skill.knownLimitations,
+  };
+}
+
+/** Prompt-bounded identity/routing summary used outside the explicit `all` section. */
+function describeSkillSummaryProjection(skill: SkillCatalogEntry): Record<string, unknown> {
+  return {
+    id: skill.id,
+    revision: skill.revision,
+    title: skill.title,
+    question: skill.canonicalQuestion,
+    availability: skill.availability,
+    releaseReady: skill.releaseReady,
+    renderer: skill.renderer,
+    adapters: skill.adapters.map((adapter) => ({
+      mappingId: adapter.mappingId,
+      feasibilityStatus: adapter.feasibilityStatus,
+      definitionStatus: adapter.definitionStatus,
+      implementationAvailability: adapter.implementationAvailability,
+    })),
+  };
+}
+
+function utf16EditDistance(left: string, right: string): number {
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 0; leftIndex < left.length; leftIndex += 1) {
+    const current = [leftIndex + 1];
+    for (let rightIndex = 0; rightIndex < right.length; rightIndex += 1) {
+      current.push(Math.min(
+        current[rightIndex] + 1,
+        previous[rightIndex + 1] + 1,
+        previous[rightIndex] + (left[leftIndex] === right[rightIndex] ? 0 : 1),
+      ));
+    }
+    previous = current;
+  }
+  return previous[right.length];
+}
+
+function nearestStableSkillId(value: string): string | null {
+  if (value.length === 0 || value.length > 64 || !/^[a-z0-9._-]+$/u.test(value)) {
+    return null;
+  }
+  const nearest = [...STABLE_SKILL_IDS]
+    .map((id) => ({ id, distance: utf16EditDistance(value, id) }))
+    .sort((left, right) =>
+      left.distance - right.distance ||
+      (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0];
+  return nearest !== undefined && nearest.distance <= 3 ? nearest.id : null;
+}
+
 function cmdIdentity(args: readonly string[]): number {
   const parsed = parseOrReport(args, { flags: ['--json'], positionalCount: 0 });
   if (!parsed) return EXIT.usage;
   const identity = getBuildIdentity();
   if (parsed.flags.has('--json')) {
-    process.stdout.write(`${JSON.stringify(identity, null, 2)}\n`);
+    writeCliJson(discoveryIdentity());
   } else {
     process.stdout.write(
       `Cortexel ${identity.packageVersion}\n` +
@@ -671,6 +800,7 @@ function cmdIdentity(args: readonly string[]): number {
         `  artifact contract: ${identity.artifactContract}\n` +
         `  contract digest:   ${identity.contractDigest}\n` +
         `  catalog digest:    ${identity.catalogDigest}\n` +
+        `  catalog domain:    ${CATALOG_DIGEST_DOMAIN}\n` +
         `  stable skills:     ${identity.stableSkillCount}\n` +
         `  source revision:   ${identity.sourceRevision}\n` +
         `  release build:     ${identity.release}\n`,
@@ -689,18 +819,32 @@ function cmdCatalog(args: readonly string[]): number {
   if (parsed.flags.has('--json')) {
     const stable = STABLE_SKILL_IDS.map((id) => ({
       id,
+      revision: SKILL_CATALOG[id].revision,
       title: SKILL_CATALOG[id].title,
       question: SKILL_CATALOG[id].canonicalQuestion,
+      availability: SKILL_CATALOG[id].availability,
+      releaseReady: SKILL_CATALOG[id].releaseReady,
+      adapters: SKILL_CATALOG[id].adapters.map((adapter) => ({
+        mappingId: adapter.mappingId,
+        feasibilityStatus: adapter.feasibilityStatus,
+        definitionStatus: adapter.definitionStatus,
+        implementationAvailability: adapter.implementationAvailability,
+      })),
     }));
-    const payload: Record<string, unknown> = { stable };
-    if (includeExperimental) payload.experimental = EXPERIMENTAL_CAPABILITY_IDS;
-    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+    const payload: Record<string, unknown> = {
+      protocol: 'cortexel-cli-catalog',
+      protocolVersion: 1,
+      buildIdentity: discoveryIdentity(),
+      skills: stable,
+    };
+    if (includeExperimental) payload.experimentalSkillIds = EXPERIMENTAL_CAPABILITY_IDS;
+    writeCliJson(payload);
     return EXIT.ok;
   }
 
   process.stdout.write(`Stable catalog (${STABLE_SKILL_IDS.length}):\n`);
   for (const id of STABLE_SKILL_IDS) {
-    process.stdout.write(`  ${id.padEnd(32)} ${SKILL_CATALOG[id].title}\n`);
+    process.stdout.write(`  ${id.padEnd(32)} ${safeText(SKILL_CATALOG[id].title, 512)}\n`);
   }
   if (includeExperimental) {
     process.stdout.write(`\nExperimental (not covered by the stable contract):\n`);
@@ -708,6 +852,111 @@ function cmdCatalog(args: readonly string[]): number {
   } else {
     process.stdout.write(`\nUse --include-experimental to also list experimental capabilities.\n`);
   }
+  return EXIT.ok;
+}
+
+function cmdDescribe(args: readonly string[]): number {
+  const parsed = parseOrReport(args, {
+    flags: ['--json'],
+    valueOptions: ['--section'],
+    positionalCount: 1,
+  });
+  if (!parsed) return EXIT.usage;
+  const section = parsed.values.get('--section') ?? 'all';
+  if (!['summary', 'example', 'schema', 'all'].includes(section)) {
+    process.stderr.write(
+      'usage error: --section accepts summary, example, schema, or all\n',
+    );
+    return EXIT.usage;
+  }
+  if (parsed.values.has('--section') && !parsed.flags.has('--json')) {
+    process.stderr.write('usage error: --section requires --json\n');
+    return EXIT.usage;
+  }
+  const id = parsed.positionals[0];
+  if (!isStableSkillId(id)) {
+    if (parsed.flags.has('--json')) {
+      writeCliJson({
+        protocol: 'cortexel-cli-error',
+        protocolVersion: 1,
+        buildIdentity: discoveryIdentity(),
+        error: {
+          code: 'CLI_UNKNOWN_STABLE_SKILL',
+          message: 'Unknown stable skill id.',
+          didYouMean: nearestStableSkillId(id),
+          validSkillIds: STABLE_SKILL_IDS,
+        },
+      }, process.stderr);
+    } else {
+      const suggestion = nearestStableSkillId(id);
+      process.stderr.write(
+        'usage error: unknown stable skill id' +
+          (suggestion === null ? '\n' : `; did you mean ${suggestion}?\n`),
+      );
+    }
+    return EXIT.usage;
+  }
+  const skill = SKILL_CATALOG[id];
+
+  if (parsed.flags.has('--json')) {
+    const authoring = SKILL_AUTHORING[id];
+    if (authoring === undefined) {
+      // Catalog/authoring generation is one atomic source projection. Reaching this
+      // branch means the packaged runtime is internally incoherent, not that the
+      // caller supplied a repairable request.
+      process.stderr.write('internal error: stable authoring entry is unavailable\n');
+      return EXIT.internal;
+    }
+    const payload: Record<string, unknown> = {
+      protocol: 'cortexel-cli-describe',
+      protocolVersion: 1,
+      buildIdentity: discoveryIdentity(),
+      section,
+      skill: section === 'all'
+        ? describeSkillProjection(skill)
+        : describeSkillSummaryProjection(skill),
+      acceptanceBoundary: {
+        command: 'cortexel validate <request.json>',
+        note:
+          'Structural schema success is not acceptance. Cortexel validation also runs ' +
+          'identity, semantic, scientific, provenance, budget, and derivation gates.',
+      },
+    };
+    if (section === 'example' || section === 'all') {
+      payload.authoringExample = authoring.authoringExample;
+    }
+    if (section === 'schema' || section === 'all') {
+      payload.requestSchema = authoring.requestSchema;
+      payload.schemaCompilationProfile = AUTHORING_SCHEMA_COMPILATION_PROFILE_V1;
+      payload.schemaResources = STABLE_CATALOG_SCHEMA_RESOURCES;
+    }
+    writeCliJson(payload);
+    return EXIT.ok;
+  }
+
+  process.stdout.write(
+    `${skill.id}@${skill.revision} — ${safeText(skill.title, 512)}\n` +
+      `Question: ${safeText(skill.canonicalQuestion, 4_096)}\n` +
+      `Availability: ${skill.availability}; release ready: ${skill.releaseReady}\n` +
+      `Renderer: ${skill.renderer.id}@${skill.renderer.revision}\n` +
+      `Source mappings (${skill.adapters.length}):\n`,
+  );
+  for (const adapter of skill.adapters) {
+    process.stdout.write(
+      `  ${adapter.mappingId}: ${adapter.feasibilityStatus}; ` +
+        `${adapter.definitionStatus}; ${adapter.implementationAvailability}\n`,
+    );
+    for (const source of adapter.sources) {
+      process.stdout.write(
+        `    ${source.role}: ${safeText(source.sourceId, 128)} ` +
+          `(${safeText(source.system, 512)})\n`,
+      );
+    }
+  }
+  process.stdout.write(
+    `Use "cortexel describe ${skill.id} --json --section example" for the synthetic ` +
+      'request fixture, or --section schema/all for structural resources and the complete bundle.\n',
+  );
   return EXIT.ok;
 }
 
@@ -727,9 +976,12 @@ function cmdValidate(args: readonly string[]): number {
   const outcome = parseAndValidateRequest(text);
   if (outcome.ok) {
     if (asJson) {
-      process.stdout.write(
-        `${JSON.stringify({ ok: true, skill: outcome.request.skillId, requestDigest: outcome.request.requestDigest, inputAssurance: outcome.request.inputAssurance }, null, 2)}\n`,
-      );
+      writeCliJson({
+        ok: true,
+        skill: outcome.request.skillId,
+        requestDigest: outcome.request.requestDigest,
+        inputAssurance: outcome.request.inputAssurance,
+      });
     } else {
       process.stdout.write(`valid: ${outcome.request.skillId} (${outcome.request.requestDigest})\n`);
     }
@@ -795,13 +1047,13 @@ function cmdRender(args: readonly string[]): number {
   if (dryRun) {
     const svgByteLength = Buffer.byteLength(result.svg, 'utf8');
     if (asJson) {
-      process.stdout.write(`${JSON.stringify({
+      writeCliJson({
         ok: true,
         dryRun: true,
         skill: renderedSkill,
         svgByteLength,
         tableRowsTotal: result.table.rowsTotal,
-      }, null, 2)}\n`);
+      });
     } else {
       process.stdout.write(
         `would render ${renderedSkill}: ` +
@@ -820,13 +1072,13 @@ function cmdRender(args: readonly string[]): number {
     artifactJson = canonicalize(result.artifact);
   } catch {
     if (asJson) {
-      process.stderr.write(`${JSON.stringify({
+      writeCliJson({
         ok: false,
         cliError: {
           kind: 'internal',
           message: 'artifact canonicalization failed',
         },
-      }, null, 2)}\n`);
+      }, process.stderr);
     } else {
       process.stderr.write('Internal error: artifact canonicalization failed\n');
     }
@@ -841,14 +1093,14 @@ function cmdRender(args: readonly string[]): number {
     // library-owned table sidecar must be introduced atomically with its schema,
     // digest binding, verifier, and byte-for-byte CLI passthrough.
     if (asJson) {
-      process.stdout.write(`${JSON.stringify({
+      writeCliJson({
         ok: true,
         dryRun: false,
         skill: renderedSkill,
         artifactDigest: result.artifact.artifactDigest,
         outputs: result.artifact.outputs,
         tableSidecar: null,
-      }, null, 2)}\n`);
+      });
     } else {
       process.stdout.write(
         'wrote figure SVG and completion artifact (no canonical table sidecar)\n',
@@ -907,7 +1159,7 @@ function cmdMigrate(args: readonly string[]): number {
     return exitCodeForErrors(parsed.errors);
   }
   const result = migrateLegacyRequest(parsed.value);
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  writeCliJson(result);
   return result.report.errors.length > 0 ? EXIT.semantic : EXIT.ok;
 }
 
@@ -916,6 +1168,7 @@ const USAGE = `Cortexel — provenance-first scientific figure contracts
 Usage:
   cortexel identity [--json]
   cortexel catalog  [--include-experimental] [--json]
+  cortexel describe <stable-skill-id> [--json [--section summary|example|schema|all]]
   cortexel validate <input|-> [--format json]
   cortexel render   <input|-> --output figure.svg [--force] [--format json]
   cortexel render   <input|-> --dry-run [--format json]
@@ -931,6 +1184,7 @@ Exit codes: 0 ok, 2 usage, 3 parse, 4 schema, 5 semantic, 6 budget, 7 I/O, 8 int
 const CLI_HANDLERS: Readonly<Record<CliCommand, (args: readonly string[]) => number>> = {
   identity: cmdIdentity,
   catalog: cmdCatalog,
+  describe: cmdDescribe,
   validate: cmdValidate,
   render: cmdRender,
   inspect: cmdInspect,
@@ -975,8 +1229,23 @@ function isDirectExecution(): boolean {
   }
 }
 
+function installDirectPipeErrorHandlers(): void {
+  process.stdout.on('error', (error: Error & { code?: string }): void => {
+    if (error.code === 'EPIPE') {
+      process.exitCode = EXIT.ok;
+      return;
+    }
+    throw error;
+  });
+  process.stderr.on('error', (error: Error & { code?: string }): void => {
+    if (error.code === 'EPIPE') return;
+    throw error;
+  });
+}
+
 // Setting exitCode lets stdout/stderr drain naturally. Importing this module from a
 // same-basename test or application never triggers the guard.
 if (isDirectExecution()) {
+  installDirectPipeErrorHandlers();
   process.exitCode = run(process.argv.slice(2));
 }

@@ -23,6 +23,7 @@ import {
   isStableContractRelease,
 } from './lib/release-identity.js';
 import { readDirectRepositoryFile } from './lib/direct-repository-file.js';
+import { validateNestExampleAudit } from './lib/nest-example-audit.js';
 import { parseJsonSourceStrict } from './lib/strict-json-source.js';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,6 +35,14 @@ export const LEDGER_PATH = path.resolve(
 export const LEDGER_SCHEMA_PATH = path.resolve(
   REPOSITORY_ROOT,
   'docs/release/evidence-ledger.schema.json',
+);
+export const NEST_EXAMPLE_AUDIT_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-coverage.v1.json',
+);
+export const NEST_EXAMPLE_AUDIT_SCHEMA_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-coverage.schema.json',
 );
 
 /** Closed status set. A status outside this set is a ledger defect, not a new state. */
@@ -342,6 +351,9 @@ export function validateLedger(
     if (status === 'NOT_APPLICABLE' && !isTrimmedString(notes, { allowEmpty: false, max: 4_096 })) {
       fail(`${id}: NOT_APPLICABLE requires a rationale in notes`);
     }
+    if (status === 'BLOCKED' && !isTrimmedString(notes, { allowEmpty: false, max: 4_096 })) {
+      fail(`${id}: BLOCKED requires the unavailable external prerequisite in notes`);
+    }
 
     gates.push(entry as unknown as LedgerGate);
   }
@@ -445,6 +457,8 @@ export function runEvidenceLedgerCli(
 
   let parsed: unknown;
   let schema: unknown;
+  let nestExampleAudit: unknown;
+  let nestExampleAuditSchema: unknown;
   try {
     parsed = parseLedgerJsonStrict(
       readDirectRepositoryFile(repositoryRoot, 'docs/release/evidence-ledger.v1.json'),
@@ -454,16 +468,31 @@ export function runEvidenceLedgerCli(
       readDirectRepositoryFile(repositoryRoot, 'docs/release/evidence-ledger.schema.json'),
       path.resolve(repositoryRoot, 'docs/release/evidence-ledger.schema.json'),
     );
+    nestExampleAudit = parseLedgerJsonStrict(
+      readDirectRepositoryFile(repositoryRoot, 'docs/audit/nest-example-coverage.v1.json'),
+      path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.v1.json'),
+    );
+    nestExampleAuditSchema = parseLedgerJsonStrict(
+      readDirectRepositoryFile(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
+      path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
+    );
   } catch (error) {
-    process.stderr.write(`ledger/schema not readable/parseable: ${String(error)}\n`);
+    process.stderr.write(`evidence audit source/schema not readable/parseable: ${String(error)}\n`);
     return 1;
   }
 
   const { errors, gates, metadata } = validateLedger(parsed, schema);
+  const nestExampleAuditProblems = validateNestExampleAudit(
+    nestExampleAudit,
+    nestExampleAuditSchema,
+  );
 
-  if (errors.length > 0) {
-    process.stderr.write('Evidence ledger is invalid:\n');
-    for (const error of errors) process.stderr.write(`  - ${error}\n`);
+  if (errors.length > 0 || nestExampleAuditProblems.length > 0) {
+    process.stderr.write('Evidence audit state is invalid:\n');
+    for (const error of errors) process.stderr.write(`  - release ledger: ${error}\n`);
+    for (const problem of nestExampleAuditProblems) {
+      process.stderr.write(`  - NEST example audit: ${problem}\n`);
+    }
     return 1;
   }
 
@@ -474,6 +503,7 @@ export function runEvidenceLedgerCli(
   for (const status of LEDGER_STATUSES) {
     process.stdout.write(`  ${status.padEnd(15)} ${counts.get(status) ?? 0}\n`);
   }
+  process.stdout.write('NEST example audit: valid external zero-claim ledger\n');
 
   if (!releaseVersion) {
     process.stdout.write(

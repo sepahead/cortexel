@@ -451,24 +451,88 @@
 
   "adapters": [
     {
-      "system": "nest.GetConnections",
-      "status": "supported",
-      "notes": "The adapter must take the node universe from the NodeCollection, never infer it from the returned connections — an edge list can only show that no connection was observed, never that a node has degree zero. It accepts the official singular/scalar form or canonical plural arrays, never both, never broadcasts an optional scalar across rows, and never deduplicates multapses. Accessor-bearing input is rejected before any getter can run (ADAPTER_ACCESSOR_INPUT_REJECTED)."
+      "mappingId": "nest-getconnections",
+      "sources": [
+        {
+          "system": "nest.GetConnections",
+          "role": "primary",
+          "notes": "Supplies only the connection rows. It accepts the official singular/scalar form or canonical plural arrays, never both, never broadcasts an optional scalar across rows, and never deduplicates multapses. Accessor-bearing input is rejected before any getter can run (ADAPTER_ACCESSOR_INPUT_REJECTED). The separately named NodeCollection source is mandatory because an edge list can only show that no connection was observed, never that a selected node has degree zero.",
+          "sourceId": "nest-getconnections"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies the complete selected node universe, including isolated and silent nodes, in the order intentionally retained for both matrix axes. The exact selection must be retained from the simulation setup; it is never reconstructed from connection endpoints.",
+          "sourceId": "nest-selected-node-universe"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nest.SynapseCollection (MPI, target-rank-local)",
-      "status": "partial",
-      "notes": "The rank-local snapshot maps cleanly onto this figure because rows are targets: the rank holds every connection whose target it owns, so each locally-owned target's ROW is complete. The adapter cannot discover which targets those are from the connections alone; the caller must declare observedTargetIds. The output stays mpi_target_rank_local and is never merged implicitly."
+      "mappingId": "nest-synapsecollection-mpi-target-rank-local",
+      "sources": [
+        {
+          "system": "nest.SynapseCollection (MPI, target-rank-local)",
+          "role": "primary",
+          "notes": "Supplies the rank-local connection rows. Rows are targets and NEST returns only connections whose targets are owned by the executing MPI process, so each owned target row is complete. The output stays mpi_target_rank_local and is never merged implicitly; connection rows alone cannot establish either the selected node universe or which selected targets are locally owned.",
+          "sourceId": "nest-synapsecollection-mpi-target-rank-local"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies both retained selection views that the rank-local rows cannot reconstruct: the complete selected node universe for the matrix axes and the exact local-membership mask of the selected target NodeCollection. `observedTargetIds` is the exact selected-target intersection whose NEST 3.10 `NodeCollection.local` value is true; it is never inferred from targets that happen to have an incoming connection. NEST deprecates rank-specific simulation logic, so this locality view is used only to describe already rank-local evidence, never to change simulation behavior.",
+          "sourceId": "nest-selected-node-and-target-locality"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "networkx.DiGraph",
-      "status": "partial",
-      "notes": "networkx's adjacency is A[source][target] — the transpose of Cortexel's convention — so the adapter transposes explicitly and records that it did. The node universe comes from G.nodes so that isolates survive; taking it from G.edges would silently delete every isolate row and column. A MultiDiGraph's parallel edges become distinct connection rows and are never collapsed."
+      "mappingId": "networkx-digraph",
+      "sources": [
+        {
+          "system": "networkx.DiGraph",
+          "role": "primary",
+          "notes": "networkx's adjacency is A[source][target] — the transpose of Cortexel's convention — so the adapter transposes explicitly and records that it did. The node universe comes from G.nodes so that isolates survive; taking it from G.edges would silently delete every isolate row and column. A MultiDiGraph's parallel edges become distinct connection rows and are never collapsed.",
+          "sourceId": "networkx-digraph"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "dense numeric matrix (numpy / scipy.sparse)",
-      "status": "rejected",
-      "notes": "A bare array carries no node ids, no orientation, and no way to distinguish a not_observed cell from an observed absence. Those are exactly the three facts this contract exists to pin down, so an array that has lost them cannot be promoted back into a matrix figure. Supply the connection rows and the node universe instead."
+      "mappingId": "dense-numeric-matrix-numpy-scipy-sparse",
+      "sources": [
+        {
+          "system": "dense numeric matrix (numpy / scipy.sparse)",
+          "role": "primary",
+          "notes": "A bare array carries no node ids, no orientation, and no way to distinguish a not_observed cell from an observed absence. Those are exactly the three facts this contract exists to pin down, so an array that has lost them cannot be promoted back into a matrix figure. Supply the connection rows and the node universe instead.",
+          "sourceId": "dense-numeric-matrix-numpy-scipy-sparse"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     }
   ],
 
@@ -500,6 +564,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

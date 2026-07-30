@@ -836,34 +836,103 @@
   },
   "adapters": [
     {
-      "system": "nest.GetConnections",
-      "status": "planned",
-      "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. A future adapter must supply source, target and each observed per-connection `delay` in milliseconds, preserve every multapse row, carry the simulation resolution as context, and never round or snap values. It must preserve valid off-grid `cont_delay_synapse` values and inspect the model and assignment path before making any lattice claim. Under MPI it must emit mpi_target_rank_local for rows whose TARGET the rank owns."
+      "mappingId": "nest-getconnections",
+      "sources": [
+        {
+          "system": "nest.GetConnections",
+          "role": "primary",
+          "notes": "Provisional source candidate only; Cortexel does not currently ship an executable V1 NEST connection adapter. A base final-snapshot mapping would supply source, target and each observed per-connection delay in milliseconds, preserve every multapse row, and never round or snap values. It would preserve valid off-grid values and make no lattice, rounding or construction-path claim. Under MPI it would remain target-rank-local; the separately named NodeCollection candidate supplies owned-target context that rows cannot reveal.",
+          "sourceId": "nest-getconnections"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies the selected endpoint universe and, under `mpi_target_rank_local`, the exact local-membership mask of the selected target NodeCollection. The endpoint universe may be incomplete because this figure makes no isolate claim, but `observedTargetIds` must still include every selected target owned by the rank, including one with no returned connection row.",
+          "sourceId": "nest-selected-endpoints-and-target-locality"
+        },
+        {
+          "system": "nest.GetDefaults(synapse_model)",
+          "role": "required_companion",
+          "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. Supplies current defaults/status for every observed synapse model. This snapshot does NOT prove the producing NEST runtime, which defaults were active when a connection was created, or whether a row was later changed; it is current model context only. Where a model decomposes total delay, the mapping must export exactly one declared delay quantity and never sum or substitute components silently.",
+          "sourceId": "nest-synapse-model-defaults"
+        },
+        {
+          "system": "host-retained NEST runtime identity",
+          "role": "required_companion",
+          "notes": "Candidate declaration of the producing NEST version/build identity captured from the live run. Model names or final defaults cannot authenticate this fact, and no normative receipt format exists yet.",
+          "sourceId": "host-nest-runtime-identity"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nest.synapse_model_status",
-      "status": "planned",
-      "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. A future mapping must bind the exact NEST version, supply the synapse model per row for grouping, and retain enough assignment provenance to distinguish normal Connect rounding from `cont_delay_synapse` model defaults supplied through CopyModel or SetDefaults and post-creation updates through SynapseCollection.set (legacy SetStatus). Where a model decomposes total delay, it must export exactly one declared delay quantity and never sum or substitute components silently."
+      "mappingId": "networkx-multidigraph",
+      "sources": [
+        {
+          "system": "networkx.MultiDiGraph",
+          "role": "primary",
+          "notes": "A `delay` edge attribute on a MultiDiGraph retains parallel edges and therefore supports per_connection. A DiGraph has already collapsed them and cannot say with which aggregation, so per_connection is REFUSED from a DiGraph rather than approximated from a collapsed graph.",
+          "sourceId": "networkx-multidigraph"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "networkx.MultiDiGraph",
-      "status": "partial",
-      "notes": "A `delay` edge attribute on a MultiDiGraph retains parallel edges and therefore supports per_connection. A DiGraph has already collapsed them and cannot say with which aggregation, so per_connection is REFUSED from a DiGraph rather than approximated from a collapsed graph."
+      "mappingId": "neo-block",
+      "sources": [
+        {
+          "system": "neo.Block",
+          "role": "primary",
+          "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it maps to a synaptic delay.",
+          "sourceId": "neo-block"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     },
     {
-      "system": "neo.Block",
-      "status": "rejected",
-      "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it maps to a synaptic delay."
+      "mappingId": "nwb-core",
+      "sources": [
+        {
+          "system": "nwb.core",
+          "role": "primary",
+          "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today.",
+          "sourceId": "nwb-core"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     },
     {
-      "system": "nwb.core",
-      "status": "planned",
-      "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today."
-    },
-    {
-      "system": "ncp",
-      "status": "planned",
-      "notes": "Not yet certified. Adapter output is never exempt from the core gate: it is validated by this contract like any other request."
+      "mappingId": "ncp",
+      "sources": [
+        {
+          "system": "ncp",
+          "role": "primary",
+          "notes": "Not yet certified. Adapter output is never exempt from the core gate: it is validated by this contract like any other request.",
+          "sourceId": "ncp"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     }
   ],
   "migration": {
@@ -901,6 +970,7 @@
     "Cortexel fits and tests nothing. A mean, a mode, or an apparent bimodality read off this figure is a property of the rows supplied and of the bins chosen for them."
   ],
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": {

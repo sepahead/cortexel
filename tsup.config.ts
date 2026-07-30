@@ -36,6 +36,7 @@ export default defineConfig({
     index: 'index.ts',
     'core/index': 'core/index.ts',
     'figure/index': 'src/figure/index.ts',
+    'authoring/index': 'src/authoring/index.ts',
     'render-svg/index': 'src/render/index.ts',
     'adapters/nest/index': 'src/adapters/nest/index.ts',
     'cli/main': 'src/cli/main.ts',

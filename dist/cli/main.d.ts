@@ -7,7 +7,7 @@ import { C as CortexelError } from '../errors-DUbFUu6n.js';
  * Dispatch and capability generation import this value directly. It is data, not a
  * source-text pattern, so quote style and comments cannot create or hide commands.
  */
-declare const CLI_COMMANDS: readonly ["identity", "catalog", "validate", "render", "inspect", "migrate"];
+declare const CLI_COMMANDS: readonly ["identity", "catalog", "describe", "validate", "render", "inspect", "migrate"];
 
 /**
  * The Cortexel CLI.
@@ -34,6 +34,12 @@ declare const CLI_COMMANDS: readonly ["identity", "catalog", "validate", "render
  * ERROR_LIMIT_REACHED warning does not override the actual errors that preceded it.
  */
 declare function exitCodeForErrors(errors: readonly CortexelError[]): number;
+/**
+ * Preserve exact parsed JSON values while preventing bidi/control code points from
+ * reaching a terminal literally. JSON.stringify already escapes JSON controls; this
+ * closes the additional display-spoofing set used by Cortexel diagnostics.
+ */
+declare function serializeCliJson(value: unknown): string;
 declare function run(argv: readonly string[]): number;
 
-export { CLI_COMMANDS, exitCodeForErrors, run };
+export { CLI_COMMANDS, exitCodeForErrors, run, serializeCliJson };

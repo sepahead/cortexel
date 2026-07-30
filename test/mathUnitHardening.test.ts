@@ -305,7 +305,64 @@ describe('unit conversion hardening', () => {
     ).toEqual(['SCIENCE_WINDOW_INVALID']);
   });
 
-  it('binds NEST origin-relative clocks to the revision-2-admitted source declaration', () => {
+  it('checks NEST tic projections, capture endpoint, grid, and history bounds', () => {
+    const authority = (
+      captureBiologicalTimeTics: string,
+      beganAtBiologicalTimeTics: string,
+      lastMutationAtBiologicalTimeTics: string,
+    ) => ({
+      runtimeStatus: {
+        resolutionMs: 0.125,
+        ticsPerMs: '1000',
+        resolutionTics: '125',
+        captureBiologicalTimeTics,
+      },
+      recordingGrid: {
+        originTics: '100250',
+        startTics: '500',
+        stopTics: '10750',
+      },
+      bufferEpoch: { beganAtBiologicalTimeTics },
+      recordingPlan: { lastMutationAtBiologicalTimeTics },
+    });
+    const validate = (
+      captureBiologicalTimeTics: string,
+      beganAtBiologicalTimeTics: string,
+      lastMutationAtBiologicalTimeTics: string,
+    ) =>
+      windowValid({
+        request: {
+          data: {
+            window: {
+              kind: 'nest_recording_device_origin_relative',
+              origin: 100.25,
+              start: 0.5,
+              stop: 10.75,
+              unit: 'ms',
+              captureAuthority: authority(
+                captureBiologicalTimeTics,
+                beganAtBiologicalTimeTics,
+                lastMutationAtBiologicalTimeTics,
+              ),
+            },
+          },
+        },
+        skillId: 'neuro.spike_raster',
+        parameters: { pointer: '/data/window', unitDimension: 'time' },
+      });
+
+    expect(validate('111000', '100750', '100750')).toEqual([]);
+    expect(
+      validate('110875', '100875', '100875')
+        .map((error) => error.instancePath),
+    ).toEqual([
+      '/data/window/captureAuthority/runtimeStatus/captureBiologicalTimeTics',
+      '/data/window/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics',
+      '/data/window/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics',
+    ]);
+  });
+
+  it('binds NEST origin-relative clocks to the revision-3-admitted source declaration', () => {
     const request = (systemVersion: string): Record<string, unknown> => ({
       data: {
         timeBase: 'absolute_clock',
@@ -318,6 +375,9 @@ describe('unit conversion hardening', () => {
           boundary: '(origin+start,origin+stop]',
           recordingBackend: 'memory',
           timeEncoding: 'native_binary64_ms',
+          captureAuthority: {
+            runtimeStatus: { nestVersion: '3.10.0' },
+          },
         },
         eventTimes: { values: [101], unit: 'ms' },
       },
@@ -342,15 +402,22 @@ describe('unit conversion hardening', () => {
       }),
     ).toEqual([]);
 
-    for (const version of ['3.9', '3.9.7', '3.10', '3.10.4']) {
-      expect(
-        eventsSourceClockDeclared({
-          request: request(version),
-          skillId: 'neuro.spike_raster',
-        }),
-      ).toEqual([]);
-    }
-    for (const version of ['3.8.9', '3.10.0.1', '3.10.0-rc1', '3.11']) {
+    expect(
+      eventsSourceClockDeclared({
+        request: request('3.10.0'),
+        skillId: 'neuro.spike_raster',
+      }),
+    ).toEqual([]);
+    for (const version of [
+      '3.8.9',
+      '3.9',
+      '3.9.7',
+      '3.10',
+      '3.10.4',
+      '3.10.0.1',
+      '3.10.0-rc1',
+      '3.11',
+    ]) {
       expect(
         eventsSourceClockDeclared({
           request: request(version),
@@ -359,7 +426,7 @@ describe('unit conversion hardening', () => {
       ).toContain('/source/systemVersion');
     }
 
-    const inconsistent = request('3.10') as {
+    const inconsistent = request('3.10.0') as {
       data: { window: Record<string, unknown>; eventTimes: Record<string, unknown> };
       source: Record<string, unknown>;
     };

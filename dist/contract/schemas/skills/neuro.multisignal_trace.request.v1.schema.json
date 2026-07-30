@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.multisignal_trace.request.v1.schema.json",
   "title": "neuro.multisignal_trace request",
-  "description": "GENERATED from contract/skills/neuro.multisignal_trace.v1.json. The acceptance authority for this skill.",
+  "description": "GENERATED from contract/skills/neuro.multisignal_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
   "type": "object",
   "properties": {
     "$schema": {

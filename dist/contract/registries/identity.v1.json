@@ -29,8 +29,14 @@
     },
     {
       "id": "catalogDigest",
-      "meaning": "SHA-256 over the STABLE catalog only. Kept separate from the contract digest so that editing an experimental capability's description cannot change the stable identity.",
-      "format": "sha256:<64 lowercase hex>"
+      "meaning": "SHA-256 over the domain-separated public stable discovery-and-authoring projection: compact SkillCatalogEntry metadata merged with the paired SkillAuthoringEntry for every stable skill sorted by id, plus the versioned schema-compilation profile and shared common/generated-enum structural schema resources. It binds public synthetic examples, scientific/accessibility claims, source mappings, availability, evidence boundaries, limits, and known limitations. It excludes experimental capabilities, implementation bytes, mutable ledgers, and repository prose.",
+      "format": "sha256:<64 lowercase hex>",
+      "domain": "cortexel-public-stable-catalog.v2",
+      "domainHistory": {
+        "v1": "The 0.9 line and early 0.10 development builds implicitly hashed only sorted {id, revision, renderer} tuples and carried no domain discriminator.",
+        "v2": "The domain literal is the first member of the canonical preimage object alongside schemaCompilationProfile, schemaResources, and skills. It identifies the complete public projection introduced for 0.10."
+      },
+      "resolver": "Retain the exact contract manifest and identity registry paired to contractDigest; manifest.catalogDigestDomain must equal this registry-owned domain. Package version alone is insufficient because development builds may reuse it. FigureArtifactV1 does not duplicate the domain field in contract 1.0."
     },
     {
       "id": "skillRevision",

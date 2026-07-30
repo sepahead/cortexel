@@ -5,6 +5,79 @@
   "description": "Every file in contract/skills/ must satisfy this. It is what makes 'one authority' enforceable rather than aspirational: a skill's scientific meaning, request schema, validators, budgets, disclosures, accessibility, evidence, ownership, and migration all live in ONE reviewable document, and every generated artifact is derived from it.\n\nFree-form executable expressions are forbidden anywhere in a contract source. A semantic rule is a NAMED validator id with parameters — never a string of code to evaluate.",
 
   "$defs": {
+    "adapterCertificationRequirement": {
+      "type": "object",
+      "description": "Immutable release-gate definition for an executable adapter mapping. Mutable gate status, evidence, receipts, and tested-source identities remain solely in the release evidence ledger so the candidate-A/authorization-B release construction does not change tested package semantics.",
+      "properties": {
+        "ledger": { "const": "cortexel-release-evidence-ledger.v1" },
+        "gate": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "pattern": "^R[0-9]{3}$" },
+            "section": { "type": "string", "minLength": 1, "maxLength": 4096 },
+            "requirement": { "type": "string", "minLength": 1, "maxLength": 4096 },
+            "releaseBlocking": { "const": true }
+          },
+          "required": ["id", "section", "requirement", "releaseBlocking"],
+          "additionalProperties": false
+        },
+        "conformanceProfile": {
+          "type": "object",
+          "description": "Identity of the immutable, contract-digest-bound executable case matrix that a receipt for this broad release gate must cover.",
+          "properties": {
+            "registry": {
+              "const": "cortexel-adapter-conformance-profiles.v1"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+              "maxLength": 96
+            },
+            "digestAlgorithm": {
+              "const": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1"
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": ["registry", "id", "digestAlgorithm", "digest"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["ledger", "gate", "conformanceProfile"],
+      "additionalProperties": false
+    },
+    "adapterSource": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+          "maxLength": 96,
+          "description": "Stable identity of this source role/profile within the composite mapping. It is not a runtime object or process instance id. Distinct sourceIds may intentionally name role-distinct uses of the same system class."
+        },
+        "system": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$",
+          "description": "Provider/profile class. This value may repeat when a composite needs role-distinct sources of the same class; sourceId, not system, is the provider-binding identity."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["primary", "required_companion", "optional_companion"]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+        }
+      },
+      "required": ["sourceId", "system", "role", "notes"],
+      "additionalProperties": false
+    },
     "requestPathSegment": {
       "oneOf": [
         {
@@ -468,16 +541,131 @@
     },
 
     "adapters": {
+      "description": "Composite interoperability mappings. Feasibility assessment, independent mapping-definition completeness, executable availability, and external release certification are separate evidence boundaries. One mapping may require or optionally consume multiple named source roles/profiles; role-distinct sources may share a system class but must have unique sourceIds. For not_assessed mappings, sources are only a provisional reviewed candidate roster: they are neither proven complete nor an executable/normative recipe. Mutable certification outcomes and receipts never enter this normative contract.",
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "system": { "type": "string" },
-          "status": { "type": "string", "enum": ["supported", "partial", "experimental", "rejected", "planned"] },
-          "notes": { "type": "string" }
+          "mappingId": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "maxLength": 96
+          },
+          "sources": {
+            "description": "Named provider roles currently known to matter to this mapping. The roster is exact contract data, but its epistemic meaning follows feasibilityStatus: under not_assessed it is a provisional candidate list and MUST NOT be read as closed authority or proof that the inputs suffice.",
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/adapterSource" },
+            "contains": {
+              "type": "object",
+              "properties": { "role": { "const": "primary" } },
+              "required": ["role"]
+            },
+            "minContains": 1,
+            "maxContains": 1
+          },
+          "feasibilityStatus": {
+            "type": "string",
+            "enum": ["assessed_feasible", "assessed_infeasible", "not_assessed"],
+            "description": "Whether a bounded review found that the named composite source profile can carry the request meaning. not_assessed means neither feasibility nor completeness of the candidate source roster has been established. This is never an implementation, mapping-definition, authentication, or certification claim."
+          },
+          "definitionStatus": {
+            "type": "string",
+            "enum": ["not_specified", "not_applicable"],
+            "description": "Whether this assessed profile lacks a closed normative mapping or has no applicable mapping. `specified` is deliberately not representable in contract source v1: Cortexel has no closed mapping-definition authority yet, and enum promotion plus prose/pointers would not constitute one."
+          },
+          "authorityRequirements": {
+            "type": "null",
+            "description": "Reserved and fixed to null in contract source v1. A future non-null form requires a closed, independently validated mapping-definition authority; feasibility prose, executable code, request schemas and release gates are insufficient."
+          },
+          "implementationAvailability": {
+            "type": "string",
+            "enum": ["packaged", "source_only", "not_implemented", "not_applicable"],
+            "description": "Availability of executable Cortexel code for this exact skill/mappingId. packaged and source_only must match the closed implementation inventory but do not create a normative source-to-request definition. not_applicable is reserved for an assessed-infeasible mapping."
+          },
+          "certificationRequirement": { "$ref": "#/$defs/adapterCertificationRequirement" },
+          "notes": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4096,
+            "pattern": "^(?:\\S|\\S[\\s\\S]*\\S)$"
+          }
         },
-        "required": ["system", "status"],
-        "additionalProperties": false
+        "required": [
+          "mappingId",
+          "sources",
+          "feasibilityStatus",
+          "definitionStatus",
+          "authorityRequirements",
+          "implementationAvailability"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": { "feasibilityStatus": { "const": "assessed_infeasible" } },
+              "required": ["feasibilityStatus"]
+            },
+            "then": {
+              "properties": {
+                "definitionStatus": { "const": "not_applicable" },
+                "authorityRequirements": { "type": "null" },
+                "implementationAvailability": { "const": "not_applicable" }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "feasibilityStatus": { "const": "not_assessed" } },
+              "required": ["feasibilityStatus"]
+            },
+            "then": {
+              "properties": {
+                "definitionStatus": { "const": "not_specified" },
+                "authorityRequirements": { "type": "null" },
+                "implementationAvailability": { "const": "not_implemented" }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "feasibilityStatus": { "const": "assessed_feasible" } },
+              "required": ["feasibilityStatus"]
+            },
+            "then": {
+              "properties": {
+                "definitionStatus": { "const": "not_specified" },
+                "implementationAvailability": {
+                  "enum": ["packaged", "source_only", "not_implemented"]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "implementationAvailability": { "enum": ["packaged", "source_only"] }
+              },
+              "required": ["implementationAvailability"]
+            },
+            "then": {
+              "properties": {
+                "certificationRequirement": {
+                  "$ref": "#/$defs/adapterCertificationRequirement"
+                }
+              },
+              "required": ["certificationRequirement"]
+            },
+            "else": {
+              "not": {
+                "properties": { "certificationRequirement": true },
+                "required": ["certificationRequirement"]
+              }
+            }
+          }
+        ]
       }
     },
 
@@ -516,6 +704,27 @@
     "examples": {
       "type": "object",
       "properties": {
+        "authoring": {
+          "type": "object",
+          "description": "Normative selection and provenance override for the one public, copyable authoring fixture. The generator deep-clones valid[baseValidExampleIndex] and replaces its complete source object with the exact synthetic fixture declaration below. TypeScript tests run every synthesized result through the full authoritative pipeline. The independent Python reader loads the same structural resources and exercises its explicitly partial semantic implementation without presenting that subset as full acceptance. Raw valid vectors remain publicly packaged conformance fixtures, but simulator/oracle vectors are never projected into the agent-facing catalog/CLI authoring example as provenance-bearing templates.",
+          "properties": {
+            "baseValidExampleIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 63
+            },
+            "source": {
+              "type": "object",
+              "properties": {
+                "kind": { "const": "synthetic_fixture" }
+              },
+              "required": ["kind"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["baseValidExampleIndex", "source"],
+          "additionalProperties": false
+        },
         "valid": {
           "type": "array",
           "minItems": 1,
@@ -538,7 +747,7 @@
           "description": "The NEAREST misuse for each rule, with the exact code it must produce. A rule with no invalid vector is not actually enforced."
         }
       },
-      "required": ["valid", "invalid"],
+      "required": ["authoring", "valid", "invalid"],
       "additionalProperties": false
     }
   },

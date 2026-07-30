@@ -53,8 +53,31 @@ export const GRAPH_EDGE_LANE_SPACING = 6;
 export const MAX_GRAPH_PARALLEL_EDGES = 9;
 export const MAX_GRAPH_EDGE_LANE_OFFSET =
   ((MAX_GRAPH_PARALLEL_EDGES - 1) / 2) * GRAPH_EDGE_LANE_SPACING;
-export const CORPUS_GRAPH_RADIUS_MEANING =
-  'Schematic sqrt(rendered relationship degree) scaling; not quantitative evidence.';
+
+const DEFAULT_CORPUS_GRAPH_BASE_RADIUS = 4;
+const DEFAULT_CORPUS_GRAPH_DEGREE_SCALE = 1.4;
+const DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP = 8;
+
+/** Exact disclosure for the radius mapping actually returned to the scene. */
+export function corpusGraphRadiusMeaning(
+  baseRadius: number,
+  degreeScale: number,
+  maxRadiusBump: number,
+): string {
+  if (degreeScale === 0 || maxRadiusBump === 0) {
+    return `Constant schematic radius ${String(baseRadius)} world units; ` +
+      'relationship degree is not encoded; not quantitative evidence.';
+  }
+  return `Schematic radius = ${String(baseRadius)} + min(${String(maxRadiusBump)}, ` +
+    'sqrt(relationship degree in the complete mapped snapshot before host-side ' +
+    `view filters) × ${String(degreeScale)}) world units; not quantitative evidence.`;
+}
+
+export const CORPUS_GRAPH_RADIUS_MEANING = corpusGraphRadiusMeaning(
+  DEFAULT_CORPUS_GRAPH_BASE_RADIUS,
+  DEFAULT_CORPUS_GRAPH_DEGREE_SCALE,
+  DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP,
+);
 
 export function assertKnowledgeGraphBudget(nodeCount: number, edgeCount: number): void {
   if (!Number.isSafeInteger(nodeCount) || nodeCount < 0 ||
@@ -67,6 +90,22 @@ export function assertKnowledgeGraphBudget(nodeCount: number, edgeCount: number)
       edgeCount > MAX_KNOWLEDGE_GRAPH_SCENE_EDGES) {
     throw new RangeError(
       `knowledge graph edges must be a non-negative integer <= ${MAX_KNOWLEDGE_GRAPH_SCENE_EDGES}`,
+    );
+  }
+}
+
+/** Validate the caller-declared namespace used to remount stateful graph surfaces.
+ * The value is a cache boundary only; validation does not authenticate it. */
+export function assertKnowledgeGraphIdentity(
+  graphIdentity: unknown,
+): asserts graphIdentity is string {
+  if (
+    typeof graphIdentity !== 'string' ||
+    graphIdentity.length < 1 ||
+    graphIdentity.length > 1_024
+  ) {
+    throw new Error(
+      'knowledge graph identity must be a non-empty string <= 1024 characters',
     );
   }
 }
@@ -92,6 +131,8 @@ export interface GraphEdgeIdentity {
   source: string;
   target: string;
   kind?: string;
+  directed?: boolean;
+  particles?: boolean;
   label?: string;
   attributes?: Readonly<KnowledgeGraphAttributes>;
   epistemic?: Readonly<KnowledgeGraphEpistemic>;
@@ -109,16 +150,17 @@ function canonicalPair(
 function graphEdgeIdentityKey(edge: GraphEdgeIdentity): string {
   if (typeof edge.id === 'string') return JSON.stringify(['id', edge.id]);
   const kind = typeof edge.kind === 'string' ? edge.kind : '';
-  if (kind === 'same_as') {
+  if (edge.directed === false) {
     const [source, target] = canonicalPair(edge.source, edge.target);
-    return JSON.stringify(['legacy-symmetric', source, target, kind]);
+    return JSON.stringify(['legacy-undirected', source, target, kind]);
   }
   return JSON.stringify(['legacy-directed', edge.source, edge.target, kind]);
 }
 
 /** Direct React entrypoints must not silently discard scientific relationships.
  * Identified edges are distinct assertions and therefore deduplicate by id;
- * legacy id-less edges retain the historical source/target/kind identity. */
+ * legacy id-less edges use source/target/kind plus their effective direction.
+ * Undirected identity is endpoint-order invariant; directed identity is not. */
 export function assertRenderableGraphEdges(
   nodes: readonly { id: string }[],
   edges: readonly GraphEdgeIdentity[],
@@ -134,6 +176,11 @@ export function assertRenderableGraphEdges(
     }
     if (edge.source === edge.target) {
       throw new Error(`knowledge graph edge at index ${index} is a self-loop`);
+    }
+    if (edge.directed === false && edge.particles === true) {
+      throw new Error(
+        `knowledge graph edge at index ${index} is undirected but carries directional particles`,
+      );
     }
     const key = graphEdgeIdentityKey(edge);
     if (relationships.has(key)) {
@@ -162,6 +209,17 @@ export function reducedMotionLayoutTickBudget(
   assertKnowledgeGraphBudget(nodeCount, edgeCount);
   const estimatedWork = Math.max(1, nodeCount + Math.ceil(edgeCount / 4));
   return Math.min(8, Math.max(2, Math.floor(2_000 / estimatedWork)));
+}
+
+/** Frame-rate-independent exponential damping for a host-owned camera target.
+ * Invalid or non-positive frame intervals make no movement; reduced motion snaps. */
+export function graphCameraTargetDamping(
+  deltaSeconds: number,
+  reducedMotion: boolean,
+): number {
+  if (reducedMotion) return 1;
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return 0;
+  return -Math.expm1(-3 * deltaSeconds);
 }
 
 export function normalizeGraphQuery(query: string): string {
@@ -607,14 +665,15 @@ export function flowParticleCount(
   return Math.min(ceiling, edges * each);
 }
 
-/** Order-sensitive content signature of a graph. Two content-equal nodes/edges
+/** Order-sensitive renderer-state signature of a graph. Two renderer-equivalent
+ *  nodes/edges
  *  arrays produce the SAME string even when their identities differ, so the
  *  scene keys its simulation memo on this instead of array identity — a host
  *  that rebuilds the arrays every render (the common React pattern) never
- *  restarts a settled layout. Node `id`/`radius` and the FULL edge content are
- *  covered, including stable edge ids (they feed the memoized sim/edge snapshots);
- *  node color/label are
- *  deliberately excluded — they restyle live without a layout restart. */
+ *  restarts a settled layout. Node `id`/`radius` and every edge field consumed by
+ *  memoized renderer state are covered, including stable edge ids. Node
+ *  color/label and evidence metadata are deliberately excluded because they
+ *  restyle or describe live without changing that state. */
 export function graphSignature(
   nodes: readonly { id: string; radius?: number }[],
   edges: readonly {
@@ -628,8 +687,16 @@ export function graphSignature(
   }[],
 ): string {
   const field = (value: string | number | boolean | undefined): string => {
-    const text = value === undefined ? '' : String(value);
-    return `${text.length}:${text}`;
+    if (value === undefined) return 'u;';
+    const type = typeof value === 'string'
+      ? 's'
+      : typeof value === 'number'
+        ? 'n'
+        : 'b';
+    const text = typeof value === 'number' && Object.is(value, -0)
+      ? '-0'
+      : String(value);
+    return `${type}${text.length}:${text}`;
   };
   let s = '';
   for (const n of nodes) s += `N${field(n.id)}${field(n.radius)}`;
@@ -674,6 +741,8 @@ export function defaultEdgeStyles(
 }
 
 export interface MapCorpusGraphOptions {
+  /** All options are trusted host-authored configuration, never raw graph or agent
+   * payload. A Proxy is not an inert data boundary and must not be supplied here. */
   /** Sphere radius for a degree-0 node (world units). Default 4. */
   baseRadius?: number;
   /** Extra radius per unit of sqrt(degree), capped by `maxRadiusBump`. Default 1.4. */
@@ -682,12 +751,104 @@ export interface MapCorpusGraphOptions {
   maxRadiusBump?: number;
   /** Override node colors per kind (defaults derive from the palette). */
   nodeColors?: Partial<Record<KnowledgeGraphNodeKind, string>>;
-  /** Override edge styles per kind (defaults derive from the palette). */
-  edgeStyles?: Partial<Record<KnowledgeGraphEdgeKind, EdgeStyle>>;
+  /** Override edge colors only. Direction and flow are contract-owned by kind. */
+  edgeColors?: Partial<Record<KnowledgeGraphEdgeKind, string>>;
+}
+
+const MAP_CORPUS_GRAPH_OPTION_KEYS = new Set([
+  'baseRadius',
+  'degreeScale',
+  'maxRadiusBump',
+  'nodeColors',
+  'edgeColors',
+]);
+const KNOWLEDGE_GRAPH_NODE_KINDS = new Set<KnowledgeGraphNodeKind>([
+  'paper',
+  'model',
+  'family',
+]);
+const KNOWLEDGE_GRAPH_EDGE_KINDS = new Set<KnowledgeGraphEdgeKind>([
+  'cites',
+  'same_as',
+  'variant_of',
+  'instantiates',
+  'belongs_to_family',
+]);
+const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
+
+function ownDataRecord(
+  value: unknown,
+  label: string,
+  allowedKeys: ReadonlySet<string>,
+): Readonly<Record<string, unknown>> {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    (Object.getPrototypeOf(value) !== Object.prototype &&
+      Object.getPrototypeOf(value) !== null)
+  ) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  const result: Record<string, unknown> = Object.create(null);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowedKeys.has(key)) {
+      throw new TypeError(`${label} contains an unknown member`);
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+      throw new TypeError(`${label}.${key} must be an enumerable data property`);
+    }
+    result[key] = descriptor.value;
+  }
+  return result;
+}
+
+function finiteRadiusOption(
+  options: Readonly<Record<string, unknown>>,
+  key: 'baseRadius' | 'degreeScale' | 'maxRadiusBump',
+  fallback: number,
+  strictlyPositive: boolean,
+): number {
+  const value = options[key];
+  if (value === undefined) return fallback;
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    Object.is(value, -0) ||
+    (strictlyPositive ? value <= 0 : value < 0)
+  ) {
+    const domain = strictlyPositive ? 'positive' : 'non-negative';
+    throw new RangeError(`mapCorpusKnowledgeGraph ${key} must be a finite ${domain} number`);
+  }
+  return value;
+}
+
+function normalizeHexColor(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !HEX_COLOR.test(value)) {
+    throw new TypeError(`${label} must be an exact #rrggbb hex color`);
+  }
+  return value.toLowerCase();
+}
+
+function colorOverrides<K extends string>(
+  value: unknown,
+  label: string,
+  allowedKeys: ReadonlySet<K>,
+): Partial<Record<K, string>> {
+  if (value === undefined) return {};
+  const record = ownDataRecord(value, label, allowedKeys);
+  const result: Partial<Record<K, string>> = {};
+  for (const [key, color] of Object.entries(record)) {
+    result[key as K] = normalizeHexColor(color, `${label}.${key}`);
+  }
+  return result;
 }
 
 export interface MappedCorpusGraph {
   context: KnowledgeGraphContext;
+  /** Caller-declared layout/cache namespace, not a content digest or authentication. */
+  graphIdentity: string;
   nodes: KnowledgeGraph3DNode[];
   edges: KnowledgeGraph3DEdge[];
 }
@@ -700,13 +861,30 @@ export interface KnowledgeGraphContext {
   generated_at: string;
 }
 
+/** Collision-free encoding of the caller-declared graph context for layout/cache
+ * continuity. Filtering one declared snapshot keeps this value. This is neither
+ * a graph-content digest nor independent authentication of any context field. */
+export function corpusGraphInstanceIdentity(
+  context: KnowledgeGraphContext,
+): string {
+  const field = (value: string): string => `${value.length}:${value}`;
+  return `cortexel-corpus-graph-instance.v1:${field(context.graph_id)}${field(
+    context.graph_source,
+  )}${field(context.graph_snapshot_id)}${field(context.graph_scope)}${field(
+    context.generated_at,
+  )}`;
+}
+
 /**
  * Map validated `corpus.knowledge_graph` params → KnowledgeGraph3DScene props.
- * Node color derives from kind; radius grows gently with degree so a highly-cited
- * paper reads as a hub. Edge color/direction/particles derive from kind (only
- * `cites` flows particles). The strict gate rejects dangling/self-loop edges;
- * this mapper defensively drops them for legacy programmatic callers so its
- * degree/radius calculation still matches the rendered edge set.
+ * Node color derives from kind; radius grows gently with total relationship degree
+ * so a highly connected entity reads as a hub. Edge color/direction/particles derive from kind (only
+ * `cites` flows particles). This public bridge rechecks duplicate nodes and every
+ * edge's renderability. It refuses rather than discarding a dangling, self-loop,
+ * or duplicate scientific assertion, then preserves the complete accepted edge
+ * sequence.
+ * `opts` is trusted host configuration. Validate or materialize any untrusted value
+ * before this call; JavaScript Proxy traps are executable behavior, not plain data.
  * The honesty boundary (same_as/variant_of are advisory, not certified sameness)
  * is enforced upstream at the skill gate, not here.
  */
@@ -716,27 +894,71 @@ export function mapCorpusKnowledgeGraph(
   opts: MapCorpusGraphOptions = {},
 ): MappedCorpusGraph {
   assertKnowledgeGraphBudget(params.nodes.length, params.edges.length);
-  const baseRadius =
-    Number.isFinite(opts.baseRadius) && (opts.baseRadius as number) > 0
-      ? (opts.baseRadius as number)
-      : 4;
-  const degreeScale =
-    Number.isFinite(opts.degreeScale) && (opts.degreeScale as number) >= 0
-      ? (opts.degreeScale as number)
-      : 1.4;
-  const maxRadiusBump =
-    Number.isFinite(opts.maxRadiusBump) && (opts.maxRadiusBump as number) >= 0
-      ? (opts.maxRadiusBump as number)
-      : 8;
-  const nodeColors = { ...defaultNodeColors(palette), ...opts.nodeColors };
-  const edgeStyles = { ...defaultEdgeStyles(palette), ...opts.edgeStyles };
+  assertUniqueGraphNodeIds(params.nodes);
+  assertRenderableGraphEdges(params.nodes, params.edges);
+  const optionValues = ownDataRecord(
+    opts,
+    'mapCorpusKnowledgeGraph options',
+    MAP_CORPUS_GRAPH_OPTION_KEYS,
+  );
+  const baseRadius = finiteRadiusOption(
+    optionValues,
+    'baseRadius',
+    DEFAULT_CORPUS_GRAPH_BASE_RADIUS,
+    true,
+  );
+  const degreeScale = finiteRadiusOption(
+    optionValues,
+    'degreeScale',
+    DEFAULT_CORPUS_GRAPH_DEGREE_SCALE,
+    false,
+  );
+  const maxRadiusBump = finiteRadiusOption(
+    optionValues,
+    'maxRadiusBump',
+    DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP,
+    false,
+  );
+  if (baseRadius + maxRadiusBump > MAX_GRAPH_NODE_RADIUS) {
+    throw new RangeError(
+      `mapCorpusKnowledgeGraph baseRadius + maxRadiusBump must be <= ` +
+      `${MAX_GRAPH_NODE_RADIUS}`,
+    );
+  }
+  const nodeColorOverrides = colorOverrides(
+    optionValues.nodeColors,
+    'mapCorpusKnowledgeGraph nodeColors',
+    KNOWLEDGE_GRAPH_NODE_KINDS,
+  );
+  const edgeColorOverrides = colorOverrides(
+    optionValues.edgeColors,
+    'mapCorpusKnowledgeGraph edgeColors',
+    KNOWLEDGE_GRAPH_EDGE_KINDS,
+  );
+  const nodeColors = {
+    ...Object.fromEntries(
+      Object.entries(defaultNodeColors(palette)).map(([kind, color]) => [
+        kind,
+        normalizeHexColor(color, `palette node color ${kind}`),
+      ]),
+    ) as Record<KnowledgeGraphNodeKind, string>,
+    ...nodeColorOverrides,
+  };
+  const edgeStyles = defaultEdgeStyles(palette);
+  for (const [kind, style] of Object.entries(edgeStyles)) {
+    style.color = normalizeHexColor(style.color, `palette edge color ${kind}`);
+  }
+  const radiusMeaning = corpusGraphRadiusMeaning(
+    baseRadius,
+    degreeScale,
+    maxRadiusBump,
+  );
 
-  const ids = new Set(params.nodes.map((n) => n.id));
-  const validEdges = filterGraphEdges(ids, params.edges as ParamEdge[]);
+  const renderableEdges = params.edges as ParamEdge[];
 
-  // Degree over valid edges only (matches what the scene actually draws).
+  // Degree over the complete accepted edge sequence (matches what the scene draws).
   const degree = new Map<string, number>();
-  for (const e of validEdges) {
+  for (const e of renderableEdges) {
     degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
     degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
   }
@@ -756,12 +978,12 @@ export function mapCorpusKnowledgeGraph(
         : { uncalibrated_score: n.uncalibrated_score }),
       color: nodeColors[n.kind as KnowledgeGraphNodeKind] ?? palette.inkDim,
       radius,
-      radiusMeaning: CORPUS_GRAPH_RADIUS_MEANING,
+      radiusMeaning,
       kind: n.kind,
     };
   });
 
-  const edges: KnowledgeGraph3DEdge[] = validEdges.map((e) => {
+  const edges: KnowledgeGraph3DEdge[] = renderableEdges.map((e) => {
     const style = edgeStyles[e.kind as KnowledgeGraphEdgeKind] ?? {
       color: palette.inkFaint,
       directed: true,
@@ -779,12 +1001,13 @@ export function mapCorpusKnowledgeGraph(
         : { uncalibrated_score: e.uncalibrated_score }),
       source: e.source,
       target: e.target,
-      color: style.color,
+      color: edgeColorOverrides[e.kind as KnowledgeGraphEdgeKind] ?? style.color,
       directed: style.directed,
       kind: e.kind,
       particles: style.particles,
     };
   });
+  assertRenderableGraphEdges(nodes, edges);
 
   return {
     context: {
@@ -794,6 +1017,13 @@ export function mapCorpusKnowledgeGraph(
       graph_scope: params.graph_scope,
       generated_at: params.generated_at,
     },
+    graphIdentity: corpusGraphInstanceIdentity({
+      graph_id: params.graph_id,
+      graph_source: params.graph_source,
+      graph_snapshot_id: params.graph_snapshot_id,
+      graph_scope: params.graph_scope,
+      generated_at: params.generated_at,
+    }),
     nodes,
     edges,
   };

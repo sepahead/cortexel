@@ -3,8 +3,9 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:ef699776098d64ae1d64697eda339ce4459941f70dac3f7c3eb0720934284c8f",
-  "catalogDigest": "sha256:be2826569b51a0f933dca61c4b99fc85bea56c5ec8c382f64a4e0c67f72f41a9",
+  "contractDigest": "sha256:a46204c087e224566e304fbe63863b94dbd7b8bf4e8218c591d9d7f2acf79247",
+  "catalogDigest": "sha256:18fe441ad91d52651cbbe5efa063478a5c458560c29d20d541d63359722addd8",
+  "catalogDigestDomain": "cortexel-public-stable-catalog.v2",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
     "packaged",
@@ -345,6 +346,92 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-getconnections",
+          "sources": [
+            {
+              "system": "nest.GetConnections",
+              "role": "primary",
+              "notes": "Supplies only the connection rows. It accepts the official singular/scalar form or canonical plural arrays, never both, never broadcasts an optional scalar across rows, and never deduplicates multapses. Accessor-bearing input is rejected before any getter can run (ADAPTER_ACCESSOR_INPUT_REJECTED). The separately named NodeCollection source is mandatory because an edge list can only show that no connection was observed, never that a selected node has degree zero.",
+              "sourceId": "nest-getconnections"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete selected node universe, including isolated and silent nodes, in the order intentionally retained for both matrix axes. The exact selection must be retained from the simulation setup; it is never reconstructed from connection endpoints.",
+              "sourceId": "nest-selected-node-universe"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nest-synapsecollection-mpi-target-rank-local",
+          "sources": [
+            {
+              "system": "nest.SynapseCollection (MPI, target-rank-local)",
+              "role": "primary",
+              "notes": "Supplies the rank-local connection rows. Rows are targets and NEST returns only connections whose targets are owned by the executing MPI process, so each owned target row is complete. The output stays mpi_target_rank_local and is never merged implicitly; connection rows alone cannot establish either the selected node universe or which selected targets are locally owned.",
+              "sourceId": "nest-synapsecollection-mpi-target-rank-local"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies both retained selection views that the rank-local rows cannot reconstruct: the complete selected node universe for the matrix axes and the exact local-membership mask of the selected target NodeCollection. `observedTargetIds` is the exact selected-target intersection whose NEST 3.10 `NodeCollection.local` value is true; it is never inferred from targets that happen to have an incoming connection. NEST deprecates rank-specific simulation logic, so this locality view is used only to describe already rank-local evidence, never to change simulation behavior.",
+              "sourceId": "nest-selected-node-and-target-locality"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "networkx-digraph",
+          "sources": [
+            {
+              "system": "networkx.DiGraph",
+              "role": "primary",
+              "notes": "networkx's adjacency is A[source][target] — the transpose of Cortexel's convention — so the adapter transposes explicitly and records that it did. The node universe comes from G.nodes so that isolates survive; taking it from G.edges would silently delete every isolate row and column. A MultiDiGraph's parallel edges become distinct connection rows and are never collapsed.",
+              "sourceId": "networkx-digraph"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "dense-numeric-matrix-numpy-scipy-sparse",
+          "sources": [
+            {
+              "system": "dense numeric matrix (numpy / scipy.sparse)",
+              "role": "primary",
+              "notes": "A bare array carries no node ids, no orientation, and no way to distinguish a not_observed cell from an observed absence. Those are exactly the three facts this contract exists to pin down, so an array that has lost them cannot be promoted back into a matrix figure. Supply the connection rows and the node universe instead.",
+              "sourceId": "dense-numeric-matrix-numpy-scipy-sparse"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        }
+      ],
       "legacyIds": [
         "nest.adjacency_matrix"
       ]
@@ -755,6 +842,101 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-getconnections",
+          "sources": [
+            {
+              "system": "nest.GetConnections",
+              "role": "primary",
+              "notes": "Supplies SynapseCollection.get() connection rows in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. It cannot prove a node has degree zero, so the separately named NodeCollection source is mandatory. The MPI scope must come from the actual run, not from an assumption. A future `global_merged` mapping must be separately profiled with an exact one-run, one-snapshot, every-rank merge authority; this single-query profile does not claim that merge.",
+              "sourceId": "nest-getconnections"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete selected node universe, including isolates and silent nodes. GetConnections can prove only that it returned no row for an endpoint; without this companion an isolate would disappear and a missing edge could be misread as evidence of absence.",
+              "sourceId": "nest-selected-node-universe"
+            },
+            {
+              "system": "nest.GetPosition",
+              "role": "optional_companion",
+              "notes": "Measured layout. Node ids are bound to the matching position order; the single-process / rank-local / merged scope of the position query is retained and must agree with the connection scope.",
+              "sourceId": "nest-getposition"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "networkx-multidigraph",
+          "sources": [
+            {
+              "system": "networkx.MultiDiGraph",
+              "role": "primary",
+              "notes": "Structure maps cleanly (directed, multiedge, self-loop). NetworkX carries no node-universe completeness flag, no MPI scope, and no units, so the caller must declare all three; the adapter never fabricates them.",
+              "sourceId": "networkx-multidigraph"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo",
+          "sources": [
+            {
+              "system": "neo",
+              "role": "primary",
+              "notes": "Neo models recordings, not connectivity. There is no faithful mapping, and an invented one would be worse than none.",
+              "sourceId": "neo"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "nwb-core",
+          "sources": [
+            {
+              "system": "nwb.core",
+              "role": "primary",
+              "notes": "NWB core has no connectivity schema. A mapping depends on a community extension (for example ndx-simulation-output); none is certified here, and Cortexel will not invent a table layout.",
+              "sourceId": "nwb-core"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "ncp",
+          "sources": [
+            {
+              "system": "ncp",
+              "role": "primary",
+              "notes": "Pending the narrow NCP adapter and its downstream consumer certification.",
+              "sourceId": "ncp"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.connection_graph",
         "nest.connectivity_matrix"
@@ -1037,6 +1219,80 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-getconnections",
+          "sources": [
+            {
+              "system": "nest.GetConnections",
+              "role": "primary",
+              "notes": "Supplies the connection rows, preserving every multapse as its own row. Under MPI the returned rows are the ones whose TARGET the rank owns, so the adapter must emit an mpi_target_rank_local scope and declare the rank's targets as observedTargetIds. That scope supports only complete local in-degree; out-degree is rejected with SCOPE_OUT_DEGREE_FROM_RANK_LOCAL because outgoing edges can terminate on other ranks.",
+              "sourceId": "nest-getconnections"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete node universe including isolated and silent nodes. Under `mpi_target_rank_local`, this profile also retains the exact local-membership mask of the selected target NodeCollection, so `observedTargetIds` includes locally owned targets with zero incoming rows. GetConnections structurally provides neither fact; without them the zero bin is empty by construction rather than by observation.",
+              "sourceId": "nest-nodecollection"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "networkx-multidigraph",
+          "sources": [
+            {
+              "system": "networkx.MultiDiGraph",
+              "role": "primary",
+              "notes": "G.nodes gives the universe and retains isolates. The counting policy must match the graph class: a DiGraph has already collapsed parallel edges, so `count_edges` is refused for it rather than approximated from a collapsed graph.",
+              "sourceId": "networkx-multidigraph"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-block",
+          "sources": [
+            {
+              "system": "neo.Block",
+              "role": "primary",
+              "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it can be mapped to a degree.",
+              "sourceId": "neo-block"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "nwb-core",
+          "sources": [
+            {
+              "system": "nwb.core",
+              "role": "primary",
+              "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today.",
+              "sourceId": "nwb-core"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        }
+      ],
       "legacyIds": [
         "nest.in_degree_distribution",
         "nest.out_degree_distribution"
@@ -1402,6 +1658,107 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-getconnections",
+          "sources": [
+            {
+              "system": "nest.GetConnections",
+              "role": "primary",
+              "notes": "Provisional source candidate only; Cortexel does not currently ship an executable V1 NEST connection adapter. A base final-snapshot mapping would supply source, target and each observed per-connection delay in milliseconds, preserve every multapse row, and never round or snap values. It would preserve valid off-grid values and make no lattice, rounding or construction-path claim. Under MPI it would remain target-rank-local; the separately named NodeCollection candidate supplies owned-target context that rows cannot reveal.",
+              "sourceId": "nest-getconnections"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the selected endpoint universe and, under `mpi_target_rank_local`, the exact local-membership mask of the selected target NodeCollection. The endpoint universe may be incomplete because this figure makes no isolate claim, but `observedTargetIds` must still include every selected target owned by the rank, including one with no returned connection row.",
+              "sourceId": "nest-selected-endpoints-and-target-locality"
+            },
+            {
+              "system": "nest.GetDefaults(synapse_model)",
+              "role": "required_companion",
+              "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. Supplies current defaults/status for every observed synapse model. This snapshot does NOT prove the producing NEST runtime, which defaults were active when a connection was created, or whether a row was later changed; it is current model context only. Where a model decomposes total delay, the mapping must export exactly one declared delay quantity and never sum or substitute components silently.",
+              "sourceId": "nest-synapse-model-defaults"
+            },
+            {
+              "system": "host-retained NEST runtime identity",
+              "role": "required_companion",
+              "notes": "Candidate declaration of the producing NEST version/build identity captured from the live run. Model names or final defaults cannot authenticate this fact, and no normative receipt format exists yet.",
+              "sourceId": "host-nest-runtime-identity"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "networkx-multidigraph",
+          "sources": [
+            {
+              "system": "networkx.MultiDiGraph",
+              "role": "primary",
+              "notes": "A `delay` edge attribute on a MultiDiGraph retains parallel edges and therefore supports per_connection. A DiGraph has already collapsed them and cannot say with which aggregation, so per_connection is REFUSED from a DiGraph rather than approximated from a collapsed graph.",
+              "sourceId": "networkx-multidigraph"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-block",
+          "sources": [
+            {
+              "system": "neo.Block",
+              "role": "primary",
+              "notes": "Neo models electrophysiological signals and spike trains. It carries no connection snapshot, and nothing in it maps to a synaptic delay.",
+              "sourceId": "neo-block"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "nwb-core",
+          "sources": [
+            {
+              "system": "nwb.core",
+              "role": "primary",
+              "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today.",
+              "sourceId": "nwb-core"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "ncp",
+          "sources": [
+            {
+              "system": "ncp",
+              "role": "primary",
+              "notes": "Not yet certified. Adapter output is never exempt from the core gate: it is validated by this contract like any other request.",
+              "sourceId": "ncp"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.delay_distribution"
       ]
@@ -1757,6 +2114,122 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-getconnections",
+          "sources": [
+            {
+              "system": "nest.GetConnections",
+              "role": "primary",
+              "notes": "Provisional source candidate only; Cortexel does not currently ship an executable V1 NEST connection adapter. A base final-snapshot mapping would map NEST `target` to rows and `source` to columns, preserve multapses, and copy observed millisecond delays verbatim. It would make no lattice, rounding or construction-path claim, so valid off-grid values remain valid and no historical assignment receipt is required for this base view.",
+              "sourceId": "nest-getconnections"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete selected node universe and, for `mpi_target_rank_local`, the exact local-membership mask of the selected target NodeCollection. This retains isolates and locally owned zero-input targets; `observedTargetIds` is never inferred from returned connection targets.",
+              "sourceId": "nest-selected-node-and-target-locality"
+            },
+            {
+              "system": "nest.GetDefaults(synapse_model)",
+              "role": "required_companion",
+              "notes": "Supplies current defaults/status for every observed synapse model and the present model context for choosing one declared delay quantity. It does NOT establish the producing NEST version, historical defaults, construction path or later updates. Models with separate axonal/dendritic components are never silently summed.",
+              "sourceId": "nest-synapse-model-defaults"
+            },
+            {
+              "system": "host-retained NEST runtime identity",
+              "role": "required_companion",
+              "notes": "Candidate declaration of the producing NEST version/build identity captured from the live run. A model name or final status cannot authenticate this identity, and no normative receipt format exists yet.",
+              "sourceId": "host-nest-runtime-identity"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "brian2-synapses",
+          "sources": [
+            {
+              "system": "brian2.Synapses",
+              "role": "primary",
+              "notes": "Brian2 carries a per-synapse `delay` with a real unit, but its i/j indices are array positions, not node ids: the caller must supply the index-to-id mapping explicitly. Brian2's pre/post delay distinction must be resolved into delaySemantics rather than assumed.",
+              "sourceId": "brian2-synapses"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "networkx-digraph",
+          "sources": [
+            {
+              "system": "networkx.DiGraph",
+              "role": "primary",
+              "notes": "The caller must name the edge attribute holding the delay and declare its unit; NetworkX carries neither units nor scope, so both must be supplied. A MultiDiGraph is required if multapses exist — a DiGraph has already destroyed them before Cortexel is reached, and nothing here can recover them.",
+              "sourceId": "networkx-digraph"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo",
+          "sources": [
+            {
+              "system": "neo",
+              "role": "primary",
+              "notes": "Neo models recorded signals and spike trains. It has no connectivity object, so there is nothing to map.",
+              "sourceId": "neo"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "nwb-core",
+          "sources": [
+            {
+              "system": "nwb.core",
+              "role": "primary",
+              "notes": "NWB core has no synapse-level connection table carrying delays. A custom extension would be required, and none is certified; a partial or invented mapping would produce a matrix whose absent cells mean nothing.",
+              "sourceId": "nwb-core"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "ncp",
+          "sources": [
+            {
+              "system": "ncp",
+              "role": "primary",
+              "notes": "The narrow NCP adapter surface is not yet certified for connection snapshots. It cannot feed this figure until it declares scope explicitly, because a connection export without scope cannot distinguish an absent cell from a not_observed one — and that distinction is the entire content of a sparse matrix.",
+              "sourceId": "ncp"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.delay_matrix"
       ]
@@ -2183,6 +2656,86 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-getposition",
+          "sources": [
+            {
+              "system": "nest.GetPosition",
+              "role": "primary",
+              "notes": "Binds node ids to the matching position order — never by array index alone — and retains the single-process / rank-local / merged scope of the position query. The layer's centre, extent and edge_wrap are carried only when the source actually declares them; they are never reconstructed from the coordinates, and a connection mask or kernel is never reconstructed from them at all. NEST layer coordinates are bare numbers: the adapter requires the caller to declare the length unit and never guesses one.",
+              "sourceId": "nest-getposition"
+            },
+            {
+              "system": "nest.GetConnections",
+              "role": "optional_companion",
+              "notes": "The optional edge layer. SynapseCollection.get() in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. The connection scope must come from the actual run, and its snapshot time must match the position query's.",
+              "sourceId": "nest-getconnections"
+            },
+            {
+              "system": "host-retained NEST position snapshot declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for producing runtime/build, run and biological time, exact selected node-id/order digest, coordinate unit, layer centre/extent/edge-wrap metadata, query scope, rank/world/merge completeness, and returned-position digest. Bare coordinate arrays cannot authenticate any of those facts, and Cortexel defines no normative receipt yet.",
+              "sourceId": "host-nest-position-snapshot-declaration"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "optional_companion",
+              "notes": "Candidate authority paired with the optional edge layer. It binds the exact connection query, selected endpoint digests, run/time, rank/world/local-ownership context and returned-row digest to the same position snapshot. It is absent when no edge layer is requested; no normative receipt exists yet.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb",
+          "sources": [
+            {
+              "system": "nwb",
+              "role": "primary",
+              "notes": "NWB carries positions in the electrode table and as ophys ROI centroids. The declared unit and what real files actually store do not always agree, so the adapter requires the caller to declare the unit and select the table explicitly; it never infers either. NWB carries no node-universe completeness flag and no MPI scope, so the caller declares both.",
+              "sourceId": "nwb"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo",
+          "sources": [
+            {
+              "system": "neo",
+              "role": "primary",
+              "notes": "Neo models recordings, not spatial layouts. There is no faithful mapping, and an invented one would be worse than none.",
+              "sourceId": "neo"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "ncp",
+          "sources": [
+            {
+              "system": "ncp",
+              "role": "primary",
+              "notes": "Pending the narrow NCP adapter and its downstream consumer certification.",
+              "sourceId": "ncp"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.spatial_map_2d",
         "nest.spatial_2d"
@@ -2689,6 +3242,101 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-weight-recorder",
+          "sources": [
+            {
+              "system": "nest.weight_recorder",
+              "role": "primary",
+              "notes": "Exact NEST 3.10 weight_recorder output includes sender, target, receptor, port, time and weight. The upstream test suite distinguishes same-pair multapses by (source,target,port), so Cortexel must not claim the device lacks all per-synapse discrimination. That tuple is still not a self-authenticating global edge id: a future mapping must bind it to the exact post-prepare connection inventory, recorder and synapse-model/port namespace from the same run. Whether the written weight precedes or follows the update triggered by a spike is a property of the exact synapse implementation/runtime and must also be bound rather than guessed. No such normative receipt or adapter exists, so this candidate mapping remains not_assessed.",
+              "sourceId": "nest-weight-recorder"
+            },
+            {
+              "system": "nest.SynapseCollection post-prepare inventory",
+              "role": "required_companion",
+              "notes": "Candidate authority for binding each recorded (source,target,port,receptor) tuple to one exact connection after recorder preparation. It must preserve same-pair multapses and bind the exact run, biological time, query, synapse model and port namespace. A final free-floating row list is insufficient, and Cortexel does not yet define or consume this receipt.",
+              "sourceId": "nest-weight-recorder-connection-inventory"
+            },
+            {
+              "system": "host-retained NEST recorder/runtime declaration",
+              "role": "required_companion",
+              "notes": "Candidate authority for the producing runtime/build, recorder identity and interval, synapse-model namespace, rank/world scope and model-specific pre/post-update convention. Until a closed digest-bound receipt exists, these remain caller declarations rather than authenticated NEST evidence.",
+              "sourceId": "host-nest-weight-recorder-context"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nest-getconnections-polling",
+          "sources": [
+            {
+              "system": "nest.GetConnections polling",
+              "role": "primary",
+              "notes": "Repeatedly calling GetConnections(...).get('weight') at declared times yields `point_sample` observations of the STORED weight. Two facts must travel with them. NEST's STDP synapses are updated lazily, only at a presynaptic spike, so a poll returns the last APPLIED weight and not one that includes plasticity pending from postsynaptic activity since. And a poll sees only the moments it looked: an update and a counter-update that both fall between two polls cancel and leave no trace, so a polled trace can never establish that a synapse was quiet.",
+              "sourceId": "nest-getconnections-polling"
+            },
+            {
+              "system": "host-retained NEST weight-polling receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound receipt for the producing runtime/build and run, exact connection inventory and model/port namespace, each biological poll coordinate, query/filter/rank scope, and every returned-row digest. It must bind the same connection identity across polls and disclose model-specific lazy-update semantics. No normative receipt or adapter exists, so this mapping remains not_assessed.",
+              "sourceId": "host-nest-weight-polling-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "brian2-statemonitor-over-synapses",
+          "sources": [
+            {
+              "system": "brian2.StateMonitor over Synapses",
+              "role": "primary",
+              "notes": "Brian records synaptic variables on a regular clock. For an event-driven (on_pre / on_post) rule the underlying variable is piecewise-constant between events while the monitor samples it on the clock, so the samples are point samples OF a step function: joining them with straight segments invents ramps that the model never had, and the mapping must therefore either declare `point_sample` honestly or reconstruct the update events. Not certified until a version matrix and fixtures exist.",
+              "sourceId": "brian2-statemonitor-over-synapses"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-nwb",
+          "sources": [
+            {
+              "system": "neo / nwb",
+              "role": "primary",
+              "notes": "Neither models a synaptic weight. Forcing a weight trace into a Neo AnalogSignal or an NWB TimeSeries would lose the synapse identity, the update semantics, and the simulator-defined unit, and would present a lazily-updated step function as a regularly sampled continuous signal. A weight trace is not an analog trace: `neuro.analog_trace` closes its quantity-kind enum against `synaptic_weight` for exactly this reason.",
+              "sourceId": "neo-nwb"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "ncp-observation",
+          "sources": [
+            {
+              "system": "ncp.observation",
+              "role": "primary",
+              "notes": "An NCP adapter must consume an already-authenticated, already-admitted observation from an immutable pinned NCP release. NCP's declarations are carried, never upgraded: `is_simulation_output=true` becomes `source.kind: simulation`, and an absent calibrated-posterior claim stays absent.",
+              "sourceId": "ncp-observation"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.plasticity_dynamics"
       ]
@@ -3009,6 +3657,98 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-getconnections",
+          "sources": [
+            {
+              "system": "nest.GetConnections",
+              "role": "primary",
+              "notes": "Supplies source, target, weight, delay and synapse_model per connection, preserving every multapse as its own row. Under MPI the returned rows are the ones whose TARGET the rank owns, so the adapter must emit an mpi_target_rank_local scope with the rank's local target universe; it may never emit a global claim from one rank.",
+              "sourceId": "nest-getconnections"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete presynaptic source universe of the queried selection rectangle. It is a role-distinct NodeCollection from the target universe even when both happen to contain the same recurrent population; GetConnections rows cannot reconstruct silent selected sources.",
+              "sourceId": "nest-source-nodecollection"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete postsynaptic target universe of the queried selection rectangle. Under `mpi_target_rank_local`, this retained collection is exactly the selected targets whose pinned NEST 3.10 local-membership value is true, including owned targets with no returned row; `observedTargetIds` equals that set. Rows cannot reconstruct either the selected target universe or ownership authority.",
+              "sourceId": "nest-target-nodecollection"
+            },
+            {
+              "system": "nest.synapse_defaults",
+              "role": "required_companion",
+              "notes": "Candidate current defaults/status for every observed synapse model. A model's declared weight dimension is insufficient by itself: physical meaning also depends on the postsynaptic neuron model, and current defaults do not authenticate the producing runtime or historical connection state.",
+              "sourceId": "nest-synapse-defaults"
+            },
+            {
+              "system": "host-retained NEST synapse/postsynaptic model semantics",
+              "role": "required_companion",
+              "notes": "Candidate declaration binding every observed synapse model and target neuron model to the exact producing runtime/build, weight quantity and unit, and any cross-model comparability claim. Connection rows cannot establish target-model physics, and Cortexel defines no normative semantics receipt yet.",
+              "sourceId": "host-nest-weight-semantics"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "networkx-multidigraph",
+          "sources": [
+            {
+              "system": "networkx.MultiDiGraph",
+              "role": "primary",
+              "notes": "The `weight` edge attribute maps directly and parallel edges are retained, which is what `observationUnit: synapse` requires. A DiGraph has already collapsed parallel edges, so the per-synapse unit is refused for it rather than approximated from a collapsed graph.",
+              "sourceId": "networkx-multidigraph"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-block",
+          "sources": [
+            {
+              "system": "neo.Block",
+              "role": "primary",
+              "notes": "Neo models signals and spike trains. It carries no connection snapshot and nothing in it maps to a synaptic weight.",
+              "sourceId": "neo-block"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "nwb-core",
+          "sources": [
+            {
+              "system": "nwb.core",
+              "role": "primary",
+              "notes": "Core NWB has no standard synaptic-connectivity table. An extension carrying one would need its own certified adapter and its own scope declaration; nothing is mapped today.",
+              "sourceId": "nwb-core"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        }
+      ],
       "legacyIds": [
         "nest.weight_histogram"
       ]
@@ -3371,6 +4111,119 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-synapsecollection",
+          "sources": [
+            {
+              "system": "nest.SynapseCollection",
+              "role": "primary",
+              "notes": "Supplies GetConnections plus get(['source', 'target', 'weight', 'synapse_model']). It accepts the official singular/scalar form or canonical plural arrays, never both; it never broadcasts a scalar weight across rows; and it never deduplicates multapses. Accessor-bearing input is rejected before any getter can run. It cannot express an empty selected target row, so the separately named NodeCollection source is mandatory; scope, snapshot time and weight semantics remain explicit mapping authority rather than properties inferred from the rows.",
+              "sourceId": "nest-synapsecollection"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete selected node universe, including isolates and targets with zero incoming connections. The matrix uses that one retained universe for both target rows and source columns and never reconstructs it from the endpoints that happen to occur.",
+              "sourceId": "nest-selected-node-universe"
+            },
+            {
+              "system": "host-retained NEST synapse/postsynaptic model semantics",
+              "role": "required_companion",
+              "notes": "Candidate declaration binding every observed synapse model and target neuron model to the exact producing runtime/build, weight quantity and unit, and any cross-model comparability claim. Connection rows cannot establish target-model physics, and Cortexel defines no normative semantics receipt yet.",
+              "sourceId": "host-nest-weight-semantics"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nest-getconnections-under-mpi-target-rank-local",
+          "sources": [
+            {
+              "system": "nest.GetConnections under MPI (target-rank-local)",
+              "role": "primary",
+              "notes": "Supplies rank-local connection rows only. The profile produces `mpi_target_rank_local`, never an implicit merge: empty owned rows are observed absence, non-owned rows are not_observed, and every returned edge target must be owned. The exact selected universe and locally owned selected targets come from the separately named NodeCollection companion, not from rows that happen to exist.",
+              "sourceId": "nest-getconnections-under-mpi-target-rank-local"
+            },
+            {
+              "system": "nest.NodeCollection",
+              "role": "required_companion",
+              "notes": "Supplies the complete selected node universe and the local-membership mask of the selected target NodeCollection. `observedTargetIds` is exactly the selected targets whose pinned NEST 3.10 `NodeCollection.local` value is true, including locally owned targets with no incoming rows; localTargetUniverseComplete may be true only for that exact set.",
+              "sourceId": "nest-selected-node-and-target-locality"
+            },
+            {
+              "system": "host-retained NEST synapse/postsynaptic model semantics",
+              "role": "required_companion",
+              "notes": "Candidate declaration binding every observed synapse model and target neuron model to the exact producing runtime/build, weight quantity and unit, and any cross-model comparability claim. Connection rows cannot establish target-model physics, and Cortexel defines no normative semantics receipt yet.",
+              "sourceId": "host-nest-weight-semantics"
+            },
+            {
+              "system": "host-retained NEST connection snapshot receipt",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+              "sourceId": "host-nest-connection-snapshot-receipt"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "connectome-edge-table-source-target-weight-model",
+          "sources": [
+            {
+              "system": "connectome edge table (source, target, weight, model)",
+              "role": "primary",
+              "notes": "Accepted only when the table is accompanied by the complete node universe, a scope, a snapshot time, and a declared weight quantity. A bare edge table cannot establish an isolate, a target with no input, or the difference between an absent cell and a measured zero.",
+              "sourceId": "connectome-edge-table-source-target-weight-model"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "scipy-sparse-dense-numpy-weight-matrix",
+          "sources": [
+            {
+              "system": "scipy.sparse / dense NumPy weight matrix",
+              "role": "primary",
+              "notes": "Not an input. A COO/CSR/dense matrix has already destroyed the facts this contract requires: duplicate entries were summed (or not) under no recorded policy, an absent cell and a zero weight have both become 0.0, and the contributing edge identities are gone. A matrix is an OUTPUT of this figure, never an input to it.",
+              "sourceId": "scipy-sparse-dense-numpy-weight-matrix"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        },
+        {
+          "mappingId": "brian2-synapses",
+          "sources": [
+            {
+              "system": "brian2.Synapses",
+              "role": "primary",
+              "notes": "Weight arrays are per-synapse and multapses are representable, so the mapping is mechanical. It is not certified until a version matrix and fixtures exist.",
+              "sourceId": "brian2-synapses"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.weight_matrix"
       ]
@@ -3730,6 +4583,80 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-multimeter",
+          "sources": [
+            {
+              "system": "nest.multimeter",
+              "role": "primary",
+              "notes": "The caller must map each recordable to a quantity kind and unit explicitly. NEST records times in ms and V_m in mV, but a recordable named `V_m` does not license the kind `membrane_voltage` — the adapter never infers a kind from a channel name, because `g_ex`, `I_syn`, and a custom model's state variable arrive through the same interface. The multimeter's `interval` gives point samples, not a held signal, so observationKind is `point_sample` unless the caller declares otherwise.",
+              "sourceId": "nest-multimeter"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. A bare multimeter event dictionary cannot authenticate these facts, and Cortexel defines no normative receipt yet.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            },
+            {
+              "system": "host-retained NEST recordable semantics",
+              "role": "required_companion",
+              "notes": "Candidate binding from each recorded key to the exact node-model recordable, scientific quantity, unit and producing model/runtime. Similar channel names, model defaults and caller labels are not interchangeable evidence; no normative semantics receipt exists yet.",
+              "sourceId": "host-nest-recordable-semantics"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-analogsignal",
+          "sources": [
+            {
+              "system": "neo.AnalogSignal",
+              "role": "primary",
+              "notes": "t_start and sampling_rate expand into an explicit time vector; the unit is taken from the quantity, never guessed. Neo's array_annotations that name a channel are carried into recordedVariable, not into the quantity kind.",
+              "sourceId": "neo-analogsignal"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-timeseries",
+          "sources": [
+            {
+              "system": "nwb.TimeSeries",
+              "role": "primary",
+              "notes": "The caller must select `rate` or `timestamps` explicitly — a TimeSeries may carry both, and choosing for them would silently pick a clock. `conversion` and `offset` must be applied by the caller, or the declared unit is a false statement about the stored integers.",
+              "sourceId": "nwb-timeseries"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "ncp-observation",
+          "sources": [
+            {
+              "system": "ncp.observation",
+              "role": "primary",
+              "notes": "An NCP observation adapter must consume an already-authenticated, already-admitted observation from an immutable pinned NCP release. NCP's own declarations are carried, never upgraded: `is_simulation_output=true` becomes `source.kind: simulation`, and the absence of a calibrated-posterior claim stays absent.",
+              "sourceId": "ncp-observation"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.voltage_trace"
       ]
@@ -4111,6 +5038,80 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-multimeter-cm-default",
+          "sources": [
+            {
+              "system": "nest.multimeter.cm_default",
+              "role": "primary",
+              "notes": "NEST exposes compartment state under positional keys (v_comp0, v_comp1, ...). The adapter REQUIRES an explicit key-to-compartmentId mapping and fails with ADAPTER_MAPPING_REQUIRED rather than assuming index order: a model assembled in a different order would otherwise attach the tuft's trace to the soma's row and no validator could see it. Accessor-bearing input is rejected before any getter runs.",
+              "sourceId": "nest-multimeter-cm-default"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. A bare multimeter event dictionary cannot authenticate these facts, and Cortexel defines no normative receipt yet.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            },
+            {
+              "system": "host-retained NEST compartment/model semantics",
+              "role": "required_companion",
+              "notes": "Candidate exact binding from every positional recordable key to one compartment identity, model morphology, quantity and unit in the producing runtime/build. Neither key order nor a `cm_default` model name authenticates morphology or scientific meaning; no normative mapping receipt exists yet.",
+              "sourceId": "host-nest-compartment-model-semantics"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neuron-vector",
+          "sources": [
+            {
+              "system": "neuron.Vector",
+              "role": "primary",
+              "notes": "NEURON records at (section, seg.x), where seg.x is a normalized position within a section rather than a global compartment identity. The caller must supply the (section, position) to compartment-id mapping; it is not derivable from the recorded arrays.",
+              "sourceId": "neuron-vector"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-analogsignal",
+          "sources": [
+            {
+              "system": "neo.AnalogSignal",
+              "role": "primary",
+              "notes": "Neo has no compartment concept. The caller must map each channel to a compartment id explicitly; a channel index is not a compartment id.",
+              "sourceId": "neo-analogsignal"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-icephys",
+          "sources": [
+            {
+              "system": "nwb.icephys",
+              "role": "primary",
+              "notes": "An NWB intracellular series describes an ELECTRODE, not a compartment of a model tree. A single-electrode recording is `neuro.analog_trace`. Presenting it here would imply a compartmental model that does not exist.",
+              "sourceId": "nwb-icephys"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        }
+      ],
       "legacyIds": [
         "nest.compartmental_dynamics"
       ]
@@ -4438,6 +5439,95 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-spike-recorder",
+          "sources": [
+            {
+              "system": "nest.spike_recorder",
+              "role": "primary",
+              "notes": "Two selected trains plus their declared sender universes. The adapter must state which senders were pooled into each train; it may never infer a train's universe from the senders that happened to spike.",
+              "sourceId": "nest-spike-recorder"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, both recorder identities/statuses/backends, exact disjoint sender-pool universes, observation windows, biological export time, rank/world scope, and detached event-buffer digests. Event rows alone cannot authenticate pool identity or completeness.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nest-correlation-detector",
+          "sources": [
+            {
+              "system": "nest.correlation_detector",
+              "role": "primary",
+              "notes": "Pinned NEST 3.10 documentation (https://nest-simulator.readthedocs.io/en/v3.10/models/correlation_detector.html) defines receptor_port 0 as source 1/reference, receptor_port 1 as source 2/target, lag as target minus reference, and all bins as left-closed/right-open, so the positive outer edge is excluded. The legacy adapter accepts only an explicit `measurement: count_histogram` and `zeroLagPolicy: included`; it emits raw_pair_count and never claims that same-event self-pairs were excluded. The weighted `histogram` is rejected because it is a Kahan sum of products of incoming connection weights and revision 4 has no weight-product quantity/unit or upstream per-event weight authority.",
+              "sourceId": "nest-correlation-detector"
+            },
+            {
+              "system": "host-retained NEST correlation configuration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, detector status, exact reference/target sender pools and receptor-port connections, simulation resolution/bounds, delta_tau and counting window, biological export time, rank/world scope, and histogram digest. Detector output alone cannot authenticate pool identity or caller-supplied kernel configuration.",
+              "sourceId": "host-nest-correlation-configuration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-spiketrain",
+          "sources": [
+            {
+              "system": "neo.SpikeTrain",
+              "role": "primary",
+              "notes": "t_start/t_stop map to the shared window and the unit is taken from the quantity, never guessed. Two SpikeTrains recorded over different intervals must be intersected by the caller first.",
+              "sourceId": "neo-spiketrain"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-units-spike-times",
+          "sources": [
+            {
+              "system": "nwb.Units.spike_times",
+              "role": "primary",
+              "notes": "The caller must select the unit rows for each train explicitly and declare the recording interval; NWB does not state which units were pooled into an analysis.",
+              "sourceId": "nwb-units-spike-times"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "elephant-cross-correlation-histogram",
+          "sources": [
+            {
+              "system": "elephant.cross_correlation_histogram",
+              "role": "primary",
+              "notes": "There is no adapter that imports an Elephant CCH as authoritative. Elephant output may enter only through an explicit pre-binned auto or cross product, with role containers, lag axis, orientation, self-pair treatment, exact pair counts and any required reference-event denominators declared; otherwise Elephant defaults would silently become Cortexel semantics.",
+              "sourceId": "elephant-cross-correlation-histogram"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.correlogram"
       ]
@@ -4789,6 +5879,74 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-spike-recorder",
+          "sources": [
+            {
+              "system": "nest.spike_recorder",
+              "role": "primary",
+              "notes": "The adapter must supply the SELECTED sender universe, which NEST knows and the event list does not, and must not assume the recorder's output is chronological or grouped by sender. Ordering is established within each train by Cortexel.",
+              "sourceId": "nest-spike-recorder"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected sender universe, origin/start/stop and biological export time, rank/world scope, and detached event-buffer digest. Event rows cannot authenticate silent senders or complete exposure.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-spiketrain",
+          "sources": [
+            {
+              "system": "neo.SpikeTrain",
+              "role": "primary",
+              "notes": "One SpikeTrain is one train, which matches the within-train rule exactly. t_start/t_stop map to the window; the unit is taken from the quantity, never guessed. Segments of a Block map to trials, and the complete Segment list must be declared even for segments in which the unit was silent.",
+              "sourceId": "neo-spiketrain"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-units-spike-times",
+          "sources": [
+            {
+              "system": "nwb.Units.spike_times",
+              "role": "primary",
+              "notes": "The caller must select the unit rows explicitly. NWB carries no trial partition unless the trials table is mapped, so the trial partitioning must be declared rather than inferred; without it the intervals would be formed across trial boundaries.",
+              "sourceId": "nwb-units-spike-times"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "ncp",
+          "sources": [
+            {
+              "system": "ncp",
+              "role": "primary",
+              "notes": "Not yet certified. An adapter is never exempt from the core gate: its output is validated by this contract like any other request.",
+              "sourceId": "ncp"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.isi_distribution"
       ]
@@ -5272,6 +6430,146 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-multimeter",
+          "sources": [
+            {
+              "system": "nest.multimeter",
+              "role": "primary",
+              "notes": "One node, several recorded variables, one clock. Each recorded variable becomes a series carrying its REAL quantity kind and unit; the adapter must supply them and never defaults an unlabelled channel to membrane voltage.",
+              "sourceId": "nest-multimeter"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. A bare multimeter event dictionary cannot authenticate these facts.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            },
+            {
+              "system": "host-retained NEST recordable semantics",
+              "role": "required_companion",
+              "notes": "Candidate binding from every recorded key to the exact node-model recordable, scientific quantity, unit and producing model/runtime. Similar channel names and shared sample coordinates are not evidence that different quantities have the declared meanings.",
+              "sourceId": "host-nest-recordable-semantics"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nest-astrocyte-ip3-ca",
+          "sources": [
+            {
+              "system": "nest.multimeter",
+              "role": "primary",
+              "notes": "Supplies the actual astrocyte time histories, including `IP3` and `Ca_astro`, from a recorder connected to the selected astrocyte_lr_1994 nodes. A model instance or model name is not a recording and can never be promoted to this primary source.",
+              "sourceId": "nest-astrocyte-multimeter"
+            },
+            {
+              "system": "nest.astrocyte_lr_1994",
+              "role": "required_companion",
+              "notes": "Candidate exact astrocyte model/recordable semantics, not time histories. Under the reviewed NEST 3.10 source, IP3 and Ca_astro are concentrations in umol/L. This profile says nothing about a neuron model's recordables and never infers units from a similarly spelled custom channel.",
+              "sourceId": "nest-astrocyte-model-semantics"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, astrocyte recorder id/status/backend, exact selected astrocyte universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. The model name does not authenticate the recorded rows.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nest-astrocyte-tripartite",
+          "sources": [
+            {
+              "system": "nest.multimeter",
+              "role": "primary",
+              "notes": "Candidate astrocyte time-history source for IP3 and Ca_astro. A model instance or name is not a recording. This mapping is separate from the IP3/Ca-only profile because adding neuronal V_m or I_SIC introduces a second recorder, model namespace and quantity authority.",
+              "sourceId": "nest-tripartite-astrocyte-multimeter"
+            },
+            {
+              "system": "nest.multimeter",
+              "role": "required_companion",
+              "notes": "Required neuronal time-history source whenever the figure includes neuronal V_m, I_SIC or another neuron recordable. Its selected nodes, interval, origin and sample coordinates must bind to the astrocyte recorder under one explicit shared-clock policy; no interpolation or same-clock inference is permitted.",
+              "sourceId": "nest-tripartite-neuron-multimeter"
+            },
+            {
+              "system": "nest.astrocyte_lr_1994",
+              "role": "required_companion",
+              "notes": "Candidate exact astrocyte model/recordable semantics for IP3 and Ca_astro, including producing runtime/build and units. Similar spelling in a custom model is not evidence of the same quantity.",
+              "sourceId": "nest-tripartite-astrocyte-model-semantics"
+            },
+            {
+              "system": "host-retained NEST neuron model semantics",
+              "role": "required_companion",
+              "notes": "Candidate exact neuron-model recordable semantics and runtime/configuration binding for every neuronal series. Astrocyte model metadata cannot establish that V_m is membrane voltage or I_SIC is current for a different neuron model.",
+              "sourceId": "host-nest-tripartite-neuron-model-semantics"
+            },
+            {
+              "system": "host-retained NEST shared-recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for one producing runtime/build and run, both recorder identities/statuses/backends, selected astrocyte and neuron universes, exact origin/start/stop/interval values, shared-clock policy, biological export time, rank/world scope, and both detached event-buffer digests. Equal-looking time arrays do not prove shared clock authority.",
+              "sourceId": "host-nest-shared-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-analogsignal",
+          "sources": [
+            {
+              "system": "neo.AnalogSignal",
+              "role": "primary",
+              "notes": "One AnalogSignal per series. t_start and sampling_period give the shared time base; the unit is taken from the quantity and never guessed.",
+              "sourceId": "neo-analogsignal"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-irregularlysampledsignal",
+          "sources": [
+            {
+              "system": "neo.IrregularlySampledSignal",
+              "role": "primary",
+              "notes": "Maps to the per-series time base. The times are used exactly as supplied; Cortexel does not resample onto a common grid.",
+              "sourceId": "neo-irregularlysampledsignal"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-timeseries",
+          "sources": [
+            {
+              "system": "nwb.TimeSeries",
+              "role": "primary",
+              "notes": "The caller must select the series and declare each one's quantity kind. An NWB unit string is not a Cortexel unit code and is not accepted as one.",
+              "sourceId": "nwb-timeseries"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.astrocyte_dynamics"
       ]
@@ -5620,6 +6918,80 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-multimeter",
+          "sources": [
+            {
+              "system": "nest.multimeter",
+              "role": "primary",
+              "notes": "Two recorded state variables plus times and senders. The adapter maps each recorded variable to an axis with its declared unit and uses the sender as the trajectory id. Recorder order is never assumed: rows are grouped per sender and each sender's own time order is preserved, never sorted globally.",
+              "sourceId": "nest-multimeter"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. Recorder rows alone cannot authenticate trajectory identity or exposure.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            },
+            {
+              "system": "host-retained NEST state-variable/model semantics",
+              "role": "required_companion",
+              "notes": "Candidate binding from both recorded keys to exact model state variables, units, fixed parameters and producing model/runtime. Recorded trajectories do not provide a derivative field or phase-plane grid; a future mapping must keep a trajectory view distinct from a derivative-field view rather than silently inventing derivatives.",
+              "sourceId": "host-nest-state-variable-model-semantics"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-analogsignal",
+          "sources": [
+            {
+              "system": "neo.AnalogSignal",
+              "role": "primary",
+              "notes": "Two channels sharing one time base map to x and y. If two signals were sampled on different clocks the adapter REFUSES rather than resampling: interpolating one signal onto the other's timestamps would fabricate state coordinates the model never produced.",
+              "sourceId": "neo-analogsignal"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-timeseries",
+          "sources": [
+            {
+              "system": "nwb.TimeSeries",
+              "role": "primary",
+              "notes": "The caller must select the two channels explicitly and supply canonical unit codes; NWB unit strings are free text and frequently aliases.",
+              "sourceId": "nwb-timeseries"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "matplotlib-streamplot",
+          "sources": [
+            {
+              "system": "matplotlib.streamplot",
+              "role": "primary",
+              "notes": "streamplot integrates an interpolated field to draw streamlines. Cortexel refuses that output: a streamline is a computed trajectory, and presenting one as data would show an integration Cortexel never performed and the caller never checked.",
+              "sourceId": "matplotlib-streamplot"
+            }
+          ],
+          "feasibilityStatus": "assessed_infeasible",
+          "definitionStatus": "not_applicable",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_applicable"
+        }
+      ],
       "legacyIds": [
         "nest.phase_plane"
       ]
@@ -5884,6 +7256,59 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-spike-recorder",
+          "sources": [
+            {
+              "system": "nest.spike_recorder",
+              "role": "primary",
+              "notes": "Events plus the recorded sender universe. The adapter must supply the RECORDED senders, which NEST knows and the event list does not.",
+              "sourceId": "nest-spike-recorder"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, complete recorded sender universe, origin/start/stop and biological export time, rank/world scope, and detached event-buffer digest. Event rows cannot authenticate silent senders, exposure or completeness.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-spiketrain",
+          "sources": [
+            {
+              "system": "neo.SpikeTrain",
+              "role": "primary",
+              "notes": "t_start/t_stop map to the window; the unit is taken from the quantity, never guessed.",
+              "sourceId": "neo-spiketrain"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-units-spike-times",
+          "sources": [
+            {
+              "system": "nwb.Units.spike_times",
+              "role": "primary",
+              "notes": "The caller must select the unit rows explicitly.",
+              "sourceId": "nwb-units-spike-times"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.population_rate"
       ]
@@ -6370,6 +7795,80 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-spike-recorder",
+          "sources": [
+            {
+              "system": "nest.spike_recorder",
+              "role": "primary",
+              "notes": "Supplies only event times and sender ids. NEST has no trial or alignment-event abstraction, so the recorder cannot establish trial identity, coverage, exclusions or exposure. The adapter blocks with ADAPTER_MAPPING_REQUIRED rather than treating each simulation as one implicit trial.",
+              "sourceId": "nest-spike-recorder"
+            },
+            {
+              "system": "host-retained NEST trial and alignment protocol",
+              "role": "required_companion",
+              "notes": "Supplies the complete trial universe, one explicit alignment coordinate per trial, selected-sender universe, relative measurement window, per-trial coverage and every exclusion. Events mode is allowed only when this record establishes full coverage of every declared trial; partial coverage or exclusions require caller-derived prebinned counts and exact denominators. The protocol is external authority and is never reconstructed from recorder boundaries.",
+              "sourceId": "host-nest-trial-alignment-protocol"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, every recorder id/status/backend, selected sender universe, origin/start/stop, biological export time, rank/world scope, and detached event-buffer digest. It must bind each export exactly once to the separately declared trial protocol.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-segment",
+          "sources": [
+            {
+              "system": "neo.Segment",
+              "role": "primary",
+              "notes": "One Segment may map to one events-mode trial only when every selected Segment covers the complete relative window. The alignment time must be an explicitly selected Event: a Segment's t_start is a recording boundary, not a stimulus onset, and is never used as an alignment reference by default. Unequal coverage requires prebinned mode.",
+              "sourceId": "neo-segment"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-timeintervals",
+          "sources": [
+            {
+              "system": "nwb.TimeIntervals",
+              "role": "primary",
+              "notes": "The alignment column must be named explicitly; start_time is not assumed to be the aligning event. Events mode supports only a selected set of full-window trials. Exclusions or unequal trial coverage must be transformed to prebinned exact counts plus covering-trial denominators before authoring this request.",
+              "sourceId": "nwb-timeintervals"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-units-spike-times",
+          "sources": [
+            {
+              "system": "nwb.Units.spike_times",
+              "role": "primary",
+              "notes": "The caller must select the unit rows explicitly; the selected-sender universe is the selection, not every unit in the file.",
+              "sourceId": "nwb-units-spike-times"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.psth"
       ]
@@ -6854,17 +8353,76 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-spike-recorder",
+          "sources": [
+            {
+              "system": "nest.spike_recorder",
+              "role": "primary",
+              "notes": "The recorder yields the events of one repeat, so it can produce only that repeat's response evidence. It cannot produce the controlled input, condition/repeat universe, attempted counts, comparable-run design, measurement window or retained event selection. The adapter never reads any of those facts back out of a device name.",
+              "sourceId": "nest-spike-recorder"
+            },
+            {
+              "system": "host-retained NEST sweep protocol",
+              "role": "required_companion",
+              "notes": "Supplies the complete ordered condition universe, typed controlled inputs, repeat identities and attempted counts, repeat design, measurement window, event selection and the binding from each recorder export to exactly one condition/repeat. It must be retained from the executed sweep; neither Cortexel nor a spike recorder can reconstruct it after the fact. This source remains caller-controlled external authority until a future normative mapping definition authenticates a concrete protocol format.",
+              "sourceId": "host-nest-sweep-protocol"
+            },
+            {
+              "system": "host-retained NEST recorder export declaration",
+              "role": "required_companion",
+              "notes": "Candidate digest-bound declaration for the producing runtime/build and run, every recorder id/status/backend, selected sender universe, origin/start/stop, biological export time, rank/world scope, and detached event-buffer digest. It must bind each export exactly once to the separately declared sweep condition and repeat.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "neo-block",
+          "sources": [
+            {
+              "system": "neo.Block",
+              "role": "primary",
+              "notes": "Condition and repeat identity must be selected explicitly from annotations. The adapter will not guess which annotation is the stimulus level, and it never coerces an annotation label into a numeric input.",
+              "sourceId": "neo-block"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-icephys",
+          "sources": [
+            {
+              "system": "nwb.icephys",
+              "role": "primary",
+              "notes": "The icephys stimulus/response tables map naturally onto conditions and repeats, but the mapping is not implemented and is therefore not claimed.",
+              "sourceId": "nwb-icephys"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.rate_response"
       ]
     },
     {
       "id": "neuro.spike_raster",
-      "revision": 4,
+      "revision": 5,
       "title": "Spike raster: event times by identified sender and trial",
       "renderer": {
         "id": "figure.spike_raster",
-        "revision": 5
+        "revision": 6
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -6915,7 +8473,7 @@
           "name": "nest-simulator spike_recorder",
           "version": "3.10.0",
           "status": "not_run",
-          "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, and duplicate rows. NEST 3.9 and 3.10 source were inspected for this repair, but the pinned executable reference environment has not been run here; status therefore remains not_run and no oracle-agreement claim is made."
+          "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
         }
       },
       "accessibility": {
@@ -7013,7 +8571,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.spike_raster.output_authority.v4"
+          "id": "neuro.spike_raster.output_authority.v5"
         },
         "requestPaths": [
           {
@@ -7155,6 +8713,96 @@
           }
         }
       },
+      "adapters": [
+        {
+          "mappingId": "nest-spike-recorder",
+          "sources": [
+            {
+              "system": "nest.spike_recorder",
+              "role": "primary",
+              "notes": "Adapter revision 3 supports only an exact NEST 3.10.0 memory-recorder status profile when `time_in_steps` is explicitly false, the named plain-data projection preserves NumPy event-array values and order, origin/start/stop carry exact on-grid integer-tic preimages, and a closed `kind: caller_declaration` record binds the single-process runtime, successful-return closed-stop endpoint, monotonic kernel clock epoch, most recent buffer epoch, most recent recording-plan mutation, and exact sender universe. It preserves nonchronological order, duplicates, origin, and the native (origin+start,origin+stop] boundary. It does not introspect PyNEST or authenticate any declared capture fact. NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
+              "sourceId": "nest-spike-recorder"
+            },
+            {
+              "system": "host-declared NEST runtime profile",
+              "role": "required_companion",
+              "notes": "The packaged adapter requires literal `nestVersion: 3.10.0`, but this value is caller-declared rather than read from or attested by a live simulator. R049 must execute the adapter against a pinned real runtime before release certification; local structural acceptance alone is not runtime provenance.",
+              "sourceId": "host-nest-runtime-declaration"
+            },
+            {
+              "system": "host-declared NEST recorder export context",
+              "role": "required_companion",
+              "notes": "The host supplies the complete recorded sender universe, capture history and process scope, and may supply run/recorder ids. The source digest binds the detached plain-data status projection; a separate domain-separated adapter-input digest binds that projection to every normalized option. Neither digest authenticates the projection, recorder wiring, silent-sender completeness, clock or buffer resets, configuration history, run identity, process scope or export custody. Those remain attributable caller declarations until an isolated live-capture receipt exists.",
+              "sourceId": "host-nest-recorder-export-declaration"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "packaged",
+          "certificationRequirement": {
+            "ledger": "cortexel-release-evidence-ledger.v1",
+            "gate": {
+              "id": "R049",
+              "section": "Adapters and ecosystem",
+              "requirement": "NEST recorder adapters are tested against real supported NEST output and do not assume chronological events.",
+              "releaseBlocking": true
+            },
+            "conformanceProfile": {
+              "registry": "cortexel-adapter-conformance-profiles.v1",
+              "id": "nest-spike-recorder.v3",
+              "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
+              "digest": "sha256:9bf23e63c51b23239cf0438fa770323b65d58cd29ff7d25ed5c7626a9e1f2be4"
+            }
+          },
+          "notes": "Executable code exists for this bounded profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
+        },
+        {
+          "mappingId": "neo-spiketrain",
+          "sources": [
+            {
+              "system": "neo.SpikeTrain",
+              "role": "primary",
+              "notes": "One SpikeTrain per sender; t_start/t_stop map to the window and the unit is taken from the quantity, never guessed. Neo has no concept of `recorded but silent`, so the caller must supply the full sender selection explicitly — a list of SpikeTrains alone cannot produce the empty rows.",
+              "sourceId": "neo-spiketrain"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "nwb-units-spike-times",
+          "sources": [
+            {
+              "system": "nwb.Units.spike_times",
+              "role": "primary",
+              "notes": "The ragged spike_times/spike_times_index pair maps to the parallel arrays, but the caller must select the unit rows explicitly. The selected rows become recordedSenderIds and senderUniverseComplete is false unless the caller selected every unit.",
+              "sourceId": "nwb-units-spike-times"
+            }
+          ],
+          "feasibilityStatus": "assessed_feasible",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        },
+        {
+          "mappingId": "ncp",
+          "sources": [
+            {
+              "system": "ncp",
+              "role": "primary",
+              "notes": "Not certified for 1.0. Until a mapping for the recorded-sender universe exists, an NCP payload cannot produce the empty rows and would silently become a raster of only the neurons that fired.",
+              "sourceId": "ncp"
+            }
+          ],
+          "feasibilityStatus": "not_assessed",
+          "definitionStatus": "not_specified",
+          "authorityRequirements": null,
+          "implementationAvailability": "not_implemented"
+        }
+      ],
       "legacyIds": [
         "nest.spike_raster"
       ]
@@ -7318,6 +8966,12 @@
       "availability": "packaged"
     },
     {
+      "id": "cortexel/authoring",
+      "kind": "export",
+      "status": "stable",
+      "availability": "packaged"
+    },
+    {
       "id": "cortexel/render-svg",
       "kind": "export",
       "status": "stable",
@@ -7373,6 +9027,12 @@
     },
     {
       "id": "cli.catalog",
+      "kind": "cli",
+      "status": "stable",
+      "availability": "packaged"
+    },
+    {
+      "id": "cli.describe",
       "kind": "cli",
       "status": "stable",
       "availability": "packaged"
@@ -8254,12 +9914,20 @@
   "disclosureRuleCount": 33,
   "normativeSources": [
     {
+      "path": "contract/meta/adapter-conformance-profiles.schema.json",
+      "digest": "sha256:2ebfc73e33822cbb0b0700a28d2c2c0aae500da3972bb91e603df90d6bb37343"
+    },
+    {
       "path": "contract/meta/canonicalization-registry.schema.json",
       "digest": "sha256:ea5a77b60df8b0a82645ae5b759641fe66c1ff273b0667d7c8d851e3db14320a"
     },
     {
       "path": "contract/meta/contract-source.schema.json",
-      "digest": "sha256:de5e3cf96cef8dee5468e454d418cc6b2094f8dadf3c5379f81d95f298b7b231"
+      "digest": "sha256:08252cf2d1ae57f000dd885392cab124810192115173360cb44c3611277348f7"
+    },
+    {
+      "path": "contract/registries/adapter-conformance-profiles.v1.json",
+      "digest": "sha256:00d91f7a2d208f36f63261a0c926bbeefc6f07a2140a162ccc17253bf0802523"
     },
     {
       "path": "contract/registries/budget-profiles.v1.json",
@@ -8271,23 +9939,23 @@
     },
     {
       "path": "contract/registries/capabilities.v1.json",
-      "digest": "sha256:812fa525a918faf0f9a2b8a55df4766f2aa6b33dc5c95e0dfb26658c97d4c48e"
+      "digest": "sha256:34a78f2ee4c8e5e401a2d2367393ec4beb4e55a15d32212786bbcb004e84a45a"
     },
     {
       "path": "contract/registries/disclosures.v1.json",
-      "digest": "sha256:dcc1955707db08db5dc0a98071a40ecb7acb3e1f72431408990596a796e765d7"
+      "digest": "sha256:8e884be8b8a3362365a6abca6844064b33535d252cbdb029bd94c1fca6fe0f11"
     },
     {
       "path": "contract/registries/error-codes.v1.json",
-      "digest": "sha256:14c369d3df76036c5b2c4198a608f12289560659b2bd1989c608fb9dddbf7ca9"
+      "digest": "sha256:a734240755f6ce9211b056277980a9b0758d201b7aecabb7f8e5a96fa89d7f5e"
     },
     {
       "path": "contract/registries/identity.v1.json",
-      "digest": "sha256:fcb85aa0fce1d8c0cf0815ad957e6dfefed653b7fec9d14be1295694f959aaa0"
+      "digest": "sha256:3e6e3c47c4a715a7e6d820d547b5d54040c5efdd5b28ab8fbc07174002f087b4"
     },
     {
       "path": "contract/registries/legacy-skill-map.v1.json",
-      "digest": "sha256:e5ee77348464528f4b2856e4091183b7939a27c000469fe7bad27c3cad409917"
+      "digest": "sha256:a0198f11979d58c07e794636ef64eadd2a24db0251a095393bc9452ca7daf243"
     },
     {
       "path": "contract/registries/numeric-policies.v1.json",
@@ -8299,11 +9967,11 @@
     },
     {
       "path": "contract/registries/renderers.v1.json",
-      "digest": "sha256:b90033ff732ff04df55519320a708fa48425ec5cf5e4a50c368c5dcac6c4db46"
+      "digest": "sha256:b62c5745272c18d800152188c4626bad11ffb0beab133d2f909e015ad77823c1"
     },
     {
       "path": "contract/registries/semantic-validators.v1.json",
-      "digest": "sha256:f186e8e3cac03369ca6691964ac28e28abaee09c80810fb50db2f46a619d8e52"
+      "digest": "sha256:86ed4d52203f37e5f4e1184e5bf269bd5d8760ebd2dd495531d8ca1dcf6329b6"
     },
     {
       "path": "contract/registries/units.v1.json",
@@ -8323,83 +9991,83 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:91db8d26bda5abbba8d0f3d016cab26be2e7dc0e5607d24bc10404ccd1673645"
+      "digest": "sha256:89462194c4fec80f4bce447775a89f63d3a9afc352c86e1021bb58db637ef5a0"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
-      "digest": "sha256:a68c96088b0261fe02a216c2625cf52fdc46848449d75ac792d1d77a21954b2e"
+      "digest": "sha256:c0b1c31885be3e6d38905e6324052ae3c0f844583b5743ddbc3cbd23ef48bfd0"
     },
     {
       "path": "contract/schemas/skills/network.connection_graph.request.v1.schema.json",
-      "digest": "sha256:713e156cad3f18a6e4b76c5bb3f1d7365aa84629a1339bcd336668695787a4f2"
+      "digest": "sha256:4d647f9c2e014c5cbc8480339870150864f7e3656286cbd99ba1dc20b3c50398"
     },
     {
       "path": "contract/schemas/skills/network.degree_distribution.request.v1.schema.json",
-      "digest": "sha256:e66e02da09cb5f87c99d847658c2e7288976a1be73f403138126814006ba0870"
+      "digest": "sha256:49b6d88406d8e415057fe7da5f6143c4edb765b86dda017db9984c531e06c4ea"
     },
     {
       "path": "contract/schemas/skills/network.delay_distribution.request.v1.schema.json",
-      "digest": "sha256:2b3aa644f89998998fc12e142b36cc9317eb6c20e8c4680d84277b89c6dfe772"
+      "digest": "sha256:4c02da4a31c5767f4f49c8c70586846643fc5c902e61745a214be0314f1d29ee"
     },
     {
       "path": "contract/schemas/skills/network.delay_matrix.request.v1.schema.json",
-      "digest": "sha256:6c110e9ecb6ce7acced54de3f158d50cc019181cfa9a85a6dd95d8596ea24047"
+      "digest": "sha256:6c6063bcff6b14cf6c30ad254d954262c9b34dccbc328d3f77b8810a813e6a97"
     },
     {
       "path": "contract/schemas/skills/network.spatial_map_2d.request.v1.schema.json",
-      "digest": "sha256:72a0d85ac5f71abf9c04cb8dbea8a57228d4e094df91926a5cdee0f31a31a7a1"
+      "digest": "sha256:a9b22e59420db69e1cd944e1c7677179458ff1c60fcc5a73d702bbfbcf4a729a"
     },
     {
       "path": "contract/schemas/skills/network.synaptic_weight_trace.request.v1.schema.json",
-      "digest": "sha256:3340b3b60a185ca7854dbc7aa8870c0224db88c1dce343b12454dd40cd4d11f0"
+      "digest": "sha256:86bc395e82a265b6c52767f1a05a68330f106f8c9767b1d037b9adc82aa8a4e3"
     },
     {
       "path": "contract/schemas/skills/network.weight_distribution.request.v1.schema.json",
-      "digest": "sha256:b4f5a1c30c058bde2d336b859ce46306752a231df8996491a86c2e169436a8ae"
+      "digest": "sha256:51e41aed4aac9314e88bea53d56917653fbabe6a33205144bb2ce44b1a83622f"
     },
     {
       "path": "contract/schemas/skills/network.weight_matrix.request.v1.schema.json",
-      "digest": "sha256:cf93e47d4821354f52d1a45f6fee191882ac721e30b038cf51a7b5870e3f8825"
+      "digest": "sha256:6777a2f0b6f67385d5ceb736bcba639fabb7873b126707e55b9bf2f9949867fb"
     },
     {
       "path": "contract/schemas/skills/neuro.analog_trace.request.v1.schema.json",
-      "digest": "sha256:44ce42ff321e11dc6e9da283fd93be17b51fdd146dd09f8c222348fc26974911"
+      "digest": "sha256:eb65a980ceee94b7cdec66b7e1ce901a138b0d354a6a7666efe70ba4bf486662"
     },
     {
       "path": "contract/schemas/skills/neuro.compartment_trace.request.v1.schema.json",
-      "digest": "sha256:cf52331c56f5bc506285154fcfefb20ace2a4625424cc371c8110ab98f045d77"
+      "digest": "sha256:bb02f77bd1edd2f960060e9a002a61dea5763f73f00053910f3f4131467bf929"
     },
     {
       "path": "contract/schemas/skills/neuro.correlogram.request.v1.schema.json",
-      "digest": "sha256:ce50fa1246536e1f5218fa8bdcda688b150df38341ac3e838c669a0b5af95a1d"
+      "digest": "sha256:5c6933542d0b43f81bb4d5086f8e20b0365222e0b930ae39acc74711c1122071"
     },
     {
       "path": "contract/schemas/skills/neuro.isi_distribution.request.v1.schema.json",
-      "digest": "sha256:07602bf69beb49c477084615c3e2eb3743e09a84fd34a2530e58b77f12536ed6"
+      "digest": "sha256:f805a709c2d8af0eb8fcae9503d382dc082b14646885afe81dff87384d5f077a"
     },
     {
       "path": "contract/schemas/skills/neuro.multisignal_trace.request.v1.schema.json",
-      "digest": "sha256:286c322f76a7fac5b5de7285703dc87ec3152c9104497a87856d1390e704e304"
+      "digest": "sha256:f9567ab4bb2b60418aeefa18424185b7fc09cac8f61a8c191e69336ba086b3d2"
     },
     {
       "path": "contract/schemas/skills/neuro.phase_plane.request.v1.schema.json",
-      "digest": "sha256:d8cefef64f9d689f0cd512dcab3ce73262201778151f05ddb8a8ea139fcd7410"
+      "digest": "sha256:171a7ecf92493bf7622f695b164b5809020375b956ae235baf162bf9318b9f84"
     },
     {
       "path": "contract/schemas/skills/neuro.population_rate.request.v1.schema.json",
-      "digest": "sha256:6495ad3efd4907ad009eb321d3ed5a7fdc3a26c2e9052089ed433915408ae9fb"
+      "digest": "sha256:86c8901343ad33d75e2f1974a63bcf830e3f9118fbfd8d3a857c5dea6117ca8a"
     },
     {
       "path": "contract/schemas/skills/neuro.psth.request.v1.schema.json",
-      "digest": "sha256:8d8114b6b7d1b5e8e9a3d4afc5fb48e94fa24f3700ca45c902d89be6a516ff61"
+      "digest": "sha256:b815903398cee2f63e3830fa97c20ad5eef061f3f011b6991c291cc490f4ac91"
     },
     {
       "path": "contract/schemas/skills/neuro.response_curve.request.v1.schema.json",
-      "digest": "sha256:8468af73268dfc9f46fe8902cb27ac92e174cd3c37c9d9fd5e668128ca30b069"
+      "digest": "sha256:45c1eabb64ca5d9af1d6c4a777664c95bd7cfdc9c5981e500ac062c43659b2fa"
     },
     {
       "path": "contract/schemas/skills/neuro.spike_raster.request.v1.schema.json",
-      "digest": "sha256:c68b6c06e8774448585de0adb1cee9bc81eb937bee318b30e9d596bcbcb0572c"
+      "digest": "sha256:8577e397b0f8641598a2792301dce6d267eefc781e432fb6d6c82342105aee34"
     },
     {
       "path": "contract/schemas/stable-figure-request-union.v1.schema.json",
@@ -8411,86 +10079,88 @@
     },
     {
       "path": "contract/skills/network.adjacency_matrix.v1.json",
-      "digest": "sha256:dade1a6a7aac2af4b4138860602f91d2b095bbef9660fe55369b40fc2bb94e59"
+      "digest": "sha256:5669bc9ef5f29c8b5bdb17b032b54dcc1021ccfef1d89bc6ef26e4b47a42ecf2"
     },
     {
       "path": "contract/skills/network.connection_graph.v1.json",
-      "digest": "sha256:971cc074b9a461b0122081339a9c1733e7274b9b08637e7b3c468af8b509ede1"
+      "digest": "sha256:be5b0eaa0ac5bf3beb92fc35de5c25865124ef6823c136c7b6d81853b089ffc8"
     },
     {
       "path": "contract/skills/network.degree_distribution.v1.json",
-      "digest": "sha256:abbc35396771df1efae16e8eae008c6bc5b7b4e5c36f2f00c7ab3372ff5cd16c"
+      "digest": "sha256:f094f4d0f5780ca049c10917e3e3764479381e59caf190b3c7729398e214c5a3"
     },
     {
       "path": "contract/skills/network.delay_distribution.v1.json",
-      "digest": "sha256:2831a512dbf5bb4a0d78da0844d7d269bd425f49f9a8e4f597a2139144fab4e1"
+      "digest": "sha256:743e8304774de1806a1f3d3b01373b88b4c04f3696869a75b5e4132048b500b6"
     },
     {
       "path": "contract/skills/network.delay_matrix.v1.json",
-      "digest": "sha256:c8acb8b1d73988d9f2090809fa86d3f340ec71a4e302615e8a032e60e2b3719b"
+      "digest": "sha256:f47e5d123bc7220c2ba7f1e66afe0216001b536dc856c7ab6ae325504db6fff8"
     },
     {
       "path": "contract/skills/network.spatial_map_2d.v1.json",
-      "digest": "sha256:d02b35d9629394c2d4ebb531df360c9d983393ea038290f7bd6f9d897174b076"
+      "digest": "sha256:7fe24ad37ec62493de445bff2aede884216ce573d53651291d99b12b898fb718"
     },
     {
       "path": "contract/skills/network.synaptic_weight_trace.v1.json",
-      "digest": "sha256:63bedf6aa007ca917e8501484ed568e629f5a6dbdcb3da9fc032c6eaa24b41a7"
+      "digest": "sha256:c37c4d5f35c4c72c4a6627ae9f600393206794c9cbb3ca2bf4efabff9abfe29b"
     },
     {
       "path": "contract/skills/network.weight_distribution.v1.json",
-      "digest": "sha256:c21bd79fb4f880ac87ee0e8d3610e5a7340fdf151e1fd9827e9235e1f116379a"
+      "digest": "sha256:0a744715b3d61968a80583323a12f9f510a6e116c61286c726e80475a4cc655d"
     },
     {
       "path": "contract/skills/network.weight_matrix.v1.json",
-      "digest": "sha256:5cde4b1becf12a8641c7a972a696d18921ad19e3cc92968aa461184888825a93"
+      "digest": "sha256:1289348272c28e778ae06e2a30ea3bf2303578753913bda6b02c190c1e31464a"
     },
     {
       "path": "contract/skills/neuro.analog_trace.v1.json",
-      "digest": "sha256:a4d07da24360b0c00883a2eba57e7060234e5a7552ecea2c469a2954f968daa6"
+      "digest": "sha256:8b51ffcedf272efb2a2a678ab775cc244ca7ff7e5b3c792044fee3241bb0bdf6"
     },
     {
       "path": "contract/skills/neuro.compartment_trace.v1.json",
-      "digest": "sha256:820e1ba06b57e6fa974235f279df22de166898d4e702d7e6a19b92e300c2e6b4"
+      "digest": "sha256:ee9939367ec9a1f137ce5d6e1df6f3c56a579cfe20d0d5aaf31355a9c775fe2f"
     },
     {
       "path": "contract/skills/neuro.correlogram.v1.json",
-      "digest": "sha256:ff7a9485ad3adcd6566d53cabca888419cfd856da2759c40f8d8c9e40119e6ab"
+      "digest": "sha256:7c234975121a6c1641db143e91824b33df6c3845fdcd0294c2147117a6497c97"
     },
     {
       "path": "contract/skills/neuro.isi_distribution.v1.json",
-      "digest": "sha256:b3ee05524788e663a185b3ab02ea95d3b1779260d3f66d2d52839fff0a2878c1"
+      "digest": "sha256:ccd0e718b571b21448244abfd47d148b53f750e80ec6543ce4ffe429cb395d63"
     },
     {
       "path": "contract/skills/neuro.multisignal_trace.v1.json",
-      "digest": "sha256:b823eecb57154b90fa490ff3352c197def92efcbcd0b7306150ebb8ebbb36b31"
+      "digest": "sha256:ab06c130ad396606fb3212b83f1a2c5e81a96b3e3247321004e0aeda4080b4d1"
     },
     {
       "path": "contract/skills/neuro.phase_plane.v1.json",
-      "digest": "sha256:43c96a09c426662337686de36d09211d1f9e3a1a265e571554f6702a3ad85a1a"
+      "digest": "sha256:2318b80090a7e466338aece60bc797775412b4a3ae2e6e42dab8949f8a8ba806"
     },
     {
       "path": "contract/skills/neuro.population_rate.v1.json",
-      "digest": "sha256:f00c993641d72ca0c5cc6bf03026daf2191e7c8699560faa1fd7a8e9e19dd0c6"
+      "digest": "sha256:4b5b6ee6dc1447cce08fb0b7a3d8a96cc343f2c11af049b155973c401ae11934"
     },
     {
       "path": "contract/skills/neuro.psth.v1.json",
-      "digest": "sha256:1e7878eb77fbdabb429ad460a7abb8cf41a891d911dc7e71abcd0eef6c3e6434"
+      "digest": "sha256:64f6865d637ca076f32aa5d554cd163f9b2798981c6c551c97a67501d3909f16"
     },
     {
       "path": "contract/skills/neuro.response_curve.v1.json",
-      "digest": "sha256:c003e849ce525bc38acb47fb2540ad8a88fada8555c54b58a47c2223bf659e7d"
+      "digest": "sha256:9d44d603ae74ea786973f9e837324d0ca2f379b7a250ef893abf1275bb5fdf8c"
     },
     {
       "path": "contract/skills/neuro.spike_raster.v1.json",
-      "digest": "sha256:ba48e1e227b4656e1ccbd4ee3d5db354c0dbb26a9d41094933f4c157c0426270"
+      "digest": "sha256:c376a24274cdc23b9574088abb513e71d975557a062abcf8c8b658bb7bd0a3fe"
     }
   ],
   "notes": [
     "GENERATED. Never edit by hand.",
     "contractDigest covers the canonicalized normative source set, excluding this file (it cannot contain its own hash) and excluding the conformance corpus (vectors test the contract; they are not the contract).",
-    "catalogDigest covers the STABLE catalog only, so editing an experimental capability cannot change the stable identity.",
+    "catalogDigest uses catalogDigestDomain cortexel-public-stable-catalog.v2 and covers the exact public stable discovery-and-authoring projection for every stable skill, sorted by id, plus its versioned schema-compilation profile and shared structural schema resources. The projection merges compact SkillCatalogEntry metadata with the paired SkillAuthoringEntry schema and synthetic fixture. It includes scientific and accessibility claims, source mappings, availability, evidence boundaries, limits, and known limitations; it excludes experimental capabilities, implementation bytes, mutable ledgers, and repository prose.",
     "Capability status is contract maturity; availability independently states packaged, source-only, or unavailable. Neither field establishes release readiness.",
+    "Skill adapter records are composite mappings. Feasibility assessment, normative definition, structured external authority, and implementation availability are independent; mutable certification status and receipts remain solely in the release ledger.",
+    "Mutable audit ledgers, including official-example execution and certification state, remain outside the normative contract, generated catalogs, package manifest, and build identities.",
     "releaseReady is false for every skill: the pinned scientific reference environment has not been executed, so no external-oracle evidence exists yet.",
     "Authored skill.revision is an optional narrowing pin. Identity resolution refuses a mismatched pin before canonicalization; every accepted canonical request materializes the resolved installed revision at skill.revision, so omitted and explicit-current pins have identical canonical bytes and request digests."
   ]

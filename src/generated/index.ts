@@ -9,4 +9,5 @@
 export * from './registry.js';
 export * from './budgets.js';
 export * from './catalog.js';
+export * from './authoring.js';
 export * from './identity.js';

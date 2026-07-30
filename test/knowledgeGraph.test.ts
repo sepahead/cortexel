@@ -13,6 +13,8 @@ import {
   assertRenderableGraphEdges,
   assertUniqueGraphNodeIds,
   CORPUS_GRAPH_RADIUS_MEANING,
+  corpusGraphInstanceIdentity,
+  corpusGraphRadiusMeaning,
   defaultNodeColors,
   filterGraphEdges,
   flowParticleCount,
@@ -21,10 +23,12 @@ import {
   graphEdgeControlPointInto,
   graphEdgeCurvePointInto,
   graphEdgeMatchesQuery,
+  graphCameraTargetDamping,
   graphQueryMatchIds,
   graphSignature,
   MAX_GRAPH_QUERY_LENGTH,
   MAX_GRAPH_EDGE_LANE_OFFSET,
+  MAX_GRAPH_NODE_RADIUS,
   MAX_GRAPH_PARALLEL_EDGES,
   MAX_KNOWLEDGE_GRAPH_SCENE_EDGES,
   MAX_KNOWLEDGE_GRAPH_SCENE_NODES,
@@ -63,12 +67,24 @@ describe('graph helpers', () => {
     expect(filterGraphEdges(ids, edges)).toEqual([{ source: 'a', target: 'b' }]);
   });
 
-  it('deduplicates symmetric same_as edges in either endpoint order', () => {
+  it('deduplicates id-less edges by their effective rendered direction', () => {
     const ids = new Set(['a', 'b']);
+    expect(
+      filterGraphEdges(ids, [
+        { source: 'a', target: 'b', kind: 'same_as', directed: false },
+        { source: 'b', target: 'a', kind: 'same_as', directed: false },
+      ]),
+    ).toHaveLength(1);
     expect(
       filterGraphEdges(ids, [
         { source: 'a', target: 'b', kind: 'same_as' },
         { source: 'b', target: 'a', kind: 'same_as' },
+      ]),
+    ).toHaveLength(2);
+    expect(
+      filterGraphEdges(ids, [
+        { source: 'a', target: 'b', kind: 'related', directed: false },
+        { source: 'b', target: 'a', kind: 'related', directed: false },
       ]),
     ).toHaveLength(1);
   });
@@ -285,6 +301,7 @@ describe('graph helpers', () => {
       radius: 4,
     }));
     const props = {
+      graphIdentity: 'graph:test:snapshot:test',
       nodes: sceneNodes,
       edges: [],
       selectedId: null,
@@ -300,6 +317,110 @@ describe('graph helpers', () => {
     expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, props))).toThrow(
       /duplicated at index 1/,
     );
+  });
+
+  it('rejects an absent or unbounded graph cache namespace before scene hooks run', () => {
+    const props = {
+      graphIdentity: '',
+      nodes: [],
+      edges: [],
+      selectedId: null,
+      query: '',
+      onSelect: () => {},
+      hoverId: null,
+      onHover: () => {},
+    };
+    expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, props))).toThrow(
+      /non-empty string <= 1024/,
+    );
+    expect(() => renderToStaticMarkup(createElement(KnowledgeGraphA11yList, props))).toThrow(
+      /non-empty string <= 1024/,
+    );
+    expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, {
+      ...props,
+      graphIdentity: 'g'.repeat(1_025),
+    }))).toThrow(/non-empty string <= 1024/);
+    expect(() => renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+      ...props,
+      graphIdentity: 'g'.repeat(1_025),
+    }))).toThrow(/non-empty string <= 1024/);
+  });
+
+  it('keys the scene-owned lifecycle boundary by the declared graph namespace', () => {
+    const props = {
+      graphIdentity: 'graph:one',
+      nodes: [],
+      edges: [],
+      selectedId: null,
+      query: '',
+      onSelect: () => {},
+      hoverId: null,
+      onHover: () => {},
+    };
+    const first = KnowledgeGraph3DScene(props);
+    const same = KnowledgeGraph3DScene({ ...props });
+    const other = KnowledgeGraph3DScene({ ...props, graphIdentity: 'graph:two' });
+    expect(first.key).toBe('graph:one');
+    expect(same.key).toBe(first.key);
+    expect(other.key).toBe('graph:two');
+    expect(other.type).toBe(first.type);
+
+    const a11yFirst = KnowledgeGraphA11yList({
+      graphIdentity: 'graph:one',
+      nodes: [],
+      edges: [],
+      selectedId: null,
+      onSelect: () => {},
+    });
+    const a11yOther = KnowledgeGraphA11yList({
+      graphIdentity: 'graph:two',
+      nodes: [],
+      edges: [],
+      selectedId: null,
+      onSelect: () => {},
+    });
+    expect(a11yFirst.key).toBe('graph:one');
+    expect(a11yOther.key).toBe('graph:two');
+  });
+
+  it('retains accessible paging for same-key views and resets it for a new namespace', async () => {
+    const nodes = Array.from({ length: 201 }, (_, index) => ({
+      id: `node:${index}`,
+      label: `Node ${index}`,
+      kind: 'model',
+      color: '#ffffff',
+      radius: 4,
+    }));
+    const props = {
+      graphIdentity: 'graph:one',
+      nodes,
+      edges: [],
+      selectedId: null,
+      onSelect: () => {},
+    };
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(createElement(KnowledgeGraphA11yList, props));
+    });
+    const next = () => renderer.root.findAllByType('button').find(
+      (button) => button.children.join('') === 'Next nodes',
+    )!;
+    const nodePageText = () => renderer.root.findByProps({
+      'aria-live': 'polite',
+    }).children.join('');
+    await act(async () => next().props.onClick());
+    expect(nodePageText()).toContain('Node page 2 of 3');
+    await act(async () => {
+      renderer.update(createElement(KnowledgeGraphA11yList, { ...props }));
+    });
+    expect(nodePageText()).toContain('Node page 2 of 3');
+    await act(async () => {
+      renderer.update(createElement(KnowledgeGraphA11yList, {
+        ...props,
+        graphIdentity: 'graph:two',
+      }));
+    });
+    expect(nodePageText()).toContain('Node page 1 of 3');
   });
 
   it('fails closed on unrenderable direct edges before either React surface runs hooks', () => {
@@ -318,18 +439,36 @@ describe('graph helpers', () => {
       { source: 'a', target: 'a', kind: 'variant_of' },
     ])).toThrow(/self-loop/);
     expect(() => assertRenderableGraphEdges(nodes, [
+      { source: 'a', target: 'b', kind: 'same_as', directed: false },
+      { source: 'b', target: 'a', kind: 'same_as', directed: false },
+    ])).toThrow(/relationship is duplicated/);
+    expect(() => assertRenderableGraphEdges(nodes, [
       { source: 'a', target: 'b', kind: 'same_as' },
       { source: 'b', target: 'a', kind: 'same_as' },
+    ])).not.toThrow();
+    expect(() => assertRenderableGraphEdges(nodes, [
+      { source: 'a', target: 'b', kind: 'related', directed: false },
+      { source: 'b', target: 'a', kind: 'related', directed: false },
     ])).toThrow(/relationship is duplicated/);
     expect(() => assertRenderableGraphEdges(nodes, [
       { id: 'claim', source: 'a', target: 'b', kind: 'same_as' },
       { id: 'claim', source: 'b', target: 'a', kind: 'same_as' },
     ])).toThrow(/id is duplicated/);
+    expect(() => assertRenderableGraphEdges(nodes, [
+      {
+        source: 'a',
+        target: 'b',
+        kind: 'related',
+        directed: false,
+        particles: true,
+      },
+    ])).toThrow(/undirected but carries directional particles/);
 
     const invalidEdges = [
       { source: 'a', target: 'ghost', kind: 'variant_of', color: '#fff' },
     ];
     const props = {
+      graphIdentity: 'graph:test:snapshot:test',
       nodes,
       edges: invalidEdges,
       selectedId: null,
@@ -344,6 +483,23 @@ describe('graph helpers', () => {
     expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, props))).toThrow(
       /missing endpoint/,
     );
+    const directionalMismatch = {
+      ...props,
+      edges: [{
+        source: 'a',
+        target: 'b',
+        kind: 'related',
+        color: '#fff',
+        directed: false,
+        particles: true,
+      }],
+    };
+    expect(() =>
+      renderToStaticMarkup(createElement(KnowledgeGraphA11yList, directionalMismatch)),
+    ).toThrow(/undirected but carries directional particles/);
+    expect(() =>
+      renderToStaticMarkup(createElement(KnowledgeGraph3DScene, directionalMismatch)),
+    ).toThrow(/undirected but carries directional particles/);
   });
 
   it('keeps a selected nonmatching node in the accessible query result', () => {
@@ -352,6 +508,7 @@ describe('graph helpers', () => {
       { id: 'model:selected', label: 'Selected model', kind: 'model', color: '#fff', radius: 4 },
     ];
     const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+      graphIdentity: 'graph:test',
       nodes,
       edges: [],
       selectedId: 'model:selected',
@@ -366,6 +523,7 @@ describe('graph helpers', () => {
 
   it('puts stable node ids in accessible descriptions when labels collide', () => {
     const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+      graphIdentity: 'graph:test',
       nodes: [
         { id: 'model:a', label: 'Same label', kind: 'model', color: '#fff', radius: 4 },
         { id: 'model:b', label: 'Same label', kind: 'model', color: '#fff', radius: 4 },
@@ -382,6 +540,7 @@ describe('graph helpers', () => {
 
   it('puts the other endpoint id in relationship prose when labels collide', () => {
     const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+      graphIdentity: 'graph:test',
       nodes: [
         { id: 'hub', label: 'Hub', kind: 'model', color: '#fff', radius: 4 },
         { id: 'model:a', label: 'Same label', kind: 'model', color: '#fff', radius: 4 },
@@ -471,6 +630,7 @@ describe('graph helpers', () => {
       directed: true,
     }));
     const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+      graphIdentity: 'graph:test',
       nodes,
       edges,
       selectedId: 'hub',
@@ -486,6 +646,7 @@ describe('graph helpers', () => {
       { id: 'b', label: 'Model B', kind: 'model', color: '#fff', radius: 4 },
     ];
     const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+      graphIdentity: 'graph:test',
       nodes,
       edges: [
         {
@@ -520,6 +681,7 @@ describe('graph helpers', () => {
       calibrated_posterior: false,
     } as const;
     const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+      graphIdentity: 'graph:test',
       nodes: [
         {
           id: 'a',
@@ -635,6 +797,7 @@ describe('graph helpers', () => {
     let renderer!: ReturnType<typeof create>;
     await act(async () => {
       renderer = create(createElement(KnowledgeGraphA11yList, {
+        graphIdentity: 'graph:test',
         nodes,
         edges,
         selectedId: 'a',
@@ -746,6 +909,18 @@ describe('graph helpers', () => {
     expect(reducedMotionLayoutTickBudget(1_000, 4_000)).toBe(2);
     expect(reducedMotionLayoutTickBudget(100, 400)).toBe(8);
   });
+
+  it('uses a frame-rate-independent fixed-target damping coefficient and snaps for reduced motion', () => {
+    const oneFrame = graphCameraTargetDamping(1 / 30, false);
+    const twoFrames = 1 - (1 - graphCameraTargetDamping(1 / 60, false)) ** 2;
+    expect(oneFrame).toBeCloseTo(twoFrames, 14);
+    expect(graphCameraTargetDamping(Number.MIN_VALUE, false)).toBeGreaterThan(0);
+    expect(graphCameraTargetDamping(0, false)).toBe(0);
+    expect(graphCameraTargetDamping(-1, false)).toBe(0);
+    expect(graphCameraTargetDamping(Number.NaN, false)).toBe(0);
+    expect(graphCameraTargetDamping(Number.POSITIVE_INFINITY, false)).toBe(0);
+    expect(graphCameraTargetDamping(Number.NaN, true)).toBe(1);
+  });
 });
 
 describe('graphSignature (content key that stops needless sim restarts)', () => {
@@ -791,6 +966,15 @@ describe('graphSignature (content key that stops needless sim restarts)', () => 
     expect(graphSignature([], [edge])).not.toBe(
       graphSignature([], [{ ...edge, id: 'claim-b' }]),
     );
+  });
+
+  it('distinguishes absent optional strings from explicit empty strings', () => {
+    const base = { source: 'a', target: 'b' };
+    for (const field of ['id', 'color', 'kind'] as const) {
+      expect(graphSignature([], [base])).not.toBe(
+        graphSignature([], [{ ...base, [field]: '' }]),
+      );
+    }
   });
 
   it('ignores node color/label — those restyle live without a layout restart', () => {
@@ -897,10 +1081,35 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
       edge('edge:instantiates', 'p1', 'm1', 'instantiates'),
       edge('edge:family', 'm1', 'f1', 'belongs_to_family'),
       edge('edge:identity', 'm1', 'm2', 'same_as'),
-      edge('edge:self', 'p2', 'p2', 'cites'), // self-loop — dropped
-      edge('edge:dangling', 'p1', 'ghost', 'cites'), // dangling — dropped
     ],
   };
+
+  it('derives a collision-free cache boundary from the complete graph context', () => {
+    const context = {
+      graph_id: params.graph_id,
+      graph_source: params.graph_source,
+      graph_snapshot_id: params.graph_snapshot_id,
+      graph_scope: params.graph_scope,
+      generated_at: params.generated_at,
+    };
+    const identity = corpusGraphInstanceIdentity(context);
+    expect(identity).toBe(corpusGraphInstanceIdentity({ ...context }));
+    for (const field of Object.keys(context) as Array<keyof typeof context>) {
+      expect(corpusGraphInstanceIdentity({
+        ...context,
+        [field]: `${context[field]}:other`,
+      })).not.toBe(identity);
+    }
+    expect(corpusGraphInstanceIdentity({
+      ...context,
+      graph_id: 'ab',
+      graph_source: 'c',
+    })).not.toBe(corpusGraphInstanceIdentity({
+      ...context,
+      graph_id: 'a',
+      graph_source: 'bc',
+    }));
+  });
 
   it('colors nodes by kind and gives every node a positive finite radius', () => {
     const { nodes } = mapCorpusKnowledgeGraph(params, P);
@@ -916,12 +1125,21 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
     }
   });
 
-  it('drops dangling AND self-loop edges so degree/radius match what the scene draws', () => {
+  it('preserves every accepted assertion and refuses invalid ones instead of dropping them', () => {
     const { edges } = mapCorpusKnowledgeGraph(params, P);
-    // 6 input edges, 1 dangling (p1→ghost) + 1 self-loop (p2→p2) → 4 rendered.
     expect(edges).toHaveLength(4);
-    expect(edges.some((e) => e.target === 'ghost')).toBe(false);
-    expect(edges.some((e) => e.source === e.target)).toBe(false);
+    expect(() => mapCorpusKnowledgeGraph({
+      ...params,
+      edges: [...params.edges, edge('edge:self', 'p2', 'p2', 'cites')],
+    }, P)).toThrow(/self-loop/);
+    expect(() => mapCorpusKnowledgeGraph({
+      ...params,
+      edges: [...params.edges, edge('edge:dangling', 'p1', 'ghost', 'cites')],
+    }, P)).toThrow(/missing endpoint/);
+    expect(() => mapCorpusKnowledgeGraph({
+      ...params,
+      edges: [...params.edges, edge('edge:cites', 'p1', 'm1', 'cites')],
+    }, P)).toThrow(/id is duplicated/);
   });
 
   it('only cites edges flow particles; same_as is undirected', () => {
@@ -932,6 +1150,45 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
     expect(cites.directed).toBe(true);
     expect(sameAs.particles).toBe(false);
     expect(sameAs.directed).toBe(false);
+  });
+
+  it('allows color overrides without delegating direction or flow semantics', () => {
+    const { edges } = mapCorpusKnowledgeGraph(params, P, {
+      edgeColors: { cites: '#123456', same_as: '#654321' },
+    });
+    const cites = edges.find((edge) => edge.kind === 'cites')!;
+    const sameAs = edges.find((edge) => edge.kind === 'same_as')!;
+    expect(cites).toMatchObject({
+      color: '#123456',
+      directed: true,
+      particles: true,
+    });
+    expect(sameAs).toMatchObject({
+      color: '#654321',
+      directed: false,
+      particles: false,
+    });
+  });
+
+  it('strictly validates and canonicalizes mapper color overrides', () => {
+    const mapped = mapCorpusKnowledgeGraph(params, P, {
+      nodeColors: { paper: '#ABCDEF' },
+      edgeColors: { cites: '#FEDCBA' },
+    });
+    expect(mapped.nodes.find((node) => node.kind === 'paper')?.color).toBe('#abcdef');
+    expect(mapped.edges.find((edge) => edge.kind === 'cites')?.color).toBe('#fedcba');
+    for (const overrides of [
+      { nodeColors: { paper: '#fff' } },
+      { edgeColors: { cites: 'red' } },
+      { nodeColors: { unknown: '#123456' } },
+      { unknownOption: true },
+    ]) {
+      expect(() => mapCorpusKnowledgeGraph(
+        params,
+        P,
+        overrides as never,
+      )).toThrow();
+    }
   });
 
   it('preserves stable assertion ids through the agent-params mapper', () => {
@@ -952,6 +1209,7 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
       graph_scope: params.graph_scope,
       generated_at: params.generated_at,
     });
+    expect(mapped.graphIdentity).toBe(corpusGraphInstanceIdentity(mapped.context));
     expect(mapped.nodes[0]).toMatchObject({
       detail: 'Balanced asynchronous regime',
       attributes: { simulator: 'NEST', resolution_ms: 0.1 },
@@ -970,7 +1228,7 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
     expect([
       ...graphQueryMatchIds(
         mapped.nodes,
-        normalizeGraphQuery('sqrt(rendered relationship degree)'),
+        normalizeGraphQuery('complete mapped snapshot'),
         mapped.edges,
       ),
     ]).toEqual(mapped.nodes.map(({ id }) => id));
@@ -979,8 +1237,49 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
   it('scales radius with degree (a hub is larger than a leaf)', () => {
     const { nodes } = mapCorpusKnowledgeGraph(params, P);
     const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
-    // p1 valid degree 2 (p2, m1 — the dropped ghost edge does NOT count); f1 degree 1.
+    // p1 has complete-snapshot degree 2 (p2, m1); f1 has degree 1.
     expect(byId.p1.radius).toBeGreaterThan(byId.f1.radius);
+  });
+
+  it('binds radius prose to the exact bounded mapping options', () => {
+    for (const options of [
+      { degreeScale: 0 },
+      { maxRadiusBump: 0 },
+    ]) {
+      const mapped = mapCorpusKnowledgeGraph(params, P, options);
+      expect(new Set(mapped.nodes.map(({ radius }) => radius))).toEqual(new Set([4]));
+      expect(new Set(mapped.nodes.map(({ radiusMeaning }) => radiusMeaning))).toEqual(
+        new Set([corpusGraphRadiusMeaning(4, options.degreeScale ?? 1.4,
+          options.maxRadiusBump ?? 8)]),
+      );
+      expect(mapped.nodes[0].radiusMeaning).toContain('relationship degree is not encoded');
+    }
+
+    const bounded = mapCorpusKnowledgeGraph(params, P, {
+      baseRadius: 63,
+      degreeScale: Number.MAX_VALUE,
+      maxRadiusBump: 1,
+    });
+    expect(bounded.nodes.every(({ radius }) =>
+      Number.isFinite(radius) && radius > 0 && radius <= MAX_GRAPH_NODE_RADIUS,
+    )).toBe(true);
+    expect(bounded.nodes[0].radiusMeaning).toBe(
+      corpusGraphRadiusMeaning(63, Number.MAX_VALUE, 1),
+    );
+  });
+
+  it('rejects mapper radius options that can exceed the renderer domain', () => {
+    for (const options of [
+      { baseRadius: Number.MAX_VALUE },
+      { baseRadius: 60, maxRadiusBump: 8 },
+      { maxRadiusBump: Number.MAX_VALUE },
+      { baseRadius: Number.NaN },
+      { degreeScale: Number.POSITIVE_INFINITY },
+      { degreeScale: -0 },
+      { maxRadiusBump: -1 },
+    ]) {
+      expect(() => mapCorpusKnowledgeGraph(params, P, options)).toThrow();
+    }
   });
 
   it('handles a valid graph with no relationships', () => {

@@ -12,6 +12,7 @@ export interface ContractIdentityAxis {
 export interface ContractIdentitySource {
   readonly request: ContractIdentityAxis;
   readonly artifact: ContractIdentityAxis;
+  readonly catalogDigestDomain: 'cortexel-public-stable-catalog.v2';
 }
 
 export interface ContractIdentityConsumers {
@@ -184,13 +185,26 @@ export function resolveContractIdentitySource(value: unknown): ContractIdentityS
   );
   const request = contractAxis(value, 'requestContract', problems);
   const artifact = contractAxis(value, 'artifactContract', problems);
+  const catalogAxis = Array.isArray(value.axes)
+    ? value.axes.find((axis: unknown) => isRecord(axis) && axis.id === 'catalogDigest')
+    : undefined;
+  const catalogDigestDomain = isRecord(catalogAxis) ? catalogAxis.domain : undefined;
+  if (catalogDigestDomain !== 'cortexel-public-stable-catalog.v2') {
+    problems.push(
+      'identity.axes.catalogDigest.domain: expected "cortexel-public-stable-catalog.v2"',
+    );
+  }
   if (request && artifact && request.name === artifact.name) {
     problems.push('identity requestContract and artifactContract names must be distinct');
   }
   if (problems.length > 0 || !request || !artifact) {
     throw new Error(`invalid identity registry: ${problems.join('; ')}`);
   }
-  return Object.freeze({ request, artifact });
+  return Object.freeze({
+    request,
+    artifact,
+    catalogDigestDomain: 'cortexel-public-stable-catalog.v2',
+  });
 }
 
 /**

@@ -44,7 +44,7 @@ The machine-readable state of every release gate is in
   universe nor complete cross-rank edge authority, so absence and zero-degree
   claims are unrecoverable. That restriction is consistent with NEST's documented
   rule that
-  [`GetConnections()` returns only connections whose targets are on the executing MPI process](https://nest-simulator.readthedocs.io/en/main/ref_material/pynest_api/nest.lib.hl_api_connections.html).
+  [`GetConnections()` returns only connections whose targets are on the executing MPI process](https://nest-simulator.readthedocs.io/en/v3.10/ref_material/pynest_api/nest.lib.hl_api_connections.html).
   It is a fail-closed limitation, not evidence that merged multi-rank results are
   correct. *Gates: R040–R045, R050–R051.*
 - **Legacy topology aggregates have bounded but incomplete authority.** Nonempty
@@ -66,7 +66,7 @@ The machine-readable state of every release gate is in
   or transform receipt. Hand-authored `excluded_self_pairs` likewise remains a
   source claim; the raw transform emits only `included`. NEST documents those
   port and window semantics in the
-  [`correlation_detector` reference](https://nest-simulator.readthedocs.io/en/v3.2/models/correlation_detector.html).
+  [`correlation_detector` reference](https://nest-simulator.readthedocs.io/en/v3.10/models/correlation_detector.html).
   The legacy weight-histogram raw transform now derives one bounded in-window
   observation per selected connection from a weight/model channel complete for
   the declared scope and
@@ -280,22 +280,62 @@ The machine-readable state of every release gate is in
 
 ## Adapters
 
+- **Adapter feasibility, definition, implementation, and certification authority are
+  separate boundaries.** Each entry is a composite mapping with one primary source
+  and explicit required/optional companions. For `not_assessed` mappings, that source
+  list is only an exact provisional candidate roster: Cortexel has not established
+  that it is complete or sufficient. `feasibilityStatus` is only an assessed
+  possibility; `definitionStatus: not_specified` means the prose is not a normative
+  implementation recipe; and `implementationAvailability: not_implemented` means
+  there is no callable adapter. Contract source v1 deliberately cannot represent
+  `specified` and fixes `authorityRequirements` to `null`, because no closed mapping-
+  definition authority exists. The packaged spike-recorder code, request schema,
+  source identity, prose and release gate cannot counterfeit that missing authority.
+  A `sourceId` names a stable mapping role/profile rather than a runtime instance;
+  role-distinct sources may share one `system` provider class.
+  Generation closes every executable `mappingId` against the source implementation
+  inventory and the immutable definition of release gate R049.
+  Mutable `PASS`/`FAIL`/`NOT_RUN`/`BLOCKED` status, receipt bytes, and tested-source
+  identity remain solely in the release ledger. The generated TypeScript/Python
+  catalogs and manifest do not copy them, preserving the tested-candidate /
+  evidence-only-authorization release construction.
 - **The NEST spike-recorder adapter (plain-data path) is implemented** (`src/adapters/nest/`):
   it snapshots an exported NEST spike-recorder object, requires the recorded sender universe
   (never inferring it), requires the top-level device-status `n_events` field to be a
   non-negative safe integer exactly equal to both event-array lengths, does not assume
   chronological events, and produces an unpinned `neuro.spike_raster` request for
-  explicit NEST 3.9/3.10 memory output with `time_in_steps: false`. Strict validation
-  resolves that request against the installed skill revision (currently revision 4).
+  the bounded shape of caller-declared exact NEST 3.10.0 memory output with
+  `time_in_steps: false`. Adapter revision 3 additionally requires a closed
+  `captureAuthority` with `kind: caller_declaration`: the exact runtime
+  resolution/tic grid and successful-return closed-stop capture endpoint, a declaration
+  that the named single-recorder PyNEST NumPy-to-plain-data projection preserved every
+  event-array value and its order, single-process rank/thread scope, most recent recorder
+  creation or `n_events=0` clear, most recent window/backend/
+  time-encoding/sender-wiring mutation, monotonic biological time since the current
+  kernel initialization, and an exact complete sender-universe binding.
+  Strict validation resolves that request against the installed skill revision
+  (currently revision 5).
   The request retains `(origin + start, origin + stop]`, native
-  binary64 milliseconds, multiplicity, and a digest of the detached export. Step/offset,
+  binary64 milliseconds, multiplicity, a digest of the detached plain-data projection,
+  and a separate domain-separated digest over that projection plus every normalized
+  adapter option.
+  Step/offset,
   ASCII, screen, MPI, and SIONlib paths fail closed: no contract currently preserves their
-  raw clock authority. Exact arithmetic proves relations among received binary64 values;
-  it cannot recover NEST's hidden integer-tic state or authenticate the export. The adapter
-  has not been tested against real, version-pinned NEST output, so the certification gate
-  remains `NOT_RUN`.
+  raw clock authority. Exact arithmetic proves relations among received binary64 values
+  and declared integer-tic preimages; it cannot authenticate those tics, the projection,
+  export, runtime/build, clock or buffer history, configuration history, recorder wiring,
+  silent-sender completeness, process scope, run identity, or export custody. Every
+  capture-authority field,
+  `nestVersion`, `recordedSenderIds`, and optional run/recorder id is a host declaration;
+  neither digest is an attestation. Local thread-sibling status merging is admitted because
+  the pinned single-process profile exposes it; MPI rank-local or caller-premerged status is
+  not. The adapter has no committed, isolated, durable real-NEST conformance receipt.
+  Limited ad hoc exact-version probes do not satisfy the certification profile, so the
+  gate remains `NOT_RUN`.
+  Every nonimplemented NEST path is `not_assessed`: its source notes retain reviewed
+  constraints and candidate authorities without claiming a closed feasible profile.
   The remaining NEST paths (connections, positions, multimeter) and the planned Neo/NWB/NCP
-  mappings are described but not implemented. No current NCP adapter capability exists; if
+  mappings are not implemented. No current NCP adapter capability exists; if
   one is introduced, it remains experimental until both real code and certification against
   an immutable NCP release exist — never against moving HEAD.
   *Gates: R049–R059.*
@@ -319,6 +359,23 @@ The machine-readable state of every release gate is in
   legacy boundary is separate from the unimplemented FigureRequestV1 NEST
   connection adapter described above, and neither has been certified against the
   pinned real-NEST oracle.
+- **The official NEST v3.10 example ledger is provisional inventory infrastructure,
+  not coverage.**
+  `docs/audit/nest-example-coverage.v1.json` pins NEST v3.10 commit
+  `acca9704da248750219a027db99fec6cd1f9052a`, its root tree, documentation index,
+  and CMake orchestration context. Version `0.1-draft` records count-only observations
+  under `pynest/examples`: 109 regular `.py` files, three `.py` path entries with Git
+  mode `120000` (orchestration symlinks), and twelve PNG/GIF/SVG paths. The recursive
+  root-tree API's 1,972 entries include directories; it is not a file count. The
+  documentation index's 94 raw `:doc:` references and 33 raw `:img-top:` occurrences
+  include repeated, shared, and external entries, and its CMake file installs only
+  `run_examples.sh`; neither source is entrypoint authority without normalization.
+  The skeleton admits no assessment rows because source roles, official entrypoints,
+  output identities, panels, overlays, tables, animations, and asset roles have not
+  been inventoried. Mapping, implementation, rendering, upstream execution, and
+  certification remain `not_assessed` or `not_run`, and its coverage claim is `none`.
+  This mutable audit state is outside `contract/`, generated catalogs, the package
+  manifest, and build identities; `bun run check:ledger` validates it separately.
 
 ## Packaging and release
 
@@ -347,19 +404,21 @@ The machine-readable state of every release gate is in
 - **Package-smoke authority is not a hostile process sandbox.** Prepared-state v2
   seals the exact Node executable and npm package tree, but not Node's dynamic
   libraries, operating-system services, or the TypeScript harness runtime. On the
-  ordinary path, the live wrapper group leader publishes the target result and
-  self-sweeps its group; timeout, output overflow, and handled `TERM`/`INT`/`HUP`
-  cancellation are also signaled only while that leader remains live. Cortexel does
-  not re-address the PGID on the ordinary wrapper/supervisor path after the leader is
-  reaped, because POSIX provides no portable closure receipt for a reusable numeric
-  process-group id. If the supervisor exits abnormally after publication, the outer
-  caller makes one best-effort numeric-PGID fallback after leader identity may no
-  longer be pinned; that fallback retains a documented reuse race. These anchored
-  sweeps cover members that retain the caller's signal authority, but same-UID
-  signaling, deliberate re-grouping, a credential/security-label transition that
-  removes signal authority, the abnormal fallback race, or simultaneous uncatchable
-  death of the outer caller and supervisor require external sandbox/cgroup
-  containment. `EPERM` is cleanup-unproven and fails closed.
+  reviewed path, a live detached guardian is the sole process-group signal authority
+  and the supervisor owns its exclusive control lease. Worker completion and
+  guardian-local failures trigger the guardian directly; bounds, handled
+  cancellation, and supervisor death close the lease, whose EOF triggers the same
+  path. The guardian publishes one bounded intent and self-addresses the group
+  exactly once while its own unreaped leader identity pins the PGID. The supervisor observes
+  guardian exit, then only drains local pipes under a separate bound; neither it nor
+  the outer caller signals or probes any numeric identity after the reap. The outer
+  caller receives no PID/PGID and has no fallback.
+  This evidence is not an independent kernel receipt that every member was killed.
+  Direct guardian death, `EPERM`/`ESRCH`, malformed protocol, or a retained pipe preventing EOF
+  fails closed without a later numeric signal. Same-UID guardian discovery/signaling,
+  deliberate re-grouping or detachment, inherited-pipe retention, and a
+  credential/security-label transition can escape or defeat the group sweep and
+  require external cgroup/sandbox/VM containment.
   The prepared
   workspace's root, parent ancestry, modes, topology, and bytes are change-bound,
   but mode hardening is not a substitute for an externally enforced read-only

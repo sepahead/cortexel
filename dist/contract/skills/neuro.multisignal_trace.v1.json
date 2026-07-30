@@ -1250,29 +1250,142 @@
   },
   "adapters": [
     {
-      "system": "nest.multimeter",
-      "status": "supported",
-      "notes": "One node, several recorded variables, one clock. Each recorded variable becomes a series carrying its REAL quantity kind and unit; the adapter must supply them and never defaults an unlabelled channel to membrane voltage."
+      "mappingId": "nest-multimeter",
+      "sources": [
+        {
+          "system": "nest.multimeter",
+          "role": "primary",
+          "notes": "One node, several recorded variables, one clock. Each recorded variable becomes a series carrying its REAL quantity kind and unit; the adapter must supply them and never defaults an unlabelled channel to membrane voltage.",
+          "sourceId": "nest-multimeter"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. A bare multimeter event dictionary cannot authenticate these facts.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        },
+        {
+          "system": "host-retained NEST recordable semantics",
+          "role": "required_companion",
+          "notes": "Candidate binding from every recorded key to the exact node-model recordable, scientific quantity, unit and producing model/runtime. Similar channel names and shared sample coordinates are not evidence that different quantities have the declared meanings.",
+          "sourceId": "host-nest-recordable-semantics"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nest.astrocyte_lr_1994",
-      "status": "supported",
-      "notes": "A recipe, not a renderer branch. Ca_astro and IP3 map to `concentration` in umol/L, the target neuron's V_m to `membrane_voltage` in mV, and the slow inward current to `current` in pA. They land in three panels because they are three dimensions — not because astrocytes are special."
+      "mappingId": "nest-astrocyte-ip3-ca",
+      "sources": [
+        {
+          "system": "nest.multimeter",
+          "role": "primary",
+          "notes": "Supplies the actual astrocyte time histories, including `IP3` and `Ca_astro`, from a recorder connected to the selected astrocyte_lr_1994 nodes. A model instance or model name is not a recording and can never be promoted to this primary source.",
+          "sourceId": "nest-astrocyte-multimeter"
+        },
+        {
+          "system": "nest.astrocyte_lr_1994",
+          "role": "required_companion",
+          "notes": "Candidate exact astrocyte model/recordable semantics, not time histories. Under the reviewed NEST 3.10 source, IP3 and Ca_astro are concentrations in umol/L. This profile says nothing about a neuron model's recordables and never infers units from a similarly spelled custom channel.",
+          "sourceId": "nest-astrocyte-model-semantics"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, astrocyte recorder id/status/backend, exact selected astrocyte universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. The model name does not authenticate the recorded rows.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "neo.AnalogSignal",
-      "status": "supported",
-      "notes": "One AnalogSignal per series. t_start and sampling_period give the shared time base; the unit is taken from the quantity and never guessed."
+      "mappingId": "nest-astrocyte-tripartite",
+      "sources": [
+        {
+          "system": "nest.multimeter",
+          "role": "primary",
+          "notes": "Candidate astrocyte time-history source for IP3 and Ca_astro. A model instance or name is not a recording. This mapping is separate from the IP3/Ca-only profile because adding neuronal V_m or I_SIC introduces a second recorder, model namespace and quantity authority.",
+          "sourceId": "nest-tripartite-astrocyte-multimeter"
+        },
+        {
+          "system": "nest.multimeter",
+          "role": "required_companion",
+          "notes": "Required neuronal time-history source whenever the figure includes neuronal V_m, I_SIC or another neuron recordable. Its selected nodes, interval, origin and sample coordinates must bind to the astrocyte recorder under one explicit shared-clock policy; no interpolation or same-clock inference is permitted.",
+          "sourceId": "nest-tripartite-neuron-multimeter"
+        },
+        {
+          "system": "nest.astrocyte_lr_1994",
+          "role": "required_companion",
+          "notes": "Candidate exact astrocyte model/recordable semantics for IP3 and Ca_astro, including producing runtime/build and units. Similar spelling in a custom model is not evidence of the same quantity.",
+          "sourceId": "nest-tripartite-astrocyte-model-semantics"
+        },
+        {
+          "system": "host-retained NEST neuron model semantics",
+          "role": "required_companion",
+          "notes": "Candidate exact neuron-model recordable semantics and runtime/configuration binding for every neuronal series. Astrocyte model metadata cannot establish that V_m is membrane voltage or I_SIC is current for a different neuron model.",
+          "sourceId": "host-nest-tripartite-neuron-model-semantics"
+        },
+        {
+          "system": "host-retained NEST shared-recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for one producing runtime/build and run, both recorder identities/statuses/backends, selected astrocyte and neuron universes, exact origin/start/stop/interval values, shared-clock policy, biological export time, rank/world scope, and both detached event-buffer digests. Equal-looking time arrays do not prove shared clock authority.",
+          "sourceId": "host-nest-shared-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "neo.IrregularlySampledSignal",
-      "status": "supported",
-      "notes": "Maps to the per-series time base. The times are used exactly as supplied; Cortexel does not resample onto a common grid."
+      "mappingId": "neo-analogsignal",
+      "sources": [
+        {
+          "system": "neo.AnalogSignal",
+          "role": "primary",
+          "notes": "One AnalogSignal per series. t_start and sampling_period give the shared time base; the unit is taken from the quantity and never guessed.",
+          "sourceId": "neo-analogsignal"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nwb.TimeSeries",
-      "status": "partial",
-      "notes": "The caller must select the series and declare each one's quantity kind. An NWB unit string is not a Cortexel unit code and is not accepted as one."
+      "mappingId": "neo-irregularlysampledsignal",
+      "sources": [
+        {
+          "system": "neo.IrregularlySampledSignal",
+          "role": "primary",
+          "notes": "Maps to the per-series time base. The times are used exactly as supplied; Cortexel does not resample onto a common grid.",
+          "sourceId": "neo-irregularlysampledsignal"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-timeseries",
+      "sources": [
+        {
+          "system": "nwb.TimeSeries",
+          "role": "primary",
+          "notes": "The caller must select the series and declare each one's quantity kind. An NWB unit string is not a Cortexel unit code and is not accepted as one.",
+          "sourceId": "nwb-timeseries"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     }
   ],
   "migration": {
@@ -1310,6 +1423,7 @@
     "Two signals of the same dimension but different species (calcium and IP3 are both concentrations) may legally share an axis. Cortexel cannot know they are different molecules, which is why every series must declare a variableId, so the legend and the table can."
   ],
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": {

@@ -458,10 +458,72 @@
   },
 
   "adapters": [
-    { "system": "nest.spike_recorder", "status": "supported", "notes": "The adapter must supply the SELECTED sender universe, which NEST knows and the event list does not, and must not assume the recorder's output is chronological or grouped by sender. Ordering is established within each train by Cortexel." },
-    { "system": "neo.SpikeTrain", "status": "supported", "notes": "One SpikeTrain is one train, which matches the within-train rule exactly. t_start/t_stop map to the window; the unit is taken from the quantity, never guessed. Segments of a Block map to trials, and the complete Segment list must be declared even for segments in which the unit was silent." },
-    { "system": "nwb.Units.spike_times", "status": "partial", "notes": "The caller must select the unit rows explicitly. NWB carries no trial partition unless the trials table is mapped, so the trial partitioning must be declared rather than inferred; without it the intervals would be formed across trial boundaries." },
-    { "system": "ncp", "status": "planned", "notes": "Not yet certified. An adapter is never exempt from the core gate: its output is validated by this contract like any other request." }
+    {
+      "mappingId": "nest-spike-recorder",
+      "sources": [
+        {
+          "system": "nest.spike_recorder",
+          "role": "primary",
+          "notes": "The adapter must supply the SELECTED sender universe, which NEST knows and the event list does not, and must not assume the recorder's output is chronological or grouped by sender. Ordering is established within each train by Cortexel.",
+          "sourceId": "nest-spike-recorder"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected sender universe, origin/start/stop and biological export time, rank/world scope, and detached event-buffer digest. Event rows cannot authenticate silent senders or complete exposure.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo-spiketrain",
+      "sources": [
+        {
+          "system": "neo.SpikeTrain",
+          "role": "primary",
+          "notes": "One SpikeTrain is one train, which matches the within-train rule exactly. t_start/t_stop map to the window; the unit is taken from the quantity, never guessed. Segments of a Block map to trials, and the complete Segment list must be declared even for segments in which the unit was silent.",
+          "sourceId": "neo-spiketrain"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-units-spike-times",
+      "sources": [
+        {
+          "system": "nwb.Units.spike_times",
+          "role": "primary",
+          "notes": "The caller must select the unit rows explicitly. NWB carries no trial partition unless the trials table is mapped, so the trial partitioning must be declared rather than inferred; without it the intervals would be formed across trial boundaries.",
+          "sourceId": "nwb-units-spike-times"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "ncp",
+      "sources": [
+        {
+          "system": "ncp",
+          "role": "primary",
+          "notes": "Not yet certified. An adapter is never exempt from the core gate: its output is validated by this contract like any other request.",
+          "sourceId": "ncp"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    }
   ],
 
   "migration": {
@@ -496,6 +558,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

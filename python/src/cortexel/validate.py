@@ -27,7 +27,7 @@ from collections.abc import Mapping, Sequence
 from fractions import Fraction
 from importlib.resources import files
 from importlib.resources.abc import Traversable
-from typing import Any, NotRequired, Optional, TypeAlias, TypeGuard, TypedDict
+from typing import Any, NotRequired, Optional, TypeAlias, TypeGuard, TypedDict, cast
 from urllib.parse import unquote
 
 from .generated.catalog import (
@@ -1547,7 +1547,7 @@ def _spike_raster_source_clock_errors(
     window: JsonRecord,
     event_times: JsonRecord,
 ) -> ErrorList:
-    """Bind an origin-relative NEST clock to the profile admitted by revision 2.
+    """Bind an origin-relative NEST clock to the profile admitted by revision 3.
 
     The schema owns the shape of the origin-relative window.  These checks own the
     cross-object provenance claim: a caller may use that source-specific clock only
@@ -1565,6 +1565,13 @@ def _spike_raster_source_clock_errors(
         data = {}
     version = source.get("systemVersion")
     digest = source.get("sourceDigest")
+    capture_authority = window.get("captureAuthority")
+    if not isinstance(capture_authority, dict):
+        capture_authority = {}
+    runtime_status = capture_authority.get("runtimeStatus")
+    if not isinstance(runtime_status, dict):
+        runtime_status = {}
+    capture_version = runtime_status.get("nestVersion")
     checks = (
         (
             source.get("kind") == "simulation",
@@ -1577,11 +1584,16 @@ def _spike_raster_source_clock_errors(
             "a NEST origin-relative event clock requires source.system = NEST exactly.",
         ),
         (
-            isinstance(version, str) and
-            re.fullmatch(r"3\.(?:9|10)(?:\.[0-9]+)?", version) is not None,
+            version == "3.10.0",
             "/source/systemVersion",
-            "the revision-2 serialized clock profile admits only NEST 3.9, 3.9.x, "
-            "3.10, or 3.10.x without a prerelease suffix.",
+            "the revision-3 serialized clock profile admits only the exact pinned "
+            "NEST 3.10.0 runtime declaration.",
+        ),
+        (
+            capture_version == version,
+            "/data/window/captureAuthority/runtimeStatus/nestVersion",
+            "the capture-authority runtime version must exactly equal "
+            "source.systemVersion.",
         ),
         (
             isinstance(digest, str) and
@@ -1593,12 +1605,12 @@ def _spike_raster_source_clock_errors(
         (
             window.get("recordingBackend") == "memory",
             "/data/window/recordingBackend",
-            "revision 2 admits only the NEST memory recording backend.",
+            "revision 3 admits only the NEST memory recording backend.",
         ),
         (
             window.get("timeEncoding") == "native_binary64_ms",
             "/data/window/timeEncoding",
-            "revision 2 admits only native_binary64_ms (time_in_steps=false), "
+            "revision 3 admits only native_binary64_ms (time_in_steps=false), "
             "not reconstructed step/offset clocks.",
         ),
         (
@@ -1626,7 +1638,7 @@ def _spike_raster_source_clock_errors(
 
 
 def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
-    """Independent exact event-window evaluator for spike-raster revision 2.
+    """Independent exact event-window evaluator for spike-raster revision 3.
 
     Every submitted finite binary64 is decoded to a :class:`Fraction` before unit
     scaling, endpoint addition, or comparison.  Consequently no rounded unit
@@ -1731,6 +1743,185 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
             ))
             errors.extend(source_clock_errors)
             return
+
+        capture_authority = window.get("captureAuthority")
+        if isinstance(capture_authority, dict):
+            runtime_status = capture_authority.get("runtimeStatus")
+            recording_grid = capture_authority.get("recordingGrid")
+            buffer_epoch = capture_authority.get("bufferEpoch")
+            recording_plan = capture_authority.get("recordingPlan")
+            if (
+                isinstance(runtime_status, dict) and
+                isinstance(recording_grid, dict) and
+                isinstance(buffer_epoch, dict) and
+                isinstance(recording_plan, dict)
+            ):
+                resolution_ms = runtime_status.get("resolutionMs")
+                tic_text = (
+                    runtime_status.get("ticsPerMs"),
+                    runtime_status.get("resolutionTics"),
+                    runtime_status.get("captureBiologicalTimeTics"),
+                    recording_grid.get("originTics"),
+                    recording_grid.get("startTics"),
+                    recording_grid.get("stopTics"),
+                    buffer_epoch.get("beganAtBiologicalTimeTics"),
+                    recording_plan.get("lastMutationAtBiologicalTimeTics"),
+                )
+                if (
+                    _is_finite_json_number(resolution_ms) and
+                    all(
+                        isinstance(value, str) and
+                        0 < len(value) <= 32 and
+                        (
+                            value == "0" or
+                            (value[0] in "123456789" and value.isascii() and value.isdigit())
+                        )
+                        for value in tic_text
+                    )
+                ):
+                    tic_strings = cast(tuple[str, ...], tic_text)
+                    (
+                        tics_per_ms,
+                        resolution_tics,
+                        capture_tics,
+                        origin_tics,
+                        start_tics,
+                        stop_tics,
+                        buffer_began_tics,
+                        plan_mutation_tics,
+                    ) = (int(value) for value in tic_strings)
+                    if tics_per_ms > 0 and resolution_tics > 0:
+                        for tics, milliseconds, path, label in (
+                            (
+                                resolution_tics,
+                                resolution_ms,
+                                "/data/window/captureAuthority/runtimeStatus/"
+                                "resolutionMs",
+                                "resolutionMs",
+                            ),
+                            (
+                                origin_tics,
+                                origin,
+                                "/data/window/captureAuthority/recordingGrid/"
+                                "originTics",
+                                "origin",
+                            ),
+                            (
+                                start_tics,
+                                start,
+                                "/data/window/captureAuthority/recordingGrid/"
+                                "startTics",
+                                "start",
+                            ),
+                            (
+                                stop_tics,
+                                stop,
+                                "/data/window/captureAuthority/recordingGrid/"
+                                "stopTics",
+                                "stop",
+                            ),
+                        ):
+                            try:
+                                projected = float(Fraction(tics, tics_per_ms))
+                            except OverflowError:
+                                projected = math.inf
+                            same_zero_sign = (
+                                projected != 0.0 or
+                                math.copysign(1.0, projected) ==
+                                math.copysign(1.0, float(milliseconds))
+                            )
+                            if projected != float(milliseconds) or not same_zero_sign:
+                                errors.append(CortexelError(
+                                    "SCIENCE_WINDOW_INVALID",
+                                    "science",
+                                    path,
+                                    f"{label} is not the correctly rounded binary64 "
+                                    "millisecond projection of its declared NEST "
+                                    "integer-tic preimage.",
+                                ))
+
+                        for tics, path, label in (
+                            (
+                                origin_tics,
+                                "/data/window/captureAuthority/recordingGrid/"
+                                "originTics",
+                                "originTics",
+                            ),
+                            (
+                                start_tics,
+                                "/data/window/captureAuthority/recordingGrid/"
+                                "startTics",
+                                "startTics",
+                            ),
+                            (
+                                stop_tics,
+                                "/data/window/captureAuthority/recordingGrid/"
+                                "stopTics",
+                                "stopTics",
+                            ),
+                            (
+                                capture_tics,
+                                "/data/window/captureAuthority/runtimeStatus/"
+                                "captureBiologicalTimeTics",
+                                "captureBiologicalTimeTics",
+                            ),
+                            (
+                                buffer_began_tics,
+                                "/data/window/captureAuthority/bufferEpoch/"
+                                "beganAtBiologicalTimeTics",
+                                "beganAtBiologicalTimeTics",
+                            ),
+                            (
+                                plan_mutation_tics,
+                                "/data/window/captureAuthority/recordingPlan/"
+                                "lastMutationAtBiologicalTimeTics",
+                                "lastMutationAtBiologicalTimeTics",
+                            ),
+                        ):
+                            if tics % resolution_tics != 0:
+                                errors.append(CortexelError(
+                                    "SCIENCE_WINDOW_INVALID",
+                                    "science",
+                                    path,
+                                    f"{label} is not on the declared NEST runtime "
+                                    "resolution grid.",
+                                ))
+
+                        absolute_start_tics = origin_tics + start_tics
+                        absolute_stop_tics = origin_tics + stop_tics
+                        if capture_tics < absolute_stop_tics:
+                            errors.append(CortexelError(
+                                "SCIENCE_WINDOW_INVALID",
+                                "science",
+                                "/data/window/captureAuthority/runtimeStatus/"
+                                "captureBiologicalTimeTics",
+                                "the NEST capture time is earlier than originTics + "
+                                "stopTics. The final status must be read only after "
+                                "the Simulate or Run call that reached the closed-stop "
+                                "endpoint returned successfully.",
+                            ))
+                        if buffer_began_tics > absolute_start_tics:
+                            errors.append(CortexelError(
+                                "SCIENCE_WINDOW_INVALID",
+                                "science",
+                                "/data/window/captureAuthority/bufferEpoch/"
+                                "beganAtBiologicalTimeTics",
+                                "the most recent NEST recorder creation or n_events=0 "
+                                "clear occurred after originTics + startTics, so the "
+                                "retained buffer cannot substantiate the complete "
+                                "window.",
+                            ))
+                        if plan_mutation_tics > absolute_start_tics:
+                            errors.append(CortexelError(
+                                "SCIENCE_WINDOW_INVALID",
+                                "science",
+                                "/data/window/captureAuthority/recordingPlan/"
+                                "lastMutationAtBiologicalTimeTics",
+                                "the most recent NEST recorder-window, backend, "
+                                "time-encoding, or sender-wiring mutation occurred "
+                                "after originTics + startTics, so one plan did not "
+                                "govern the complete window.",
+                            ))
 
     values = event_times.get("values")
     if not isinstance(values, list):

@@ -512,12 +512,99 @@
   },
 
   "adapters": [
-    { "system": "nest.GetConnections", "status": "supported", "notes": "SynapseCollection.get() in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. The adapter MUST additionally supply the node universe from the NodeCollection: GetConnections cannot prove a node has degree zero, only that it returned no row for it. The MPI scope must come from the actual run, not from an assumption. When the adapter merges ranks into a `global_merged` scope it MUST merge one run at one snapshot time and cover every rank exactly once; Cortexel can check the rank cover but has no way to see a cross-run or cross-time merge, so that one is the adapter's obligation." },
-    { "system": "nest.GetPosition", "status": "supported", "notes": "Measured layout. Node ids are bound to the matching position order; the single-process / rank-local / merged scope of the position query is retained and must agree with the connection scope." },
-    { "system": "networkx.MultiDiGraph", "status": "partial", "notes": "Structure maps cleanly (directed, multiedge, self-loop). NetworkX carries no node-universe completeness flag, no MPI scope, and no units, so the caller must declare all three; the adapter never fabricates them." },
-    { "system": "neo", "status": "rejected", "notes": "Neo models recordings, not connectivity. There is no faithful mapping, and an invented one would be worse than none." },
-    { "system": "nwb", "status": "planned", "notes": "NWB core has no connectivity schema. A mapping depends on a community extension (for example ndx-simulation-output); none is certified here, and Cortexel will not invent a table layout." },
-    { "system": "ncp", "status": "planned", "notes": "Pending the narrow NCP adapter and its downstream consumer certification." }
+    {
+      "mappingId": "nest-getconnections",
+      "sources": [
+        {
+          "system": "nest.GetConnections",
+          "role": "primary",
+          "notes": "Supplies SynapseCollection.get() connection rows in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. It cannot prove a node has degree zero, so the separately named NodeCollection source is mandatory. The MPI scope must come from the actual run, not from an assumption. A future `global_merged` mapping must be separately profiled with an exact one-run, one-snapshot, every-rank merge authority; this single-query profile does not claim that merge.",
+          "sourceId": "nest-getconnections"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies the complete selected node universe, including isolates and silent nodes. GetConnections can prove only that it returned no row for an endpoint; without this companion an isolate would disappear and a missing edge could be misread as evidence of absence.",
+          "sourceId": "nest-selected-node-universe"
+        },
+        {
+          "system": "nest.GetPosition",
+          "role": "optional_companion",
+          "notes": "Measured layout. Node ids are bound to the matching position order; the single-process / rank-local / merged scope of the position query is retained and must agree with the connection scope.",
+          "sourceId": "nest-getposition"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "networkx-multidigraph",
+      "sources": [
+        {
+          "system": "networkx.MultiDiGraph",
+          "role": "primary",
+          "notes": "Structure maps cleanly (directed, multiedge, self-loop). NetworkX carries no node-universe completeness flag, no MPI scope, and no units, so the caller must declare all three; the adapter never fabricates them.",
+          "sourceId": "networkx-multidigraph"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo",
+      "sources": [
+        {
+          "system": "neo",
+          "role": "primary",
+          "notes": "Neo models recordings, not connectivity. There is no faithful mapping, and an invented one would be worse than none.",
+          "sourceId": "neo"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
+    },
+    {
+      "mappingId": "nwb-core",
+      "sources": [
+        {
+          "system": "nwb.core",
+          "role": "primary",
+          "notes": "NWB core has no connectivity schema. A mapping depends on a community extension (for example ndx-simulation-output); none is certified here, and Cortexel will not invent a table layout.",
+          "sourceId": "nwb-core"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
+    },
+    {
+      "mappingId": "ncp",
+      "sources": [
+        {
+          "system": "ncp",
+          "role": "primary",
+          "notes": "Pending the narrow NCP adapter and its downstream consumer certification.",
+          "sourceId": "ncp"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    }
   ],
 
   "migration": {
@@ -560,6 +647,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

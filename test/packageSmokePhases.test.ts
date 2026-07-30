@@ -1,11 +1,15 @@
 import {
   chmodSync,
+  closeSync,
+  constants as fsConstants,
   existsSync,
   linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -28,6 +32,7 @@ import {
   executePackageSmokeWorkspace,
   fingerprintNpmPackageTree,
   fingerprintPackageSmokeWorkspace,
+  formatReviewedNodeCommandFailure,
   inspectNodeExecutableAuthority,
   inspectNpmPackageAuthority,
   inspectNpmPackageTarball,
@@ -54,6 +59,84 @@ import {
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
 const cleanups: string[] = [];
+
+interface LifecycleFifo {
+  readonly path: string;
+  readonly reader: number;
+  readonly marker: string;
+  readonly prefetched: Buffer[];
+}
+
+function createLifecycleFifo(
+  workspace: string,
+  name: string,
+  marker: string,
+): LifecycleFifo {
+  const path = join(workspace, `${name}.fifo`);
+  const made = spawnSync('mkfifo', ['-m', '600', path], { encoding: 'utf8' });
+  if (made.status !== 0 || made.signal !== null) {
+    throw new Error(`mkfifo failed: ${made.stderr.trim()}`);
+  }
+  return {
+    path,
+    reader: openSync(path, fsConstants.O_RDONLY | fsConstants.O_NONBLOCK),
+    marker,
+    prefetched: [],
+  };
+}
+
+function expectLifecycleFifoOpen(fifo: LifecycleFifo): void {
+  const buffer = Buffer.alloc(256);
+  while (true) {
+    try {
+      const count = readSync(fifo.reader, buffer, 0, buffer.length, null);
+      if (count === 0) {
+        throw new Error('lifecycle FIFO had no live writer at the negative-control observation');
+      }
+      fifo.prefetched.push(Buffer.from(buffer.subarray(0, count)));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EAGAIN' || code === 'EWOULDBLOCK') return;
+      throw error;
+    }
+  }
+}
+
+function expectLifecycleFifoClosed(fifo: LifecycleFifo, timeoutMs = 3_000): void {
+  const deadline = Date.now() + timeoutMs;
+  const chunks: Buffer[] = fifo.prefetched.splice(0);
+  const buffer = Buffer.alloc(256);
+  try {
+    while (Date.now() < deadline) {
+      try {
+        const count = readSync(fifo.reader, buffer, 0, buffer.length, null);
+        if (count === 0) {
+          expect(Buffer.concat(chunks).toString('utf8')).toBe(fifo.marker);
+          return;
+        }
+        chunks.push(Buffer.from(buffer.subarray(0, count)));
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'EAGAIN' && code !== 'EWOULDBLOCK') throw error;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    }
+    throw new Error('lifecycle FIFO retained a writer beyond its cleanup deadline');
+  } finally {
+    closeSync(fifo.reader);
+  }
+}
+
+function lifecycleWriterProgram(fifo: LifecycleFifo, lifetimeMs = 15_000): string {
+  return `const lifecycleFs = require('node:fs');
+    const lifecycleFd = lifecycleFs.openSync(${JSON.stringify(fifo.path)}, 'w');
+    lifecycleFs.writeSync(lifecycleFd, ${JSON.stringify(fifo.marker)});
+    lifecycleFs.writeFileSync(${JSON.stringify(`${fifo.path}.ready`)}, 'ready\\n', {
+      flag: 'wx',
+      mode: 0o600,
+    });
+    setTimeout(() => process.exit(71), ${lifetimeMs});`;
+}
 
 interface TestTarEntry {
   readonly path: string;
@@ -470,8 +553,49 @@ describe('two-phase package smoke contract', () => {
     }, 'win32')).toThrow(/authorities disagree/u);
   });
 
+  it('bounds and terminal-escapes reviewed-command failure diagnostics', () => {
+    const stdoutOnly = formatReviewedNodeCommandFailure('/reviewed/bin/node', {
+      status: 2,
+      signal: null,
+      stdout: 'consumer.ts(1,1): type error\n\u001b[31mred\u001b[0m\u202ereordered',
+      stderr: '',
+    });
+    expect(stdoutOnly).toContain('"status":2');
+    expect(stdoutOnly).toContain('consumer.ts(1,1): type error');
+    expect(stdoutOnly).toContain('\\u000a');
+    expect(stdoutOnly).toContain('\\u001b');
+    expect(stdoutOnly).toContain('\\u202e');
+    expect(stdoutOnly).not.toContain('\u001b');
+    expect(stdoutOnly).not.toContain('\u202e');
+
+    const clipped = formatReviewedNodeCommandFailure(
+      `/reviewed/${'\u2066'.repeat(2_000)}/node`,
+      {
+        status: -1,
+        signal: 'SIGTERM',
+        stdout: '🙂'.repeat(4_000),
+        stderr: '\u0000'.repeat(4_000),
+      },
+    );
+    expect(Buffer.byteLength(clipped)).toBeLessThanOrEqual(7_500);
+    const detail = JSON.parse(clipped.slice(clipped.indexOf('{'))) as {
+      commandTruncated: boolean;
+      stdoutTruncated: boolean;
+      stderrTruncated: boolean;
+      signal: string;
+    };
+    expect(detail).toMatchObject({
+      commandTruncated: true,
+      stdoutTruncated: true,
+      stderrTruncated: true,
+      signal: 'SIGTERM',
+    });
+    expect(clipped).not.toContain('\u2066');
+    expect(clipped).not.toContain('\u0000');
+  });
+
   it('bounds reviewed Node commands and their descendant process group', () => {
-    if (process.platform === 'win32') return;
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
     const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
       encoding: 'utf8',
     });
@@ -499,7 +623,7 @@ describe('two-phase package smoke contract', () => {
       timedOut: false,
       outputOverflow: false,
     });
-    expect(successful.processGroupId).toBeGreaterThan(0);
+    expect(successful.guardianSweepIntentCount).toBe(1);
 
     // This completion deliberately exceeds the former one-second test assumption.
     // The production wall-clock timer remains authoritative; only this regression's
@@ -538,7 +662,7 @@ describe('two-phase package smoke contract', () => {
     expect(largeOutput.timedOut).toBe(false);
     expect(largeOutput.outputOverflow).toBe(false);
     expect(largeOutput.stdout.length).toBe(largeOutputBytes);
-    expect(largeOutput.groupKillCount).toBe(1);
+    expect(largeOutput.guardianSweepIntentCount).toBe(1);
 
     const exactSplitOutput = runReviewedNodeCommand(
       reviewedNode,
@@ -569,48 +693,56 @@ describe('two-phase package smoke contract', () => {
     expect(nonzero.stderr).toBe('bounded-error');
     expect(nonzero.timedOut).toBe(false);
     expect(nonzero.outputOverflow).toBe(false);
-    expect(successful.groupKillCount).toBe(1);
-    expect(nonzero.groupKillCount).toBe(1);
+    expect(successful.guardianSweepIntentCount).toBe(1);
+    expect(nonzero.guardianSweepIntentCount).toBe(1);
 
-    const exitWithChild = (exitCode: number, pidFile: string) => runReviewedNodeCommand(
+    const exitWithChild = (exitCode: number, fifo: LifecycleFifo) => runReviewedNodeCommand(
       reviewedNode,
       [
         '-e',
-        `const child = require('node:child_process').spawn(
+         `const child = require('node:child_process').spawn(
            process.execPath,
-           ['-e', 'setInterval(() => {}, 1000)'],
+           ['-e', ${JSON.stringify(`${lifecycleWriterProgram(fifo)}
+             setInterval(() => {}, 1000);`)}],
            { stdio: 'ignore' },
          );
-         require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(child.pid));
+         while (!require('node:fs').existsSync(${JSON.stringify(`${fifo.path}.ready`)})) {
+           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+         }
          process.exit(${exitCode});`,
       ],
       workspace,
       { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     );
-    const successChildPid = join(workspace, 'success-child.pid');
-    const nonzeroChildPid = join(workspace, 'nonzero-child.pid');
-    const successfulWithChild = exitWithChild(0, successChildPid);
-    const nonzeroWithChild = exitWithChild(9, nonzeroChildPid);
+    const successChild = createLifecycleFifo(workspace, 'success-child', 'S');
+    const nonzeroChild = createLifecycleFifo(workspace, 'nonzero-child', 'N');
+    const successfulWithChild = exitWithChild(0, successChild);
+    const nonzeroWithChild = exitWithChild(9, nonzeroChild);
     expect(successfulWithChild.status).toBe(0);
     expect(nonzeroWithChild.status).toBe(9);
     expect(successfulWithChild.timedOut).toBe(false);
     expect(nonzeroWithChild.timedOut).toBe(false);
     expect(successfulWithChild.outputOverflow).toBe(false);
     expect(nonzeroWithChild.outputOverflow).toBe(false);
-    expect(successfulWithChild.groupKillCount).toBe(1);
-    expect(nonzeroWithChild.groupKillCount).toBe(1);
+    expect(successfulWithChild.guardianSweepIntentCount).toBe(1);
+    expect(nonzeroWithChild.guardianSweepIntentCount).toBe(1);
+    expectLifecycleFifoClosed(successChild);
+    expectLifecycleFifoClosed(nonzeroChild);
 
-    const signaledChildPid = join(workspace, 'signaled-child.pid');
+    const signaledChild = createLifecycleFifo(workspace, 'signaled-child', 'G');
     const signaledWithChild = runReviewedNodeCommand(
       reviewedNode,
       [
         '-e',
-        `const child = require('node:child_process').spawn(
+         `const child = require('node:child_process').spawn(
            process.execPath,
-           ['-e', 'setInterval(() => {}, 1000)'],
+           ['-e', ${JSON.stringify(`${lifecycleWriterProgram(signaledChild)}
+             setInterval(() => {}, 1000);`)}],
            { stdio: 'ignore' },
          );
-         require('node:fs').writeFileSync(${JSON.stringify(signaledChildPid)}, String(child.pid));
+         while (!require('node:fs').existsSync(${JSON.stringify(`${signaledChild.path}.ready`)})) {
+           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+         }
          process.kill(process.pid, 'SIGTERM');`,
       ],
       workspace,
@@ -621,10 +753,11 @@ describe('two-phase package smoke contract', () => {
       signal: 'SIGTERM',
       timedOut: false,
       outputOverflow: false,
-      groupKillCount: 1,
+      guardianSweepIntentCount: 1,
     });
+    expectLifecycleFifoClosed(signaledChild);
 
-    const timeoutChildPid = join(workspace, 'timeout-child.pid');
+    const timeoutChild = createLifecycleFifo(workspace, 'timeout-child', 'T');
     const timedOut = runReviewedNodeCommand(
       reviewedNode,
       [
@@ -632,10 +765,14 @@ describe('two-phase package smoke contract', () => {
         `const fs = require('node:fs');
          const child = require('node:child_process').spawn(
            process.execPath,
-           ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'],
+           ['-e', ${JSON.stringify(`${lifecycleWriterProgram(timeoutChild)}
+             process.on("SIGTERM", () => {});
+             setInterval(() => {}, 1000);`)}],
            { stdio: 'ignore' },
          );
-         fs.writeFileSync(${JSON.stringify(timeoutChildPid)}, String(child.pid));
+         while (!fs.existsSync(${JSON.stringify(`${timeoutChild.path}.ready`)})) {
+           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+         }
          process.on('SIGTERM', () => {});
          setInterval(() => {}, 1000);`,
       ],
@@ -645,10 +782,10 @@ describe('two-phase package smoke contract', () => {
     expect(timedOut.timedOut).toBe(true);
     expect(timedOut.outputOverflow).toBe(false);
     expect(timedOut.signal).toBe('SIGKILL');
-    expect(timedOut.processGroupId).toBeGreaterThan(0);
-    expect(timedOut.groupKillCount).toBe(1);
+    expect(timedOut.guardianSweepIntentCount).toBe(1);
+    expectLifecycleFifoClosed(timeoutChild);
 
-    const overflowChildPid = join(workspace, 'overflow-child.pid');
+    const overflowChild = createLifecycleFifo(workspace, 'overflow-child', 'O');
     const overflow = runReviewedNodeCommand(
       reviewedNode,
       [
@@ -656,10 +793,13 @@ describe('two-phase package smoke contract', () => {
         `const fs = require('node:fs');
          const child = require('node:child_process').spawn(
            process.execPath,
-           ['-e', 'setInterval(() => {}, 1000)'],
+           ['-e', ${JSON.stringify(`${lifecycleWriterProgram(overflowChild)}
+             setInterval(() => {}, 1000);`)}],
            { stdio: 'ignore' },
          );
-         fs.writeFileSync(${JSON.stringify(overflowChildPid)}, String(child.pid));
+         while (!fs.existsSync(${JSON.stringify(`${overflowChild.path}.ready`)})) {
+           Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+         }
          process.stdout.write('x'.repeat(2048));
          setInterval(() => {}, 1000);`,
       ],
@@ -670,8 +810,8 @@ describe('two-phase package smoke contract', () => {
     expect(overflow.outputOverflow).toBe(true);
     expect(overflow.signal).toBe('SIGKILL');
     expect(Buffer.byteLength(overflow.stdout)).toBe(1_024);
-    expect(overflow.processGroupId).toBeGreaterThan(0);
-    expect(overflow.groupKillCount).toBe(1);
+    expect(overflow.guardianSweepIntentCount).toBe(1);
+    expectLifecycleFifoClosed(overflowChild);
 
     const stderrOverflow = runReviewedNodeCommand(
       reviewedNode,
@@ -685,7 +825,7 @@ describe('two-phase package smoke contract', () => {
       stderr: 'e'.repeat(1_024),
       timedOut: false,
       outputOverflow: true,
-      groupKillCount: 1,
+      guardianSweepIntentCount: 1,
     });
 
     const combinedOverflow = runReviewedNodeCommand(
@@ -702,84 +842,25 @@ describe('two-phase package smoke contract', () => {
       signal: 'SIGKILL',
       timedOut: false,
       outputOverflow: true,
-      groupKillCount: 1,
+      guardianSweepIntentCount: 1,
     });
     expect(Buffer.byteLength(combinedOverflow.stdout) + Buffer.byteLength(combinedOverflow.stderr))
       .toBe(1_024);
 
-    const waitForGone = (pid: number, processGroup: boolean): boolean => {
-      const deadline = Date.now() + 2_000;
-      while (Date.now() < deadline) {
-        try {
-          process.kill(processGroup ? -pid : pid, 0);
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code === 'ESRCH') return true;
-          if (code === 'EPERM') {
-            // These fixed test programs never change credentials or security
-            // labels. EPERM therefore means their numeric identity was reused by
-            // another authority, not that the original fixture escaped cleanup.
-            return true;
-          }
-          throw error;
-        }
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
-      }
-      return false;
-    };
-    const parentKillWrapperPidFile = join(workspace, 'parent-kill-wrapper.pid');
-    const parentKillTargetPidFile = join(workspace, 'parent-kill-target.pid');
-    let parentKillWrapperPid: number | undefined;
-    let parentKillTargetPid: number | undefined;
-    try {
-      expect(() => runReviewedNodeCommand(
-        reviewedNode,
-        [
-          '-e',
-          `const fs = require('node:fs');
-           fs.writeFileSync(${JSON.stringify(parentKillWrapperPidFile)}, String(process.ppid));
-           fs.writeFileSync(${JSON.stringify(parentKillTargetPidFile)}, String(process.pid));
-           process.kill(process.ppid, 'SIGKILL');
-           setInterval(() => {}, 1000);`,
-        ],
-        workspace,
-        { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
-      )).toThrow(/outer SIGKILL boundary/u);
-      parentKillWrapperPid = Number(readFileSync(parentKillWrapperPidFile, 'utf8'));
-      parentKillTargetPid = Number(readFileSync(parentKillTargetPidFile, 'utf8'));
-      expect(parentKillWrapperPid).toBeGreaterThan(0);
-      expect(parentKillTargetPid).toBeGreaterThan(0);
-      expect(waitForGone(parentKillWrapperPid, true)).toBe(true);
-      expect(waitForGone(parentKillTargetPid, false)).toBe(true);
-    } finally {
-      if (existsSync(parentKillWrapperPidFile)) {
-        parentKillWrapperPid = Number(readFileSync(parentKillWrapperPidFile, 'utf8'));
-      }
-      if (existsSync(parentKillTargetPidFile)) {
-        parentKillTargetPid = Number(readFileSync(parentKillTargetPidFile, 'utf8'));
-      }
-      if (parentKillWrapperPid !== undefined) {
-        try {
-          process.kill(-parentKillWrapperPid, 'SIGKILL');
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code !== 'ESRCH' && code !== 'EPERM') throw error;
-        }
-      }
-    }
+    const parentKillTarget = createLifecycleFifo(workspace, 'parent-kill-target', 'P');
+    expect(() => runReviewedNodeCommand(
+      reviewedNode,
+      [
+        '-e',
+        `${lifecycleWriterProgram(parentKillTarget)}
+         process.kill(process.ppid, 'SIGKILL');
+         setInterval(() => {}, 1000);`,
+      ],
+      workspace,
+      { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
+    )).toThrow(/without a valid result/u);
+    expectLifecycleFifoClosed(parentKillTarget);
 
-    for (const [result, pidFile] of [
-      [successfulWithChild, successChildPid],
-      [nonzeroWithChild, nonzeroChildPid],
-      [signaledWithChild, signaledChildPid],
-      [overflow, overflowChildPid],
-    ] as const) {
-      expect(waitForGone(result.processGroupId!, true)).toBe(true);
-      expect(waitForGone(Number(readFileSync(pidFile, 'utf8')), false)).toBe(true);
-    }
-    expect(waitForGone(timedOut.processGroupId!, true)).toBe(true);
-    expect(existsSync(timeoutChildPid)).toBe(true);
-    expect(waitForGone(Number(readFileSync(timeoutChildPid, 'utf8')), false)).toBe(true);
     for (const result of [
       successful,
       delayedSuccessful,
@@ -789,7 +870,7 @@ describe('two-phase package smoke contract', () => {
       stderrOverflow,
       combinedOverflow,
     ]) {
-      expect(waitForGone(result.processGroupId!, true)).toBe(true);
+      expect(result.guardianSweepIntentCount).toBe(1);
     }
 
     expect(() => runReviewedNodeCommand(
@@ -804,19 +885,26 @@ describe('two-phase package smoke contract', () => {
       workspace,
       { environment, timeoutMs: nonTimeoutCommandTimeoutMs, outputLimitBytes: 1_024 },
     )).toThrow(/argument 2/u);
-    expect(() => runReviewedNodeCommand(
-      reviewedNode,
-      ['-e', 'process.exit(0)'],
-      workspace,
-      {
-        environment: {
-          ...environment,
-          CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK: '{}',
+    for (const reserved of [
+      'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD',
+      'CORTEXEL_PACKAGE_SMOKE_GUARDIAN_PAYLOAD',
+      'CORTEXEL_PACKAGE_SMOKE_WORKER_PAYLOAD',
+      'CORTEXEL_PACKAGE_SMOKE_TRUSTED_COMMAND_TEST_HOOK',
+    ]) {
+      expect(() => runReviewedNodeCommand(
+        reviewedNode,
+        ['-e', 'process.exit(0)'],
+        workspace,
+        {
+          environment: {
+            ...environment,
+            [reserved]: '{}',
+          },
+          timeoutMs: nonTimeoutCommandTimeoutMs,
+          outputLimitBytes: 1_024,
         },
-        timeoutMs: nonTimeoutCommandTimeoutMs,
-        outputLimitBytes: 1_024,
-      },
-    )).toThrow(/reserved entry/u);
+      )).toThrow(new RegExp(`reserved entry ${reserved}`, 'u'));
+    }
 
     const sentinelDirectory = join(workspace, 'unreviewed-sibling');
     const sentinelMarker = join(workspace, 'sibling-ran');
@@ -839,13 +927,38 @@ describe('two-phase package smoke contract', () => {
     );
     expect(exactRuntime.timedOut).toBe(false);
     expect(exactRuntime.outputOverflow).toBe(false);
-    expect(waitForGone(exactRuntime.processGroupId!, true)).toBe(true);
+    expect(exactRuntime.guardianSweepIntentCount).toBe(1);
     expect(realpathSync(exactRuntime.stdout)).toBe(reviewedNode);
     expect(() => realpathSync(sentinelMarker)).toThrow();
+
+    const loaderMarker = join(workspace, 'target-loader-pids');
+    const loader = join(workspace, 'target-loader.cjs');
+    writeFileSync(
+      loader,
+      `require('node:fs').appendFileSync(${JSON.stringify(loaderMarker)}, process.pid + '\\n');\n`,
+      { mode: 0o444 },
+    );
+    chmodSync(loader, 0o444);
+    const targetLoader = runReviewedNodeCommand(
+      reviewedNode,
+      ['-e', 'process.stdout.write(String(process.pid))'],
+      workspace,
+      {
+        environment: {
+          ...environment,
+          NODE_OPTIONS: `--require=${loader}`,
+        },
+        timeoutMs: nonTimeoutCommandTimeoutMs,
+        outputLimitBytes: 1_024,
+      },
+    );
+    const loadedPids = readFileSync(loaderMarker, 'utf8').trimEnd().split('\n');
+    expect(loadedPids).toEqual([targetLoader.stdout]);
+    expect(Number.isSafeInteger(Number(targetLoader.stdout))).toBe(true);
   }, 60_000);
 
   it('does not re-address a reusable process-group id after a clean supervisor receipt', () => {
-    if (process.platform === 'win32') return;
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
     const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], { encoding: 'utf8' });
     if (nodeProbe.status !== 0 || nodeProbe.signal !== null) {
       throw new Error('the clean-receipt regression requires Node');
@@ -877,106 +990,122 @@ describe('two-phase package smoke contract', () => {
       stdout: 'clean-receipt',
       timedOut: false,
       outputOverflow: false,
-      groupKillCount: 1,
+      guardianSweepIntentCount: 1,
     });
   }, 20_000);
 
-  it('keeps outer failure primary when fallback process-group authority is lost', () => {
-    if (process.platform === 'win32') return;
+  it('fails on bounded pipe drain when a deliberately detached descendant escapes', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
     const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], { encoding: 'utf8' });
     if (nodeProbe.status !== 0 || nodeProbe.signal !== null) {
-      throw new Error('the fallback-authority regression requires Node');
+      throw new Error('the detached-pipe regression requires Node');
     }
     const reviewedNode = realpathSync(nodeProbe.stdout.trim());
-    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-fallback-eperm-')));
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-detached-pipe-')));
     cleanups.push(workspace);
-    const environment = packageSmokeEnvironment(reviewedNode, workspace, {});
-    const wrapperPidFile = join(workspace, 'wrapper.pid');
-    const targetPidFile = join(workspace, 'target.pid');
-    const originalKill = process.kill;
-    let publishedProcessGroupId: number | undefined;
-    let targetPid: number | undefined;
-    let failure: unknown;
-    let cleanupGroupGone = false;
-    let cleanupTargetGone = false;
-    const waitForGone = (pid: number, group: boolean): boolean => {
-      const deadline = Date.now() + 2_000;
-      while (Date.now() < deadline) {
-        try {
-          originalKill(group ? -pid : pid, 0);
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code === 'ESRCH') return true;
-          if (code === 'EPERM') {
-            // After the injected failure is removed, this fixed same-UID target
-            // cannot lose authority. EPERM therefore identifies PID/PGID reuse.
-            return true;
-          }
-          throw error;
-        }
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+    const detachedLifetime = createLifecycleFifo(workspace, 'detached-pipe-writer', 'D');
+    const detachedProgram = `${lifecycleWriterProgram(detachedLifetime, 6_000)}
+      setInterval(() => {}, 1000);`;
+    const targetProgram = `
+      const fs = require('node:fs');
+      const detached = require('node:child_process').spawn(
+        process.execPath,
+        ['-e', ${JSON.stringify(detachedProgram)}],
+        { detached: true, stdio: ['ignore', 'inherit', 'inherit'] },
+      );
+      detached.unref();
+      while (!fs.existsSync(${JSON.stringify(`${detachedLifetime.path}.ready`)})) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
       }
-      return false;
-    };
+      process.exit(0);
+    `;
+    const hostSignals: { pid: number; signal: string | number | undefined }[] = [];
     const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-      if (pid < 0 && signal === 'SIGKILL') {
-        publishedProcessGroupId = -pid;
-        throw Object.assign(new Error('injected process-group authority loss'), { code: 'EPERM' });
-      }
-      return originalKill(pid, signal);
+      hostSignals.push({ pid, signal });
+      throw new Error('outer numeric process signalling is forbidden');
     });
+    const startedAt = Date.now();
     try {
-      try {
-        runReviewedNodeCommand(
-          reviewedNode,
-          [
-            '-e',
-            `const fs = require('node:fs');
-             fs.writeFileSync(${JSON.stringify(wrapperPidFile)}, String(process.ppid));
-             fs.writeFileSync(${JSON.stringify(targetPidFile)}, String(process.pid));
-             process.kill(process.ppid, 'SIGKILL');
-             setInterval(() => {}, 1000);`,
-          ],
-          workspace,
-          { environment, timeoutMs: 10_000, outputLimitBytes: 1_024 },
-        );
-      } catch (error) {
-        failure = error;
-      }
+      expect(() => runReviewedNodeCommand(
+        reviewedNode,
+        ['-e', targetProgram],
+        workspace,
+        {
+          environment: packageSmokeEnvironment(reviewedNode, workspace, {}),
+          timeoutMs: 10_000,
+          outputLimitBytes: 1_024,
+        },
+      )).toThrow(/pipes did not reach bounded EOF after exit/u);
     } finally {
       killSpy.mockRestore();
-      if (publishedProcessGroupId === undefined && existsSync(wrapperPidFile)) {
-        publishedProcessGroupId = Number(readFileSync(wrapperPidFile, 'utf8'));
-      }
-      if (existsSync(targetPidFile)) {
-        targetPid = Number(readFileSync(targetPidFile, 'utf8'));
-      }
-      if (publishedProcessGroupId !== undefined) {
-        try {
-          originalKill(-publishedProcessGroupId, 'SIGKILL');
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code !== 'ESRCH') throw error;
-        }
-        cleanupGroupGone = waitForGone(publishedProcessGroupId, true);
-      }
-      if (targetPid !== undefined) {
-        cleanupTargetGone = waitForGone(targetPid, false);
-      }
     }
-    expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toMatch(/failed its outer SIGKILL boundary/u);
-    expect((failure as Error).message).toMatch(
-      /process-group cleanup unproven: signal authority lost \(outer SIGKILL: EPERM\)/u,
-    );
-    expect(publishedProcessGroupId).toBeGreaterThan(0);
-    expect(targetPid).toBeGreaterThan(0);
-    expect(cleanupGroupGone).toBe(true);
-    expect(cleanupTargetGone).toBe(true);
-  }, 30_000);
+    expect(Date.now() - startedAt).toBeLessThan(4_500);
+    expect(hostSignals).toEqual([]);
+    expectLifecycleFifoOpen(detachedLifetime);
+    expectLifecycleFifoClosed(detachedLifetime, 8_000);
+  }, 15_000);
 
-  it('kills the detached target group when its outer supervisor group is cancelled', () => {
-    if (process.platform === 'win32') return;
+  it('has exactly one explicit direct-property process-group signal site', () => {
+    const supervisorSource = readFileSync(
+      join(root, 'scripts', 'lib', 'reviewed-node-supervisor.ts'),
+      'utf8',
+    );
+    const outerSource = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    expect(
+      `${supervisorSource}\n${outerSource}`.match(/\.\s*kill\s*\(/gu) ?? [],
+    ).toEqual(['.kill(']);
+    expect(
+      supervisorSource.match(
+        /process\.kill\(-process\.pid, 'SIGKILL'\)/gu,
+      ) ?? [],
+    ).toEqual(["process.kill(-process.pid, 'SIGKILL')"]);
+    expect(outerSource).not.toContain('process.kill(');
+    expect(outerSource).not.toContain('processGroupId');
+    expect(outerSource).not.toContain('publishedProcessGroup');
+  });
+
+  it('never adds an outer numeric fallback after abnormal supervisor completion', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], { encoding: 'utf8' });
+    if (nodeProbe.status !== 0 || nodeProbe.signal !== null) {
+      throw new Error('the abnormal-supervisor regression requires Node');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-no-pgid-fallback-')));
+    cleanups.push(workspace);
+    const targetLifetime = createLifecycleFifo(workspace, 'parent-kill', 'K');
+    const hostSignals: { pid: number; signal: string | number | undefined }[] = [];
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      hostSignals.push({ pid, signal });
+      throw new Error('outer numeric process signalling is forbidden');
+    });
+    try {
+      expect(() => runReviewedNodeCommand(
+        reviewedNode,
+        [
+          '-e',
+          `${lifecycleWriterProgram(targetLifetime)}
+           process.kill(process.ppid, 'SIGKILL');
+           setInterval(() => {}, 1000);`,
+        ],
+        workspace,
+        {
+          environment: packageSmokeEnvironment(reviewedNode, workspace, {}),
+          timeoutMs: 10_000,
+          outputLimitBytes: 1_024,
+        },
+      )).toThrow(/without a valid result/u);
+    } finally {
+      killSpy.mockRestore();
+    }
+    expect(hostSignals).toEqual([]);
+    expectLifecycleFifoClosed(targetLifetime);
+  }, 20_000);
+
+
+
+  it('self-sweeps same-group lifetimes when TERM, INT, or HUP cancels the supervisor', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
     const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
       encoding: 'utf8',
     });
@@ -992,7 +1121,7 @@ describe('two-phase package smoke contract', () => {
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
 
-    const waitFor = (predicate: () => boolean, timeoutMs = 3_000): boolean => {
+    const waitFor = (predicate: () => boolean, timeoutMs = 4_000): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1000,38 +1129,34 @@ describe('two-phase package smoke contract', () => {
       }
       return predicate();
     };
-    const processIsGone = (pid: number, group: boolean): boolean => {
-      try {
-        process.kill(group ? -pid : pid, 0);
-        return false;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'ESRCH') return true;
-        if (code === 'EPERM') {
-          // The controlled fixture never changes signal authority; EPERM proves
-          // this numeric identity has rebound after the fixture exited.
-          return true;
-        }
-        throw error;
-      }
-    };
 
     for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
       const signalName = signal.toLowerCase();
-      const wrapperPidFile = join(workspace, `${signalName}-wrapper.pid`);
-      const targetPidFile = join(workspace, `${signalName}-target.pid`);
-      const descendantPidFile = join(workspace, `${signalName}-descendant.pid`);
+      const targetLifetime = createLifecycleFifo(
+        workspace,
+        `${signalName}-target`,
+        signalName[3] ?? 't',
+      );
+      const descendantLifetime = createLifecycleFifo(
+        workspace,
+        `${signalName}-descendant`,
+        signalName[4] ?? 'd',
+      );
       const runner = join(workspace, `${signalName}-runner.ts`);
+      const descendantProgram = `${lifecycleWriterProgram(descendantLifetime)}
+        setInterval(() => {}, 1000);`;
       const targetProgram = `
-        const fs = require('node:fs');
-        const child = require('node:child_process').spawn(
+        ${lifecycleWriterProgram(targetLifetime)}
+        require('node:child_process').spawn(
           process.execPath,
-          ['-e', 'setInterval(() => {}, 1000)'],
+          ['-e', ${JSON.stringify(descendantProgram)}],
           { stdio: 'ignore' },
         );
-        fs.writeFileSync(${JSON.stringify(wrapperPidFile)}, String(process.ppid));
-        fs.writeFileSync(${JSON.stringify(targetPidFile)}, String(process.pid));
-        fs.writeFileSync(${JSON.stringify(descendantPidFile)}, String(child.pid));
+        while (!require('node:fs').existsSync(
+          ${JSON.stringify(`${descendantLifetime.path}.ready`)}
+        )) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+        }
         setInterval(() => {}, 1000);
       `;
       writeFileSync(
@@ -1056,40 +1181,21 @@ describe('two-phase package smoke contract', () => {
         stdio: 'ignore',
       });
       outer.unref();
-      let wrapperPid: number | undefined;
-      let targetPid: number | undefined;
-      try {
-        expect(waitFor(() =>
-          existsSync(wrapperPidFile) &&
-          existsSync(targetPidFile) &&
-          existsSync(descendantPidFile))).toBe(true);
-        wrapperPid = Number(readFileSync(wrapperPidFile, 'utf8'));
-        targetPid = Number(readFileSync(targetPidFile, 'utf8'));
-        const descendantPid = Number(readFileSync(descendantPidFile, 'utf8'));
-        expect(Number.isSafeInteger(wrapperPid) && wrapperPid > 0).toBe(true);
-        expect(Number.isSafeInteger(targetPid) && targetPid > 0).toBe(true);
-        expect(Number.isSafeInteger(descendantPid) && descendantPid > 0).toBe(true);
-        process.kill(-outer.pid!, signal);
-        expect(waitFor(() => processIsGone(wrapperPid!, true))).toBe(true);
-        expect(waitFor(() => processIsGone(wrapperPid!, false))).toBe(true);
-        expect(waitFor(() => processIsGone(targetPid!, false))).toBe(true);
-        expect(waitFor(() => processIsGone(descendantPid, false))).toBe(true);
-      } finally {
-        for (const [pid, group] of [[outer.pid, true], [wrapperPid, true]] as const) {
-          if (pid === undefined) continue;
-          try {
-            process.kill(group ? -pid : pid, 'SIGKILL');
-          } catch (error) {
-            const code = (error as NodeJS.ErrnoException).code;
-            if (code !== 'ESRCH' && code !== 'EPERM') throw error;
-          }
-        }
-      }
-    }
-  });
+      expect(waitFor(() =>
+        existsSync(`${targetLifetime.path}.ready`) &&
+        existsSync(`${descendantLifetime.path}.ready`))).toBe(true);
 
-  it('keeps reviewed code gated across pre-handshake and pre-GO wrapper/supervisor death', () => {
-    if (process.platform === 'win32') return;
+      // The test-owned detached runner is still the live leader of this exact
+      // group at the rendezvous. This is the one intentional cancellation signal;
+      // no PID/PGID is probed or re-addressed after it.
+      process.kill(-outer.pid!, signal);
+      expectLifecycleFifoClosed(targetLifetime, 5_000);
+      expectLifecycleFifoClosed(descendantLifetime, 5_000);
+    }
+  }, 30_000);
+
+  it('uses active lease EOF after supervisor SIGKILL and fails closed if the guardian dies', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
     const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
       encoding: 'utf8',
     });
@@ -1097,15 +1203,14 @@ describe('two-phase package smoke contract', () => {
       encoding: 'utf8',
     });
     if (nodeProbe.status !== 0 || bunProbe.status !== 0) {
-      throw new Error('the killpoint regression requires exact Node and Bun executables');
+      throw new Error('the active lease regression requires exact Node and Bun executables');
     }
     const reviewedNode = realpathSync(nodeProbe.stdout.trim());
     const reviewedBun = realpathSync(bunProbe.stdout.trim());
-    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-supervisor-killpoint-')));
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-active-lease-')));
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
-
-    const waitFor = (predicate: () => boolean, timeoutMs = 4_000): boolean => {
+    const waitFor = (predicate: () => boolean, timeoutMs = 6_000): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1113,76 +1218,42 @@ describe('two-phase package smoke contract', () => {
       }
       return predicate();
     };
-    const processIsGone = (pid: number, group: boolean): boolean => {
-      try {
-        process.kill(group ? -pid : pid, 0);
-        return false;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'ESRCH') return true;
-        if (code === 'EPERM') {
-          // The controlled fixture never changes signal authority; EPERM proves
-          // this numeric identity has rebound after the fixture exited.
-          return true;
-        }
-        throw error;
-      }
-    };
 
-    for (const scenario of [
-      {
-        phase: 'wrapper-spawned-before-handshake',
-        victim: 'wrapper',
-        expectedKind: 'threw',
-      },
-      {
-        phase: 'handshake-published-before-go',
-        victim: 'wrapper',
-        expectedKind: 'threw',
-      },
-      {
-        phase: 'handshake-published-before-go',
-        victim: 'supervisor',
-        expectedKind: 'threw',
-      },
-    ] as const) {
-      const { phase, victim, expectedKind } = scenario;
-      const prefix = phase === 'wrapper-spawned-before-handshake'
-        ? 'pre-handshake-wrapper'
-        : `pre-go-${victim}`;
-      const readyPath = join(workspace, `${prefix}-ready.json`);
-      const targetMarker = join(workspace, `${prefix}-target-ran`);
-      const outcomePath = join(workspace, `${prefix}-outcome.json`);
-      const runner = join(workspace, `${prefix}-runner.ts`);
-      const targetProgram = `
-        require('node:fs').writeFileSync(${JSON.stringify(targetMarker)}, 'ran\\n');
-        setInterval(() => {}, 1000);
-      `;
+    for (const victim of ['supervisor', 'guardian'] as const) {
+      const targetLifetime = createLifecycleFifo(
+        workspace,
+        `${victim}-sigkill-target`,
+        victim === 'supervisor' ? 'S' : 'G',
+      );
+      const readyPath = join(workspace, `${victim}-go-sent.json`);
+      const outcomePath = join(workspace, `${victim}-outcome.json`);
+      const runner = join(workspace, `${victim}-runner.ts`);
       writeFileSync(
         runner,
         `
           import { writeFileSync } from 'node:fs';
           import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
           try {
-            const result = runReviewedNodeCommand(
+            runReviewedNodeCommand(
               ${JSON.stringify(reviewedNode)},
-              ['-e', ${JSON.stringify(targetProgram)}],
+              ['-e', ${JSON.stringify(
+                `${lifecycleWriterProgram(targetLifetime, 6_000)}
+                 setInterval(() => {}, 1000);`,
+              )}],
               ${JSON.stringify(workspace)},
               {
                 environment: { PATH: '/usr/bin:/bin' },
                 timeoutMs: 10_000,
                 outputLimitBytes: 1_024,
                 trustedTestHook: {
-                  phase: ${JSON.stringify(phase)},
+                  phase: 'go-sent',
                   readyPath: ${JSON.stringify(readyPath)},
                 },
               },
             );
-            writeFileSync(
-              ${JSON.stringify(outcomePath)},
-              JSON.stringify({ kind: 'returned', signal: result.signal, status: result.status }) + '\\n',
-              { flag: 'wx' },
-            );
+            writeFileSync(${JSON.stringify(outcomePath)}, '{"kind":"returned"}\\n', {
+              flag: 'wx',
+            });
           } catch (error) {
             writeFileSync(
               ${JSON.stringify(outcomePath)},
@@ -1201,62 +1272,267 @@ describe('two-phase package smoke contract', () => {
         stdio: 'ignore',
       });
       outer.unref();
-      let supervisorPid: number | undefined;
-      let wrapperPid: number | undefined;
-      try {
-        expect(waitFor(() => existsSync(readyPath))).toBe(true);
-        const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
-          phase: string;
-          processGroupId: number;
-          schema: string;
-          supervisorPid: number;
-        };
-        expect(ready.schema).toBe('cortexel-package-smoke-command-test-hook.v1');
-        expect(ready.phase).toBe(phase);
-        supervisorPid = ready.supervisorPid;
-        wrapperPid = ready.processGroupId;
-        expect(Number.isSafeInteger(supervisorPid) && supervisorPid > 1).toBe(true);
-        expect(Number.isSafeInteger(wrapperPid) && wrapperPid > 1).toBe(true);
+      expect(waitFor(() =>
+        existsSync(readyPath) &&
+        existsSync(`${targetLifetime.path}.ready`))).toBe(true);
+      const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
+        guardianPid: number;
+        phase: string;
+        schema: string;
+        supervisorPid: number;
+      };
+      expect(ready).toMatchObject({
+        phase: 'go-sent',
+        schema: 'cortexel-package-smoke-command-test-hook.v2',
+      });
+      const victimPid = victim === 'supervisor'
+        ? ready.supervisorPid
+        : ready.guardianPid;
+      expect(Number.isSafeInteger(victimPid) && victimPid > 1).toBe(true);
 
-        process.kill(victim === 'wrapper' ? wrapperPid : supervisorPid, 'SIGKILL');
-        expect(waitFor(() => existsSync(outcomePath))).toBe(true);
-        const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
-          kind: string;
-          message?: string;
-          signal?: string | null;
-          status?: number;
-        };
-        expect(outcome.kind).toBe(expectedKind);
-        if (expectedKind === 'threw') {
-          expect(outcome.message).toMatch(
-            victim === 'wrapper'
-              ? /reviewed Node target spawn failed.*wrapper exited before its GO gate/u
-              : /outer SIGKILL boundary/u,
-          );
-        } else {
-          expect(outcome).toMatchObject({ signal: 'SIGKILL', status: -1 });
-        }
-        expect(existsSync(targetMarker)).toBe(false);
-        expect(waitFor(() => processIsGone(wrapperPid!, true))).toBe(true);
-        expect(waitFor(() => processIsGone(wrapperPid!, false))).toBe(true);
-        expect(waitFor(() => processIsGone(supervisorPid!, false))).toBe(true);
-      } finally {
-        for (const [pid, group] of [
-          [outer.pid, true],
-          [supervisorPid, false],
-          [wrapperPid, true],
-        ] as const) {
-          if (pid === undefined) continue;
-          try {
-            process.kill(group ? -pid : pid, 'SIGKILL');
-          } catch (error) {
-            const code = (error as NodeJS.ErrnoException).code;
-            if (code !== 'ESRCH' && code !== 'EPERM') throw error;
-          }
-        }
+      // Both identities come from a trusted rendezvous while the exact processes
+      // and target are live. Signal once, then use protocol output and FIFO EOF;
+      // never perform a postmortem PID/PGID probe or second signal.
+      const signaledAt = Date.now();
+      process.kill(victimPid, 'SIGKILL');
+      expect(waitFor(() => existsSync(outcomePath), 4_500)).toBe(true);
+      expect(Date.now() - signaledAt).toBeLessThan(4_500);
+      const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
+        kind: string;
+        message?: string;
+      };
+      expect(outcome.kind).toBe('threw');
+      expect(outcome.message).toMatch(/without a valid result/u);
+
+      if (victim === 'supervisor') {
+        // Kernel EOF on the guardian's exclusive lease triggers the anchored
+        // group sweep even though SIGKILL bypasses supervisor signal handlers.
+        expectLifecycleFifoClosed(targetLifetime, 5_000);
+      } else {
+        // Killing the anchor itself is outside the pure-Node containment claim.
+        // The supervisor returns after its bounded local pipe-drain failure, and
+        // this deliberately finite fixture later closes itself.
+        expectLifecycleFifoOpen(targetLifetime);
+        expectLifecycleFifoClosed(targetLifetime, 8_000);
       }
     }
-  }, 15_000);
+  }, 30_000);
+
+
+  it('keeps GO gated across worker, guardian, and supervisor killpoints', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    const bunProbe = spawnSync('bun', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    if (nodeProbe.status !== 0 || bunProbe.status !== 0) {
+      throw new Error('the killpoint regression requires exact Node and Bun executables');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    const reviewedBun = realpathSync(bunProbe.stdout.trim());
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-guardian-killpoint-')));
+    cleanups.push(workspace);
+    const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
+    const waitFor = (predicate: () => boolean, timeoutMs = 6_000): boolean => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (predicate()) return true;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+      return predicate();
+    };
+
+    for (const scenario of [
+      { phase: 'worker-ready-before-handshake', victim: 'worker' },
+      { phase: 'handshake-published-before-go', victim: 'worker' },
+      { phase: 'handshake-published-before-go', victim: 'guardian' },
+      { phase: 'handshake-published-before-go', victim: 'supervisor' },
+    ] as const) {
+      const prefix = `${scenario.phase}-${scenario.victim}`;
+      const readyPath = join(workspace, `${prefix}-ready.json`);
+      const targetMarker = join(workspace, `${prefix}-target-ran`);
+      const outcomePath = join(workspace, `${prefix}-outcome.json`);
+      const runner = join(workspace, `${prefix}-runner.ts`);
+      const targetProgram = `
+        require('node:fs').writeFileSync(${JSON.stringify(targetMarker)}, 'ran\\n');
+        setInterval(() => {}, 1000);
+      `;
+      writeFileSync(
+        runner,
+        `
+          import { writeFileSync } from 'node:fs';
+          import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
+          try {
+            runReviewedNodeCommand(
+              ${JSON.stringify(reviewedNode)},
+              ['-e', ${JSON.stringify(targetProgram)}],
+              ${JSON.stringify(workspace)},
+              {
+                environment: { PATH: '/usr/bin:/bin' },
+                timeoutMs: 10_000,
+                outputLimitBytes: 1_024,
+                trustedTestHook: {
+                  phase: ${JSON.stringify(scenario.phase)},
+                  readyPath: ${JSON.stringify(readyPath)},
+                },
+              },
+            );
+            writeFileSync(${JSON.stringify(outcomePath)}, '{"kind":"returned"}\\n', {
+              flag: 'wx',
+            });
+          } catch (error) {
+            writeFileSync(
+              ${JSON.stringify(outcomePath)},
+              JSON.stringify({
+                kind: 'threw',
+                message: error instanceof Error ? error.message : String(error),
+              }) + '\\n',
+              { flag: 'wx' },
+            );
+          }
+        `,
+      );
+      const outer = spawn(reviewedBun, [runner], {
+        cwd: root,
+        detached: true,
+        stdio: 'ignore',
+      });
+      outer.unref();
+      expect(waitFor(() => existsSync(readyPath))).toBe(true);
+      const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
+        guardianPid: number;
+        phase: string;
+        schema: string;
+        supervisorPid: number;
+        workerPid: number;
+      };
+      expect(ready).toMatchObject({
+        phase: scenario.phase,
+        schema: 'cortexel-package-smoke-command-test-hook.v2',
+      });
+      const victimPid = scenario.victim === 'worker'
+        ? ready.workerPid
+        : scenario.victim === 'guardian'
+          ? ready.guardianPid
+          : ready.supervisorPid;
+      expect(Number.isSafeInteger(victimPid) && victimPid > 1).toBe(true);
+
+      // The hook is emitted only while this exact direct child/guardian is live.
+      // Signal once, then rely on protocol outcome—never a postmortem probe.
+      process.kill(victimPid, 'SIGKILL');
+      expect(waitFor(() => existsSync(outcomePath))).toBe(true);
+      const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
+        kind: string;
+        message?: string;
+      };
+      expect(outcome.kind).toBe('threw');
+      expect(outcome.message).toMatch(/without a valid result/u);
+      expect(existsSync(targetMarker)).toBe(false);
+    }
+  }, 30_000);
+
+  it('does not signal after the guardian is reaped and before result publication', () => {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') return;
+    const nodeProbe = spawnSync('node', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    const bunProbe = spawnSync('bun', ['--print', 'process.execPath'], {
+      encoding: 'utf8',
+    });
+    if (nodeProbe.status !== 0 || bunProbe.status !== 0) {
+      throw new Error('the post-reap regression requires exact Node and Bun executables');
+    }
+    const reviewedNode = realpathSync(nodeProbe.stdout.trim());
+    const reviewedBun = realpathSync(bunProbe.stdout.trim());
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-post-reap-')));
+    cleanups.push(workspace);
+    const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
+    const readyPath = join(workspace, 'guardian-reaped-ready.json');
+    const outcomePath = join(workspace, 'guardian-reaped-outcome.json');
+    const targetMarker = join(workspace, 'guardian-reaped-target-ran');
+    const runner = join(workspace, 'guardian-reaped-runner.ts');
+    writeFileSync(
+      runner,
+      `
+        import { writeFileSync } from 'node:fs';
+        import { runReviewedNodeCommand } from ${JSON.stringify(smokeModule)};
+        const hostSignals = [];
+        const originalKill = process.kill;
+        process.kill = ((pid, signal) => {
+          hostSignals.push({ pid, signal });
+          throw new Error('post-reap outer signal attempted');
+        });
+        try {
+          runReviewedNodeCommand(
+            ${JSON.stringify(reviewedNode)},
+            ['-e', ${JSON.stringify(
+              `require('node:fs').writeFileSync(${JSON.stringify(targetMarker)}, 'ran\\n');`,
+            )}],
+            ${JSON.stringify(workspace)},
+            {
+              environment: { PATH: '/usr/bin:/bin' },
+              timeoutMs: 10_000,
+              outputLimitBytes: 1_024,
+              trustedTestHook: {
+                phase: 'guardian-swept-before-result',
+                readyPath: ${JSON.stringify(readyPath)},
+              },
+            },
+          );
+          writeFileSync(${JSON.stringify(outcomePath)}, JSON.stringify({
+            hostSignals,
+            kind: 'returned',
+          }) + '\\n', { flag: 'wx' });
+        } catch (error) {
+          writeFileSync(${JSON.stringify(outcomePath)}, JSON.stringify({
+            hostSignals,
+            kind: 'threw',
+            message: error instanceof Error ? error.message : String(error),
+          }) + '\\n', { flag: 'wx' });
+        } finally {
+          process.kill = originalKill;
+        }
+      `,
+    );
+    const outer = spawn(reviewedBun, [runner], {
+      cwd: root,
+      detached: true,
+      stdio: 'ignore',
+    });
+    outer.unref();
+    const waitFor = (predicate: () => boolean, timeoutMs = 6_000): boolean => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (predicate()) return true;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+      }
+      return predicate();
+    };
+    expect(waitFor(() => existsSync(readyPath))).toBe(true);
+    const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
+      phase: string;
+      schema: string;
+      supervisorPid: number;
+    };
+    expect(ready).toMatchObject({
+      phase: 'guardian-swept-before-result',
+      schema: 'cortexel-package-smoke-command-test-hook.v2',
+    });
+    expect(Number.isSafeInteger(ready.supervisorPid) && ready.supervisorPid > 1).toBe(true);
+    process.kill(ready.supervisorPid, 'SIGKILL');
+    expect(waitFor(() => existsSync(outcomePath))).toBe(true);
+    const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
+      hostSignals: unknown[];
+      kind: string;
+      message?: string;
+    };
+    expect(outcome.kind).toBe('threw');
+    expect(outcome.message).toMatch(/without a valid result/u);
+    expect(outcome.hostSignals).toEqual([]);
+    expect(readFileSync(targetMarker, 'utf8')).toBe('ran\n');
+  }, 20_000);
 
   it('requires an absolute persistent workspace and a carried state digest', () => {
     const workspace = resolve('package-smoke-test-workspace');

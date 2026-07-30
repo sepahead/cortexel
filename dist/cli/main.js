@@ -1,31 +1,44 @@
 #!/usr/bin/env node
 import {
   migrateLegacyRequest
-} from "../chunk-2YYBMHXX.js";
+} from "../chunk-HCAMUZSV.js";
+import {
+  AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+  SKILL_AUTHORING,
+  STABLE_CATALOG_SCHEMA_RESOURCES
+} from "../chunk-J2ZCIKKJ.js";
 import {
   buildFigureFromJson
-} from "../chunk-VEPECETX.js";
-import "../chunk-AVLFUCHM.js";
+} from "../chunk-C5JOYF2K.js";
+import "../chunk-INDR2QS5.js";
 import {
   parseJsonStrict
-} from "../chunk-HEEPK7X6.js";
-import "../chunk-6VN5AFAK.js";
+} from "../chunk-3OPWOH6Z.js";
+import "../chunk-L6Q7RZCU.js";
 import {
-  ERROR_STAGES,
+  ERROR_STAGES
+} from "../chunk-6FUWJQMA.js";
+import {
   EXPERIMENTAL_CAPABILITY_IDS,
   SKILL_CATALOG,
-  STABLE_SKILL_IDS
-} from "../chunk-23EH6LGQ.js";
-import "../chunk-XGABDL4O.js";
-import "../chunk-X2A5HVBH.js";
+  STABLE_SKILL_IDS,
+  isStableSkillId
+} from "../chunk-6VUQLANI.js";
+import "../chunk-IPFP7NAU.js";
 import {
+  UNSAFE_DISPLAY_PATTERN_SOURCE,
   getBudgetLimits,
-  getBuildIdentity,
-  makeError
-} from "../chunk-JG4ZORSQ.js";
+  makeError,
+  safeText
+} from "../chunk-VHSQP47Z.js";
+import "../chunk-XGABDL4O.js";
 import {
   canonicalize
 } from "../chunk-ZYBCCIMH.js";
+import {
+  CATALOG_DIGEST_DOMAIN,
+  getBuildIdentity
+} from "../chunk-WQLKPQUW.js";
 
 // src/cli/main.ts
 import { randomBytes } from "crypto";
@@ -51,6 +64,7 @@ import { parseAndValidateRequest } from "#cortexel-request-capability";
 var CLI_COMMANDS = [
   "identity",
   "catalog",
+  "describe",
   "validate",
   "render",
   "inspect",
@@ -100,6 +114,20 @@ function exitCodeForErrors(errors) {
 }
 var CLI_INPUT_BYTE_LIMIT = getBudgetLimits("standard").rawInputBytes;
 var INPUT_READ_CHUNK_BYTES = 64 * 1024;
+var CLI_UNSAFE_DISPLAY_REGEX = new RegExp(UNSAFE_DISPLAY_PATTERN_SOURCE, "gu");
+function serializeCliJson(value) {
+  return JSON.stringify(value, null, 2).replace(
+    CLI_UNSAFE_DISPLAY_REGEX,
+    (character) => {
+      if (character.charCodeAt(0) <= 31) return character;
+      return [...character].map((part) => `\\u${part.charCodeAt(0).toString(16).padStart(4, "0")}`).join("");
+    }
+  );
+}
+function writeCliJson(value, stream = process.stdout) {
+  stream.write(`${serializeCliJson(value)}
+`);
+}
 var CliInputBoundaryError = class extends Error {
   constructor(kind, limit, observed) {
     super(kind);
@@ -169,8 +197,7 @@ function inputBoundaryErrors(error) {
 }
 function printDiagnostics(errors, asJson) {
   if (asJson) {
-    process.stderr.write(`${JSON.stringify({ ok: false, errors }, null, 2)}
-`);
+    writeCliJson({ ok: false, errors }, process.stderr);
     return;
   }
   for (const error of errors) {
@@ -189,14 +216,13 @@ var CliIoError = class extends Error {
 function writeInputIoDiagnostic(asJson = false) {
   const message = "unable to read the selected input";
   if (asJson) {
-    process.stderr.write(`${JSON.stringify({
+    writeCliJson({
       ok: false,
       cliError: {
         kind: "input_io",
         message
       }
-    }, null, 2)}
-`);
+    }, process.stderr);
   } else {
     process.stderr.write(`I/O error: ${message}
 `);
@@ -220,14 +246,13 @@ function outputIoMessage(error) {
 function writeOutputIoDiagnostic(error, asJson = false) {
   const message = outputIoMessage(error);
   if (asJson) {
-    process.stderr.write(`${JSON.stringify({
+    writeCliJson({
       ok: false,
       cliError: {
         kind: "output_io",
         message
       }
-    }, null, 2)}
-`);
+    }, process.stderr);
   } else {
     process.stderr.write(`I/O error: ${message}
 `);
@@ -507,13 +532,81 @@ function validateJsonFormat(parsed) {
   process.stderr.write("usage error: --format accepts only json\n");
   return false;
 }
+function discoveryIdentity() {
+  return {
+    ...getBuildIdentity(),
+    catalogDigestDomain: CATALOG_DIGEST_DOMAIN
+  };
+}
+function describeSkillProjection(skill) {
+  return {
+    id: skill.id,
+    revision: skill.revision,
+    status: skill.status,
+    availability: skill.availability,
+    releaseReady: skill.releaseReady,
+    title: skill.title,
+    canonicalQuestion: skill.canonicalQuestion,
+    cannotEstablish: skill.cannotEstablish,
+    renderer: skill.renderer,
+    semanticValidators: skill.semanticValidators,
+    disclosures: skill.disclosures,
+    budgets: skill.budgets,
+    uncertaintySupport: skill.uncertaintySupport,
+    accessibility: skill.accessibility,
+    outputAuthority: skill.outputAuthority,
+    evidence: skill.evidence,
+    adapters: skill.adapters,
+    legacyIds: skill.legacyIds,
+    owner: skill.owner,
+    knownLimitations: skill.knownLimitations
+  };
+}
+function describeSkillSummaryProjection(skill) {
+  return {
+    id: skill.id,
+    revision: skill.revision,
+    title: skill.title,
+    question: skill.canonicalQuestion,
+    availability: skill.availability,
+    releaseReady: skill.releaseReady,
+    renderer: skill.renderer,
+    adapters: skill.adapters.map((adapter) => ({
+      mappingId: adapter.mappingId,
+      feasibilityStatus: adapter.feasibilityStatus,
+      definitionStatus: adapter.definitionStatus,
+      implementationAvailability: adapter.implementationAvailability
+    }))
+  };
+}
+function utf16EditDistance(left, right) {
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 0; leftIndex < left.length; leftIndex += 1) {
+    const current = [leftIndex + 1];
+    for (let rightIndex = 0; rightIndex < right.length; rightIndex += 1) {
+      current.push(Math.min(
+        current[rightIndex] + 1,
+        previous[rightIndex + 1] + 1,
+        previous[rightIndex] + (left[leftIndex] === right[rightIndex] ? 0 : 1)
+      ));
+    }
+    previous = current;
+  }
+  return previous[right.length];
+}
+function nearestStableSkillId(value) {
+  if (value.length === 0 || value.length > 64 || !/^[a-z0-9._-]+$/u.test(value)) {
+    return null;
+  }
+  const nearest = [...STABLE_SKILL_IDS].map((id) => ({ id, distance: utf16EditDistance(value, id) })).sort((left, right) => left.distance - right.distance || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0];
+  return nearest !== void 0 && nearest.distance <= 3 ? nearest.id : null;
+}
 function cmdIdentity(args) {
   const parsed = parseOrReport(args, { flags: ["--json"], positionalCount: 0 });
   if (!parsed) return EXIT.usage;
   const identity = getBuildIdentity();
   if (parsed.flags.has("--json")) {
-    process.stdout.write(`${JSON.stringify(identity, null, 2)}
-`);
+    writeCliJson(discoveryIdentity());
   } else {
     process.stdout.write(
       `Cortexel ${identity.packageVersion}
@@ -521,6 +614,7 @@ function cmdIdentity(args) {
   artifact contract: ${identity.artifactContract}
   contract digest:   ${identity.contractDigest}
   catalog digest:    ${identity.catalogDigest}
+  catalog domain:    ${CATALOG_DIGEST_DOMAIN}
   stable skills:     ${identity.stableSkillCount}
   source revision:   ${identity.sourceRevision}
   release build:     ${identity.release}
@@ -539,19 +633,32 @@ function cmdCatalog(args) {
   if (parsed.flags.has("--json")) {
     const stable = STABLE_SKILL_IDS.map((id) => ({
       id,
+      revision: SKILL_CATALOG[id].revision,
       title: SKILL_CATALOG[id].title,
-      question: SKILL_CATALOG[id].canonicalQuestion
+      question: SKILL_CATALOG[id].canonicalQuestion,
+      availability: SKILL_CATALOG[id].availability,
+      releaseReady: SKILL_CATALOG[id].releaseReady,
+      adapters: SKILL_CATALOG[id].adapters.map((adapter) => ({
+        mappingId: adapter.mappingId,
+        feasibilityStatus: adapter.feasibilityStatus,
+        definitionStatus: adapter.definitionStatus,
+        implementationAvailability: adapter.implementationAvailability
+      }))
     }));
-    const payload = { stable };
-    if (includeExperimental) payload.experimental = EXPERIMENTAL_CAPABILITY_IDS;
-    process.stdout.write(`${JSON.stringify(payload, null, 2)}
-`);
+    const payload = {
+      protocol: "cortexel-cli-catalog",
+      protocolVersion: 1,
+      buildIdentity: discoveryIdentity(),
+      skills: stable
+    };
+    if (includeExperimental) payload.experimentalSkillIds = EXPERIMENTAL_CAPABILITY_IDS;
+    writeCliJson(payload);
     return EXIT.ok;
   }
   process.stdout.write(`Stable catalog (${STABLE_SKILL_IDS.length}):
 `);
   for (const id of STABLE_SKILL_IDS) {
-    process.stdout.write(`  ${id.padEnd(32)} ${SKILL_CATALOG[id].title}
+    process.stdout.write(`  ${id.padEnd(32)} ${safeText(SKILL_CATALOG[id].title, 512)}
 `);
   }
   if (includeExperimental) {
@@ -565,6 +672,102 @@ Experimental (not covered by the stable contract):
 Use --include-experimental to also list experimental capabilities.
 `);
   }
+  return EXIT.ok;
+}
+function cmdDescribe(args) {
+  const parsed = parseOrReport(args, {
+    flags: ["--json"],
+    valueOptions: ["--section"],
+    positionalCount: 1
+  });
+  if (!parsed) return EXIT.usage;
+  const section = parsed.values.get("--section") ?? "all";
+  if (!["summary", "example", "schema", "all"].includes(section)) {
+    process.stderr.write(
+      "usage error: --section accepts summary, example, schema, or all\n"
+    );
+    return EXIT.usage;
+  }
+  if (parsed.values.has("--section") && !parsed.flags.has("--json")) {
+    process.stderr.write("usage error: --section requires --json\n");
+    return EXIT.usage;
+  }
+  const id = parsed.positionals[0];
+  if (!isStableSkillId(id)) {
+    if (parsed.flags.has("--json")) {
+      writeCliJson({
+        protocol: "cortexel-cli-error",
+        protocolVersion: 1,
+        buildIdentity: discoveryIdentity(),
+        error: {
+          code: "CLI_UNKNOWN_STABLE_SKILL",
+          message: "Unknown stable skill id.",
+          didYouMean: nearestStableSkillId(id),
+          validSkillIds: STABLE_SKILL_IDS
+        }
+      }, process.stderr);
+    } else {
+      const suggestion = nearestStableSkillId(id);
+      process.stderr.write(
+        "usage error: unknown stable skill id" + (suggestion === null ? "\n" : `; did you mean ${suggestion}?
+`)
+      );
+    }
+    return EXIT.usage;
+  }
+  const skill = SKILL_CATALOG[id];
+  if (parsed.flags.has("--json")) {
+    const authoring = SKILL_AUTHORING[id];
+    if (authoring === void 0) {
+      process.stderr.write("internal error: stable authoring entry is unavailable\n");
+      return EXIT.internal;
+    }
+    const payload = {
+      protocol: "cortexel-cli-describe",
+      protocolVersion: 1,
+      buildIdentity: discoveryIdentity(),
+      section,
+      skill: section === "all" ? describeSkillProjection(skill) : describeSkillSummaryProjection(skill),
+      acceptanceBoundary: {
+        command: "cortexel validate <request.json>",
+        note: "Structural schema success is not acceptance. Cortexel validation also runs identity, semantic, scientific, provenance, budget, and derivation gates."
+      }
+    };
+    if (section === "example" || section === "all") {
+      payload.authoringExample = authoring.authoringExample;
+    }
+    if (section === "schema" || section === "all") {
+      payload.requestSchema = authoring.requestSchema;
+      payload.schemaCompilationProfile = AUTHORING_SCHEMA_COMPILATION_PROFILE_V1;
+      payload.schemaResources = STABLE_CATALOG_SCHEMA_RESOURCES;
+    }
+    writeCliJson(payload);
+    return EXIT.ok;
+  }
+  process.stdout.write(
+    `${skill.id}@${skill.revision} \u2014 ${safeText(skill.title, 512)}
+Question: ${safeText(skill.canonicalQuestion, 4096)}
+Availability: ${skill.availability}; release ready: ${skill.releaseReady}
+Renderer: ${skill.renderer.id}@${skill.renderer.revision}
+Source mappings (${skill.adapters.length}):
+`
+  );
+  for (const adapter of skill.adapters) {
+    process.stdout.write(
+      `  ${adapter.mappingId}: ${adapter.feasibilityStatus}; ${adapter.definitionStatus}; ${adapter.implementationAvailability}
+`
+    );
+    for (const source of adapter.sources) {
+      process.stdout.write(
+        `    ${source.role}: ${safeText(source.sourceId, 128)} (${safeText(source.system, 512)})
+`
+      );
+    }
+  }
+  process.stdout.write(
+    `Use "cortexel describe ${skill.id} --json --section example" for the synthetic request fixture, or --section schema/all for structural resources and the complete bundle.
+`
+  );
   return EXIT.ok;
 }
 function cmdValidate(args) {
@@ -581,10 +784,12 @@ function cmdValidate(args) {
   const outcome = parseAndValidateRequest(text);
   if (outcome.ok) {
     if (asJson) {
-      process.stdout.write(
-        `${JSON.stringify({ ok: true, skill: outcome.request.skillId, requestDigest: outcome.request.requestDigest, inputAssurance: outcome.request.inputAssurance }, null, 2)}
-`
-      );
+      writeCliJson({
+        ok: true,
+        skill: outcome.request.skillId,
+        requestDigest: outcome.request.requestDigest,
+        inputAssurance: outcome.request.inputAssurance
+      });
     } else {
       process.stdout.write(`valid: ${outcome.request.skillId} (${outcome.request.requestDigest})
 `);
@@ -641,14 +846,13 @@ function cmdRender(args) {
   if (dryRun) {
     const svgByteLength = Buffer.byteLength(result.svg, "utf8");
     if (asJson) {
-      process.stdout.write(`${JSON.stringify({
+      writeCliJson({
         ok: true,
         dryRun: true,
         skill: renderedSkill,
         svgByteLength,
         tableRowsTotal: result.table.rowsTotal
-      }, null, 2)}
-`);
+      });
     } else {
       process.stdout.write(
         `would render ${renderedSkill}: ${svgByteLength} SVG bytes, ${result.table.rowsTotal} in-memory table rows
@@ -665,14 +869,13 @@ function cmdRender(args) {
     artifactJson = canonicalize(result.artifact);
   } catch {
     if (asJson) {
-      process.stderr.write(`${JSON.stringify({
+      writeCliJson({
         ok: false,
         cliError: {
           kind: "internal",
           message: "artifact canonicalization failed"
         }
-      }, null, 2)}
-`);
+      }, process.stderr);
     } else {
       process.stderr.write("Internal error: artifact canonicalization failed\n");
     }
@@ -681,15 +884,14 @@ function cmdRender(args) {
   try {
     writeFigureEmission(svgTarget, result.svg, artifactTarget, artifactJson, force);
     if (asJson) {
-      process.stdout.write(`${JSON.stringify({
+      writeCliJson({
         ok: true,
         dryRun: false,
         skill: renderedSkill,
         artifactDigest: result.artifact.artifactDigest,
         outputs: result.artifact.outputs,
         tableSidecar: null
-      }, null, 2)}
-`);
+      });
     } else {
       process.stdout.write(
         "wrote figure SVG and completion artifact (no canonical table sidecar)\n"
@@ -743,8 +945,7 @@ function cmdMigrate(args) {
     return exitCodeForErrors(parsed.errors);
   }
   const result = migrateLegacyRequest(parsed.value);
-  process.stdout.write(`${JSON.stringify(result, null, 2)}
-`);
+  writeCliJson(result);
   return result.report.errors.length > 0 ? EXIT.semantic : EXIT.ok;
 }
 var USAGE = `Cortexel \u2014 provenance-first scientific figure contracts
@@ -752,6 +953,7 @@ var USAGE = `Cortexel \u2014 provenance-first scientific figure contracts
 Usage:
   cortexel identity [--json]
   cortexel catalog  [--include-experimental] [--json]
+  cortexel describe <stable-skill-id> [--json [--section summary|example|schema|all]]
   cortexel validate <input|-> [--format json]
   cortexel render   <input|-> --output figure.svg [--force] [--format json]
   cortexel render   <input|-> --dry-run [--format json]
@@ -766,6 +968,7 @@ Exit codes: 0 ok, 2 usage, 3 parse, 4 schema, 5 semantic, 6 budget, 7 I/O, 8 int
 var CLI_HANDLERS = {
   identity: cmdIdentity,
   catalog: cmdCatalog,
+  describe: cmdDescribe,
   validate: cmdValidate,
   render: cmdRender,
   inspect: cmdInspect,
@@ -808,12 +1011,27 @@ function isDirectExecution() {
     return false;
   }
 }
+function installDirectPipeErrorHandlers() {
+  process.stdout.on("error", (error) => {
+    if (error.code === "EPIPE") {
+      process.exitCode = EXIT.ok;
+      return;
+    }
+    throw error;
+  });
+  process.stderr.on("error", (error) => {
+    if (error.code === "EPIPE") return;
+    throw error;
+  });
+}
 if (isDirectExecution()) {
+  installDirectPipeErrorHandlers();
   process.exitCode = run(process.argv.slice(2));
 }
 export {
   CLI_COMMANDS,
   exitCodeForErrors,
-  run
+  run,
+  serializeCliJson
 };
 //# sourceMappingURL=main.js.map

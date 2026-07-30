@@ -235,6 +235,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
   it('renders real buttons, selection state, kinds, and directed relationships', () => {
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
+        graphIdentity="graph:test"
         nodes={[
           { id: 'p1', label: 'Paper', kind: 'paper', color: '#ffffff', radius: 4 },
           { id: 'm1', label: 'Model', kind: 'model', color: '#ffffff', radius: 4 },
@@ -262,6 +263,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
   it('has an explicit empty state', () => {
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
+        graphIdentity="graph:test"
         nodes={[]}
         edges={[]}
         selectedId={null}
@@ -292,6 +294,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
     }));
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
+        graphIdentity="graph:test"
         nodes={nodes}
         edges={edges}
         selectedId="hub"
@@ -315,6 +318,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
     }));
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
+        graphIdentity="graph:test"
         nodes={nodes}
         edges={[]}
         selectedId={null}
@@ -337,6 +341,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
     }));
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
+        graphIdentity="graph:test"
         nodes={nodes}
         edges={[]}
         selectedId="n950"
@@ -351,6 +356,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
   it('does not derive DOM ids from ill-formed graph identifiers', () => {
     expect(() => renderToStaticMarkup(
       <KnowledgeGraphA11yList
+        graphIdentity="graph:test"
         nodes={[
           { id: '\ud800', label: 'Surrogate id', kind: 'paper', color: '#fff', radius: 4 },
         ]}
@@ -364,6 +370,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
   it('escapes visual-order controls even when the graph companion is called directly', () => {
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
+        graphIdentity="graph:test"
         label={'Graph\u202econtrols'}
         nodes={[
           {

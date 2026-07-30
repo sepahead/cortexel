@@ -11,6 +11,7 @@ import os
 import sys
 import tomllib
 import unittest
+from collections.abc import Mapping
 from fractions import Fraction
 from importlib.resources import files
 from importlib.resources.abc import Traversable
@@ -24,6 +25,7 @@ from cortexel.generated import (  # noqa: E402
     CANONICALIZATION_ALGORITHMS,
     NUMERIC_ALGORITHMS,
     NUMERIC_POLICIES,
+    SKILL_ADAPTERS,
     SKILL_REVISIONS,
     STABLE_SKILL_IDS,
     UNITS,
@@ -93,6 +95,242 @@ class TestPackagedSchemaResources(unittest.TestCase):
         }
         errors = cortexel.validate_request_partial(request)
         self.assertEqual([error.code for error in errors], ["SCHEMA_UNKNOWN_SKILL"])
+
+
+class TestAgentDiscovery(unittest.TestCase):
+    def test_exact_schema_compilation_profile_is_closed_and_digest_bound(self):
+        self.assertEqual(
+            cortexel.AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+            {
+                "id": "cortexel-authoring-schema-compilation-profile.v1",
+                "dialect": "https://json-schema.org/draft/2020-12/schema",
+                "engine": "ajv-8",
+                "options": {
+                    "strict": True,
+                    "allErrors": True,
+                    "coerceTypes": False,
+                    "useDefaults": False,
+                    "removeAdditional": False,
+                    "allowUnionTypes": True,
+                    "validateFormats": False,
+                    "strictRequired": False,
+                    "strictTypes": False,
+                },
+            },
+        )
+        self.assertEqual(
+            set(cortexel.AUTHORING_SCHEMA_COMPILATION_PROFILE_V1),
+            {"id", "dialect", "engine", "options"},
+        )
+
+    def test_all_stable_authoring_examples_match_the_normative_selector(self):
+        catalog = cortexel.list_skills()
+        self.assertEqual(catalog["protocol"], "cortexel-python-catalog")
+        self.assertEqual(catalog["protocolVersion"], 1)
+        self.assertEqual(
+            [skill["id"] for skill in catalog["skills"]],
+            list(STABLE_SKILL_IDS),
+        )
+        self.assertEqual(
+            catalog["buildIdentity"]["catalogDigestDomain"],
+            cortexel.CATALOG_DIGEST_DOMAIN,
+        )
+        self.assertEqual(
+            set(cortexel.get_build_identity()),
+            {
+                "packageVersion",
+                "requestContract",
+                "artifactContract",
+                "contractDigest",
+                "catalogDigest",
+                "stableSkillCount",
+                "sourceRevision",
+                "release",
+            },
+        )
+        self.assertEqual(
+            set(catalog["buildIdentity"]),
+            {*cortexel.get_build_identity(), "catalogDigestDomain"},
+        )
+
+        described = []
+        for skill_id in STABLE_SKILL_IDS:
+            with self.subTest(skill_id=skill_id):
+                payload = cortexel.describe_skill(skill_id)
+                self.assertEqual(payload["protocol"], "cortexel-python-describe")
+                self.assertEqual(payload["protocolVersion"], 1)
+                self.assertEqual(payload["section"], "all")
+                self.assertEqual(payload["skill"]["id"], skill_id)
+                self.assertEqual(
+                    payload["authoringExample"]["source"],
+                    {"kind": "synthetic_fixture"},
+                )
+
+                with open(
+                    os.path.join(CONTRACT_SKILLS, f"{skill_id}.v1.json"),
+                    encoding="utf-8",
+                ) as stream:
+                    source = json.load(stream)
+                selection = source["examples"]["authoring"]
+                expected = json.loads(json.dumps(
+                    source["examples"]["valid"][selection["baseValidExampleIndex"]],
+                ))
+                expected["source"] = selection["source"]
+                self.assertEqual(payload["authoringExample"], expected)
+
+                # This is deliberately the partial reader: an empty result is useful
+                # differential evidence, but never a full acceptance certificate.
+                self.assertEqual(
+                    cortexel.validate_request_partial(payload["authoringExample"]),
+                    [],
+                )
+                self.assertEqual(
+                    [error.code for error in cortexel.validate_request(
+                        payload["authoringExample"],
+                    )],
+                    ["SEMANTIC_VALIDATOR_UNAVAILABLE"],
+                )
+                described.append(payload)
+
+        identity = {
+            "domain": cortexel.CATALOG_DIGEST_DOMAIN,
+            "schemaCompilationProfile": described[0]["schemaCompilationProfile"],
+            "schemaResources": described[0]["schemaResources"],
+            "skills": [
+                {
+                    **payload["skill"],
+                    "requestSchema": payload["requestSchema"],
+                    "authoringExample": payload["authoringExample"],
+                }
+                for payload in described
+            ],
+        }
+        self.assertEqual(cortexel.canonical_digest(identity), cortexel.CATALOG_DIGEST)
+
+    def test_sections_are_detached_and_unknown_values_fail_closed(self):
+        class HostileSection:
+            compared = False
+
+            def __eq__(self, _other):
+                self.compared = True
+                raise AssertionError("section comparison hook ran")
+
+        class StringSubclass(str):
+            pass
+
+        summary = cortexel.describe_skill(
+            "neuro.spike_raster",
+            section="summary",
+        )
+        example = cortexel.describe_skill(
+            "neuro.spike_raster",
+            section="example",
+        )
+        schema = cortexel.describe_skill(
+            "neuro.spike_raster",
+            section="schema",
+        )
+        self.assertNotIn("authoringExample", summary)
+        self.assertNotIn("requestSchema", summary)
+        self.assertIn("authoringExample", example)
+        self.assertNotIn("requestSchema", example)
+        self.assertIn("requestSchema", schema)
+        self.assertIn("schemaCompilationProfile", schema)
+        self.assertIn("schemaResources", schema)
+        self.assertNotIn("authoringExample", schema)
+        for payload in (summary, example, schema):
+            for full_only_key in (
+                "cannotEstablish",
+                "outputAuthority",
+                "evidence",
+                "knownLimitations",
+            ):
+                self.assertNotIn(full_only_key, payload["skill"])
+
+        example["authoringExample"]["source"]["kind"] = "caller_mutation"
+        fresh = cortexel.describe_skill("neuro.spike_raster", section="example")
+        self.assertEqual(
+            fresh["authoringExample"]["source"],
+            {"kind": "synthetic_fixture"},
+        )
+        with self.assertRaisesRegex(ValueError, "unknown stable"):
+            cortexel.describe_skill("../not-a-skill")
+        with self.assertRaisesRegex(ValueError, "unknown stable"):
+            cortexel.describe_skill(StringSubclass("neuro.spike_raster"))
+        with self.assertRaisesRegex(ValueError, "section must"):
+            cortexel.describe_skill("neuro.spike_raster", section="unknown")  # type: ignore[arg-type]
+        hostile = HostileSection()
+        with self.assertRaisesRegex(ValueError, "section must"):
+            cortexel.describe_skill("neuro.spike_raster", section=hostile)  # type: ignore[arg-type]
+        self.assertFalse(hostile.compared)
+
+    def test_every_compact_section_has_an_exact_bounded_projection(self):
+        expected_skill_keys = {
+            "adapters",
+            "availability",
+            "id",
+            "question",
+            "releaseReady",
+            "renderer",
+            "revision",
+            "title",
+        }
+        expected_adapter_keys = {
+            "definitionStatus",
+            "feasibilityStatus",
+            "implementationAvailability",
+            "mappingId",
+        }
+        expected_top_level = {
+            "summary": {
+                "acceptanceBoundary",
+                "buildIdentity",
+                "protocol",
+                "protocolVersion",
+                "section",
+                "skill",
+            },
+            "example": {
+                "acceptanceBoundary",
+                "authoringExample",
+                "buildIdentity",
+                "protocol",
+                "protocolVersion",
+                "section",
+                "skill",
+            },
+            "schema": {
+                "acceptanceBoundary",
+                "buildIdentity",
+                "protocol",
+                "protocolVersion",
+                "requestSchema",
+                "schemaCompilationProfile",
+                "schemaResources",
+                "section",
+                "skill",
+            },
+        }
+        byte_limits = {
+            "summary": 16 * 1024,
+            "example": 64 * 1024,
+            "schema": 256 * 1024,
+        }
+
+        for skill_id in STABLE_SKILL_IDS:
+            for section in ("summary", "example", "schema"):
+                with self.subTest(skill_id=skill_id, section=section):
+                    payload = cortexel.describe_skill(skill_id, section=section)
+                    self.assertEqual(set(payload), expected_top_level[section])
+                    self.assertEqual(set(payload["skill"]), expected_skill_keys)
+                    for adapter in payload["skill"]["adapters"]:
+                        self.assertEqual(set(adapter), expected_adapter_keys)
+                    encoded = json.dumps(
+                        payload,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                    self.assertLess(len(encoded), byte_limits[section])
 
 
 class TestCanonicalization(unittest.TestCase):
@@ -302,9 +540,21 @@ class TestGeneratedAuthority(unittest.TestCase):
             STABLE_SKILL_IDS[0] = "forged.skill"
         with self.assertRaises(TypeError):
             SKILL_REVISIONS["neuro.response_curve"] = 1
+        with self.assertRaises(TypeError):
+            SKILL_ADAPTERS["neuro.spike_raster"][0]["feasibilityStatus"] = "not_assessed"
+        with self.assertRaises(TypeError):
+            SKILL_ADAPTERS["neuro.spike_raster"][0]["sources"][0]["role"] = "optional_companion"
 
     def test_generated_skill_revisions_match_every_stable_contract(self):
+        def thaw(value):
+            if isinstance(value, Mapping):
+                return {key: thaw(item) for key, item in value.items()}
+            if isinstance(value, tuple):
+                return [thaw(item) for item in value]
+            return value
+
         expected = {}
+        expected_adapters = {}
         for name in sorted(os.listdir(CONTRACT_SKILLS)):
             if not name.endswith(".json"):
                 continue
@@ -312,7 +562,15 @@ class TestGeneratedAuthority(unittest.TestCase):
                 contract = json.load(handle)
             if contract["status"] == "stable":
                 expected[contract["id"]] = contract["revision"]
+                expected_adapters[contract["id"]] = contract["adapters"]
         self.assertEqual(dict(SKILL_REVISIONS), expected)
+        self.assertEqual(
+            {
+                skill_id: thaw(adapters)
+                for skill_id, adapters in SKILL_ADAPTERS.items()
+            },
+            expected_adapters,
+        )
 
     def test_executes_every_normative_nominal_interval_candidate_vector(self):
         bins_policy = NUMERIC_POLICIES["cortexel_binary64_uniform_exposure_bins_v1"]
@@ -670,7 +928,48 @@ class TestValidation(unittest.TestCase):
         request["data"]["eventTimes"]["values"] = list(values)
         sender = request["data"]["recordedSenderIds"][0]
         request["data"]["eventSenderIds"] = [sender] * len(values)
-        request["data"]["window"] = dict(window)
+        normalized_window = dict(window)
+        if origin_relative:
+            authority = json.loads(json.dumps(
+                request["data"]["window"]["captureAuthority"]
+            ))
+            origin = float(normalized_window["origin"])
+            start = float(normalized_window["start"])
+            stop = float(normalized_window["stop"])
+            authority["runtimeStatus"]["resolutionMs"] = 0.125
+            authority["runtimeStatus"]["ticsPerMs"] = "1000"
+            authority["runtimeStatus"]["resolutionTics"] = "125"
+
+            def fixture_tics(milliseconds):
+                candidate = milliseconds * 1000
+                if (
+                    math.isfinite(candidate) and
+                    candidate >= 0 and
+                    candidate.is_integer() and
+                    candidate < 10 ** 32
+                ):
+                    return str(int(candidate))
+                # Collapsed/overflow tests return before capture-authority
+                # semantics. Keep their structural fixture inside the schema
+                # without pretending this fallback is a real clock preimage.
+                return "0"
+
+            authority["runtimeStatus"]["captureBiologicalTimeTics"] = (
+                fixture_tics(origin + stop)
+            )
+            authority["recordingGrid"] = {
+                "originTics": fixture_tics(origin),
+                "startTics": fixture_tics(start),
+                "stopTics": fixture_tics(stop),
+            }
+            authority["bufferEpoch"]["beganAtBiologicalTimeTics"] = (
+                fixture_tics(origin)
+            )
+            authority["recordingPlan"]["lastMutationAtBiologicalTimeTics"] = (
+                fixture_tics(origin + start)
+            )
+            normalized_window["captureAuthority"] = authority
+        request["data"]["window"] = normalized_window
         request["parameters"]["outOfWindowPolicy"] = policy
         return request
 
@@ -1375,6 +1674,49 @@ class TestValidation(unittest.TestCase):
         closed_stop = self._spike_request([110], window, origin_relative=True)
         self.assertEqual(cortexel.validate_request_partial(closed_stop), [])
 
+    def test_spike_raster_capture_authority_uses_exact_tics_grid_and_history(self):
+        request = json.loads(json.dumps(
+            self._spike_contract()["examples"]["valid"][0]
+        ))
+        authority = request["data"]["window"]["captureAuthority"]
+        authority["runtimeStatus"]["captureBiologicalTimeTics"] = "9875"
+        authority["bufferEpoch"]["beganBy"] = "n_events_zero"
+        authority["bufferEpoch"]["beganAtBiologicalTimeTics"] = "125"
+        authority["recordingPlan"]["lastMutationAtBiologicalTimeTics"] = "125"
+        errors = cortexel.validate_request_partial(request)
+        self.assertEqual(
+            [
+                (error.code, error.instance_path)
+                for error in errors
+                if error.code == "SCIENCE_WINDOW_INVALID"
+            ],
+            [
+                (
+                    "SCIENCE_WINDOW_INVALID",
+                    "/data/window/captureAuthority/bufferEpoch/"
+                    "beganAtBiologicalTimeTics",
+                ),
+                (
+                    "SCIENCE_WINDOW_INVALID",
+                    "/data/window/captureAuthority/recordingPlan/"
+                    "lastMutationAtBiologicalTimeTics",
+                ),
+                (
+                    "SCIENCE_WINDOW_INVALID",
+                    "/data/window/captureAuthority/runtimeStatus/"
+                    "captureBiologicalTimeTics",
+                ),
+            ],
+        )
+
+        exact = json.loads(json.dumps(
+            self._spike_contract()["examples"]["valid"][0]
+        ))
+        exact_authority = exact["data"]["window"]["captureAuthority"]
+        exact_authority["runtimeStatus"]["resolutionMs"] = 0.125
+        exact_authority["runtimeStatus"]["captureBiologicalTimeTics"] = "10000"
+        self.assertEqual(cortexel.validate_request_partial(exact), [])
+
     def test_spike_raster_invalid_or_collapsed_windows_preempt_membership(self):
         origin_window = {
             "kind": "nest_recording_device_origin_relative",
@@ -1435,12 +1777,14 @@ class TestValidation(unittest.TestCase):
         errors = cortexel.validate_request_partial(invalid_origin)
         self.assertEqual(
             [error.code for error in errors],
-            ["SCIENCE_WINDOW_INVALID"] + ["PROVENANCE_SOURCE_CLOCK_INCONSISTENT"] * 3,
+            ["SCIENCE_WINDOW_INVALID"] +
+            ["PROVENANCE_SOURCE_CLOCK_INCONSISTENT"] * 4,
         )
         self.assertEqual(
             [error.instance_path for error in errors],
             [
                 "/data/window/stop",
+                "/data/window/captureAuthority/runtimeStatus/nestVersion",
                 "/source/sourceDigest",
                 "/source/system",
                 "/source/systemVersion",
@@ -1485,13 +1829,23 @@ class TestValidation(unittest.TestCase):
 
     def test_spike_raster_nest_source_clock_binding_is_fail_closed(self):
         contract = self._spike_contract()
-        for version in ("3.9", "3.9.0", "3.10", "3.10.123"):
-            with self.subTest(version=version):
-                request = json.loads(json.dumps(contract["examples"]["valid"][0]))
-                request["source"]["systemVersion"] = version
-                self.assertEqual(cortexel.validate_request_partial(request), [])
+        request = json.loads(json.dumps(contract["examples"]["valid"][0]))
+        request["source"]["systemVersion"] = "3.10.0"
+        self.assertEqual(cortexel.validate_request_partial(request), [])
 
-        for version in (None, "3.8", "3.11", "v3.10.0", "3.10.0rc1", "3.10.0.1"):
+        for version in (
+            None,
+            "3.8",
+            "3.9",
+            "3.9.0",
+            "3.9.17",
+            "3.10",
+            "3.10.123",
+            "3.11",
+            "v3.10.0",
+            "3.10.0rc1",
+            "3.10.0.1",
+        ):
             with self.subTest(version=version):
                 request = json.loads(json.dumps(contract["examples"]["valid"][0]))
                 if version is None:
@@ -1503,8 +1857,13 @@ class TestValidation(unittest.TestCase):
                     error for error in errors
                     if error.code == "PROVENANCE_SOURCE_CLOCK_INCONSISTENT"
                 ]
-                self.assertEqual(len(clock_errors), 1)
-                self.assertEqual(clock_errors[0].instance_path, "/source/systemVersion")
+                self.assertEqual(
+                    [error.instance_path for error in clock_errors],
+                    [
+                        "/data/window/captureAuthority/runtimeStatus/nestVersion",
+                        "/source/systemVersion",
+                    ],
+                )
 
         for field, value, expected_path in (
             ("kind", "unknown", "/source/kind"),
@@ -1553,7 +1912,7 @@ class TestValidation(unittest.TestCase):
         _validate_spike_raster(inconsistent, errors)
         self.assertEqual(
             [error.code for error in errors],
-            ["PROVENANCE_SOURCE_CLOCK_INCONSISTENT"] * 8,
+            ["PROVENANCE_SOURCE_CLOCK_INCONSISTENT"] * 9,
         )
         self.assertTrue(all(error.stage == "provenance" for error in errors))
         self.assertEqual(
@@ -1562,6 +1921,7 @@ class TestValidation(unittest.TestCase):
                 "/source/kind",
                 "/source/system",
                 "/source/systemVersion",
+                "/data/window/captureAuthority/runtimeStatus/nestVersion",
                 "/source/sourceDigest",
                 "/data/window/recordingBackend",
                 "/data/window/timeEncoding",

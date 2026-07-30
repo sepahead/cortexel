@@ -151,11 +151,32 @@ and the two answer different questions.
 
 ### Catalog digest — the stable surface, isolated
 
-`catalogDigest` hashes the **stable catalog only**, kept separate from the contract
-digest so that editing an experimental capability's description, an example, or an
-internal note **cannot** perturb the stable identity. If the catalog digest is
-unchanged, the set of stable promises is unchanged, regardless of churn in the
-experimental or documentation areas.
+`catalogDigest` hashes the exact public stable discovery-and-authoring projection for
+every stable skill, sorted by id, together with the shared common and generated-enum
+schema resources and the versioned compiler profile needed to compile those per-skill
+schemas offline. Each record merges
+compact `SkillCatalogEntry` metadata with its paired `SkillAuthoringEntry`. It therefore binds acceptance schemas, the
+synthetic public authoring fixtures, scientific and accessibility claims, source
+mappings, availability, evidence boundaries, limits, and known limitations. It excludes
+implementation bytes, mutable ledgers, repository prose, and experimental capabilities;
+editing an experimental description/example/note cannot perturb stable identity. If the
+catalog digest is unchanged, this complete public stable projection is unchanged.
+
+The canonical preimage carries the registry-owned domain literal
+`cortexel-public-stable-catalog.v2` together with `schemaCompilationProfile`,
+`schemaResources`, and `skills`.
+The profile's `ajv-8` engine label pins the compatible major semantics Cortexel
+reviewed. It is not an executable-byte identity, dependency lock, or proof that a
+consumer loaded the reviewed Ajv build; full acceptance remains the installed
+Cortexel validation runtime.
+The 0.9 line and early 0.10 development builds used an implicit v1 projection
+containing only sorted `{id, revision, renderer}` tuples. Keeping `manifestVersion: 1` does not
+make those digest domains interchangeable: a verifier reads the shipped
+`catalogDigestDomain` from the exact retained manifest/identity registry paired to
+`contractDigest`. The repeatedly reused development package version is not a sufficient
+resolver.
+Artifacts in contract 1.0 retain `packageVersion` and `catalogDigest` but do not
+duplicate the domain; the package manifest is the domain resolver.
 
 ### Skill and renderer revisions — pin, don't approximate
 
@@ -301,6 +322,26 @@ exports remain the legacy VizSpec surfaces alongside the additive FigureRequestV
 entries; their registry limitations say so explicitly. The packaged
 `cortexel/react/knowledge-graph` export remains experimental legacy code, not a
 FigureRequestV1 skill.
+
+Adapter records inside a skill are versioned composite mappings.
+`feasibilityStatus` records a bounded assessment, `definitionStatus` distinguishes
+`not_specified` from `not_applicable`, and `implementationAvailability` describes the
+exact executable skill/`mappingId` bridge. These fields do not inherit the enclosing skill's
+`availability` or `releaseReady` value. In particular, a packaged renderer and an
+assessed-feasible NEST source profile do not create a packaged NEST adapter.
+Within a mapping, `sourceId` identifies a stable source role/profile rather than a
+runtime instance. Role-distinct sources may share one `system` provider class while
+retaining distinct ids. Contract source v1 reserves `authorityRequirements` as null
+and does not admit `definitionStatus: specified`: Cortexel has no closed,
+independently reviewable normative source-to-request definition inventory yet.
+Introducing that state and authority is a contract change; an enum flip, prose,
+pointers, code, schemas, or a release gate are insufficient.
+
+An executable mapping additionally names the immutable release gate through
+`certificationRequirement`. The gate's mutable status, evidence, receipt, and tested
+commit remain outside the versioned package contract in the release evidence ledger.
+Changing a mapping id, source composition/roles, required external authority, or gate
+definition changes public metadata and follows the ordinary compatibility policy.
 
 There is no current-contract `figure.bundle`, `cli.verify`, experimental 3D,
 experimental knowledge-graph, experimental animation, or NCP-adapter capability.

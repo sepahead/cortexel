@@ -22,6 +22,7 @@ import { canonicalize } from '../../src/core/canonicalize.js';
 import { sha256Digest } from '../../src/core/sha256.js';
 import { parseJsonSourceStrict } from './strict-json-source.js';
 import { buildContractManifest } from './contract-manifest.js';
+import { AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 } from './stable-catalog.js';
 import {
   compareNormativePathsUtf8,
   enumerateNormativeContractFiles,
@@ -39,6 +40,7 @@ export interface NormativeSourceRecord {
 interface ContractManifest {
   readonly contractDigest?: unknown;
   readonly catalogDigest?: unknown;
+  readonly catalogDigestDomain?: unknown;
   readonly stableSkillCount?: unknown;
   readonly stableSkills?: unknown;
   readonly normativeSources?: unknown;
@@ -229,25 +231,110 @@ export function contractPackageProblems(contractRoot: string): string[] {
     problems.push('manifest.contractDigest does not match the shipped normative bytes');
   }
 
-  const stableCatalogView: { id: string; revision: unknown; renderer: unknown }[] = [];
+  const capabilitiesSource = parsedByRelative.get('registries/capabilities.v1.json');
+  const capabilityRecords =
+    isRecord(capabilitiesSource) && Array.isArray(capabilitiesSource.capabilities)
+      ? capabilitiesSource.capabilities.filter(isRecord)
+      : [];
+  const capabilityById = new Map(
+    capabilityRecords.flatMap((capability) =>
+      typeof capability.id === 'string'
+        ? [[capability.id, capability] as const]
+        : []),
+  );
+  const stableCatalogSkills: Record<string, any>[] = [];
   for (const [relative, value] of parsedByRelative.entries()) {
     if (!relative.startsWith('skills/') || !isRecord(value) || value.status !== 'stable') continue;
     if (typeof value.id !== 'string' || value.id.length === 0) {
       problems.push(`contract/${relative}: stable skill id must be a nonempty string`);
       continue;
     }
-    if (value.revision === undefined || value.renderer === undefined) {
-      problems.push(`contract/${relative}: stable skill identity requires revision and renderer`);
+    const skill = value as Record<string, any>;
+    const capability = capabilityById.get(value.id);
+    const requestSchema = parsedByRelative.get(
+      `schemas/skills/${value.id}.request.v1.schema.json`,
+    );
+    const exampleIndex = skill.examples?.authoring?.baseValidExampleIndex;
+    const source = skill.examples?.authoring?.source;
+    const validExamples = skill.examples?.valid;
+    if (
+      !capability ||
+      !isRecord(requestSchema) ||
+      !Number.isSafeInteger(exampleIndex) ||
+      exampleIndex < 0 ||
+      !Array.isArray(validExamples) ||
+      exampleIndex >= validExamples.length ||
+      !isRecord(source)
+    ) {
+      problems.push(
+        `contract/${relative}: stable public catalog inputs are incomplete`,
+      );
       continue;
     }
-    stableCatalogView.push({ id: value.id, revision: value.revision, renderer: value.renderer });
+    const authoringExample = structuredClone(validExamples[exampleIndex]);
+    authoringExample.source = structuredClone(source);
+    stableCatalogSkills.push({
+      id: skill.id,
+      revision: skill.revision,
+      status: skill.status,
+      availability: capability.availability,
+      releaseReady: skill.releaseReady,
+      title: skill.title,
+      canonicalQuestion: skill.purpose?.canonicalQuestion,
+      cannotEstablish: skill.purpose?.cannotEstablish,
+      renderer: skill.renderer,
+      semanticValidators: skill.semanticValidators,
+      disclosures: skill.disclosures,
+      budgets: skill.budgets,
+      uncertaintySupport: skill.science?.uncertaintySupport,
+      accessibility: skill.accessibility,
+      outputAuthority: skill.outputAuthority,
+      evidence: skill.evidence,
+      adapters: skill.adapters,
+      requestSchema,
+      authoringExample,
+      legacyIds: skill.migration?.legacyIds,
+      owner: skill.owner,
+      knownLimitations: skill.knownLimitations,
+    });
   }
-  stableCatalogView.sort((left, right) =>
+  stableCatalogSkills.sort((left, right) =>
     left.id < right.id ? -1 : left.id > right.id ? 1 : 0
   );
-  const catalogDigest = sha256Digest(canonicalize(stableCatalogView as never));
-  if (manifest.catalogDigest !== catalogDigest) {
-    problems.push('manifest.catalogDigest does not match the shipped stable skill bytes');
+  const stableSchemaResources = [
+    parsedByRelative.get('schemas/common.v1.schema.json'),
+    parsedByRelative.get('schemas/generated/registry-enums.v1.schema.json'),
+  ];
+  if (!stableSchemaResources.every(isRecord)) {
+    problems.push('stable catalog schema resources are missing');
+  } else {
+    if (manifest.catalogDigestDomain !== 'cortexel-public-stable-catalog.v2') {
+      problems.push('manifest.catalogDigestDomain is not the supported v2 domain');
+    }
+    stableSchemaResources.sort((left, right) => {
+      const leftId = typeof left?.$id === 'string' ? left.$id : '';
+      const rightId = typeof right?.$id === 'string' ? right.$id : '';
+      return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+    });
+    try {
+      const stableCatalogIdentity = {
+        domain: 'cortexel-public-stable-catalog.v2',
+        schemaCompilationProfile: AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+        schemaResources: stableSchemaResources,
+        skills: stableCatalogSkills,
+      };
+      const catalogDigest = sha256Digest(canonicalize(stableCatalogIdentity as never));
+      if (manifest.catalogDigest !== catalogDigest) {
+        problems.push(
+          'manifest.catalogDigest does not match the shipped public stable catalog',
+        );
+      }
+    } catch (error) {
+      problems.push(
+        'shipped public stable catalog is not canonicalizable: ' +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
   }
 
   if (!Array.isArray(manifest.stableSkills)) {
@@ -266,7 +353,15 @@ export function contractPackageProblems(contractRoot: string): string[] {
       }
       manifestCatalogView.push({ id: skill.id, revision: skill.revision, renderer: skill.renderer });
     }
-    if (canonicalize(manifestCatalogView as never) !== canonicalize(stableCatalogView as never)) {
+    const stableIdentityTuples = stableCatalogSkills.map((skill) => ({
+      id: skill.id,
+      revision: skill.revision,
+      renderer: skill.renderer,
+    }));
+    if (
+      canonicalize(manifestCatalogView as never) !==
+      canonicalize(stableIdentityTuples as never)
+    ) {
       problems.push('manifest.stableSkills does not mirror the shipped stable skill identity view');
     }
     if (manifest.stableSkillCount !== manifest.stableSkills.length) {
@@ -293,6 +388,10 @@ export function contractPackageProblems(contractRoot: string): string[] {
       canonicalizations: requiredRecord('registries/canonicalizations.v1.json'),
       disclosures: requiredRecord('registries/disclosures.v1.json'),
       identity: requiredRecord('registries/identity.v1.json'),
+      stableSchemaResources: [
+        requiredRecord('schemas/common.v1.schema.json'),
+        requiredRecord('schemas/generated/registry-enums.v1.schema.json'),
+      ],
       normativeSources: actualInventory,
     });
     if (canonicalize(manifest as never) !== canonicalize(expectedManifest as never)) {

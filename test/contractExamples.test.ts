@@ -19,7 +19,10 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { validateRequestValue } from '../src/core/request.js';
-import { SKILL_CATALOG, STABLE_SKILL_IDS } from '../src/generated/catalog.js';
+import {
+  lookupSkillCatalogEntry,
+  STABLE_SKILL_IDS,
+} from '../src/generated/catalog.js';
 
 const CONTRACT_SKILLS = path.resolve(import.meta.dirname, '../contract/skills');
 
@@ -87,7 +90,7 @@ describe.each(contracts.map((contract) => [contract.id, contract] as const))(
   'contract %s',
   (id, contract) => {
     it('is registered in the generated catalog', () => {
-      expect(SKILL_CATALOG[id]).toBeDefined();
+      expect(lookupSkillCatalogEntry(id)).toBeDefined();
     });
 
     describe('valid examples', () => {

@@ -1,25 +1,20 @@
 import {
   migrateLegacyRequest
-} from "../chunk-2YYBMHXX.js";
+} from "../chunk-HCAMUZSV.js";
 import {
   deriveDisclosures
-} from "../chunk-AVLFUCHM.js";
+} from "../chunk-INDR2QS5.js";
 import {
   parseJsonStrict
-} from "../chunk-HEEPK7X6.js";
+} from "../chunk-3OPWOH6Z.js";
 import {
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
   DISCLOSURE_RULES,
   ERROR_CODES,
   ERROR_CODE_META,
-  EXPERIMENTAL_CAPABILITY_IDS,
-  LEGACY_SKILL_MAP,
   QUANTITY_KINDS,
-  REMOVED_CAPABILITY_IDS,
   RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
-  SKILL_CATALOG,
-  STABLE_SKILL_IDS,
   UNITS,
   UNIT_CODES,
   axesAreCompatible,
@@ -32,22 +27,23 @@ import {
   responseEventMembershipDigest,
   toSeconds,
   unitLabel
-} from "../chunk-23EH6LGQ.js";
-import "../chunk-XGABDL4O.js";
+} from "../chunk-6FUWJQMA.js";
+import {
+  EXPERIMENTAL_CAPABILITY_IDS,
+  LEGACY_SKILL_MAP,
+  REMOVED_CAPABILITY_IDS,
+  SKILL_CATALOG,
+  STABLE_SKILL_IDS,
+  isStableSkillId,
+  lookupSkillCatalogEntry
+} from "../chunk-6VUQLANI.js";
 import {
   snapshotValue
-} from "../chunk-X2A5HVBH.js";
+} from "../chunk-IPFP7NAU.js";
 import {
-  ARTIFACT_CONTRACT,
-  CATALOG_DIGEST,
-  CONTRACT_DIGEST,
   DEFAULT_PROFILE,
-  PACKAGE_VERSION,
-  REQUEST_CONTRACT,
-  STABLE_SKILL_COUNT,
   finalizeErrors,
   getBudgetLimits,
-  getBuildIdentity,
   isSafeDisplayString,
   makeError,
   pointer,
@@ -55,7 +51,8 @@ import {
   safeText,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-JG4ZORSQ.js";
+} from "../chunk-VHSQP47Z.js";
+import "../chunk-XGABDL4O.js";
 import {
   CanonicalizationError,
   canonicalDigest,
@@ -65,6 +62,16 @@ import {
   sha256Hex,
   utf8ByteLength
 } from "../chunk-ZYBCCIMH.js";
+import {
+  ARTIFACT_CONTRACT,
+  CATALOG_DIGEST,
+  CATALOG_DIGEST_DOMAIN,
+  CONTRACT_DIGEST,
+  PACKAGE_VERSION,
+  REQUEST_CONTRACT,
+  STABLE_SKILL_COUNT,
+  getBuildIdentity
+} from "../chunk-WQLKPQUW.js";
 
 // src/core/index.ts
 import {
@@ -77,6 +84,7 @@ export {
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
   CATALOG_DIGEST,
+  CATALOG_DIGEST_DOMAIN,
   CONTRACT_DIGEST,
   CanonicalizationError,
   DEFAULT_PROFILE,
@@ -108,7 +116,9 @@ export {
   getBuildIdentity,
   isKnownUnit,
   isSafeDisplayString,
+  isStableSkillId,
   isValidatedRequest,
+  lookupSkillCatalogEntry,
   makeError,
   migrateLegacyRequest,
   normalizeResponseEventMemberIds,

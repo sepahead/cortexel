@@ -716,34 +716,118 @@
   },
   "adapters": [
     {
-      "system": "nest.GetConnections",
-      "status": "planned",
-      "notes": "Mapping recipe only; Cortexel does not currently ship an executable V1 NEST connection adapter. A future adapter must bind the exact NEST version, map NEST `target` to rows and `source` to columns, preserve multapses, declare scope and delaySemantics, and copy observed millisecond delays verbatim. It must retain valid off-grid `cont_delay_synapse` values, carry simulationResolution only as context, and inspect the model and assignment path before claiming a lattice. Models that split axonal and dendritic delay require the reported component to be declared explicitly."
+      "mappingId": "nest-getconnections",
+      "sources": [
+        {
+          "system": "nest.GetConnections",
+          "role": "primary",
+          "notes": "Provisional source candidate only; Cortexel does not currently ship an executable V1 NEST connection adapter. A base final-snapshot mapping would map NEST `target` to rows and `source` to columns, preserve multapses, and copy observed millisecond delays verbatim. It would make no lattice, rounding or construction-path claim, so valid off-grid values remain valid and no historical assignment receipt is required for this base view.",
+          "sourceId": "nest-getconnections"
+        },
+        {
+          "system": "nest.NodeCollection",
+          "role": "required_companion",
+          "notes": "Supplies the complete selected node universe and, for `mpi_target_rank_local`, the exact local-membership mask of the selected target NodeCollection. This retains isolates and locally owned zero-input targets; `observedTargetIds` is never inferred from returned connection targets.",
+          "sourceId": "nest-selected-node-and-target-locality"
+        },
+        {
+          "system": "nest.GetDefaults(synapse_model)",
+          "role": "required_companion",
+          "notes": "Supplies current defaults/status for every observed synapse model and the present model context for choosing one declared delay quantity. It does NOT establish the producing NEST version, historical defaults, construction path or later updates. Models with separate axonal/dendritic components are never silently summed.",
+          "sourceId": "nest-synapse-model-defaults"
+        },
+        {
+          "system": "host-retained NEST runtime identity",
+          "role": "required_companion",
+          "notes": "Candidate declaration of the producing NEST version/build identity captured from the live run. A model name or final status cannot authenticate this identity, and no normative receipt format exists yet.",
+          "sourceId": "host-nest-runtime-identity"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration/receipt for the exact producing runtime/build, run, biological time, GetConnections filters, selected source/target digests, rank/world/local-ownership mask, and returned-row digest. A global merged profile additionally requires every rank exactly once for the same run, time, and query. Cortexel defines no normative receipt yet; this provisional mapping remains not_assessed.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "brian2.Synapses",
-      "status": "partial",
-      "notes": "Brian2 carries a per-synapse `delay` with a real unit, but its i/j indices are array positions, not node ids: the caller must supply the index-to-id mapping explicitly. Brian2's pre/post delay distinction must be resolved into delaySemantics rather than assumed."
+      "mappingId": "brian2-synapses",
+      "sources": [
+        {
+          "system": "brian2.Synapses",
+          "role": "primary",
+          "notes": "Brian2 carries a per-synapse `delay` with a real unit, but its i/j indices are array positions, not node ids: the caller must supply the index-to-id mapping explicitly. Brian2's pre/post delay distinction must be resolved into delaySemantics rather than assumed.",
+          "sourceId": "brian2-synapses"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "networkx.DiGraph",
-      "status": "partial",
-      "notes": "The caller must name the edge attribute holding the delay and declare its unit; NetworkX carries neither units nor scope, so both must be supplied. A MultiDiGraph is required if multapses exist — a DiGraph has already destroyed them before Cortexel is reached, and nothing here can recover them."
+      "mappingId": "networkx-digraph",
+      "sources": [
+        {
+          "system": "networkx.DiGraph",
+          "role": "primary",
+          "notes": "The caller must name the edge attribute holding the delay and declare its unit; NetworkX carries neither units nor scope, so both must be supplied. A MultiDiGraph is required if multapses exist — a DiGraph has already destroyed them before Cortexel is reached, and nothing here can recover them.",
+          "sourceId": "networkx-digraph"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "neo",
-      "status": "rejected",
-      "notes": "Neo models recorded signals and spike trains. It has no connectivity object, so there is nothing to map."
+      "mappingId": "neo",
+      "sources": [
+        {
+          "system": "neo",
+          "role": "primary",
+          "notes": "Neo models recorded signals and spike trains. It has no connectivity object, so there is nothing to map.",
+          "sourceId": "neo"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     },
     {
-      "system": "nwb",
-      "status": "rejected",
-      "notes": "NWB core has no synapse-level connection table carrying delays. A custom extension would be required, and none is certified; a partial or invented mapping would produce a matrix whose absent cells mean nothing."
+      "mappingId": "nwb-core",
+      "sources": [
+        {
+          "system": "nwb.core",
+          "role": "primary",
+          "notes": "NWB core has no synapse-level connection table carrying delays. A custom extension would be required, and none is certified; a partial or invented mapping would produce a matrix whose absent cells mean nothing.",
+          "sourceId": "nwb-core"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     },
     {
-      "system": "ncp",
-      "status": "planned",
-      "notes": "The narrow NCP adapter surface is not yet certified for connection snapshots. It cannot feed this figure until it declares scope explicitly, because a connection export without scope cannot distinguish an absent cell from a not_observed one — and that distinction is the entire content of a sparse matrix."
+      "mappingId": "ncp",
+      "sources": [
+        {
+          "system": "ncp",
+          "role": "primary",
+          "notes": "The narrow NCP adapter surface is not yet certified for connection snapshots. It cannot feed this figure until it declares scope explicitly, because a connection export without scope cannot distinguish an absent cell from a not_observed one — and that distinction is the entire content of a sparse matrix.",
+          "sourceId": "ncp"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     }
   ],
   "migration": {
@@ -778,6 +862,7 @@
     "The node universe must be declared complete: topology.node_universe_declared rejects complete == false, so a delay matrix over an explicitly partial node set is not available. Edge-snapshot partiality is expressed through the declared scope instead."
   ],
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": {

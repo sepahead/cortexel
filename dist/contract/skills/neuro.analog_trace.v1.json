@@ -513,10 +513,78 @@
   },
 
   "adapters": [
-    { "system": "nest.multimeter", "status": "supported", "notes": "The caller must map each recordable to a quantity kind and unit explicitly. NEST records times in ms and V_m in mV, but a recordable named `V_m` does not license the kind `membrane_voltage` — the adapter never infers a kind from a channel name, because `g_ex`, `I_syn`, and a custom model's state variable arrive through the same interface. The multimeter's `interval` gives point samples, not a held signal, so observationKind is `point_sample` unless the caller declares otherwise." },
-    { "system": "neo.AnalogSignal", "status": "supported", "notes": "t_start and sampling_rate expand into an explicit time vector; the unit is taken from the quantity, never guessed. Neo's array_annotations that name a channel are carried into recordedVariable, not into the quantity kind." },
-    { "system": "nwb.TimeSeries", "status": "partial", "notes": "The caller must select `rate` or `timestamps` explicitly — a TimeSeries may carry both, and choosing for them would silently pick a clock. `conversion` and `offset` must be applied by the caller, or the declared unit is a false statement about the stored integers." },
-    { "system": "ncp.observation", "status": "planned", "notes": "An NCP observation adapter must consume an already-authenticated, already-admitted observation from an immutable pinned NCP release. NCP's own declarations are carried, never upgraded: `is_simulation_output=true` becomes `source.kind: simulation`, and the absence of a calibrated-posterior claim stays absent." }
+    {
+      "mappingId": "nest-multimeter",
+      "sources": [
+        {
+          "system": "nest.multimeter",
+          "role": "primary",
+          "notes": "The caller must map each recordable to a quantity kind and unit explicitly. NEST records times in ms and V_m in mV, but a recordable named `V_m` does not license the kind `membrane_voltage` — the adapter never infers a kind from a channel name, because `g_ex`, `I_syn`, and a custom model's state variable arrive through the same interface. The multimeter's `interval` gives point samples, not a held signal, so observationKind is `point_sample` unless the caller declares otherwise.",
+          "sourceId": "nest-multimeter"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. A bare multimeter event dictionary cannot authenticate these facts, and Cortexel defines no normative receipt yet.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        },
+        {
+          "system": "host-retained NEST recordable semantics",
+          "role": "required_companion",
+          "notes": "Candidate binding from each recorded key to the exact node-model recordable, scientific quantity, unit and producing model/runtime. Similar channel names, model defaults and caller labels are not interchangeable evidence; no normative semantics receipt exists yet.",
+          "sourceId": "host-nest-recordable-semantics"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo-analogsignal",
+      "sources": [
+        {
+          "system": "neo.AnalogSignal",
+          "role": "primary",
+          "notes": "t_start and sampling_rate expand into an explicit time vector; the unit is taken from the quantity, never guessed. Neo's array_annotations that name a channel are carried into recordedVariable, not into the quantity kind.",
+          "sourceId": "neo-analogsignal"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb-timeseries",
+      "sources": [
+        {
+          "system": "nwb.TimeSeries",
+          "role": "primary",
+          "notes": "The caller must select `rate` or `timestamps` explicitly — a TimeSeries may carry both, and choosing for them would silently pick a clock. `conversion` and `offset` must be applied by the caller, or the declared unit is a false statement about the stored integers.",
+          "sourceId": "nwb-timeseries"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "ncp-observation",
+      "sources": [
+        {
+          "system": "ncp.observation",
+          "role": "primary",
+          "notes": "An NCP observation adapter must consume an already-authenticated, already-admitted observation from an immutable pinned NCP release. NCP's own declarations are carried, never upgraded: `is_simulation_output=true` becomes `source.kind: simulation`, and the absence of a calibrated-posterior claim stays absent.",
+          "sourceId": "ncp-observation"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    }
   ],
 
   "migration": {
@@ -552,6 +620,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

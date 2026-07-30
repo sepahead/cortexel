@@ -1,0 +1,61 @@
+{
+  "$schema": "../meta/adapter-conformance-profiles.schema.json",
+  "registry": "cortexel-adapter-conformance-profiles",
+  "version": "1.0",
+  "profiles": [
+    {
+      "id": "nest-spike-recorder.v3",
+      "adapter": "cortexel/adapters/nest#nestSpikeRecorderToRaster",
+      "adapterRevision": 3,
+      "upstream": {
+        "system": "NEST",
+        "version": "3.10.0",
+        "sourceCommit": "acca9704da248750219a027db99fec6cd1f9052a"
+      },
+      "inputDigestDomain": "cortexel.nest-spike-recorder-adapter-input.v3",
+      "captureAuthorityProfile": "cortexel-nest-memory-spike-capture-authority.v1",
+      "admittedStatus": {
+        "recordTo": "memory",
+        "timeInSteps": false,
+        "statusReadMethod": "pynest_single_spike_recorder_get_status_plain_projection_v1",
+        "executionScope": "single_process",
+        "eventBoundary": "(origin+start,origin+stop]",
+        "captureHorizon": "origin+stop_after_successful_return"
+      },
+      "authorityFields": [
+        "capture authority kind is caller_declaration; detached acceptance is never relabelled as an authenticated live-capture receipt",
+        "exact NEST 3.10.0 runtime declaration and the runtime tics-per-millisecond plus positive resolution-tic integers",
+        "single-spike-recorder PyNEST status read after successful Simulate or Run return, projected to closed plain JSON data by projection revision 1 without reordering, deduplicating, coercing, or dropping NumPy event-array elements",
+        "single process with rank zero and exact positive local-thread count",
+        "canonical integer-tic preimages for the exported origin, start, stop, and resolution millisecond values, with every recorder endpoint exactly on the runtime resolution grid",
+        "capture biological time on the runtime resolution grid and no earlier than origin tics plus stop tics, with status read only after the advancing Simulate or Run call returned successfully",
+        "most recent recorder creation or n_events=0 buffer clear on the runtime grid and no later than origin tics plus start tics",
+        "most recent window, backend, time-encoding, or sender-wiring mutation on the runtime grid and no later than origin tics plus start tics",
+        "biological_time remained monotonic since the most recent process initialization or ResetKernel; a live receipt may assert this only from an isolated harness that exclusively owns or intercepts kernel mutation through snapshot",
+        "recordedSenderIds exactly equal the full source universe connected for the complete window",
+        "source digest over the detached plain-data status projection and domain-separated adapter-input digest over that projection plus every normalized option"
+      ],
+      "positiveCases": [
+        "one-thread and multi-thread single-process status merging",
+        "empty and nonempty recordings with exact n_events reconciliation",
+        "nonchronological events, duplicate events, silent recorded senders, native fractional milliseconds, and non-zero origin",
+        "event exactly at the closed origin plus stop boundary",
+        "capture exactly at origin plus stop after the advancing Simulate or Run call returned successfully",
+        "NumPy sender/time arrays projected to dense plain arrays with identical length, order, multiplicity, and finite scalar values"
+      ],
+      "negativeCases": [
+        "capture before origin plus stop, capture before successful return, or capture on a non-resolution-grid tic",
+        "origin, start, stop, or resolution millisecond value without the declared exact integer-tic preimage, or any recorder endpoint off the runtime resolution grid",
+        "buffer reset after origin plus start or at a non-grid tic",
+        "recorder-window, backend, time-encoding, or sender-wiring mutation after origin plus start or at a non-grid tic",
+        "SetKernelStatus biological_time reset to zero at any point after the current kernel initialization, including a reset followed by n_events=0; NEST 3.10.0 marks that operation incompletely supported, so only ResetKernel plus complete recorder and wiring reconstruction begins an admissible fresh epoch",
+        "rank-local, multi-process, or caller-premerged MPI status",
+        "missing, duplicate, or foreign sender-universe members",
+        "NEST 3.9, bare 3.10, any other 3.10 patch declaration, prerelease, or newer runtime",
+        "raw NumPy arrays without the named plain-data projection, lossy or reordered projection, step-offset, ASCII, screen, MPI, SIONlib, accessor-bearing, non-finite, sparse, decorated, or unknown authority/option input",
+        "adapter-input digest insensitivity to any normalized option"
+      ],
+      "evidenceBoundary": "This profile defines the cases a future R049 receipt must execute. Structural or semantic acceptance does not authenticate NEST, process topology, status custody, buffer/configuration/wiring history, or sender-universe truth. The upstream execution gate remains NOT_RUN until a receipt binds the exact profile, source commit, toolchain, test bytes, and result."
+    }
+  ]
+}

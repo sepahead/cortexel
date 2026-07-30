@@ -16,7 +16,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { exitCodeForErrors, run } from '../src/cli/main.js';
+import { exitCodeForErrors, run, serializeCliJson } from '../src/cli/main.js';
 import { canonicalDigestExcluding, canonicalize } from '../src/core/canonicalize.js';
 import type { CortexelError } from '../src/core/errors.js';
 import { getBudgetLimits } from '../src/core/limits.js';
@@ -27,6 +27,7 @@ import {
   type ErrorCode,
   type ErrorStage,
 } from '../src/generated/registry.js';
+import { STABLE_SKILL_IDS } from '../src/generated/catalog.js';
 
 /**
  * The CLI exit values and argument grammar are stable process contracts. `run` returns
@@ -141,6 +142,44 @@ function runCli(
   });
 }
 
+function runCliWithClosedOutput(
+  args: readonly string[],
+  closed: 'stdout' | 'stderr',
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(SOURCE_TYPESCRIPT_RUNTIME, [CLI_ENTRY, ...args], {
+      cwd: REPOSITORY,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const childStdout = child.stdout;
+    const childStderr = child.stderr;
+    if (!childStdout || !childStderr) {
+      reject(new Error('CLI EPIPE test process did not expose output pipes'));
+      return;
+    }
+    let stdout = '';
+    let stderr = '';
+    childStdout.setEncoding('utf8');
+    childStderr.setEncoding('utf8');
+    if (closed === 'stdout') {
+      childStdout.destroy();
+    } else {
+      childStdout.on('data', (chunk: string) => {
+        stdout += chunk;
+      });
+    }
+    if (closed === 'stderr') {
+      childStderr.destroy();
+    } else {
+      childStderr.on('data', (chunk: string) => {
+        stderr += chunk;
+      });
+    }
+    child.once('error', reject);
+    child.once('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
+  });
+}
+
 function assertBoundArtifact(output: string): void {
   const svg = readFileSync(output, 'utf8');
   const artifactText = readFileSync(artifactPath(output), 'utf8');
@@ -171,17 +210,205 @@ describe('cli — identity, catalog, and direct execution', () => {
     const identity = JSON.parse(stdout);
     expect(identity.requestContract).toBe('cortexel-figure-request/1.0');
     expect(identity.contractDigest).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    expect(identity.catalogDigestDomain).toBe('cortexel-public-stable-catalog.v2');
   });
 
   it('lists exactly the 19 stable skills and keeps experimental output explicit', () => {
     const stable = capture(() => run(['catalog', '--json']));
     expect(stable.code).toBe(0);
-    expect(JSON.parse(stable.stdout).stable).toHaveLength(19);
-    expect(JSON.parse(stable.stdout).experimental).toBeUndefined();
+    const stablePayload = JSON.parse(stable.stdout);
+    expect(Object.keys(stablePayload)).toEqual([
+      'protocol',
+      'protocolVersion',
+      'buildIdentity',
+      'skills',
+    ]);
+    expect(stablePayload.protocol).toBe('cortexel-cli-catalog');
+    expect(stablePayload.protocolVersion).toBe(1);
+    expect(stablePayload.skills).toHaveLength(19);
+    expect(stablePayload.experimentalSkillIds).toBeUndefined();
+    expect(stablePayload.skills[0]).toEqual(expect.objectContaining({
+      revision: expect.any(Number),
+      availability: 'packaged',
+      releaseReady: false,
+      adapters: expect.any(Array),
+    }));
 
     const all = capture(() => run(['catalog', '--include-experimental', '--json']));
     expect(all.code).toBe(0);
-    expect(Array.isArray(JSON.parse(all.stdout).experimental)).toBe(true);
+    expect(Array.isArray(JSON.parse(all.stdout).experimentalSkillIds)).toBe(true);
+  });
+
+  it('describes one stable skill with complete agent-authoring and adapter evidence', () => {
+    const described = capture(() =>
+      run(['describe', 'neuro.response_curve', '--json']));
+    expect(described.code).toBe(0);
+    expect(described.stderr).toBe('');
+    const payload = JSON.parse(described.stdout);
+    expect(payload).toEqual(expect.objectContaining({
+      protocol: 'cortexel-cli-describe',
+      protocolVersion: 1,
+      section: 'all',
+      requestSchema: expect.objectContaining({
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        $id: 'https://sepahead.github.io/cortexel/schemas/v1/skills/' +
+          'neuro.response_curve.request.v1.schema.json',
+        properties: expect.objectContaining({
+          data: expect.any(Object),
+          parameters: expect.any(Object),
+          source: expect.any(Object),
+        }),
+        required: ['contract', 'skill', 'data', 'parameters', 'source'],
+        additionalProperties: false,
+      }),
+      authoringExample: expect.objectContaining({
+        contract: {
+          name: 'cortexel-figure-request',
+          version: '1.0',
+        },
+        skill: expect.objectContaining({ id: 'neuro.response_curve' }),
+      }),
+    }));
+    expect(payload.skill).toEqual(expect.objectContaining({
+      id: 'neuro.response_curve',
+      revision: expect.any(Number),
+    }));
+    expect(payload.skill.adapters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        mappingId: 'nest-spike-recorder',
+        feasibilityStatus: 'not_assessed',
+        definitionStatus: 'not_specified',
+        implementationAvailability: 'not_implemented',
+        sources: expect.arrayContaining([
+          expect.objectContaining({
+            sourceId: 'host-nest-sweep-protocol',
+            role: 'required_companion',
+          }),
+        ]),
+      }),
+    ]));
+  });
+
+  it('returns closed describe sections without forcing a full schema into an agent prompt', () => {
+    const summary = capture(() =>
+      run(['describe', 'neuro.response_curve', '--json', '--section', 'summary']));
+    const example = capture(() =>
+      run(['describe', 'neuro.response_curve', '--section', 'example', '--json']));
+    const schema = capture(() =>
+      run(['describe', 'neuro.response_curve', '--json', '--section', 'schema']));
+    for (const result of [summary, example, schema]) {
+      expect(result.code).toBe(0);
+      expect(result.stderr).toBe('');
+    }
+    expect(JSON.parse(summary.stdout)).not.toHaveProperty('requestSchema');
+    expect(JSON.parse(summary.stdout)).not.toHaveProperty('authoringExample');
+    expect(JSON.parse(example.stdout)).toHaveProperty(
+      'authoringExample.source',
+      { kind: 'synthetic_fixture' },
+    );
+    expect(JSON.parse(example.stdout)).not.toHaveProperty('requestSchema');
+    expect(JSON.parse(schema.stdout)).toHaveProperty('requestSchema');
+    expect(JSON.parse(schema.stdout)).toHaveProperty('schemaCompilationProfile');
+    expect(JSON.parse(schema.stdout)).toHaveProperty('schemaResources');
+    expect(JSON.parse(schema.stdout)).not.toHaveProperty('authoringExample');
+    for (const result of [summary, example, schema]) {
+      const skill = JSON.parse(result.stdout).skill;
+      expect(skill).not.toHaveProperty('cannotEstablish');
+      expect(skill).not.toHaveProperty('outputAuthority');
+      expect(skill).not.toHaveProperty('evidence');
+      expect(skill).not.toHaveProperty('knownLimitations');
+    }
+    expect(summary.stdout.length).toBeLessThan(example.stdout.length);
+    expect(example.stdout.length).toBeLessThan(32 * 1024);
+    expect(schema.stdout.length).toBeLessThan(256 * 1024);
+  });
+
+  it('keeps every compact describe section closed and UTF-8 byte-bounded', () => {
+    const expectedSkillKeys = [
+      'adapters',
+      'availability',
+      'id',
+      'question',
+      'releaseReady',
+      'renderer',
+      'revision',
+      'title',
+    ];
+    const expectedAdapterKeys = [
+      'definitionStatus',
+      'feasibilityStatus',
+      'implementationAvailability',
+      'mappingId',
+    ];
+    const sectionKeys = {
+      summary: [
+        'acceptanceBoundary',
+        'buildIdentity',
+        'protocol',
+        'protocolVersion',
+        'section',
+        'skill',
+      ],
+      example: [
+        'acceptanceBoundary',
+        'authoringExample',
+        'buildIdentity',
+        'protocol',
+        'protocolVersion',
+        'section',
+        'skill',
+      ],
+      schema: [
+        'acceptanceBoundary',
+        'buildIdentity',
+        'protocol',
+        'protocolVersion',
+        'requestSchema',
+        'schemaCompilationProfile',
+        'schemaResources',
+        'section',
+        'skill',
+      ],
+    } as const;
+    const byteLimits = {
+      summary: 16 * 1024,
+      example: 64 * 1024,
+      schema: 256 * 1024,
+    } as const;
+
+    for (const id of STABLE_SKILL_IDS) {
+      for (const section of ['summary', 'example', 'schema'] as const) {
+        const result = capture(() =>
+          run(['describe', id, '--json', '--section', section]));
+        expect(result.code, `${id}/${section}`).toBe(0);
+        expect(result.stderr, `${id}/${section}`).toBe('');
+        expect(Buffer.byteLength(result.stdout, 'utf8'), `${id}/${section}`)
+          .toBeLessThan(byteLimits[section]);
+        const payload = JSON.parse(result.stdout);
+        expect(Object.keys(payload).sort(), `${id}/${section}`)
+          .toEqual([...sectionKeys[section]].sort());
+        expect(Object.keys(payload.skill).sort(), `${id}/${section}`)
+          .toEqual(expectedSkillKeys);
+        for (const adapter of payload.skill.adapters) {
+          expect(Object.keys(adapter).sort(), `${id}/${section}`)
+            .toEqual(expectedAdapterKeys);
+        }
+      }
+    }
+  });
+
+  it('serializes unsafe display code points as valid, value-preserving JSON escapes', () => {
+    const value = {
+      'unsafe\u202ekey': 'line\nbidi\u202e zero-width\u200b c1\u0085',
+      ordinary: ['x', '\ud800'],
+    };
+    const serialized = serializeCliJson(value);
+    expect(JSON.parse(serialized)).toEqual(value);
+    expect(serialized).not.toContain('\u202e');
+    expect(serialized).not.toContain('\u200b');
+    expect(serialized).not.toContain('\u0085');
+    expect(serialized).toContain('\\u202e');
+    expect(serialized).toContain('\n');
   });
 
   it('does not execute when imported by a different entry script also named main.ts', () => {
@@ -240,6 +467,24 @@ describe('cli — identity, catalog, and direct execution', () => {
       expect(JSON.parse(result.stdout).release).toBe(false);
     });
   });
+
+  it('treats an early-closed discovery stdout pipe as normal consumer completion', async () => {
+    const result = await runCliWithClosedOutput(
+      ['describe', 'neuro.response_curve', '--json', '--section', 'all'],
+      'stdout',
+    );
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+  });
+
+  it('preserves the selected usage code when the diagnostic pipe closes early', async () => {
+    const result = await runCliWithClosedOutput(
+      ['describe', 'neuro.reponse_curve', '--json'],
+      'stderr',
+    );
+    expect(result.code).toBe(2);
+    expect(result.stdout).toBe('');
+  });
 });
 
 describe('cli — every command has a closed argv grammar', () => {
@@ -248,6 +493,13 @@ describe('cli — every command has a closed argv grammar', () => {
     ['identity', 'extra'],
     ['catalog', '--include-experimental', '--include-experimental'],
     ['catalog', '--unknown'],
+    ['describe'],
+    ['describe', 'neuro.response_curve', 'extra'],
+    ['describe', 'neuro.response_curve', '--json', '--json'],
+    ['describe', 'neuro.response_curve', '--section'],
+    ['describe', 'neuro.response_curve', '--section', 'nope', '--json'],
+    ['describe', 'neuro.response_curve', '--section', 'all'],
+    ['describe', 'neuro.response_curve', '--json', '--section', 'all', '--section', 'all'],
     ['validate'],
     ['validate', ''],
     ['validate', 'one', 'two'],
@@ -280,6 +532,22 @@ describe('cli — every command has a closed argv grammar', () => {
     expect(result.stdout).toBe('');
     expect(result.stderr).toContain('usage error:');
     expectBoundedSafeDiagnostic(result.stderr);
+  });
+
+  it('returns a bounded versioned machine error for an unknown stable skill', () => {
+    const result = capture(() => run(['describe', 'neuro.reponse_curve', '--json']));
+    expect(result.code).toBe(2);
+    expect(result.stdout).toBe('');
+    const payload = JSON.parse(result.stderr);
+    expect(payload).toEqual(expect.objectContaining({
+      protocol: 'cortexel-cli-error',
+      protocolVersion: 1,
+      error: expect.objectContaining({
+        code: 'CLI_UNKNOWN_STABLE_SKILL',
+        didYouMean: 'neuro.response_curve',
+      }),
+    }));
+    expect(result.stderr.length).toBeLessThan(4_096);
   });
 
   it('consumes --format values as option values regardless of option order', () => {
@@ -390,6 +658,24 @@ describe('cli — exit codes are an exhaustive stable contract', () => {
 });
 
 describe('cli — diagnostics do not disclose caller filesystem paths', () => {
+  it('escapes hostile legacy ids in the end-to-end migration JSON channel', () => {
+    withTempDirectory((directory) => {
+      const legacyId = 'legacy\u202e\n\u001bidentifier';
+      const input = path.join(directory, 'legacy.json');
+      writeFileSync(input, JSON.stringify({ skill: { id: legacyId } }), 'utf8');
+
+      const result = capture(() => run(['migrate', input]));
+      expect(result.code).toBe(5);
+      expect(result.stderr).toBe('');
+      expect(JSON.parse(result.stdout).report.legacyId).toBe(legacyId);
+      expect(result.stdout).not.toMatch(
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u,
+      );
+      expect(result.stdout).toContain('\\u202e');
+      expect(result.stdout).toContain('\\u001b');
+    });
+  });
+
   it('bounds and sanitizes input I/O diagnostics', () => {
     const secret = `SECRET_INPUT_${'x'.repeat(300)}`;
     const input = path.join(tmpdir(), `${secret}\u001b[31m.json`);

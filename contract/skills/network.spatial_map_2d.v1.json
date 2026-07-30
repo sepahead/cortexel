@@ -680,11 +680,84 @@
   },
 
   "adapters": [
-    { "system": "nest.GetPosition", "status": "supported", "notes": "Binds node ids to the matching position order — never by array index alone — and retains the single-process / rank-local / merged scope of the position query. The layer's centre, extent and edge_wrap are carried only when the source actually declares them; they are never reconstructed from the coordinates, and a connection mask or kernel is never reconstructed from them at all. NEST layer coordinates are bare numbers: the adapter requires the caller to declare the length unit and never guesses one." },
-    { "system": "nest.GetConnections", "status": "supported", "notes": "The optional edge layer. SynapseCollection.get() in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. The connection scope must come from the actual run, and its snapshot time must match the position query's." },
-    { "system": "nwb", "status": "partial", "notes": "NWB carries positions in the electrode table and as ophys ROI centroids. The declared unit and what real files actually store do not always agree, so the adapter requires the caller to declare the unit and select the table explicitly; it never infers either. NWB carries no node-universe completeness flag and no MPI scope, so the caller declares both." },
-    { "system": "neo", "status": "rejected", "notes": "Neo models recordings, not spatial layouts. There is no faithful mapping, and an invented one would be worse than none." },
-    { "system": "ncp", "status": "planned", "notes": "Pending the narrow NCP adapter and its downstream consumer certification." }
+    {
+      "mappingId": "nest-getposition",
+      "sources": [
+        {
+          "system": "nest.GetPosition",
+          "role": "primary",
+          "notes": "Binds node ids to the matching position order — never by array index alone — and retains the single-process / rank-local / merged scope of the position query. The layer's centre, extent and edge_wrap are carried only when the source actually declares them; they are never reconstructed from the coordinates, and a connection mask or kernel is never reconstructed from them at all. NEST layer coordinates are bare numbers: the adapter requires the caller to declare the length unit and never guesses one.",
+          "sourceId": "nest-getposition"
+        },
+        {
+          "system": "nest.GetConnections",
+          "role": "optional_companion",
+          "notes": "The optional edge layer. SynapseCollection.get() in the official singular/scalar form OR canonical plural arrays, never both, never broadcasting an optional scalar across rows, and never deduplicating multapses. The connection scope must come from the actual run, and its snapshot time must match the position query's.",
+          "sourceId": "nest-getconnections"
+        },
+        {
+          "system": "host-retained NEST position snapshot declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for producing runtime/build, run and biological time, exact selected node-id/order digest, coordinate unit, layer centre/extent/edge-wrap metadata, query scope, rank/world/merge completeness, and returned-position digest. Bare coordinate arrays cannot authenticate any of those facts, and Cortexel defines no normative receipt yet.",
+          "sourceId": "host-nest-position-snapshot-declaration"
+        },
+        {
+          "system": "host-retained NEST connection snapshot receipt",
+          "role": "optional_companion",
+          "notes": "Candidate authority paired with the optional edge layer. It binds the exact connection query, selected endpoint digests, run/time, rank/world/local-ownership context and returned-row digest to the same position snapshot. It is absent when no edge layer is requested; no normative receipt exists yet.",
+          "sourceId": "host-nest-connection-snapshot-receipt"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "nwb",
+      "sources": [
+        {
+          "system": "nwb",
+          "role": "primary",
+          "notes": "NWB carries positions in the electrode table and as ophys ROI centroids. The declared unit and what real files actually store do not always agree, so the adapter requires the caller to declare the unit and select the table explicitly; it never infers either. NWB carries no node-universe completeness flag and no MPI scope, so the caller declares both.",
+          "sourceId": "nwb"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    },
+    {
+      "mappingId": "neo",
+      "sources": [
+        {
+          "system": "neo",
+          "role": "primary",
+          "notes": "Neo models recordings, not spatial layouts. There is no faithful mapping, and an invented one would be worse than none.",
+          "sourceId": "neo"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
+    },
+    {
+      "mappingId": "ncp",
+      "sources": [
+        {
+          "system": "ncp",
+          "role": "primary",
+          "notes": "Pending the narrow NCP adapter and its downstream consumer certification.",
+          "sourceId": "ncp"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
+    }
   ],
 
   "migration": {
@@ -724,6 +797,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": { "name": "cortexel-figure-request", "version": "1.0" },

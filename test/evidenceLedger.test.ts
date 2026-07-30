@@ -246,6 +246,15 @@ describe('evidence ledger — forged and malformed fixtures fail closed', () => 
     expect(errors).toContain('R001: NOT_APPLICABLE requires a rationale in notes');
   });
 
+  it('rejects BLOCKED without naming the unavailable external prerequisite', () => {
+    const ledger = buildLedger();
+    (ledger.gates as LedgerGate[])[0].status = 'BLOCKED';
+    const { errors } = validateLedger(ledger);
+    expect(errors).toContain(
+      'R001: BLOCKED requires the unavailable external prerequisite in notes',
+    );
+  });
+
   it('does not let a fixed gate opt out of release blocking', () => {
     const ledger = buildLedger();
     (ledger.gates as LedgerGate[])[0].releaseBlocking = false;

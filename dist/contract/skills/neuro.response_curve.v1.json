@@ -1175,19 +1175,61 @@
 
   "adapters": [
     {
-      "system": "nest.spike_recorder",
-      "status": "partial",
-      "notes": "The recorder yields the events of one repeat, so it can produce the response. It cannot produce the INPUT: the injected current or drive rate lives in the protocol that set up the sweep, not in the recorder output. The caller must declare the condition input; the adapter never reads it back out of a device name."
+      "mappingId": "nest-spike-recorder",
+      "sources": [
+        {
+          "system": "nest.spike_recorder",
+          "role": "primary",
+          "notes": "The recorder yields the events of one repeat, so it can produce only that repeat's response evidence. It cannot produce the controlled input, condition/repeat universe, attempted counts, comparable-run design, measurement window or retained event selection. The adapter never reads any of those facts back out of a device name.",
+          "sourceId": "nest-spike-recorder"
+        },
+        {
+          "system": "host-retained NEST sweep protocol",
+          "role": "required_companion",
+          "notes": "Supplies the complete ordered condition universe, typed controlled inputs, repeat identities and attempted counts, repeat design, measurement window, event selection and the binding from each recorder export to exactly one condition/repeat. It must be retained from the executed sweep; neither Cortexel nor a spike recorder can reconstruct it after the fact. This source remains caller-controlled external authority until a future normative mapping definition authenticates a concrete protocol format.",
+          "sourceId": "host-nest-sweep-protocol"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, every recorder id/status/backend, selected sender universe, origin/start/stop, biological export time, rank/world scope, and detached event-buffer digest. It must bind each export exactly once to the separately declared sweep condition and repeat.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "neo.Block",
-      "status": "partial",
-      "notes": "Condition and repeat identity must be selected explicitly from annotations. The adapter will not guess which annotation is the stimulus level, and it never coerces an annotation label into a numeric input."
+      "mappingId": "neo-block",
+      "sources": [
+        {
+          "system": "neo.Block",
+          "role": "primary",
+          "notes": "Condition and repeat identity must be selected explicitly from annotations. The adapter will not guess which annotation is the stimulus level, and it never coerces an annotation label into a numeric input.",
+          "sourceId": "neo-block"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nwb.icephys",
-      "status": "planned",
-      "notes": "The icephys stimulus/response tables map naturally onto conditions and repeats, but the mapping is not implemented and is therefore not claimed."
+      "mappingId": "nwb-icephys",
+      "sources": [
+        {
+          "system": "nwb.icephys",
+          "role": "primary",
+          "notes": "The icephys stimulus/response tables map naturally onto conditions and repeats, but the mapping is not implemented and is therefore not claimed.",
+          "sourceId": "nwb-icephys"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     }
   ],
 
@@ -1238,6 +1280,7 @@
   ],
 
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": {

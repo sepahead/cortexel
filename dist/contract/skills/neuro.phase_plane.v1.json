@@ -1400,24 +1400,76 @@
   },
   "adapters": [
     {
-      "system": "nest.multimeter",
-      "status": "supported",
-      "notes": "Two recorded state variables plus times and senders. The adapter maps each recorded variable to an axis with its declared unit and uses the sender as the trajectory id. Recorder order is never assumed: rows are grouped per sender and each sender's own time order is preserved, never sorted globally."
+      "mappingId": "nest-multimeter",
+      "sources": [
+        {
+          "system": "nest.multimeter",
+          "role": "primary",
+          "notes": "Two recorded state variables plus times and senders. The adapter maps each recorded variable to an axis with its declared unit and uses the sender as the trajectory id. Recorder order is never assumed: rows are grouped per sender and each sender's own time order is preserved, never sorted globally.",
+          "sourceId": "nest-multimeter"
+        },
+        {
+          "system": "host-retained NEST recorder export declaration",
+          "role": "required_companion",
+          "notes": "Candidate digest-bound declaration for the producing runtime/build and run, recorder id/status/backend, selected node universe, origin/start/stop/interval, biological export time, rank/world scope, and detached event-buffer digest. Recorder rows alone cannot authenticate trajectory identity or exposure.",
+          "sourceId": "host-nest-recorder-export-declaration"
+        },
+        {
+          "system": "host-retained NEST state-variable/model semantics",
+          "role": "required_companion",
+          "notes": "Candidate binding from both recorded keys to exact model state variables, units, fixed parameters and producing model/runtime. Recorded trajectories do not provide a derivative field or phase-plane grid; a future mapping must keep a trajectory view distinct from a derivative-field view rather than silently inventing derivatives.",
+          "sourceId": "host-nest-state-variable-model-semantics"
+        }
+      ],
+      "feasibilityStatus": "not_assessed",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "neo.AnalogSignal",
-      "status": "supported",
-      "notes": "Two channels sharing one time base map to x and y. If two signals were sampled on different clocks the adapter REFUSES rather than resampling: interpolating one signal onto the other's timestamps would fabricate state coordinates the model never produced."
+      "mappingId": "neo-analogsignal",
+      "sources": [
+        {
+          "system": "neo.AnalogSignal",
+          "role": "primary",
+          "notes": "Two channels sharing one time base map to x and y. If two signals were sampled on different clocks the adapter REFUSES rather than resampling: interpolating one signal onto the other's timestamps would fabricate state coordinates the model never produced.",
+          "sourceId": "neo-analogsignal"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "nwb.TimeSeries",
-      "status": "partial",
-      "notes": "The caller must select the two channels explicitly and supply canonical unit codes; NWB unit strings are free text and frequently aliases."
+      "mappingId": "nwb-timeseries",
+      "sources": [
+        {
+          "system": "nwb.TimeSeries",
+          "role": "primary",
+          "notes": "The caller must select the two channels explicitly and supply canonical unit codes; NWB unit strings are free text and frequently aliases.",
+          "sourceId": "nwb-timeseries"
+        }
+      ],
+      "feasibilityStatus": "assessed_feasible",
+      "definitionStatus": "not_specified",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_implemented"
     },
     {
-      "system": "matplotlib.streamplot",
-      "status": "rejected",
-      "notes": "streamplot integrates an interpolated field to draw streamlines. Cortexel refuses that output: a streamline is a computed trajectory, and presenting one as data would show an integration Cortexel never performed and the caller never checked."
+      "mappingId": "matplotlib-streamplot",
+      "sources": [
+        {
+          "system": "matplotlib.streamplot",
+          "role": "primary",
+          "notes": "streamplot integrates an interpolated field to draw streamlines. Cortexel refuses that output: a streamline is a computed trajectory, and presenting one as data would show an integration Cortexel never performed and the caller never checked.",
+          "sourceId": "matplotlib-streamplot"
+        }
+      ],
+      "feasibilityStatus": "assessed_infeasible",
+      "definitionStatus": "not_applicable",
+      "authorityRequirements": null,
+      "implementationAvailability": "not_applicable"
     }
   ],
   "migration": {
@@ -1455,6 +1507,7 @@
     "`trace.axis_dimension_compatible` and `trace.duplicate_time_policy` read a `data.series[]` trace structure this phase plane does not use, so they are not declared. Per-component dimension is covered by `unit.dimension_match`; duplicate-time handling is a derivation concern."
   ],
   "examples": {
+    "authoring": { "baseValidExampleIndex": 0, "source": { "kind": "synthetic_fixture" } },
     "valid": [
       {
         "contract": {

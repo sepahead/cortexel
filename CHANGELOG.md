@@ -6,6 +6,89 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — NEST adapter capability evidence
+
+- Stable-contract adapter metadata now uses composite mappings with stable source ids,
+  exactly one primary source, explicit required/optional companions, separate
+  feasibility and executable-availability states, and a reserved normative-definition
+  boundary. Contract source v1 cannot encode `specified` and requires
+  `authorityRequirements: null` until a closed mapping-definition authority exists;
+  enum promotion plus prose, pointers, code, schemas or gates cannot forge one. The
+  generated TypeScript/Python catalogs and contract manifest retain these boundaries, and
+  generation rejects any `packaged` or `source_only` claim absent from the closed
+  source implementation inventory. The NEST rank-local degree assessment also states
+  explicitly that it supports only complete local in-degree and that out-degree fails
+  with `SCOPE_OUT_DEGREE_FROM_RANK_LOCAL`.
+- Source ids identify stable mapping roles/profiles rather than runtime instances, so
+  role-distinct inputs may share one provider `system` class. The packaged
+  spike-recorder implementation, request schema, source identity, and R049 requirement
+  do not amount to a separate closed
+  source-to-request specification. All feasible prose rows remain honestly
+  `not_specified`; core-NWB profiles with no connectivity carrier are assessed
+  infeasible rather than left as roadmap entries.
+- The implementation inventory and the executable mapping bind the exact immutable
+  definition of release gate `R049`. Mutable gate status, evidence, receipts, and
+  tested-source identities remain solely in the release ledger, so a valid
+  `NOT_RUN`→`PASS` evidence-only authorization does not change generated package
+  semantics or create a self-referential release.
+- `cortexel/adapters/nest` no longer claims that live PyNEST integration exists in the
+  Python package. Neither runtime starts or introspects NEST; the one packaged V1
+  adapter accepts only revision 3's bounded plain-data shape of a caller-declared exact
+  NEST 3.10.0 memory spike-recorder profile. A final status and `n_events` value cannot
+  prove that the buffer was not reset, configuration or wiring remained fixed, the
+  capture endpoint was reached after a successful return, the kernel clock remained
+  monotonic, the NumPy arrays were projected losslessly, or MPI ranks were merged. The adapter
+  therefore requires a closed capture-authority declaration covering the exact
+  successful-return closed-stop endpoint, exact integer-tic/grid preimages, most
+  recent buffer epoch and recording-plan mutation, monotonic kernel clock epoch,
+  complete sender universe, exact single-process scope, status-read method, and runtime
+  resolution. It accepts local thread-sibling merging but refuses MPI/premerged claims.
+  The source digest binds only the detached plain-data projection; a second
+  domain-separated digest binds that projection to every normalized option. Neither
+  digest authenticates the
+  runtime or any declared capture fact. NEST 3.9, bare 3.10, and other patches fail
+  closed until separately pinned and evidenced. Its broad immutable R049 definition is
+  unchanged, its exact conformance obligations live in the versioned adapter profile,
+  and its upstream gate remains `NOT_RUN` in the release ledger.
+- A repository-validated, provisional `0.1-draft` audit skeleton pins the official NEST
+  v3.10 tree at commit `acca9704da248750219a027db99fec6cd1f9052a`, root-tree identity,
+  documentation index, and CMake orchestration context. It records 109 regular Python
+  files, three `.py` orchestration symlinks, and twelve PNG/GIF/SVG path entries, but
+  admits no assessment rows and only `coverageClaim: none`. Raw path and documentation
+  directive counts are not relabelled as entrypoint, visual-output, mapping, rendering,
+  execution, or scientific-certification coverage; the CMake file installs only
+  `run_examples.sh` and is not entrypoint authority. Because its execution and
+  certification axes are mutable, it lives under `docs/audit/` and is excluded from
+  contract/package catalogs, manifests, and build digests.
+- The offline CLI now exposes compact adapter status in `catalog --json` and a
+  `describe <stable-skill-id> [--json]` command generated from the exact packaged
+  catalog. Its closed `--section summary|example|schema|all` projection lets an agent
+  request the small synthetic fixture before spending prompt budget on the complete
+  schema. Non-`all` sections retain only compact identity/routing/availability metadata;
+  omitting `--section` retains the full bundle. The full JSON form carries the complete composed per-skill structural schema
+  and its two packaged offline reference resources, one living synthetic-fixture request,
+  composite source roles, evidence boundaries,
+  packaged implementation availability, immutable certification requirements, and
+  known limitations. It remains a
+  discovery/authoring aid, not a live PyNEST adapter or external-provenance proof.
+- A dependency-free `cortexel/authoring` subpath now exposes the same deeply frozen
+  catalog metadata, schema resources, versioned Ajv compile profile, and synthetic
+  fixtures without loading them into every `cortexel/figure` consumer. The profile
+  is bound by `catalogDigest` and records the two intentional Ajv lint exceptions
+  whose context-aware equivalents run in the generator. The independent Python reader adds detached
+  `list_skills()` / `describe_skill()` discovery while continuing to refuse full
+  semantic certification for its explicitly partial validator port.
+- `catalogDigest` now uses the registry-owned, domain-separated
+  `cortexel-public-stable-catalog.v2` preimage. It binds the exact public stable
+  entries plus the shared offline structural-schema resources; stable schemas,
+  synthetic examples, scientific/accessibility claims, source mappings,
+  availability, evidence boundaries, limits, and known limitations can no longer
+  change behind an unchanged digest. The 0.9 line's manifest v1 used an
+  implicit tuple-only `{id, revision, renderer}` projection. Verifiers must read the
+  shipped `catalogDigestDomain`; package version plus the corresponding manifest
+  resolves the algorithm. FigureArtifactV1 contract 1.0 does not duplicate the
+  domain field.
+
 ### Fixed — bounded cross-language parity subprocesses
 
 - Cross-language parity tests now give each direct Python child a 60-second
@@ -48,6 +131,34 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed — renderer accessibility and perception evidence
 
+- The experimental legacy knowledge-graph memo signature now uses
+  type-and-presence-tagged length framing. An absent optional assertion id, kind, or
+  color can no longer collide with an explicit empty string and retain stale
+  simulation/edge state across a semantically material React update.
+- The legacy corpus mapper now refuses dangling, self-loop, duplicate, or otherwise
+  unrenderable assertions instead of silently dropping scientific relationships.
+  Edge identity follows effective rendered direction rather than a `same_as` name
+  heuristic, undirected edges cannot carry directional flow particles, and
+  contract-owned direction/flow can no longer be overridden as host styling.
+- The Engram corpus adapter rejects naked `confidence`; an optional score must carry
+  its exact uncalibrated discriminator and the stable edge-kind/score gate must
+  accept that declared meaning. Edge kind is no longer used to invent semantics.
+- The legacy Engram corpus adapter no longer fabricates
+  `graph_snapshot_record` anchors from entity/assertion ids. Every upstream node and
+  assertion must provide its own typed evidence references; Cortexel validates and
+  retains them unchanged. The legacy surface still has no evidence-record inventory,
+  so reference shape is not source authentication and the caller-supplied snapshot id
+  remains unverified.
+- Mapped corpus graphs expose a collision-free encoding of their complete declared
+  graph context. Both `KnowledgeGraph3DScene` and `KnowledgeGraphA11yList` require
+  that cache namespace and use independent React key boundaries, so a changed
+  namespace remounts scene-owned positions, one-time framing status, pending
+  selection-camera intent, and accessible pager/disclosure state. Same-key filters
+  retain continuity. The host-owned camera/controls target plus controlled selection
+  and hover remain host state and must be reset or reframed by that host where required.
+  Radius prose now names its full mapped-snapshot degree basis rather than falsely
+  implying host-filtered visible degree. The identity is neither a graph-content
+  digest nor independent authentication.
 - Normative SVGs now expose deduplicated panel summaries and explicit no-data
   reasons through a second referenced description. Essential unencoded spatial,
   graph, and phase-plane marks use the theme axis token instead of the
@@ -105,9 +216,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Package supervision tests no longer launch `ps` from reviewed child code.
   macOS `sandbox-exec` rejects that launch even with an allow-default profile.
-  The tests now trigger the same abnormal outer completion by killing the direct
-  wrapper. Separate handshake tests continue to cover supervisor death and
-  detached process-group cleanup without weakening the production boundary.
+  Identity-bound FIFO leases now prove when reviewed lifetimes close, without
+  postmortem PID/PGID probes. Gated rendezvous tests separately cover worker,
+  guardian, and supervisor death before `GO`, supervisor `SIGKILL` after `GO`,
+  direct guardian loss, descendant cleanup, and the no-signal boundary after the
+  guardian has been reaped.
 
 ### Fixed — phase-plane derivative and accessibility authority
 
@@ -304,26 +417,32 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   changes and state/seal circularity. Execute retains its first exact file
   authority and revalidates the leaf's digest, identity, ownership, and `0444`
   mode after active work.
-  A trusted gated wrapper enters a fresh POSIX process group. The supervisor
-  publishes that group before it permits reviewed code to execute. On ordinary
-  completion, the still-live wrapper publishes a canonical target result over a
-  private pipe and self-sweeps the group before its leader identity can be reused.
-  Timeout, output overflow, and handled `TERM`, `INT`, or `HUP` cancellation likewise
-  signal only while the direct wrapper leader is live. No clean path re-addresses or
-  probes a PGID after that leader is reaped: POSIX supplies no portable process-group
-  closure receipt. The anchored sweep covers descendants that remain in the group
-  and retain signaling authority; `EPERM` is cleanup-unproven and fails closed.
-  If the supervisor fails after reviewed code could start, the outer caller attempts
-  one abnormal-only numeric-PGID fallback and rejects the command. That fallback has
-  a residual reuse race. This boundary is not a sandbox against same-UID signaling,
-  a descendant that starts another session/process group or changes signaling
-  authority, or simultaneous uncatchable death of both outer caller and supervisor;
-  stronger lifetime containment requires an external sandbox/cgroup.
-  Windows fails closed until an equivalent reviewed Job Object boundary exists.
-  Supervisor-only, one-way regression rendezvous now prove that killing the
-  wrapper before or after handshake publication, or the supervisor after
-  publication but before `GO`, cannot start target code; the controlled wrapper
-  fixture also terminates without turning its published number into a closure claim.
+  A trusted detached guardian is the live leader of a fresh POSIX session/process
+  group. It creates a gated non-leader worker, which alone starts the reviewed
+  target. The supervisor holds the guardian's exclusive control lease and publishes
+  only a boolean armed handshake; neither the outer caller nor any result contains
+  a PID/PGID cleanup handle. Target loader/runtime variables are installed only by
+  the worker for the target, never in the supervisor, guardian, or worker.
+  Worker completion and guardian-local worker/protocol failures trigger the
+  guardian directly. Timeout, output overflow, handled `TERM`/`INT`/`HUP`, and
+  supervisor death close the exclusive lease; its EOF reaches the same sweep path.
+  The still-live guardian publishes one bounded intent and owns the only explicit
+  production process-group signaling site: it self-addresses `SIGKILL` to
+  `-process.pid` while its unreaped leader identity pins the group number. The
+  supervisor accepts only the exact
+  intent, guardian exit by `SIGKILL`, canonical protocol EOF, and bounded
+  stdout/stderr EOF. It performs no post-reap signal or identity probe; the outer
+  caller has no numeric fallback.
+  Direct guardian death, `EPERM`/`ESRCH`, malformed protocol, or a retained pipe
+  fails closed without signaling a reusable identity. This boundary covers
+  same-authority descendants that remain in the group, but it is not a sandbox
+  against guardian discovery/signaling, deliberate detachment/re-grouping,
+  inherited-pipe retention, or a credential/security-label change. Those
+  capabilities require an external cgroup/sandbox/VM. Windows fails closed until
+  an equivalent reviewed Job Object boundary exists.
+  One-way regression rendezvous cover pre-`GO` worker/guardian/supervisor
+  killpoints, active supervisor `SIGKILL` lease EOF, direct guardian loss, target
+  attempts to kill its immediate parent, and the absence of any post-reap signal.
   Protocol-size limits account for base64 expansion without giant regular
   expressions. Directory reads and file hashes are allocation-bounded. Every
   installed package container, scope, package identity,
@@ -610,7 +729,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reinterpreted. The new request preserves the origin-relative terms and exact closure,
   compares received binary64 quantities without first rounding their sum, and refuses a
   display interval whose one permitted endpoint conversion collapses or overflows.
-- The plain-data NEST adapter now admits only explicit NEST 3.9/3.10 memory exports
+- The plain-data NEST adapter now admits only the exact NEST 3.10.0 memory-export profile
   with `time_in_steps: false`. This is a fail-closed revision-2 source-declaration
   profile, not upstream certification; the real-environment gate remains `NOT_RUN`.
   It rejects missing encoding status, step/offset clocks,
@@ -1540,8 +1659,9 @@ breaking changes to the entry points (see **Changed**).
   rather than array identity, so a host that rebuilds its nodes/edges arrays
   every render — the common React pattern — never restarts a settled layout;
   any real change still warm-restarts. The scene now honors the library's
-  `reducedMotion` prop contract like its Expandable* siblings (pre-settled
-  layout, still particles, snap fly-to). Focused emphasis also collapses flow
+  `reducedMotion` prop contract like its Expandable* siblings (bounded static
+  refinement from the deterministic seed, still particles, snap fly-to). Focused
+  emphasis also collapses flow
   particles on peripheral edges (the dimmed periphery no longer sparkles), and
   per-edge golden-ratio phase offsets stop all citation flows pulsing in lockstep.
 - **BREAKING: the root `cortexel` entry now re-exports only `cortexel/core`.** It

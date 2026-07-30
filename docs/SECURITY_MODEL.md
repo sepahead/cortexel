@@ -113,9 +113,23 @@ traverses them:
    or detached table sidecar is emitted. OutputAuthority does not verify this serialized
    boundary.
 7. **Adapters** (`src/adapters/*`). Simulator output (for example a NEST recorder
-   object) crosses into the request contract. The NEST entry is packaged and
-   semantically stable but not release-certified. No NCP adapter implementation or
-   capability exists.
+   object) crosses into the request contract. Only the bounded plain-data
+   `nest.spike_recorder` → `neuro.spike_raster` mapping is packaged, and its pinned
+   upstream execution remains `NOT_RUN` in the external release ledger. Its required
+   capture authority is still untrusted caller data: exact arithmetic can reject an
+   internally impossible horizon/history relation, but neither the source digest nor
+   the adapter-input digest proves the runtime, process scope, reset/configuration/
+   wiring history, or sender universe. Skill records
+   separately state composite source roles, feasibility, reserved definition state,
+   and implementation availability so one axis cannot
+   borrow another's evidence. Source ids name stable mapping roles/profiles, not runtime
+   instances, and role-distinct sources may share a system class. The executable
+   raster remains `not_specified` because code and a release gate are not an independent
+   normative source-to-request definition. V1 cannot encode `specified` and fixes
+   `authorityRequirements` to null until a closed definition authority exists. The
+   executable record binds only the immutable certification-gate definition. Mutable status and
+   receipt identity remain outside package semantics. No NCP adapter
+   implementation or capability exists.
 8. **The packaged offline CLI** (`src/cli/main.ts`, installed as `cortexel`). Files, stdin, and the process
    filesystem. It bounds bytes before fatal UTF-8 decoding, uses one fixed cooperative
    lock in the resolved physical output directory, inspects final entries without
@@ -365,7 +379,7 @@ A compact index of the mechanisms above against the boundaries they defend.
 | Budgets | fail-not-truncate, min-only limits, quadratic refusal, bounded diagnostics | `RESOURCE_PAIRWISE_EXCEEDED`, `RESOURCE_MARKS_EXCEEDED`, `ERROR_LIMIT_REACHED` |
 | Frozen-plan OutputAuthority | live validated-request + closed-plan capabilities; closed independent evaluator registry; exact rows, one-pass source summary, disclosures, and carrier class/provenance sequence; evaluator/environment fact separation; no SVG/persisted claim | internal refusal (`INTERNAL_INVARIANT_VIOLATED`) |
 | SVG / in-memory table output | closed-vocabulary SVG serializer, independent text/attribute escaping, public-only metadata, complete-returned-or-refuse table boundary; artifact binds table shape only | (structural — no injectable element exists) |
-| Adapters | accessor-free typed input, no scalar broadcast, explicit packaged availability independent of revision-admitted source-version declarations; no claimed upstream certification or NCP implementation | `ADAPTER_ACCESSOR_INPUT_REJECTED`, `ADAPTER_UNSUPPORTED_VERSION` |
+| Adapters | accessor-free typed input, no scalar broadcast, composite source role/profile identities (system classes may repeat), separate feasibility/implementation boundaries, `specified` and non-null mapping authority structurally unrepresentable until a closed definition authority exists, bidirectional closure of executable declarations against the source implementation inventory, exact NEST 3.10.0 executable profile, contract-bound immutable certification requirement with mutable outcome/receipt kept in the external ledger, and no claimed NCP implementation | `ADAPTER_ACCESSOR_INPUT_REJECTED`, `ADAPTER_UNSUPPORTED_VERSION` |
 | Packaged CLI | offline; exact shebang and direct-execution guard; closed arguments; byte-bounded fatal UTF-8 input; one non-reclaimed directory-wide O_EXCL publication lock; lstat-safe final-entry checks; short O_EXCL temporary siblings; atomic non-force no-replace or refusal; force removes stale artifact first; artifact-last completion marker; file/parent fsync where supported; bounded path-free diagnostics; no whole-emission atomicity or trusted output-directory authority | (I/O exit code 7) |
 | Legacy WebGL / future host resolvers | separated from FigureRequestV1; mandatory availability evidence; host-owned I/O; legacy KG nondeterminism disclosed | `CAPABILITY_EXPERIMENTAL`, `DATA_REFERENCE_UNRESOLVED` |
 

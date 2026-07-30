@@ -1114,7 +1114,7 @@
               "const": "figure.spike_raster"
             },
             "rendererRevision": {
-              "const": 5
+              "const": 6
             }
           },
           "required": [

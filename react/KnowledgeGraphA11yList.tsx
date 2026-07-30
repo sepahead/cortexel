@@ -10,6 +10,7 @@ import type {
 } from './KnowledgeGraph3DScene';
 import {
   assertKnowledgeGraphBudget,
+  assertKnowledgeGraphIdentity,
   assertRenderableGraphEdges,
   assertUniqueGraphNodeIds,
   filterGraphEdges,
@@ -29,6 +30,8 @@ export const DEFAULT_A11Y_NODE_PAGE_SIZE = 100;
 export const MAX_A11Y_NODE_PAGE_SIZE = 200;
 
 export interface KnowledgeGraphA11yListProps {
+  /** Same caller-declared cache namespace passed to KnowledgeGraph3DScene. */
+  graphIdentity: string;
   nodes: readonly KnowledgeGraph3DNode[];
   edges: readonly KnowledgeGraph3DEdge[];
   selectedId: string | null;
@@ -277,7 +280,16 @@ function relationshipText(
     (metadata ? `. ${metadata}` : '');
 }
 
-export function KnowledgeGraphA11yList({
+export function KnowledgeGraphA11yList(props: KnowledgeGraphA11yListProps) {
+  const { graphIdentity, nodes, edges } = props;
+  assertKnowledgeGraphIdentity(graphIdentity);
+  assertKnowledgeGraphBudget(nodes.length, edges.length);
+  assertUniqueGraphNodeIds(nodes);
+  assertRenderableGraphEdges(nodes, edges);
+  return <KnowledgeGraphA11yListInstance key={graphIdentity} {...props} />;
+}
+
+function KnowledgeGraphA11yListInstance({
   nodes,
   edges,
   selectedId,
@@ -287,9 +299,6 @@ export function KnowledgeGraphA11yList({
   label = 'Knowledge graph nodes',
   nodePageSize = DEFAULT_A11Y_NODE_PAGE_SIZE,
 }: KnowledgeGraphA11yListProps) {
-  assertKnowledgeGraphBudget(nodes.length, edges.length);
-  assertUniqueGraphNodeIds(nodes);
-  assertRenderableGraphEdges(nodes, edges);
   const instanceId = useId().replace(/:/g, '');
   const safePageSize = Number.isSafeInteger(nodePageSize)
     ? Math.min(MAX_A11Y_NODE_PAGE_SIZE, Math.max(1, nodePageSize))

@@ -84,7 +84,7 @@ Summary:
 | Pre-1.0 id | Outcome | FigureRequestV1 target |
 |---|---|---|
 | `nest.voltage_trace` | report-only target skeleton | `neuro.analog_trace` (never infers membrane voltage, origin, units, identity, window, layout, or duplicate-time policy) |
-| `nest.spike_raster` | report-only target skeleton | the installed `neuro.spike_raster` contract (currently revision 4; requires the recorded sender universe and an explicit event-window clock/closure; a NEST memory export additionally requires origin, start, stop, `time_in_steps: false`, a revision-2-admitted 3.9/3.10 source-version declaration, and an export digest; admission is not upstream certification) |
+| `nest.spike_raster` | report-only target skeleton | the installed `neuro.spike_raster` contract (currently revision 5; requires the recorded sender universe and an explicit event-window clock/closure; a NEST memory export additionally requires origin, start, stop, `time_in_steps: false`, the exact 3.10.0 profile, both source and adapter-input digests, and revision 3 capture authority for horizon, buffer/configuration/wiring history, sender universe and single-process scope; admission is not upstream certification) |
 | `nest.population_rate` | report-only target skeleton | `neuro.population_rate` (requires a recorded-sender count) |
 | `nest.rate_response` | report-only target skeleton | `neuro.response_curve` (requires input quantity + response method + caller-declared event scope) |
 | `nest.isi_distribution` | report-only target skeleton | `neuro.isi_distribution` |
@@ -132,11 +132,16 @@ Do not relabel a legacy NEST window as revision 2 by copying its old `start` and
 Revision 1 assumed `[start, stop)`, whereas a NEST recording device records over
 `(origin + start, origin + stop]`. A future implemented transform may construct the
 generic event-window form only when the legacy producer independently establishes that
-closure. For a native NEST
-memory export, re-read the recorder status and preserve `origin`, `start`, `stop`,
-`record_to: memory`, explicit `time_in_steps: false`, the NEST 3.9/3.10 version, and a
-digest of the detached export. Step/offset and file-backed exports have no revision-2
-adapter path and remain blocking migrations.
+closure. For a native NEST memory export, re-run capture through adapter revision 3.
+Preserve `origin`, `start`, `stop`, `record_to: memory`, explicit
+`time_in_steps: false`, the exact NEST 3.10.0 runtime declaration, the detached status
+value, and capture-time records for the runtime resolution, successful
+simulation-return horizon, most recent buffer clear or creation, most recent
+recorder-plan/wiring mutation, complete sender universe, and exact single-process
+scope. A final status cannot reconstruct those facts after the event. The source
+digest and domain-separated adapter-input digest are identities, not attestations.
+Step/offset, file-backed, MPI rank-local, caller-premerged MPI, and other runtime
+versions have no revision-3 adapter path and remain blocking migrations.
 
 ## API vs contract identity
 
