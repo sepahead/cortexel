@@ -34,6 +34,9 @@ guide below. Discovery is offline and versioned:
 cortexel catalog --json
 cortexel describe neuro.spike_raster --json --section example
 cortexel describe neuro.spike_raster --json --section schema
+cortexel source catalog --json
+cortexel source describe nest-spike-recorder --json
+cortexel source adapt nest-spike-recorder capture.json > request.json
 cortexel validate request.json
 cortexel render request.json --output figure.svg
 ```
@@ -49,13 +52,29 @@ The `summary`, `example`, and `schema` sections carry only compact skill identit
 renderer, availability, and adapter-status metadata; only `all` includes the full
 scientific/evidence/authority catalog record.
 
+Skill adapter metadata is not an invocation surface. `cortexel source catalog --json`
+is the closed digest-bound list of adapters the installed package can actually execute.
+At present it contains only `nest-spike-recorder`. `source describe` returns its exact
+authority statement, limitations, and copyable `{ exportedStatus, options }` envelope;
+`source adapt` reads bounded duplicate-key-safe JSON and emits a canonical request only
+after the adapter and the complete stable FigureRequest gate both succeed. Its stdout
+can be piped directly to `validate` or `render`. It does not import PyNEST, authenticate
+the producing process, or turn the external R049 gate into package evidence.
+
 The same resources are importable without a subprocess:
 
 ```ts
 import {
   SKILL_AUTHORING,
+  SOURCE_ADAPTER_CATALOG,
+  lookupSourceAdapter,
 } from 'cortexel/authoring';
 import { validateRequestValue } from 'cortexel/figure';
+
+const sourceAdapter = lookupSourceAdapter('nest-spike-recorder');
+if (sourceAdapter !== SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) {
+  throw new Error('source adapter unavailable');
+}
 
 const draft = structuredClone(
   SKILL_AUTHORING['neuro.spike_raster'].authoringExample,

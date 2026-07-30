@@ -12024,6 +12024,16 @@ var CAPABILITY_CATALOG = freezeGenerated({
       "Offline and stable-skill-only. JSON output is generated from the exact packaged catalog; closed summary, example, schema and all sections let prompt-budgeted agents request only what they need. The complete bundle includes the composed per-skill acceptance schema with explicit common-contract references, one living illustrative request, source mappings, evidence limits and implementation/certification metadata. The example is not a source-to-request adapter and does not establish external provenance."
     ]
   },
+  "cli.source": {
+    "id": "cli.source",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
+    ]
+  },
   "cli.validate": {
     "id": "cli.validate",
     "kind": "cli",
@@ -12715,7 +12725,7 @@ var UNCERTAINTY_STYLES_BY_KIND = freezeGenerated({
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:a46204c087e224566e304fbe63863b94dbd7b8bf4e8218c591d9d7f2acf79247";
+var CONTRACT_DIGEST = "sha256:0b8afcc2682f41339d8e01776c485444edb3d88a457196a7f18b018d1ca84a6e";
 var CATALOG_DIGEST = "sha256:18fe441ad91d52651cbbe5efa063478a5c458560c29d20d541d63359722addd8";
 var CATALOG_DIGEST_DOMAIN = "cortexel-public-stable-catalog.v2";
 var STABLE_SKILL_COUNT = 19;
@@ -54478,19 +54488,19 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
   const skillId = validated.skillId;
   const rendererId = SKILL_CATALOG[skillId].renderer.id;
   const done = (plan, derivationOperations = [], derivedDisclosureFacts = {}) => ({ plan, rendererId, derivationOperations, derivedDisclosureFacts });
-  const fail3 = (code, stage, message, instancePath = "") => ({
+  const fail4 = (code, stage, message, instancePath = "") => ({
     errors: [makeError({ code, stage, message, instancePath, skillId })]
   });
   const failDistribution = (error) => {
     const stage = error.code.startsWith("RESOURCE_") ? "budget" : error.code.startsWith("RENDER_") ? "render" : error.code.startsWith("SCOPE_") ? "scope" : error.code.startsWith("SCIENCE_") ? "science" : "semantic";
     const instancePath = error.path.length === 0 ? "/data" : `/${error.path.map((part) => String(part).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
-    return fail3(error.code, stage, error.message, instancePath);
+    return fail4(error.code, stage, error.message, instancePath);
   };
   if (skillId === "neuro.population_rate") {
     const mode = data.mode;
     if (mode === "events") {
       if (parameters.rateMode !== "binned_count") {
-        return fail3(
+        return fail4(
           "RENDER_UNSUPPORTED_SKILL",
           "render",
           `population rate mode ${String(parameters.rateMode)} has no contract-faithful compiler in this build. Cortexel will not substitute a binned count.`,
@@ -54595,7 +54605,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       } catch (error) {
         if (error instanceof DistributionDerivationError) return failDistribution(error);
         const message = error instanceof Error ? error.message : "population-rate derivation failed";
-        return fail3(
+        return fail4(
           "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
           "science",
           message,
@@ -54612,7 +54622,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const declaredRecordedSenderCount = num(data.recordedSenderCount);
       const recordedSenderCount = recordedSenderIds.length;
       if (declaredRecordedSenderCount !== recordedSenderCount) {
-        return fail3(
+        return fail4(
           "SCIENCE_NORMALIZATION_UNVERIFIABLE",
           "science",
           `recordedSenderCount ${String(declaredRecordedSenderCount)} does not equal the complete recordedSenderIds cardinality ${recordedSenderCount}.`,
@@ -54622,7 +54632,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const sourceEventCount = num(data.sourceEventCount);
       const exactCountTotal2 = counts.reduce((total, count) => total + BigInt(count), 0n);
       if (sourceEventCount === void 0 || exactCountTotal2 !== BigInt(sourceEventCount)) {
-        return fail3(
+        return fail4(
           "SCIENCE_NORMALIZATION_UNVERIFIABLE",
           "science",
           `sum(counts) is ${exactCountTotal2}, not sourceEventCount ${String(sourceEventCount)}.`,
@@ -54711,7 +54721,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         derivedFacts
       );
     } catch (error) {
-      return fail3(
+      return fail4(
         "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
         "science",
         error instanceof Error ? error.message : "prebinned population-rate derivation failed",
@@ -54740,7 +54750,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     });
     const analogUncertainty = rec(parameters.uncertainty);
     if (analogUncertainty?.kind !== void 0 && analogUncertainty.kind !== "none" && inputs.length !== 1) {
-      return fail3(
+      return fail4(
         "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
         "science",
         "registry 1.0 analog uncertainty is figure-level and therefore unambiguous only for exactly one series. Use separate figures or declare uncertainty:none for a multi-series trace.",
@@ -54758,7 +54768,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       if (uncertaintyError) return { errors: [uncertaintyError] };
       const mismatch = traceUncertaintyLengthMismatch(analogUncertainty, inputs[0].values.length);
       if (mismatch) {
-        return fail3(
+        return fail4(
           "SEMANTIC_LENGTH_MISMATCH",
           "semantic",
           `analog uncertainty.${mismatch.key} has ${mismatch.observed} entries for ${inputs[0].values.length} samples.`,
@@ -54768,7 +54778,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     }
     const layout = parameters.layout;
     if (layout === "shared_axis" && inputs.length > CATEGORICAL_SERIES_STYLES.length) {
-      return fail3(
+      return fail4(
         "RENDER_SERIES_LIMIT_EXCEEDED",
         "render",
         `${inputs.length} series were assigned to one shared axis, but the registered palette has only ${CATEGORICAL_SERIES_STYLES.length} stable distinguishable style tuples.`,
@@ -54787,7 +54797,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       }
       for (const [key, indexes] of groups) {
         if (indexes.length > CATEGORICAL_SERIES_STYLES.length) {
-          return fail3(
+          return fail4(
             "RENDER_SERIES_LIMIT_EXCEEDED",
             "render",
             `panel ${key} would overlay ${indexes.length} series, above the ${CATEGORICAL_SERIES_STYLES.length}-style distinguishability limit.`,
@@ -54798,7 +54808,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           const dimensions = new Set(indexes.map((index) => dimensionOf(inputs[index].valueUnit)));
           const incompatible = indexes.length > 1 && indexes.slice(1).some((index) => !axesAreCompatible(inputs[indexes[0]].valueUnit, inputs[index].valueUnit));
           if (dimensions.size > 1 || incompatible) {
-            return fail3(
+            return fail4(
               "SCIENCE_UNIT_DIMENSION_MISMATCH",
               "science",
               `quantity-kind group ${key} cannot share one numeric axis. Use groupBy=series; Cortexel will not force dimensionally incompatible or simulator-defined state variables into a comparison.`,
@@ -54857,7 +54867,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const allPrepared = allEntries.map((entry) => entry.series);
     const empty = allPrepared.find((prepared) => prepared.outputCount === 0);
     if (empty) {
-      return fail3(
+      return fail4(
         "RENDER_NO_DATA",
         "render",
         `series ${empty.id} has no observation inside the declared display window. Cortexel refuses an empty trace because it is visually indistinguishable from a measured flat or silent signal.`,
@@ -55020,7 +55030,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     }
     const seriesIds = inputs.map((input) => input.id);
     if (new Set(seriesIds).size !== seriesIds.length) {
-      return fail3(
+      return fail4(
         "SEMANTIC_DUPLICATE_ID",
         "semantic",
         "multi-signal series ids must be unique; duplicate identities cannot bind an unambiguous legend or table.",
@@ -55033,7 +55043,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     }));
     const panelIds = orderedPanelRecords.map(({ panel, declaredIndex }) => panel.panelId ?? `panel-${declaredIndex + 1}`);
     if (new Set(panelIds).size !== panelIds.length) {
-      return fail3(
+      return fail4(
         "SEMANTIC_DUPLICATE_ID",
         "semantic",
         "multi-signal panel ids must be unique; duplicate panels would duplicate observations in the artifact.",
@@ -55043,7 +55053,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const panelIdSet = new Set(panelIds);
     const undeclared = inputs.find((input) => !panelIdSet.has(input.panelId));
     if (undeclared) {
-      return fail3(
+      return fail4(
         "RENDER_NO_DATA",
         "render",
         `series ${undeclared.id} names undeclared panel ${undeclared.panelId}. Cortexel refuses rather than silently dropping the series.`,
@@ -55062,7 +55072,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const panelId = panel.panelId ?? `panel-${declaredIndex + 1}`;
       const memberInputs = inputs.map((input, index) => ({ input, index })).filter(({ input }) => input.panelId === panelId);
       if (memberInputs.length === 0) {
-        return fail3(
+        return fail4(
           "RENDER_NO_DATA",
           "render",
           `declared panel ${panelId} has no member series. Cortexel refuses an empty coordinate system.`,
@@ -55070,7 +55080,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (memberInputs.length > CATEGORICAL_SERIES_STYLES.length) {
-        return fail3(
+        return fail4(
           "RENDER_SERIES_LIMIT_EXCEEDED",
           "render",
           `panel ${panelId} contains ${memberInputs.length} overlaid series, above the ${CATEGORICAL_SERIES_STYLES.length}-style distinguishability limit.`,
@@ -55080,7 +55090,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const targetUnit = normalization ? "1" : panel.unit ?? "1";
       const members = [];
       if (memberInputs.length > 1 && memberInputs.some(({ input }) => dimensionOf(input.valueUnit) === "simulator_defined")) {
-        return fail3(
+        return fail4(
           "SCIENCE_UNIT_DIMENSION_MISMATCH",
           "science",
           `panel ${panelId} contains a simulator-defined unit alongside another series. Its meaning is model-dependent even when the unit codes are identical, so it must occupy a panel of its own.`,
@@ -55089,7 +55099,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       }
       for (const { input, index } of memberInputs) {
         if (input.times.length !== input.values.length) {
-          return fail3(
+          return fail4(
             "SEMANTIC_LENGTH_MISMATCH",
             "semantic",
             `series ${input.id} has ${input.times.length} timestamps and ${input.values.length} values.`,
@@ -55110,7 +55120,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           input.values.length
         );
         if (uncertaintyMismatch) {
-          return fail3(
+          return fail4(
             "SEMANTIC_LENGTH_MISMATCH",
             "semantic",
             `series ${input.id} uncertainty.${uncertaintyMismatch.key} has ${uncertaintyMismatch.observed} entries for ${input.values.length} samples.`,
@@ -55126,7 +55136,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           return { errors: [tracePreparationError(error, skillId, `/data/series/${index}`)] };
         }
         if (prepared.excludedBelow + prepared.excludedAbove > 0) {
-          return fail3(
+          return fail4(
             "SCIENCE_EVENT_OUT_OF_WINDOW",
             "science",
             `series ${input.id} has ${prepared.excludedBelow + prepared.excludedAbove} samples outside the declared display window after applying its clock offset. Multi-signal traces refuse this contradiction rather than cropping it.`,
@@ -55134,7 +55144,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           );
         }
         if (prepared.outputCount === 0) {
-          return fail3(
+          return fail4(
             "RENDER_NO_DATA",
             "render",
             `series ${input.id} has no observation to draw.`,
@@ -55155,7 +55165,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         ...entry.uncertaintyLower ?? [],
         ...entry.uncertaintyUpper ?? []
       ].some((value) => value !== null && value <= 0))) {
-        return fail3(
+        return fail4(
           "RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN",
           "render",
           `panel ${panelId} requests a logarithmic scale but contains a zero or negative displayed value. Cortexel never clips those observations.`,
@@ -55364,7 +55374,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const targetValueUnit = String(firstValues.unit);
     const declaredUncertainty = rec(parameters.uncertainty);
     if (declaredUncertainty?.kind !== void 0 && declaredUncertainty.kind !== "none" && rawSeries.length !== 1) {
-      return fail3(
+      return fail4(
         "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
         "science",
         "compartment-trace uncertainty is declared once for the whole figure in contract 1.0 and is therefore unambiguous only when exactly one source series is present.",
@@ -55372,7 +55382,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       );
     }
     if (parameters.layout === "heatmap" && declaredUncertainty?.kind !== void 0 && declaredUncertainty.kind !== "none") {
-      return fail3(
+      return fail4(
         "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
         "science",
         "a heatmap cell has one colour channel and cannot simultaneously encode a declared interval without a registered uncertainty mark; choose a trace layout or uncertainty:none.",
@@ -55400,7 +55410,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         if (uncertaintyError) return { errors: [uncertaintyError] };
         const mismatch = traceUncertaintyLengthMismatch(declaredUncertainty, sourceValues.length);
         if (mismatch) {
-          return fail3(
+          return fail4(
             "SEMANTIC_LENGTH_MISMATCH",
             "semantic",
             `compartment uncertainty.${mismatch.key} has ${mismatch.observed} entries for ${sourceValues.length} samples.`,
@@ -55505,7 +55515,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       0
     ) + compartmentIds.filter((id) => !recordedCompartmentIds.has(id)).length;
     if (tableRows.length !== expectedCompartmentRows) {
-      return fail3(
+      return fail4(
         "INTERNAL_INVARIANT_VIOLATED",
         "internal",
         `compartment table materialized ${tableRows.length} rows for ${expectedCompartmentRows} accepted sample/unrecorded-compartment carriers.`,
@@ -55570,7 +55580,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     if (layout === "heatmap") {
       const signalIds = new Set(entries.map((entry) => String(entry.raw.signalId)));
       if (signalIds.size !== 1) {
-        return fail3(
+        return fail4(
           "RENDER_SERIES_LIMIT_EXCEEDED",
           "render",
           `a heatmap has one global colour quantity, but ${signalIds.size} signal identities were supplied.`,
@@ -55635,7 +55645,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           const id = compartmentIds[index];
           const panelEntries = entries.filter((entry) => String(entry.raw.compartmentId) === id).map((entry, entryIndex) => asPanelEntry(entry, entryIndex));
           if (panelEntries.length > CATEGORICAL_SERIES_STYLES.length) {
-            return fail3(
+            return fail4(
               "RENDER_SERIES_LIMIT_EXCEEDED",
               "render",
               `compartment ${id} has ${panelEntries.length} overlaid signals but only ${CATEGORICAL_SERIES_STYLES.length} stable style tuples exist.`,
@@ -55663,7 +55673,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         const selectedEntries = entries.filter((entry) => selected.has(String(entry.raw.compartmentId)));
         const drawnCount = selectedEntries.length + (derivedAggregate ? 1 : 0);
         if (drawnCount > CATEGORICAL_SERIES_STYLES.length) {
-          return fail3(
+          return fail4(
             "RENDER_SERIES_LIMIT_EXCEEDED",
             "render",
             `${drawnCount} overlay series exceed the ${CATEGORICAL_SERIES_STYLES.length} registered distinguishable style tuples.`,
@@ -56060,7 +56070,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           panelEntry,
           parameters.showObservationMarkers === true
         )) {
-          return fail3(
+          return fail4(
             "RENDER_NO_DATA",
             "render",
             "the declared aggregate has no finite retained point, reconstructed vertex, event-held state, carry-in state, or painted initial state in the requested window.",
@@ -56075,7 +56085,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
         const tableRows2 = table2.rows;
         if (tableRows2.length !== rowPreflight2.exactRowCount) {
-          return fail3(
+          return fail4(
             "INTERNAL_INVARIANT_VIOLATED",
             "internal",
             `declared aggregate table materialized ${tableRows2.length} rows after an exact ${rowPreflight2.exactRowCount}-row canonical carrier preflight.`,
@@ -56179,7 +56189,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
         if ("code" in preparedOrError) return { errors: [preparedOrError] };
         if ((display === "aggregate_derived" || display === "aggregate_derived_with_members") && rec(raw.uncertainty)?.kind !== "none") {
-          return fail3(
+          return fail4(
             "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
             "science",
             "derived weight aggregates require uncertainty:none on every member; across-trial edge uncertainty cannot be propagated across synapses without an error model.",
@@ -56189,7 +56199,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         members.push(preparedOrError);
       }
       if (display === "individual" && members.length > CATEGORICAL_SERIES_STYLES.length) {
-        return fail3(
+        return fail4(
           "RENDER_SERIES_LIMIT_EXCEEDED",
           "render",
           `${members.length} individual synapses exceed the ${CATEGORICAL_SERIES_STYLES.length} registered distinguishable style tuples.`,
@@ -56259,7 +56269,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       let aggregateMember;
       if (display === "aggregate_derived" || display === "aggregate_derived_with_members") {
         if (!preparedAggregateGrid) {
-          return fail3(
+          return fail4(
             "INTERNAL_INVARIANT_VIOLATED",
             "internal",
             "derived weight display reached aggregate evaluation without an exact bounded grid preflight.",
@@ -56421,7 +56431,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       );
       const tableRows = table.rows;
       if (tableRows.length !== rowPreflight.exactRowCount) {
-        return fail3(
+        return fail4(
           "INTERNAL_INVARIANT_VIOLATED",
           "internal",
           `weight table materialized ${tableRows.length} rows after an exact ${rowPreflight.exactRowCount}-row canonical carrier preflight.`,
@@ -56456,7 +56466,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         entry,
         parameters.showObservationMarkers === true
       ))) {
-        return fail3(
+        return fail4(
           "RENDER_NO_DATA",
           "render",
           "the selected display has no finite retained point, reconstructed vertex, event-held state, carry-in state, or painted initial state in the requested window.",
@@ -56598,7 +56608,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     try {
       partition = exactSpikeWindowPartition(data);
     } catch (error) {
-      return fail3(
+      return fail4(
         "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
         "science",
         error instanceof Error ? error.message : "the event window cannot be represented on the spike-raster display axis.",
@@ -56629,7 +56639,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const senderPopulationIds = strings4(data.senderPopulationIds);
     const outOfWindowPolicy = parameters.outOfWindowPolicy;
     if (excludedCount > 0 && outOfWindowPolicy !== "exclude_and_disclose") {
-      return fail3(
+      return fail4(
         "SCIENCE_EVENT_OUT_OF_WINDOW",
         "science",
         `${excludedCount} events are outside the declared ${boundary} window; a validated reject-policy request must not reach rendering.`,
@@ -56781,7 +56791,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const edgeCorrection = String(parameters.edgeCorrection);
     const mode = String(data.mode);
     if (statistic !== "raw_pair_count" && statistic !== "target_rate_per_reference_event") {
-      return fail3(
+      return fail4(
         "RENDER_UNSUPPORTED_SKILL",
         "render",
         `correlogram statistic ${statistic} is outside the closed revision-4 product.`,
@@ -56789,7 +56799,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       );
     }
     if (statistic === "raw_pair_count" && edgeCorrection !== "none" || statistic === "target_rate_per_reference_event" && edgeCorrection !== "none" && edgeCorrection !== "eligible_reference_events") {
-      return fail3(
+      return fail4(
         "SCIENCE_CORRELATION_DENOMINATOR_INVALID",
         "science",
         `${statistic} cannot use edge correction ${edgeCorrection}.`,
@@ -56800,7 +56810,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const preBinned = mode === "prebinned_auto" || mode === "prebinned_cross";
       const rawInputs = eventCorrelogramInputs(data, parameters);
       if (!preBinned && !rawInputs) {
-        return fail3(
+        return fail4(
           "RENDER_UNSUPPORTED_SKILL",
           "render",
           `correlogram data mode ${mode} is outside the four closed revision-4 modes.`,
@@ -57082,14 +57092,14 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       }
       if (error instanceof CorrelogramDerivationError) {
         const stage = error.code === "RESOURCE_PAIRWISE_EXCEEDED" ? "budget" : error.code === "INTERNAL_INVARIANT_VIOLATED" ? "internal" : "science";
-        return fail3(
+        return fail4(
           error.code,
           stage,
           error.message,
           correlogramDerivationRequestPath(mode, error.instancePath)
         );
       }
-      return fail3(
+      return fail4(
         "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
         "science",
         error instanceof Error ? error.message : "correlogram derivation failed",
@@ -57168,7 +57178,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         })();
         const histogram = result.histogram.groups[0];
         if (parameters.xScale === "log" && (resolvedBins.spec.edges.some((edge) => !(edge > 0)) || result.zeroIntervalCount > 0)) {
-          return fail3(
+          return fail4(
             "RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN",
             "render",
             "a logarithmic ISI axis requires strictly positive bin edges and intervals.",
@@ -57293,10 +57303,10 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         if (error instanceof DistributionDerivationError) return failDistribution(error);
         const message = error instanceof Error ? error.message : "ISI derivation failed";
         if (error instanceof EmptyHistogramNormalizationError) {
-          return fail3("RENDER_NO_DATA", "render", message, "/data");
+          return fail4("RENDER_NO_DATA", "render", message, "/data");
         }
         const numericResolutionFailure = message.includes("overflows") || message.includes("unrepresentable") || message.includes("rounds across") || message.includes("rounded") || message.includes("safe-integer");
-        return fail3(
+        return fail4(
           numericResolutionFailure ? "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE" : "INTERNAL_INVARIANT_VIOLATED",
           numericResolutionFailure ? "science" : "render",
           message,
@@ -57404,7 +57414,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       } catch (error) {
         if (error instanceof DistributionDerivationError) return failDistribution(error);
-        return fail3(
+        return fail4(
           "INTERNAL_INVARIANT_VIOLATED",
           "render",
           error instanceof Error ? error.message : "degree-distribution derivation failed",
@@ -57538,7 +57548,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           outOfRangePolicy: String(parameters.outOfRangeWeights)
         });
         if (parameters.xScale === "log" && result.minimumObservation !== null && !(result.minimumObservation > 0)) {
-          return fail3(
+          return fail4(
             "RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN",
             "render",
             "logarithmic distribution observations must be strictly positive.",
@@ -57572,7 +57582,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const binCount = resolvedBins.spec.edges.length - 1;
       for (const group of histogramGroups) {
         if (group.values.length !== binCount) {
-          return fail3(
+          return fail4(
             "SEMANTIC_LENGTH_MISMATCH",
             "semantic",
             `group ${group.id} has ${group.values.length} histogram values for ${binCount} declared bins.`,
@@ -57580,7 +57590,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           );
         }
         if (group.values.some((value) => !Number.isFinite(value) || value < 0)) {
-          return fail3(
+          return fail4(
             "SCIENCE_NORMALIZATION_UNVERIFIABLE",
             "science",
             `group ${group.id} contains a histogram value that is not finite and non-negative.`,
@@ -57591,7 +57601,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const underflow = histogramGroups.reduce((sum, group) => sum + group.underRangeCount, 0);
       const overflow = histogramGroups.reduce((sum, group) => sum + group.overRangeCount, 0);
       if ((isDelay ? parameters.outOfRangeDelays : parameters.outOfRangeWeights) === "reject" && (underflow > 0 || overflow > 0)) {
-        return fail3(
+        return fail4(
           "SCIENCE_BIN_EDGES_INVALID",
           "science",
           `${underflow} observations fall below and ${overflow} above the declared bin range under the reject policy.`,
@@ -57599,7 +57609,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (parameters.xScale === "log" && resolvedBins.spec.edges.some((edge) => !(edge > 0))) {
-        return fail3(
+        return fail4(
           "RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN",
           "render",
           "a logarithmic distribution axis requires strictly positive bin edges.",
@@ -57890,20 +57900,20 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "distribution derivation failed";
       if (error instanceof EmptyHistogramNormalizationError) {
-        return fail3("RENDER_NO_DATA", "render", message, "/data");
+        return fail4("RENDER_NO_DATA", "render", message, "/data");
       }
       if (message.includes("no_aggregation")) {
-        return fail3("SCIENCE_AGGREGATION_REQUIRED", "science", message, "/parameters");
+        return fail4("SCIENCE_AGGREGATION_REQUIRED", "science", message, "/parameters");
       }
       if (message.includes("logarithmic distribution observations")) {
-        return fail3(
+        return fail4(
           "RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN",
           "render",
           message,
           "/parameters/xScale"
         );
       }
-      return fail3(
+      return fail4(
         message.includes("unit") || message.includes("reciprocal") ? "SCIENCE_UNIT_DIMENSION_MISMATCH" : message.includes("histogram") || message.includes("safe-integer") ? "SCIENCE_NORMALIZATION_UNVERIFIABLE" : "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
         "science",
         message,
@@ -58448,7 +58458,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     } catch (error) {
       if (error instanceof MatrixDerivationError) {
         const instancePath = error.code === "SCIENCE_DELAY_NONPOSITIVE" ? "/data/connections/delays/values" : error.code === "SCIENCE_AGGREGATION_REQUIRED" ? "/parameters/multapseAggregation" : error.code === "RESOURCE_MATRIX_CELLS_EXCEEDED" ? "/parameters/tableCellEnumeration" : "/data/connections";
-        return fail3(error.code, stageForMatrixError(error), error.message, instancePath);
+        return fail4(error.code, stageForMatrixError(error), error.message, instancePath);
       }
       throw error;
     }
@@ -58501,7 +58511,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const group = rec(candidate) ?? {};
       const groupId = String(group.id);
       if (groupIds.has(groupId)) {
-        return fail3(
+        return fail4(
           "SEMANTIC_DUPLICATE_ID",
           "semantic",
           `node-universe group id ${JSON.stringify(groupId)} is declared more than once. Group order and legend identity require unique ids.`,
@@ -58511,7 +58521,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       groupIds.add(groupId);
       for (const member of strings4(group.memberIds)) {
         if (!universeSet.has(member)) {
-          return fail3(
+          return fail4(
             "SEMANTIC_UNKNOWN_REFERENCE",
             "semantic",
             `group ${JSON.stringify(groupId)} contains node ${JSON.stringify(member)}, which is outside the declared node universe. A group is a partition of that universe, never an extension of it.`,
@@ -58520,7 +58530,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         }
         const previousGroup = groupByNode.get(member);
         if (previousGroup !== void 0) {
-          return fail3(
+          return fail4(
             "SEMANTIC_DUPLICATE_ID",
             "semantic",
             `node ${JSON.stringify(member)} belongs to both group ${JSON.stringify(previousGroup)} and group ${JSON.stringify(groupId)}. Group colour and marker shape require disjoint membership.`,
@@ -58566,7 +58576,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           edgeChordRule: boundary2?.kind === "periodic" ? String(boundary2.edgeChordRule) : "open"
         };
       } catch (error) {
-        return fail3(
+        return fail4(
           "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
           "science",
           error instanceof Error ? `the declared spatial domain is not representable under the registered extent-relative binary64 policy: ${error.message}` : "the declared spatial domain is not representable under the registered extent-relative binary64 policy.",
@@ -58623,7 +58633,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const targets = strings4(connections?.targetIds);
     const callerEdgeIds = strings4(connections?.edgeIds);
     if (callerEdgeIds.length > 0 && callerEdgeIds.length !== sources.length) {
-      return fail3(
+      return fail4(
         "SEMANTIC_LENGTH_MISMATCH",
         "semantic",
         `connections.edgeIds has ${callerEdgeIds.length} entries for ${sources.length} connection rows.`,
@@ -58664,7 +58674,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           physicalSourceId === physicalTargetId
         );
       } catch (error) {
-        return fail3(
+        return fail4(
           "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
           "science",
           error instanceof Error ? `connection ${edgeIndex} cannot be routed in finite binary64: ${error.message}` : `connection ${edgeIndex} cannot be routed in finite binary64.`,
@@ -58672,7 +58682,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (physicalSourceId !== physicalTargetId && route.dx === 0 && route.dy === 0) {
-        return fail3(
+        return fail4(
           "RENDER_DEGENERATE_DOMAIN",
           "render",
           `connection ${edgeIndex} joins distinct nodes ${physicalSourceId} and ${physicalTargetId} at the same measured place under path kind ${route.pathKind}. A zero-length chord has no target end for an arrowhead, and Cortexel refuses rather than invent a separation.`,
@@ -58715,7 +58725,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const tableRows = [...nodeRows, ...edgeRows];
     const expectedSpatialRows = strings4(rec(data.nodeUniverse)?.ids).length + sources.length;
     if (tableRows.length !== expectedSpatialRows) {
-      return fail3(
+      return fail4(
         "INTERNAL_INVARIANT_VIOLATED",
         "internal",
         `spatial table materialized ${tableRows.length} rows for ${expectedSpatialRows} declared node/connection carriers.`,
@@ -58724,7 +58734,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     }
     const nodeEncoding = rec(parameters.nodeEncoding) ?? {};
     if (nodeEncoding.mode === "value" && !valueRecord) {
-      return fail3(
+      return fail4(
         "RENDER_NO_DATA",
         "render",
         "nodeEncoding.mode is value, but positions.value was not supplied. Cortexel refuses rather than draw a uniform map under a numeric legend.",
@@ -58751,7 +58761,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           }
           previousTransform = transformed;
         } catch (error) {
-          return fail3(
+          return fail4(
             "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
             "science",
             error instanceof Error ? `the declared spatial node symlog scale cannot preserve finite strict value ordering: ${error.message}` : "the declared spatial node symlog scale cannot preserve finite strict value ordering.",
@@ -58764,7 +58774,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const encodedValues = connectionDisplay?.valueEncoding === "weight" ? weights : connectionDisplay?.valueEncoding === "delay" ? delays : [];
     if (connectionDisplay && connectionDisplay.valueEncoding !== "none") {
       if (encodedValues.length !== sources.length) {
-        return fail3(
+        return fail4(
           "RENDER_NO_DATA",
           "render",
           `${String(connectionDisplay.valueEncoding)} was selected for connection encoding, but that complete parallel value channel was not supplied.`,
@@ -58780,7 +58790,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       }
       for (const entries of valuesByPair.values()) {
         if (entries.length > 1 && (typeof parameters.multapseAggregation !== "string" || parameters.multapseAggregation === "no_aggregation")) {
-          return fail3(
+          return fail4(
             "SCIENCE_AGGREGATION_REQUIRED",
             "science",
             "multiple connection rows share one measured endpoint chord, so its encoded value requires an explicit sum, mean, min, or max aggregation. Reciprocal directions remain separate arrow/count evidence, but cannot carry two incompatible stroke values on one physical chord.",
@@ -58789,7 +58799,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         }
         const finite2 = entries.filter((value) => typeof value === "number");
         if (finite2.length > 0 && finite2.length !== entries.length) {
-          return fail3(
+          return fail4(
             "RENDER_NO_DATA",
             "render",
             "one shared spatial chord cannot simultaneously encode a finite value and a missing value from parallel connections. Cortexel refuses rather than let the finite row visually stand in for the missing row.",
@@ -58802,7 +58812,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
             entries.length === 1 ? "no_aggregation" : parameters.multapseAggregation
           );
         } catch (error) {
-          return fail3(
+          return fail4(
             "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
             "science",
             error instanceof Error ? `the declared spatial chord aggregate is not representable as finite binary64: ${error.message}` : "the declared spatial chord aggregate is not representable as finite binary64.",
@@ -58929,7 +58939,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const responseMethod = response?.method ?? parameters.responseMethod;
     const repeatDesign = parameters.repeatDesign;
     if (parameters.responseMethod !== response?.method) {
-      return fail3(
+      return fail4(
         "SCIENCE_RESPONSE_METHOD_MISMATCH",
         "science",
         `parameters.responseMethod is ${JSON.stringify(parameters.responseMethod)} but the response values are typed as ${JSON.stringify(response?.method)}. Cortexel will not relabel one scientific quantity as another.`,
@@ -58939,7 +58949,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const rateResponse = responseMethod === "mean_firing_rate" || responseMethod === "peak_firing_rate";
     const eventScopeVerification = verifyResponseEventScope(data.eventScope);
     if (!eventScopeVerification.ok) {
-      return fail3(
+      return fail4(
         "SCIENCE_EVENT_SCOPE_UNVERIFIABLE",
         "science",
         eventScopeVerification.message,
@@ -58954,7 +58964,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         data.eventScope
       );
       if (!rateAuthority.ok) {
-        return fail3(
+        return fail4(
           rateAuthority.path.startsWith("/eventScope") ? "SCIENCE_EVENT_SCOPE_UNVERIFIABLE" : "SCIENCE_NORMALIZATION_UNVERIFIABLE",
           "science",
           rateAuthority.message,
@@ -58970,7 +58980,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         data.measurementWindow
       );
       if (!peakBasisVerification.ok) {
-        return fail3(
+        return fail4(
           "SCIENCE_NORMALIZATION_UNVERIFIABLE",
           "science",
           peakBasisVerification.message,
@@ -58990,7 +59000,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         if (!binnedPeakValueLatticeVerification.ok) {
           const responseBase = `/data/${mode === "aggregates" ? "aggregates" : "observations"}/response`;
           const instancePath = binnedPeakValueLatticeVerification.path.startsWith("/values/") ? `${responseBase}${binnedPeakValueLatticeVerification.path}` : binnedPeakValueLatticeVerification.path.startsWith("/sampleCounts") ? `/data/aggregates${binnedPeakValueLatticeVerification.path}` : binnedPeakValueLatticeVerification.path === "/estimator" ? "/parameters/estimator" : `${responseBase}${binnedPeakValueLatticeVerification.path}`;
-          return fail3(
+          return fail4(
             "SCIENCE_NORMALIZATION_UNVERIFIABLE",
             "science",
             binnedPeakValueLatticeVerification.message,
@@ -59018,7 +59028,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const hasDefinedAuditedEventCounts = definedAuditedEventCount > 0;
     if (mode === "repeats" && peakBasisVerification?.ok === true && peakBasisVerification.kind === "binned_count") {
       if (!auditedPeakBinCounts) {
-        return fail3(
+        return fail4(
           "SCIENCE_NORMALIZATION_UNVERIFIABLE",
           "science",
           "raw binned-count peaks require exact parallel peakBinCounts so repeat rates and condition estimators can be re-derived without mode-dependent rounding",
@@ -59026,7 +59036,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (auditedPeakBinCounts.length !== responseValues.length) {
-        return fail3(
+        return fail4(
           "SEMANTIC_LENGTH_MISMATCH",
           "semantic",
           "response.audit.peakBinCounts must be parallel to raw binned-peak response values",
@@ -59042,7 +59052,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         const peakBinCount = auditedPeakBinCounts[index];
         const suppliedRate = responseValues[index];
         if (peakBinCount !== null && (!Number.isSafeInteger(peakBinCount) || peakBinCount < 0)) {
-          return fail3(
+          return fail4(
             "SCIENCE_COUNT_NOT_INTEGER",
             "science",
             "audited peak-bin counts must be exact non-negative safe integers or null",
@@ -59050,7 +59060,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           );
         }
         if (peakBinCount === null !== (suppliedRate === null)) {
-          return fail3(
+          return fail4(
             "SCIENCE_NORMALIZATION_UNVERIFIABLE",
             "science",
             "an audited peak-bin count must be null exactly where its response is null",
@@ -59069,7 +59079,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
               rateUnit
             );
           } catch (error) {
-            return fail3(
+            return fail4(
               "SCIENCE_NORMALIZATION_UNVERIFIABLE",
               "science",
               `the raw binned-peak rate could not be re-derived from its exact max-bin count (${error instanceof Error ? error.message : "numeric failure"})`,
@@ -59077,7 +59087,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
             );
           }
           if ((suppliedRate === 0 ? 0 : suppliedRate) !== expectedRate) {
-            return fail3(
+            return fail4(
               "SCIENCE_NORMALIZATION_UNVERIFIABLE",
               "science",
               `raw binned-peak rate ${suppliedRate} ${rateUnit} does not equal the one-round exact rate ${expectedRate} ${rateUnit} derived from peak-bin count ${peakBinCount}, divisor ${rateAuthority.integerDivisor}, and bin width ${binWidthValue} ${binWidthUnit}`,
@@ -59087,7 +59097,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         }
       }
     } else if (auditedPeakBinCounts) {
-      return fail3(
+      return fail4(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         "science",
         "peakBinCounts is legal only for raw binned-count peak responses",
@@ -59096,7 +59106,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     }
     if (auditedEventCounts) {
       if (auditedEventCounts.length !== responseValues.length) {
-        return fail3(
+        return fail4(
           "SEMANTIC_LENGTH_MISMATCH",
           "semantic",
           "response.audit.eventCounts must be parallel to response.values",
@@ -59111,7 +59121,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       for (let index = 0; index < auditedEventCounts.length; index++) {
         const eventCount = auditedEventCounts[index];
         if (eventCount !== null && (!Number.isSafeInteger(eventCount) || eventCount < 0)) {
-          return fail3(
+          return fail4(
             "SCIENCE_COUNT_NOT_INTEGER",
             "science",
             "audited event counts must be exact non-negative safe integers or null",
@@ -59119,7 +59129,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           );
         }
         if (eventCount === null !== (responseValues[index] === null)) {
-          return fail3(
+          return fail4(
             "SCIENCE_NORMALIZATION_UNVERIFIABLE",
             "science",
             "an audited event count must be null exactly where its response is null",
@@ -59140,7 +59150,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
             );
           } catch (error) {
             const detail = error instanceof Error ? error.message : "numeric conversion failed";
-            return fail3(
+            return fail4(
               "SCIENCE_NORMALIZATION_UNVERIFIABLE",
               "science",
               `the per-repeat mean-rate audit could not be re-derived (${detail})`,
@@ -59148,7 +59158,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
             );
           }
           if ((suppliedRate === 0 ? 0 : suppliedRate) !== expectedRate) {
-            return fail3(
+            return fail4(
               "SCIENCE_NORMALIZATION_UNVERIFIABLE",
               "science",
               `supplied mean rate ${suppliedRate} ${auditedRateUnit} does not equal the one-round exact ${rateAuthority?.ok === true ? rateAuthority.normalization : "declared normalization"} derived from audited count ${eventCount}, integer divisor ${rateAuthority?.ok === true ? rateAuthority.integerDivisor : 1}, and the exact typed measurement window; the derived value is ${expectedRate} ${auditedRateUnit}`,
@@ -59161,7 +59171,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const uncertainty = rec(parameters.uncertainty);
     const uncertaintyKind = uncertainty?.kind ?? "none";
     if (uncertaintyKind !== "none") {
-      return fail3(
+      return fail4(
         "SCIENCE_UNCERTAINTY_UNSUPPORTED_FOR_SKILL",
         "science",
         `response-curve uncertainty variant ${uncertaintyKind} is not drawable in the current build. Cortexel refuses to drop or reinterpret it.`,
@@ -59169,7 +59179,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       );
     }
     if (responseMethod === "first_spike_latency" && response?.latencyReference !== "measurement_window_start") {
-      return fail3(
+      return fail4(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         "science",
         "revision 2 supports first-spike latency only from measurement_window_start; stimulus onset has no typed coordinate relative to the window",
@@ -59194,7 +59204,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
             { value: windowStop2, unit: windowUnit2 }
           );
           if (comparison > 0 || comparison === 0 && !closedStop) {
-            return fail3(
+            return fail4(
               "SCIENCE_LATENCY_OUTSIDE_WINDOW",
               "science",
               `first-spike latency ${latency} ${responseUnit2} is referenced to the measurement-window start but lies outside the declared ${closedStop ? "closed" : "half-open"} window.`,
@@ -59256,42 +59266,42 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     if (!derived.ok) {
       const { issue: issue2 } = derived;
       if (issue2.code === "length_mismatch") {
-        return fail3("SEMANTIC_LENGTH_MISMATCH", "semantic", issue2.message, issue2.path);
+        return fail4("SEMANTIC_LENGTH_MISMATCH", "semantic", issue2.message, issue2.path);
       }
       if (issue2.code === "duplicate_condition" || issue2.code === "duplicate_repeat") {
-        return fail3("SEMANTIC_DUPLICATE_ID", "semantic", issue2.message, issue2.path);
+        return fail4("SEMANTIC_DUPLICATE_ID", "semantic", issue2.message, issue2.path);
       }
       if (issue2.code === "duplicate_input") {
-        return fail3("SCIENCE_RESPONSE_INPUT_DUPLICATE", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_RESPONSE_INPUT_DUPLICATE", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "unknown_condition") {
-        return fail3("SEMANTIC_UNKNOWN_REFERENCE", "semantic", issue2.message, issue2.path);
+        return fail4("SEMANTIC_UNKNOWN_REFERENCE", "semantic", issue2.message, issue2.path);
       }
       if (issue2.code === "paired_repeats_incomplete") {
-        return fail3("SCIENCE_PAIRED_REPEATS_INCOMPLETE", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_PAIRED_REPEATS_INCOMPLETE", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "attempted_count_mismatch") {
-        return fail3("SCIENCE_NORMALIZATION_UNVERIFIABLE", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_NORMALIZATION_UNVERIFIABLE", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "count_not_integer") {
-        return fail3("SCIENCE_COUNT_NOT_INTEGER", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_COUNT_NOT_INTEGER", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "count_estimator_incoherent") {
-        return fail3("SCIENCE_COUNT_ESTIMATOR_INCOHERENT", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_COUNT_ESTIMATOR_INCOHERENT", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "rate_audit_incoherent") {
-        return fail3("SCIENCE_NORMALIZATION_UNVERIFIABLE", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_NORMALIZATION_UNVERIFIABLE", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "trimmed_count_incoherent") {
-        return fail3("SCIENCE_NORMALIZATION_UNVERIFIABLE", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_NORMALIZATION_UNVERIFIABLE", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "invalid_response_value") {
-        return fail3("SCIENCE_RESPONSE_VALUE_INVALID", "science", issue2.message, issue2.path);
+        return fail4("SCIENCE_RESPONSE_VALUE_INVALID", "science", issue2.message, issue2.path);
       }
       if (issue2.code === "nonpositive_log_input") {
-        return fail3("RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN", "render", issue2.message, issue2.path);
+        return fail4("RENDER_LOG_SCALE_NONPOSITIVE_DOMAIN", "render", issue2.message, issue2.path);
       }
-      return fail3(
+      return fail4(
         issue2.message.includes("binary64") || issue2.code === "invalid_numeric" ? "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE" : "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         "science",
         issue2.message,
@@ -59656,7 +59666,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
   if (skillId === "neuro.psth") {
     const psthBinDeclaration = rec(parameters.bins);
     if (typeof psthBinDeclaration?.finalEdgeInclusive !== "boolean") {
-      return fail3(
+      return fail4(
         "SCIENCE_BIN_EDGES_INVALID",
         "science",
         "PSTH requires an explicit finalEdgeInclusive declaration; it does not inherit the common bin-schema display default.",
@@ -59735,7 +59745,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       }
     } catch (error) {
       if (error instanceof PsthDerivationError) {
-        return fail3(
+        return fail4(
           error.code,
           error.code.startsWith("RESOURCE_") ? "budget" : "science",
           error.message,
@@ -59819,7 +59829,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const lower = projectedBins.map(psth.edges[index]);
       const upper = projectedBins.map(psth.edges[index + 1]);
       if (!Number.isFinite(lower) || !Number.isFinite(upper) || !(upper > lower) || formatCoordinate(lower) === formatCoordinate(upper) || formatCoordinate(upper - lower) === "0") {
-        return fail3(
+        return fail4(
           "RENDER_DEGENERATE_DOMAIN",
           "render",
           `authoritative PSTH bin ${index} has positive scientific width but collapses to zero width in the deterministic SVG coordinate grid at ${compileContext.width}px. Cortexel refuses rather than widen, overlap, or hide the interval; increase the output width or use scientifically justified wider bins.`,
@@ -59847,7 +59857,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         if (value === null) continue;
         const rect = psthRects.rects[rectIndex++];
         if (!rect || value !== 0 && formatCoordinate(rect.height) === "0") {
-          return fail3(
+          return fail4(
             "RENDER_DEGENERATE_DOMAIN",
             "render",
             `nonzero PSTH bin ${binIndex2} collapses to zero height in the deterministic SVG coordinate grid. Cortexel refuses rather than inflate a minimum-height mark or render an observed value indistinguishably from zero; change the scale by narrowing the displayed dynamic range or split the data into honest panels.`,
@@ -59886,7 +59896,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const trajectoryTimeResult = trajectories ? phaseTrajectoryTimeAuthority(trajectories, duplicateTimePolicy) : void 0;
     if (trajectoryTimeResult && !trajectoryTimeResult.ok) {
       const duplicate = trajectoryTimeResult.kind === "duplicate_rejected";
-      return fail3(
+      return fail4(
         duplicate ? "SCIENCE_DUPLICATE_TIME_POLICY" : "SCIENCE_NEGATIVE_INTERVAL",
         "science",
         duplicate ? `trajectory ${trajectoryTimeResult.trajectoryId} repeats time ${exactNumberText(trajectoryTimeResult.time)} at source ordinals ${trajectoryTimeResult.previousSourceOrdinal} and ${trajectoryTimeResult.sourceOrdinal}, but duplicateTimePolicy=reject requires strict per-trajectory time.` : `trajectory ${trajectoryTimeResult.trajectoryId} changes from time ${exactNumberText(trajectoryTimeResult.previousTime)} at source ordinal ${trajectoryTimeResult.previousSourceOrdinal} to ${exactNumberText(trajectoryTimeResult.time)} at source ordinal ${trajectoryTimeResult.sourceOrdinal}, reversing the one declared global timeDirection=${String(trajectories?.timeDirection)}, which governs every trajectory in this FigureRequest. Mixed forward/backward trajectories require separate FigureRequests.`,
@@ -59900,7 +59910,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       (converged, index) => declaredConvergence[index] !== converged
     );
     if (convergenceMismatch >= 0) {
-      return fail3(
+      return fail4(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         "science",
         `fixed point ${strings4(fixedPoints?.ids)[convergenceMismatch]} declares converged=${String(declaredConvergence[convergenceMismatch])}, but |residual| <= tolerance re-derives ${String(convergenceFlags[convergenceMismatch])} after unit conversion with the contract's relative 1e-9 comparison tolerance.`,
@@ -59913,7 +59923,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "axis-normalized speed is unrepresentable";
       if (!message.includes("binary64")) throw error;
-      return fail3(
+      return fail4(
         "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
         "science",
         message,
@@ -59922,7 +59932,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     }
     const expectedPhaseRows = completenessRowPreflight(skillId, data);
     if (tableRows.length !== expectedPhaseRows) {
-      return fail3(
+      return fail4(
         "INTERNAL_INVARIANT_VIOLATED",
         "internal",
         `phase-plane table materialized ${tableRows.length} rows for ${expectedPhaseRows} declared carrier points.`,
@@ -59968,7 +59978,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       parameters.magnitudeBasis ?? "axis_normalized"
     );
     if (magnitudeBasis === "physical" && dimensionOf(xAxisUnit) !== dimensionOf(yAxisUnit)) {
-      return fail3(
+      return fail4(
         "SCIENCE_UNIT_DIMENSION_MISMATCH",
         "science",
         `physical vector magnitude cannot combine ${xAxisUnit} and ${yAxisUnit}; use axis_normalized for incommensurable state axes.`,
@@ -60002,7 +60012,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "axis-normalized vector is unrepresentable";
       if (!message.includes("binary64")) throw error;
-      return fail3(
+      return fail4(
         "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
         "science",
         message,
@@ -60325,7 +60335,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         for (const memberId of strings4(group.memberIds)) {
           const previousGroup = groupByNode.get(memberId);
           if (previousGroup !== void 0) {
-            return fail3(
+            return fail4(
               "SEMANTIC_DUPLICATE_ID",
               "semantic",
               `node ${memberId} belongs to both group ${previousGroup} and group ${String(group.id)}; group colour, marker shape, and grouped layout require a partition, not overlapping memberships.`,
@@ -60339,7 +60349,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const degree = rec(parameters.degreeAnnotation);
       const scopeRecord = rec(data.scope) ?? {};
       if (degree && rec(data.nodeUniverse)?.complete !== true) {
-        return fail3(
+        return fail4(
           "SCOPE_NODE_UNIVERSE_REQUIRED",
           "scope",
           "a degree annotation requires a complete declared node universe; an omitted node can turn a visible isolate into an unobserved neighbour.",
@@ -60347,7 +60357,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (degree && scopeRecord.kind === "sampled") {
-        return fail3(
+        return fail4(
           "SCOPE_NODE_UNIVERSE_REQUIRED",
           "scope",
           "degree over sampled edges is a property of the retained sample, not the declared network. Cortexel refuses the annotation rather than label it as network degree.",
@@ -60355,7 +60365,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (degree && scopeRecord.kind === "mpi_target_rank_local" && degree.mode !== "in_degree") {
-        return fail3(
+        return fail4(
           "SCOPE_OUT_DEGREE_FROM_RANK_LOCAL",
           "scope",
           "a target-rank-local connection query cannot establish outgoing or total degree because remote-target connections live on other ranks.",
@@ -60363,7 +60373,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (parameters.nodeColorBy === "group" && groups.length > CATEGORICAL_SERIES_STYLES.length) {
-        return fail3(
+        return fail4(
           "RENDER_SERIES_LIMIT_EXCEEDED",
           "render",
           `${groups.length} node groups exceed the ${CATEGORICAL_SERIES_STYLES.length} registered distinguishable color/shape tuples.`,
@@ -60427,7 +60437,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           const sourcePosition = positionIndex.get(sources[edgeIndex]);
           const targetPosition = positionIndex.get(targets[edgeIndex]);
           if (positionXs[sourcePosition] === positionXs[targetPosition] && positionYs[sourcePosition] === positionYs[targetPosition]) {
-            return fail3(
+            return fail4(
               "RENDER_DEGENERATE_DOMAIN",
               "render",
               `directed connection ${edgeIndex} joins distinct nodes ${sources[edgeIndex]} and ${targets[edgeIndex]} at the same measured coordinate. A zero-length chord has no target end for an arrowhead, and Cortexel refuses rather than invent a separation.`,
@@ -60491,7 +60501,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         if (count > maximumParallel) maximumParallel = count;
       }
       if (parallelEdges.display === "separate_lanes" && maximumParallel > (num(parallelEdges.maxLanes) ?? 0)) {
-        return fail3(
+        return fail4(
           "RENDER_SERIES_LIMIT_EXCEEDED",
           "render",
           `one unordered endpoint pair carries ${maximumParallel} connections but maxLanes is ${String(parallelEdges.maxLanes)}. Revision 1 refuses instead of sharing a lane and hiding a connection.`,
@@ -60531,7 +60541,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const tableRows = [...nodeRows, ...edgeRows];
       const expectedGraphRows = ids.length + sources.length;
       if (tableRows.length !== expectedGraphRows) {
-        return fail3(
+        return fail4(
           "INTERNAL_INVARIANT_VIOLATED",
           "internal",
           `connection-graph table materialized ${tableRows.length} rows for ${expectedGraphRows} declared node/edge carriers.`,
@@ -60541,7 +60551,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       const edgeEncoding = rec(parameters.edgeValueEncoding);
       const encodedValues = edgeEncoding?.mode === "weight" ? weights : edgeEncoding?.mode === "delay" ? delays : [];
       if (edgeEncoding && (edgeEncoding.channel === "color" || edgeEncoding.channel === "width_and_color") && edgeEncoding.colorScale !== "sequential" && edgeEncoding.colorScale !== "diverging") {
-        return fail3(
+        return fail4(
           "RENDER_NO_DATA",
           "render",
           "an edge color channel requires an explicit sequential or diverging colorScale; Cortexel refuses rather than infer a numeric color meaning.",
@@ -60549,7 +60559,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         );
       }
       if (edgeEncoding && encodedValues.length !== sources.length) {
-        return fail3(
+        return fail4(
           "RENDER_NO_DATA",
           "render",
           `${String(edgeEncoding.mode)} was selected for edge encoding, but that complete parallel channel was not supplied.`,
@@ -60567,7 +60577,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
         for (const entries of valuesByDirection.values()) {
           const finite2 = entries.filter((value) => typeof value === "number");
           if (finite2.length > 0 && finite2.length !== entries.length) {
-            return fail3(
+            return fail4(
               "RENDER_NO_DATA",
               "render",
               "one bundled stroke cannot truthfully encode both finite and missing parallel-edge values. Cortexel refuses rather than let the finite rows visually stand in for missing rows.",
@@ -60618,7 +60628,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
             previousTransform = transformed;
           }
         } catch (error) {
-          return fail3(
+          return fail4(
             "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
             "science",
             error instanceof Error ? `the declared graph edge aggregation or value scale cannot be represented as ordered finite binary64: ${error.message}` : "the declared graph edge aggregation or value scale cannot be represented as ordered finite binary64.",
@@ -61629,11 +61639,902 @@ function dispatch(outcome) {
   return buildFigureFromValidated(outcome.request);
 }
 
+// src/adapters/nest/profile.ts
+var NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3 = Object.freeze({
+  adapterRevision: 3,
+  nestVersion: "3.10.0",
+  upstreamSourceCommit: "acca9704da248750219a027db99fec6cd1f9052a",
+  inputDigestDomain: "cortexel.nest-spike-recorder-adapter-input.v3",
+  captureAuthorityProfile: "cortexel-nest-memory-spike-capture-authority.v1",
+  statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1"
+});
+
+// src/adapters/source-catalog.ts
+var SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN = "cortexel-source-adapter-catalog.rfc8785-sha256.v1";
+var SOURCE_ADAPTER_IDS = Object.freeze([
+  "nest-spike-recorder"
+]);
+var SOURCE_ADAPTER_ID_SET = new Set(SOURCE_ADAPTER_IDS);
+function isSourceAdapterId(value) {
+  return typeof value === "string" && SOURCE_ADAPTER_ID_SET.has(value);
+}
+var NEST_SPIKE_RECORDER_EXAMPLE = {
+  exportedStatus: {
+    record_to: "memory",
+    time_in_steps: false,
+    origin: 0,
+    start: 0,
+    stop: 10,
+    n_events: 3,
+    events: {
+      // Source order, repeated observations, and a silent sender are intentional.
+      senders: [2, 1, 2],
+      times: [9.9, 1, 1]
+    }
+  },
+  options: {
+    recordedSenderIds: [1, 2, 3],
+    nestVersion: "3.10.0",
+    captureAuthority: {
+      kind: "caller_declaration",
+      profile: "cortexel-nest-memory-spike-capture-authority.v1",
+      runtimeStatus: {
+        nestVersion: "3.10.0",
+        statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1",
+        executionScope: {
+          kind: "single_process",
+          numProcesses: 1,
+          rank: 0,
+          localNumThreads: 1
+        },
+        resolutionMs: 0.1,
+        ticsPerMs: "1000",
+        resolutionTics: "100",
+        captureBiologicalTimeTics: "10000",
+        captureBoundary: "after_successful_simulate_or_run_return"
+      },
+      recordingGrid: {
+        originTics: "0",
+        startTics: "0",
+        stopTics: "10000"
+      },
+      bufferEpoch: {
+        beganBy: "recorder_creation",
+        beganAtBiologicalTimeTics: "0"
+      },
+      recordingPlan: {
+        lastMutationAtBiologicalTimeTics: "0",
+        scope: "window_backend_time_encoding_and_sender_wiring",
+        senderUniverseBinding: "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+      },
+      clockEpochContinuity: "biological_time_monotonic_since_last_kernel_initialization",
+      eventCompleteness: "complete_for_recorded_senders"
+    },
+    runId: "run-1",
+    recorderId: "spike-recorder-1"
+  }
+};
+var SOURCE_ADAPTER_CATALOG_DATA = {
+  protocol: "cortexel-source-adapter-catalog",
+  protocolVersion: 1,
+  adapters: {
+    "nest-spike-recorder": {
+      id: "nest-spike-recorder",
+      revision: 3,
+      title: "NEST 3.10.0 memory spike recorder to stable spike raster",
+      sourceSystem: "NEST Simulator",
+      admittedSourceVersions: ["3.10.0"],
+      outputSkillId: "neuro.spike_raster",
+      implementation: {
+        packageSubpath: "cortexel/adapters/nest",
+        exportName: "nestSpikeRecorderToRaster",
+        profile: NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3
+      },
+      cli: {
+        command: "cortexel source adapt nest-spike-recorder <input|->",
+        inputMediaType: "application/json",
+        outputMediaType: "application/json",
+        pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg"
+      },
+      inputEnvelope: {
+        type: "object",
+        requiredMembers: ["exportedStatus", "options"],
+        additionalMembers: false,
+        exportedStatus: "Exact detached plain-data projection of one NEST spike-recorder status.",
+        options: "Complete recorded sender universe plus the caller-retained capture authority."
+      },
+      acceptanceBoundary: {
+        adapter: "The adapter checks its exact revision-3 source profile and authors a request.",
+        request: "The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.",
+        rendering: "Pipe the emitted request to `cortexel render`; adapter success alone is never render authority."
+      },
+      authority: [
+        "The source digest binds the detached JSON-compatible status projection, not a live simulator process.",
+        "The adapter-input digest additionally binds the normalized options and caller-declared capture authority.",
+        "The complete sender universe, recorder history, wiring history, process scope, run id, and recorder id remain caller declarations.",
+        "Events retain source order and multiplicity; the scientific view owns any scoped sorting or aggregation."
+      ],
+      limitations: [
+        "Only record_to=memory and time_in_steps=false are admitted.",
+        "Only the exact declared NEST 3.10.0 profile is admitted.",
+        "Only a single-process capture scope is admitted.",
+        "The package does not import PyNEST, inspect a live simulation, or authenticate caller declarations.",
+        "ASCII, screen, MPI, SIONlib, step-plus-offset clocks, and every other stable NEST mapping remain unsupported by this adapter revision.",
+        "Real-NEST conformance gate R049 remains external release evidence; packaged code is not certification."
+      ],
+      example: NEST_SPIKE_RECORDER_EXAMPLE
+    }
+  }
+};
+var SOURCE_ADAPTER_CATALOG = freezeGenerated(SOURCE_ADAPTER_CATALOG_DATA);
+function lookupSourceAdapter(value) {
+  if (!isSourceAdapterId(value)) return void 0;
+  return SOURCE_ADAPTER_CATALOG.adapters[value];
+}
+var SOURCE_ADAPTER_CATALOG_DIGEST = canonicalDigest({
+  domain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  catalog: SOURCE_ADAPTER_CATALOG
+});
+
+// src/adapters/nest/recorders.ts
+var ADMITTED_NEST_VERSION = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3.nestVersion;
+var NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3.inputDigestDomain;
+var CAPTURE_AUTHORITY_PROFILE = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3.captureAuthorityProfile;
+var CAPTURE_AUTHORITY_KIND = "caller_declaration";
+var STATUS_READ_METHOD = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3.statusReadMethod;
+var CAPTURE_BOUNDARY = "after_successful_simulate_or_run_return";
+var RECORDING_PLAN_SCOPE = "window_backend_time_encoding_and_sender_wiring";
+var SENDER_UNIVERSE_BINDING = "recorded_sender_ids_exactly_equal_full_window_connected_source_universe";
+var CLOCK_EPOCH_CONTINUITY = "biological_time_monotonic_since_last_kernel_initialization";
+var EVENT_COMPLETENESS = "complete_for_recorded_senders";
+var CANONICAL_POSITIVE_DECIMAL = /^[1-9][0-9]*$/u;
+var CANONICAL_NON_NEGATIVE_DECIMAL = /^(?:0|[1-9][0-9]*)$/u;
+var CORTEXEL_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/u;
+var MAX_IDENTIFIER_LENGTH = 128;
+var MAX_TIC_DECIMAL_LENGTH = 32;
+function fail3(errors) {
+  return { ok: false, errors };
+}
+function adapterFailure(code, instancePath, message) {
+  return fail3([makeError({ code, stage: "adapter", instancePath, message })]);
+}
+function isPlainRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function firstUnknownKey(value, allowed) {
+  return Object.keys(value).filter((key) => !allowed.has(key)).sort()[0];
+}
+function exactObjectKeysFailure(value, allowed, instancePath, label) {
+  const unknown = firstUnknownKey(value, allowed);
+  if (unknown === void 0) return void 0;
+  return adapterFailure(
+    "ADAPTER_MAPPING_REQUIRED",
+    `${instancePath}/${unknown}`,
+    `${label} is closed for adapter revision 3; unknown member ${JSON.stringify(unknown)} is not consumed or digest-normalized.`
+  );
+}
+function snapshotFailure(errors, inputName) {
+  const accessorOrHostileReflection = errors.some(
+    (error) => error.code === "SNAPSHOT_ACCESSOR_PROPERTY" || error.code === "SNAPSHOT_HOSTILE_REFLECTION"
+  );
+  if (accessorOrHostileReflection) {
+    const firstHostile = errors.find(
+      (error) => error.code === "SNAPSHOT_ACCESSOR_PROPERTY" || error.code === "SNAPSHOT_HOSTILE_REFLECTION"
+    );
+    return adapterFailure(
+      "ADAPTER_ACCESSOR_INPUT_REJECTED",
+      firstHostile?.instancePath ?? "",
+      `the NEST ${inputName} could not be safely snapshotted because it carries an accessor or hostile reflection trap. Pass detached plain data.`
+    );
+  }
+  return fail3(errors);
+}
+function normalizeSenderId(value) {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value > 0 ? String(value) : void 0;
+  }
+  if (typeof value === "string" && value.length <= MAX_IDENTIFIER_LENGTH && CANONICAL_POSITIVE_DECIMAL.test(value)) {
+    return value;
+  }
+  return void 0;
+}
+function isCortexelIdentifier(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_IDENTIFIER_LENGTH && CORTEXEL_IDENTIFIER.test(value);
+}
+function parseCanonicalTics(value, instancePath, label, positive) {
+  const pattern = positive ? CANONICAL_POSITIVE_DECIMAL : CANONICAL_NON_NEGATIVE_DECIMAL;
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_TIC_DECIMAL_LENGTH || !pattern.test(value)) {
+    return {
+      ok: false,
+      result: adapterFailure(
+        "ADAPTER_MAPPING_REQUIRED",
+        instancePath,
+        `${label} must be a canonical ${positive ? "positive" : "non-negative"} base-10 integer string of at most ${MAX_TIC_DECIMAL_LENGTH} digits.`
+      )
+    };
+  }
+  return { ok: true, canonical: value, value: BigInt(value) };
+}
+function projectedMillisecondsFailure(tics, ticsPerMs, milliseconds, instancePath, label) {
+  try {
+    const projected = exactRationalToBinary64(tics, ticsPerMs);
+    if (!Object.is(projected, milliseconds)) {
+      return adapterFailure(
+        "ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED",
+        instancePath,
+        `${label} must equal the correctly rounded binary64 projection of its declared integer-tic preimage. Received ${milliseconds}; the tic authority projects to ${projected}.`
+      );
+    }
+  } catch {
+    return adapterFailure(
+      "ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED",
+      instancePath,
+      `${label} cannot be represented as a finite binary64 millisecond projection of its declared integer-tic preimage.`
+    );
+  }
+  return void 0;
+}
+function nestSpikeRecorderToRaster(exported, options) {
+  const limits = getBudgetLimits("standard");
+  const exportedSnapshot = snapshotValue(exported, limits);
+  const optionsSnapshot = snapshotValue(options, limits);
+  if (!exportedSnapshot.ok) return snapshotFailure(exportedSnapshot.errors, "export");
+  if (!optionsSnapshot.ok) return snapshotFailure(optionsSnapshot.errors, "options");
+  const value = exportedSnapshot.value;
+  const optionValue = optionsSnapshot.value;
+  if (!isPlainRecord(value)) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "",
+      "expected a plain NEST spike-recorder status object."
+    );
+  }
+  if (!isPlainRecord(optionValue)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "",
+      "NEST adapter options must be a plain object containing a version and the complete recorded sender universe."
+    );
+  }
+  const optionKeysFailure = exactObjectKeysFailure(
+    optionValue,
+    /* @__PURE__ */ new Set(["recordedSenderIds", "nestVersion", "captureAuthority", "runId", "recorderId"]),
+    "",
+    "NEST adapter options"
+  );
+  if (optionKeysFailure) return optionKeysFailure;
+  if (value.record_to !== "memory") {
+    return adapterFailure(
+      "ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED",
+      "/record_to",
+      'revision 3 accepts only an explicit `record_to: "memory"` status. File, screen, MPI, and SIONlib serializations are not admitted as lossless clock boundaries.'
+    );
+  }
+  if (value.time_in_steps !== false) {
+    return adapterFailure(
+      "ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED",
+      "/time_in_steps",
+      "revision 3 requires the status field `time_in_steps` to be explicitly false. Missing or step/offset time encodings are not reconstructed as milliseconds."
+    );
+  }
+  if (!isPlainRecord(value.events)) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/events",
+      "a NEST spike-recorder export must have an `events` object with `senders` and `times` arrays."
+    );
+  }
+  const events = value.events;
+  const offsetKey = Object.prototype.hasOwnProperty.call(events, "offsets") ? "offsets" : Object.prototype.hasOwnProperty.call(events, "offset") ? "offset" : void 0;
+  if (offsetKey !== void 0) {
+    return adapterFailure(
+      "ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED",
+      `/events/${offsetKey}`,
+      "offset-bearing events contradict the revision-3-admitted native-millisecond mode. Preserve the raw step/offset representation for a future contract instead of collapsing it here."
+    );
+  }
+  if (!Array.isArray(events.senders) || !Array.isArray(events.times)) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/events",
+      "`events.senders` and `events.times` must both be dense plain arrays."
+    );
+  }
+  const nEvents = value.n_events;
+  if (typeof nEvents !== "number" || !Number.isSafeInteger(nEvents) || nEvents < 0) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/n_events",
+      "`n_events` is required and must be a non-negative safe integer copied from the NEST recording-device status. Cortexel does not infer completeness from the event arrays."
+    );
+  }
+  if (events.senders.length !== nEvents || events.times.length !== nEvents) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/n_events",
+      `the authoritative NEST n_events value (${nEvents}) must equal both parallel event-array lengths; received senders=${events.senders.length} and times=${events.times.length}. Cortexel cannot author a completeness claim from inconsistent status data.`
+    );
+  }
+  const origin = value.origin;
+  const start = value.start;
+  const stop = value.stop;
+  if (typeof origin !== "number" || !Number.isFinite(origin) || origin < 0) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/origin",
+      "`origin` must be a finite non-negative number in NEST milliseconds."
+    );
+  }
+  if (typeof start !== "number" || !Number.isFinite(start) || start < 0) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/start",
+      "`start` must be a finite non-negative number relative to the NEST recording-device origin."
+    );
+  }
+  if (typeof stop !== "number" || !Number.isFinite(stop) || stop < 0) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/stop",
+      "`stop` must be a finite non-negative number relative to the NEST recording-device origin."
+    );
+  }
+  if (!(start < stop)) {
+    return adapterFailure(
+      "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+      "/stop",
+      "`stop` must be strictly greater than `start` for the NEST origin-relative recording interval."
+    );
+  }
+  const nestVersion = optionValue.nestVersion;
+  if (typeof nestVersion !== "string" || nestVersion.length > 120 || nestVersion !== ADMITTED_NEST_VERSION) {
+    return adapterFailure(
+      "ADAPTER_UNSUPPORTED_VERSION",
+      "/nestVersion",
+      "nestVersion is required and must equal the exact pinned adapter-revision-3 profile 3.10.0. Other NEST releases and patches remain unsupported until separately executed and evidenced."
+    );
+  }
+  const captureAuthority = optionValue.captureAuthority;
+  if (!isPlainRecord(captureAuthority)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority",
+      "captureAuthority is required. A detached final status alone cannot prove that the NEST memory buffer was not reset, that recorder configuration and wiring stayed fixed, that the successful-return capture endpoint was reached, that the kernel clock stayed monotonic, that the projection was lossless, or that MPI ranks were merged."
+    );
+  }
+  const captureKeysFailure = exactObjectKeysFailure(
+    captureAuthority,
+    /* @__PURE__ */ new Set([
+      "kind",
+      "profile",
+      "runtimeStatus",
+      "recordingGrid",
+      "bufferEpoch",
+      "recordingPlan",
+      "clockEpochContinuity",
+      "eventCompleteness"
+    ]),
+    "/captureAuthority",
+    "captureAuthority"
+  );
+  if (captureKeysFailure) return captureKeysFailure;
+  if (captureAuthority.kind !== CAPTURE_AUTHORITY_KIND) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/kind",
+      `captureAuthority.kind must equal ${JSON.stringify(CAPTURE_AUTHORITY_KIND)}. This detached adapter accepts a caller declaration, not an authenticated live-capture receipt.`
+    );
+  }
+  if (captureAuthority.profile !== CAPTURE_AUTHORITY_PROFILE) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/profile",
+      `captureAuthority.profile must equal ${JSON.stringify(CAPTURE_AUTHORITY_PROFILE)}.`
+    );
+  }
+  const runtimeStatus = captureAuthority.runtimeStatus;
+  if (!isPlainRecord(runtimeStatus)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus",
+      "captureAuthority.runtimeStatus must be a closed plain object."
+    );
+  }
+  const runtimeKeysFailure = exactObjectKeysFailure(
+    runtimeStatus,
+    /* @__PURE__ */ new Set([
+      "nestVersion",
+      "statusReadMethod",
+      "executionScope",
+      "resolutionMs",
+      "ticsPerMs",
+      "resolutionTics",
+      "captureBiologicalTimeTics",
+      "captureBoundary"
+    ]),
+    "/captureAuthority/runtimeStatus",
+    "captureAuthority.runtimeStatus"
+  );
+  if (runtimeKeysFailure) return runtimeKeysFailure;
+  if (runtimeStatus.nestVersion !== ADMITTED_NEST_VERSION) {
+    return adapterFailure(
+      "ADAPTER_UNSUPPORTED_VERSION",
+      "/captureAuthority/runtimeStatus/nestVersion",
+      "captureAuthority.runtimeStatus.nestVersion must equal the pinned 3.10.0 profile."
+    );
+  }
+  if (runtimeStatus.nestVersion !== nestVersion) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus/nestVersion",
+      "the capture runtime version must exactly equal the top-level adapter version declaration."
+    );
+  }
+  if (runtimeStatus.statusReadMethod !== STATUS_READ_METHOD) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus/statusReadMethod",
+      `statusReadMethod must equal ${JSON.stringify(STATUS_READ_METHOD)}; raw NumPy values, bulk collections, lossy projections, and reconstructed status objects have different authority boundaries.`
+    );
+  }
+  if (runtimeStatus.captureBoundary !== CAPTURE_BOUNDARY) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus/captureBoundary",
+      `captureBoundary must equal ${JSON.stringify(CAPTURE_BOUNDARY)}.`
+    );
+  }
+  const resolutionMs = runtimeStatus.resolutionMs;
+  if (typeof resolutionMs !== "number" || !Number.isFinite(resolutionMs) || !(resolutionMs > 0)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus/resolutionMs",
+      "resolutionMs must be a finite positive binary64 value copied from the pinned NEST runtime status."
+    );
+  }
+  const ticsPerMsResult = parseCanonicalTics(
+    runtimeStatus.ticsPerMs,
+    "/captureAuthority/runtimeStatus/ticsPerMs",
+    "ticsPerMs",
+    true
+  );
+  if (!ticsPerMsResult.ok) return ticsPerMsResult.result;
+  const resolutionTicsResult = parseCanonicalTics(
+    runtimeStatus.resolutionTics,
+    "/captureAuthority/runtimeStatus/resolutionTics",
+    "resolutionTics",
+    true
+  );
+  if (!resolutionTicsResult.ok) return resolutionTicsResult.result;
+  const captureTicsResult = parseCanonicalTics(
+    runtimeStatus.captureBiologicalTimeTics,
+    "/captureAuthority/runtimeStatus/captureBiologicalTimeTics",
+    "captureBiologicalTimeTics",
+    false
+  );
+  if (!captureTicsResult.ok) return captureTicsResult.result;
+  const executionScope = runtimeStatus.executionScope;
+  if (!isPlainRecord(executionScope)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus/executionScope",
+      "executionScope must be a closed single-process scope object."
+    );
+  }
+  const executionScopeKeysFailure = exactObjectKeysFailure(
+    executionScope,
+    /* @__PURE__ */ new Set(["kind", "numProcesses", "rank", "localNumThreads"]),
+    "/captureAuthority/runtimeStatus/executionScope",
+    "captureAuthority.runtimeStatus.executionScope"
+  );
+  if (executionScopeKeysFailure) return executionScopeKeysFailure;
+  if (executionScope.kind !== "single_process" || executionScope.numProcesses !== 1 || executionScope.rank !== 0 || typeof executionScope.localNumThreads !== "number" || !Number.isSafeInteger(executionScope.localNumThreads) || executionScope.localNumThreads < 1 || executionScope.localNumThreads > 1e6) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus/executionScope",
+      "revision 3 admits only one exact single-process scope: kind=single_process, numProcesses=1, rank=0, and localNumThreads a safe integer from 1 through 1000000. Rank-local and caller-premerged MPI status is not a complete recorder authority."
+    );
+  }
+  const recordingGrid = captureAuthority.recordingGrid;
+  if (!isPlainRecord(recordingGrid)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/recordingGrid",
+      "recordingGrid must be a closed object containing the exact integer-tic preimages of origin, start, and stop."
+    );
+  }
+  const recordingGridKeysFailure = exactObjectKeysFailure(
+    recordingGrid,
+    /* @__PURE__ */ new Set(["originTics", "startTics", "stopTics"]),
+    "/captureAuthority/recordingGrid",
+    "captureAuthority.recordingGrid"
+  );
+  if (recordingGridKeysFailure) return recordingGridKeysFailure;
+  const originTicsResult = parseCanonicalTics(
+    recordingGrid.originTics,
+    "/captureAuthority/recordingGrid/originTics",
+    "originTics",
+    false
+  );
+  if (!originTicsResult.ok) return originTicsResult.result;
+  const startTicsResult = parseCanonicalTics(
+    recordingGrid.startTics,
+    "/captureAuthority/recordingGrid/startTics",
+    "startTics",
+    false
+  );
+  if (!startTicsResult.ok) return startTicsResult.result;
+  const stopTicsResult = parseCanonicalTics(
+    recordingGrid.stopTics,
+    "/captureAuthority/recordingGrid/stopTics",
+    "stopTics",
+    false
+  );
+  if (!stopTicsResult.ok) return stopTicsResult.result;
+  const bufferEpoch = captureAuthority.bufferEpoch;
+  if (!isPlainRecord(bufferEpoch)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/bufferEpoch",
+      "bufferEpoch must identify the most recent recorder creation or n_events=0 memory clear."
+    );
+  }
+  const bufferKeysFailure = exactObjectKeysFailure(
+    bufferEpoch,
+    /* @__PURE__ */ new Set(["beganBy", "beganAtBiologicalTimeTics"]),
+    "/captureAuthority/bufferEpoch",
+    "captureAuthority.bufferEpoch"
+  );
+  if (bufferKeysFailure) return bufferKeysFailure;
+  if (bufferEpoch.beganBy !== "recorder_creation" && bufferEpoch.beganBy !== "n_events_zero") {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/bufferEpoch/beganBy",
+      "bufferEpoch.beganBy must be recorder_creation or n_events_zero."
+    );
+  }
+  const bufferBeganTicsResult = parseCanonicalTics(
+    bufferEpoch.beganAtBiologicalTimeTics,
+    "/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics",
+    "bufferEpoch.beganAtBiologicalTimeTics",
+    false
+  );
+  if (!bufferBeganTicsResult.ok) return bufferBeganTicsResult.result;
+  const recordingPlan = captureAuthority.recordingPlan;
+  if (!isPlainRecord(recordingPlan)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/recordingPlan",
+      "recordingPlan must identify the most recent recorder-window, backend, clock, or sender-wiring mutation."
+    );
+  }
+  const planKeysFailure = exactObjectKeysFailure(
+    recordingPlan,
+    /* @__PURE__ */ new Set([
+      "lastMutationAtBiologicalTimeTics",
+      "scope",
+      "senderUniverseBinding"
+    ]),
+    "/captureAuthority/recordingPlan",
+    "captureAuthority.recordingPlan"
+  );
+  if (planKeysFailure) return planKeysFailure;
+  if (recordingPlan.scope !== RECORDING_PLAN_SCOPE) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/recordingPlan/scope",
+      `recordingPlan.scope must equal ${JSON.stringify(RECORDING_PLAN_SCOPE)}.`
+    );
+  }
+  if (recordingPlan.senderUniverseBinding !== SENDER_UNIVERSE_BINDING) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/recordingPlan/senderUniverseBinding",
+      `senderUniverseBinding must equal ${JSON.stringify(SENDER_UNIVERSE_BINDING)}.`
+    );
+  }
+  const planMutationTicsResult = parseCanonicalTics(
+    recordingPlan.lastMutationAtBiologicalTimeTics,
+    "/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics",
+    "recordingPlan.lastMutationAtBiologicalTimeTics",
+    false
+  );
+  if (!planMutationTicsResult.ok) return planMutationTicsResult.result;
+  if (captureAuthority.clockEpochContinuity !== CLOCK_EPOCH_CONTINUITY) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/clockEpochContinuity",
+      `captureAuthority.clockEpochContinuity must equal ${JSON.stringify(CLOCK_EPOCH_CONTINUITY)}. NEST can reset biological_time to zero without destroying the recorder or clearing retained memory, and its own 3.10.0 source marks that operation incompletely supported.`
+    );
+  }
+  if (captureAuthority.eventCompleteness !== EVENT_COMPLETENESS) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/eventCompleteness",
+      `captureAuthority.eventCompleteness must equal ${JSON.stringify(EVENT_COMPLETENESS)}.`
+    );
+  }
+  const ticsPerMs = ticsPerMsResult.value;
+  const resolutionTics = resolutionTicsResult.value;
+  const captureBiologicalTimeTics = captureTicsResult.value;
+  const originTics = originTicsResult.value;
+  const startTics = startTicsResult.value;
+  const stopTics = stopTicsResult.value;
+  const beganAtBiologicalTimeTics = bufferBeganTicsResult.value;
+  const lastMutationAtBiologicalTimeTics = planMutationTicsResult.value;
+  for (const [tics, milliseconds, instancePath, label] of [
+    [
+      resolutionTics,
+      resolutionMs,
+      "/captureAuthority/runtimeStatus/resolutionMs",
+      "resolutionMs"
+    ],
+    [
+      originTics,
+      origin,
+      "/captureAuthority/recordingGrid/originTics",
+      "origin"
+    ],
+    [
+      startTics,
+      start,
+      "/captureAuthority/recordingGrid/startTics",
+      "start"
+    ],
+    [
+      stopTics,
+      stop,
+      "/captureAuthority/recordingGrid/stopTics",
+      "stop"
+    ]
+  ]) {
+    const projectionFailure = projectedMillisecondsFailure(
+      tics,
+      ticsPerMs,
+      milliseconds,
+      instancePath,
+      label
+    );
+    if (projectionFailure) return projectionFailure;
+  }
+  for (const [tics, instancePath, label] of [
+    [
+      originTics,
+      "/captureAuthority/recordingGrid/originTics",
+      "originTics"
+    ],
+    [
+      startTics,
+      "/captureAuthority/recordingGrid/startTics",
+      "startTics"
+    ],
+    [
+      stopTics,
+      "/captureAuthority/recordingGrid/stopTics",
+      "stopTics"
+    ],
+    [
+      captureBiologicalTimeTics,
+      "/captureAuthority/runtimeStatus/captureBiologicalTimeTics",
+      "captureBiologicalTimeTics"
+    ],
+    [
+      beganAtBiologicalTimeTics,
+      "/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics",
+      "beganAtBiologicalTimeTics"
+    ],
+    [
+      lastMutationAtBiologicalTimeTics,
+      "/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics",
+      "lastMutationAtBiologicalTimeTics"
+    ]
+  ]) {
+    if (tics % resolutionTics !== 0n) {
+      return adapterFailure(
+        "ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED",
+        instancePath,
+        `${label} must lie exactly on the declared NEST runtime resolution grid.`
+      );
+    }
+  }
+  const absoluteStartTics = originTics + startTics;
+  const absoluteStopTics = originTics + stopTics;
+  if (captureBiologicalTimeTics < absoluteStopTics) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/runtimeStatus/captureBiologicalTimeTics",
+      "captureBiologicalTimeTics must be at least originTics + stopTics, and the status must be read only after the Simulate or Run call that reached that endpoint returned successfully."
+    );
+  }
+  if (beganAtBiologicalTimeTics > absoluteStartTics) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics",
+      "the most recent recorder creation or n_events=0 clear must be no later than originTics + startTics."
+    );
+  }
+  if (lastMutationAtBiologicalTimeTics > absoluteStartTics) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics",
+      "the most recent recorder-window, backend, clock, or sender-wiring mutation must be no later than originTics + startTics."
+    );
+  }
+  const recordedValues = optionValue.recordedSenderIds;
+  if (!Array.isArray(recordedValues) || recordedValues.length === 0) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/recordedSenderIds",
+      "recordedSenderIds is required and must be a non-empty array containing the complete recorded universe, including silent senders."
+    );
+  }
+  const recordedSenderIds = [];
+  const recordedUniverse = /* @__PURE__ */ new Set();
+  for (let index = 0; index < recordedValues.length; index++) {
+    const normalized = normalizeSenderId(recordedValues[index]);
+    if (normalized === void 0) {
+      return adapterFailure(
+        "ADAPTER_MAPPING_REQUIRED",
+        `/recordedSenderIds/${index}`,
+        "a recorded sender id must be a positive safe-integer number or an already-canonical positive decimal string."
+      );
+    }
+    if (recordedUniverse.has(normalized)) {
+      return adapterFailure(
+        "ADAPTER_MAPPING_REQUIRED",
+        `/recordedSenderIds/${index}`,
+        "recordedSenderIds must be unique after canonical decimal normalization."
+      );
+    }
+    recordedUniverse.add(normalized);
+    recordedSenderIds.push(normalized);
+  }
+  const eventSenderIds = [];
+  const eventTimes = [];
+  for (let index = 0; index < events.times.length; index++) {
+    const time = events.times[index];
+    if (typeof time !== "number" || !Number.isFinite(time)) {
+      return adapterFailure(
+        "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+        `/events/times/${index}`,
+        "each native-millisecond event time must already be a finite JavaScript number; strings and coercible objects are rejected."
+      );
+    }
+    const sender = normalizeSenderId(events.senders[index]);
+    if (sender === void 0) {
+      return adapterFailure(
+        "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+        `/events/senders/${index}`,
+        "each event sender must be a positive safe-integer number or an already-canonical positive decimal string."
+      );
+    }
+    if (!recordedUniverse.has(sender)) {
+      return adapterFailure(
+        "ADAPTER_MAPPING_REQUIRED",
+        `/events/senders/${index}`,
+        "every event sender must be a member of the declared complete recorded sender universe."
+      );
+    }
+    eventTimes.push(time);
+    eventSenderIds.push(sender);
+  }
+  const runId = optionValue.runId;
+  if (runId !== void 0 && !isCortexelIdentifier(runId)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/runId",
+      "runId, when supplied, must be a Cortexel identifier."
+    );
+  }
+  const recorderId = optionValue.recorderId;
+  if (recorderId !== void 0 && !isCortexelIdentifier(recorderId)) {
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      "/recorderId",
+      "recorderId, when supplied, must be a Cortexel identifier."
+    );
+  }
+  const normalizedCaptureAuthority = {
+    kind: CAPTURE_AUTHORITY_KIND,
+    profile: CAPTURE_AUTHORITY_PROFILE,
+    runtimeStatus: {
+      nestVersion: ADMITTED_NEST_VERSION,
+      statusReadMethod: STATUS_READ_METHOD,
+      executionScope: {
+        kind: "single_process",
+        numProcesses: 1,
+        rank: 0,
+        localNumThreads: executionScope.localNumThreads
+      },
+      resolutionMs,
+      ticsPerMs: ticsPerMsResult.canonical,
+      resolutionTics: resolutionTicsResult.canonical,
+      captureBiologicalTimeTics: captureTicsResult.canonical,
+      captureBoundary: CAPTURE_BOUNDARY
+    },
+    recordingGrid: {
+      originTics: originTicsResult.canonical,
+      startTics: startTicsResult.canonical,
+      stopTics: stopTicsResult.canonical
+    },
+    bufferEpoch: {
+      beganBy: bufferEpoch.beganBy,
+      beganAtBiologicalTimeTics: bufferBeganTicsResult.canonical
+    },
+    recordingPlan: {
+      lastMutationAtBiologicalTimeTics: planMutationTicsResult.canonical,
+      scope: RECORDING_PLAN_SCOPE,
+      senderUniverseBinding: SENDER_UNIVERSE_BINDING
+    },
+    clockEpochContinuity: CLOCK_EPOCH_CONTINUITY,
+    eventCompleteness: EVENT_COMPLETENESS
+  };
+  const adapterInputDigest = canonicalDigest({
+    domain: NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN,
+    exportedStatus: value,
+    options: {
+      recordedSenderIds,
+      nestVersion,
+      captureAuthority: normalizedCaptureAuthority,
+      runId: runId ?? null,
+      recorderId: recorderId ?? null
+    }
+  });
+  const request = {
+    contract: {
+      name: REQUEST_CONTRACT_IDENTITY.name,
+      version: REQUEST_CONTRACT_IDENTITY.version
+    },
+    skill: { id: "neuro.spike_raster" },
+    data: {
+      eventTimes: { kind: "time", unit: "ms", values: eventTimes },
+      eventSenderIds,
+      recordedSenderIds,
+      window: {
+        kind: "nest_recording_device_origin_relative",
+        origin,
+        start,
+        stop,
+        unit: "ms",
+        boundary: "(origin+start,origin+stop]",
+        recordingBackend: "memory",
+        timeEncoding: "native_binary64_ms",
+        captureAuthority: {
+          ...normalizedCaptureAuthority,
+          adapterInputDigest
+        }
+      },
+      timeBase: "absolute_clock",
+      senderUniverseComplete: true,
+      eventCompleteness: EVENT_COMPLETENESS
+    },
+    parameters: {
+      rowOrder: "canonical_sender_id",
+      markStyle: "tick",
+      outOfWindowPolicy: "reject",
+      // The current renderer cannot yet guarantee a complete density-grid
+      // artifact/sidecar above the mark budget. Fail closed until that named
+      // compaction path is implemented and conformance-tested.
+      aboveMarkBudget: "refuse"
+    },
+    source: {
+      kind: "simulation",
+      system: "NEST",
+      systemVersion: nestVersion,
+      ...runId !== void 0 ? { runId } : {},
+      ...recorderId !== void 0 ? { recorderId } : {},
+      sourceDigest: canonicalDigest(value)
+    }
+  };
+  return { ok: true, request };
+}
+
 // src/cli/commands.ts
 var CLI_COMMANDS = [
   "identity",
   "catalog",
   "describe",
+  "source",
   "validate",
   "render",
   "inspect",
@@ -62339,6 +63240,199 @@ Source mappings (${skill.adapters.length}):
   );
   return EXIT.ok;
 }
+function sourceDiscoveryIdentity() {
+  return {
+    buildIdentity: discoveryIdentity(),
+    sourceAdapterCatalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
+    sourceAdapterCatalogDigestDomain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN
+  };
+}
+function nearestSourceAdapterId(value) {
+  if (value.length === 0 || value.length > 64 || !/^[a-z0-9._-]+$/u.test(value)) {
+    return null;
+  }
+  const nearest = [...SOURCE_ADAPTER_IDS].map((id) => ({ id, distance: utf16EditDistance(value, id) })).sort((left, right) => left.distance - right.distance || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0];
+  return nearest !== void 0 && nearest.distance <= 3 ? nearest.id : null;
+}
+function reportUnknownSourceAdapter(value, asJson) {
+  const suggestion = nearestSourceAdapterId(value);
+  if (asJson) {
+    writeCliJson({
+      protocol: "cortexel-cli-error",
+      protocolVersion: 1,
+      ...sourceDiscoveryIdentity(),
+      error: {
+        code: "CLI_UNKNOWN_SOURCE_ADAPTER",
+        message: "Unknown executable source-adapter id.",
+        didYouMean: suggestion,
+        validSourceAdapterIds: SOURCE_ADAPTER_IDS
+      }
+    }, process.stderr);
+  } else {
+    process.stderr.write(
+      "usage error: unknown executable source-adapter id" + (suggestion === null ? "\n" : `; did you mean ${suggestion}?
+`)
+    );
+  }
+  return EXIT.usage;
+}
+function cmdSourceCatalog(args) {
+  const parsed = parseOrReport(args, { flags: ["--json"], positionalCount: 0 });
+  if (!parsed) return EXIT.usage;
+  if (parsed.flags.has("--json")) {
+    writeCliJson({
+      protocol: "cortexel-cli-source-catalog",
+      protocolVersion: 1,
+      ...sourceDiscoveryIdentity(),
+      adapters: SOURCE_ADAPTER_IDS.map((id) => {
+        const descriptor = lookupSourceAdapter(id);
+        return {
+          id: descriptor.id,
+          revision: descriptor.revision,
+          title: descriptor.title,
+          sourceSystem: descriptor.sourceSystem,
+          admittedSourceVersions: descriptor.admittedSourceVersions,
+          outputSkillId: descriptor.outputSkillId,
+          command: descriptor.cli.command
+        };
+      })
+    });
+    return EXIT.ok;
+  }
+  process.stdout.write(`Executable source adapters (${SOURCE_ADAPTER_IDS.length}):
+`);
+  for (const id of SOURCE_ADAPTER_IDS) {
+    const descriptor = lookupSourceAdapter(id);
+    process.stdout.write(
+      `  ${id.padEnd(28)} ${safeText(descriptor.title, 512)}
+`
+    );
+  }
+  process.stdout.write(
+    "\nCandidate mappings described by a skill are not executable unless listed here.\n"
+  );
+  return EXIT.ok;
+}
+function cmdSourceDescribe(args) {
+  const parsed = parseOrReport(args, { flags: ["--json"], positionalCount: 1 });
+  if (!parsed) return EXIT.usage;
+  const id = parsed.positionals[0];
+  if (!isSourceAdapterId(id)) {
+    return reportUnknownSourceAdapter(id, parsed.flags.has("--json"));
+  }
+  const descriptor = lookupSourceAdapter(id);
+  if (parsed.flags.has("--json")) {
+    writeCliJson({
+      protocol: "cortexel-cli-source-describe",
+      protocolVersion: 1,
+      ...sourceDiscoveryIdentity(),
+      adapter: descriptor
+    });
+    return EXIT.ok;
+  }
+  process.stdout.write(
+    `${descriptor.id}@${descriptor.revision} \u2014 ${safeText(descriptor.title, 512)}
+Source: ${safeText(descriptor.sourceSystem, 256)} (${descriptor.admittedSourceVersions.join(", ")})
+Output skill: ${descriptor.outputSkillId}
+Command: ${descriptor.cli.command}
+Use --json for the complete authority statement, limitations, and copyable input.
+`
+  );
+  return EXIT.ok;
+}
+function adapterEnvelopeFailure(instancePath, message) {
+  return [makeError({
+    code: "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+    stage: "adapter",
+    instancePath,
+    message
+  })];
+}
+function isPlainJsonRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function cmdSourceAdapt(args) {
+  const parsed = parseOrReport(args, {
+    valueOptions: ["--format"],
+    positionalCount: 2
+  });
+  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
+  const [id, input] = parsed.positionals;
+  const asJson = parsed.values.get("--format") === "json";
+  if (!isSourceAdapterId(id)) return reportUnknownSourceAdapter(id, asJson);
+  let text;
+  try {
+    text = readInput(input);
+  } catch (error) {
+    return handleInputReadFailure(error, asJson);
+  }
+  const parsedInput = parseJsonStrict(text, {
+    limits: getBudgetLimits("standard")
+  });
+  if (!parsedInput.ok) {
+    printDiagnostics(parsedInput.errors, asJson);
+    return exitCodeForErrors(parsedInput.errors);
+  }
+  if (!isPlainJsonRecord(parsedInput.value)) {
+    const errors = adapterEnvelopeFailure(
+      "",
+      "source-adapter input must be one object with exportedStatus and options members."
+    );
+    printDiagnostics(errors, asJson);
+    return exitCodeForErrors(errors);
+  }
+  const keys = Object.keys(parsedInput.value).sort();
+  if (keys.length !== 2 || keys[0] !== "exportedStatus" || keys[1] !== "options") {
+    const errors = adapterEnvelopeFailure(
+      "",
+      "source-adapter input must contain exactly exportedStatus and options."
+    );
+    printDiagnostics(errors, asJson);
+    return exitCodeForErrors(errors);
+  }
+  let adapted;
+  switch (id) {
+    case "nest-spike-recorder":
+      adapted = nestSpikeRecorderToRaster(
+        parsedInput.value.exportedStatus,
+        parsedInput.value.options
+      );
+      break;
+  }
+  if (!adapted.ok) {
+    printDiagnostics(adapted.errors, asJson);
+    return exitCodeForErrors(adapted.errors);
+  }
+  const checked = (0, import_request3.validateRequestValue)(adapted.request);
+  if (!checked.ok) {
+    printDiagnostics(checked.errors, asJson);
+    return exitCodeForErrors(checked.errors);
+  }
+  try {
+    process.stdout.write(`${canonicalize(checked.request.canonicalRequest)}
+`);
+  } catch {
+    process.stderr.write("internal error: adapted request canonicalization failed\n");
+    return EXIT.internal;
+  }
+  return EXIT.ok;
+}
+function cmdSource(args) {
+  const [subcommand, ...rest] = args;
+  switch (subcommand) {
+    case "catalog":
+      return cmdSourceCatalog(rest);
+    case "describe":
+      return cmdSourceDescribe(rest);
+    case "adapt":
+      return cmdSourceAdapt(rest);
+    default:
+      process.stderr.write(
+        "usage error: source requires catalog, describe, or adapt\n"
+      );
+      return EXIT.usage;
+  }
+}
 function cmdValidate(args) {
   const parsed = parseOrReport(args, { valueOptions: ["--format"], positionalCount: 1 });
   if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
@@ -62523,6 +63617,9 @@ Usage:
   cortexel identity [--json]
   cortexel catalog  [--include-experimental] [--json]
   cortexel describe <stable-skill-id> [--json [--section summary|example|schema|all]]
+  cortexel source catalog [--json]
+  cortexel source describe <source-adapter-id> [--json]
+  cortexel source adapt <source-adapter-id> <input|-> [--format json]
   cortexel validate <input|-> [--format json]
   cortexel render   <input|-> --output figure.svg [--force] [--format json]
   cortexel render   <input|-> --dry-run [--format json]
@@ -62538,6 +63635,7 @@ var CLI_HANDLERS = {
   identity: cmdIdentity,
   catalog: cmdCatalog,
   describe: cmdDescribe,
+  source: cmdSource,
   validate: cmdValidate,
   render: cmdRender,
   inspect: cmdInspect,

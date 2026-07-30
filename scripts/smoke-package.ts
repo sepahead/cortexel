@@ -54,6 +54,9 @@ import { CORTEXEL_SPEC_VERSION } from '../core/vizSpec';
 import { canonicalize } from '../src/core/canonicalize';
 import { getBudgetLimits } from '../src/core/limits';
 import { parseJsonStrict, type JsonValue } from '../src/core/parse-json';
+import { SOURCE_ADAPTER_CATALOG } from '../src/adapters/source-catalog';
+import { nestSpikeRecorderToRaster as sourceNestSpikeRecorderToRaster } from '../src/adapters/nest';
+import { validateRequestValue as validateSourceRequestValue } from '../src/core/request';
 import {
   SKILL_AUTHORING as SOURCE_SKILL_AUTHORING,
   STABLE_SKILL_IDS as SOURCE_STABLE_SKILL_IDS,
@@ -4476,10 +4479,16 @@ const runtimeFigureContractProbe = `
       'CATALOG_DIGEST_DOMAIN',
       'SKILL_AUTHORING',
       'SKILL_CATALOG',
+      'SOURCE_ADAPTER_CATALOG',
+      'SOURCE_ADAPTER_CATALOG_DIGEST',
+      'SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN',
+      'SOURCE_ADAPTER_IDS',
       'STABLE_CATALOG_SCHEMA_RESOURCES',
       'STABLE_SKILL_IDS',
+      'isSourceAdapterId',
       'isStableSkillId',
       'lookupSkillCatalogEntry',
+      'lookupSourceAdapter',
     ])) {
     throw new Error('packed authoring entry exposes an unexpected runtime surface: ' +
       JSON.stringify(authoringExportNames));
@@ -4521,6 +4530,26 @@ const runtimeFigureContractProbe = `
         figure.lookupSkillCatalogEntry(id) !== undefined) {
       throw new Error('packed stable catalog lookup admitted an unknown or prototype key');
     }
+  }
+  if (JSON.stringify(authoring.SOURCE_ADAPTER_IDS) !==
+      JSON.stringify(['nest-spike-recorder']) ||
+      Object.keys(authoring.SOURCE_ADAPTER_CATALOG.adapters).length !== 1 ||
+      !authoring.isSourceAdapterId('nest-spike-recorder') ||
+      authoring.lookupSourceAdapter('nest-spike-recorder') !==
+        authoring.SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) {
+    throw new Error('packed executable source-adapter discovery is incomplete');
+  }
+  for (const id of ['', 'nest-multimeter', '__proto__', 'constructor']) {
+    if (authoring.isSourceAdapterId(id) ||
+        authoring.lookupSourceAdapter(id) !== undefined) {
+      throw new Error('packed source-adapter lookup admitted an unknown or prototype key');
+    }
+  }
+  if (figure.sha256Digest(figure.canonicalize({
+    domain: authoring.SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+    catalog: authoring.SOURCE_ADAPTER_CATALOG,
+  })) !== authoring.SOURCE_ADAPTER_CATALOG_DIGEST) {
+    throw new Error('packed source-adapter discovery bytes do not reproduce their digest');
   }
   const catalogView = {
     domain: authoring.CATALOG_DIGEST_DOMAIN,
@@ -4858,6 +4887,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             typeof core.getPositionToSpatialMap2DParams !== 'function' ||
             typeof figure.parseAndValidateRequest !== 'function' ||
             typeof authoring.SKILL_AUTHORING !== 'object' ||
+            typeof authoring.SOURCE_ADAPTER_CATALOG !== 'object' ||
+            typeof authoring.lookupSourceAdapter !== 'function' ||
             typeof renderSvg.buildFigure !== 'function' ||
             typeof nestAdapter.nestSpikeRecorderToRaster !== 'function' ||
             packageMetadata.name !== 'cortexel' ||
@@ -4909,6 +4940,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             typeof core.getPositionToSpatialMap2DParams !== 'function' ||
             typeof figure.parseAndValidateRequest !== 'function' ||
             typeof authoring.SKILL_AUTHORING !== 'object' ||
+            typeof authoring.SOURCE_ADAPTER_CATALOG !== 'object' ||
+            typeof authoring.lookupSourceAdapter !== 'function' ||
             typeof renderSvg.buildFigure !== 'function' ||
             typeof nestAdapter.nestSpikeRecorderToRaster !== 'function' ||
             packageMetadata.name !== 'cortexel' ||
@@ -5103,6 +5136,31 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     );
     authoringFixturePaths.set(skillId, authoringPath);
   }
+  const sourceAdapterFixturePath = join(
+    unrelated,
+    'source-adapter-nest-spike-recorder.json',
+  );
+  phaseWriteFile(
+    sourceAdapterFixturePath,
+    `${canonicalize(SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example)}\n`,
+  );
+  const sourceAdapterExample =
+    SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example;
+  const sourceAdapted = sourceNestSpikeRecorderToRaster(
+    sourceAdapterExample.exportedStatus,
+    sourceAdapterExample.options,
+  );
+  if (!sourceAdapted.ok) {
+    fail('source adapter rejected the source-catalog example before package execution');
+  }
+  const sourceAdaptedValidation = validateSourceRequestValue(sourceAdapted.request);
+  if (!sourceAdaptedValidation.ok) {
+    fail('source adapter example failed the source validation pipeline before package execution');
+  }
+  const adaptedRequestPath = join(unrelated, 'adapted-nest-spike-raster.json');
+  const expectedAdaptedRequest =
+    `${canonicalize(sourceAdaptedValidation.request.canonicalRequest)}\n`;
+  phaseWriteFile(adaptedRequestPath, expectedAdaptedRequest);
   if (phase === 'execute') {
     for (const importer of ['import-cli.mjs', 'import-cli.cjs']) {
       const imported = runResult(nodeExecutable, [join(consumer, importer)], unrelated);
@@ -5171,6 +5229,97 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       catalogIds.length !== 19
     ) {
       throw new Error('packed CLI catalog does not enumerate the exact stable manifest ids');
+    }
+
+    const sourceCatalogResult = runInstalledCli(['source', 'catalog', '--json']);
+    if (sourceCatalogResult.status !== 0 || sourceCatalogResult.stderr !== '') {
+      throw new Error('packed CLI source catalog command failed');
+    }
+    const cliSourceCatalog = strictJson(
+      sourceCatalogResult.stdout,
+      'installed CLI source catalog',
+    );
+    if (
+      !isRecord(cliSourceCatalog) ||
+      cliSourceCatalog.protocol !== 'cortexel-cli-source-catalog' ||
+      cliSourceCatalog.protocolVersion !== 1 ||
+      typeof cliSourceCatalog.sourceAdapterCatalogDigest !== 'string' ||
+      typeof cliSourceCatalog.sourceAdapterCatalogDigestDomain !== 'string' ||
+      !Array.isArray(cliSourceCatalog.adapters) ||
+      cliSourceCatalog.adapters.length !== 1 ||
+      !isRecord(cliSourceCatalog.adapters[0]) ||
+      cliSourceCatalog.adapters[0].id !== 'nest-spike-recorder' ||
+      cliSourceCatalog.adapters[0].outputSkillId !== 'neuro.spike_raster'
+    ) {
+      throw new Error('packed CLI source catalog protocol is malformed');
+    }
+    if (
+      sha256(canonicalize({
+        domain: cliSourceCatalog.sourceAdapterCatalogDigestDomain,
+        catalog: SOURCE_ADAPTER_CATALOG,
+      })) !== cliSourceCatalog.sourceAdapterCatalogDigest
+    ) {
+      throw new Error('packed CLI source discovery bytes do not reproduce its digest');
+    }
+    const sourceDescribeResult = runInstalledCli([
+      'source',
+      'describe',
+      'nest-spike-recorder',
+      '--json',
+    ]);
+    const sourceDescription = strictJson(
+      sourceDescribeResult.stdout,
+      'installed CLI source description',
+    );
+    if (
+      sourceDescribeResult.status !== 0 ||
+      sourceDescribeResult.stderr !== '' ||
+      !isRecord(sourceDescription) ||
+      sourceDescription.protocol !== 'cortexel-cli-source-describe' ||
+      sourceDescription.protocolVersion !== 1 ||
+      canonicalize(sourceDescription.adapter) !==
+        canonicalize(SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'])
+    ) {
+      throw new Error('packed CLI source description differs from prepared source');
+    }
+    const sourceAdaptResult = runInstalledCli([
+      'source',
+      'adapt',
+      'nest-spike-recorder',
+      sourceAdapterFixturePath,
+      '--format',
+      'json',
+    ]);
+    if (sourceAdaptResult.status !== 0 || sourceAdaptResult.stderr !== '') {
+      throw new Error('packed CLI source adapter rejected its copyable example');
+    }
+    const adaptedRequest = strictJson(
+      sourceAdaptResult.stdout,
+      'installed CLI adapted request',
+    );
+    if (
+      !isRecord(adaptedRequest) ||
+      !isRecord(adaptedRequest.skill) ||
+      adaptedRequest.skill.id !== 'neuro.spike_raster' ||
+      sourceAdaptResult.stdout !== expectedAdaptedRequest
+    ) {
+      throw new Error('packed CLI source adapter emitted bytes differing from prepared source');
+    }
+    const adaptedValidation = runInstalledCli(['validate', adaptedRequestPath]);
+    const adaptedRender = runInstalledCli([
+      'render',
+      adaptedRequestPath,
+      '--dry-run',
+      '--format',
+      'json',
+    ]);
+    if (
+      adaptedValidation.status !== 0 ||
+      adaptedValidation.stderr !== '' ||
+      adaptedRender.status !== 0 ||
+      adaptedRender.stderr !== ''
+    ) {
+      throw new Error('packed CLI adapted request did not validate and render end to end');
     }
 
     let discoveryCompilationProfile: Record<string, JsonValue> | undefined;
@@ -5287,6 +5436,26 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       unknownPayload.error.didYouMean !== 'neuro.response_curve'
     ) {
       throw new Error('packed CLI unknown-skill protocol is malformed');
+    }
+    const unknownSourceResult = runInstalledCli([
+      'source',
+      'describe',
+      'nest-multimeter',
+      '--json',
+    ]);
+    const unknownSourcePayload = strictJson(
+      unknownSourceResult.stderr,
+      'installed CLI unknown-source error',
+    );
+    if (
+      unknownSourceResult.status !== 2 ||
+      unknownSourceResult.stdout !== '' ||
+      !isRecord(unknownSourcePayload) ||
+      unknownSourcePayload.protocol !== 'cortexel-cli-error' ||
+      !isRecord(unknownSourcePayload.error) ||
+      unknownSourcePayload.error.code !== 'CLI_UNKNOWN_SOURCE_ADAPTER'
+    ) {
+      throw new Error('packed CLI unknown-source protocol is malformed');
     }
   }
 

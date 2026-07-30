@@ -8,6 +8,7 @@ export const CLI_COMMANDS = [
   'identity',
   'catalog',
   'describe',
+  'source',
   'validate',
   'render',
   'inspect',

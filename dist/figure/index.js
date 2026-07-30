@@ -1,12 +1,12 @@
 import {
   migrateLegacyRequest
-} from "../chunk-HCAMUZSV.js";
+} from "../chunk-O26PPGAG.js";
 import {
   deriveDisclosures
-} from "../chunk-INDR2QS5.js";
+} from "../chunk-3B7S6D34.js";
 import {
   parseJsonStrict
-} from "../chunk-3OPWOH6Z.js";
+} from "../chunk-L4WMNNDJ.js";
 import {
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
@@ -27,7 +27,7 @@ import {
   responseEventMembershipDigest,
   toSeconds,
   unitLabel
-} from "../chunk-6FUWJQMA.js";
+} from "../chunk-4A4K5NRD.js";
 import {
   EXPERIMENTAL_CAPABILITY_IDS,
   LEGACY_SKILL_MAP,
@@ -36,10 +36,10 @@ import {
   STABLE_SKILL_IDS,
   isStableSkillId,
   lookupSkillCatalogEntry
-} from "../chunk-6VUQLANI.js";
+} from "../chunk-DPIT352X.js";
 import {
   snapshotValue
-} from "../chunk-IPFP7NAU.js";
+} from "../chunk-S32HFOQJ.js";
 import {
   DEFAULT_PROFILE,
   finalizeErrors,
@@ -51,17 +51,8 @@ import {
   safeText,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-VHSQP47Z.js";
+} from "../chunk-HLJSPQRG.js";
 import "../chunk-XGABDL4O.js";
-import {
-  CanonicalizationError,
-  canonicalDigest,
-  canonicalDigestExcluding,
-  canonicalize,
-  sha256Digest,
-  sha256Hex,
-  utf8ByteLength
-} from "../chunk-ZYBCCIMH.js";
 import {
   ARTIFACT_CONTRACT,
   CATALOG_DIGEST,
@@ -71,7 +62,16 @@ import {
   REQUEST_CONTRACT,
   STABLE_SKILL_COUNT,
   getBuildIdentity
-} from "../chunk-WQLKPQUW.js";
+} from "../chunk-PZCDM4HZ.js";
+import {
+  CanonicalizationError,
+  canonicalDigest,
+  canonicalDigestExcluding,
+  canonicalize,
+  sha256Digest,
+  sha256Hex,
+  utf8ByteLength
+} from "../chunk-ZYBCCIMH.js";
 
 // src/core/index.ts
 import {

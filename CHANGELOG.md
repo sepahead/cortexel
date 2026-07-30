@@ -71,6 +71,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   packaged implementation availability, immutable certification requirements, and
   known limitations. It remains a
   discovery/authoring aid, not a live PyNEST adapter or external-provenance proof.
+- The offline CLI now also exposes a separate closed executable source-adapter
+  inventory through `source catalog`, complete digest-bound adapter discovery through
+  `source describe`, and a bounded duplicate-key-safe
+  `source adapt <adapter-id> <input|->` boundary. The only living id is
+  `nest-spike-recorder`; its copyable input retains the full caller-declared revision-3
+  capture authority, and the CLI emits canonical request JSON only after both the
+  adapter and the complete stable FigureRequest pipeline succeed. Candidate mappings,
+  live PyNEST capture, other NEST profiles, and mutable R049 status are not promoted by
+  discovery. The same deeply frozen source catalog, guarded lookup, and digest are
+  available from `cortexel/authoring`.
 - A dependency-free `cortexel/authoring` subpath now exposes the same deeply frozen
   catalog metadata, schema resources, versioned Ajv compile profile, and synthetic
   fixtures without loading them into every `cortexel/figure` consumer. The profile

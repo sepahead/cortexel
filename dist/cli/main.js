@@ -1,44 +1,53 @@
 #!/usr/bin/env node
 import {
   migrateLegacyRequest
-} from "../chunk-HCAMUZSV.js";
+} from "../chunk-O26PPGAG.js";
 import {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
   SKILL_AUTHORING,
-  STABLE_CATALOG_SCHEMA_RESOURCES
-} from "../chunk-J2ZCIKKJ.js";
+  SOURCE_ADAPTER_CATALOG_DIGEST,
+  SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_IDS,
+  STABLE_CATALOG_SCHEMA_RESOURCES,
+  isSourceAdapterId,
+  lookupSourceAdapter
+} from "../chunk-PCBTWOAZ.js";
 import {
   buildFigureFromJson
-} from "../chunk-C5JOYF2K.js";
-import "../chunk-INDR2QS5.js";
+} from "../chunk-SB4UYJN2.js";
+import "../chunk-3B7S6D34.js";
+import {
+  nestSpikeRecorderToRaster
+} from "../chunk-NHUJIG7G.js";
+import "../chunk-ZH5ZNYHE.js";
 import {
   parseJsonStrict
-} from "../chunk-3OPWOH6Z.js";
-import "../chunk-L6Q7RZCU.js";
+} from "../chunk-L4WMNNDJ.js";
+import "../chunk-XZP4LRCZ.js";
 import {
   ERROR_STAGES
-} from "../chunk-6FUWJQMA.js";
+} from "../chunk-4A4K5NRD.js";
 import {
   EXPERIMENTAL_CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
   isStableSkillId
-} from "../chunk-6VUQLANI.js";
-import "../chunk-IPFP7NAU.js";
+} from "../chunk-DPIT352X.js";
+import "../chunk-S32HFOQJ.js";
 import {
   UNSAFE_DISPLAY_PATTERN_SOURCE,
   getBudgetLimits,
   makeError,
   safeText
-} from "../chunk-VHSQP47Z.js";
+} from "../chunk-HLJSPQRG.js";
 import "../chunk-XGABDL4O.js";
-import {
-  canonicalize
-} from "../chunk-ZYBCCIMH.js";
 import {
   CATALOG_DIGEST_DOMAIN,
   getBuildIdentity
-} from "../chunk-WQLKPQUW.js";
+} from "../chunk-PZCDM4HZ.js";
+import {
+  canonicalize
+} from "../chunk-ZYBCCIMH.js";
 
 // src/cli/main.ts
 import { randomBytes } from "crypto";
@@ -58,13 +67,17 @@ import {
 } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { parseAndValidateRequest } from "#cortexel-request-capability";
+import {
+  parseAndValidateRequest,
+  validateRequestValue
+} from "#cortexel-request-capability";
 
 // src/cli/commands.ts
 var CLI_COMMANDS = [
   "identity",
   "catalog",
   "describe",
+  "source",
   "validate",
   "render",
   "inspect",
@@ -770,6 +783,199 @@ Source mappings (${skill.adapters.length}):
   );
   return EXIT.ok;
 }
+function sourceDiscoveryIdentity() {
+  return {
+    buildIdentity: discoveryIdentity(),
+    sourceAdapterCatalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
+    sourceAdapterCatalogDigestDomain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN
+  };
+}
+function nearestSourceAdapterId(value) {
+  if (value.length === 0 || value.length > 64 || !/^[a-z0-9._-]+$/u.test(value)) {
+    return null;
+  }
+  const nearest = [...SOURCE_ADAPTER_IDS].map((id) => ({ id, distance: utf16EditDistance(value, id) })).sort((left, right) => left.distance - right.distance || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0];
+  return nearest !== void 0 && nearest.distance <= 3 ? nearest.id : null;
+}
+function reportUnknownSourceAdapter(value, asJson) {
+  const suggestion = nearestSourceAdapterId(value);
+  if (asJson) {
+    writeCliJson({
+      protocol: "cortexel-cli-error",
+      protocolVersion: 1,
+      ...sourceDiscoveryIdentity(),
+      error: {
+        code: "CLI_UNKNOWN_SOURCE_ADAPTER",
+        message: "Unknown executable source-adapter id.",
+        didYouMean: suggestion,
+        validSourceAdapterIds: SOURCE_ADAPTER_IDS
+      }
+    }, process.stderr);
+  } else {
+    process.stderr.write(
+      "usage error: unknown executable source-adapter id" + (suggestion === null ? "\n" : `; did you mean ${suggestion}?
+`)
+    );
+  }
+  return EXIT.usage;
+}
+function cmdSourceCatalog(args) {
+  const parsed = parseOrReport(args, { flags: ["--json"], positionalCount: 0 });
+  if (!parsed) return EXIT.usage;
+  if (parsed.flags.has("--json")) {
+    writeCliJson({
+      protocol: "cortexel-cli-source-catalog",
+      protocolVersion: 1,
+      ...sourceDiscoveryIdentity(),
+      adapters: SOURCE_ADAPTER_IDS.map((id) => {
+        const descriptor = lookupSourceAdapter(id);
+        return {
+          id: descriptor.id,
+          revision: descriptor.revision,
+          title: descriptor.title,
+          sourceSystem: descriptor.sourceSystem,
+          admittedSourceVersions: descriptor.admittedSourceVersions,
+          outputSkillId: descriptor.outputSkillId,
+          command: descriptor.cli.command
+        };
+      })
+    });
+    return EXIT.ok;
+  }
+  process.stdout.write(`Executable source adapters (${SOURCE_ADAPTER_IDS.length}):
+`);
+  for (const id of SOURCE_ADAPTER_IDS) {
+    const descriptor = lookupSourceAdapter(id);
+    process.stdout.write(
+      `  ${id.padEnd(28)} ${safeText(descriptor.title, 512)}
+`
+    );
+  }
+  process.stdout.write(
+    "\nCandidate mappings described by a skill are not executable unless listed here.\n"
+  );
+  return EXIT.ok;
+}
+function cmdSourceDescribe(args) {
+  const parsed = parseOrReport(args, { flags: ["--json"], positionalCount: 1 });
+  if (!parsed) return EXIT.usage;
+  const id = parsed.positionals[0];
+  if (!isSourceAdapterId(id)) {
+    return reportUnknownSourceAdapter(id, parsed.flags.has("--json"));
+  }
+  const descriptor = lookupSourceAdapter(id);
+  if (parsed.flags.has("--json")) {
+    writeCliJson({
+      protocol: "cortexel-cli-source-describe",
+      protocolVersion: 1,
+      ...sourceDiscoveryIdentity(),
+      adapter: descriptor
+    });
+    return EXIT.ok;
+  }
+  process.stdout.write(
+    `${descriptor.id}@${descriptor.revision} \u2014 ${safeText(descriptor.title, 512)}
+Source: ${safeText(descriptor.sourceSystem, 256)} (${descriptor.admittedSourceVersions.join(", ")})
+Output skill: ${descriptor.outputSkillId}
+Command: ${descriptor.cli.command}
+Use --json for the complete authority statement, limitations, and copyable input.
+`
+  );
+  return EXIT.ok;
+}
+function adapterEnvelopeFailure(instancePath, message) {
+  return [makeError({
+    code: "ADAPTER_NEST_UNSUPPORTED_SHAPE",
+    stage: "adapter",
+    instancePath,
+    message
+  })];
+}
+function isPlainJsonRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function cmdSourceAdapt(args) {
+  const parsed = parseOrReport(args, {
+    valueOptions: ["--format"],
+    positionalCount: 2
+  });
+  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
+  const [id, input] = parsed.positionals;
+  const asJson = parsed.values.get("--format") === "json";
+  if (!isSourceAdapterId(id)) return reportUnknownSourceAdapter(id, asJson);
+  let text;
+  try {
+    text = readInput(input);
+  } catch (error) {
+    return handleInputReadFailure(error, asJson);
+  }
+  const parsedInput = parseJsonStrict(text, {
+    limits: getBudgetLimits("standard")
+  });
+  if (!parsedInput.ok) {
+    printDiagnostics(parsedInput.errors, asJson);
+    return exitCodeForErrors(parsedInput.errors);
+  }
+  if (!isPlainJsonRecord(parsedInput.value)) {
+    const errors = adapterEnvelopeFailure(
+      "",
+      "source-adapter input must be one object with exportedStatus and options members."
+    );
+    printDiagnostics(errors, asJson);
+    return exitCodeForErrors(errors);
+  }
+  const keys = Object.keys(parsedInput.value).sort();
+  if (keys.length !== 2 || keys[0] !== "exportedStatus" || keys[1] !== "options") {
+    const errors = adapterEnvelopeFailure(
+      "",
+      "source-adapter input must contain exactly exportedStatus and options."
+    );
+    printDiagnostics(errors, asJson);
+    return exitCodeForErrors(errors);
+  }
+  let adapted;
+  switch (id) {
+    case "nest-spike-recorder":
+      adapted = nestSpikeRecorderToRaster(
+        parsedInput.value.exportedStatus,
+        parsedInput.value.options
+      );
+      break;
+  }
+  if (!adapted.ok) {
+    printDiagnostics(adapted.errors, asJson);
+    return exitCodeForErrors(adapted.errors);
+  }
+  const checked = validateRequestValue(adapted.request);
+  if (!checked.ok) {
+    printDiagnostics(checked.errors, asJson);
+    return exitCodeForErrors(checked.errors);
+  }
+  try {
+    process.stdout.write(`${canonicalize(checked.request.canonicalRequest)}
+`);
+  } catch {
+    process.stderr.write("internal error: adapted request canonicalization failed\n");
+    return EXIT.internal;
+  }
+  return EXIT.ok;
+}
+function cmdSource(args) {
+  const [subcommand, ...rest] = args;
+  switch (subcommand) {
+    case "catalog":
+      return cmdSourceCatalog(rest);
+    case "describe":
+      return cmdSourceDescribe(rest);
+    case "adapt":
+      return cmdSourceAdapt(rest);
+    default:
+      process.stderr.write(
+        "usage error: source requires catalog, describe, or adapt\n"
+      );
+      return EXIT.usage;
+  }
+}
 function cmdValidate(args) {
   const parsed = parseOrReport(args, { valueOptions: ["--format"], positionalCount: 1 });
   if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
@@ -954,6 +1160,9 @@ Usage:
   cortexel identity [--json]
   cortexel catalog  [--include-experimental] [--json]
   cortexel describe <stable-skill-id> [--json [--section summary|example|schema|all]]
+  cortexel source catalog [--json]
+  cortexel source describe <source-adapter-id> [--json]
+  cortexel source adapt <source-adapter-id> <input|-> [--format json]
   cortexel validate <input|-> [--format json]
   cortexel render   <input|-> --output figure.svg [--force] [--format json]
   cortexel render   <input|-> --dry-run [--format json]
@@ -969,6 +1178,7 @@ var CLI_HANDLERS = {
   identity: cmdIdentity,
   catalog: cmdCatalog,
   describe: cmdDescribe,
+  source: cmdSource,
   validate: cmdValidate,
   render: cmdRender,
   inspect: cmdInspect,

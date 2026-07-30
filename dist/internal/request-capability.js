@@ -1,6 +1,6 @@
 import {
   parseJsonStrict
-} from "../chunk-3OPWOH6Z.js";
+} from "../chunk-L4WMNNDJ.js";
 import {
   DistributionDerivationError,
   MatrixDerivationError,
@@ -13,7 +13,7 @@ import {
   deriveWeightMatrix,
   validateStructure,
   verifyHistogramValues
-} from "../chunk-L6Q7RZCU.js";
+} from "../chunk-XZP4LRCZ.js";
 import {
   MAX_MATERIALIZED_BINS,
   SEMANTIC_VALIDATOR_IDS,
@@ -39,16 +39,16 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "../chunk-6FUWJQMA.js";
+} from "../chunk-4A4K5NRD.js";
 import {
   LEGACY_SKILL_MAP,
   SKILL_CATALOG,
   isStableSkillId,
   lookupSkillCatalogEntry
-} from "../chunk-6VUQLANI.js";
+} from "../chunk-DPIT352X.js";
 import {
   snapshotValue
-} from "../chunk-IPFP7NAU.js";
+} from "../chunk-S32HFOQJ.js";
 import {
   DEFAULT_PROFILE,
   MAX_ERROR_RECORDS,
@@ -59,7 +59,7 @@ import {
   pointer,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-VHSQP47Z.js";
+} from "../chunk-HLJSPQRG.js";
 import {
   binary64RelativeDifferenceWithinEpsilons,
   binary64RelativeDifferenceWithinTolerance,
@@ -71,13 +71,13 @@ import {
   isRoundedMeanOfSafeNonnegativeIntegers
 } from "../chunk-XGABDL4O.js";
 import {
-  canonicalDigest
-} from "../chunk-ZYBCCIMH.js";
-import {
   CONTRACT_DIGEST,
   REQUEST_CONTRACT,
   deepFreeze
-} from "../chunk-WQLKPQUW.js";
+} from "../chunk-PZCDM4HZ.js";
+import {
+  canonicalDigest
+} from "../chunk-ZYBCCIMH.js";
 
 // src/core/semantics/provenance.ts
 var LIBRARY_AUTHORED_FIELDS = /* @__PURE__ */ new Set([

@@ -1,18 +1,18 @@
 import {
   makeError,
   pointer
-} from "./chunk-VHSQP47Z.js";
+} from "./chunk-HLJSPQRG.js";
 import {
   exactBinary64MultiplyByRational,
   exactRationalToBinary64,
   finiteBinary64ToMinSubnormalUnits
 } from "./chunk-XGABDL4O.js";
 import {
+  freezeGenerated
+} from "./chunk-PZCDM4HZ.js";
+import {
   canonicalDigest
 } from "./chunk-ZYBCCIMH.js";
-import {
-  freezeGenerated
-} from "./chunk-WQLKPQUW.js";
 
 // src/generated/registry.ts
 var ERROR_CODES = freezeGenerated([
@@ -3999,4 +3999,4 @@ export {
   verifyPeakBasisAgainstWindow,
   verifyBinnedPeakValueLattice
 };
-//# sourceMappingURL=chunk-6FUWJQMA.js.map
+//# sourceMappingURL=chunk-4A4K5NRD.js.map

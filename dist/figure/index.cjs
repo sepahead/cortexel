@@ -85,7 +85,7 @@ module.exports = __toCommonJS(figure_exports);
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:a46204c087e224566e304fbe63863b94dbd7b8bf4e8218c591d9d7f2acf79247";
+var CONTRACT_DIGEST = "sha256:0b8afcc2682f41339d8e01776c485444edb3d88a457196a7f18b018d1ca84a6e";
 var CATALOG_DIGEST = "sha256:18fe441ad91d52651cbbe5efa063478a5c458560c29d20d541d63359722addd8";
 var CATALOG_DIGEST_DOMAIN = "cortexel-public-stable-catalog.v2";
 var STABLE_SKILL_COUNT = 19;
@@ -10937,6 +10937,16 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "owner": "Sepehr Mahmoudian",
     "limitations": [
       "Offline and stable-skill-only. JSON output is generated from the exact packaged catalog; closed summary, example, schema and all sections let prompt-budgeted agents request only what they need. The complete bundle includes the composed per-skill acceptance schema with explicit common-contract references, one living illustrative request, source mappings, evidence limits and implementation/certification metadata. The example is not a source-to-request adapter and does not establish external provenance."
+    ]
+  },
+  "cli.source": {
+    "id": "cli.source",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
     ]
   },
   "cli.validate": {

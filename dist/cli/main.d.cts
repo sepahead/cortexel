@@ -7,7 +7,7 @@ import { C as CortexelError } from '../errors-DUbFUu6n.cjs';
  * Dispatch and capability generation import this value directly. It is data, not a
  * source-text pattern, so quote style and comments cannot create or hide commands.
  */
-declare const CLI_COMMANDS: readonly ["identity", "catalog", "describe", "validate", "render", "inspect", "migrate"];
+declare const CLI_COMMANDS: readonly ["identity", "catalog", "describe", "source", "validate", "render", "inspect", "migrate"];
 
 /**
  * The Cortexel CLI.

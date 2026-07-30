@@ -1,6 +1,6 @@
 import {
   freezeGenerated
-} from "./chunk-WQLKPQUW.js";
+} from "./chunk-PZCDM4HZ.js";
 
 // src/generated/catalog.ts
 var CAPABILITY_AVAILABILITIES = freezeGenerated([
@@ -10826,6 +10826,16 @@ var CAPABILITY_CATALOG = freezeGenerated({
       "Offline and stable-skill-only. JSON output is generated from the exact packaged catalog; closed summary, example, schema and all sections let prompt-budgeted agents request only what they need. The complete bundle includes the composed per-skill acceptance schema with explicit common-contract references, one living illustrative request, source mappings, evidence limits and implementation/certification metadata. The example is not a source-to-request adapter and does not establish external provenance."
     ]
   },
+  "cli.source": {
+    "id": "cli.source",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
+    ]
+  },
   "cli.validate": {
     "id": "cli.validate",
     "kind": "cli",
@@ -11525,4 +11535,4 @@ export {
   CATEGORICAL_SERIES_STYLES,
   UNCERTAINTY_STYLES_BY_KIND
 };
-//# sourceMappingURL=chunk-6VUQLANI.js.map
+//# sourceMappingURL=chunk-DPIT352X.js.map

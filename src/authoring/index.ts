@@ -26,3 +26,13 @@ export {
   type SkillCatalogEntry,
   type StableSkillId,
 } from '../generated/catalog.js';
+export {
+  isSourceAdapterId,
+  lookupSourceAdapter,
+  SOURCE_ADAPTER_CATALOG,
+  SOURCE_ADAPTER_CATALOG_DIGEST,
+  SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_IDS,
+  type SourceAdapterDescriptor,
+  type SourceAdapterId,
+} from '../adapters/source-catalog.js';

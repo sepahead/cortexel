@@ -332,6 +332,14 @@ The machine-readable state of every release gate is in
   not. The adapter has no committed, isolated, durable real-NEST conformance receipt.
   Limited ad hoc exact-version probes do not satisfy the certification profile, so the
   gate remains `NOT_RUN`.
+  The packaged offline CLI makes this one executable path discoverable through
+  `source catalog` / `source describe` and callable through
+  `source adapt nest-spike-recorder`. That command accepts only a strict
+  `{ exportedStatus, options }` JSON envelope, runs the same adapter, revalidates its
+  request through the full stable gate, and emits canonical request JSON. The discovery
+  inventory is separately domain-digested and contains no nonimplemented mapping.
+  This improves agent ergonomics but creates no live-PyNEST, source-authentication, or
+  R049 evidence.
   Every nonimplemented NEST path is `not_assessed`: its source notes retain reviewed
   constraints and candidate authorities without claiming a closed feasible profile.
   The remaining NEST paths (connections, positions, multimeter) and the planned Neo/NWB/NCP
@@ -390,7 +398,8 @@ The machine-readable state of every release gate is in
   The pack smoke exercises ESM, CJS, every same-format and mixed-format validated-request
   handoff, copied/proxied-token rejection, declarations, legacy imports, unrelated-cwd
   validation, digest reproduction from shipped bytes, CLI identity/import guard/exit
-  codes, peer isolation, the tarball allow-list, and exact tar entry modes. A final
+  codes, executable source discovery/adaptation, peer isolation, the tarball allow-list,
+  and exact tar entry modes. A final
   post-emit pass verifies the exact closed `package.files` inventory, refuses
   indirect/non-regular entries under `dist` and `LICENSES`, and normalizes every packed
   ordinary file (including root metadata/notices) to `0644`, the sole CLI entry to

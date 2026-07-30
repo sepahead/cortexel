@@ -1,6 +1,6 @@
 import {
   deriveDisclosures
-} from "./chunk-INDR2QS5.js";
+} from "./chunk-3B7S6D34.js";
 import {
   DistributionDerivationError,
   MATRIX_AXIS_ORDER,
@@ -15,7 +15,7 @@ import {
   deriveWeightDistribution,
   deriveWeightMatrix,
   validateArtifactStructure
-} from "./chunk-L6Q7RZCU.js";
+} from "./chunk-XZP4LRCZ.js";
 import {
   RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
   axesAreCompatible,
@@ -48,13 +48,13 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "./chunk-6FUWJQMA.js";
+} from "./chunk-4A4K5NRD.js";
 import {
   CATEGORICAL_SERIES_STYLES,
   SKILL_CATALOG,
   THEMES,
   UNCERTAINTY_STYLES_BY_KIND
-} from "./chunk-6VUQLANI.js";
+} from "./chunk-DPIT352X.js";
 import {
   ARTIFACT_CONTRACT_IDENTITY,
   BUDGET_PROFILES,
@@ -62,7 +62,7 @@ import {
   makeError,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "./chunk-VHSQP47Z.js";
+} from "./chunk-HLJSPQRG.js";
 import {
   binary64RelativeDifferenceWithinEpsilons,
   exactBinary64AffineFraction,
@@ -82,17 +82,17 @@ import {
   roundedBinary64Mean
 } from "./chunk-XGABDL4O.js";
 import {
+  ARTIFACT_CONTRACT,
+  deepFreeze,
+  getBuildIdentity
+} from "./chunk-PZCDM4HZ.js";
+import {
   canonicalDigest,
   canonicalDigestExcluding,
   canonicalize,
   sha256Digest,
   utf8ByteLength
 } from "./chunk-ZYBCCIMH.js";
-import {
-  ARTIFACT_CONTRACT,
-  deepFreeze,
-  getBuildIdentity
-} from "./chunk-WQLKPQUW.js";
 
 // src/render/buildFigure.ts
 import {
@@ -25384,4 +25384,4 @@ export {
   buildFigureFromJson,
   buildFigure
 };
-//# sourceMappingURL=chunk-C5JOYF2K.js.map
+//# sourceMappingURL=chunk-SB4UYJN2.js.map

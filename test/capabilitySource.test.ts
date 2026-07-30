@@ -107,6 +107,7 @@ describe('capability maturity and concrete availability', () => {
       'cli.inspect',
       'cli.migrate',
       'cli.render',
+      'cli.source',
       'cli.validate',
     ]);
     const hiddenCommandEvidence = {

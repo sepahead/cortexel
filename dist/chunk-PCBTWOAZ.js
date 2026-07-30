@@ -1,6 +1,12 @@
 import {
+  NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3
+} from "./chunk-ZH5ZNYHE.js";
+import {
   freezeGenerated
-} from "./chunk-WQLKPQUW.js";
+} from "./chunk-PZCDM4HZ.js";
+import {
+  canonicalDigest
+} from "./chunk-ZYBCCIMH.js";
 
 // src/generated/authoring.ts
 var AUTHORING_SCHEMA_COMPILATION_PROFILE_V1 = freezeGenerated({
@@ -15571,9 +15577,142 @@ var SKILL_AUTHORING = freezeGenerated({
   }
 });
 
+// src/adapters/source-catalog.ts
+var SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN = "cortexel-source-adapter-catalog.rfc8785-sha256.v1";
+var SOURCE_ADAPTER_IDS = Object.freeze([
+  "nest-spike-recorder"
+]);
+var SOURCE_ADAPTER_ID_SET = new Set(SOURCE_ADAPTER_IDS);
+function isSourceAdapterId(value) {
+  return typeof value === "string" && SOURCE_ADAPTER_ID_SET.has(value);
+}
+var NEST_SPIKE_RECORDER_EXAMPLE = {
+  exportedStatus: {
+    record_to: "memory",
+    time_in_steps: false,
+    origin: 0,
+    start: 0,
+    stop: 10,
+    n_events: 3,
+    events: {
+      // Source order, repeated observations, and a silent sender are intentional.
+      senders: [2, 1, 2],
+      times: [9.9, 1, 1]
+    }
+  },
+  options: {
+    recordedSenderIds: [1, 2, 3],
+    nestVersion: "3.10.0",
+    captureAuthority: {
+      kind: "caller_declaration",
+      profile: "cortexel-nest-memory-spike-capture-authority.v1",
+      runtimeStatus: {
+        nestVersion: "3.10.0",
+        statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1",
+        executionScope: {
+          kind: "single_process",
+          numProcesses: 1,
+          rank: 0,
+          localNumThreads: 1
+        },
+        resolutionMs: 0.1,
+        ticsPerMs: "1000",
+        resolutionTics: "100",
+        captureBiologicalTimeTics: "10000",
+        captureBoundary: "after_successful_simulate_or_run_return"
+      },
+      recordingGrid: {
+        originTics: "0",
+        startTics: "0",
+        stopTics: "10000"
+      },
+      bufferEpoch: {
+        beganBy: "recorder_creation",
+        beganAtBiologicalTimeTics: "0"
+      },
+      recordingPlan: {
+        lastMutationAtBiologicalTimeTics: "0",
+        scope: "window_backend_time_encoding_and_sender_wiring",
+        senderUniverseBinding: "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+      },
+      clockEpochContinuity: "biological_time_monotonic_since_last_kernel_initialization",
+      eventCompleteness: "complete_for_recorded_senders"
+    },
+    runId: "run-1",
+    recorderId: "spike-recorder-1"
+  }
+};
+var SOURCE_ADAPTER_CATALOG_DATA = {
+  protocol: "cortexel-source-adapter-catalog",
+  protocolVersion: 1,
+  adapters: {
+    "nest-spike-recorder": {
+      id: "nest-spike-recorder",
+      revision: 3,
+      title: "NEST 3.10.0 memory spike recorder to stable spike raster",
+      sourceSystem: "NEST Simulator",
+      admittedSourceVersions: ["3.10.0"],
+      outputSkillId: "neuro.spike_raster",
+      implementation: {
+        packageSubpath: "cortexel/adapters/nest",
+        exportName: "nestSpikeRecorderToRaster",
+        profile: NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3
+      },
+      cli: {
+        command: "cortexel source adapt nest-spike-recorder <input|->",
+        inputMediaType: "application/json",
+        outputMediaType: "application/json",
+        pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg"
+      },
+      inputEnvelope: {
+        type: "object",
+        requiredMembers: ["exportedStatus", "options"],
+        additionalMembers: false,
+        exportedStatus: "Exact detached plain-data projection of one NEST spike-recorder status.",
+        options: "Complete recorded sender universe plus the caller-retained capture authority."
+      },
+      acceptanceBoundary: {
+        adapter: "The adapter checks its exact revision-3 source profile and authors a request.",
+        request: "The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.",
+        rendering: "Pipe the emitted request to `cortexel render`; adapter success alone is never render authority."
+      },
+      authority: [
+        "The source digest binds the detached JSON-compatible status projection, not a live simulator process.",
+        "The adapter-input digest additionally binds the normalized options and caller-declared capture authority.",
+        "The complete sender universe, recorder history, wiring history, process scope, run id, and recorder id remain caller declarations.",
+        "Events retain source order and multiplicity; the scientific view owns any scoped sorting or aggregation."
+      ],
+      limitations: [
+        "Only record_to=memory and time_in_steps=false are admitted.",
+        "Only the exact declared NEST 3.10.0 profile is admitted.",
+        "Only a single-process capture scope is admitted.",
+        "The package does not import PyNEST, inspect a live simulation, or authenticate caller declarations.",
+        "ASCII, screen, MPI, SIONlib, step-plus-offset clocks, and every other stable NEST mapping remain unsupported by this adapter revision.",
+        "Real-NEST conformance gate R049 remains external release evidence; packaged code is not certification."
+      ],
+      example: NEST_SPIKE_RECORDER_EXAMPLE
+    }
+  }
+};
+var SOURCE_ADAPTER_CATALOG = freezeGenerated(SOURCE_ADAPTER_CATALOG_DATA);
+function lookupSourceAdapter(value) {
+  if (!isSourceAdapterId(value)) return void 0;
+  return SOURCE_ADAPTER_CATALOG.adapters[value];
+}
+var SOURCE_ADAPTER_CATALOG_DIGEST = canonicalDigest({
+  domain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  catalog: SOURCE_ADAPTER_CATALOG
+});
+
 export {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
   STABLE_CATALOG_SCHEMA_RESOURCES,
-  SKILL_AUTHORING
+  SKILL_AUTHORING,
+  SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_IDS,
+  isSourceAdapterId,
+  SOURCE_ADAPTER_CATALOG,
+  lookupSourceAdapter,
+  SOURCE_ADAPTER_CATALOG_DIGEST
 };
-//# sourceMappingURL=chunk-J2ZCIKKJ.js.map
+//# sourceMappingURL=chunk-PCBTWOAZ.js.map

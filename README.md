@@ -148,6 +148,15 @@ cortexel describe neuro.spike_raster --json --section schema
 # with --json retains the complete bundle.
 cortexel describe neuro.spike_raster --json --section all
 
+# Discover only adapters this installed package can actually execute. Candidate
+# mappings in skill prose are intentionally absent from this list.
+cortexel source catalog --json
+
+# Get the exact authority statement, limitations, and a copyable input envelope,
+# then adapt it into a request that has already passed the full stable gate.
+cortexel source describe nest-spike-recorder --json
+cortexel source adapt nest-spike-recorder capture.json > request.json
+
 # Validate a request from a file or stdin. Exit code 0 = valid.
 cortexel validate request.json
 
@@ -177,6 +186,13 @@ supplies its complete schema, versioned compiler profile, and reference resource
 while `all` returns the complete scientific/evidence/authority bundle. Its example
 illustrates the structural schema—it
 neither adapts a live source nor proves the truth of external provenance claims.
+`source catalog` is a separate, digest-bound executable inventory. Today it contains
+only `nest-spike-recorder`; `source describe` returns that adapter's complete
+caller-authority statement and copyable JSON input, and `source adapt` rejects duplicate
+members, unknown envelope fields, unsupported source profiles, and any authored request
+that the full stable pipeline refuses. Its stdout is the canonical request JSON, so it
+can be piped directly to `validate` or `render`. It remains a detached plain-data
+boundary—not a live PyNEST capture or an R049 conformance receipt.
 Schema success is not acceptance; run
 `cortexel validate` to execute the identity, semantic, scientific, provenance, budget,
 and derivation gates.
@@ -184,8 +200,17 @@ and derivation gates.
 Programmatic agents can load the same immutable resources without invoking a process:
 
 ```ts
-import { SKILL_AUTHORING } from 'cortexel/authoring';
+import {
+  SKILL_AUTHORING,
+  SOURCE_ADAPTER_CATALOG,
+  lookupSourceAdapter,
+} from 'cortexel/authoring';
 import { validateRequestValue } from 'cortexel/figure';
+
+const nestRasterAdapter = lookupSourceAdapter('nest-spike-recorder');
+if (nestRasterAdapter !== SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) {
+  throw new Error('installed source-adapter discovery is incoherent');
+}
 
 const request = structuredClone(
   SKILL_AUTHORING['neuro.spike_raster'].authoringExample,
