@@ -1,12 +1,12 @@
 import {
   migrateLegacyRequest
-} from "../chunk-O26PPGAG.js";
+} from "../chunk-CEZJZVUM.js";
 import {
   deriveDisclosures
-} from "../chunk-3B7S6D34.js";
+} from "../chunk-SGBEOOWY.js";
 import {
   parseJsonStrict
-} from "../chunk-L4WMNNDJ.js";
+} from "../chunk-QXQJPKJH.js";
 import {
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
@@ -27,7 +27,8 @@ import {
   responseEventMembershipDigest,
   toSeconds,
   unitLabel
-} from "../chunk-4A4K5NRD.js";
+} from "../chunk-QKGQ343H.js";
+import "../chunk-XGABDL4O.js";
 import {
   EXPERIMENTAL_CAPABILITY_IDS,
   LEGACY_SKILL_MAP,
@@ -36,10 +37,10 @@ import {
   STABLE_SKILL_IDS,
   isStableSkillId,
   lookupSkillCatalogEntry
-} from "../chunk-DPIT352X.js";
+} from "../chunk-AJMFQ6OE.js";
 import {
   snapshotValue
-} from "../chunk-S32HFOQJ.js";
+} from "../chunk-ZJBZFUTH.js";
 import {
   DEFAULT_PROFILE,
   finalizeErrors,
@@ -51,8 +52,7 @@ import {
   safeText,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-HLJSPQRG.js";
-import "../chunk-XGABDL4O.js";
+} from "../chunk-VJN27A3U.js";
 import {
   ARTIFACT_CONTRACT,
   CATALOG_DIGEST,
@@ -62,7 +62,7 @@ import {
   REQUEST_CONTRACT,
   STABLE_SKILL_COUNT,
   getBuildIdentity
-} from "../chunk-PZCDM4HZ.js";
+} from "../chunk-M7SHUGNL.js";
 import {
   CanonicalizationError,
   canonicalDigest,

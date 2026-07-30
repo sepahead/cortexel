@@ -305,29 +305,44 @@ The machine-readable state of every release gate is in
   non-negative safe integer exactly equal to both event-array lengths, does not assume
   chronological events, and produces an unpinned `neuro.spike_raster` request for
   the bounded shape of caller-declared exact NEST 3.10.0 memory output with
-  `time_in_steps: false`. Adapter revision 3 additionally requires a closed
-  `captureAuthority` with `kind: caller_declaration`: the exact runtime
-  resolution/tic grid and successful-return closed-stop capture endpoint, a declaration
-  that the named single-recorder PyNEST NumPy-to-plain-data projection preserved every
-  event-array value and its order, single-process rank/thread scope, most recent recorder
-  creation or `n_events=0` clear, most recent window/backend/
-  time-encoding/sender-wiring mutation, monotonic biological time since the current
-  kernel initialization, and an exact complete sender-universe binding.
-  Strict validation resolves that request against the installed skill revision
-  (currently revision 5).
-  The request retains `(origin + start, origin + stop]`, native
-  binary64 milliseconds, multiplicity, a digest of the detached plain-data projection,
-  and a separate domain-separated digest over that projection plus every normalized
-  adapter option.
+  `time_in_steps: false`. Strict validation resolves the result against installed
+  `neuro.spike_raster` revision 6 and `figure.spike_raster` revision 7.
+
+  Executable adapter revision 5 has two closed branch records. `finiteStop` requires
+  projection v1 and capture-authority profile v3 with `kind: caller_declaration`, and
+  retains `(origin+start,origin+stop]`. `positiveInfinityCaptureBounded` covers NEST's
+  default positive-infinity stop with projection v2 and capture-authority profile v4.
+  Projection v2 alone converts the exact pinned-runtime PyNEST `DBL_MAX` representation into the
+  closed token `{ "kind": "nest_time_positive_infinity" }`; the adapter rejects a raw
+  numeric `DBL_MAX` and arbitrary/decorated tokens. This branch has no finite `stopTics`.
+  Instead, its authority binds a finite `captureTime` to the exact biological
+  time immediately after a successful *advancing* `Simulate` or `Run` return and before
+  any further advance or mutation. The emitted request retains
+  `(origin+start,capture]`. That endpoint is capture, not a configured finite stop or
+  recorder deactivation, and establishes nothing after capture. The two branches use
+  distinct authority profiles, projection methods, request shapes, and disclosure facts,
+  but one revision-5 adapter-input digest domain; their evidence is not interchangeable.
+
+  Both branches require the exact LP64/int64/binary64 time-build profile, runtime
+  resolution/tic grid, source-faithful stored-reciprocal time projection, and a
+  declaration that the
+  named single-recorder PyNEST NumPy-to-plain-data projection preserved every event-array
+  value and its order, single-process rank/thread scope, most recent recorder creation or
+  `n_events=0` clear, most recent window/backend/time-encoding/sender-wiring mutation,
+  monotonic biological time since the current kernel initialization, and an exact
+  complete sender-universe binding. They retain native binary64 milliseconds,
+  multiplicity, a digest of the detached plain-data projection, and a branch-specific
+  domain-separated digest over that projection plus every normalized adapter option.
   Step/offset,
   ASCII, screen, MPI, and SIONlib paths fail closed: no contract currently preserves their
   raw clock authority. Exact arithmetic proves relations among received binary64 values
   and declared integer-tic preimages; it cannot authenticate those tics, the projection,
   export, runtime/build, clock or buffer history, configuration history, recorder wiring,
   silent-sender completeness, process scope, run identity, or export custody. Every
-  capture-authority field,
+  capture-authority and build-profile field,
   `nestVersion`, `recordedSenderIds`, and optional run/recorder id is a host declaration;
-  neither digest is an attestation. Local thread-sibling status merging is admitted because
+  neither digest is an attestation. Historical adapter v3 and capture-authority v1/v2
+  records are non-executable migration identities. Local thread-sibling status merging is admitted because
   the pinned single-process profile exposes it; MPI rank-local or caller-premerged status is
   not. The adapter has no committed, isolated, durable real-NEST conformance receipt.
   Limited ad hoc exact-version probes do not satisfy the certification profile, so the
@@ -335,9 +350,11 @@ The machine-readable state of every release gate is in
   The packaged offline CLI makes this one executable path discoverable through
   `source catalog` / `source describe` and callable through
   `source adapt nest-spike-recorder`. That command accepts only a strict
-  `{ exportedStatus, options }` JSON envelope, runs the same adapter, revalidates its
-  request through the full stable gate, and emits canonical request JSON. The discovery
-  inventory is separately domain-digested and contains no nonimplemented mapping.
+  `{ exportedStatus, options }` JSON envelope; its copyable example uses revision 5's
+  typed positive-infinity branch and capture-authority profile v4, while finite input
+  uses the `finiteStop` branch and profile v3. It runs the same adapter, revalidates its request
+  through the full stable gate, and emits canonical request JSON. The discovery inventory
+  is separately domain-digested and contains no nonimplemented mapping.
   This improves agent ergonomics but creates no live-PyNEST, source-authentication, or
   R049 evidence.
   Every nonimplemented NEST path is `not_assessed`: its source notes retain reviewed
@@ -447,6 +464,9 @@ The machine-readable state of every release gate is in
   with no retry, second wait, signal, or identity probe after the call begins. Linux
   requires readable `/proc/self/task`; Darwin requires the supported
   `libproc` `proc_taskinfo` ABI. Kqueue process readiness is not ownership evidence.
+  Pipe-drain selector failure falls back to direct readiness while the leader remains
+  unreaped; persistent readiness failure is retained and consumes the fixed cleanup
+  deadline before the one-way raw reap.
   This prevents
   the reviewed cleanup path from knowingly addressing a PID/PGID after its leader
   identity was released; it is not an atomic defense against hostile same-process

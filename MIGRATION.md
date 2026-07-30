@@ -84,7 +84,7 @@ Summary:
 | Pre-1.0 id | Outcome | FigureRequestV1 target |
 |---|---|---|
 | `nest.voltage_trace` | report-only target skeleton | `neuro.analog_trace` (never infers membrane voltage, origin, units, identity, window, layout, or duplicate-time policy) |
-| `nest.spike_raster` | report-only target skeleton | the installed `neuro.spike_raster` contract (currently revision 5; requires the recorded sender universe and an explicit event-window clock/closure; a NEST memory export additionally requires origin, start, stop, `time_in_steps: false`, the exact 3.10.0 profile, both source and adapter-input digests, and revision 3 capture authority for horizon, buffer/configuration/wiring history, sender universe and single-process scope; admission is not upstream certification) |
+| `nest.spike_raster` | report-only target skeleton | the installed `neuro.spike_raster` contract (currently revision 6; requires the recorded sender universe and an explicit event-window clock/closure; an exact NEST 3.10.0 memory export must use executable adapter revision 5 with its `finiteStop` or `positiveInfinityCaptureBounded` branch, exact time-build profile, branch-specific projection and capture authority, and unified v5 digest domain; admission is not upstream certification) |
 | `nest.population_rate` | report-only target skeleton | `neuro.population_rate` (requires a recorded-sender count) |
 | `nest.rate_response` | report-only target skeleton | `neuro.response_curve` (requires input quantity + response method + caller-declared event scope) |
 | `nest.isi_distribution` | report-only target skeleton | `neuro.isi_distribution` |
@@ -126,22 +126,42 @@ original source evidence and block if it cannot. Neither path may synthesize:
 - a zero-lag / self-pair policy for a correlogram;
 - a calibrated-posterior status.
 
-### Spike-raster revision-1 erratum
+### Spike-raster revision-1 erratum and NEST adapter branches
 
 Do not relabel a legacy NEST window as revision 2 by copying its old `start` and `stop`.
 Revision 1 assumed `[start, stop)`, whereas a NEST recording device records over
 `(origin + start, origin + stop]`. A future implemented transform may construct the
 generic event-window form only when the legacy producer independently establishes that
-closure. For a native NEST memory export, re-run capture through adapter revision 3.
-Preserve `origin`, `start`, `stop`, `record_to: memory`, explicit
-`time_in_steps: false`, the exact NEST 3.10.0 runtime declaration, the detached status
-value, and capture-time records for the runtime resolution, successful
-simulation-return horizon, most recent buffer clear or creation, most recent
-recorder-plan/wiring mutation, complete sender universe, and exact single-process
-scope. A final status cannot reconstruct those facts after the event. The source
-digest and domain-separated adapter-input digest are identities, not attestations.
+closure. For a native NEST memory export, re-run capture through executable adapter
+revision 5 and the branch matching the actual configured stop. The `finiteStop` branch
+preserves `origin`, `start`, numeric `stop`, `record_to: memory`, explicit
+`time_in_steps: false`, projection v1, and capture-authority profile v3; its interval is
+`(origin+start,origin+stop]` under the unified v5 digest domain.
+
+NEST's default positive-infinity stop is a different evidence shape. Re-capture it
+through revision 5's `positiveInfinityCaptureBounded` branch and named projection v2,
+which alone may replace the
+exact pinned-runtime PyNEST `DBL_MAX` representation with
+`{ "kind": "nest_time_positive_infinity" }`. Do not hand a raw numeric `DBL_MAX` to
+the adapter or reinterpret an ordinary large finite value as infinity: both fail
+closed. Capture-authority profile v4 must record the finite exact biological time immediately
+after a successful *advancing* `Simulate` or `Run` return and before any further
+advance or mutation. It has finite origin/start/capture tic preimages but no
+`stopTics`, and retains only `(origin+start,capture]`. That closed endpoint is capture,
+not device deactivation, and makes no claim about events after capture.
+
+Both branches require the exact NEST 3.10.0 runtime declaration, detached status value,
+exact LP64/int64/binary64 time-build profile, runtime resolution, source-faithful
+stored-reciprocal time projection, most recent buffer clear or creation, most recent
+recorder-plan/wiring mutation, complete sender universe, and exact single-process scope.
+A final status cannot reconstruct those facts after the event. Source and revision-5
+adapter-input digests are identities, not attestations; all capture and build authority
+remains caller-declared. Historical adapter v3 and capture-authority v1/v2 inputs are
+non-executable migration identities. R049 remains `NOT_RUN` without a durable isolated
+receipt binding the wheel, toolchain, active floating-point environment, harness, and
+results.
 Step/offset, file-backed, MPI rank-local, caller-premerged MPI, and other runtime
-versions have no revision-3 adapter path and remain blocking migrations.
+versions have no admitted stable adapter path and remain blocking migrations.
 
 ## API vs contract identity
 

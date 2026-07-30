@@ -126,6 +126,12 @@
       "text": "NEST capture declaration — Cortexel checked the declared plain-data projection, integer-tic grid, successful-return endpoint, buffer/plan history, clock-epoch continuity, sender universe, and single-process scope only for internal consistency. It did not observe or authenticate the runtime, projection, topology, resets, history, wiring, sender universe, or export; all remain caller claims."
     },
     {
+      "id": "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
+      "severity": "important",
+      "trigger": "the NEST recorder used its positive-infinity configured stop and the finite figure window ends at capture",
+      "text": "NEST positive-infinity capture — The recorder had no finite configured stop. The plotted upper endpoint is the caller-declared successful-return capture time, not recorder deactivation; this artifact establishes nothing about events after capture."
+    },
+    {
       "id": "MISSING_VALUES_PRESENT",
       "severity": "important",
       "trigger": "any series contains null observations",

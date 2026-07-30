@@ -32,6 +32,7 @@ interface DisclosureFacts {
     readonly nodeUniverseComplete?: boolean;
     readonly excludedOutOfWindow?: number;
     readonly nestSerializedClock?: boolean;
+    readonly nestCaptureBoundedPositiveInfinity?: boolean;
     readonly missingValueCount?: number;
     readonly unitConversions?: readonly string[];
     readonly duplicateTimeAggregateMethod?: string;

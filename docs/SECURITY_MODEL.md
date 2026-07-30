@@ -115,11 +115,25 @@ traverses them:
 7. **Adapters** (`src/adapters/*`). Simulator output (for example a NEST recorder
    object) crosses into the request contract. Only the bounded plain-data
    `nest.spike_recorder` → `neuro.spike_raster` mapping is packaged, and its pinned
-   upstream execution remains `NOT_RUN` in the external release ledger. Its required
-   capture authority is still untrusted caller data: exact arithmetic can reject an
-   internally impossible horizon/history relation, but neither the source digest nor
-   the adapter-input digest proves the runtime, process scope, reset/configuration/
-   wiring history, or sender universe. Skill records
+   upstream execution remains `NOT_RUN` in the external release ledger. Executable
+   adapter revision 5 has `finiteStop` and `positiveInfinityCaptureBounded` branch
+   records under one v5 digest domain. The finite branch uses projection v1 and
+   capture-authority profile v3 and retains `(origin+start,origin+stop]`. The
+   positive-infinity branch uses projection v2 and capture-authority profile v4 and accepts only the closed
+   `{ "kind": "nest_time_positive_infinity" }` token; raw numeric `DBL_MAX` is
+   rejected rather than treated as a trustworthy infinity marker. That branch ends the
+   request at the finite caller-declared capture time immediately after a successful
+   *advancing* `Simulate` or `Run` return and before any further advance or mutation.
+   Its `(origin+start,capture]` endpoint is not device deactivation and authorizes no
+   post-capture claim. Both branches require the declared LP64/int64/binary64 build
+   profile and source-faithful stored-reciprocal time projection. Required build and
+   capture authority remain untrusted caller data: exact arithmetic can reject an
+   internally impossible clock/horizon/history relation, but neither the source digest
+   nor the adapter-input digest proves the runtime, producing build, active
+   floating-point environment, projection, capture timing, process scope,
+   reset/configuration/wiring history, or sender universe. Historical adapter v3 and
+   capture-authority v1/v2 records are non-executable migration identities.
+   Skill records
    separately state composite source roles, feasibility, reserved definition state,
    and implementation availability so one axis cannot
    borrow another's evidence. Source ids name stable mapping roles/profiles, not runtime

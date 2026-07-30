@@ -236,6 +236,7 @@
         "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
         "MISSING_VALUES_PRESENT",
         "MULTAPSE_AGGREGATED",
+        "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
         "NEST_SERIALIZED_CLOCK_BOUNDARY",
         "NODE_UNIVERSE_INCOMPLETE",
         "NONSTANDARD_BUDGET_PROFILE",
@@ -619,6 +620,28 @@
           "properties": {
             "id": {
               "const": "NEST_SERIALIZED_CLOCK_BOUNDARY"
+            },
+            "severity": {
+              "const": "important"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
+            }
+          },
+          "required": [
+            "id",
+            "severity",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY"
             },
             "severity": {
               "const": "important"
@@ -1114,7 +1137,7 @@
               "const": "figure.spike_raster"
             },
             "rendererRevision": {
-              "const": 6
+              "const": 7
             }
           },
           "required": [

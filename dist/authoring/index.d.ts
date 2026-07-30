@@ -1,6 +1,6 @@
 import { S as StableSkillId } from '../catalog-p-MPgBs_.js';
 export { a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, i as isStableSkillId, l as lookupSkillCatalogEntry } from '../catalog-p-MPgBs_.js';
-export { C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN } from '../identity-D5q7LYbI.js';
+export { C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN } from '../identity-BePV0iiY.js';
 import '../errors-DUbFUu6n.js';
 
 /**
@@ -56,7 +56,7 @@ declare const SOURCE_ADAPTER_CATALOG: {
     readonly adapters: {
         readonly 'nest-spike-recorder': {
             readonly id: "nest-spike-recorder";
-            readonly revision: 3;
+            readonly revision: 5;
             readonly title: "NEST 3.10.0 memory spike recorder to stable spike raster";
             readonly sourceSystem: "NEST Simulator";
             readonly admittedSourceVersions: readonly ["3.10.0"];
@@ -65,12 +65,35 @@ declare const SOURCE_ADAPTER_CATALOG: {
                 readonly packageSubpath: "cortexel/adapters/nest";
                 readonly exportName: "nestSpikeRecorderToRaster";
                 readonly profile: Readonly<{
-                    readonly adapterRevision: 3;
+                    readonly adapterRevision: 5;
                     readonly nestVersion: "3.10.0";
                     readonly upstreamSourceCommit: "acca9704da248750219a027db99fec6cd1f9052a";
-                    readonly inputDigestDomain: "cortexel.nest-spike-recorder-adapter-input.v3";
-                    readonly captureAuthorityProfile: "cortexel-nest-memory-spike-capture-authority.v1";
-                    readonly statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1";
+                    readonly inputDigestDomain: "cortexel.nest-spike-recorder-adapter-input.v5";
+                    readonly branches: Readonly<{
+                        finiteStop: Readonly<{
+                            stopKind: "finite";
+                            captureAuthorityProfile: "cortexel-nest-memory-spike-capture-authority.v3";
+                            recordTo: "memory";
+                            timeInSteps: false;
+                            statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1";
+                            executionScope: "single_process";
+                            eventBoundary: "(origin+start,origin+stop]";
+                            captureHorizon: "origin+stop_after_successful_return";
+                        }>;
+                        positiveInfinityCaptureBounded: Readonly<{
+                            stopKind: "nest_time_positive_infinity";
+                            captureAuthorityProfile: "cortexel-nest-memory-spike-capture-authority.v4";
+                            recordTo: "memory";
+                            timeInSteps: false;
+                            statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v2";
+                            executionScope: "single_process";
+                            eventBoundary: "(origin+start,capture]";
+                            captureHorizon: "capture_after_successful_advancing_return_before_further_advance_or_mutation";
+                        }>;
+                    }>;
+                    readonly timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1";
+                    readonly captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation";
+                    readonly positiveInfinityExportedMs: number;
                 }>;
             };
             readonly cli: {
@@ -87,19 +110,137 @@ declare const SOURCE_ADAPTER_CATALOG: {
                 readonly options: "Complete recorded sender universe plus the caller-retained capture authority.";
             };
             readonly acceptanceBoundary: {
-                readonly adapter: "The adapter checks its exact revision-3 source profile and authors a request.";
+                readonly adapter: "The adapter checks one exact revision-5 source-faithful clock profile with closed finite-stop and positive-infinity/capture-bounded branches, then authors the corresponding request.";
                 readonly request: "The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.";
                 readonly rendering: "Pipe the emitted request to `cortexel render`; adapter success alone is never render authority.";
             };
-            readonly authority: readonly ["The source digest binds the detached JSON-compatible status projection, not a live simulator process.", "The adapter-input digest additionally binds the normalized options and caller-declared capture authority.", "The complete sender universe, recorder history, wiring history, process scope, run id, and recorder id remain caller declarations.", "Events retain source order and multiplicity; the scientific view owns any scoped sorting or aggregation."];
-            readonly limitations: readonly ["Only record_to=memory and time_in_steps=false are admitted.", "Only the exact declared NEST 3.10.0 profile is admitted.", "Only a single-process capture scope is admitted.", "The package does not import PyNEST, inspect a live simulation, or authenticate caller declarations.", "ASCII, screen, MPI, SIONlib, step-plus-offset clocks, and every other stable NEST mapping remain unsupported by this adapter revision.", "Real-NEST conformance gate R049 remains external release evidence; packaged code is not certification."];
+            readonly authority: readonly ["The source digest binds the detached JSON-compatible status projection, not a live simulator process.", "The adapter-input digest additionally binds the normalized options and caller-declared capture authority.", "Revision 5 binds the exact LP64/int64/IEEE-binary64 time-build profile and reproduces NEST 3.10.0 Time::get_ms as rounded reciprocal followed by rounded multiplication.", "The exact positive-infinity projection token maps to a finite window ending at the declared successful-return capture time; it never relabels that time as recorder deactivation.", "The emitted configuredStop records the pinned NEST 3.10.0 profile constant exportedMs=DBL_MAX; the typed input sentinel asserts that projection revision 2 recognized that value, but this version-bound interpretation remains unauthenticated.", "Projection v2 with capture-authority profile v4 requires the caller to declare that the last advancing Simulate or Run ended exactly at captureTime and that status was projected before any further advance or mutation.", "Finite-stop and positive-infinity requests use capture-authority v3/v4 respectively and one domain-separated revision-5 input digest; historical v1/v2 authority fails with an explicit migration error.", "The complete sender universe, recorder history, wiring history, process scope, run id, and recorder id remain caller declarations.", "Events retain source order and multiplicity; the scientific view owns any scoped sorting or aggregation."];
+            readonly limitations: readonly ["Only record_to=memory and time_in_steps=false are admitted.", "Only the exact declared NEST 3.10.0 LP64/int64/IEEE-binary64 time-build profile and conservative safe-integer clock subset are admitted.", "Only a single-process capture scope is admitted.", "Positive-infinity status must pass through projection revision 2, which emits the exact typed sentinel; raw DBL_MAX is rejected.", "The package does not import PyNEST, inspect a live simulation, or authenticate caller declarations.", "ASCII, screen, MPI, SIONlib, step-plus-offset clocks, non-LP64 builds, clocks outside the safe source-round-trippable subset, and every other stable NEST mapping remain unsupported by this adapter revision.", "Real-NEST conformance gate R049 remains external release evidence; packaged code is not certification."];
+            readonly examples: {
+                readonly positiveInfinity: {
+                    readonly exportedStatus: {
+                        readonly record_to: "memory";
+                        readonly time_in_steps: false;
+                        readonly origin: 0;
+                        readonly start: 0;
+                        readonly stop: {
+                            readonly kind: "nest_time_positive_infinity";
+                        };
+                        readonly n_events: 3;
+                        readonly events: {
+                            readonly senders: readonly [2, 1, 2];
+                            readonly times: readonly [9.9, 1, 1];
+                        };
+                    };
+                    readonly options: {
+                        readonly recordedSenderIds: readonly [1, 2, 3];
+                        readonly nestVersion: "3.10.0";
+                        readonly captureAuthority: {
+                            readonly kind: "caller_declaration";
+                            readonly profile: "cortexel-nest-memory-spike-capture-authority.v4";
+                            readonly runtimeStatus: {
+                                readonly nestVersion: "3.10.0";
+                                readonly timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1";
+                                readonly statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v2";
+                                readonly executionScope: {
+                                    readonly kind: "single_process";
+                                    readonly numProcesses: 1;
+                                    readonly rank: 0;
+                                    readonly localNumThreads: 1;
+                                };
+                                readonly resolutionMs: 0.1;
+                                readonly ticsPerMs: "1000";
+                                readonly resolutionTics: "100";
+                                readonly captureBiologicalTimeTics: "10000";
+                                readonly captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation";
+                            };
+                            readonly recordingGrid: {
+                                readonly originTics: "0";
+                                readonly startTics: "0";
+                            };
+                            readonly bufferEpoch: {
+                                readonly beganBy: "recorder_creation";
+                                readonly beganAtBiologicalTimeTics: "0";
+                            };
+                            readonly recordingPlan: {
+                                readonly lastMutationAtBiologicalTimeTics: "0";
+                                readonly scope: "window_backend_time_encoding_and_sender_wiring";
+                                readonly senderUniverseBinding: "recorded_sender_ids_exactly_equal_full_window_connected_source_universe";
+                            };
+                            readonly clockEpochContinuity: "biological_time_monotonic_since_last_kernel_initialization";
+                            readonly eventCompleteness: "complete_for_recorded_senders";
+                        };
+                        readonly runId: "run-1";
+                        readonly recorderId: "spike-recorder-1";
+                    };
+                };
+                readonly finiteStop: {
+                    readonly exportedStatus: {
+                        readonly record_to: "memory";
+                        readonly time_in_steps: false;
+                        readonly origin: 0;
+                        readonly start: 0;
+                        readonly stop: 10;
+                        readonly n_events: 3;
+                        readonly events: {
+                            readonly senders: readonly [2, 1, 2];
+                            readonly times: readonly [9.9, 1, 1];
+                        };
+                    };
+                    readonly options: {
+                        readonly recordedSenderIds: readonly [1, 2, 3];
+                        readonly nestVersion: "3.10.0";
+                        readonly captureAuthority: {
+                            readonly kind: "caller_declaration";
+                            readonly profile: "cortexel-nest-memory-spike-capture-authority.v3";
+                            readonly runtimeStatus: {
+                                readonly nestVersion: "3.10.0";
+                                readonly timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1";
+                                readonly statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1";
+                                readonly executionScope: {
+                                    readonly kind: "single_process";
+                                    readonly numProcesses: 1;
+                                    readonly rank: 0;
+                                    readonly localNumThreads: 1;
+                                };
+                                readonly resolutionMs: 0.1;
+                                readonly ticsPerMs: "1000";
+                                readonly resolutionTics: "100";
+                                readonly captureBiologicalTimeTics: "10000";
+                                readonly captureBoundary: "after_successful_simulate_or_run_return";
+                            };
+                            readonly recordingGrid: {
+                                readonly originTics: "0";
+                                readonly startTics: "0";
+                                readonly stopTics: "10000";
+                            };
+                            readonly bufferEpoch: {
+                                readonly beganBy: "recorder_creation";
+                                readonly beganAtBiologicalTimeTics: "0";
+                            };
+                            readonly recordingPlan: {
+                                readonly lastMutationAtBiologicalTimeTics: "0";
+                                readonly scope: "window_backend_time_encoding_and_sender_wiring";
+                                readonly senderUniverseBinding: "recorded_sender_ids_exactly_equal_full_window_connected_source_universe";
+                            };
+                            readonly clockEpochContinuity: "biological_time_monotonic_since_last_kernel_initialization";
+                            readonly eventCompleteness: "complete_for_recorded_senders";
+                        };
+                        readonly runId: "run-1";
+                        readonly recorderId: "spike-recorder-1";
+                    };
+                };
+            };
+            /** Prompt-budget compatibility field: the current branch remains directly copyable. */
             readonly example: {
                 readonly exportedStatus: {
                     readonly record_to: "memory";
                     readonly time_in_steps: false;
                     readonly origin: 0;
                     readonly start: 0;
-                    readonly stop: 10;
+                    readonly stop: {
+                        readonly kind: "nest_time_positive_infinity";
+                    };
                     readonly n_events: 3;
                     readonly events: {
                         readonly senders: readonly [2, 1, 2];
@@ -111,10 +252,11 @@ declare const SOURCE_ADAPTER_CATALOG: {
                     readonly nestVersion: "3.10.0";
                     readonly captureAuthority: {
                         readonly kind: "caller_declaration";
-                        readonly profile: "cortexel-nest-memory-spike-capture-authority.v1";
+                        readonly profile: "cortexel-nest-memory-spike-capture-authority.v4";
                         readonly runtimeStatus: {
                             readonly nestVersion: "3.10.0";
-                            readonly statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1";
+                            readonly timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1";
+                            readonly statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v2";
                             readonly executionScope: {
                                 readonly kind: "single_process";
                                 readonly numProcesses: 1;
@@ -125,12 +267,11 @@ declare const SOURCE_ADAPTER_CATALOG: {
                             readonly ticsPerMs: "1000";
                             readonly resolutionTics: "100";
                             readonly captureBiologicalTimeTics: "10000";
-                            readonly captureBoundary: "after_successful_simulate_or_run_return";
+                            readonly captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation";
                         };
                         readonly recordingGrid: {
                             readonly originTics: "0";
                             readonly startTics: "0";
-                            readonly stopTics: "10000";
                         };
                         readonly bufferEpoch: {
                             readonly beganBy: "recorder_creation";

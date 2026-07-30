@@ -192,19 +192,26 @@ is the part callers most often assume they are getting and are not.
 - **Records:** the denominator, each analysis's declared bin/event boundary, displayed
   vs. total counts, zero-lag policy, and normalization kind. Generic raster windows admit
   `[start, stop)`, `[start, stop]`, or `(start, stop]`. The request gate admits declared
-  exact NEST 3.10.0 native-memory clock profile; the separately bounded packaged adapter
-  accepts only revision 3's caller-declared exact NEST 3.10.0 memory export plus its
-  required `kind: caller_declaration` capture record. The literal version, exact
-  integer-tic grid, successful-return closed-stop capture endpoint, named
-  plain-data projection, buffer and recorder-plan history, monotonic kernel clock
-  epoch, single-process scope, and complete sender universe remain caller
-  declarations, not live-simulator attestations. The
-  `time_in_steps: false` export retains
-  `(origin + start, origin + stop]`; Cortexel
-  checks exact relations among the serialized binary64 values and declared capture facts,
-  then discloses that it did not observe or authenticate the declared integer tics,
-  projection, runtime, process topology, clock or buffer resets,
-  configuration/wiring history, or source export.
+  exact NEST 3.10.0 native-memory clock profile. Stable `neuro.spike_raster` revision 6
+  admits executable adapter revision 5 with `finiteStop` and
+  `positiveInfinityCaptureBounded` branch records. The finite branch retains
+  `(origin+start,origin+stop]` with projection v1 and capture-authority profile v3. The
+  positive-infinity branch uses projection v2 and capture-authority profile v4 and
+  accepts only `{ "kind": "nest_time_positive_infinity" }`; raw numeric
+  `DBL_MAX` fails closed. It retains `(origin+start,capture]`, where the finite capture
+  endpoint is the exact biological time immediately after a successful *advancing*
+  `Simulate` or `Run` return and before any further advance or mutation. Capture is not
+  a configured finite stop or device deactivation, and the request establishes nothing
+  after capture. Both branches use the revision-5 digest domain and require
+  `time_in_steps: false`, a branch-specific `kind: caller_declaration` capture record,
+  the exact LP64/int64/binary64 time-build profile, source-faithful integer-tic
+  projection, named plain-data projection, buffer and recorder-plan history,
+  monotonic kernel-clock epoch, single-process scope, and complete sender universe remain
+  caller declarations, not live-simulator attestations. Cortexel checks exact relations
+  among the serialized binary64 values and declared capture facts, then discloses that it
+  did not observe or authenticate the tics, projection, runtime or build, active
+  floating-point environment, process topology,
+  capture timing, clock or buffer resets, configuration/wiring history, or source export.
 - **Does not establish:** population size from the neurons that happened to spike (a
   silent neuron is still a recorded neuron; `SCIENCE_DENOMINATOR_INVALID`), that a
   correlation coefficient exists where only a scaled pair count was supplied

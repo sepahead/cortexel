@@ -60,6 +60,25 @@ const UNIT_CODE_REFS = new Set([
   'https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/unitCode',
 ]);
 
+type MutableRequest = Record<string, any>;
+
+const spikeRasterContract = JSON.parse(readFileSync(
+  path.join(REPO, 'contract/skills/neuro.spike_raster.v1.json'),
+  'utf8',
+)) as { examples: { valid: MutableRequest[] } };
+const finiteNestSpikeExamples = spikeRasterContract.examples.valid.filter(
+  ({ data }) => data.window.kind === 'nest_recording_device_origin_relative',
+);
+if (finiteNestSpikeExamples.length !== 1) {
+  throw new Error(
+    `expected exactly one finite NEST spike-raster example, found ${finiteNestSpikeExamples.length}`,
+  );
+}
+
+function finiteNestSpikeRequest(): MutableRequest {
+  return structuredClone(finiteNestSpikeExamples[0]!);
+}
+
 function collectUnitCodePropertyNames(
   node: unknown,
   propertyName: string | undefined,
@@ -246,46 +265,42 @@ describe('unit conversion hardening', () => {
   });
 
   it('compares NEST origin-relative open-start and closed-stop bounds exactly', () => {
-    const validate = (values: number[]) =>
-      eventsWithinWindow({
-        request: {
-          data: {
-            window: {
-              kind: 'nest_recording_device_origin_relative',
-              origin: 100,
-              start: 10,
-              stop: 20,
-              unit: 'ms',
-              boundary: '(origin+start,origin+stop]',
-              recordingBackend: 'memory',
-              timeEncoding: 'native_binary64_ms',
-            },
-            eventTimes: { values, unit: 'ms' },
-          },
-          parameters: { outOfWindowPolicy: 'reject' },
-        },
+    const request = finiteNestSpikeRequest();
+    const validate = (values: number[]) => {
+      request.data.eventTimes.values = values;
+      return eventsWithinWindow({
+        request,
         skillId: 'neuro.spike_raster',
       });
+    };
 
-    expect(validate([110])[0]?.code).toBe('SCIENCE_EVENT_OUT_OF_WINDOW');
-    expect(validate([110.00000000000001])).toEqual([]);
-    expect(validate([120])).toEqual([]);
-    expect(validate([120.00000000000001])[0]?.code).toBe('SCIENCE_EVENT_OUT_OF_WINDOW');
+    expect(validate([0])[0]?.code).toBe('SCIENCE_EVENT_OUT_OF_WINDOW');
+    expect(validate([Number.MIN_VALUE])).toEqual([]);
+    expect(validate([10])).toEqual([]);
+    expect(validate([10.000000000000002])[0]?.code).toBe(
+      'SCIENCE_EVENT_OUT_OF_WINDOW',
+    );
   });
 
-  it('refuses a NEST window whose exact endpoint sums collapse for display', () => {
+  it('refuses a NEST endpoint that aliases its adjacent source-grid time', () => {
+    const request = finiteNestSpikeRequest();
+    const window = request.data.window;
+    const authority = window.captureAuthority;
+    const upperTics = 9_007_199_254_740_990n;
+    window.origin = 0;
+    window.start = 0;
+    window.stop = Number(upperTics) * (1 / 1000);
+    authority.runtimeStatus.resolutionMs = 0.001;
+    authority.runtimeStatus.resolutionTics = '1';
+    authority.runtimeStatus.captureBiologicalTimeTics = upperTics.toString(10);
+    authority.recordingGrid.originTics = '0';
+    authority.recordingGrid.startTics = '0';
+    authority.recordingGrid.stopTics = upperTics.toString(10);
+    authority.bufferEpoch.beganAtBiologicalTimeTics = '0';
+    authority.recordingPlan.lastMutationAtBiologicalTimeTics = '0';
+
     const errors = windowValid({
-      request: {
-        data: {
-          window: {
-            kind: 'nest_recording_device_origin_relative',
-            origin: 2 ** 53,
-            start: 0,
-            stop: 1,
-            unit: 'ms',
-          },
-        },
-      },
+      request,
       skillId: 'neuro.spike_raster',
       parameters: { pointer: '/data/window', unitDimension: 'time' },
     });
@@ -362,32 +377,12 @@ describe('unit conversion hardening', () => {
     ]);
   });
 
-  it('binds NEST origin-relative clocks to the revision-3-admitted source declaration', () => {
-    const request = (systemVersion: string): Record<string, unknown> => ({
-      data: {
-        timeBase: 'absolute_clock',
-        window: {
-          kind: 'nest_recording_device_origin_relative',
-          origin: 100,
-          start: 0,
-          stop: 10,
-          unit: 'ms',
-          boundary: '(origin+start,origin+stop]',
-          recordingBackend: 'memory',
-          timeEncoding: 'native_binary64_ms',
-          captureAuthority: {
-            runtimeStatus: { nestVersion: '3.10.0' },
-          },
-        },
-        eventTimes: { values: [101], unit: 'ms' },
-      },
-      source: {
-        kind: 'simulation',
-        system: 'NEST',
-        systemVersion,
-        sourceDigest: `sha256:${'0'.repeat(64)}`,
-      },
-    });
+  it('binds NEST origin-relative clocks to the revision-5 source declaration', () => {
+    const request = (systemVersion: string): MutableRequest => {
+      const candidate = finiteNestSpikeRequest();
+      candidate.source.systemVersion = systemVersion;
+      return candidate;
+    };
 
     expect(
       eventsSourceClockDeclared({

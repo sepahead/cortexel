@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:0b8afcc2682f41339d8e01776c485444edb3d88a457196a7f18b018d1ca84a6e",
-  "catalogDigest": "sha256:18fe441ad91d52651cbbe5efa063478a5c458560c29d20d541d63359722addd8",
+  "contractDigest": "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004",
+  "catalogDigest": "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e",
   "catalogDigestDomain": "cortexel-public-stable-catalog.v2",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
@@ -8418,11 +8418,11 @@
     },
     {
       "id": "neuro.spike_raster",
-      "revision": 5,
+      "revision": 6,
       "title": "Spike raster: event times by identified sender and trial",
       "renderer": {
         "id": "figure.spike_raster",
-        "revision": 6
+        "revision": 7
       },
       "availability": "packaged",
       "releaseReady": false,
@@ -8450,6 +8450,7 @@
         "REFERENCE_COMPARISON_NOT_RUN",
         "EVENTS_EXCLUDED_OUT_OF_WINDOW",
         "NEST_SERIALIZED_CLOCK_BOUNDARY",
+        "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
         "UNIT_CONVERTED",
         "CALLER_NOTE_UNVERIFIED",
         "NONSTANDARD_BUDGET_PROFILE"
@@ -8473,7 +8474,7 @@
           "name": "nest-simulator spike_recorder",
           "version": "3.10.0",
           "status": "not_run",
-          "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
+          "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, finite closed origin+stop, default-positive-infinity closed capture, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
         }
       },
       "accessibility": {
@@ -8571,7 +8572,7 @@
         "version": 1,
         "evaluator": {
           "tag": "registered_evaluator",
-          "id": "neuro.spike_raster.output_authority.v5"
+          "id": "neuro.spike_raster.output_authority.v6"
         },
         "requestPaths": [
           {
@@ -8720,7 +8721,7 @@
             {
               "system": "nest.spike_recorder",
               "role": "primary",
-              "notes": "Adapter revision 3 supports only an exact NEST 3.10.0 memory-recorder status profile when `time_in_steps` is explicitly false, the named plain-data projection preserves NumPy event-array values and order, origin/start/stop carry exact on-grid integer-tic preimages, and a closed `kind: caller_declaration` record binds the single-process runtime, successful-return closed-stop endpoint, monotonic kernel clock epoch, most recent buffer epoch, most recent recording-plan mutation, and exact sender universe. It preserves nonchronological order, duplicates, origin, and the native (origin+start,origin+stop] boundary. It does not introspect PyNEST or authenticate any declared capture fact. NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
+              "notes": "Adapter revision 5 supersedes the historical finite-stop revision-3 behavior and the unshipped positive-infinity draft instead of silently changing either identity. It accepts the same detached finite/status data shapes only under new capture-authority profile v3 for finite stop or v4 for positive infinity; both explicitly bind the pinned LP64/int64/binary64-roundTiesToEven/no-excess time build. Both branches require explicit `time_in_steps: false`, a named lossless NumPy-to-plain-data projection, source-faithful finite integer-tic preimages, single-process authority, monotonic kernel-clock and buffer/configuration/wiring history, and the exact sender universe. The admitted clock subset uses non-negative safe-integer tics, the pinned 64-bit `tic_t`/`INF_MARGIN=8` finite ceiling, source-faithful two-operation binary64 `Time::get_ms()` projection, inverse round-trip, and adjacent-grid distinguishability. Finite revision 5 preserves (origin+start,origin+stop] under capture authority v3. The positive-infinity branch accepts only the typed sentinel emitted by projection v2 and preserves (origin+start,capture] under capture authority v4. Both use the revision-5 digest domain. Capture is not device deactivation. Cortexel does not introspect PyNEST or authenticate any declared capture fact. Raw DBL_MAX, historical authority v1/v2, clocks outside the conservative profile, NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
               "sourceId": "nest-spike-recorder"
             },
             {
@@ -8750,12 +8751,12 @@
             },
             "conformanceProfile": {
               "registry": "cortexel-adapter-conformance-profiles.v1",
-              "id": "nest-spike-recorder.v3",
+              "id": "nest-spike-recorder.v5",
               "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
-              "digest": "sha256:9bf23e63c51b23239cf0438fa770323b65d58cd29ff7d25ed5c7626a9e1f2be4"
+              "digest": "sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a"
             }
           },
-          "notes": "Executable code exists for this bounded profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
+          "notes": "Executable revision-5 code exists for finite-stop and positive-infinity/capture-bounded branches under one source-faithful build/clock profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, conformance-profile identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
         },
         {
           "mappingId": "neo-spiketrain",
@@ -9917,11 +9918,11 @@
       "manifestBinding": "exact_id_revision_and_entry_digest"
     }
   },
-  "disclosureRuleCount": 33,
+  "disclosureRuleCount": 34,
   "normativeSources": [
     {
       "path": "contract/meta/adapter-conformance-profiles.schema.json",
-      "digest": "sha256:2ebfc73e33822cbb0b0700a28d2c2c0aae500da3972bb91e603df90d6bb37343"
+      "digest": "sha256:0c959749c644d6bf1fbe2ce74bf5d07c22e1c0eb5553edfa0b11c3337261a141"
     },
     {
       "path": "contract/meta/canonicalization-registry.schema.json",
@@ -9933,7 +9934,7 @@
     },
     {
       "path": "contract/registries/adapter-conformance-profiles.v1.json",
-      "digest": "sha256:00d91f7a2d208f36f63261a0c926bbeefc6f07a2140a162ccc17253bf0802523"
+      "digest": "sha256:22fe121f6bc642cf6e41034679c19c29f770dcf44ddbd4ce3aeb03aca33f6a62"
     },
     {
       "path": "contract/registries/budget-profiles.v1.json",
@@ -9949,11 +9950,11 @@
     },
     {
       "path": "contract/registries/disclosures.v1.json",
-      "digest": "sha256:8e884be8b8a3362365a6abca6844064b33535d252cbdb029bd94c1fca6fe0f11"
+      "digest": "sha256:91770fd72ed7b068387c091f91e93f977d82cd83f1f4f342f4d3267133c214b9"
     },
     {
       "path": "contract/registries/error-codes.v1.json",
-      "digest": "sha256:a734240755f6ce9211b056277980a9b0758d201b7aecabb7f8e5a96fa89d7f5e"
+      "digest": "sha256:9d8aa4c14d0b91dc98de6758b3475de1ae3214a0d7fb61613d89d12bea55489f"
     },
     {
       "path": "contract/registries/identity.v1.json",
@@ -9973,11 +9974,11 @@
     },
     {
       "path": "contract/registries/renderers.v1.json",
-      "digest": "sha256:b62c5745272c18d800152188c4626bad11ffb0beab133d2f909e015ad77823c1"
+      "digest": "sha256:082f532172892e97d8cbc9375b8dfac8031d29ebbfcfac1971dadfb3cef725e6"
     },
     {
       "path": "contract/registries/semantic-validators.v1.json",
-      "digest": "sha256:86ed4d52203f37e5f4e1184e5bf269bd5d8760ebd2dd495531d8ca1dcf6329b6"
+      "digest": "sha256:ea509a987252177415e58446f93959978da6166b41176760d23a73132804507f"
     },
     {
       "path": "contract/registries/units.v1.json",
@@ -9989,7 +9990,7 @@
     },
     {
       "path": "contract/schemas/figure-artifact.v1.schema.json",
-      "digest": "sha256:6fcd904c0cc9c3d92d45a8561c65b167b8153f2fb537f951fbe071a82ec63531"
+      "digest": "sha256:735e5f4d2b860fc770cd80fd5d23762efd92dbbb0131fe806e046cd53ba8532a"
     },
     {
       "path": "contract/schemas/figure-request.v1.schema.json",
@@ -9997,7 +9998,7 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:89462194c4fec80f4bce447775a89f63d3a9afc352c86e1021bb58db637ef5a0"
+      "digest": "sha256:4057441a376e5afab263b33c31b49e11fa5767848b42680bc77aae8d2fe0501f"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
@@ -10073,7 +10074,7 @@
     },
     {
       "path": "contract/schemas/skills/neuro.spike_raster.request.v1.schema.json",
-      "digest": "sha256:8577e397b0f8641598a2792301dce6d267eefc781e432fb6d6c82342105aee34"
+      "digest": "sha256:d8ed356de2db27e36fc06b9b7b1d2eb88d13698ae80648ca32c31ae3314e565d"
     },
     {
       "path": "contract/schemas/stable-figure-request-union.v1.schema.json",
@@ -10149,7 +10150,7 @@
     },
     {
       "path": "contract/skills/neuro.psth.v1.json",
-      "digest": "sha256:64f6865d637ca076f32aa5d554cd163f9b2798981c6c551c97a67501d3909f16"
+      "digest": "sha256:8ee99d5f79064dc967fc8a5173ca8a65913b149a2f27ff988c98dc2028c7e253"
     },
     {
       "path": "contract/skills/neuro.response_curve.v1.json",
@@ -10157,7 +10158,7 @@
     },
     {
       "path": "contract/skills/neuro.spike_raster.v1.json",
-      "digest": "sha256:c376a24274cdc23b9574088abb513e71d975557a062abcf8c8b658bb7bd0a3fe"
+      "digest": "sha256:53e013165a5f6e15028e4abbcd0e8a8cccf9d8170eb7199ec7bcba53f37df97b"
     }
   ],
   "notes": [

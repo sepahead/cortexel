@@ -1,14 +1,14 @@
 import {
   LEGACY_SKILL_MAP
-} from "./chunk-DPIT352X.js";
+} from "./chunk-AJMFQ6OE.js";
 import {
   snapshotValue
-} from "./chunk-S32HFOQJ.js";
+} from "./chunk-ZJBZFUTH.js";
 import {
   REQUEST_CONTRACT_IDENTITY,
   getBudgetLimits,
   makeError
-} from "./chunk-HLJSPQRG.js";
+} from "./chunk-VJN27A3U.js";
 
 // src/core/migrate-v0.ts
 function migrateLegacyRequest(input) {
@@ -211,4 +211,4 @@ function migrateLegacyRequest(input) {
 export {
   migrateLegacyRequest
 };
-//# sourceMappingURL=chunk-O26PPGAG.js.map
+//# sourceMappingURL=chunk-CEZJZVUM.js.map

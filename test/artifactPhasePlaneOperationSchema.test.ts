@@ -18,8 +18,8 @@ const phaseContract = JSON.parse(readFileSync(
   path.join(root, 'contract/skills/neuro.phase_plane.v1.json'),
   'utf8',
 )) as { examples: { valid: MutableRecord[] } };
-const spikeContract = JSON.parse(readFileSync(
-  path.join(root, 'contract/skills/neuro.spike_raster.v1.json'),
+const responseCurveContract = JSON.parse(readFileSync(
+  path.join(root, 'contract/skills/neuro.response_curve.v1.json'),
   'utf8',
 )) as { examples: { valid: MutableRecord[] } };
 
@@ -133,7 +133,7 @@ describe('FigureArtifactV1 closed phase-plane carrier operation', () => {
   });
 
   it('preserves generic historical operation contracts on unrelated skills', () => {
-    const result = buildFigure(structuredClone(spikeContract.examples.valid[0]));
+    const result = buildFigure(structuredClone(responseCurveContract.examples.valid[0]));
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(JSON.stringify(result.errors));
     const artifact = structuredClone(result.artifact) as MutableRecord;
@@ -151,7 +151,10 @@ describe('FigureArtifactV1 closed phase-plane carrier operation', () => {
       },
     });
     rewrapArtifact(artifact);
-    expectAccepted(artifact, 'unrelated spike artifact with an open historical operation');
+    expectAccepted(
+      artifact,
+      'unrelated response-curve artifact with an open historical operation',
+    );
   });
 
   it('closes operation identity, parameters, receipt presence, and receipt properties', () => {

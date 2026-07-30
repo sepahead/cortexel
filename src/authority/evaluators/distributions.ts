@@ -5,8 +5,9 @@
  * Independence boundary: this module reads only the validated canonical request. It
  * does not import a figure compiler, RenderPlan, artifact, receipt, adapter, generated
  * catalog, or `src/analysis` derivation. The small shared trust base is limited to the
- * registered-unit exact arithmetic, exact binary64 rounding, canonical JSON, and the
- * source-owned bin materializers in `core/`.
+ * registered-unit exact arithmetic, exact binary64 rounding, canonical JSON, the
+ * pinned NEST source-clock projection kernel, and source-owned bin materializers in
+ * `core/`.
  */
 
 import {
@@ -51,6 +52,7 @@ import {
   rowSequence,
   summaryFactMap,
 } from './model.js';
+import { projectNestWindowEndpointsV310 } from '../../core/semantics/nest-time.js';
 
 type JsonRecord = Record<string, JsonValue>;
 type Cell = AuthorityCellV1;
@@ -652,6 +654,8 @@ interface RasterPartition {
   readonly displayStart: number;
   readonly displayStop: number;
   readonly excludedCount: number;
+  readonly nestSerializedClock: boolean;
+  readonly nestCaptureBoundedPositiveInfinity: boolean;
 }
 
 function rasterPartition(data: JsonRecord): RasterPartition {
@@ -660,23 +664,81 @@ function rasterPartition(data: JsonRecord): RasterPartition {
   const times = numbers(eventTimes.values);
   const timeUnit = String(eventTimes.unit);
   const windowUnit = String(window.unit);
-  const nest = window.kind === 'nest_recording_device_origin_relative';
+  const nestFiniteStop = window.kind === 'nest_recording_device_origin_relative';
+  const nestCaptureBoundedPositiveInfinity =
+    window.kind === 'nest_recording_device_positive_infinity_capture_bounded';
+  const nest = nestFiniteStop || nestCaptureBoundedPositiveInfinity;
+  const upperValue = Number(
+    nestCaptureBoundedPositiveInfinity ? window.captureTime : window.stop,
+  );
   const lower = nest
     ? [
       { value: Number(window.origin), unit: windowUnit },
       { value: Number(window.start), unit: windowUnit },
     ]
     : [{ value: Number(window.start), unit: windowUnit }];
-  const upper = nest
-    ? [
+  const upper = nestCaptureBoundedPositiveInfinity
+    ? [{ value: upperValue, unit: windowUnit }]
+    : nest
+      ? [
       { value: Number(window.origin), unit: windowUnit },
-      { value: Number(window.stop), unit: windowUnit },
+      { value: upperValue, unit: windowUnit },
     ]
-    : [{ value: Number(window.stop), unit: windowUnit }];
-  const boundary = nest ? '(origin+start,origin+stop]' : String(window.boundary);
+      : [{ value: upperValue, unit: windowUnit }];
+  const boundary = nestCaptureBoundedPositiveInfinity
+    ? '(origin+start,capture]'
+    : nest
+      ? '(origin+start,origin+stop]'
+      : String(window.boundary);
   const openStart = boundary.startsWith('(');
   const closedStop = boundary.endsWith(']');
+  let nestDisplayStart: number | undefined;
+  let nestDisplayStop: number | undefined;
+  if (nest) {
+    if (timeUnit !== 'ms' || windowUnit !== 'ms') {
+      throw new Error('validated NEST raster authority did not retain unit ms');
+    }
+    const captureAuthority = record(window.captureAuthority);
+    const runtimeStatus = record(captureAuthority.runtimeStatus);
+    const recordingGrid = record(captureAuthority.recordingGrid);
+    const bufferEpoch = record(captureAuthority.bufferEpoch);
+    const recordingPlan = record(captureAuthority.recordingPlan);
+    const tic = (value: JsonValue | undefined): bigint => BigInt(String(value));
+    const ticsPerMs = tic(runtimeStatus.ticsPerMs);
+    const resolutionTics = tic(runtimeStatus.resolutionTics);
+    const originTics = tic(recordingGrid.originTics);
+    const startTics = tic(recordingGrid.startTics);
+    const captureTics = tic(runtimeStatus.captureBiologicalTimeTics);
+    const upperOffsetTics = nestCaptureBoundedPositiveInfinity
+      ? captureTics
+      : tic(recordingGrid.stopTics);
+    const projection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: [
+        originTics,
+        startTics,
+        upperOffsetTics,
+        captureTics,
+        tic(bufferEpoch.beganAtBiologicalTimeTics),
+        tic(recordingPlan.lastMutationAtBiologicalTimeTics),
+      ],
+      lowerEndpointTics: originTics + startTics,
+      upperEndpointTics: nestCaptureBoundedPositiveInfinity
+        ? captureTics
+        : originTics + upperOffsetTics,
+    });
+    if (!projection.ok) {
+      throw new Error(`validated NEST raster authority is outside its source-clock profile: ${projection.message}`);
+    }
+    nestDisplayStart = projection.lowerMilliseconds;
+    nestDisplayStop = projection.upperMilliseconds;
+  }
   const inWindow = times.map((time) => {
+    if (nestDisplayStart !== undefined && nestDisplayStop !== undefined) {
+      return !(openStart ? time <= nestDisplayStart : time < nestDisplayStart) &&
+        !(closedStop ? time > nestDisplayStop : time >= nestDisplayStop);
+    }
     const event = { value: time, unit: timeUnit };
     const lowerVsEvent = compareExactUnitSumToValue(lower, event);
     const upperVsEvent = compareExactUnitSumToValue(upper, event);
@@ -689,9 +751,11 @@ function rasterPartition(data: JsonRecord): RasterPartition {
     windowUnit,
     boundary,
     inWindow,
-    displayStart: convertExactUnitSum(lower, timeUnit),
-    displayStop: convertExactUnitSum(upper, timeUnit),
+    displayStart: nestDisplayStart ?? convertExactUnitSum(lower, timeUnit),
+    displayStop: nestDisplayStop ?? convertExactUnitSum(upper, timeUnit),
     excludedCount: inWindow.filter((accepted) => !accepted).length,
+    nestSerializedClock: nest,
+    nestCaptureBoundedPositiveInfinity,
   };
 }
 
@@ -802,15 +866,16 @@ function rasterModel(requestValue: JsonValue): AuthorityModel {
           )],
         }
         : {}),
-      ...(record(data.window).kind === 'nest_recording_device_origin_relative'
-        ? { nestSerializedClock: true }
+      ...(partition.nestSerializedClock ? { nestSerializedClock: true } : {}),
+      ...(partition.nestCaptureBoundedPositiveInfinity
+        ? { nestCaptureBoundedPositiveInfinity: true }
         : {}),
     }),
   };
 }
 
 const RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId('neuro.spike_raster', 5),
+  authorityEvaluatorId('neuro.spike_raster', 6),
   (request) => modelFields(rasterModel(request)),
 );
 

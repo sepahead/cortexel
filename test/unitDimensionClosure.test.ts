@@ -302,7 +302,9 @@ function expectedBareOwner(
   const key = `${contract.id}:${patternOf(occurrence.path)}`;
   if (
     key === 'neuro.spike_raster:data.window.unit' &&
-    request.data?.window?.kind === 'nest_recording_device_origin_relative'
+    (request.data?.window?.kind === 'nest_recording_device_origin_relative' ||
+      request.data?.window?.kind ===
+        'nest_recording_device_positive_infinity_capture_bounded')
   ) {
     // This source-clock branch intentionally fixes native serialized NEST time to
     // ms, so its structural literal is stricter than the generic time dimension.

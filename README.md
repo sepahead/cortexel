@@ -88,10 +88,13 @@ FigureRequestV1 capabilities alongside them:
   full-pipeline-valid fixture per skill;
 - `cortexel/render-svg` — deterministic headless SVG + complete returned table;
 - `cortexel/adapters/nest` — currently one narrow plain-data NEST 3.10.0
-  memory-spike-recorder adapter. It requires caller-retained capture history and
-  single-process scope and strict validation resolves its output against the installed
-  contract revision; it is not a live PyNEST bridge, broad NEST coverage, or upstream
-  certification;
+  memory-spike-recorder adapter. Executable revision 5 has closed `finiteStop` and
+  `positiveInfinityCaptureBounded` branches, preserving `(origin+start,origin+stop]`
+  and caller-declared `(origin+start,capture]` respectively. Both require an exact
+  time-build profile, source-faithful integer-tic projection, retained capture history,
+  and single-process scope. Strict validation resolves their output against the
+  installed contract revision. This is not a live PyNEST bridge, broad NEST coverage,
+  or upstream certification;
 - `cortexel/contract/manifest.json` and `cortexel/contract/*` — the exact normative
   registries, schemas, and skill sources copied once under `dist/contract`;
 - `cortexel` (bin) — the offline CLI.
@@ -121,11 +124,23 @@ For `not_assessed` mappings, the named sources are only a provisional candidate
 roster; neither completeness nor sufficiency has been established.
 The only packaged FigureRequestV1 NEST mapping is the bounded plain-data
 `nest.spike_recorder` → `neuro.spike_raster` shape profile for a caller-declared
-exact NEST 3.10.0 memory export. The adapter digest-binds the detached plain-data
-projection and checks its declared integer-tic, capture, and history relations; it
-does not authenticate the NumPy projection, producing runtime, kernel clock,
-recorder wiring, sender-universe completeness, or export custody. Neither
-JavaScript nor the current Python package starts a live PyNEST simulator.
+exact NEST 3.10.0 memory export. Stable skill revision 6 and renderer revision 7 use
+one executable adapter revision 5 with two noninterchangeable branch records.
+`finiteStop` uses projection v1 and capture-authority profile v3;
+`positiveInfinityCaptureBounded` uses projection v2 and capture-authority profile v4.
+The latter admits NEST's positive-infinity stop only as
+`{ "kind": "nest_time_positive_infinity" }`; raw numeric `DBL_MAX` is rejected rather
+than guessed to be infinity. It binds a finite `captureTime`
+to the exact biological time immediately after a successful *advancing* `Simulate`
+or `Run` return and before any further advance or mutation, and preserves only
+`(origin+start,capture]`. Capture is not recorder deactivation and establishes nothing
+after capture. Both branches use the revision-5 digest domain and require the declared
+LP64/int64/binary64 time-build profile plus NEST's stored-reciprocal time projection.
+The adapter digest-binds the detached plain-data projection and normalized options; it
+does not authenticate the projection, producing runtime or build, active floating-point
+environment, kernel clock, recorder wiring, sender-universe completeness, capture timing,
+or export custody. Neither JavaScript nor the current Python package starts PyNEST.
+Historical adapter v3 and capture-authority v1/v2 inputs are migration identities only.
 
 ## Offline CLI
 
@@ -188,11 +203,15 @@ illustrates the structural schema—it
 neither adapts a live source nor proves the truth of external provenance claims.
 `source catalog` is a separate, digest-bound executable inventory. Today it contains
 only `nest-spike-recorder`; `source describe` returns that adapter's complete
-caller-authority statement and copyable JSON input, and `source adapt` rejects duplicate
-members, unknown envelope fields, unsupported source profiles, and any authored request
-that the full stable pipeline refuses. Its stdout is the canonical request JSON, so it
-can be piped directly to `validate` or `render`. It remains a detached plain-data
-boundary—not a live PyNEST capture or an R049 conformance receipt.
+caller-authority statement and copyable revision-5 positive-infinity input. Its typed
+stop sentinel must come from the named projection-v2 boundary; `source adapt` rejects a
+raw `DBL_MAX`, duplicate members, unknown envelope fields, unsupported source profiles,
+and any authored request that the full stable pipeline refuses. The finite-stop branch
+uses capture-authority profile v3 under the same revision-5 digest domain. Historical
+adapter-v3 and capture-authority-v1/v2 inputs are refused with migration diagnostics. The
+command's stdout is canonical request JSON, so it can be piped directly to `validate`
+or `render`. It remains a detached plain-data boundary—not a live PyNEST capture or an
+R049 conformance receipt.
 Schema success is not acceptance; run
 `cortexel validate` to execute the identity, semantic, scientific, provenance, budget,
 and derivation gates.

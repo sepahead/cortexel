@@ -17,7 +17,6 @@ import {
   axesAreCompatible,
   compareExactUnitSumToValue,
   convert,
-  convertExactUnitSum,
   dimensionOf,
   divideExactIntegerByConvertedDifference,
   isKnownUnit,
@@ -39,6 +38,129 @@ import {
 import { checkReferencesInUniverse } from './structure.js';
 import { legalKnownUnit } from './units.js';
 import { MAX_MATERIALIZED_BINS, materializeWidthBins } from '../binning.js';
+import {
+  nestFiniteTimeLimitTicsV310,
+  projectNestTicsToMillisecondsV310,
+  projectNestWindowEndpointsV310,
+} from './nest-time.js';
+
+const NEST_FINITE_STOP_WINDOW_KIND = 'nest_recording_device_origin_relative';
+const NEST_CAPTURE_BOUNDED_WINDOW_KIND =
+  'nest_recording_device_positive_infinity_capture_bounded';
+
+function nestWindowKind(window: Record<string, unknown>):
+  | 'finite_stop'
+  | 'positive_infinity_capture_bounded'
+  | undefined {
+  const kind = asString(window.kind);
+  if (kind === NEST_FINITE_STOP_WINDOW_KIND) return 'finite_stop';
+  if (kind === NEST_CAPTURE_BOUNDED_WINDOW_KIND) {
+    return 'positive_infinity_capture_bounded';
+  }
+  return undefined;
+}
+
+interface NestProjectedEndpoints {
+  readonly lowerMs: number;
+  readonly upperMs: number;
+}
+
+const CANONICAL_NEST_TIC = /^(?:0|[1-9][0-9]*)$/u;
+
+function nestTic(value: unknown): bigint | undefined {
+  const text = asString(value);
+  return text !== undefined && text.length <= 32 && CANONICAL_NEST_TIC.test(text)
+    ? BigInt(text)
+    : undefined;
+}
+
+/**
+ * Project the two absolute NEST endpoints from their integer-tic authority.
+ *
+ * The separately serialized `origin`, `start`, and `stop` fields are useful
+ * human-scale projections, but adding those binary64 values would round twice.
+ * Endpoint membership is defined by adding tics first and then reproducing the
+ * pinned binary64 reciprocal-and-multiply `Time::get_ms()` source sequence.
+ */
+function projectNestEndpoints(
+  window: Record<string, unknown>,
+  captureBounded: boolean,
+): NestProjectedEndpoints | undefined {
+  const captureAuthority = asRecord(window.captureAuthority);
+  const runtimeStatus = asRecord(captureAuthority?.runtimeStatus);
+  const recordingGrid = asRecord(captureAuthority?.recordingGrid);
+  const ticsPerMs = nestTic(runtimeStatus?.ticsPerMs);
+  const resolutionTics = nestTic(runtimeStatus?.resolutionTics);
+  const captureTics = nestTic(runtimeStatus?.captureBiologicalTimeTics);
+  const originTics = nestTic(recordingGrid?.originTics);
+  const startTics = nestTic(recordingGrid?.startTics);
+  const upperTics = captureBounded
+    ? captureTics
+    : nestTic(recordingGrid?.stopTics);
+  const bufferEpoch = asRecord(captureAuthority?.bufferEpoch);
+  const recordingPlan = asRecord(captureAuthority?.recordingPlan);
+  const bufferTics = nestTic(bufferEpoch?.beganAtBiologicalTimeTics);
+  const mutationTics = nestTic(recordingPlan?.lastMutationAtBiologicalTimeTics);
+  const resolutionMs = asNumber(runtimeStatus?.resolutionMs);
+  const originMs = asNumber(window.origin);
+  const startMs = asNumber(window.start);
+  const upperMs = asNumber(captureBounded ? window.captureTime : window.stop);
+  if (
+    ticsPerMs === undefined ||
+    resolutionTics === undefined ||
+    captureTics === undefined ||
+    originTics === undefined ||
+    startTics === undefined ||
+    upperTics === undefined ||
+    bufferTics === undefined ||
+    mutationTics === undefined ||
+    resolutionMs === undefined ||
+    originMs === undefined ||
+    startMs === undefined ||
+    upperMs === undefined ||
+    asString(runtimeStatus?.timeBuildProfile) !==
+      'nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1'
+  ) return undefined;
+
+  for (const [tics, milliseconds] of [
+    [resolutionTics, resolutionMs],
+    [originTics, originMs],
+    [startTics, startMs],
+    [upperTics, upperMs],
+  ] as const) {
+    const sourceProjection = projectNestTicsToMillisecondsV310(tics, ticsPerMs);
+    if (!sourceProjection.ok || !Object.is(sourceProjection.milliseconds, milliseconds)) {
+      return undefined;
+    }
+  }
+
+  const retainedTics = [
+    originTics,
+    startTics,
+    upperTics,
+    captureTics,
+    bufferTics,
+    mutationTics,
+  ];
+  if (
+    resolutionTics === 0n ||
+    retainedTics.some((tics) => tics % resolutionTics !== 0n)
+  ) return undefined;
+
+  const projection = projectNestWindowEndpointsV310({
+    ticsPerMs,
+    resolutionTics,
+    retainedTics,
+    lowerEndpointTics: originTics + startTics,
+    upperEndpointTics: captureBounded ? upperTics : originTics + upperTics,
+  });
+  return projection.ok
+    ? {
+        lowerMs: projection.lowerMilliseconds,
+        upperMs: projection.upperMilliseconds,
+      }
+    : undefined;
+}
 
 /** Resolve bin edges from either an explicit edge list or a width that tiles a range. */
 export function resolveBinEdges(spec: Record<string, unknown> | undefined): number[] | undefined {
@@ -271,11 +393,13 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
   const window = asRecord(readPointer(context.request, at));
   if (!window) return [];
 
-  const originRelative =
-    asString(window.kind) === 'nest_recording_device_origin_relative';
+  const nestKind = nestWindowKind(window);
+  const nestWindow = nestKind !== undefined;
+  const captureBounded = nestKind === 'positive_infinity_capture_bounded';
   const origin = asNumber(window.origin);
   const start = asNumber(window.start);
-  const stop = asNumber(window.stop);
+  const upper = asNumber(captureBounded ? window.captureTime : window.stop);
+  const upperName = captureBounded ? 'captureTime' : 'stop';
   const unit = asString(window.unit);
   const unitDimension = asString(context.parameters?.unitDimension);
   if (
@@ -299,9 +423,9 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
   // semantic boundary total when called directly, however: a non-finite clock
   // endpoint cannot define a scientific interval.
   for (const [name, value] of [
-    ...(originRelative ? [['origin', window.origin] as const] : []),
+    ...(nestWindow ? [['origin', window.origin] as const] : []),
     ['start', window.start] as const,
-    ['stop', window.stop] as const,
+    [upperName, captureBounded ? window.captureTime : window.stop] as const,
   ]) {
     if (typeof value === 'number' && !Number.isFinite(value)) {
       return [
@@ -316,73 +440,22 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
     }
   }
 
-  if (originRelative && origin === undefined) return [];
-  if (start === undefined || stop === undefined) return [];
+  if (nestWindow && origin === undefined) return [];
+  if (start === undefined || upper === undefined) return [];
 
-  if (!(stop > start)) {
+  if (!nestWindow && !(upper > start)) {
     return [
       makeError({
         code: 'SCIENCE_WINDOW_INVALID',
         stage: 'science',
-        instancePath: `${at}/stop`,
+        instancePath: `${at}/${upperName}`,
         validatorId: 'window.valid',
-        message: `the observation window is empty or inverted (start ${start}, stop ${stop}). It must satisfy start < stop.`,
+        message: `the observation window is empty or inverted (start ${start}, stop ${upper}). It must satisfy start < stop.`,
       }),
     ];
   }
 
-  if (originRelative && unit) {
-    try {
-      const displayedStart = convertExactUnitSum(
-        [
-          { value: origin!, unit },
-          { value: start, unit },
-        ],
-        unit,
-      );
-      const displayedStop = convertExactUnitSum(
-        [
-          { value: origin!, unit },
-          { value: stop, unit },
-        ],
-        unit,
-      );
-      if (
-        !Number.isFinite(displayedStart) ||
-        !Number.isFinite(displayedStop) ||
-        !(displayedStop > displayedStart)
-      ) {
-        return [
-          makeError({
-            code: 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
-            stage: 'science',
-            instancePath: `${at}/stop`,
-            validatorId: 'window.valid',
-            message: `the exact NEST endpoints origin + start and origin + stop do not remain finite and strictly ordered when rounded once into ${unit} for display. Preserve a better-scaled clock segment; Cortexel will not draw a collapsed interval.`,
-          }),
-        ];
-      }
-    } catch (error) {
-      // Canonical-code and dimension validators own unknown or incompatible
-      // units. This validator owns representability of an otherwise valid time
-      // interval, including overflow of the exact endpoint sum.
-      if (dimensionOf(unit) !== 'time') return [];
-      const message = error instanceof Error
-        ? error.message
-        : 'exact endpoint conversion failed';
-      return [
-        makeError({
-          code: 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
-          stage: 'science',
-          instancePath: `${at}/stop`,
-          validatorId: 'window.valid',
-          message: `the exact NEST endpoints origin + start and origin + stop cannot be represented as finite, strictly ordered ${unit} display values: ${message}`,
-        }),
-      ];
-    }
-  }
-
-  if (!originRelative || !unit || dimensionOf(unit) !== 'time') return [];
+  if (!nestWindow || !unit || dimensionOf(unit) !== 'time') return [];
 
   const captureAuthority = asRecord(window.captureAuthority);
   const runtimeStatus = asRecord(captureAuthority?.runtimeStatus);
@@ -390,127 +463,261 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
   const bufferEpoch = asRecord(captureAuthority?.bufferEpoch);
   const recordingPlan = asRecord(captureAuthority?.recordingPlan);
   const resolutionMs = asNumber(runtimeStatus?.resolutionMs);
-  const ticText = [
-    asString(runtimeStatus?.ticsPerMs),
-    asString(runtimeStatus?.resolutionTics),
-    asString(runtimeStatus?.captureBiologicalTimeTics),
-    asString(recordingGrid?.originTics),
-    asString(recordingGrid?.startTics),
-    asString(recordingGrid?.stopTics),
-    asString(bufferEpoch?.beganAtBiologicalTimeTics),
-    asString(recordingPlan?.lastMutationAtBiologicalTimeTics),
-  ] as const;
+  const ticsPerMsText = asString(runtimeStatus?.ticsPerMs);
+  const resolutionTicsText = asString(runtimeStatus?.resolutionTics);
+  const captureTicsText = asString(runtimeStatus?.captureBiologicalTimeTics);
+  const originTicsText = asString(recordingGrid?.originTics);
+  const startTicsText = asString(recordingGrid?.startTics);
+  const stopTicsText = captureBounded
+    ? undefined
+    : asString(recordingGrid?.stopTics);
+  const bufferTicsText = asString(bufferEpoch?.beganAtBiologicalTimeTics);
+  const mutationTicsText = asString(recordingPlan?.lastMutationAtBiologicalTimeTics);
+  const requiredTicText = [
+    ticsPerMsText,
+    resolutionTicsText,
+    captureTicsText,
+    originTicsText,
+    startTicsText,
+    ...(captureBounded ? [] : [stopTicsText]),
+    bufferTicsText,
+    mutationTicsText,
+  ];
   if (
     resolutionMs === undefined ||
-    ticText.some((value) => value === undefined)
+    requiredTicText.some((value) => value === undefined)
   ) {
     // The closed schema owns missing or malformed capture-authority members.
     return [];
   }
 
-  const canonicalTic = /^(?:0|[1-9][0-9]*)$/u;
-  if (ticText.some(
+  if (requiredTicText.some(
     (value) =>
       value === undefined ||
       value.length === 0 ||
       value.length > 32 ||
-      !canonicalTic.test(value),
+      !CANONICAL_NEST_TIC.test(value),
   )) {
     // The closed schema owns malformed decimal strings.
     return [];
   }
-  const [
-    ticsPerMs,
-    resolutionTics,
-    captureBiologicalTimeTics,
-    originTics,
-    startTics,
-    stopTics,
-    beganAtBiologicalTimeTics,
-    lastMutationAtBiologicalTimeTics,
-  ] = ticText.map((value) => BigInt(value!));
+
+  const ticsPerMs = BigInt(ticsPerMsText!);
+  const resolutionTics = BigInt(resolutionTicsText!);
+  const captureBiologicalTimeTics = BigInt(captureTicsText!);
+  const originTics = BigInt(originTicsText!);
+  const startTics = BigInt(startTicsText!);
+  const stopTics = stopTicsText === undefined ? undefined : BigInt(stopTicsText);
+  const beganAtBiologicalTimeTics = BigInt(bufferTicsText!);
+  const lastMutationAtBiologicalTimeTics = BigInt(mutationTicsText!);
   if (ticsPerMs === 0n || resolutionTics === 0n) return [];
 
+  const maximumSafeTics = BigInt(Number.MAX_SAFE_INTEGER);
+  const ticsPerMsPath = `${at}/captureAuthority/runtimeStatus/ticsPerMs`;
+  const resolutionTicsPath = `${at}/captureAuthority/runtimeStatus/resolutionTics`;
   const errors: CortexelError[] = [];
-  for (const [tics, milliseconds, instancePath, label] of [
+  const sourceInvalidNames = new Set<string>();
+  const unsafeTicNames = new Set<string>();
+  const sourceFailure = (
+    name: string,
+    instancePath: string,
+    message: string,
+  ): void => {
+    sourceInvalidNames.add(name);
+    errors.push(
+      makeError({
+        code: 'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
+        stage: 'provenance',
+        instancePath,
+        validatorId: 'window.valid',
+        message,
+      }),
+    );
+  };
+  const unsafeTicFailure = (
+    name: string,
+    instancePath: string,
+    message: string,
+  ): void => {
+    unsafeTicNames.add(name);
+    sourceFailure(name, instancePath, message);
+  };
+
+  if (ticsPerMs > maximumSafeTics) {
+    sourceFailure(
+      'ticsPerMs',
+      ticsPerMsPath,
+      'ticsPerMs is outside executable mapping profile 5; it must be a positive safe integer.',
+    );
+  }
+  const finiteTimeLimitTics =
+    resolutionTics <= maximumSafeTics
+      ? nestFiniteTimeLimitTicsV310(resolutionTics)
+      : undefined;
+  if (finiteTimeLimitTics === undefined) {
+    unsafeTicFailure(
+      'resolutionTics',
+      resolutionTicsPath,
+      'resolutionTics is outside the pinned LP64/int64 NEST 3.10.0 finite-Time build profile.',
+    );
+  }
+
+  const captureTicsPath =
+    `${at}/captureAuthority/runtimeStatus/captureBiologicalTimeTics`;
+  const originTicsPath = `${at}/captureAuthority/recordingGrid/originTics`;
+  const startTicsPath = `${at}/captureAuthority/recordingGrid/startTics`;
+  const stopTicsPath = `${at}/captureAuthority/recordingGrid/stopTics`;
+  const bufferTicsPath =
+    `${at}/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics`;
+  const mutationTicsPath =
+    `${at}/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics`;
+  const projectionChecks: Array<
+    readonly [string, bigint, number, string, string]
+  > = [
     [
+      'resolutionTics',
       resolutionTics,
       resolutionMs,
       `${at}/captureAuthority/runtimeStatus/resolutionMs`,
       'resolutionMs',
     ],
     [
+      'originTics',
       originTics,
       origin!,
-      `${at}/captureAuthority/recordingGrid/originTics`,
+      originTicsPath,
       'origin',
     ],
     [
+      'startTics',
       startTics,
       start,
-      `${at}/captureAuthority/recordingGrid/startTics`,
+      startTicsPath,
       'start',
     ],
-    [
+  ];
+  if (captureBounded) {
+    projectionChecks.push([
+      'captureBiologicalTimeTics',
+      captureBiologicalTimeTics,
+      upper,
+      captureTicsPath,
+      'captureTime',
+    ]);
+  } else if (stopTics !== undefined) {
+    projectionChecks.push([
+      'stopTics',
       stopTics,
-      stop,
-      `${at}/captureAuthority/recordingGrid/stopTics`,
+      upper,
+      stopTicsPath,
       'stop',
+    ]);
+  }
+  const retainedTics: Array<readonly [string, bigint, string, string]> = [
+    [
+      'resolutionTics',
+      resolutionTics,
+      resolutionTicsPath,
+      'resolutionTics',
     ],
-  ] as const) {
-    let projected: number;
-    try {
-      projected = exactRationalToBinary64(tics, ticsPerMs);
-    } catch {
-      projected = Number.NaN;
+    [
+      'originTics',
+      originTics,
+      originTicsPath,
+      'originTics',
+    ],
+    [
+      'startTics',
+      startTics,
+      startTicsPath,
+      'startTics',
+    ],
+    [
+      'captureBiologicalTimeTics',
+      captureBiologicalTimeTics,
+      captureTicsPath,
+      'captureBiologicalTimeTics',
+    ],
+    [
+      'beganAtBiologicalTimeTics',
+      beganAtBiologicalTimeTics,
+      bufferTicsPath,
+      'beganAtBiologicalTimeTics',
+    ],
+    [
+      'lastMutationAtBiologicalTimeTics',
+      lastMutationAtBiologicalTimeTics,
+      mutationTicsPath,
+      'lastMutationAtBiologicalTimeTics',
+    ],
+  ];
+  if (stopTics !== undefined) {
+    retainedTics.splice(3, 0, [
+      'stopTics',
+      stopTics,
+      stopTicsPath,
+      'stopTics',
+    ]);
+  }
+  const gridChecks = retainedTics.filter(
+    ([name]) => name !== 'resolutionTics',
+  );
+  const absoluteStartTics = originTics + startTics;
+  const absoluteUpperTics = captureBounded
+    ? captureBiologicalTimeTics
+    : originTics + stopTics!;
+
+  const retainedProjections = new Map<string, number>();
+  for (const [name, tics, instancePath, label] of retainedTics) {
+    if (unsafeTicNames.has(name)) continue;
+    if (
+      tics > maximumSafeTics ||
+      (finiteTimeLimitTics !== undefined && tics >= finiteTimeLimitTics)
+    ) {
+      unsafeTicFailure(
+        name,
+        instancePath,
+        `${label} is outside executable mapping profile 5: it must be a safe integer${
+          finiteTimeLimitTics === undefined
+            ? '.'
+            : ' strictly below the pinned finite-Time limit.'
+        }`,
+      );
+      continue;
     }
+    if (sourceInvalidNames.has('ticsPerMs')) continue;
+    const projection = projectNestTicsToMillisecondsV310(tics, ticsPerMs);
+    if (!projection.ok) {
+      sourceFailure(
+        name,
+        instancePath,
+        `${label} is outside executable mapping profile 5: ${projection.message}`,
+      );
+      continue;
+    }
+    retainedProjections.set(name, projection.milliseconds);
+  }
+
+  // Parallel human-scale fields are source claims, not an alternative clock.
+  // Compare them only when the corresponding primitive was independently
+  // admitted and round-tripped through the pinned get_ms implementation.
+  for (const [name, , milliseconds, instancePath, label] of projectionChecks) {
+    const projected = retainedProjections.get(name);
+    if (projected === undefined) continue;
     if (!Object.is(projected, milliseconds)) {
-      errors.push(
-        makeError({
-          code: 'SCIENCE_WINDOW_INVALID',
-          stage: 'science',
-          instancePath,
-          validatorId: 'window.valid',
-          message:
-            `${label} is not the correctly rounded binary64 millisecond projection of its declared NEST integer-tic preimage.`,
-        }),
+      sourceFailure(
+        name,
+        instancePath,
+        `${label} is not the pinned NEST 3.10.0 get_ms binary64 projection of its declared integer-tic preimage.`,
       );
     }
   }
 
-  for (const [tics, instancePath, label] of [
-    [
-      originTics,
-      `${at}/captureAuthority/recordingGrid/originTics`,
-      'originTics',
-    ],
-    [
-      startTics,
-      `${at}/captureAuthority/recordingGrid/startTics`,
-      'startTics',
-    ],
-    [
-      stopTics,
-      `${at}/captureAuthority/recordingGrid/stopTics`,
-      'stopTics',
-    ],
-    [
-      captureBiologicalTimeTics,
-      `${at}/captureAuthority/runtimeStatus/captureBiologicalTimeTics`,
-      'captureBiologicalTimeTics',
-    ],
-    [
-      beganAtBiologicalTimeTics,
-      `${at}/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics`,
-      'beganAtBiologicalTimeTics',
-    ],
-    [
-      lastMutationAtBiologicalTimeTics,
-      `${at}/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics`,
-      'lastMutationAtBiologicalTimeTics',
-    ],
-  ] as const) {
-    if (tics % resolutionTics !== 0n) {
+  let gridInvalid = false;
+  if (!unsafeTicNames.has('resolutionTics')) {
+    for (const [name, tics, instancePath, label] of gridChecks) {
+      if (unsafeTicNames.has(name) || tics % resolutionTics === 0n) continue;
+      gridInvalid = true;
       errors.push(
         makeError({
           code: 'SCIENCE_WINDOW_INVALID',
@@ -524,46 +731,161 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
     }
   }
 
-  const absoluteStartTics = originTics + startTics;
-  const absoluteStopTics = originTics + stopTics;
-  if (captureBiologicalTimeTics < absoluteStopTics) {
+  const upperAuthorityPath = captureBounded
+    ? captureTicsPath
+    : stopTicsPath;
+  const absoluteStartOperandsSafe =
+    !unsafeTicNames.has('originTics') &&
+    !unsafeTicNames.has('startTics');
+  const absoluteUpperOperandsSafe = captureBounded
+    ? !unsafeTicNames.has('captureBiologicalTimeTics')
+    : !unsafeTicNames.has('originTics') && !unsafeTicNames.has('stopTics');
+  const exactIntervalOrdered =
+    absoluteStartOperandsSafe && absoluteUpperOperandsSafe
+      ? absoluteUpperTics > absoluteStartTics
+      : undefined;
+  if (exactIntervalOrdered === false) {
     errors.push(
       makeError({
         code: 'SCIENCE_WINDOW_INVALID',
         stage: 'science',
-        instancePath:
-          `${at}/captureAuthority/runtimeStatus/captureBiologicalTimeTics`,
+        instancePath: upperAuthorityPath,
         validatorId: 'window.valid',
-        message:
-          'the NEST capture time is earlier than originTics + stopTics. The final status must be read only after the Simulate or Run call that reached the closed-stop endpoint returned successfully.',
+        message: captureBounded
+          ? 'the NEST positive-infinity capture time must be strictly later than originTics + startTics; a capture at the open start has no complete observation interval.'
+          : 'the NEST finite stop must be strictly later than start on the declared integer-tic clock.',
       }),
     );
   }
-  if (beganAtBiologicalTimeTics > absoluteStartTics) {
+
+  if (
+    exactIntervalOrdered === true &&
+    !captureBounded &&
+    stopTics !== undefined &&
+    !unsafeTicNames.has('captureBiologicalTimeTics')
+  ) {
+    if (captureBiologicalTimeTics < absoluteUpperTics) {
+      errors.push(
+        makeError({
+          code: 'SCIENCE_WINDOW_INVALID',
+          stage: 'science',
+          instancePath: captureTicsPath,
+          validatorId: 'window.valid',
+          message:
+            'the NEST capture time is earlier than originTics + stopTics. The final status must be read only after the Simulate or Run call that reached the closed-stop endpoint returned successfully.',
+        }),
+      );
+    }
+  }
+  if (
+    absoluteStartOperandsSafe &&
+    !unsafeTicNames.has('beganAtBiologicalTimeTics') &&
+    beganAtBiologicalTimeTics > absoluteStartTics
+  ) {
     errors.push(
       makeError({
         code: 'SCIENCE_WINDOW_INVALID',
         stage: 'science',
-        instancePath:
-          `${at}/captureAuthority/bufferEpoch/beganAtBiologicalTimeTics`,
+        instancePath: bufferTicsPath,
         validatorId: 'window.valid',
         message:
           'the most recent NEST recorder creation or n_events=0 clear occurred after originTics + startTics, so the retained buffer cannot substantiate the complete window.',
       }),
     );
   }
-  if (lastMutationAtBiologicalTimeTics > absoluteStartTics) {
+  if (
+    absoluteStartOperandsSafe &&
+    !unsafeTicNames.has('lastMutationAtBiologicalTimeTics') &&
+    lastMutationAtBiologicalTimeTics > absoluteStartTics
+  ) {
     errors.push(
       makeError({
         code: 'SCIENCE_WINDOW_INVALID',
         stage: 'science',
-        instancePath:
-          `${at}/captureAuthority/recordingPlan/lastMutationAtBiologicalTimeTics`,
+        instancePath: mutationTicsPath,
         validatorId: 'window.valid',
         message:
           'the most recent NEST recorder-window, backend, time-encoding, or sender-wiring mutation occurred after originTics + startTics, so one plan did not govern the complete window.',
       }),
     );
+  }
+
+  // Absolute endpoint derivation owns more prerequisites than exact chronology:
+  // both scale declarations, every retained primitive projection, and the grid
+  // must be admissible before Cortexel can interpret event membership or probe
+  // adjacent binary64 clock points.
+  let endpointSourceValid =
+    finiteTimeLimitTics !== undefined &&
+    !gridInvalid &&
+    !sourceInvalidNames.has('ticsPerMs') &&
+    !sourceInvalidNames.has('resolutionTics') &&
+    retainedProjections.size === retainedTics.length &&
+    retainedTics.every(([name]) => !sourceInvalidNames.has(name));
+  if (endpointSourceValid) {
+    for (const [name, tics, instancePath, label] of [
+      [
+        'absoluteStartTics',
+        absoluteStartTics,
+        startTicsPath,
+        'originTics + startTics',
+      ],
+      [
+        'absoluteUpperTics',
+        absoluteUpperTics,
+        upperAuthorityPath,
+        captureBounded
+          ? 'captureBiologicalTimeTics'
+          : 'originTics + stopTics',
+      ],
+    ] as const) {
+      if (
+        tics > maximumSafeTics ||
+        tics >= finiteTimeLimitTics!
+      ) {
+        sourceFailure(
+          name,
+          instancePath,
+          `${label} is outside executable mapping profile 5: it must be a safe integer strictly below the pinned finite-Time limit.`,
+        );
+        endpointSourceValid = false;
+        continue;
+      }
+      const projection = projectNestTicsToMillisecondsV310(tics, ticsPerMs);
+      if (!projection.ok) {
+        sourceFailure(
+          name,
+          instancePath,
+          `${label} is outside executable mapping profile 5: ${projection.message}`,
+        );
+        endpointSourceValid = false;
+      }
+    }
+  }
+
+  if (endpointSourceValid && exactIntervalOrdered === true) {
+    const endpointProjection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: retainedTics.map(([, tics]) => tics),
+      lowerEndpointTics: absoluteStartTics,
+      upperEndpointTics: absoluteUpperTics,
+    });
+    if (!endpointProjection.ok) {
+      const sourceProfileFailure = endpointProjection.kind === 'source_profile';
+      errors.push(
+        makeError({
+          code: sourceProfileFailure
+            ? 'PROVENANCE_SOURCE_CLOCK_INCONSISTENT'
+            : endpointProjection.kind === 'window_order'
+              ? 'SCIENCE_WINDOW_INVALID'
+              : 'SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE',
+          stage: sourceProfileFailure ? 'provenance' : 'science',
+          instancePath: upperAuthorityPath,
+          validatorId: 'window.valid',
+          message: `the pinned NEST 3.10.0 endpoint projection is not admissible: ${endpointProjection.message}`,
+        }),
+      );
+    }
   }
 
   return errors;
@@ -573,9 +895,13 @@ export const windowValid: SemanticValidator = (context: SemanticContext): Cortex
  * Events must lie within the declared observation window.
  *
  * General event windows explicitly select [start, stop), [start, stop], or
- * (start, stop]. A NEST recording-device window retains the simulator's native
- * (origin + start, origin + stop] convention. Exact endpoint sums are compared
- * with each event without first rounding either endpoint.
+ * (start, stop]. A finite-stop NEST recording-device window retains the
+ * simulator's native (origin + start, origin + stop] convention. A NEST device
+ * configured with positive infinity instead ends this artifact's finite prefix
+ * at the exact successful-return capture time: (origin + start, capture]. NEST
+ * endpoints are added in integer tics and then projected with the pinned
+ * `Time::get_ms()` binary64 operation sequence before comparison with exported
+ * binary64 event times. Separately serialized origin/offset fields are never summed.
  *
  * Out-of-window events are reported with a COUNT, never silently dropped — a
  * disclosure on the figure then says how many were excluded. The semantic gate
@@ -589,22 +915,28 @@ export const eventsWithinWindow: SemanticValidator = (
   const window = asRecord(data.window);
   if (!window) return [];
 
-  const originRelative =
-    asString(window.kind) === 'nest_recording_device_origin_relative';
+  const nestKind = nestWindowKind(window);
+  const nestWindow = nestKind !== undefined;
+  const captureBounded = nestKind === 'positive_infinity_capture_bounded';
+  if (nestWindow && nestSourceClockDeclarationErrors(context).length > 0) {
+    // Do not derive event membership through a second path when the complete
+    // source-clock declaration for the same request is already rejected.
+    return [];
+  }
   const origin = asNumber(window.origin);
   const start = asNumber(window.start);
-  const stop = asNumber(window.stop);
+  const upper = asNumber(captureBounded ? window.captureTime : window.stop);
   if (
     start === undefined ||
-    stop === undefined ||
-    (originRelative && origin === undefined)
+    upper === undefined ||
+    (nestWindow && origin === undefined)
   ) {
     return [];
   }
   // `window.valid` owns this authoring error. Membership is undefined until a
   // real interval (and, for NEST, a renderable interval) exists, so do not emit
   // one misleading event error per invalid window.
-  if (!(stop > start)) return [];
+  if (!nestWindow && !(upper > start)) return [];
 
   const eventTimes = asRecord(data.eventTimes);
   const times = asArray(eventTimes?.values);
@@ -618,42 +950,42 @@ export const eventsWithinWindow: SemanticValidator = (
     dimensionOf(windowUnit) !== 'time'
   ) return [];
 
-  const lowerTerms = originRelative
+  const lowerTerms = nestWindow
     ? [
         { value: origin!, unit: windowUnit },
         { value: start, unit: windowUnit },
       ]
     : [{ value: start, unit: windowUnit }];
-  const upperTerms = originRelative
-    ? [
+  const upperTerms = captureBounded
+    ? [{ value: upper, unit: windowUnit }]
+    : nestWindow
+      ? [
         { value: origin!, unit: windowUnit },
-        { value: stop, unit: windowUnit },
+        { value: upper, unit: windowUnit },
       ]
-    : [{ value: stop, unit: windowUnit }];
-  const boundary = originRelative
-    ? '(origin+start,origin+stop]'
-    : asString(window.boundary);
+      : [{ value: upper, unit: windowUnit }];
+  const boundary = captureBounded
+    ? '(origin+start,capture]'
+    : nestWindow
+      ? '(origin+start,origin+stop]'
+      : asString(window.boundary);
   const openStart =
-    boundary === '(start,stop]' || boundary === '(origin+start,origin+stop]';
+    boundary === '(start,stop]' ||
+    boundary === '(origin+start,origin+stop]' ||
+    boundary === '(origin+start,capture]';
   const closedStop =
     boundary === '[start,stop]' ||
     boundary === '(start,stop]' ||
-    boundary === '(origin+start,origin+stop]';
+    boundary === '(origin+start,origin+stop]' ||
+    boundary === '(origin+start,capture]';
 
-  if (originRelative) {
-    try {
-      const displayedStart = convertExactUnitSum(lowerTerms, windowUnit);
-      const displayedStop = convertExactUnitSum(upperTerms, windowUnit);
-      if (
-        !Number.isFinite(displayedStart) ||
-        !Number.isFinite(displayedStop) ||
-        !(displayedStop > displayedStart)
-      ) {
-        return [];
-      }
-    } catch {
-      return [];
-    }
+  const nestEndpoints = nestWindow
+    ? projectNestEndpoints(window, captureBounded)
+    : undefined;
+  if (nestWindow && (!nestEndpoints || eventUnit !== 'ms' || windowUnit !== 'ms')) {
+    // `window.valid` and `events.source_clock_declared` own malformed or
+    // out-of-profile NEST authority. Membership cannot be inferred safely.
+    return [];
   }
 
   let outside = 0;
@@ -665,22 +997,31 @@ export const eventsWithinWindow: SemanticValidator = (
     let beforeStart: boolean;
     let beyondStop: boolean;
     try {
-      // Compare endpoint sum to event and invert the relation. This avoids both
-      // origin + offset rounding and a rounded unit-converted event value.
-      const lowerComparedWithEvent = compareExactUnitSumToValue(
-        lowerTerms,
-        { value: time, unit: eventUnit },
-      );
-      const upperComparedWithEvent = compareExactUnitSumToValue(
-        upperTerms,
-        { value: time, unit: eventUnit },
-      );
-      beforeStart = openStart
-        ? lowerComparedWithEvent >= 0
-        : lowerComparedWithEvent > 0;
-      beyondStop = closedStop
-        ? upperComparedWithEvent < 0
-        : upperComparedWithEvent <= 0;
+      if (nestEndpoints) {
+        beforeStart = openStart
+          ? time <= nestEndpoints.lowerMs
+          : time < nestEndpoints.lowerMs;
+        beyondStop = closedStop
+          ? time > nestEndpoints.upperMs
+          : time >= nestEndpoints.upperMs;
+      } else {
+        // Generic windows retain exact registered-unit comparison without a
+        // rounded intermediate conversion.
+        const lowerComparedWithEvent = compareExactUnitSumToValue(
+          lowerTerms,
+          { value: time, unit: eventUnit },
+        );
+        const upperComparedWithEvent = compareExactUnitSumToValue(
+          upperTerms,
+          { value: time, unit: eventUnit },
+        );
+        beforeStart = openStart
+          ? lowerComparedWithEvent >= 0
+          : lowerComparedWithEvent > 0;
+        beyondStop = closedStop
+          ? upperComparedWithEvent < 0
+          : upperComparedWithEvent <= 0;
+      }
     } catch (error) {
       const message = error instanceof Error
         ? error.message
@@ -710,9 +1051,11 @@ export const eventsWithinWindow: SemanticValidator = (
   if (outside === 0) return [];
   if (asString(getParameters(context).outOfWindowPolicy) === 'exclude_and_disclose') return [];
 
-  const windowDescription = originRelative
-    ? `(origin ${origin} + start ${start}, origin ${origin} + stop ${stop}] ${windowUnit}`
-    : `${boundary ?? '[start,stop)'} with start ${start}, stop ${stop} ${windowUnit}`;
+  const windowDescription = captureBounded
+    ? `(origin ${origin} + start ${start}, capture ${upper}] ${windowUnit}`
+    : nestWindow
+      ? `(origin ${origin} + start ${start}, origin ${origin} + stop ${upper}] ${windowUnit}`
+      : `${boundary ?? '[start,stop)'} with start ${start}, stop ${upper} ${windowUnit}`;
 
   return [
     makeError({
@@ -720,22 +1063,25 @@ export const eventsWithinWindow: SemanticValidator = (
       stage: 'science',
       instancePath: pointer('data', 'eventTimes', 'values', firstIndex),
       validatorId: 'events.within_window',
-      message: `${outside} of ${times.length} events fall outside the declared window ${windowDescription} under exact comparison with the event clock in ${eventUnit}. Widen the window or choose exclude_and_disclose; Cortexel will not quietly ignore an observation you supplied.`,
+      message: `${outside} of ${times.length} events fall outside the declared window ${windowDescription} under ${nestWindow ? 'the pinned NEST source-clock projection' : 'exact registered-unit comparison'} with the event clock in ${eventUnit}. Widen the window or choose exclude_and_disclose; Cortexel will not quietly ignore an observation you supplied.`,
     }),
   ];
 };
 
 /**
- * Bind the source-specific NEST clock declaration to the only serialized clock
- * profile admitted by revision 3. This is an internal-consistency check, not an
- * authenticity claim and not a reconstruction of NEST's hidden integer tics.
+ * Bind each source-specific NEST clock declaration to executable mapping profile 5.
+ * Finite-stop and positive-infinity windows retain distinct shapes, but share the
+ * same corrected source-bound NEST 3.10.0 time projection. This is an
+ * internal-consistency check, not an authenticity claim.
  */
-export const eventsSourceClockDeclared: SemanticValidator = (
+function nestSourceClockDeclarationErrors(
   context: SemanticContext,
-): CortexelError[] => {
+): CortexelError[] {
   const data = getData(context);
   const window = asRecord(data.window);
-  if (!window || asString(window.kind) !== 'nest_recording_device_origin_relative') return [];
+  if (!window) return [];
+  const nestKind = nestWindowKind(window);
+  if (nestKind === undefined) return [];
 
   const source = asRecord(context.request.source);
   const eventTimes = asRecord(data.eventTimes);
@@ -762,12 +1108,18 @@ export const eventsSourceClockDeclared: SemanticValidator = (
     {
       valid: version === '3.10.0',
       path: ['source', 'systemVersion'],
-      message: 'the revision-3 serialized clock profile admits only the exact pinned NEST 3.10.0 runtime declaration.',
+      message: 'executable mapping profile 5 admits only the exact pinned NEST 3.10.0 runtime declaration.',
     },
     {
       valid: captureVersion === version,
       path: ['data', 'window', 'captureAuthority', 'runtimeStatus', 'nestVersion'],
       message: 'the capture-authority runtime version must exactly equal source.systemVersion.',
+    },
+    {
+      valid: asString(runtimeStatus?.timeBuildProfile) ===
+        'nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1',
+      path: ['data', 'window', 'captureAuthority', 'runtimeStatus', 'timeBuildProfile'],
+      message: 'mapping revision 5 admits only the caller-declared LP64/int64 NEST 3.10.0 binary64 roundTiesToEven, stored-operation, no-excess-precision time build profile. R049 must independently establish the runtime rounding mode and toolchain flags.',
     },
     {
       valid: digest !== undefined && /^sha256:[0-9a-f]{64}$/u.test(digest),
@@ -777,12 +1129,12 @@ export const eventsSourceClockDeclared: SemanticValidator = (
     {
       valid: asString(window.recordingBackend) === 'memory',
       path: ['data', 'window', 'recordingBackend'],
-      message: 'revision 3 admits only the NEST memory recording backend.',
+      message: 'executable mapping profile 5 admits only the NEST memory recording backend.',
     },
     {
       valid: asString(window.timeEncoding) === 'native_binary64_ms',
       path: ['data', 'window', 'timeEncoding'],
-      message: 'revision 3 admits only native_binary64_ms (time_in_steps=false), not reconstructed step/offset clocks.',
+      message: 'executable mapping profile 5 admits only native_binary64_ms (time_in_steps=false), not reconstructed step/offset clocks.',
     },
     {
       valid: asString(eventTimes?.unit) === 'ms',
@@ -807,7 +1159,10 @@ export const eventsSourceClockDeclared: SemanticValidator = (
         message: check.message,
       }),
     );
-};
+}
+
+export const eventsSourceClockDeclared: SemanticValidator =
+  nestSourceClockDeclarationErrors;
 
 /**
  * The recorded-sender universe must be declared, and every event must come from it.

@@ -92,15 +92,31 @@ Do not infer executable support from a source mapping. `feasibilityStatus` is on
 bounded assessment, and `implementationAvailability` is the executable axis. Today the
 only packaged stable NEST mapping is the bounded plain-data shape of a
 caller-declared exact NEST 3.10.0 memory spike-recorder profile at
-`cortexel/adapters/nest`. Adapter revision 3 requires the host to declare that it
-applied the named projection preserving every NumPy event-array value and its order,
-plus a `kind: caller_declaration` capture record
-for the successful-return closed-stop endpoint, exact integer-tic grid, buffer and
-recording-plan history, monotonic kernel clock epoch, exact sender
-universe, and single-process scope. Cortexel digest-binds the detached projection and
-normalized options but does not authenticate the producing simulator, process topology,
-buffer resets, configuration or wiring history, sender-universe completeness, or export
-custody, and it does not start PyNEST.
+`cortexel/adapters/nest`. Stable `neuro.spike_raster` revision 6 and
+`figure.spike_raster` revision 7 admit one executable adapter revision 5 with two
+closed, noninterchangeable branch records:
+
+- `finiteStop` uses projection v1 and capture-authority profile v3, retaining
+  `(origin+start,origin+stop]`;
+- `positiveInfinityCaptureBounded` uses projection v2 and capture-authority profile v4.
+  It accepts only `{ "kind": "nest_time_positive_infinity" }`; raw numeric `DBL_MAX`
+  is rejected. Its finite closed endpoint is the exact biological time immediately
+  after a successful *advancing* `Simulate` or `Run` return and before any further
+  advance or mutation. The request retains `(origin+start,capture]`; capture is not a
+  configured stop or recorder deactivation and establishes nothing after capture.
+
+Both branches require one revision-5 adapter-input digest, a `kind: caller_declaration`
+capture record, the exact LP64/int64/binary64 time-build profile, the branch-specific
+named projection preserving every NumPy event-array value and its order, source-faithful
+integer-tic preimages, buffer and recording-plan history, a monotonic kernel-clock epoch,
+the exact sender universe, and single-process scope. Cortexel checks the declared
+stored-reciprocal time projection but does not authenticate the producing simulator,
+build, active floating-point environment, projection, topology, capture timing, history,
+sender-universe completeness, or export custody, and it does not start PyNEST. Historical
+adapter profile v3 and capture-authority profiles v1/v2 are non-executable migration
+identities. R049 remains `NOT_RUN` until a durable isolated receipt binds the exact
+revision-5 profile, wheel, toolchain, floating-point environment, harness bytes, and
+results.
 Every other NEST mapping remains nonexecutable unless its exact record says otherwise.
 Python exposes `list_skills()` and `describe_skill()`, but its semantic port is
 explicitly partial and refuses to issue a full validity certificate.

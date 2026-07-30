@@ -592,16 +592,13 @@ def _validate_schema(
                     value, schema["then"], path, conditional_errors, document_root
                 )
                 if conditional_errors:
+                    # Mirror Ajv's public diagnostic boundary, not its internal
+                    # applicator bookkeeping. The selected branch errors identify
+                    # the actual repair paths; an extra generic record at `path`
+                    # merely restates that the branch failed. Other genuinely
+                    # summary-only failures (for example overlapping oneOf branches
+                    # or a matched `not`) are emitted by their own keywords below.
                     errors.extend(conditional_errors)
-                    # Ajv reports both the actionable branch failure and its selected
-                    # `if` keyword failure. Preserve that stable generic parent record
-                    # so independent diagnostic corpora compare exactly.
-                    errors.append(CortexelError(
-                        "SCHEMA_VALIDATION_FAILED",
-                        "structural",
-                        path,
-                        "the selected then branch failed structural validation",
-                    ))
         elif "else" in schema:
             conditional_errors = []
             _validate_schema(
@@ -609,12 +606,6 @@ def _validate_schema(
             )
             if conditional_errors:
                 errors.extend(conditional_errors)
-                errors.append(CortexelError(
-                    "SCHEMA_VALIDATION_FAILED",
-                    "structural",
-                    path,
-                    "the selected else branch failed structural validation",
-                ))
 
     expected_type = schema.get("type")
     if expected_type:
@@ -1542,20 +1533,82 @@ def _convert_binary64(value: float, source_unit: str, target_unit: str) -> float
     return converted
 
 
+# NEST 3.10.0 stores Time::tic_t in a signed 64-bit integer and reserves an
+# INF_MARGIN=8 region.  The stable adapter deliberately accepts the smaller
+# exactly-representable integer subset so Python and ECMAScript cannot disagree
+# while converting an authority string to the binary64 operands used by NEST.
+_NEST_310_TIC_T_MAX = (1 << 63) - 1
+_NEST_310_INF_MARGIN = 8
+_NEST_310_EXACT_INTEGER_MAX = (1 << 53) - 1
+
+
+def _nest_310_finite_time_limit(resolution_tics: int) -> int:
+    """Reproduce ``Time::compute_max`` for the pinned 64-bit NEST profile."""
+    if resolution_tics <= 0:
+        raise ValueError("resolutionTics must be positive")
+    base = _NEST_310_TIC_T_MAX // _NEST_310_INF_MARGIN
+    return base - base % resolution_tics
+
+
+def _nest_310_get_ms_projection(tics: int, tics_per_ms: int) -> float:
+    """Mirror the two binary64 operations in NEST 3.10.0 ``Time::get_ms``.
+
+    NEST first stores ``MS_PER_TIC = 1 / tics_per_ms`` as binary64 and later
+    multiplies that rounded reciprocal by the binary64 conversion of ``tic_t``.
+    A correctly rounded exact quotient is therefore not the source algorithm.
+    Keeping these as two Python operations also prevents an optimizer from
+    replacing the pinned operation order with one exact rational division.
+    """
+    if tics < 0 or tics_per_ms <= 0:
+        raise ValueError("the admitted NEST clock uses non-negative tics")
+    try:
+        milliseconds_per_tic = 1.0 / float(tics_per_ms)
+        projected = float(tics) * milliseconds_per_tic
+    except OverflowError as error:
+        raise ValueError("the NEST binary64 projection overflowed") from error
+    if not math.isfinite(projected) or (tics != 0 and projected == 0.0):
+        raise ValueError("the NEST binary64 projection is not finite and nonzero")
+    return projected
+
+
+def _nest_310_project_retained_tics(tics: int, tics_per_ms: int) -> float:
+    """Project one admitted authority tic and prove NEST can recover it."""
+    if tics > _NEST_310_EXACT_INTEGER_MAX:
+        raise ValueError("the retained tic exceeds the exact binary64 integer subset")
+    projected = _nest_310_get_ms_projection(tics, tics_per_ms)
+    # This is the non-negative branch of NEST's millisecond Time constructor:
+    # static_cast<tic_t>(ms * TICS_PER_MS + 0.5).  Each operation is binary64.
+    recovered = math.trunc(projected * float(tics_per_ms) + 0.5)
+    if recovered != tics:
+        raise ValueError("the NEST millisecond projection does not recover its tic")
+    return projected
+
+
 def _spike_raster_source_clock_errors(
     request: JsonRecord,
     window: JsonRecord,
     event_times: JsonRecord,
 ) -> ErrorList:
-    """Bind an origin-relative NEST clock to the profile admitted by revision 3.
+    """Bind each origin-relative NEST clock to its admitted exact 3.10.0 profile.
 
-    The schema owns the shape of the origin-relative window.  These checks own the
-    cross-object provenance claim: a caller may use that source-specific clock only
-    when the request consistently identifies the supported NEST serialization.  This
-    does not authenticate the digest or reconstruct NEST's hidden integer-tic clock.
+    The schema owns each closed finite-stop or positive-infinity/capture-bounded
+    profile. These checks own the cross-object provenance claim: a caller may use
+    either source-specific clock only when the request consistently identifies the
+    supported NEST serialization. This does not authenticate the digest or runtime.
     """
-    if window.get("kind") != "nest_recording_device_origin_relative":
+    window_kind = window.get("kind")
+    finite_stop = window_kind == "nest_recording_device_origin_relative"
+    capture_bounded = (
+        window_kind ==
+        "nest_recording_device_positive_infinity_capture_bounded"
+    )
+    if not finite_stop and not capture_bounded:
         return []
+    # Executable source projection revision 5 corrects the pinned NEST get_ms
+    # operation order for both the finite-stop and capture-bounded branches.
+    # Historical finite revision 3 and infinity revision 4 are not current
+    # executable evidence domains.
+    profile_revision = 5
 
     source = request.get("source")
     if not isinstance(source, dict):
@@ -1586,14 +1639,21 @@ def _spike_raster_source_clock_errors(
         (
             version == "3.10.0",
             "/source/systemVersion",
-            "the revision-3 serialized clock profile admits only the exact pinned "
-            "NEST 3.10.0 runtime declaration.",
+            f"the revision-{profile_revision} serialized clock profile admits only "
+            "the exact pinned NEST 3.10.0 runtime declaration.",
         ),
         (
             capture_version == version,
             "/data/window/captureAuthority/runtimeStatus/nestVersion",
             "the capture-authority runtime version must exactly equal "
             "source.systemVersion.",
+        ),
+        (
+            runtime_status.get("timeBuildProfile") ==
+            "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
+            "/data/window/captureAuthority/runtimeStatus/timeBuildProfile",
+            "source projection revision 5 requires the exact pinned NEST 3.10 "
+            "Time build profile (int64 tic_t, int64 long, IEEE-754 binary64).",
         ),
         (
             isinstance(digest, str) and
@@ -1605,13 +1665,14 @@ def _spike_raster_source_clock_errors(
         (
             window.get("recordingBackend") == "memory",
             "/data/window/recordingBackend",
-            "revision 3 admits only the NEST memory recording backend.",
+            f"revision {profile_revision} admits only the NEST memory recording "
+            "backend.",
         ),
         (
             window.get("timeEncoding") == "native_binary64_ms",
             "/data/window/timeEncoding",
-            "revision 3 admits only native_binary64_ms (time_in_steps=false), "
-            "not reconstructed step/offset clocks.",
+            f"revision {profile_revision} admits only native_binary64_ms "
+            "(time_in_steps=false), not reconstructed step/offset clocks.",
         ),
         (
             event_times.get("unit") == "ms",
@@ -1638,11 +1699,15 @@ def _spike_raster_source_clock_errors(
 
 
 def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
-    """Independent exact event-window evaluator for spike-raster revision 3.
+    """Independent exact evaluator for both stable NEST spike-window profiles.
 
-    Every submitted finite binary64 is decoded to a :class:`Fraction` before unit
-    scaling, endpoint addition, or comparison.  Consequently no rounded unit
-    conversion and no tolerance can move an event across a declared boundary.
+    Generic windows decode every submitted finite binary64 to a :class:`Fraction`
+    before unit scaling or comparison. NEST windows instead add their authoritative
+    integer tics first and reproduce the pinned NEST 3.10.0 ``get_ms`` operation
+    order exactly once per absolute endpoint. Membership then compares exact
+    Fractions of those source-produced binary64 endpoints. Consequently neither a
+    rounded unit conversion nor an accidental sum of separately rounded NEST status
+    fields can move an event across a declared boundary.
     """
     data = request.get("data")
     parameters = request.get("parameters")
@@ -1665,32 +1730,37 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
         # repeating that already-actionable diagnostic at the same repair path.
         return
 
-    origin_relative = (
-        window.get("kind") == "nest_recording_device_origin_relative"
+    window_kind = window.get("kind")
+    finite_stop = window_kind == "nest_recording_device_origin_relative"
+    capture_bounded = (
+        window_kind ==
+        "nest_recording_device_positive_infinity_capture_bounded"
     )
+    nest_window = finite_stop or capture_bounded
     start = window.get("start")
-    stop = window.get("stop")
-    origin = window.get("origin") if origin_relative else 0
+    upper_name = "captureTime" if capture_bounded else "stop"
+    upper_value = window.get(upper_name)
+    origin = window.get("origin") if nest_window else 0
     if not (
         _is_finite_json_number(start)
-        and _is_finite_json_number(stop)
+        and _is_finite_json_number(upper_value)
         and _is_finite_json_number(origin)
     ):
         # The host-number and structural gates own malformed/non-finite inputs.
         return
 
     start_fraction = Fraction.from_float(float(start))
-    stop_fraction = Fraction.from_float(float(stop))
+    upper_fraction = Fraction.from_float(float(upper_value))
     source_clock_errors = _spike_raster_source_clock_errors(
         request, window, event_times
     )
-    if stop_fraction <= start_fraction:
+    if not nest_window and upper_fraction <= start_fraction:
         errors.append(CortexelError(
             "SCIENCE_WINDOW_INVALID",
             "science",
-            "/data/window/stop",
-            f"the observation window is empty or inverted (start {start}, stop {stop}). "
-            "It must satisfy start < stop.",
+            f"/data/window/{upper_name}",
+            f"the observation window is empty or inverted (start {start}, "
+            f"stop {upper_value}). It must satisfy start < stop.",
         ))
         # Membership has no meaning until the author supplies a real interval. Source
         # provenance is an independent validator, however, and must not be suppressed by
@@ -1713,37 +1783,15 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
         return
 
     window_scale = _unit_scale(window_unit)
-    origin_fraction = Fraction.from_float(float(origin))
-    lower = (origin_fraction + start_fraction) * window_scale
-    upper = (origin_fraction + stop_fraction) * window_scale
+    # Generic-window bounds remain exact submitted binary64 quantities. NEST
+    # bounds are replaced below only after their complete tic authority has been
+    # checked and the combined absolute tics have been projected by the pinned
+    # source algorithm.
+    lower = start_fraction * window_scale
+    upper = upper_fraction * window_scale
+    nest_membership_ready = not nest_window
 
-    if origin_relative:
-        # The renderer must materialize each exact origin-relative endpoint once in
-        # the declared window unit.  Refuse overflow or a binary64 collapse instead
-        # of drawing a zero-width interval that the exact clock says is non-empty.
-        try:
-            displayed_start = float(lower / window_scale)
-            displayed_stop = float(upper / window_scale)
-        except OverflowError:
-            displayed_start = math.inf
-            displayed_stop = math.inf
-        if (
-            not math.isfinite(displayed_start) or
-            not math.isfinite(displayed_stop) or
-            not displayed_stop > displayed_start
-        ):
-            errors.append(CortexelError(
-                "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
-                "science",
-                "/data/window/stop",
-                "the exact NEST endpoints origin + start and origin + stop do not "
-                f"remain finite and strictly ordered when rounded once into {window_unit} "
-                "for display. Preserve a better-scaled clock segment; Cortexel will "
-                "not draw a collapsed interval.",
-            ))
-            errors.extend(source_clock_errors)
-            return
-
+    if nest_window:
         capture_authority = window.get("captureAuthority")
         if isinstance(capture_authority, dict):
             runtime_status = capture_authority.get("runtimeStatus")
@@ -1757,16 +1805,23 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
                 isinstance(recording_plan, dict)
             ):
                 resolution_ms = runtime_status.get("resolutionMs")
-                tic_text = (
-                    runtime_status.get("ticsPerMs"),
-                    runtime_status.get("resolutionTics"),
-                    runtime_status.get("captureBiologicalTimeTics"),
-                    recording_grid.get("originTics"),
-                    recording_grid.get("startTics"),
-                    recording_grid.get("stopTics"),
-                    buffer_epoch.get("beganAtBiologicalTimeTics"),
-                    recording_plan.get("lastMutationAtBiologicalTimeTics"),
-                )
+                tic_text = {
+                    "tics_per_ms": runtime_status.get("ticsPerMs"),
+                    "resolution_tics": runtime_status.get("resolutionTics"),
+                    "capture_tics": runtime_status.get(
+                        "captureBiologicalTimeTics"
+                    ),
+                    "origin_tics": recording_grid.get("originTics"),
+                    "start_tics": recording_grid.get("startTics"),
+                    "buffer_began_tics": buffer_epoch.get(
+                        "beganAtBiologicalTimeTics"
+                    ),
+                    "plan_mutation_tics": recording_plan.get(
+                        "lastMutationAtBiologicalTimeTics"
+                    ),
+                }
+                if finite_stop:
+                    tic_text["stop_tics"] = recording_grid.get("stopTics")
                 if (
                     _is_finite_json_number(resolution_ms) and
                     all(
@@ -1776,23 +1831,188 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
                             value == "0" or
                             (value[0] in "123456789" and value.isascii() and value.isdigit())
                         )
-                        for value in tic_text
+                        for value in tic_text.values()
                     )
                 ):
-                    tic_strings = cast(tuple[str, ...], tic_text)
-                    (
-                        tics_per_ms,
-                        resolution_tics,
-                        capture_tics,
-                        origin_tics,
-                        start_tics,
-                        stop_tics,
-                        buffer_began_tics,
-                        plan_mutation_tics,
-                    ) = (int(value) for value in tic_strings)
+                    tic_strings = cast(dict[str, str], tic_text)
+                    tic_values = {
+                        name: int(value)
+                        for name, value in tic_strings.items()
+                    }
+                    tics_per_ms = tic_values["tics_per_ms"]
+                    resolution_tics = tic_values["resolution_tics"]
+                    capture_tics = tic_values["capture_tics"]
+                    origin_tics = tic_values["origin_tics"]
+                    start_tics = tic_values["start_tics"]
+                    buffer_began_tics = tic_values["buffer_began_tics"]
+                    plan_mutation_tics = tic_values["plan_mutation_tics"]
+                    stop_tics = tic_values.get("stop_tics")
                     if tics_per_ms > 0 and resolution_tics > 0:
-                        for tics, milliseconds, path, label in (
+                        tics_per_ms_path = (
+                            "/data/window/captureAuthority/runtimeStatus/ticsPerMs"
+                        )
+                        resolution_tics_path = (
+                            "/data/window/captureAuthority/runtimeStatus/"
+                            "resolutionTics"
+                        )
+                        capture_tics_path = (
+                            "/data/window/captureAuthority/runtimeStatus/"
+                            "captureBiologicalTimeTics"
+                        )
+                        origin_tics_path = (
+                            "/data/window/captureAuthority/recordingGrid/originTics"
+                        )
+                        start_tics_path = (
+                            "/data/window/captureAuthority/recordingGrid/startTics"
+                        )
+                        stop_tics_path = (
+                            "/data/window/captureAuthority/recordingGrid/stopTics"
+                        )
+                        buffer_tics_path = (
+                            "/data/window/captureAuthority/bufferEpoch/"
+                            "beganAtBiologicalTimeTics"
+                        )
+                        plan_tics_path = (
+                            "/data/window/captureAuthority/recordingPlan/"
+                            "lastMutationAtBiologicalTimeTics"
+                        )
+
+                        source_invalid_names: set[str] = set()
+                        # Domain-invalid integer operands suppress only conclusions
+                        # that actually depend on those operands. Projection
+                        # mismatches remain source errors, but do not erase exact
+                        # integer chronology that is independently decidable.
+                        unsafe_tic_names: set[str] = set()
+
+                        def source_tic_error(
+                            name: str,
+                            path: str,
+                            message: str,
+                        ) -> None:
+                            source_invalid_names.add(name)
+                            errors.append(CortexelError(
+                                "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                                "provenance",
+                                path,
+                                message,
+                            ))
+
+                        def unsafe_tic_error(
+                            name: str,
+                            path: str,
+                            message: str,
+                        ) -> None:
+                            unsafe_tic_names.add(name)
+                            source_tic_error(name, path, message)
+
+                        if tics_per_ms > _NEST_310_EXACT_INTEGER_MAX:
+                            source_tic_error(
+                                "tics_per_ms",
+                                tics_per_ms_path,
+                                "ticsPerMs exceeds the exact non-negative integer "
+                                "subset admitted for the pinned NEST 3.10.0 "
+                                "binary64 clock projection.",
+                            )
+
+                        finite_time_limit: int | None = None
+                        if resolution_tics > _NEST_310_EXACT_INTEGER_MAX:
+                            unsafe_tic_error(
+                                "resolution_tics",
+                                resolution_tics_path,
+                                "resolutionTics exceeds the exact non-negative "
+                                "integer subset admitted for the pinned NEST "
+                                "3.10.0 binary64 clock projection.",
+                            )
+                        else:
+                            finite_time_limit = _nest_310_finite_time_limit(
+                                resolution_tics
+                            )
+                        retained_tics = [
                             (
+                                "resolution_tics",
+                                resolution_tics,
+                                resolution_tics_path,
+                                "resolutionTics",
+                            ),
+                            (
+                                "capture_tics",
+                                capture_tics,
+                                capture_tics_path,
+                                "captureBiologicalTimeTics",
+                            ),
+                            (
+                                "origin_tics",
+                                origin_tics,
+                                origin_tics_path,
+                                "originTics",
+                            ),
+                            (
+                                "start_tics",
+                                start_tics,
+                                start_tics_path,
+                                "startTics",
+                            ),
+                            (
+                                "buffer_began_tics",
+                                buffer_began_tics,
+                                buffer_tics_path,
+                                "beganAtBiologicalTimeTics",
+                            ),
+                            (
+                                "plan_mutation_tics",
+                                plan_mutation_tics,
+                                plan_tics_path,
+                                "lastMutationAtBiologicalTimeTics",
+                            ),
+                        ]
+                        if stop_tics is not None:
+                            retained_tics.insert(4, (
+                                "stop_tics",
+                                stop_tics,
+                                stop_tics_path,
+                                "stopTics",
+                            ))
+
+                        retained_projections: dict[str, float] = {}
+                        for name, tics, path, label in retained_tics:
+                            if name in unsafe_tic_names:
+                                continue
+                            if (
+                                tics > _NEST_310_EXACT_INTEGER_MAX or
+                                (
+                                    finite_time_limit is not None and
+                                    tics >= finite_time_limit
+                                )
+                            ):
+                                unsafe_tic_error(
+                                    name,
+                                    path,
+                                    f"{label} is outside the conservative exact-"
+                                    "integer subset of the finite NEST 3.10.0 "
+                                    "Time::tic_t domain for this resolution.",
+                                )
+                                continue
+                            if "tics_per_ms" in source_invalid_names:
+                                continue
+                            try:
+                                retained_projections[name] = (
+                                    _nest_310_project_retained_tics(
+                                        tics,
+                                        tics_per_ms,
+                                    )
+                                )
+                            except ValueError as error:
+                                source_tic_error(
+                                    name,
+                                    path,
+                                    f"{label} cannot round-trip through the pinned "
+                                    "NEST 3.10.0 binary64 millisecond projection: "
+                                    f"{error}",
+                                )
+
+                        projection_checks = [
+                            (
+                                "resolution_tics",
                                 resolution_tics,
                                 resolution_ms,
                                 "/data/window/captureAuthority/runtimeStatus/"
@@ -1800,85 +2020,103 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
                                 "resolutionMs",
                             ),
                             (
+                                "origin_tics",
                                 origin_tics,
                                 origin,
-                                "/data/window/captureAuthority/recordingGrid/"
-                                "originTics",
+                                origin_tics_path,
                                 "origin",
                             ),
                             (
+                                "start_tics",
                                 start_tics,
                                 start,
-                                "/data/window/captureAuthority/recordingGrid/"
-                                "startTics",
+                                start_tics_path,
                                 "start",
                             ),
-                            (
+                        ]
+                        if capture_bounded:
+                            projection_checks.append((
+                                "capture_tics",
+                                capture_tics,
+                                upper_value,
+                                capture_tics_path,
+                                "captureTime",
+                            ))
+                        elif stop_tics is not None:
+                            projection_checks.append((
+                                "stop_tics",
                                 stop_tics,
-                                stop,
-                                "/data/window/captureAuthority/recordingGrid/"
-                                "stopTics",
+                                upper_value,
+                                stop_tics_path,
                                 "stop",
-                            ),
-                        ):
-                            try:
-                                projected = float(Fraction(tics, tics_per_ms))
-                            except OverflowError:
-                                projected = math.inf
+                            ))
+                        for name, _tics, milliseconds, path, label in projection_checks:
+                            projected = retained_projections.get(name)
+                            if projected is None:
+                                continue
                             same_zero_sign = (
                                 projected != 0.0 or
                                 math.copysign(1.0, projected) ==
                                 math.copysign(1.0, float(milliseconds))
                             )
                             if projected != float(milliseconds) or not same_zero_sign:
-                                errors.append(CortexelError(
-                                    "SCIENCE_WINDOW_INVALID",
-                                    "science",
+                                source_tic_error(
+                                    name,
                                     path,
-                                    f"{label} is not the correctly rounded binary64 "
-                                    "millisecond projection of its declared NEST "
-                                    "integer-tic preimage.",
-                                ))
+                                    f"{label} is not the binary64 millisecond value "
+                                    "produced from its declared integer-tic preimage "
+                                    "by the pinned NEST 3.10.0 reciprocal-then-"
+                                    "multiply operation order.",
+                                )
 
-                        for tics, path, label in (
+                        grid_checks = [
                             (
+                                "origin_tics",
                                 origin_tics,
-                                "/data/window/captureAuthority/recordingGrid/"
-                                "originTics",
+                                origin_tics_path,
                                 "originTics",
                             ),
                             (
+                                "start_tics",
                                 start_tics,
-                                "/data/window/captureAuthority/recordingGrid/"
-                                "startTics",
+                                start_tics_path,
                                 "startTics",
                             ),
                             (
-                                stop_tics,
-                                "/data/window/captureAuthority/recordingGrid/"
-                                "stopTics",
-                                "stopTics",
-                            ),
-                            (
+                                "capture_tics",
                                 capture_tics,
-                                "/data/window/captureAuthority/runtimeStatus/"
-                                "captureBiologicalTimeTics",
+                                capture_tics_path,
                                 "captureBiologicalTimeTics",
                             ),
                             (
+                                "buffer_began_tics",
                                 buffer_began_tics,
-                                "/data/window/captureAuthority/bufferEpoch/"
-                                "beganAtBiologicalTimeTics",
+                                buffer_tics_path,
                                 "beganAtBiologicalTimeTics",
                             ),
                             (
+                                "plan_mutation_tics",
                                 plan_mutation_tics,
-                                "/data/window/captureAuthority/recordingPlan/"
-                                "lastMutationAtBiologicalTimeTics",
+                                plan_tics_path,
                                 "lastMutationAtBiologicalTimeTics",
                             ),
-                        ):
-                            if tics % resolution_tics != 0:
+                        ]
+                        if stop_tics is not None:
+                            grid_checks.insert(2, (
+                                "stop_tics",
+                                stop_tics,
+                                stop_tics_path,
+                                "stopTics",
+                            ))
+                        grid_invalid = False
+                        if "resolution_tics" not in unsafe_tic_names:
+                            for name, tics, path, label in grid_checks:
+                                if (
+                                    name in unsafe_tic_names or
+                                    tics % resolution_tics == 0
+                                ):
+                                    continue
+                                grid_invalid = True
                                 errors.append(CortexelError(
                                     "SCIENCE_WINDOW_INVALID",
                                     "science",
@@ -1888,19 +2126,64 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
                                 ))
 
                         absolute_start_tics = origin_tics + start_tics
-                        absolute_stop_tics = origin_tics + stop_tics
-                        if capture_tics < absolute_stop_tics:
+                        absolute_upper_tics = (
+                            capture_tics
+                            if capture_bounded
+                            else origin_tics + cast(int, stop_tics)
+                        )
+                        upper_tics_path = (
+                            capture_tics_path
+                            if capture_bounded
+                            else stop_tics_path
+                        )
+                        absolute_start_operands_safe = not {
+                            "origin_tics", "start_tics"
+                        }.intersection(unsafe_tic_names)
+                        absolute_upper_operands_safe = (
+                            "capture_tics" not in unsafe_tic_names
+                            if capture_bounded
+                            else not {
+                                "origin_tics", "stop_tics"
+                            }.intersection(unsafe_tic_names)
+                        )
+                        interval_tics_ordered: bool | None = None
+                        if (
+                            absolute_start_operands_safe and
+                            absolute_upper_operands_safe
+                        ):
+                            interval_tics_ordered = (
+                                absolute_upper_tics > absolute_start_tics
+                            )
+                        if interval_tics_ordered is False:
                             errors.append(CortexelError(
                                 "SCIENCE_WINDOW_INVALID",
                                 "science",
-                                "/data/window/captureAuthority/runtimeStatus/"
-                                "captureBiologicalTimeTics",
+                                upper_tics_path,
+                                "the absolute NEST upper endpoint tics must be "
+                                "strictly later than originTics + startTics; an "
+                                "upper endpoint at or before the open start has no "
+                                "complete observation interval.",
+                            ))
+                        elif (
+                            interval_tics_ordered is True and
+                            stop_tics is not None and
+                            "capture_tics" not in unsafe_tic_names and
+                            capture_tics < absolute_upper_tics
+                        ):
+                            errors.append(CortexelError(
+                                "SCIENCE_WINDOW_INVALID",
+                                "science",
+                                capture_tics_path,
                                 "the NEST capture time is earlier than originTics + "
                                 "stopTics. The final status must be read only after "
                                 "the Simulate or Run call that reached the closed-stop "
                                 "endpoint returned successfully.",
                             ))
-                        if buffer_began_tics > absolute_start_tics:
+                        if (
+                            absolute_start_operands_safe and
+                            "buffer_began_tics" not in unsafe_tic_names and
+                            buffer_began_tics > absolute_start_tics
+                        ):
                             errors.append(CortexelError(
                                 "SCIENCE_WINDOW_INVALID",
                                 "science",
@@ -1911,7 +2194,11 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
                                 "retained buffer cannot substantiate the complete "
                                 "window.",
                             ))
-                        if plan_mutation_tics > absolute_start_tics:
+                        if (
+                            absolute_start_operands_safe and
+                            "plan_mutation_tics" not in unsafe_tic_names and
+                            plan_mutation_tics > absolute_start_tics
+                        ):
                             errors.append(CortexelError(
                                 "SCIENCE_WINDOW_INVALID",
                                 "science",
@@ -1923,23 +2210,181 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
                                 "govern the complete window.",
                             ))
 
+                        # Membership is not a second interpretation path around a
+                        # rejected source declaration. Every retained primitive,
+                        # including each parallel serialized-ms projection, must
+                        # be source-consistent before endpoint science can run.
+                        endpoint_source_valid = (
+                            not source_clock_errors and
+                            finite_time_limit is not None and
+                            not grid_invalid and
+                            "tics_per_ms" not in source_invalid_names and
+                            "resolution_tics" not in source_invalid_names and
+                            len(retained_projections) == len(retained_tics) and
+                            all(
+                                name not in source_invalid_names
+                                for name, _tics, _path, _label in retained_tics
+                            )
+                        )
+                        combined_tics = [
+                            (
+                                "absolute_start_tics",
+                                absolute_start_tics,
+                                start_tics_path,
+                                "originTics + startTics",
+                            ),
+                            (
+                                "absolute_upper_tics",
+                                absolute_upper_tics,
+                                upper_tics_path,
+                                (
+                                    "captureBiologicalTimeTics"
+                                    if capture_bounded
+                                    else "originTics + stopTics"
+                                ),
+                            ),
+                        ]
+                        combined_projections: dict[str, float] = {}
+                        if endpoint_source_valid and finite_time_limit is not None:
+                            for name, tics, path, label in combined_tics:
+                                if (
+                                    tics > _NEST_310_EXACT_INTEGER_MAX or
+                                    tics >= finite_time_limit
+                                ):
+                                    source_tic_error(
+                                        name,
+                                        path,
+                                        f"{label} is outside the conservative exact-"
+                                        "integer subset of the finite NEST 3.10.0 "
+                                        "Time::tic_t domain for this resolution.",
+                                    )
+                                    endpoint_source_valid = False
+                                    continue
+                                try:
+                                    combined_projections[name] = (
+                                        _nest_310_project_retained_tics(
+                                            tics,
+                                            tics_per_ms,
+                                        )
+                                    )
+                                except ValueError as error:
+                                    source_tic_error(
+                                        name,
+                                        path,
+                                        f"{label} cannot round-trip through the "
+                                        "pinned NEST 3.10.0 binary64 millisecond "
+                                        f"projection: {error}",
+                                    )
+                                    endpoint_source_valid = False
+
+                        projected_start = combined_projections.get(
+                            "absolute_start_tics"
+                        )
+                        projected_upper = combined_projections.get(
+                            "absolute_upper_tics"
+                        )
+                        if (
+                            endpoint_source_valid and
+                            finite_time_limit is not None and
+                            interval_tics_ordered is True and
+                            projected_start is not None and
+                            projected_upper is not None
+                        ):
+                            endpoint_alias = False
+                            if not projected_upper > projected_start:
+                                errors.append(CortexelError(
+                                    "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+                                    "science",
+                                    upper_tics_path,
+                                    "the strictly ordered absolute NEST endpoint "
+                                    "tics collapse or invert after the pinned "
+                                    "binary64 millisecond projection.",
+                                ))
+                            else:
+                                for endpoint_tics, projected in (
+                                    (
+                                        absolute_start_tics,
+                                        projected_start,
+                                    ),
+                                    (
+                                        absolute_upper_tics,
+                                        projected_upper,
+                                    ),
+                                ):
+                                    for neighbor in (
+                                        endpoint_tics - resolution_tics,
+                                        endpoint_tics + resolution_tics,
+                                    ):
+                                        if not 0 <= neighbor < finite_time_limit:
+                                            continue
+                                        try:
+                                            neighbor_projection = (
+                                                _nest_310_get_ms_projection(
+                                                    neighbor,
+                                                    tics_per_ms,
+                                                )
+                                            )
+                                        except ValueError:
+                                            neighbor_projection = projected
+                                        if neighbor_projection == projected:
+                                            endpoint_alias = True
+                                            break
+                                    if endpoint_alias:
+                                        break
+                                if endpoint_alias:
+                                    errors.append(CortexelError(
+                                        "SCIENCE_NUMERIC_RESOLUTION_"
+                                        "UNREPRESENTABLE",
+                                        "science",
+                                        upper_tics_path,
+                                        "the pinned NEST 3.10.0 binary64 "
+                                        "millisecond clock aliases an adjacent "
+                                        "runtime-resolution tic at an operative "
+                                        "window boundary.",
+                                    ))
+                            if (
+                                projected_upper > projected_start and
+                                not endpoint_alias
+                            ):
+                                # The source algorithm emits milliseconds. Decode
+                                # those two binary64 values exactly before unit
+                                # scaling and event membership comparison.
+                                millisecond_scale = _unit_scale("ms")
+                                lower = (
+                                    Fraction.from_float(projected_start) *
+                                    millisecond_scale
+                                )
+                                upper = (
+                                    Fraction.from_float(projected_upper) *
+                                    millisecond_scale
+                                )
+                                nest_membership_ready = True
+
+        if not nest_membership_ready:
+            errors.extend(source_clock_errors)
+            return
+
     values = event_times.get("values")
     if not isinstance(values, list):
         errors.extend(source_clock_errors)
         return
     boundary = (
-        "(origin+start,origin+stop]"
-        if origin_relative
+        "(origin+start,capture]"
+        if capture_bounded
+        else "(origin+start,origin+stop]"
+        if finite_stop
         else window.get("boundary")
     )
     open_start = boundary in (
         "(start,stop]",
         "(origin+start,origin+stop]",
+        "(origin+start,capture]",
     )
     closed_stop = boundary in (
         "[start,stop]",
         "(start,stop]",
         "(origin+start,origin+stop]",
+        "(origin+start,capture]",
     )
 
     event_scale = _unit_scale(event_unit)
@@ -1963,9 +2408,12 @@ def _validate_spike_raster(request: JsonRecord, errors: ErrorList) -> None:
 
     if outside > 0 and parameters.get("outOfWindowPolicy") != "exclude_and_disclose":
         description = (
-            f"(origin {origin} + start {start}, origin {origin} + stop {stop}] {window_unit}"
-            if origin_relative
-            else f"{boundary} with start {start}, stop {stop} {window_unit}"
+            f"(origin {origin} + start {start}, capture {upper_value}] {window_unit}"
+            if capture_bounded
+            else f"(origin {origin} + start {start}, origin {origin} + stop "
+            f"{upper_value}] {window_unit}"
+            if finite_stop
+            else f"{boundary} with start {start}, stop {upper_value} {window_unit}"
         )
         errors.append(CortexelError(
             "SCIENCE_EVENT_OUT_OF_WINDOW",
@@ -4089,7 +4537,8 @@ def validate_request_partial(request: Any) -> ErrorList:
 
     Order mirrors the TypeScript pipeline: snapshot, authority, identity, structure, then
     the semantic subset this Python port implements. That subset includes units, exact
-    spike-raster revision-2 window/source-clock authority, PSTH portable
+    spike-raster finite-stop and positive-infinity/capture-bounded window/source-clock
+    authority, PSTH portable
     count/exposure/normalization/baseline authority, and response-curve rate/basis
     authority; other deeper validators (correlogram and topology scope, for example)
     are ported incrementally; see docs/KNOWN_LIMITATIONS.md. Where Python

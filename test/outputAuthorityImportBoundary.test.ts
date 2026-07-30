@@ -17,6 +17,7 @@ const ALLOWED_EVALUATOR_IMPORTS = new Set([
   '../../core/output-authority.js',
   '../../core/parse-json.js',
   '../../core/response-curve-basis.js',
+  '../../core/semantics/nest-time.js',
   '../../core/spatial.js',
   '../../core/units.js',
   './model.js',

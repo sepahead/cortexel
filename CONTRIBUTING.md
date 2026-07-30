@@ -207,8 +207,11 @@ closed. Kqueue process registration/readiness is never child-ownership evidence;
 Darwin may still use a kqueue-backed selector only for pipe descriptors. The gate
 drains captured output under fixed bounds, makes one
 `killpg(SIGKILL)` attempt while the direct leader is still unreaped, re-proves child
-ownership before any direct-PID fallback, performs a bounded pipe drain, and only then
-reaps. If a pre-signal, fallback, exit-confirmation, or final pre-reap observation
+ownership before any direct-PID fallback, performs a bounded pipe drain to EOF or the
+fixed cleanup deadline, and only then reaps. Selector construction or registration
+failure uses direct pipe readiness while the leader remains unreaped; if that path also
+fails, cleanup retains the error and consumes the same deadline without busy-spinning.
+If a pre-signal, fallback, exit-confirmation, or final pre-reap observation
 reports lost ownership, or cannot ultimately prove current ownership, the gate performs
 no later numeric signal or `Popen.wait()` on that identity.
 The sole raw `waitpid` starts only after the final non-reaping ownership observation.

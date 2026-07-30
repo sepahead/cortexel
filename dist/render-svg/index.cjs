@@ -567,6 +567,139 @@ function finalizeErrors(errors) {
   return kept;
 }
 
+// src/core/semantics/nest-time.ts
+var NEST_TIC_T_MAX = (1n << 63n) - 1n;
+var NEST_TIME_INF_MARGIN = 8n;
+var MAX_SAFE_TICS = BigInt(Number.MAX_SAFE_INTEGER);
+function failure(kind, message) {
+  return { ok: false, kind, message };
+}
+function sourceGetMillisecondsV310(tics, ticsPerMs) {
+  const millisecondsPerTic = 1 / Number(ticsPerMs);
+  return Number(tics) * millisecondsPerTic;
+}
+function nestFiniteTimeLimitTicsV310(resolutionTics) {
+  if (resolutionTics <= 0n || resolutionTics > MAX_SAFE_TICS) return void 0;
+  const marginLimited = NEST_TIC_T_MAX / NEST_TIME_INF_MARGIN;
+  const limit = marginLimited - marginLimited % resolutionTics;
+  return limit > 0n ? limit : void 0;
+}
+function projectNestTicsToMillisecondsV310(tics, ticsPerMs) {
+  if (tics < 0n || tics > MAX_SAFE_TICS || ticsPerMs <= 0n || ticsPerMs > MAX_SAFE_TICS) {
+    return failure(
+      "source_profile",
+      "the admitted NEST 3.10.0 source-clock subset requires non-negative tics and positive ticsPerMs no larger than Number.MAX_SAFE_INTEGER."
+    );
+  }
+  const ticsPerMsNumber = Number(ticsPerMs);
+  const milliseconds = sourceGetMillisecondsV310(tics, ticsPerMs);
+  if (!Number.isFinite(milliseconds)) {
+    return failure(
+      "source_profile",
+      "the NEST 3.10.0 get_ms binary64 projection is not finite."
+    );
+  }
+  const recoveredNumber = Math.trunc(milliseconds * ticsPerMsNumber + 0.5);
+  if (!Number.isSafeInteger(recoveredNumber) || BigInt(recoveredNumber) !== tics) {
+    return failure(
+      "source_profile",
+      "the NEST 3.10.0 get_ms projection does not recover the declared tic with the pinned non-negative Time(ms) inverse."
+    );
+  }
+  return { ok: true, milliseconds };
+}
+function projectNestWindowEndpointsV310(input) {
+  const finiteTimeLimitTics = nestFiniteTimeLimitTicsV310(input.resolutionTics);
+  if (finiteTimeLimitTics === void 0 || input.ticsPerMs <= 0n || input.ticsPerMs > MAX_SAFE_TICS) {
+    return failure(
+      "source_profile",
+      "the admitted NEST 3.10.0 source-clock subset requires positive safe-integer ticsPerMs and resolutionTics."
+    );
+  }
+  const operativeTics = [
+    ...input.retainedTics,
+    input.lowerEndpointTics,
+    input.upperEndpointTics
+  ];
+  for (const tics of operativeTics) {
+    if (tics < 0n) {
+      return failure(
+        "source_profile",
+        "every retained and combined NEST Time value must be non-negative."
+      );
+    }
+    if (tics >= finiteTimeLimitTics) {
+      return failure(
+        "source_profile",
+        "every operative NEST Time value must be strictly below the pinned finite-Time limit."
+      );
+    }
+    if (tics > MAX_SAFE_TICS) {
+      return failure(
+        "source_profile",
+        "every retained and combined NEST Time value in executable mapping profile 5 must be no larger than Number.MAX_SAFE_INTEGER."
+      );
+    }
+    const projected = projectNestTicsToMillisecondsV310(tics, input.ticsPerMs);
+    if (!projected.ok) return projected;
+  }
+  if (!(input.upperEndpointTics > input.lowerEndpointTics)) {
+    return failure(
+      "window_order",
+      "the exact upper endpoint tic must be strictly greater than the exact lower endpoint tic."
+    );
+  }
+  const lower = projectNestTicsToMillisecondsV310(
+    input.lowerEndpointTics,
+    input.ticsPerMs
+  );
+  const upper = projectNestTicsToMillisecondsV310(
+    input.upperEndpointTics,
+    input.ticsPerMs
+  );
+  if (!lower.ok) return lower;
+  if (!upper.ok) return upper;
+  if (!(upper.milliseconds > lower.milliseconds)) {
+    return failure(
+      "numeric_resolution",
+      "the ordered NEST endpoint tics alias or invert after the pinned get_ms binary64 projection."
+    );
+  }
+  for (const [label, tics, projected] of [
+    ["lower", input.lowerEndpointTics, lower.milliseconds],
+    ["upper", input.upperEndpointTics, upper.milliseconds]
+  ]) {
+    for (const neighbor of [
+      tics >= input.resolutionTics ? tics - input.resolutionTics : void 0,
+      tics + input.resolutionTics < finiteTimeLimitTics ? tics + input.resolutionTics : void 0
+    ]) {
+      if (neighbor === void 0) continue;
+      const neighborMilliseconds = sourceGetMillisecondsV310(
+        neighbor,
+        input.ticsPerMs
+      );
+      if (!Number.isFinite(neighborMilliseconds)) {
+        return failure(
+          "source_profile",
+          `the ${label} endpoint's adjacent NEST resolution-grid value has a non-finite get_ms projection.`
+        );
+      }
+      if (Object.is(neighborMilliseconds, projected)) {
+        return failure(
+          "numeric_resolution",
+          `the ${label} endpoint aliases its adjacent NEST resolution-grid value after the pinned get_ms binary64 projection.`
+        );
+      }
+    }
+  }
+  return {
+    ok: true,
+    lowerMilliseconds: lower.milliseconds,
+    upperMilliseconds: upper.milliseconds,
+    finiteTimeLimitTics
+  };
+}
+
 // src/generated/registry.ts
 var ERROR_CODES = freezeGenerated([
   "ADAPTER_ACCESSOR_INPUT_REJECTED",
@@ -1287,8 +1420,8 @@ var ERROR_CODE_META = freezeGenerated({
   "PROVENANCE_SOURCE_CLOCK_INCONSISTENT": {
     "stage": "provenance",
     "severity": "error",
-    "summary": "A source-specific event clock contradicts the request's source, version, digest, backend, encoding, or event unit.",
-    "correctiveAction": "For a NEST origin-relative window, export the complete memory-recorder status with time_in_steps=false, retain native milliseconds, declare NEST 3.9 or 3.10, and bind the export with its canonical SHA-256 digest. Do not relabel or reconstruct the clock."
+    "summary": "A source-specific event clock contradicts the request's source, exact runtime/build profile, digest, backend, encoding, tic authority, or event unit.",
+    "correctiveAction": "For the current NEST adapter, export one complete NEST 3.10.0 memory spike-recorder status with time_in_steps=false, preserve native binary64 milliseconds, use capture-authority v3 for finite stop or v4 for positive infinity, declare the exact supported LP64/int64/binary64-roundTiesToEven/no-excess clock profile, and bind every normalized option in the revision-5 adapter-input digest. Do not relabel, add serialized endpoints, or substitute an ideal rational projection."
   },
   "RESOURCE_BUDGET_EXCEEDED": {
     "stage": "budget",
@@ -1468,7 +1601,7 @@ var ERROR_CODE_META = freezeGenerated({
     "stage": "adapter",
     "severity": "error",
     "summary": "The NEST recorder time encoding is absent or cannot be represented losslessly by this adapter revision.",
-    "correctiveAction": "For adapter revision 3, configure the memory recorder with time_in_steps=false before Simulate, preserve the exact NEST integer-tic preimages and runtime grid, retain the required capture history and single-process declaration, read status only after a successful Run/Simulate return at or beyond originTics+stopTics, and apply the named lossless plain-data projection. Raw step/offset support remains fail-closed until the downstream contract preserves that pair as the canonical clock."
+    "correctiveAction": "Use exact NEST 3.10.0 memory output with time_in_steps=false, preserve the runtime grid and finite integer-tic preimages, retain the required capture history and single-process declaration, and apply the named lossless plain-data projection. A finite stop uses revision-3 authority and must be captured after originTics+stopTics. The default positive-infinity stop must be projected to the exact typed sentinel and paired with revision-4 authority whose finite capture time immediately follows a successful advancing return; raw numeric DBL_MAX is rejected. Step/offset support remains fail-closed until the downstream contract preserves that pair as the canonical clock."
   },
   "ADAPTER_UNSUPPORTED_VERSION": {
     "stage": "adapter",
@@ -2261,6 +2394,11 @@ var DISCLOSURE_RULES = freezeGenerated([
     "id": "NEST_SERIALIZED_CLOCK_BOUNDARY",
     "severity": "important",
     "text": "NEST capture declaration \u2014 Cortexel checked the declared plain-data projection, integer-tic grid, successful-return endpoint, buffer/plan history, clock-epoch continuity, sender universe, and single-process scope only for internal consistency. It did not observe or authenticate the runtime, projection, topology, resets, history, wiring, sender universe, or export; all remain caller claims."
+  },
+  {
+    "id": "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
+    "severity": "important",
+    "text": "NEST positive-infinity capture \u2014 The recorder had no finite configured stop. The plotted upper endpoint is the caller-declared successful-return capture time, not recorder deactivation; this artifact establishes nothing about events after capture."
   },
   {
     "id": "MISSING_VALUES_PRESENT",
@@ -5783,6 +5921,352 @@ function validatePhasePlaneRelations(operation, operationIndex, canonicalRequest
   }
   return errors;
 }
+function validateSpikeRasterDerivationRelations(operation, index, canonicalRequest) {
+  const basePath = `/derivation/operations/${index}`;
+  const errors = [];
+  const data = asRecord(canonicalRequest.data);
+  const requestParameters = asRecord(canonicalRequest.parameters);
+  if (!data || !requestParameters) {
+    throw new Error("the canonical spike-raster request omitted data or parameters");
+  }
+  const requiredRecord = (value, label) => {
+    const record7 = asRecord(value);
+    if (!record7) throw new Error(`the canonical spike-raster request omitted ${label}`);
+    return record7;
+  };
+  const requiredNumber = (value, label) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`the canonical spike-raster request omitted finite ${label}`);
+    }
+    return value;
+  };
+  const requiredString = (value, label) => {
+    if (typeof value !== "string") {
+      throw new Error(`the canonical spike-raster request omitted string ${label}`);
+    }
+    return value;
+  };
+  const requiredNumbers = (value, label) => {
+    if (!Array.isArray(value)) {
+      throw new Error(`the canonical spike-raster request omitted array ${label}`);
+    }
+    return value.map((candidate, itemIndex) => requiredNumber(candidate, `${label}/${itemIndex}`));
+  };
+  const requiredStrings = (value, label) => {
+    if (!Array.isArray(value)) {
+      throw new Error(`the canonical spike-raster request omitted array ${label}`);
+    }
+    return value.map((candidate, itemIndex) => requiredString(candidate, `${label}/${itemIndex}`));
+  };
+  const optionalStrings = (value, label) => value === void 0 ? void 0 : requiredStrings(value, label);
+  const canonicalTic = (value, label) => {
+    if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+      throw new Error(`the canonical spike-raster request omitted canonical ${label}`);
+    }
+    return BigInt(value);
+  };
+  const compareUnicodeCodePoints6 = (left, right) => {
+    const leftIterator = left[Symbol.iterator]();
+    const rightIterator = right[Symbol.iterator]();
+    while (true) {
+      const leftNext = leftIterator.next();
+      const rightNext = rightIterator.next();
+      if (leftNext.done || rightNext.done) {
+        if (leftNext.done && rightNext.done) return 0;
+        return leftNext.done ? -1 : 1;
+      }
+      const leftCodePoint = leftNext.value.codePointAt(0);
+      const rightCodePoint = rightNext.value.codePointAt(0);
+      if (leftCodePoint !== rightCodePoint) {
+        return leftCodePoint < rightCodePoint ? -1 : 1;
+      }
+    }
+  };
+  const eventTimes = requiredRecord(data.eventTimes, "data/eventTimes");
+  const times = requiredNumbers(eventTimes.values, "data/eventTimes/values");
+  const timeUnit = requiredString(eventTimes.unit, "data/eventTimes/unit");
+  const window = requiredRecord(data.window, "data/window");
+  const windowUnit = requiredString(window.unit, "data/window/unit");
+  const nestFiniteStop = window.kind === "nest_recording_device_origin_relative";
+  const nestCaptureBounded = window.kind === "nest_recording_device_positive_infinity_capture_bounded";
+  const nestOriginRelative = nestFiniteStop || nestCaptureBounded;
+  const start = requiredNumber(window.start, "data/window/start");
+  const upper = requiredNumber(
+    nestCaptureBounded ? window.captureTime : window.stop,
+    nestCaptureBounded ? "data/window/captureTime" : "data/window/stop"
+  );
+  const origin = nestOriginRelative ? requiredNumber(window.origin, "data/window/origin") : void 0;
+  const lowerTerms = nestOriginRelative ? [
+    { value: origin, unit: windowUnit },
+    { value: start, unit: windowUnit }
+  ] : [{ value: start, unit: windowUnit }];
+  const upperTerms = nestCaptureBounded ? [{ value: upper, unit: windowUnit }] : nestOriginRelative ? [
+    { value: origin, unit: windowUnit },
+    { value: upper, unit: windowUnit }
+  ] : [{ value: upper, unit: windowUnit }];
+  const boundary = nestCaptureBounded ? "(origin+start,capture]" : nestFiniteStop ? "(origin+start,origin+stop]" : requiredString(window.boundary, "data/window/boundary");
+  const openStart = boundary.startsWith("(");
+  const closedStop = boundary.endsWith("]");
+  let nestEndpointProjection;
+  if (nestOriginRelative) {
+    if (timeUnit !== "ms" || windowUnit !== "ms") {
+      throw new Error("a canonical NEST spike-raster request did not retain unit ms");
+    }
+    const captureAuthority = requiredRecord(
+      window.captureAuthority,
+      "data/window/captureAuthority"
+    );
+    const runtimeStatus = requiredRecord(
+      captureAuthority.runtimeStatus,
+      "data/window/captureAuthority/runtimeStatus"
+    );
+    const recordingGrid = requiredRecord(
+      captureAuthority.recordingGrid,
+      "data/window/captureAuthority/recordingGrid"
+    );
+    const bufferEpoch = requiredRecord(
+      captureAuthority.bufferEpoch,
+      "data/window/captureAuthority/bufferEpoch"
+    );
+    const recordingPlan = requiredRecord(
+      captureAuthority.recordingPlan,
+      "data/window/captureAuthority/recordingPlan"
+    );
+    const ticsPerMsText = requiredString(
+      runtimeStatus.ticsPerMs,
+      "data/window/captureAuthority/runtimeStatus/ticsPerMs"
+    );
+    const resolutionTicsText = requiredString(
+      runtimeStatus.resolutionTics,
+      "data/window/captureAuthority/runtimeStatus/resolutionTics"
+    );
+    const ticsPerMs = canonicalTic(runtimeStatus.ticsPerMs, "ticsPerMs");
+    const resolutionTics = canonicalTic(
+      runtimeStatus.resolutionTics,
+      "resolutionTics"
+    );
+    const originTics = canonicalTic(recordingGrid.originTics, "originTics");
+    const startTics = canonicalTic(recordingGrid.startTics, "startTics");
+    const captureTics = canonicalTic(
+      runtimeStatus.captureBiologicalTimeTics,
+      "captureBiologicalTimeTics"
+    );
+    const upperOffsetTics = nestCaptureBounded ? captureTics : canonicalTic(recordingGrid.stopTics, "stopTics");
+    const lowerEndpointTics = originTics + startTics;
+    const upperEndpointTics = nestCaptureBounded ? captureTics : originTics + upperOffsetTics;
+    const projection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: [
+        originTics,
+        startTics,
+        upperOffsetTics,
+        captureTics,
+        canonicalTic(
+          bufferEpoch.beganAtBiologicalTimeTics,
+          "beganAtBiologicalTimeTics"
+        ),
+        canonicalTic(
+          recordingPlan.lastMutationAtBiologicalTimeTics,
+          "lastMutationAtBiologicalTimeTics"
+        )
+      ],
+      lowerEndpointTics,
+      upperEndpointTics
+    });
+    if (!projection.ok) {
+      throw new Error(`the canonical NEST endpoint projection is inadmissible: ${projection.message}`);
+    }
+    nestEndpointProjection = {
+      algorithm: "nest_3_10_time_get_ms_binary64_reciprocal_then_multiply.v1",
+      ticsPerMs: ticsPerMsText,
+      resolutionTics: resolutionTicsText,
+      lowerEndpointTics: lowerEndpointTics.toString(10),
+      upperEndpointTics: upperEndpointTics.toString(10),
+      finiteTimeLimitTics: projection.finiteTimeLimitTics.toString(10),
+      lowerMilliseconds: projection.lowerMilliseconds,
+      upperMilliseconds: projection.upperMilliseconds
+    };
+  }
+  const displayStart = nestEndpointProjection ? requiredNumber(nestEndpointProjection.lowerMilliseconds, "derived lowerMilliseconds") : convertExactUnitSum(lowerTerms, timeUnit);
+  const displayStop = nestEndpointProjection ? requiredNumber(nestEndpointProjection.upperMilliseconds, "derived upperMilliseconds") : convertExactUnitSum(upperTerms, timeUnit);
+  if (!(displayStop > displayStart)) {
+    throw new Error("the canonical spike-raster endpoints collapse or invert on the display axis");
+  }
+  const inWindow2 = new Array(times.length).fill(false);
+  let excludedBelow = 0;
+  let excludedAbove = 0;
+  for (let eventIndex = 0; eventIndex < times.length; eventIndex++) {
+    const time = times[eventIndex];
+    let below;
+    let above;
+    if (nestEndpointProjection) {
+      below = openStart ? time <= displayStart : time < displayStart;
+      above = closedStop ? time > displayStop : time >= displayStop;
+    } else {
+      const event = { value: time, unit: timeUnit };
+      const lowerVsEvent = compareExactUnitSumToValue(lowerTerms, event);
+      const upperVsEvent = compareExactUnitSumToValue(upperTerms, event);
+      below = openStart ? lowerVsEvent >= 0 : lowerVsEvent > 0;
+      above = closedStop ? upperVsEvent < 0 : upperVsEvent <= 0;
+    }
+    if (below) excludedBelow++;
+    else if (above) excludedAbove++;
+    else inWindow2[eventIndex] = true;
+  }
+  const excludedCount = excludedBelow + excludedAbove;
+  const acceptedCount = times.length - excludedCount;
+  const senders = requiredStrings(data.eventSenderIds, "data/eventSenderIds");
+  const recorded = requiredStrings(
+    data.recordedSenderIds,
+    "data/recordedSenderIds"
+  );
+  const eventTrials = optionalStrings(data.eventTrialIds, "data/eventTrialIds");
+  const trialIds = optionalStrings(data.trialIds, "data/trialIds") ?? [];
+  const suppliedEventIds = optionalStrings(data.eventIds, "data/eventIds");
+  const senderPopulationIds = optionalStrings(data.senderPopulationIds, "data/senderPopulationIds") ?? [];
+  const populationBySender = /* @__PURE__ */ new Map();
+  for (let senderIndex = 0; senderIndex < recorded.length; senderIndex++) {
+    const populationId = senderPopulationIds[senderIndex];
+    if (populationId !== void 0) {
+      populationBySender.set(recorded[senderIndex], populationId);
+    }
+  }
+  const rowOrder = requiredString(
+    requestParameters.rowOrder,
+    "parameters/rowOrder"
+  );
+  let orderedSenders = [...recorded];
+  if (rowOrder === "canonical_sender_id") {
+    orderedSenders.sort(compareUnicodeCodePoints6);
+  } else if (rowOrder === "grouped_by_population" && senderPopulationIds.length > 0) {
+    const sendersByPopulation = /* @__PURE__ */ new Map();
+    for (const senderId of recorded) {
+      const populationId = populationBySender.get(senderId);
+      if (populationId === void 0) continue;
+      const populationSenders = sendersByPopulation.get(populationId);
+      if (populationSenders === void 0) {
+        sendersByPopulation.set(populationId, [senderId]);
+      } else {
+        populationSenders.push(senderId);
+      }
+    }
+    orderedSenders = [];
+    for (const populationSenders of sendersByPopulation.values()) {
+      for (const senderId of populationSenders) orderedSenders.push(senderId);
+    }
+  }
+  const rowKey = (senderId, trialId) => JSON.stringify([senderId, trialId]);
+  const rows = orderedSenders.flatMap((senderId) => {
+    const trials = eventTrials ? trialIds : [null];
+    return trials.map((trialId) => ({
+      key: rowKey(senderId, trialId),
+      label: trialId === null ? senderId : `${senderId} / ${trialId}`
+    }));
+  });
+  const rowIndexByKey = new Map(rows.map((row, rowIndex) => [row.key, rowIndex]));
+  const rowLabelByKey = new Map(rows.map((row) => [row.key, row.label]));
+  const events = times.map((time, sourceOrdinal) => {
+    const senderId = senders[sourceOrdinal];
+    if (senderId === void 0) {
+      throw new Error(`canonical spike event ${sourceOrdinal} has no sender`);
+    }
+    const trialId = eventTrials?.[sourceOrdinal] ?? null;
+    const key = rowKey(senderId, trialId);
+    const rowIndex = rowIndexByKey.get(key);
+    const rowLabel = rowLabelByKey.get(key);
+    if (rowIndex === void 0 || rowLabel === void 0) {
+      throw new Error(`canonical spike event ${sourceOrdinal} does not resolve to a row`);
+    }
+    return {
+      sourceOrdinal,
+      eventId: suppliedEventIds?.[sourceOrdinal] ?? `source-ordinal-${sourceOrdinal}`,
+      time,
+      timeUnit,
+      senderId,
+      trialId,
+      populationId: populationBySender.get(senderId) ?? null,
+      rowKey: key,
+      rowIndex,
+      rowLabel,
+      inWindow: inWindow2[sourceOrdinal]
+    };
+  });
+  events.sort((left, right) => left.time < right.time ? -1 : left.time > right.time ? 1 : left.rowIndex !== right.rowIndex ? left.rowIndex - right.rowIndex : left.sourceOrdinal - right.sourceOrdinal);
+  const conversion = windowUnit !== timeUnit ? conversionReceipt(windowUnit, timeUnit) : void 0;
+  const expectedParameters = {
+    boundary,
+    declaredLowerEndpointTerms: lowerTerms,
+    declaredUpperEndpointTerms: upperTerms,
+    ...nestEndpointProjection ? { nestEndpointProjection } : {},
+    displayUnit: timeUnit,
+    rowOrder,
+    markStyle: typeof requestParameters.markStyle === "string" ? requestParameters.markStyle : "tick",
+    outOfWindowPolicy: requiredString(
+      requestParameters.outOfWindowPolicy,
+      "parameters/outOfWindowPolicy"
+    ),
+    eventIdentityPolicy: suppliedEventIds ? "caller_declared_unique_event_ids" : "source_ordinal_v1"
+  };
+  const expectedReceipt = {
+    sourceEventCount: times.length,
+    acceptedEventCount: acceptedCount,
+    excludedOutOfWindow: excludedCount,
+    excludedBelowOrAtOpenStart: excludedBelow,
+    excludedAboveOrAtOpenStop: excludedAbove,
+    displayStart,
+    displayStop,
+    displayUnit: timeUnit,
+    rowCount: rows.length,
+    drawnMarkCount: acceptedCount,
+    stableSort: ["time", "rowIndex", "sourceOrdinal"],
+    sourceClockMode: nestCaptureBounded ? "nest_3_10_0_memory_native_binary64_ms_positive_infinity_capture_bounded" : nestFiniteStop ? "nest_3_10_0_memory_native_binary64_ms_finite_stop" : "caller_declared_event_window",
+    ...conversion ? { windowEndpointConversion: conversion } : {}
+  };
+  if (operation.id !== "spike_raster.partition_and_rows") {
+    errors.push(relationError(
+      `${basePath}/id`,
+      "the persisted spike-raster operation id is not the closed v4 partition-and-rows id."
+    ));
+  }
+  if (operation.algorithm !== "cortexel.spike_raster.source_bound_window_partition.v4") {
+    errors.push(relationError(
+      `${basePath}/algorithm`,
+      "the persisted spike-raster algorithm is not the closed source-bound v4 algorithm."
+    ));
+  }
+  if (operation.algorithmRevision !== 4) {
+    errors.push(relationError(
+      `${basePath}/algorithmRevision`,
+      "the persisted spike-raster algorithm revision is not exactly 4."
+    ));
+  }
+  if (!sameCanonical(operation.parameters, expectedParameters)) {
+    errors.push(relationError(
+      `${basePath}/parameters`,
+      "the spike-raster parameters do not exactly equal the independently replayed source window, NEST projection when applicable, row policy, and event-identity policy."
+    ));
+  }
+  if (operation.inputDigest !== canonicalDigest(data)) {
+    errors.push(relationError(
+      `${basePath}/inputDigest`,
+      "the spike-raster input digest does not bind the exact canonical request data."
+    ));
+  }
+  if (operation.outputDigest !== canonicalDigest({ events, rows })) {
+    errors.push(relationError(
+      `${basePath}/outputDigest`,
+      "the spike-raster output digest does not bind every independently replayed event and row carrier."
+    ));
+  }
+  if (!sameCanonical(operation.receipt, expectedReceipt)) {
+    errors.push(relationError(
+      `${basePath}/receipt`,
+      "the spike-raster receipt does not exactly equal the independently replayed counts, endpoints, ordering, clock mode, and optional unit conversion."
+    ));
+  }
+  return errors;
+}
 function validateArtifactRelations(artifact) {
   const root = asRecord(artifact) ?? {};
   const canonicalRequest = asRecord(root.canonicalRequest) ?? {};
@@ -5803,6 +6287,20 @@ function validateArtifactRelations(artifact) {
       "/derivation/operations",
       "a phase-plane artifact must contain exactly its one closed carrier-canonicalization operation; omission, relabelling, and unrelated side operations are not authorized."
     ));
+  }
+  if (asRecord(canonicalRequest.skill)?.id === "neuro.spike_raster") {
+    if (operations.length !== 1) {
+      errors.push(relationError(
+        "/derivation/operations",
+        "a spike-raster artifact must contain exactly its one closed v4 partition-and-rows operation; omission, relabelling, and unrelated side operations are not authorized."
+      ));
+    } else {
+      errors.push(...validateSpikeRasterDerivationRelations(
+        operations[0],
+        0,
+        canonicalRequest
+      ));
+    }
   }
   const operationIds = /* @__PURE__ */ new Set();
   for (let index = 0; index < operations.length; index++) {
@@ -5932,6 +6430,7 @@ var RULE_PREDICATES = {
   POSITIONS_MISSING: (f) => (f.positionsMissing ?? 0) > 0,
   EVENTS_EXCLUDED_OUT_OF_WINDOW: (f) => (f.excludedOutOfWindow ?? 0) > 0,
   NEST_SERIALIZED_CLOCK_BOUNDARY: (f) => f.nestSerializedClock === true,
+  NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY: (f) => f.nestCaptureBoundedPositiveInfinity === true,
   MISSING_VALUES_PRESENT: (f) => (f.missingValueCount ?? 0) > 0,
   UNIT_CONVERTED: (f) => (f.unitConversions?.length ?? 0) > 0,
   UNCERTAINTY_NOT_PROVIDED: (f) => f.uncertaintyKind === "none",
@@ -15964,7 +16463,7 @@ var SKILL_CATALOG = freezeGenerated({
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -15982,7 +16481,7 @@ var SKILL_CATALOG = freezeGenerated({
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 6
+      "revision": 7
     },
     "semanticValidators": [
       {
@@ -16054,6 +16553,7 @@ var SKILL_CATALOG = freezeGenerated({
       "REFERENCE_COMPARISON_NOT_RUN",
       "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "NEST_SERIALIZED_CLOCK_BOUNDARY",
+      "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
       "UNIT_CONVERTED",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
@@ -16165,7 +16665,7 @@ var SKILL_CATALOG = freezeGenerated({
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.spike_raster.output_authority.v5"
+        "id": "neuro.spike_raster.output_authority.v6"
       },
       "requestPaths": [
         {
@@ -16313,7 +16813,7 @@ var SKILL_CATALOG = freezeGenerated({
         "name": "nest-simulator spike_recorder",
         "version": "3.10.0",
         "status": "not_run",
-        "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
+        "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, finite closed origin+stop, default-positive-infinity closed capture, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
       }
     },
     "adapters": [
@@ -16323,7 +16823,7 @@ var SKILL_CATALOG = freezeGenerated({
           {
             "system": "nest.spike_recorder",
             "role": "primary",
-            "notes": "Adapter revision 3 supports only an exact NEST 3.10.0 memory-recorder status profile when `time_in_steps` is explicitly false, the named plain-data projection preserves NumPy event-array values and order, origin/start/stop carry exact on-grid integer-tic preimages, and a closed `kind: caller_declaration` record binds the single-process runtime, successful-return closed-stop endpoint, monotonic kernel clock epoch, most recent buffer epoch, most recent recording-plan mutation, and exact sender universe. It preserves nonchronological order, duplicates, origin, and the native (origin+start,origin+stop] boundary. It does not introspect PyNEST or authenticate any declared capture fact. NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
+            "notes": "Adapter revision 5 supersedes the historical finite-stop revision-3 behavior and the unshipped positive-infinity draft instead of silently changing either identity. It accepts the same detached finite/status data shapes only under new capture-authority profile v3 for finite stop or v4 for positive infinity; both explicitly bind the pinned LP64/int64/binary64-roundTiesToEven/no-excess time build. Both branches require explicit `time_in_steps: false`, a named lossless NumPy-to-plain-data projection, source-faithful finite integer-tic preimages, single-process authority, monotonic kernel-clock and buffer/configuration/wiring history, and the exact sender universe. The admitted clock subset uses non-negative safe-integer tics, the pinned 64-bit `tic_t`/`INF_MARGIN=8` finite ceiling, source-faithful two-operation binary64 `Time::get_ms()` projection, inverse round-trip, and adjacent-grid distinguishability. Finite revision 5 preserves (origin+start,origin+stop] under capture authority v3. The positive-infinity branch accepts only the typed sentinel emitted by projection v2 and preserves (origin+start,capture] under capture authority v4. Both use the revision-5 digest domain. Capture is not device deactivation. Cortexel does not introspect PyNEST or authenticate any declared capture fact. Raw DBL_MAX, historical authority v1/v2, clocks outside the conservative profile, NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
             "sourceId": "nest-spike-recorder"
           },
           {
@@ -16353,12 +16853,12 @@ var SKILL_CATALOG = freezeGenerated({
           },
           "conformanceProfile": {
             "registry": "cortexel-adapter-conformance-profiles.v1",
-            "id": "nest-spike-recorder.v3",
+            "id": "nest-spike-recorder.v5",
             "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
-            "digest": "sha256:9bf23e63c51b23239cf0438fa770323b65d58cd29ff7d25ed5c7626a9e1f2be4"
+            "digest": "sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a"
           }
         },
-        "notes": "Executable code exists for this bounded profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
+        "notes": "Executable revision-5 code exists for finite-stop and positive-infinity/capture-bounded branches under one source-faithful build/clock profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, conformance-profile identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
       },
       {
         "mappingId": "neo-spiketrain",
@@ -16415,10 +16915,10 @@ var SKILL_CATALOG = freezeGenerated({
       "NODE_UNIVERSE_INCOMPLETE is the nearest existing rule to that gap, but its text is about edges and degree and would be false on a raster, so it is deliberately not emitted. A wrong disclosure is worse than a missing one.",
       "There is likewise no disclosure id for a caller-sampled event set. Rather than emit a rule that does not fit, the contract refuses the sampled value outright.",
       "Cortexel verifies that every event's sender is in the declared universe. It cannot verify that the recorder observed every spike of those senders, so an empty row is evidence of no RECORDED event; reading it as silence rests on the recorder, not on Cortexel.",
-      "For a NEST origin-relative window, exact comparisons are exact over the exported finite binary64 millisecond values and declared integer-tic preimages. The required `kind: caller_declaration` capture record also binds the named plain-data projection, successful-return closed-stop endpoint, monotonic kernel clock epoch, buffer epoch, recording-plan history, sender universe, runtime profile and single-process scope. Cortexel checks those declarations for internal consistency but cannot observe or authenticate them; the mandatory NEST capture-boundary disclosure states that limitation on every such figure.",
-      "NEST `time_in_steps:true` is deliberately unsupported in revision 3. A step index plus offset is a different canonical clock representation, not a millisecond array; support requires preserving the raw pair and NEST grid authority rather than reconstructing and discarding it.",
+      "NEST membership compares exported binary64 events with source-faithful endpoint projections from declared tics. Cortexel adds Time tics before reproducing pinned NEST 3.10.0's rounded reciprocal-and-multiply `Time::get_ms()`; it never adds serialized millisecond fields. Only a safe-integer, finite-Time, inverse-round-trippable, adjacent-grid-distinguishable clock subset is admitted. The caller-declared capture record binds the plain-data projection, build/runtime profile, successful-return boundary, clock/buffer/configuration/wiring history, sender universe, and single-process scope. Finite revision 5 closes at configured origin+stop; positive infinity closes only at declared capture and establishes nothing later. Cortexel checks internal consistency but cannot authenticate those facts; mandatory disclosures say so.",
+      "NEST `time_in_steps:true` remains deliberately unsupported. A step index plus offset is a different canonical clock representation, not a millisecond array; support requires preserving the raw pair and NEST grid authority rather than reconstructing and discarding it.",
       "Below the mark budget every event is drawn, but two events closer than one device pixel overlap. The table count is authoritative; the visible tick count is not, and no figure caption can make it so.",
-      "No raster compaction or complete-table sidecar is implemented in revision 3. Requests over the exact-mark or complete-returned-table budget fail closed; the registered future raster_density_bins policy is not advertised by this skill until both surfaces exist.",
+      "No raster compaction or complete-table sidecar is implemented in revision 6. Requests over the exact-mark or complete-returned-table budget fail closed; the registered future raster_density_bins policy is not advertised by this skill until both surfaces exist.",
       "No uncertainty variant is renderable. An event is an observation, not an estimate, and a band drawn around one would be a fabrication."
     ]
   }
@@ -17269,14 +17769,14 @@ var RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 6,
+    "revision": 7,
     "status": "stable",
     "marks": [
       "rule",
       "point",
       "text"
     ],
-    "notes": "Exact ticks or points below the mark cap; over-budget input fails closed because no raster compaction plus complete-sidecar implementation ships in revision 3. Event-window closure is rendered from the request, NEST origin-relative windows are converted exactly once at the presentation edge, caller-declared capture authority remains visibly disclosed, and Y order is explicit and NEVER silently sorted by observed rate."
+    "notes": "Exact ticks or points below the mark cap; over-budget input fails closed because no raster compaction plus complete-sidecar implementation ships. Finite-stop NEST windows and positive-infinity capture-bounded windows keep distinct endpoint semantics, each endpoint is converted exactly once at the presentation edge, caller-declared capture authority remains visibly disclosed, and Y order is explicit and NEVER silently sorted by observed rate."
   },
   "figure.population_rate": {
     "id": "figure.population_rate",
@@ -22676,8 +23176,8 @@ function formatCoordinate(value) {
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:0b8afcc2682f41339d8e01776c485444edb3d88a457196a7f18b018d1ca84a6e";
-var CATALOG_DIGEST = "sha256:18fe441ad91d52651cbbe5efa063478a5c458560c29d20d541d63359722addd8";
+var CONTRACT_DIGEST = "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004";
+var CATALOG_DIGEST = "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
   return Object.freeze({
@@ -27744,19 +28244,65 @@ function rasterPartition(data) {
   const times = numbers(eventTimes.values);
   const timeUnit = String(eventTimes.unit);
   const windowUnit = String(window.unit);
-  const nest = window.kind === "nest_recording_device_origin_relative";
+  const nestFiniteStop = window.kind === "nest_recording_device_origin_relative";
+  const nestCaptureBoundedPositiveInfinity = window.kind === "nest_recording_device_positive_infinity_capture_bounded";
+  const nest = nestFiniteStop || nestCaptureBoundedPositiveInfinity;
+  const upperValue = Number(
+    nestCaptureBoundedPositiveInfinity ? window.captureTime : window.stop
+  );
   const lower = nest ? [
     { value: Number(window.origin), unit: windowUnit },
     { value: Number(window.start), unit: windowUnit }
   ] : [{ value: Number(window.start), unit: windowUnit }];
-  const upper = nest ? [
+  const upper = nestCaptureBoundedPositiveInfinity ? [{ value: upperValue, unit: windowUnit }] : nest ? [
     { value: Number(window.origin), unit: windowUnit },
-    { value: Number(window.stop), unit: windowUnit }
-  ] : [{ value: Number(window.stop), unit: windowUnit }];
-  const boundary = nest ? "(origin+start,origin+stop]" : String(window.boundary);
+    { value: upperValue, unit: windowUnit }
+  ] : [{ value: upperValue, unit: windowUnit }];
+  const boundary = nestCaptureBoundedPositiveInfinity ? "(origin+start,capture]" : nest ? "(origin+start,origin+stop]" : String(window.boundary);
   const openStart = boundary.startsWith("(");
   const closedStop = boundary.endsWith("]");
+  let nestDisplayStart;
+  let nestDisplayStop;
+  if (nest) {
+    if (timeUnit !== "ms" || windowUnit !== "ms") {
+      throw new Error("validated NEST raster authority did not retain unit ms");
+    }
+    const captureAuthority = record2(window.captureAuthority);
+    const runtimeStatus = record2(captureAuthority.runtimeStatus);
+    const recordingGrid = record2(captureAuthority.recordingGrid);
+    const bufferEpoch = record2(captureAuthority.bufferEpoch);
+    const recordingPlan = record2(captureAuthority.recordingPlan);
+    const tic = (value) => BigInt(String(value));
+    const ticsPerMs = tic(runtimeStatus.ticsPerMs);
+    const resolutionTics = tic(runtimeStatus.resolutionTics);
+    const originTics = tic(recordingGrid.originTics);
+    const startTics = tic(recordingGrid.startTics);
+    const captureTics = tic(runtimeStatus.captureBiologicalTimeTics);
+    const upperOffsetTics = nestCaptureBoundedPositiveInfinity ? captureTics : tic(recordingGrid.stopTics);
+    const projection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: [
+        originTics,
+        startTics,
+        upperOffsetTics,
+        captureTics,
+        tic(bufferEpoch.beganAtBiologicalTimeTics),
+        tic(recordingPlan.lastMutationAtBiologicalTimeTics)
+      ],
+      lowerEndpointTics: originTics + startTics,
+      upperEndpointTics: nestCaptureBoundedPositiveInfinity ? captureTics : originTics + upperOffsetTics
+    });
+    if (!projection.ok) {
+      throw new Error(`validated NEST raster authority is outside its source-clock profile: ${projection.message}`);
+    }
+    nestDisplayStart = projection.lowerMilliseconds;
+    nestDisplayStop = projection.upperMilliseconds;
+  }
   const inWindow2 = times.map((time) => {
+    if (nestDisplayStart !== void 0 && nestDisplayStop !== void 0) {
+      return !(openStart ? time <= nestDisplayStart : time < nestDisplayStart) && !(closedStop ? time > nestDisplayStop : time >= nestDisplayStop);
+    }
     const event = { value: time, unit: timeUnit };
     const lowerVsEvent = compareExactUnitSumToValue(lower, event);
     const upperVsEvent = compareExactUnitSumToValue(upper, event);
@@ -27768,9 +28314,11 @@ function rasterPartition(data) {
     windowUnit,
     boundary,
     inWindow: inWindow2,
-    displayStart: convertExactUnitSum(lower, timeUnit),
-    displayStop: convertExactUnitSum(upper, timeUnit),
-    excludedCount: inWindow2.filter((accepted) => !accepted).length
+    displayStart: nestDisplayStart ?? convertExactUnitSum(lower, timeUnit),
+    displayStop: nestDisplayStop ?? convertExactUnitSum(upper, timeUnit),
+    excludedCount: inWindow2.filter((accepted) => !accepted).length,
+    nestSerializedClock: nest,
+    nestCaptureBoundedPositiveInfinity
   };
 }
 function rasterModel(requestValue) {
@@ -27874,12 +28422,13 @@ function rasterModel(requestValue) {
           partition.timeUnit
         )]
       } : {},
-      ...record2(data.window).kind === "nest_recording_device_origin_relative" ? { nestSerializedClock: true } : {}
+      ...partition.nestSerializedClock ? { nestSerializedClock: true } : {},
+      ...partition.nestCaptureBoundedPositiveInfinity ? { nestCaptureBoundedPositiveInfinity: true } : {}
     })
   };
 }
 var RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.spike_raster", 5),
+  authorityEvaluatorId("neuro.spike_raster", 6),
   (request) => modelFields(rasterModel(request))
 );
 function aggregate3(values, method) {
@@ -29173,7 +29722,7 @@ var OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
   "neuro.population_rate.output_authority.v4",
   "neuro.psth.output_authority.v4",
   "neuro.response_curve.output_authority.v4",
-  "neuro.spike_raster.output_authority.v5"
+  "neuro.spike_raster.output_authority.v6"
 ]);
 var IMPLEMENTATION_ID = /^[a-z][a-z0-9_.-]*$/u;
 var DANGEROUS_MAP_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
@@ -34676,7 +35225,8 @@ function disclosureFacts(request, extra) {
     sourceAuthenticityVerified: false,
     referenceComparisonRun: false,
     callerNotePresent: typeof source.declaredNote === "string",
-    nestSerializedClock: eventWindow?.kind === "nest_recording_device_origin_relative",
+    nestSerializedClock: eventWindow?.kind === "nest_recording_device_origin_relative" || eventWindow?.kind === "nest_recording_device_positive_infinity_capture_bounded",
+    nestCaptureBoundedPositiveInfinity: eventWindow?.kind === "nest_recording_device_positive_infinity_capture_bounded",
     uncertaintyKind: uncertainty ? uncertainty.kind : void 0,
     uncertaintyReason: uncertainty ? uncertainty.reason : void 0,
     ...scope ? { scopeKind: scope.kind } : {},
@@ -34818,32 +35368,93 @@ function compareUnicodeCodePoints5(left, right) {
     if (leftCodePoint !== rightCodePoint) return leftCodePoint < rightCodePoint ? -1 : 1;
   }
 }
-function exactSpikeWindowPartition(data) {
+function sourceBoundSpikeWindowPartition(data) {
   const eventTimes = rec(data.eventTimes) ?? {};
   const times = numbers4(eventTimes.values);
   const window = rec(data.window) ?? {};
   const timeUnit = typeof eventTimes.unit === "string" ? eventTimes.unit : "ms";
   const windowUnit = typeof window.unit === "string" ? window.unit : timeUnit;
-  const nestOriginRelative = window.kind === "nest_recording_device_origin_relative";
+  const nestFiniteStop = window.kind === "nest_recording_device_origin_relative";
+  const nestCaptureBoundedPositiveInfinity = window.kind === "nest_recording_device_positive_infinity_capture_bounded";
+  const nestOriginRelative = nestFiniteStop || nestCaptureBoundedPositiveInfinity;
   const origin = nestOriginRelative ? num(window.origin) : void 0;
   const start = num(window.start);
-  const stop = num(window.stop);
-  if (start === void 0 || stop === void 0 || nestOriginRelative && origin === void 0) {
+  const upper = num(
+    nestCaptureBoundedPositiveInfinity ? window.captureTime : window.stop
+  );
+  if (start === void 0 || upper === void 0 || nestOriginRelative && origin === void 0) {
     throw new Error("a validated spike-raster window did not retain its finite endpoint terms");
   }
   const lowerTerms = nestOriginRelative ? [
     { value: origin, unit: windowUnit },
     { value: start, unit: windowUnit }
   ] : [{ value: start, unit: windowUnit }];
-  const upperTerms = nestOriginRelative ? [
+  const upperTerms = nestCaptureBoundedPositiveInfinity ? [{ value: upper, unit: windowUnit }] : nestOriginRelative ? [
     { value: origin, unit: windowUnit },
-    { value: stop, unit: windowUnit }
-  ] : [{ value: stop, unit: windowUnit }];
-  const boundary = nestOriginRelative ? "(origin+start,origin+stop]" : String(window.boundary);
+    { value: upper, unit: windowUnit }
+  ] : [{ value: upper, unit: windowUnit }];
+  const boundary = nestCaptureBoundedPositiveInfinity ? "(origin+start,capture]" : nestOriginRelative ? "(origin+start,origin+stop]" : String(window.boundary);
   const openStart = boundary.startsWith("(");
   const closedStop = boundary.endsWith("]");
-  const displayStart = convertExactUnitSum(lowerTerms, timeUnit);
-  const displayStop = convertExactUnitSum(upperTerms, timeUnit);
+  let nestEndpointProjection;
+  if (nestOriginRelative) {
+    if (timeUnit !== "ms" || windowUnit !== "ms") {
+      throw new Error("a validated NEST native event clock did not retain unit ms");
+    }
+    const captureAuthority = rec(window.captureAuthority) ?? {};
+    const runtimeStatus = rec(captureAuthority.runtimeStatus) ?? {};
+    const recordingGrid = rec(captureAuthority.recordingGrid) ?? {};
+    const bufferEpoch = rec(captureAuthority.bufferEpoch) ?? {};
+    const recordingPlan = rec(captureAuthority.recordingPlan) ?? {};
+    const tic = (value, label) => {
+      if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+        throw new Error(`a validated NEST clock did not retain canonical ${label}`);
+      }
+      return BigInt(value);
+    };
+    const ticsPerMsText = String(runtimeStatus.ticsPerMs);
+    const resolutionTicsText = String(runtimeStatus.resolutionTics);
+    const ticsPerMs = tic(runtimeStatus.ticsPerMs, "ticsPerMs");
+    const resolutionTics = tic(runtimeStatus.resolutionTics, "resolutionTics");
+    const originTics = tic(recordingGrid.originTics, "originTics");
+    const startTics = tic(recordingGrid.startTics, "startTics");
+    const captureTics = tic(
+      runtimeStatus.captureBiologicalTimeTics,
+      "captureBiologicalTimeTics"
+    );
+    const upperOffsetTics = nestCaptureBoundedPositiveInfinity ? captureTics : tic(recordingGrid.stopTics, "stopTics");
+    const lowerEndpointTics = originTics + startTics;
+    const upperEndpointTics = nestCaptureBoundedPositiveInfinity ? captureTics : originTics + upperOffsetTics;
+    const projection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: [
+        originTics,
+        startTics,
+        upperOffsetTics,
+        captureTics,
+        tic(bufferEpoch.beganAtBiologicalTimeTics, "beganAtBiologicalTimeTics"),
+        tic(recordingPlan.lastMutationAtBiologicalTimeTics, "lastMutationAtBiologicalTimeTics")
+      ],
+      lowerEndpointTics,
+      upperEndpointTics
+    });
+    if (!projection.ok) {
+      throw new Error(`the validated NEST endpoint projection is not admissible: ${projection.message}`);
+    }
+    nestEndpointProjection = {
+      algorithm: "nest_3_10_time_get_ms_binary64_reciprocal_then_multiply.v1",
+      ticsPerMs: ticsPerMsText,
+      resolutionTics: resolutionTicsText,
+      lowerEndpointTics: lowerEndpointTics.toString(10),
+      upperEndpointTics: upperEndpointTics.toString(10),
+      finiteTimeLimitTics: projection.finiteTimeLimitTics.toString(10),
+      lowerMilliseconds: projection.lowerMilliseconds,
+      upperMilliseconds: projection.upperMilliseconds
+    };
+  }
+  const displayStart = nestEndpointProjection ? nestEndpointProjection.lowerMilliseconds : convertExactUnitSum(lowerTerms, timeUnit);
+  const displayStop = nestEndpointProjection ? nestEndpointProjection.upperMilliseconds : convertExactUnitSum(upperTerms, timeUnit);
   if (!(displayStop > displayStart)) {
     throw new Error(
       "the exact event-window endpoints collapse or invert after their one permitted binary64 display conversion"
@@ -34853,11 +35464,18 @@ function exactSpikeWindowPartition(data) {
   let excludedBelow = 0;
   let excludedAbove = 0;
   for (let index = 0; index < times.length; index++) {
-    const event = { value: times[index], unit: timeUnit };
-    const lowerVsEvent = compareExactUnitSumToValue(lowerTerms, event);
-    const upperVsEvent = compareExactUnitSumToValue(upperTerms, event);
-    const below = openStart ? lowerVsEvent >= 0 : lowerVsEvent > 0;
-    const above = closedStop ? upperVsEvent < 0 : upperVsEvent <= 0;
+    let below;
+    let above;
+    if (nestEndpointProjection) {
+      below = openStart ? times[index] <= displayStart : times[index] < displayStart;
+      above = closedStop ? times[index] > displayStop : times[index] >= displayStop;
+    } else {
+      const event = { value: times[index], unit: timeUnit };
+      const lowerVsEvent = compareExactUnitSumToValue(lowerTerms, event);
+      const upperVsEvent = compareExactUnitSumToValue(upperTerms, event);
+      below = openStart ? lowerVsEvent >= 0 : lowerVsEvent > 0;
+      above = closedStop ? upperVsEvent < 0 : upperVsEvent <= 0;
+    }
     if (below) excludedBelow++;
     else if (above) excludedAbove++;
     else inWindow2[index] = true;
@@ -34868,8 +35486,10 @@ function exactSpikeWindowPartition(data) {
     timeUnit,
     windowUnit,
     nestOriginRelative,
+    nestCaptureBoundedPositiveInfinity,
     lowerTerms,
     upperTerms,
+    ...nestEndpointProjection ? { nestEndpointProjection } : {},
     boundary,
     displayStart,
     displayStop,
@@ -40091,7 +40711,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
   if (skillId === "neuro.spike_raster") {
     let partition;
     try {
-      partition = exactSpikeWindowPartition(data);
+      partition = sourceBoundSpikeWindowPartition(data);
     } catch (error) {
       return fail2(
         "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
@@ -40105,8 +40725,10 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       timeUnit,
       windowUnit,
       nestOriginRelative,
+      nestCaptureBoundedPositiveInfinity,
       lowerTerms,
       upperTerms,
+      nestEndpointProjection,
       boundary,
       displayStart,
       displayStop,
@@ -40201,11 +40823,12 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const operation = {
       ...derivationOperation(
         "spike_raster.partition_and_rows",
-        "cortexel.spike_raster.exact_window_partition",
+        "cortexel.spike_raster.source_bound_window_partition.v4",
         {
           boundary,
-          lowerEndpointTerms: lowerTerms,
-          upperEndpointTerms: upperTerms,
+          declaredLowerEndpointTerms: lowerTerms,
+          declaredUpperEndpointTerms: upperTerms,
+          ...nestEndpointProjection ? { nestEndpointProjection } : {},
           displayUnit: timeUnit,
           rowOrder: parameters.rowOrder,
           markStyle: parameters.markStyle ?? "tick",
@@ -40226,11 +40849,11 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           rowCount: rows.length,
           drawnMarkCount: acceptedCount,
           stableSort: ["time", "rowIndex", "sourceOrdinal"],
-          sourceClockMode: nestOriginRelative ? "nest_3_9_or_3_10_memory_native_binary64_ms" : "caller_declared_event_window",
+          sourceClockMode: nestCaptureBoundedPositiveInfinity ? "nest_3_10_0_memory_native_binary64_ms_positive_infinity_capture_bounded" : nestOriginRelative ? "nest_3_10_0_memory_native_binary64_ms_finite_stop" : "caller_declared_event_window",
           ...conversion ? { windowEndpointConversion: conversion } : {}
         }
       ),
-      algorithmRevision: 2
+      algorithmRevision: 4
     };
     const axisPrefix = data.timeBase === "trial_relative" ? `time relative to ${String(data.alignmentLabel)}` : "time";
     const activeSenders = new Set(
@@ -44702,7 +45325,7 @@ function buildFigureFromValidated(validated) {
       };
     }
     try {
-      spikeAcceptedMarks = exactSpikeWindowPartition(data).acceptedCount;
+      spikeAcceptedMarks = sourceBoundSpikeWindowPartition(data).acceptedCount;
     } catch (error) {
       return {
         ok: false,

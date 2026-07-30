@@ -7,20 +7,24 @@ import {
   conversionReceipt,
   convert,
   convertCompositeDerivative,
+  convertExactUnitSum,
   dimensionOf,
   divideExactIntegerByConvertedDifference,
   normalizeDerivativeByExactAxisExtent
-} from "./chunk-4A4K5NRD.js";
-import {
-  finalizeErrors,
-  makeError
-} from "./chunk-HLJSPQRG.js";
+} from "./chunk-QKGQ343H.js";
 import {
   binary64RelativeDifferenceWithinTolerance,
   exactBinary64Mean,
   exactBinary64Sum,
   exactRationalToBinary64
 } from "./chunk-XGABDL4O.js";
+import {
+  projectNestWindowEndpointsV310
+} from "./chunk-2N3ZC6OE.js";
+import {
+  finalizeErrors,
+  makeError
+} from "./chunk-VJN27A3U.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding
@@ -1722,6 +1726,352 @@ function validatePhasePlaneRelations(operation, operationIndex, canonicalRequest
   }
   return errors;
 }
+function validateSpikeRasterDerivationRelations(operation, index, canonicalRequest) {
+  const basePath = `/derivation/operations/${index}`;
+  const errors = [];
+  const data = asRecord(canonicalRequest.data);
+  const requestParameters = asRecord(canonicalRequest.parameters);
+  if (!data || !requestParameters) {
+    throw new Error("the canonical spike-raster request omitted data or parameters");
+  }
+  const requiredRecord = (value, label) => {
+    const record = asRecord(value);
+    if (!record) throw new Error(`the canonical spike-raster request omitted ${label}`);
+    return record;
+  };
+  const requiredNumber = (value, label) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`the canonical spike-raster request omitted finite ${label}`);
+    }
+    return value;
+  };
+  const requiredString = (value, label) => {
+    if (typeof value !== "string") {
+      throw new Error(`the canonical spike-raster request omitted string ${label}`);
+    }
+    return value;
+  };
+  const requiredNumbers = (value, label) => {
+    if (!Array.isArray(value)) {
+      throw new Error(`the canonical spike-raster request omitted array ${label}`);
+    }
+    return value.map((candidate, itemIndex) => requiredNumber(candidate, `${label}/${itemIndex}`));
+  };
+  const requiredStrings = (value, label) => {
+    if (!Array.isArray(value)) {
+      throw new Error(`the canonical spike-raster request omitted array ${label}`);
+    }
+    return value.map((candidate, itemIndex) => requiredString(candidate, `${label}/${itemIndex}`));
+  };
+  const optionalStrings = (value, label) => value === void 0 ? void 0 : requiredStrings(value, label);
+  const canonicalTic = (value, label) => {
+    if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+      throw new Error(`the canonical spike-raster request omitted canonical ${label}`);
+    }
+    return BigInt(value);
+  };
+  const compareUnicodeCodePoints2 = (left, right) => {
+    const leftIterator = left[Symbol.iterator]();
+    const rightIterator = right[Symbol.iterator]();
+    while (true) {
+      const leftNext = leftIterator.next();
+      const rightNext = rightIterator.next();
+      if (leftNext.done || rightNext.done) {
+        if (leftNext.done && rightNext.done) return 0;
+        return leftNext.done ? -1 : 1;
+      }
+      const leftCodePoint = leftNext.value.codePointAt(0);
+      const rightCodePoint = rightNext.value.codePointAt(0);
+      if (leftCodePoint !== rightCodePoint) {
+        return leftCodePoint < rightCodePoint ? -1 : 1;
+      }
+    }
+  };
+  const eventTimes = requiredRecord(data.eventTimes, "data/eventTimes");
+  const times = requiredNumbers(eventTimes.values, "data/eventTimes/values");
+  const timeUnit = requiredString(eventTimes.unit, "data/eventTimes/unit");
+  const window = requiredRecord(data.window, "data/window");
+  const windowUnit = requiredString(window.unit, "data/window/unit");
+  const nestFiniteStop = window.kind === "nest_recording_device_origin_relative";
+  const nestCaptureBounded = window.kind === "nest_recording_device_positive_infinity_capture_bounded";
+  const nestOriginRelative = nestFiniteStop || nestCaptureBounded;
+  const start = requiredNumber(window.start, "data/window/start");
+  const upper = requiredNumber(
+    nestCaptureBounded ? window.captureTime : window.stop,
+    nestCaptureBounded ? "data/window/captureTime" : "data/window/stop"
+  );
+  const origin = nestOriginRelative ? requiredNumber(window.origin, "data/window/origin") : void 0;
+  const lowerTerms = nestOriginRelative ? [
+    { value: origin, unit: windowUnit },
+    { value: start, unit: windowUnit }
+  ] : [{ value: start, unit: windowUnit }];
+  const upperTerms = nestCaptureBounded ? [{ value: upper, unit: windowUnit }] : nestOriginRelative ? [
+    { value: origin, unit: windowUnit },
+    { value: upper, unit: windowUnit }
+  ] : [{ value: upper, unit: windowUnit }];
+  const boundary = nestCaptureBounded ? "(origin+start,capture]" : nestFiniteStop ? "(origin+start,origin+stop]" : requiredString(window.boundary, "data/window/boundary");
+  const openStart = boundary.startsWith("(");
+  const closedStop = boundary.endsWith("]");
+  let nestEndpointProjection;
+  if (nestOriginRelative) {
+    if (timeUnit !== "ms" || windowUnit !== "ms") {
+      throw new Error("a canonical NEST spike-raster request did not retain unit ms");
+    }
+    const captureAuthority = requiredRecord(
+      window.captureAuthority,
+      "data/window/captureAuthority"
+    );
+    const runtimeStatus = requiredRecord(
+      captureAuthority.runtimeStatus,
+      "data/window/captureAuthority/runtimeStatus"
+    );
+    const recordingGrid = requiredRecord(
+      captureAuthority.recordingGrid,
+      "data/window/captureAuthority/recordingGrid"
+    );
+    const bufferEpoch = requiredRecord(
+      captureAuthority.bufferEpoch,
+      "data/window/captureAuthority/bufferEpoch"
+    );
+    const recordingPlan = requiredRecord(
+      captureAuthority.recordingPlan,
+      "data/window/captureAuthority/recordingPlan"
+    );
+    const ticsPerMsText = requiredString(
+      runtimeStatus.ticsPerMs,
+      "data/window/captureAuthority/runtimeStatus/ticsPerMs"
+    );
+    const resolutionTicsText = requiredString(
+      runtimeStatus.resolutionTics,
+      "data/window/captureAuthority/runtimeStatus/resolutionTics"
+    );
+    const ticsPerMs = canonicalTic(runtimeStatus.ticsPerMs, "ticsPerMs");
+    const resolutionTics = canonicalTic(
+      runtimeStatus.resolutionTics,
+      "resolutionTics"
+    );
+    const originTics = canonicalTic(recordingGrid.originTics, "originTics");
+    const startTics = canonicalTic(recordingGrid.startTics, "startTics");
+    const captureTics = canonicalTic(
+      runtimeStatus.captureBiologicalTimeTics,
+      "captureBiologicalTimeTics"
+    );
+    const upperOffsetTics = nestCaptureBounded ? captureTics : canonicalTic(recordingGrid.stopTics, "stopTics");
+    const lowerEndpointTics = originTics + startTics;
+    const upperEndpointTics = nestCaptureBounded ? captureTics : originTics + upperOffsetTics;
+    const projection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: [
+        originTics,
+        startTics,
+        upperOffsetTics,
+        captureTics,
+        canonicalTic(
+          bufferEpoch.beganAtBiologicalTimeTics,
+          "beganAtBiologicalTimeTics"
+        ),
+        canonicalTic(
+          recordingPlan.lastMutationAtBiologicalTimeTics,
+          "lastMutationAtBiologicalTimeTics"
+        )
+      ],
+      lowerEndpointTics,
+      upperEndpointTics
+    });
+    if (!projection.ok) {
+      throw new Error(`the canonical NEST endpoint projection is inadmissible: ${projection.message}`);
+    }
+    nestEndpointProjection = {
+      algorithm: "nest_3_10_time_get_ms_binary64_reciprocal_then_multiply.v1",
+      ticsPerMs: ticsPerMsText,
+      resolutionTics: resolutionTicsText,
+      lowerEndpointTics: lowerEndpointTics.toString(10),
+      upperEndpointTics: upperEndpointTics.toString(10),
+      finiteTimeLimitTics: projection.finiteTimeLimitTics.toString(10),
+      lowerMilliseconds: projection.lowerMilliseconds,
+      upperMilliseconds: projection.upperMilliseconds
+    };
+  }
+  const displayStart = nestEndpointProjection ? requiredNumber(nestEndpointProjection.lowerMilliseconds, "derived lowerMilliseconds") : convertExactUnitSum(lowerTerms, timeUnit);
+  const displayStop = nestEndpointProjection ? requiredNumber(nestEndpointProjection.upperMilliseconds, "derived upperMilliseconds") : convertExactUnitSum(upperTerms, timeUnit);
+  if (!(displayStop > displayStart)) {
+    throw new Error("the canonical spike-raster endpoints collapse or invert on the display axis");
+  }
+  const inWindow = new Array(times.length).fill(false);
+  let excludedBelow = 0;
+  let excludedAbove = 0;
+  for (let eventIndex = 0; eventIndex < times.length; eventIndex++) {
+    const time = times[eventIndex];
+    let below;
+    let above;
+    if (nestEndpointProjection) {
+      below = openStart ? time <= displayStart : time < displayStart;
+      above = closedStop ? time > displayStop : time >= displayStop;
+    } else {
+      const event = { value: time, unit: timeUnit };
+      const lowerVsEvent = compareExactUnitSumToValue(lowerTerms, event);
+      const upperVsEvent = compareExactUnitSumToValue(upperTerms, event);
+      below = openStart ? lowerVsEvent >= 0 : lowerVsEvent > 0;
+      above = closedStop ? upperVsEvent < 0 : upperVsEvent <= 0;
+    }
+    if (below) excludedBelow++;
+    else if (above) excludedAbove++;
+    else inWindow[eventIndex] = true;
+  }
+  const excludedCount = excludedBelow + excludedAbove;
+  const acceptedCount = times.length - excludedCount;
+  const senders = requiredStrings(data.eventSenderIds, "data/eventSenderIds");
+  const recorded = requiredStrings(
+    data.recordedSenderIds,
+    "data/recordedSenderIds"
+  );
+  const eventTrials = optionalStrings(data.eventTrialIds, "data/eventTrialIds");
+  const trialIds = optionalStrings(data.trialIds, "data/trialIds") ?? [];
+  const suppliedEventIds = optionalStrings(data.eventIds, "data/eventIds");
+  const senderPopulationIds = optionalStrings(data.senderPopulationIds, "data/senderPopulationIds") ?? [];
+  const populationBySender = /* @__PURE__ */ new Map();
+  for (let senderIndex = 0; senderIndex < recorded.length; senderIndex++) {
+    const populationId = senderPopulationIds[senderIndex];
+    if (populationId !== void 0) {
+      populationBySender.set(recorded[senderIndex], populationId);
+    }
+  }
+  const rowOrder = requiredString(
+    requestParameters.rowOrder,
+    "parameters/rowOrder"
+  );
+  let orderedSenders = [...recorded];
+  if (rowOrder === "canonical_sender_id") {
+    orderedSenders.sort(compareUnicodeCodePoints2);
+  } else if (rowOrder === "grouped_by_population" && senderPopulationIds.length > 0) {
+    const sendersByPopulation = /* @__PURE__ */ new Map();
+    for (const senderId of recorded) {
+      const populationId = populationBySender.get(senderId);
+      if (populationId === void 0) continue;
+      const populationSenders = sendersByPopulation.get(populationId);
+      if (populationSenders === void 0) {
+        sendersByPopulation.set(populationId, [senderId]);
+      } else {
+        populationSenders.push(senderId);
+      }
+    }
+    orderedSenders = [];
+    for (const populationSenders of sendersByPopulation.values()) {
+      for (const senderId of populationSenders) orderedSenders.push(senderId);
+    }
+  }
+  const rowKey = (senderId, trialId) => JSON.stringify([senderId, trialId]);
+  const rows = orderedSenders.flatMap((senderId) => {
+    const trials = eventTrials ? trialIds : [null];
+    return trials.map((trialId) => ({
+      key: rowKey(senderId, trialId),
+      label: trialId === null ? senderId : `${senderId} / ${trialId}`
+    }));
+  });
+  const rowIndexByKey = new Map(rows.map((row, rowIndex) => [row.key, rowIndex]));
+  const rowLabelByKey = new Map(rows.map((row) => [row.key, row.label]));
+  const events = times.map((time, sourceOrdinal) => {
+    const senderId = senders[sourceOrdinal];
+    if (senderId === void 0) {
+      throw new Error(`canonical spike event ${sourceOrdinal} has no sender`);
+    }
+    const trialId = eventTrials?.[sourceOrdinal] ?? null;
+    const key = rowKey(senderId, trialId);
+    const rowIndex = rowIndexByKey.get(key);
+    const rowLabel = rowLabelByKey.get(key);
+    if (rowIndex === void 0 || rowLabel === void 0) {
+      throw new Error(`canonical spike event ${sourceOrdinal} does not resolve to a row`);
+    }
+    return {
+      sourceOrdinal,
+      eventId: suppliedEventIds?.[sourceOrdinal] ?? `source-ordinal-${sourceOrdinal}`,
+      time,
+      timeUnit,
+      senderId,
+      trialId,
+      populationId: populationBySender.get(senderId) ?? null,
+      rowKey: key,
+      rowIndex,
+      rowLabel,
+      inWindow: inWindow[sourceOrdinal]
+    };
+  });
+  events.sort((left, right) => left.time < right.time ? -1 : left.time > right.time ? 1 : left.rowIndex !== right.rowIndex ? left.rowIndex - right.rowIndex : left.sourceOrdinal - right.sourceOrdinal);
+  const conversion = windowUnit !== timeUnit ? conversionReceipt(windowUnit, timeUnit) : void 0;
+  const expectedParameters = {
+    boundary,
+    declaredLowerEndpointTerms: lowerTerms,
+    declaredUpperEndpointTerms: upperTerms,
+    ...nestEndpointProjection ? { nestEndpointProjection } : {},
+    displayUnit: timeUnit,
+    rowOrder,
+    markStyle: typeof requestParameters.markStyle === "string" ? requestParameters.markStyle : "tick",
+    outOfWindowPolicy: requiredString(
+      requestParameters.outOfWindowPolicy,
+      "parameters/outOfWindowPolicy"
+    ),
+    eventIdentityPolicy: suppliedEventIds ? "caller_declared_unique_event_ids" : "source_ordinal_v1"
+  };
+  const expectedReceipt = {
+    sourceEventCount: times.length,
+    acceptedEventCount: acceptedCount,
+    excludedOutOfWindow: excludedCount,
+    excludedBelowOrAtOpenStart: excludedBelow,
+    excludedAboveOrAtOpenStop: excludedAbove,
+    displayStart,
+    displayStop,
+    displayUnit: timeUnit,
+    rowCount: rows.length,
+    drawnMarkCount: acceptedCount,
+    stableSort: ["time", "rowIndex", "sourceOrdinal"],
+    sourceClockMode: nestCaptureBounded ? "nest_3_10_0_memory_native_binary64_ms_positive_infinity_capture_bounded" : nestFiniteStop ? "nest_3_10_0_memory_native_binary64_ms_finite_stop" : "caller_declared_event_window",
+    ...conversion ? { windowEndpointConversion: conversion } : {}
+  };
+  if (operation.id !== "spike_raster.partition_and_rows") {
+    errors.push(relationError(
+      `${basePath}/id`,
+      "the persisted spike-raster operation id is not the closed v4 partition-and-rows id."
+    ));
+  }
+  if (operation.algorithm !== "cortexel.spike_raster.source_bound_window_partition.v4") {
+    errors.push(relationError(
+      `${basePath}/algorithm`,
+      "the persisted spike-raster algorithm is not the closed source-bound v4 algorithm."
+    ));
+  }
+  if (operation.algorithmRevision !== 4) {
+    errors.push(relationError(
+      `${basePath}/algorithmRevision`,
+      "the persisted spike-raster algorithm revision is not exactly 4."
+    ));
+  }
+  if (!sameCanonical(operation.parameters, expectedParameters)) {
+    errors.push(relationError(
+      `${basePath}/parameters`,
+      "the spike-raster parameters do not exactly equal the independently replayed source window, NEST projection when applicable, row policy, and event-identity policy."
+    ));
+  }
+  if (operation.inputDigest !== canonicalDigest(data)) {
+    errors.push(relationError(
+      `${basePath}/inputDigest`,
+      "the spike-raster input digest does not bind the exact canonical request data."
+    ));
+  }
+  if (operation.outputDigest !== canonicalDigest({ events, rows })) {
+    errors.push(relationError(
+      `${basePath}/outputDigest`,
+      "the spike-raster output digest does not bind every independently replayed event and row carrier."
+    ));
+  }
+  if (!sameCanonical(operation.receipt, expectedReceipt)) {
+    errors.push(relationError(
+      `${basePath}/receipt`,
+      "the spike-raster receipt does not exactly equal the independently replayed counts, endpoints, ordering, clock mode, and optional unit conversion."
+    ));
+  }
+  return errors;
+}
 function validateArtifactRelations(artifact) {
   const root = asRecord(artifact) ?? {};
   const canonicalRequest = asRecord(root.canonicalRequest) ?? {};
@@ -1742,6 +2092,20 @@ function validateArtifactRelations(artifact) {
       "/derivation/operations",
       "a phase-plane artifact must contain exactly its one closed carrier-canonicalization operation; omission, relabelling, and unrelated side operations are not authorized."
     ));
+  }
+  if (asRecord(canonicalRequest.skill)?.id === "neuro.spike_raster") {
+    if (operations.length !== 1) {
+      errors.push(relationError(
+        "/derivation/operations",
+        "a spike-raster artifact must contain exactly its one closed v4 partition-and-rows operation; omission, relabelling, and unrelated side operations are not authorized."
+      ));
+    } else {
+      errors.push(...validateSpikeRasterDerivationRelations(
+        operations[0],
+        0,
+        canonicalRequest
+      ));
+    }
   }
   const operationIds = /* @__PURE__ */ new Set();
   for (let index = 0; index < operations.length; index++) {
@@ -1869,7 +2233,9 @@ function validateStructure(request, skillId) {
     return { ok: true, errors: [] };
   }
   const raw = validate.errors ?? [];
-  const errors = raw.filter((error) => error.keyword !== "oneOf" && error.keyword !== "anyOf").map((error) => translate(error, skillId));
+  const errors = raw.filter(
+    (error) => error.keyword !== "oneOf" && error.keyword !== "anyOf" && error.keyword !== "if"
+  ).map((error) => translate(error, skillId));
   if (errors.length === 0 && raw.length > 0) {
     errors.push(translate(raw[0], skillId));
   }
@@ -3429,4 +3795,4 @@ export {
   deriveWeightDistribution,
   verifyHistogramValues
 };
-//# sourceMappingURL=chunk-XZP4LRCZ.js.map
+//# sourceMappingURL=chunk-W34Q2PSG.js.map

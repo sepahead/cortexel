@@ -14,6 +14,7 @@ import itertools
 import json
 import os
 import re
+import select
 import selectors
 import shlex
 import signal
@@ -1939,9 +1940,6 @@ def _run_checked_with_blocked_cancellation(
         if not capture_output:
             return
         deadline = time.monotonic() + PROCESS_CLEANUP_TIMEOUT_SECONDS
-        prepare_output_capture(recovering=True)
-        if selector is None:
-            fail(f"{label} output drain selector was not created")
         retain_output = body_error is None
         drain_error: BaseException | None = None
         additional_failures = 0
@@ -1960,6 +1958,102 @@ def _run_checked_with_blocked_cancellation(
                     )
             retain_output = False
 
+        setup_error: BaseException | None = None
+        try:
+            prepare_output_capture(recovering=True)
+        except BaseException as exc:
+            setup_error = exc
+            latch_drain_failure(exc)
+
+        if setup_error is not None:
+            # Selector construction/registration is fallible after launch. Keep
+            # the unreaped leader as the PID/PGID anchor and use the most basic
+            # POSIX readiness primitive directly. If even that path is damaged,
+            # consume the fixed deadline without spinning before final reap.
+            unresolved = {"stdout", "stderr"}
+            direct_streams: dict[int, str] = {}
+            for stream, stream_name in (
+                (stdout_stream, "stdout"),
+                (stderr_stream, "stderr"),
+            ):
+                if stream is None:
+                    latch_drain_failure(
+                        RuntimeError(f"{label} {stream_name} pipe was not published")
+                    )
+                    continue
+                try:
+                    file_descriptor = stream.fileno()
+                except BaseException as exc:
+                    latch_drain_failure(exc)
+                    continue
+                if file_descriptor < 0 or file_descriptor in direct_streams:
+                    latch_drain_failure(
+                        RuntimeError(f"{label} output pipe identity is invalid")
+                    )
+                    continue
+                direct_streams[file_descriptor] = stream_name
+
+            while unresolved:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    latch_drain_failure(RuntimeError(f"{label} pipe drain timed out"))
+                    break
+                if not direct_streams:
+                    time.sleep(min(remaining, 0.01))
+                    continue
+                try:
+                    ready, _, _ = select.select(
+                        tuple(direct_streams),
+                        (),
+                        (),
+                        min(remaining, 0.1),
+                    )
+                except BaseException as exc:
+                    latch_drain_failure(exc)
+                    remaining = deadline - time.monotonic()
+                    if remaining > 0:
+                        time.sleep(min(remaining, 0.01))
+                    continue
+                for file_descriptor in ready:
+                    stream_name = direct_streams.get(file_descriptor)
+                    if stream_name is None:
+                        latch_drain_failure(
+                            RuntimeError(f"{label} direct pipe readiness changed")
+                        )
+                        continue
+                    try:
+                        chunk = os.read(file_descriptor, IO_CHUNK_BYTES)
+                    except BaseException as exc:
+                        latch_drain_failure(exc)
+                        remaining = deadline - time.monotonic()
+                        if remaining > 0:
+                            time.sleep(min(remaining, 0.01))
+                        continue
+                    if not chunk:
+                        unresolved.discard(stream_name)
+                        del direct_streams[file_descriptor]
+                        continue
+                    if retain_output:
+                        captured[stream_name].extend(chunk)
+                        if sum(map(len, captured.values())) > MAX_SUBPROCESS_OUTPUT_BYTES:
+                            latch_drain_failure(
+                                RuntimeError(
+                                    f"{label} exceeded its "
+                                    f"{MAX_SUBPROCESS_OUTPUT_BYTES}-byte "
+                                    "captured-output budget"
+                                )
+                            )
+            if drain_error is None:
+                fail(f"{label} selector recovery lost its initiating failure")
+            if additional_failures > 4:
+                _note_exception(
+                    drain_error,
+                    f"{additional_failures - 4} further pipe-drain failures suppressed",
+                )
+            raise drain_error
+
+        if selector is None:
+            fail(f"{label} output drain selector was not created")
         while True:
             try:
                 streams_remain = bool(selector.get_map())

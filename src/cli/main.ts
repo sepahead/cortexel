@@ -68,7 +68,7 @@ import {
 } from '../adapters/source-catalog.js';
 import {
   nestSpikeRecorderToRaster,
-  type NestSpikeOptions,
+  type NestSpikeOptionsInput,
 } from '../adapters/nest/index.js';
 import {
   makeError,
@@ -1152,7 +1152,7 @@ function cmdSourceAdapt(args: readonly string[]): number {
     case 'nest-spike-recorder':
       adapted = nestSpikeRecorderToRaster(
         parsedInput.value.exportedStatus,
-        parsedInput.value.options as unknown as NestSpikeOptions,
+        parsedInput.value.options as unknown as NestSpikeOptionsInput,
       );
       break;
   }

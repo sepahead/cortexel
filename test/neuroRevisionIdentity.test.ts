@@ -22,7 +22,7 @@ const NEURO_SKILLS = [
   ['neuro.population_rate', 4, 'figure.population_rate', 5],
   ['neuro.psth', 4, 'figure.psth', 5],
   ['neuro.response_curve', 4, 'figure.response_curve', 5],
-  ['neuro.spike_raster', 5, 'figure.spike_raster', 6],
+  ['neuro.spike_raster', 6, 'figure.spike_raster', 7],
 ] as const;
 
 function skillSource(skillId: string): JsonRecord {

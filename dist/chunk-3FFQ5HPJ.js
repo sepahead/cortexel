@@ -1,6 +1,6 @@
 import {
   deriveDisclosures
-} from "./chunk-3B7S6D34.js";
+} from "./chunk-SGBEOOWY.js";
 import {
   DistributionDerivationError,
   MATRIX_AXIS_ORDER,
@@ -15,7 +15,7 @@ import {
   deriveWeightDistribution,
   deriveWeightMatrix,
   validateArtifactStructure
-} from "./chunk-XZP4LRCZ.js";
+} from "./chunk-W34Q2PSG.js";
 import {
   RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID,
   axesAreCompatible,
@@ -48,21 +48,7 @@ import {
   verifyPeakBasisAgainstWindow,
   verifyResponseEventScope,
   verifyResponseRateAuthority
-} from "./chunk-4A4K5NRD.js";
-import {
-  CATEGORICAL_SERIES_STYLES,
-  SKILL_CATALOG,
-  THEMES,
-  UNCERTAINTY_STYLES_BY_KIND
-} from "./chunk-DPIT352X.js";
-import {
-  ARTIFACT_CONTRACT_IDENTITY,
-  BUDGET_PROFILES,
-  DEFAULT_PROFILE,
-  makeError,
-  tryGetBudgetLimits,
-  trySelectTighterBudgetProfile
-} from "./chunk-HLJSPQRG.js";
+} from "./chunk-QKGQ343H.js";
 import {
   binary64RelativeDifferenceWithinEpsilons,
   exactBinary64AffineFraction,
@@ -82,10 +68,27 @@ import {
   roundedBinary64Mean
 } from "./chunk-XGABDL4O.js";
 import {
+  CATEGORICAL_SERIES_STYLES,
+  SKILL_CATALOG,
+  THEMES,
+  UNCERTAINTY_STYLES_BY_KIND
+} from "./chunk-AJMFQ6OE.js";
+import {
+  projectNestWindowEndpointsV310
+} from "./chunk-2N3ZC6OE.js";
+import {
+  ARTIFACT_CONTRACT_IDENTITY,
+  BUDGET_PROFILES,
+  DEFAULT_PROFILE,
+  makeError,
+  tryGetBudgetLimits,
+  trySelectTighterBudgetProfile
+} from "./chunk-VJN27A3U.js";
+import {
   ARTIFACT_CONTRACT,
   deepFreeze,
   getBuildIdentity
-} from "./chunk-PZCDM4HZ.js";
+} from "./chunk-M7SHUGNL.js";
 import {
   canonicalDigest,
   canonicalDigestExcluding,
@@ -8013,19 +8016,65 @@ function rasterPartition(data) {
   const times = numbers(eventTimes.values);
   const timeUnit = String(eventTimes.unit);
   const windowUnit = String(window.unit);
-  const nest = window.kind === "nest_recording_device_origin_relative";
+  const nestFiniteStop = window.kind === "nest_recording_device_origin_relative";
+  const nestCaptureBoundedPositiveInfinity = window.kind === "nest_recording_device_positive_infinity_capture_bounded";
+  const nest = nestFiniteStop || nestCaptureBoundedPositiveInfinity;
+  const upperValue = Number(
+    nestCaptureBoundedPositiveInfinity ? window.captureTime : window.stop
+  );
   const lower = nest ? [
     { value: Number(window.origin), unit: windowUnit },
     { value: Number(window.start), unit: windowUnit }
   ] : [{ value: Number(window.start), unit: windowUnit }];
-  const upper = nest ? [
+  const upper = nestCaptureBoundedPositiveInfinity ? [{ value: upperValue, unit: windowUnit }] : nest ? [
     { value: Number(window.origin), unit: windowUnit },
-    { value: Number(window.stop), unit: windowUnit }
-  ] : [{ value: Number(window.stop), unit: windowUnit }];
-  const boundary = nest ? "(origin+start,origin+stop]" : String(window.boundary);
+    { value: upperValue, unit: windowUnit }
+  ] : [{ value: upperValue, unit: windowUnit }];
+  const boundary = nestCaptureBoundedPositiveInfinity ? "(origin+start,capture]" : nest ? "(origin+start,origin+stop]" : String(window.boundary);
   const openStart = boundary.startsWith("(");
   const closedStop = boundary.endsWith("]");
+  let nestDisplayStart;
+  let nestDisplayStop;
+  if (nest) {
+    if (timeUnit !== "ms" || windowUnit !== "ms") {
+      throw new Error("validated NEST raster authority did not retain unit ms");
+    }
+    const captureAuthority = record(window.captureAuthority);
+    const runtimeStatus = record(captureAuthority.runtimeStatus);
+    const recordingGrid = record(captureAuthority.recordingGrid);
+    const bufferEpoch = record(captureAuthority.bufferEpoch);
+    const recordingPlan = record(captureAuthority.recordingPlan);
+    const tic = (value) => BigInt(String(value));
+    const ticsPerMs = tic(runtimeStatus.ticsPerMs);
+    const resolutionTics = tic(runtimeStatus.resolutionTics);
+    const originTics = tic(recordingGrid.originTics);
+    const startTics = tic(recordingGrid.startTics);
+    const captureTics = tic(runtimeStatus.captureBiologicalTimeTics);
+    const upperOffsetTics = nestCaptureBoundedPositiveInfinity ? captureTics : tic(recordingGrid.stopTics);
+    const projection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: [
+        originTics,
+        startTics,
+        upperOffsetTics,
+        captureTics,
+        tic(bufferEpoch.beganAtBiologicalTimeTics),
+        tic(recordingPlan.lastMutationAtBiologicalTimeTics)
+      ],
+      lowerEndpointTics: originTics + startTics,
+      upperEndpointTics: nestCaptureBoundedPositiveInfinity ? captureTics : originTics + upperOffsetTics
+    });
+    if (!projection.ok) {
+      throw new Error(`validated NEST raster authority is outside its source-clock profile: ${projection.message}`);
+    }
+    nestDisplayStart = projection.lowerMilliseconds;
+    nestDisplayStop = projection.upperMilliseconds;
+  }
   const inWindow2 = times.map((time) => {
+    if (nestDisplayStart !== void 0 && nestDisplayStop !== void 0) {
+      return !(openStart ? time <= nestDisplayStart : time < nestDisplayStart) && !(closedStop ? time > nestDisplayStop : time >= nestDisplayStop);
+    }
     const event = { value: time, unit: timeUnit };
     const lowerVsEvent = compareExactUnitSumToValue(lower, event);
     const upperVsEvent = compareExactUnitSumToValue(upper, event);
@@ -8037,9 +8086,11 @@ function rasterPartition(data) {
     windowUnit,
     boundary,
     inWindow: inWindow2,
-    displayStart: convertExactUnitSum(lower, timeUnit),
-    displayStop: convertExactUnitSum(upper, timeUnit),
-    excludedCount: inWindow2.filter((accepted) => !accepted).length
+    displayStart: nestDisplayStart ?? convertExactUnitSum(lower, timeUnit),
+    displayStop: nestDisplayStop ?? convertExactUnitSum(upper, timeUnit),
+    excludedCount: inWindow2.filter((accepted) => !accepted).length,
+    nestSerializedClock: nest,
+    nestCaptureBoundedPositiveInfinity
   };
 }
 function rasterModel(requestValue) {
@@ -8143,12 +8194,13 @@ function rasterModel(requestValue) {
           partition.timeUnit
         )]
       } : {},
-      ...record(data.window).kind === "nest_recording_device_origin_relative" ? { nestSerializedClock: true } : {}
+      ...partition.nestSerializedClock ? { nestSerializedClock: true } : {},
+      ...partition.nestCaptureBoundedPositiveInfinity ? { nestCaptureBoundedPositiveInfinity: true } : {}
     })
   };
 }
 var RASTER_AUTHORITY = defineAuthorityEvaluator(
-  authorityEvaluatorId("neuro.spike_raster", 5),
+  authorityEvaluatorId("neuro.spike_raster", 6),
   (request) => modelFields(rasterModel(request))
 );
 function aggregate2(values, method) {
@@ -9442,7 +9494,7 @@ var OUTPUT_AUTHORITY_IMPLEMENTATION_IDS_V1 = Object.freeze([
   "neuro.population_rate.output_authority.v4",
   "neuro.psth.output_authority.v4",
   "neuro.response_curve.output_authority.v4",
-  "neuro.spike_raster.output_authority.v5"
+  "neuro.spike_raster.output_authority.v6"
 ]);
 var IMPLEMENTATION_ID = /^[a-z][a-z0-9_.-]*$/u;
 var DANGEROUS_MAP_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
@@ -14927,7 +14979,8 @@ function disclosureFacts(request, extra) {
     sourceAuthenticityVerified: false,
     referenceComparisonRun: false,
     callerNotePresent: typeof source.declaredNote === "string",
-    nestSerializedClock: eventWindow?.kind === "nest_recording_device_origin_relative",
+    nestSerializedClock: eventWindow?.kind === "nest_recording_device_origin_relative" || eventWindow?.kind === "nest_recording_device_positive_infinity_capture_bounded",
+    nestCaptureBoundedPositiveInfinity: eventWindow?.kind === "nest_recording_device_positive_infinity_capture_bounded",
     uncertaintyKind: uncertainty ? uncertainty.kind : void 0,
     uncertaintyReason: uncertainty ? uncertainty.reason : void 0,
     ...scope ? { scopeKind: scope.kind } : {},
@@ -15069,32 +15122,93 @@ function compareUnicodeCodePoints3(left, right) {
     if (leftCodePoint !== rightCodePoint) return leftCodePoint < rightCodePoint ? -1 : 1;
   }
 }
-function exactSpikeWindowPartition(data) {
+function sourceBoundSpikeWindowPartition(data) {
   const eventTimes = rec(data.eventTimes) ?? {};
   const times = numbers4(eventTimes.values);
   const window = rec(data.window) ?? {};
   const timeUnit = typeof eventTimes.unit === "string" ? eventTimes.unit : "ms";
   const windowUnit = typeof window.unit === "string" ? window.unit : timeUnit;
-  const nestOriginRelative = window.kind === "nest_recording_device_origin_relative";
+  const nestFiniteStop = window.kind === "nest_recording_device_origin_relative";
+  const nestCaptureBoundedPositiveInfinity = window.kind === "nest_recording_device_positive_infinity_capture_bounded";
+  const nestOriginRelative = nestFiniteStop || nestCaptureBoundedPositiveInfinity;
   const origin = nestOriginRelative ? num(window.origin) : void 0;
   const start = num(window.start);
-  const stop = num(window.stop);
-  if (start === void 0 || stop === void 0 || nestOriginRelative && origin === void 0) {
+  const upper = num(
+    nestCaptureBoundedPositiveInfinity ? window.captureTime : window.stop
+  );
+  if (start === void 0 || upper === void 0 || nestOriginRelative && origin === void 0) {
     throw new Error("a validated spike-raster window did not retain its finite endpoint terms");
   }
   const lowerTerms = nestOriginRelative ? [
     { value: origin, unit: windowUnit },
     { value: start, unit: windowUnit }
   ] : [{ value: start, unit: windowUnit }];
-  const upperTerms = nestOriginRelative ? [
+  const upperTerms = nestCaptureBoundedPositiveInfinity ? [{ value: upper, unit: windowUnit }] : nestOriginRelative ? [
     { value: origin, unit: windowUnit },
-    { value: stop, unit: windowUnit }
-  ] : [{ value: stop, unit: windowUnit }];
-  const boundary = nestOriginRelative ? "(origin+start,origin+stop]" : String(window.boundary);
+    { value: upper, unit: windowUnit }
+  ] : [{ value: upper, unit: windowUnit }];
+  const boundary = nestCaptureBoundedPositiveInfinity ? "(origin+start,capture]" : nestOriginRelative ? "(origin+start,origin+stop]" : String(window.boundary);
   const openStart = boundary.startsWith("(");
   const closedStop = boundary.endsWith("]");
-  const displayStart = convertExactUnitSum(lowerTerms, timeUnit);
-  const displayStop = convertExactUnitSum(upperTerms, timeUnit);
+  let nestEndpointProjection;
+  if (nestOriginRelative) {
+    if (timeUnit !== "ms" || windowUnit !== "ms") {
+      throw new Error("a validated NEST native event clock did not retain unit ms");
+    }
+    const captureAuthority = rec(window.captureAuthority) ?? {};
+    const runtimeStatus = rec(captureAuthority.runtimeStatus) ?? {};
+    const recordingGrid = rec(captureAuthority.recordingGrid) ?? {};
+    const bufferEpoch = rec(captureAuthority.bufferEpoch) ?? {};
+    const recordingPlan = rec(captureAuthority.recordingPlan) ?? {};
+    const tic = (value, label) => {
+      if (typeof value !== "string" || !/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+        throw new Error(`a validated NEST clock did not retain canonical ${label}`);
+      }
+      return BigInt(value);
+    };
+    const ticsPerMsText = String(runtimeStatus.ticsPerMs);
+    const resolutionTicsText = String(runtimeStatus.resolutionTics);
+    const ticsPerMs = tic(runtimeStatus.ticsPerMs, "ticsPerMs");
+    const resolutionTics = tic(runtimeStatus.resolutionTics, "resolutionTics");
+    const originTics = tic(recordingGrid.originTics, "originTics");
+    const startTics = tic(recordingGrid.startTics, "startTics");
+    const captureTics = tic(
+      runtimeStatus.captureBiologicalTimeTics,
+      "captureBiologicalTimeTics"
+    );
+    const upperOffsetTics = nestCaptureBoundedPositiveInfinity ? captureTics : tic(recordingGrid.stopTics, "stopTics");
+    const lowerEndpointTics = originTics + startTics;
+    const upperEndpointTics = nestCaptureBoundedPositiveInfinity ? captureTics : originTics + upperOffsetTics;
+    const projection = projectNestWindowEndpointsV310({
+      ticsPerMs,
+      resolutionTics,
+      retainedTics: [
+        originTics,
+        startTics,
+        upperOffsetTics,
+        captureTics,
+        tic(bufferEpoch.beganAtBiologicalTimeTics, "beganAtBiologicalTimeTics"),
+        tic(recordingPlan.lastMutationAtBiologicalTimeTics, "lastMutationAtBiologicalTimeTics")
+      ],
+      lowerEndpointTics,
+      upperEndpointTics
+    });
+    if (!projection.ok) {
+      throw new Error(`the validated NEST endpoint projection is not admissible: ${projection.message}`);
+    }
+    nestEndpointProjection = {
+      algorithm: "nest_3_10_time_get_ms_binary64_reciprocal_then_multiply.v1",
+      ticsPerMs: ticsPerMsText,
+      resolutionTics: resolutionTicsText,
+      lowerEndpointTics: lowerEndpointTics.toString(10),
+      upperEndpointTics: upperEndpointTics.toString(10),
+      finiteTimeLimitTics: projection.finiteTimeLimitTics.toString(10),
+      lowerMilliseconds: projection.lowerMilliseconds,
+      upperMilliseconds: projection.upperMilliseconds
+    };
+  }
+  const displayStart = nestEndpointProjection ? nestEndpointProjection.lowerMilliseconds : convertExactUnitSum(lowerTerms, timeUnit);
+  const displayStop = nestEndpointProjection ? nestEndpointProjection.upperMilliseconds : convertExactUnitSum(upperTerms, timeUnit);
   if (!(displayStop > displayStart)) {
     throw new Error(
       "the exact event-window endpoints collapse or invert after their one permitted binary64 display conversion"
@@ -15104,11 +15218,18 @@ function exactSpikeWindowPartition(data) {
   let excludedBelow = 0;
   let excludedAbove = 0;
   for (let index = 0; index < times.length; index++) {
-    const event = { value: times[index], unit: timeUnit };
-    const lowerVsEvent = compareExactUnitSumToValue(lowerTerms, event);
-    const upperVsEvent = compareExactUnitSumToValue(upperTerms, event);
-    const below = openStart ? lowerVsEvent >= 0 : lowerVsEvent > 0;
-    const above = closedStop ? upperVsEvent < 0 : upperVsEvent <= 0;
+    let below;
+    let above;
+    if (nestEndpointProjection) {
+      below = openStart ? times[index] <= displayStart : times[index] < displayStart;
+      above = closedStop ? times[index] > displayStop : times[index] >= displayStop;
+    } else {
+      const event = { value: times[index], unit: timeUnit };
+      const lowerVsEvent = compareExactUnitSumToValue(lowerTerms, event);
+      const upperVsEvent = compareExactUnitSumToValue(upperTerms, event);
+      below = openStart ? lowerVsEvent >= 0 : lowerVsEvent > 0;
+      above = closedStop ? upperVsEvent < 0 : upperVsEvent <= 0;
+    }
     if (below) excludedBelow++;
     else if (above) excludedAbove++;
     else inWindow2[index] = true;
@@ -15119,8 +15240,10 @@ function exactSpikeWindowPartition(data) {
     timeUnit,
     windowUnit,
     nestOriginRelative,
+    nestCaptureBoundedPositiveInfinity,
     lowerTerms,
     upperTerms,
+    ...nestEndpointProjection ? { nestEndpointProjection } : {},
     boundary,
     displayStart,
     displayStop,
@@ -20342,7 +20465,7 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
   if (skillId === "neuro.spike_raster") {
     let partition;
     try {
-      partition = exactSpikeWindowPartition(data);
+      partition = sourceBoundSpikeWindowPartition(data);
     } catch (error) {
       return fail(
         "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
@@ -20356,8 +20479,10 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
       timeUnit,
       windowUnit,
       nestOriginRelative,
+      nestCaptureBoundedPositiveInfinity,
       lowerTerms,
       upperTerms,
+      nestEndpointProjection,
       boundary,
       displayStart,
       displayStop,
@@ -20452,11 +20577,12 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
     const operation = {
       ...derivationOperation(
         "spike_raster.partition_and_rows",
-        "cortexel.spike_raster.exact_window_partition",
+        "cortexel.spike_raster.source_bound_window_partition.v4",
         {
           boundary,
-          lowerEndpointTerms: lowerTerms,
-          upperEndpointTerms: upperTerms,
+          declaredLowerEndpointTerms: lowerTerms,
+          declaredUpperEndpointTerms: upperTerms,
+          ...nestEndpointProjection ? { nestEndpointProjection } : {},
           displayUnit: timeUnit,
           rowOrder: parameters.rowOrder,
           markStyle: parameters.markStyle ?? "tick",
@@ -20477,11 +20603,11 @@ function compile(validated, context, pairwiseOperations, returnedTableRows) {
           rowCount: rows.length,
           drawnMarkCount: acceptedCount,
           stableSort: ["time", "rowIndex", "sourceOrdinal"],
-          sourceClockMode: nestOriginRelative ? "nest_3_9_or_3_10_memory_native_binary64_ms" : "caller_declared_event_window",
+          sourceClockMode: nestCaptureBoundedPositiveInfinity ? "nest_3_10_0_memory_native_binary64_ms_positive_infinity_capture_bounded" : nestOriginRelative ? "nest_3_10_0_memory_native_binary64_ms_finite_stop" : "caller_declared_event_window",
           ...conversion ? { windowEndpointConversion: conversion } : {}
         }
       ),
-      algorithmRevision: 2
+      algorithmRevision: 4
     };
     const axisPrefix = data.timeBase === "trial_relative" ? `time relative to ${String(data.alignmentLabel)}` : "time";
     const activeSenders = new Set(
@@ -24953,7 +25079,7 @@ function buildFigureFromValidated(validated) {
       };
     }
     try {
-      spikeAcceptedMarks = exactSpikeWindowPartition(data).acceptedCount;
+      spikeAcceptedMarks = sourceBoundSpikeWindowPartition(data).acceptedCount;
     } catch (error) {
       return {
         ok: false,
@@ -25384,4 +25510,4 @@ export {
   buildFigureFromJson,
   buildFigure
 };
-//# sourceMappingURL=chunk-SB4UYJN2.js.map
+//# sourceMappingURL=chunk-3FFQ5HPJ.js.map

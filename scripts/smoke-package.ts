@@ -4582,58 +4582,23 @@ const runtimeFigureContractProbe = `
   if (!rendered.ok || !rendered.svg.startsWith('<svg')) {
     throw new Error('packed headless renderer cannot render a shipped living example');
   }
-  const adapted = nestAdapter.nestSpikeRecorderToRaster(
-    {
-      record_to: 'memory', time_in_steps: false, origin: 100.25, start: 0.5,
-      stop: 10.75, n_events: 1, events: { senders: [1], times: [111] },
-    },
-    {
-      recordedSenderIds: [1, 2],
-      nestVersion: '3.10.0',
-      captureAuthority: {
-        kind: 'caller_declaration',
-        profile: 'cortexel-nest-memory-spike-capture-authority.v1',
-        runtimeStatus: {
-          nestVersion: '3.10.0',
-          statusReadMethod:
-            'pynest_single_spike_recorder_get_status_plain_projection_v1',
-          executionScope: {
-            kind: 'single_process',
-            numProcesses: 1,
-            rank: 0,
-            localNumThreads: 1,
-          },
-          resolutionMs: 0.125,
-          ticsPerMs: '1000',
-          resolutionTics: '125',
-          captureBiologicalTimeTics: '111000',
-          captureBoundary: 'after_successful_simulate_or_run_return',
-        },
-        recordingGrid: {
-          originTics: '100250',
-          startTics: '500',
-          stopTics: '10750',
-        },
-        bufferEpoch: {
-          beganBy: 'recorder_creation',
-          beganAtBiologicalTimeTics: '100250',
-        },
-        recordingPlan: {
-          lastMutationAtBiologicalTimeTics: '100750',
-          scope: 'window_backend_time_encoding_and_sender_wiring',
-          senderUniverseBinding:
-            'recorded_sender_ids_exactly_equal_full_window_connected_source_universe',
-        },
-        clockEpochContinuity:
-          'biological_time_monotonic_since_last_kernel_initialization',
-        eventCompleteness: 'complete_for_recorded_senders',
-      },
-      runId: 'smoke',
-      recorderId: 'sr',
-    },
-  );
-  if (!adapted.ok || !figure.validateRequestValue(adapted.request).ok) {
-    throw new Error('packed NEST adapter output does not pass the packed validator');
+  const packagedNestSource = authoring.lookupSourceAdapter('nest-spike-recorder');
+  if (packagedNestSource !== authoring.SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'] ||
+      packagedNestSource.revision !== 5 ||
+      JSON.stringify(Object.keys(packagedNestSource.examples)) !==
+        JSON.stringify(['positiveInfinity', 'finiteStop'])) {
+    throw new Error('packed NEST adapter descriptor or branch inventory is incoherent');
+  }
+  for (const branch of ['positiveInfinity', 'finiteStop']) {
+    const example = packagedNestSource.examples[branch];
+    const adapted = nestAdapter.nestSpikeRecorderToRaster(
+      example.exportedStatus,
+      example.options,
+    );
+    if (!adapted.ok || !figure.validateRequestValue(adapted.request).ok) {
+      throw new Error('packed NEST adapter ' + branch +
+        ' example does not pass the packed adapter and validator');
+    }
   }
   if (capabilityRegistry.registry !== 'cortexel-capabilities' ||
       requestSchema.$id !== 'https://sepahead.github.io/cortexel/schemas/v1/figure-request.v1.schema.json' ||

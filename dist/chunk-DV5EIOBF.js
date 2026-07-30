@@ -1,9 +1,9 @@
 import {
-  NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3
-} from "./chunk-ZH5ZNYHE.js";
+  NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5
+} from "./chunk-3A56EAOW.js";
 import {
   freezeGenerated
-} from "./chunk-PZCDM4HZ.js";
+} from "./chunk-M7SHUGNL.js";
 import {
   canonicalDigest
 } from "./chunk-ZYBCCIMH.js";
@@ -1341,6 +1341,7 @@ var STABLE_CATALOG_SCHEMA_RESOURCES = freezeGenerated([
           "MISSING_REPLICATES_EXCLUDED_FROM_AGGREGATE",
           "MISSING_VALUES_PRESENT",
           "MULTAPSE_AGGREGATED",
+          "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
           "NEST_SERIALIZED_CLOCK_BOUNDARY",
           "NODE_UNIVERSE_INCOMPLETE",
           "NONSTANDARD_BUDGET_PROFILE",
@@ -1724,6 +1725,28 @@ var STABLE_CATALOG_SCHEMA_RESOURCES = freezeGenerated([
             "properties": {
               "id": {
                 "const": "NEST_SERIALIZED_CLOCK_BOUNDARY"
+              },
+              "severity": {
+                "const": "important"
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              }
+            },
+            "required": [
+              "id",
+              "severity",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY"
               },
               "severity": {
                 "const": "important"
@@ -2219,7 +2242,7 @@ var STABLE_CATALOG_SCHEMA_RESOURCES = freezeGenerated([
                 "const": "figure.spike_raster"
               },
               "rendererRevision": {
-                "const": 6
+                "const": 7
               }
             },
             "required": [
@@ -15120,233 +15143,529 @@ var SKILL_AUTHORING = freezeGenerated({
               "description": "The COMPLETE trial universe in display order, INCLUDING trials in which nothing happened. Required whenever eventTrialIds are supplied. Cortexel never infers the trial count from the observed trial ids: a trial with no spikes is still a trial, and it is precisely the trial you must be able to see."
             },
             "window": {
-              "description": "The declared event-membership window. Closure is mandatory. NEST memory-recorder exports use the origin-relative variant so the source's origin is retained and its open-start/closed-stop rule cannot be silently reinterpreted.",
-              "oneOf": [
+              "description": "The declared event-membership window. Closure is mandatory. A finite-stop NEST memory recorder retains its native (origin + start, origin + stop] device interval. A recorder configured with NEST positive infinity uses a distinct capture-bounded variant whose finite upper endpoint is the successful-return biological capture time, never a fabricated device stop.",
+              "allOf": [
                 {
-                  "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/eventTimeWindow"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "nest_recording_device_origin_relative"
-                    },
-                    "origin": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "start": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "stop": {
-                      "type": "number",
-                      "minimum": 0
-                    },
-                    "unit": {
-                      "const": "ms"
-                    },
-                    "boundary": {
-                      "const": "(origin+start,origin+stop]"
-                    },
-                    "recordingBackend": {
-                      "const": "memory"
-                    },
-                    "timeEncoding": {
-                      "const": "native_binary64_ms"
-                    },
-                    "captureAuthority": {
+                  "if": {
+                    "type": "object",
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
+                    "if": {
                       "type": "object",
-                      "description": "Caller-declared authority needed to interpret a retained NEST memory status as a complete raster. Cortexel checks this declaration for internal consistency and binds it into the request; it does not authenticate the runtime, buffer history, recorder mutations, sender wiring, or process scope.",
                       "properties": {
                         "kind": {
-                          "const": "caller_declaration",
-                          "description": "This detached JSON is an attributable caller claim, never a live-capture attestation."
+                          "const": "nest_recording_device_origin_relative"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    "then": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "nest_recording_device_origin_relative"
                         },
-                        "profile": {
-                          "const": "cortexel-nest-memory-spike-capture-authority.v1"
+                        "origin": {
+                          "type": "number",
+                          "minimum": 0
                         },
-                        "runtimeStatus": {
+                        "start": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "stop": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "unit": {
+                          "const": "ms"
+                        },
+                        "boundary": {
+                          "const": "(origin+start,origin+stop]"
+                        },
+                        "recordingBackend": {
+                          "const": "memory"
+                        },
+                        "timeEncoding": {
+                          "const": "native_binary64_ms"
+                        },
+                        "captureAuthority": {
                           "type": "object",
+                          "description": "Caller-declared authority needed to interpret a retained NEST memory status as a complete raster. Cortexel checks this declaration for internal consistency and binds it into the request; it does not authenticate the runtime, buffer history, recorder mutations, sender wiring, or process scope.",
                           "properties": {
-                            "nestVersion": {
-                              "const": "3.10.0"
+                            "kind": {
+                              "const": "caller_declaration",
+                              "description": "This detached JSON is an attributable caller claim, never a live-capture attestation."
                             },
-                            "statusReadMethod": {
-                              "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
+                            "profile": {
+                              "const": "cortexel-nest-memory-spike-capture-authority.v3"
                             },
-                            "executionScope": {
+                            "runtimeStatus": {
                               "type": "object",
                               "properties": {
-                                "kind": {
-                                  "const": "single_process"
+                                "nestVersion": {
+                                  "const": "3.10.0"
                                 },
-                                "numProcesses": {
-                                  "const": 1
+                                "timeBuildProfile": {
+                                  "const": "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1"
                                 },
-                                "rank": {
-                                  "const": 0
+                                "statusReadMethod": {
+                                  "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
                                 },
-                                "localNumThreads": {
-                                  "type": "integer",
-                                  "minimum": 1,
-                                  "maximum": 1e6
+                                "executionScope": {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "const": "single_process"
+                                    },
+                                    "numProcesses": {
+                                      "const": 1
+                                    },
+                                    "rank": {
+                                      "const": 0
+                                    },
+                                    "localNumThreads": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 1e6
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "numProcesses",
+                                    "rank",
+                                    "localNumThreads"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "resolutionMs": {
+                                  "type": "number",
+                                  "exclusiveMinimum": 0
+                                },
+                                "ticsPerMs": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "maxLength": 16
+                                },
+                                "resolutionTics": {
+                                  "type": "string",
+                                  "pattern": "^[1-9][0-9]*$",
+                                  "maxLength": 16
+                                },
+                                "captureBiologicalTimeTics": {
+                                  "type": "string",
+                                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                                  "maxLength": 16
+                                },
+                                "captureBoundary": {
+                                  "const": "after_successful_simulate_or_run_return"
                                 }
                               },
                               "required": [
-                                "kind",
-                                "numProcesses",
-                                "rank",
-                                "localNumThreads"
+                                "nestVersion",
+                                "timeBuildProfile",
+                                "statusReadMethod",
+                                "executionScope",
+                                "resolutionMs",
+                                "ticsPerMs",
+                                "resolutionTics",
+                                "captureBiologicalTimeTics",
+                                "captureBoundary"
                               ],
                               "additionalProperties": false
                             },
-                            "resolutionMs": {
-                              "type": "number",
-                              "exclusiveMinimum": 0
+                            "recordingGrid": {
+                              "type": "object",
+                              "description": "Exact NEST integer-tic preimages of the serialized origin/start/stop millisecond fields. These preserve grid authority that binary64 millisecond values alone cannot establish.",
+                              "properties": {
+                                "originTics": {
+                                  "type": "string",
+                                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                                  "maxLength": 16
+                                },
+                                "startTics": {
+                                  "type": "string",
+                                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                                  "maxLength": 16
+                                },
+                                "stopTics": {
+                                  "type": "string",
+                                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                                  "maxLength": 16
+                                }
+                              },
+                              "required": [
+                                "originTics",
+                                "startTics",
+                                "stopTics"
+                              ],
+                              "additionalProperties": false
                             },
-                            "ticsPerMs": {
-                              "type": "string",
-                              "pattern": "^[1-9][0-9]*$",
-                              "maxLength": 32
+                            "bufferEpoch": {
+                              "type": "object",
+                              "description": "The most recent creation or n_events=0 clear of this recorder's memory buffer.",
+                              "properties": {
+                                "beganBy": {
+                                  "type": "string",
+                                  "enum": [
+                                    "recorder_creation",
+                                    "n_events_zero"
+                                  ]
+                                },
+                                "beganAtBiologicalTimeTics": {
+                                  "type": "string",
+                                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                                  "maxLength": 16
+                                }
+                              },
+                              "required": [
+                                "beganBy",
+                                "beganAtBiologicalTimeTics"
+                              ],
+                              "additionalProperties": false
                             },
-                            "resolutionTics": {
-                              "type": "string",
-                              "pattern": "^[1-9][0-9]*$",
-                              "maxLength": 32
+                            "recordingPlan": {
+                              "type": "object",
+                              "description": "The most recent mutation of the recorder window/backend/time encoding or sender wiring.",
+                              "properties": {
+                                "lastMutationAtBiologicalTimeTics": {
+                                  "type": "string",
+                                  "pattern": "^(?:0|[1-9][0-9]*)$",
+                                  "maxLength": 16
+                                },
+                                "scope": {
+                                  "const": "window_backend_time_encoding_and_sender_wiring"
+                                },
+                                "senderUniverseBinding": {
+                                  "const": "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+                                }
+                              },
+                              "required": [
+                                "lastMutationAtBiologicalTimeTics",
+                                "scope",
+                                "senderUniverseBinding"
+                              ],
+                              "additionalProperties": false
                             },
-                            "captureBiologicalTimeTics": {
-                              "type": "string",
-                              "pattern": "^(?:0|[1-9][0-9]*)$",
-                              "maxLength": 32
+                            "clockEpochContinuity": {
+                              "const": "biological_time_monotonic_since_last_kernel_initialization",
+                              "description": "Caller declaration that biological_time remained monotonic from the most recent process initialization or ResetKernel through capture. SetKernelStatus({biological_time: 0}) can preserve a recorder and its old memory while restarting the clock; NEST 3.10.0 marks that operation incompletely supported, so clearing n_events afterward does not restore this certified profile."
                             },
-                            "captureBoundary": {
-                              "const": "after_successful_simulate_or_run_return"
+                            "eventCompleteness": {
+                              "const": "complete_for_recorded_senders"
+                            },
+                            "adapterInputDigest": {
+                              "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+                              "description": "Domain-separated digest over the detached plain-data status projection and every normalized adapter option. This is content identity, not source authentication or projection attestation."
                             }
                           },
                           "required": [
-                            "nestVersion",
-                            "statusReadMethod",
-                            "executionScope",
-                            "resolutionMs",
-                            "ticsPerMs",
-                            "resolutionTics",
-                            "captureBiologicalTimeTics",
-                            "captureBoundary"
+                            "kind",
+                            "profile",
+                            "runtimeStatus",
+                            "recordingGrid",
+                            "bufferEpoch",
+                            "recordingPlan",
+                            "clockEpochContinuity",
+                            "eventCompleteness",
+                            "adapterInputDigest"
                           ],
                           "additionalProperties": false
-                        },
-                        "recordingGrid": {
-                          "type": "object",
-                          "description": "Exact NEST integer-tic preimages of the serialized origin/start/stop millisecond fields. These preserve grid authority that binary64 millisecond values alone cannot establish.",
-                          "properties": {
-                            "originTics": {
-                              "type": "string",
-                              "pattern": "^(?:0|[1-9][0-9]*)$",
-                              "maxLength": 32
-                            },
-                            "startTics": {
-                              "type": "string",
-                              "pattern": "^(?:0|[1-9][0-9]*)$",
-                              "maxLength": 32
-                            },
-                            "stopTics": {
-                              "type": "string",
-                              "pattern": "^(?:0|[1-9][0-9]*)$",
-                              "maxLength": 32
-                            }
-                          },
-                          "required": [
-                            "originTics",
-                            "startTics",
-                            "stopTics"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "bufferEpoch": {
-                          "type": "object",
-                          "description": "The most recent creation or n_events=0 clear of this recorder's memory buffer.",
-                          "properties": {
-                            "beganBy": {
-                              "type": "string",
-                              "enum": [
-                                "recorder_creation",
-                                "n_events_zero"
-                              ]
-                            },
-                            "beganAtBiologicalTimeTics": {
-                              "type": "string",
-                              "pattern": "^(?:0|[1-9][0-9]*)$",
-                              "maxLength": 32
-                            }
-                          },
-                          "required": [
-                            "beganBy",
-                            "beganAtBiologicalTimeTics"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "recordingPlan": {
-                          "type": "object",
-                          "description": "The most recent mutation of the recorder window/backend/time encoding or sender wiring.",
-                          "properties": {
-                            "lastMutationAtBiologicalTimeTics": {
-                              "type": "string",
-                              "pattern": "^(?:0|[1-9][0-9]*)$",
-                              "maxLength": 32
-                            },
-                            "scope": {
-                              "const": "window_backend_time_encoding_and_sender_wiring"
-                            },
-                            "senderUniverseBinding": {
-                              "const": "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
-                            }
-                          },
-                          "required": [
-                            "lastMutationAtBiologicalTimeTics",
-                            "scope",
-                            "senderUniverseBinding"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "clockEpochContinuity": {
-                          "const": "biological_time_monotonic_since_last_kernel_initialization",
-                          "description": "Caller declaration that biological_time remained monotonic from the most recent process initialization or ResetKernel through capture. SetKernelStatus({biological_time: 0}) can preserve a recorder and its old memory while restarting the clock; NEST 3.10.0 marks that operation incompletely supported, so clearing n_events afterward does not restore this certified profile."
-                        },
-                        "eventCompleteness": {
-                          "const": "complete_for_recorded_senders"
-                        },
-                        "adapterInputDigest": {
-                          "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
-                          "description": "Domain-separated digest over the detached plain-data status projection and every normalized adapter option. This is content identity, not source authentication or projection attestation."
                         }
                       },
                       "required": [
                         "kind",
-                        "profile",
-                        "runtimeStatus",
-                        "recordingGrid",
-                        "bufferEpoch",
-                        "recordingPlan",
-                        "clockEpochContinuity",
-                        "eventCompleteness",
-                        "adapterInputDigest"
+                        "origin",
+                        "start",
+                        "stop",
+                        "unit",
+                        "boundary",
+                        "recordingBackend",
+                        "timeEncoding",
+                        "captureAuthority"
                       ],
                       "additionalProperties": false
+                    },
+                    "else": {
+                      "if": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "nest_recording_device_positive_infinity_capture_bounded"
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ]
+                      },
+                      "then": {
+                        "type": "object",
+                        "description": "A finite observation window cut from a NEST memory spike recorder whose configured device stop was NEST positive infinity. The upper endpoint is the successful-return biological capture time. It is not a recorder deactivation time.",
+                        "properties": {
+                          "kind": {
+                            "const": "nest_recording_device_positive_infinity_capture_bounded"
+                          },
+                          "origin": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "start": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "captureTime": {
+                            "type": "number",
+                            "minimum": 0,
+                            "description": "Finite absolute NEST biological time in milliseconds at the successful Simulate or Run return where the memory status was read. Its exact integer-tic preimage is captureAuthority.runtimeStatus.captureBiologicalTimeTics."
+                          },
+                          "unit": {
+                            "const": "ms"
+                          },
+                          "boundary": {
+                            "const": "(origin+start,capture]"
+                          },
+                          "recordingBackend": {
+                            "const": "memory"
+                          },
+                          "timeEncoding": {
+                            "const": "native_binary64_ms"
+                          },
+                          "configuredStop": {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "const": "nest_time_positive_infinity"
+                              },
+                              "exportedMs": {
+                                "const": 17976931348623157e292,
+                                "description": "Exact binary64 DBL_MAX value exposed by NEST 3.10.0 Time::get_ms() for its internal positive-infinity sentinel. This identifies the pinned projection rule; it does not authenticate the detached input."
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "exportedMs"
+                            ],
+                            "additionalProperties": false,
+                            "description": "The source recorder retained NEST's positive-infinity stop. NEST 3.10.0 exposes that internal Time sentinel through PyNEST as DBL_MAX; the named projection replaces only that exact pinned-profile value with this closed JSON sentinel."
+                          },
+                          "captureAuthority": {
+                            "type": "object",
+                            "description": "Caller-declared authority for a finite capture of a NEST positive-infinity memory recorder. Cortexel derives and checks the finite capture endpoint from exact tics but does not authenticate the runtime, successful return, projection, history, wiring, or process scope.",
+                            "properties": {
+                              "kind": {
+                                "const": "caller_declaration",
+                                "description": "This detached JSON is an attributable caller claim, never a live-capture attestation."
+                              },
+                              "profile": {
+                                "const": "cortexel-nest-memory-spike-capture-authority.v4"
+                              },
+                              "runtimeStatus": {
+                                "type": "object",
+                                "properties": {
+                                  "nestVersion": {
+                                    "const": "3.10.0"
+                                  },
+                                  "timeBuildProfile": {
+                                    "const": "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1"
+                                  },
+                                  "statusReadMethod": {
+                                    "const": "pynest_single_spike_recorder_get_status_plain_projection_v2"
+                                  },
+                                  "executionScope": {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "const": "single_process"
+                                      },
+                                      "numProcesses": {
+                                        "const": 1
+                                      },
+                                      "rank": {
+                                        "const": 0
+                                      },
+                                      "localNumThreads": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 1e6
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "numProcesses",
+                                      "rank",
+                                      "localNumThreads"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "resolutionMs": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                  },
+                                  "ticsPerMs": {
+                                    "type": "string",
+                                    "pattern": "^[1-9][0-9]*$",
+                                    "maxLength": 16
+                                  },
+                                  "resolutionTics": {
+                                    "type": "string",
+                                    "pattern": "^[1-9][0-9]*$",
+                                    "maxLength": 16
+                                  },
+                                  "captureBiologicalTimeTics": {
+                                    "type": "string",
+                                    "pattern": "^(?:0|[1-9][0-9]*)$",
+                                    "maxLength": 16
+                                  },
+                                  "captureBoundary": {
+                                    "const": "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation"
+                                  }
+                                },
+                                "required": [
+                                  "nestVersion",
+                                  "timeBuildProfile",
+                                  "statusReadMethod",
+                                  "executionScope",
+                                  "resolutionMs",
+                                  "ticsPerMs",
+                                  "resolutionTics",
+                                  "captureBiologicalTimeTics",
+                                  "captureBoundary"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recordingGrid": {
+                                "type": "object",
+                                "description": "Exact NEST integer-tic preimages of the finite serialized origin and start values. There is deliberately no stopTics member: the configured stop is positive infinity and the finite upper endpoint is the independently declared capture biological time.",
+                                "properties": {
+                                  "originTics": {
+                                    "type": "string",
+                                    "pattern": "^(?:0|[1-9][0-9]*)$",
+                                    "maxLength": 16
+                                  },
+                                  "startTics": {
+                                    "type": "string",
+                                    "pattern": "^(?:0|[1-9][0-9]*)$",
+                                    "maxLength": 16
+                                  }
+                                },
+                                "required": [
+                                  "originTics",
+                                  "startTics"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "bufferEpoch": {
+                                "type": "object",
+                                "description": "The most recent creation or n_events=0 clear of this recorder's memory buffer.",
+                                "properties": {
+                                  "beganBy": {
+                                    "type": "string",
+                                    "enum": [
+                                      "recorder_creation",
+                                      "n_events_zero"
+                                    ]
+                                  },
+                                  "beganAtBiologicalTimeTics": {
+                                    "type": "string",
+                                    "pattern": "^(?:0|[1-9][0-9]*)$",
+                                    "maxLength": 16
+                                  }
+                                },
+                                "required": [
+                                  "beganBy",
+                                  "beganAtBiologicalTimeTics"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "recordingPlan": {
+                                "type": "object",
+                                "description": "The most recent mutation of the recorder window/backend/time encoding or sender wiring.",
+                                "properties": {
+                                  "lastMutationAtBiologicalTimeTics": {
+                                    "type": "string",
+                                    "pattern": "^(?:0|[1-9][0-9]*)$",
+                                    "maxLength": 16
+                                  },
+                                  "scope": {
+                                    "const": "window_backend_time_encoding_and_sender_wiring"
+                                  },
+                                  "senderUniverseBinding": {
+                                    "const": "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+                                  }
+                                },
+                                "required": [
+                                  "lastMutationAtBiologicalTimeTics",
+                                  "scope",
+                                  "senderUniverseBinding"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "clockEpochContinuity": {
+                                "const": "biological_time_monotonic_since_last_kernel_initialization",
+                                "description": "Caller declaration that biological_time remained monotonic from the most recent process initialization or ResetKernel through capture."
+                              },
+                              "eventCompleteness": {
+                                "const": "complete_for_recorded_senders"
+                              },
+                              "adapterInputDigest": {
+                                "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/sha256",
+                                "description": "Domain-separated v5 digest over the detached positive-infinity plain-data projection and every normalized adapter option. This is content identity, not authentication."
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "profile",
+                              "runtimeStatus",
+                              "recordingGrid",
+                              "bufferEpoch",
+                              "recordingPlan",
+                              "clockEpochContinuity",
+                              "eventCompleteness",
+                              "adapterInputDigest"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "origin",
+                          "start",
+                          "captureTime",
+                          "unit",
+                          "boundary",
+                          "recordingBackend",
+                          "timeEncoding",
+                          "configuredStop",
+                          "captureAuthority"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "else": {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "nest_recording_device_origin_relative",
+                              "nest_recording_device_positive_infinity_capture_bounded"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
-                  "required": [
-                    "kind",
-                    "origin",
-                    "start",
-                    "stop",
-                    "unit",
-                    "boundary",
-                    "recordingBackend",
-                    "timeEncoding",
-                    "captureAuthority"
-                  ],
-                  "additionalProperties": false
+                  "else": {
+                    "$ref": "https://sepahead.github.io/cortexel/schemas/v1/common.v1.schema.json#/$defs/eventTimeWindow"
+                  }
                 }
               ]
             },
@@ -15579,20 +15898,20 @@ var SKILL_AUTHORING = freezeGenerated({
 
 // src/adapters/source-catalog.ts
 var SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN = "cortexel-source-adapter-catalog.rfc8785-sha256.v1";
-var SOURCE_ADAPTER_IDS = Object.freeze([
-  "nest-spike-recorder"
-]);
+var SOURCE_ADAPTER_IDS = Object.freeze(["nest-spike-recorder"]);
 var SOURCE_ADAPTER_ID_SET = new Set(SOURCE_ADAPTER_IDS);
 function isSourceAdapterId(value) {
   return typeof value === "string" && SOURCE_ADAPTER_ID_SET.has(value);
 }
-var NEST_SPIKE_RECORDER_EXAMPLE = {
+var NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE = {
   exportedStatus: {
     record_to: "memory",
     time_in_steps: false,
     origin: 0,
     start: 0,
-    stop: 10,
+    stop: {
+      kind: "nest_time_positive_infinity"
+    },
     n_events: 3,
     events: {
       // Source order, repeated observations, and a silent sender are intentional.
@@ -15605,9 +15924,66 @@ var NEST_SPIKE_RECORDER_EXAMPLE = {
     nestVersion: "3.10.0",
     captureAuthority: {
       kind: "caller_declaration",
-      profile: "cortexel-nest-memory-spike-capture-authority.v1",
+      profile: "cortexel-nest-memory-spike-capture-authority.v4",
       runtimeStatus: {
         nestVersion: "3.10.0",
+        timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
+        statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v2",
+        executionScope: {
+          kind: "single_process",
+          numProcesses: 1,
+          rank: 0,
+          localNumThreads: 1
+        },
+        resolutionMs: 0.1,
+        ticsPerMs: "1000",
+        resolutionTics: "100",
+        captureBiologicalTimeTics: "10000",
+        captureBoundary: "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation"
+      },
+      recordingGrid: {
+        originTics: "0",
+        startTics: "0"
+      },
+      bufferEpoch: {
+        beganBy: "recorder_creation",
+        beganAtBiologicalTimeTics: "0"
+      },
+      recordingPlan: {
+        lastMutationAtBiologicalTimeTics: "0",
+        scope: "window_backend_time_encoding_and_sender_wiring",
+        senderUniverseBinding: "recorded_sender_ids_exactly_equal_full_window_connected_source_universe"
+      },
+      clockEpochContinuity: "biological_time_monotonic_since_last_kernel_initialization",
+      eventCompleteness: "complete_for_recorded_senders"
+    },
+    runId: "run-1",
+    recorderId: "spike-recorder-1"
+  }
+};
+var NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE = {
+  exportedStatus: {
+    record_to: "memory",
+    time_in_steps: false,
+    origin: 0,
+    start: 0,
+    stop: 10,
+    n_events: 3,
+    events: {
+      // Matches the v4 example's observations so only evidence shape differs.
+      senders: [2, 1, 2],
+      times: [9.9, 1, 1]
+    }
+  },
+  options: {
+    recordedSenderIds: [1, 2, 3],
+    nestVersion: "3.10.0",
+    captureAuthority: {
+      kind: "caller_declaration",
+      profile: "cortexel-nest-memory-spike-capture-authority.v3",
+      runtimeStatus: {
+        nestVersion: "3.10.0",
+        timeBuildProfile: "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
         statusReadMethod: "pynest_single_spike_recorder_get_status_plain_projection_v1",
         executionScope: {
           kind: "single_process",
@@ -15648,7 +16024,7 @@ var SOURCE_ADAPTER_CATALOG_DATA = {
   adapters: {
     "nest-spike-recorder": {
       id: "nest-spike-recorder",
-      revision: 3,
+      revision: 5,
       title: "NEST 3.10.0 memory spike recorder to stable spike raster",
       sourceSystem: "NEST Simulator",
       admittedSourceVersions: ["3.10.0"],
@@ -15656,7 +16032,7 @@ var SOURCE_ADAPTER_CATALOG_DATA = {
       implementation: {
         packageSubpath: "cortexel/adapters/nest",
         exportName: "nestSpikeRecorderToRaster",
-        profile: NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3
+        profile: NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5
       },
       cli: {
         command: "cortexel source adapt nest-spike-recorder <input|->",
@@ -15672,25 +16048,36 @@ var SOURCE_ADAPTER_CATALOG_DATA = {
         options: "Complete recorded sender universe plus the caller-retained capture authority."
       },
       acceptanceBoundary: {
-        adapter: "The adapter checks its exact revision-3 source profile and authors a request.",
+        adapter: "The adapter checks one exact revision-5 source-faithful clock profile with closed finite-stop and positive-infinity/capture-bounded branches, then authors the corresponding request.",
         request: "The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.",
         rendering: "Pipe the emitted request to `cortexel render`; adapter success alone is never render authority."
       },
       authority: [
         "The source digest binds the detached JSON-compatible status projection, not a live simulator process.",
         "The adapter-input digest additionally binds the normalized options and caller-declared capture authority.",
+        "Revision 5 binds the exact LP64/int64/IEEE-binary64 time-build profile and reproduces NEST 3.10.0 Time::get_ms as rounded reciprocal followed by rounded multiplication.",
+        "The exact positive-infinity projection token maps to a finite window ending at the declared successful-return capture time; it never relabels that time as recorder deactivation.",
+        "The emitted configuredStop records the pinned NEST 3.10.0 profile constant exportedMs=DBL_MAX; the typed input sentinel asserts that projection revision 2 recognized that value, but this version-bound interpretation remains unauthenticated.",
+        "Projection v2 with capture-authority profile v4 requires the caller to declare that the last advancing Simulate or Run ended exactly at captureTime and that status was projected before any further advance or mutation.",
+        "Finite-stop and positive-infinity requests use capture-authority v3/v4 respectively and one domain-separated revision-5 input digest; historical v1/v2 authority fails with an explicit migration error.",
         "The complete sender universe, recorder history, wiring history, process scope, run id, and recorder id remain caller declarations.",
         "Events retain source order and multiplicity; the scientific view owns any scoped sorting or aggregation."
       ],
       limitations: [
         "Only record_to=memory and time_in_steps=false are admitted.",
-        "Only the exact declared NEST 3.10.0 profile is admitted.",
+        "Only the exact declared NEST 3.10.0 LP64/int64/IEEE-binary64 time-build profile and conservative safe-integer clock subset are admitted.",
         "Only a single-process capture scope is admitted.",
+        "Positive-infinity status must pass through projection revision 2, which emits the exact typed sentinel; raw DBL_MAX is rejected.",
         "The package does not import PyNEST, inspect a live simulation, or authenticate caller declarations.",
-        "ASCII, screen, MPI, SIONlib, step-plus-offset clocks, and every other stable NEST mapping remain unsupported by this adapter revision.",
+        "ASCII, screen, MPI, SIONlib, step-plus-offset clocks, non-LP64 builds, clocks outside the safe source-round-trippable subset, and every other stable NEST mapping remain unsupported by this adapter revision.",
         "Real-NEST conformance gate R049 remains external release evidence; packaged code is not certification."
       ],
-      example: NEST_SPIKE_RECORDER_EXAMPLE
+      examples: {
+        positiveInfinity: NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE,
+        finiteStop: NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE
+      },
+      /** Prompt-budget compatibility field: the current branch remains directly copyable. */
+      example: NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE
     }
   }
 };
@@ -15715,4 +16102,4 @@ export {
   lookupSourceAdapter,
   SOURCE_ADAPTER_CATALOG_DIGEST
 };
-//# sourceMappingURL=chunk-PCBTWOAZ.js.map
+//# sourceMappingURL=chunk-DV5EIOBF.js.map

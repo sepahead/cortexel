@@ -11,7 +11,9 @@
  * package contract so release authorization can add receipts without changing the
  * tested candidate's semantics.
  */
-import { NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3 } from './nest/profile.js';
+import {
+  NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5,
+} from './nest/profile.js';
 
 export const ADAPTER_IMPLEMENTATIONS_V1 = Object.freeze([
   Object.freeze({
@@ -22,7 +24,7 @@ export const ADAPTER_IMPLEMENTATIONS_V1 = Object.freeze([
     exportName: 'nestSpikeRecorderToRaster',
     sourcePath: 'src/adapters/nest/recorders.ts',
     publicEntryPath: 'src/adapters/nest/index.ts',
-    adapterProfile: NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3,
+    adapterProfile: NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5,
     certificationRequirement: Object.freeze({
       ledger: 'cortexel-release-evidence-ledger.v1',
       gate: Object.freeze({
@@ -34,11 +36,9 @@ export const ADAPTER_IMPLEMENTATIONS_V1 = Object.freeze([
       }),
       conformanceProfile: Object.freeze({
         registry: 'cortexel-adapter-conformance-profiles.v1',
-        id: 'nest-spike-recorder.v3',
-        digestAlgorithm:
-          'cortexel_adapter_conformance_profile_rfc8785_sha256_v1',
-        digest:
-          'sha256:9bf23e63c51b23239cf0438fa770323b65d58cd29ff7d25ed5c7626a9e1f2be4',
+        id: 'nest-spike-recorder.v5',
+        digestAlgorithm: 'cortexel_adapter_conformance_profile_rfc8785_sha256_v1',
+        digest: 'sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a',
       }),
     }),
   }),

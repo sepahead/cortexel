@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {
   migrateLegacyRequest
-} from "../chunk-O26PPGAG.js";
+} from "../chunk-CEZJZVUM.js";
 import {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
   SKILL_AUTHORING,
@@ -11,40 +11,41 @@ import {
   STABLE_CATALOG_SCHEMA_RESOURCES,
   isSourceAdapterId,
   lookupSourceAdapter
-} from "../chunk-PCBTWOAZ.js";
+} from "../chunk-DV5EIOBF.js";
 import {
   buildFigureFromJson
-} from "../chunk-SB4UYJN2.js";
-import "../chunk-3B7S6D34.js";
+} from "../chunk-3FFQ5HPJ.js";
+import "../chunk-SGBEOOWY.js";
 import {
   nestSpikeRecorderToRaster
-} from "../chunk-NHUJIG7G.js";
-import "../chunk-ZH5ZNYHE.js";
+} from "../chunk-JL2LLSH4.js";
+import "../chunk-3A56EAOW.js";
 import {
   parseJsonStrict
-} from "../chunk-L4WMNNDJ.js";
-import "../chunk-XZP4LRCZ.js";
+} from "../chunk-QXQJPKJH.js";
+import "../chunk-W34Q2PSG.js";
 import {
   ERROR_STAGES
-} from "../chunk-4A4K5NRD.js";
+} from "../chunk-QKGQ343H.js";
+import "../chunk-XGABDL4O.js";
 import {
   EXPERIMENTAL_CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
   isStableSkillId
-} from "../chunk-DPIT352X.js";
-import "../chunk-S32HFOQJ.js";
+} from "../chunk-AJMFQ6OE.js";
+import "../chunk-ZJBZFUTH.js";
+import "../chunk-2N3ZC6OE.js";
 import {
   UNSAFE_DISPLAY_PATTERN_SOURCE,
   getBudgetLimits,
   makeError,
   safeText
-} from "../chunk-HLJSPQRG.js";
-import "../chunk-XGABDL4O.js";
+} from "../chunk-VJN27A3U.js";
 import {
   CATALOG_DIGEST_DOMAIN,
   getBuildIdentity
-} from "../chunk-PZCDM4HZ.js";
+} from "../chunk-M7SHUGNL.js";
 import {
   canonicalize
 } from "../chunk-ZYBCCIMH.js";

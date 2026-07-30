@@ -767,6 +767,8 @@ describe('cross-language parity — TypeScript vs Python', () => {
     if (!contract) throw new Error('neuro.spike_raster contract not found');
     const invalidWindow = structuredClone(contract.examples.valid[0]) as any;
     invalidWindow.data.window.stop = invalidWindow.data.window.start;
+    invalidWindow.data.window.captureAuthority.recordingGrid.stopTics =
+      invalidWindow.data.window.captureAuthority.recordingGrid.startTics;
     invalidWindow.source.system = 'nest';
     invalidWindow.source.systemVersion = '3.11';
     delete invalidWindow.source.sourceDigest;
@@ -792,7 +794,6 @@ describe('cross-language parity — TypeScript vs Python', () => {
         'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
       ],
       [
-        'SCIENCE_EVENT_OUT_OF_WINDOW',
         'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
       ],
     ]);
@@ -810,6 +811,11 @@ describe('cross-language parity — TypeScript vs Python', () => {
     const science = (instancePath: string): PortableDiagnosticRecord => ({
       code: 'SCIENCE_WINDOW_INVALID',
       stage: 'science',
+      instancePath,
+    });
+    const sourceClock = (instancePath: string): PortableDiagnosticRecord => ({
+      code: 'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
+      stage: 'provenance',
       instancePath,
     });
     const structural = (
@@ -844,21 +850,12 @@ describe('cross-language parity — TypeScript vs Python', () => {
     const mismatchedStopProjection = fresh();
     mismatchedStopProjection.data.window.captureAuthority.recordingGrid.stopTics = '9875';
 
-    // The extra tic is far below one binary64 ulp at 10 ms, so its exact rational
-    // projection still rounds to 10. Grid membership must therefore be checked as
-    // an independent integer relation rather than inferred from projection equality.
+    // Projection equality and source round-trip do not establish resolution-grid
+    // membership. Keep this counterexample inside the admitted safe-integer domain.
     const offGridButSameProjection = fresh();
-    Object.assign(offGridButSameProjection.data.window.captureAuthority.runtimeStatus, {
-      resolutionMs: 1e-16,
-      ticsPerMs: '100000000000000000',
-      resolutionTics: '10',
-      captureBiologicalTimeTics: '1000000000000000010',
-    });
-    Object.assign(offGridButSameProjection.data.window.captureAuthority.recordingGrid, {
-      originTics: '0',
-      startTics: '0',
-      stopTics: '1000000000000000001',
-    });
+    offGridButSameProjection.data.window.stop = 9876 * (1 / 1000);
+    offGridButSameProjection.data.window.captureAuthority.recordingGrid.stopTics =
+      '9876';
 
     const beforeClosedStop = fresh();
     beforeClosedStop.data.window.captureAuthority.runtimeStatus
@@ -909,24 +906,24 @@ describe('cross-language parity — TypeScript vs Python', () => {
       readonly expected: readonly PortableDiagnosticRecord[];
     }[] = [
       {
-        name: 'one-third millisecond is the exact rational projection of one of three tics',
+        name: 'one-third millisecond matches the pinned reciprocal-times-tic projection',
         request: exactThirdTicClock,
         expected: [],
       },
       {
-        name: 'the adjacent binary64 value is not the exact rational tic projection',
+        name: 'the adjacent binary64 value is not the pinned source-clock projection',
         request: adjacentThirdProjection,
-        expected: [science(resolutionPath)],
+        expected: [sourceClock(resolutionPath)],
       },
       {
         name: 'ticsPerMs remains the shared projection denominator',
         request: mismatchedTicsPerMs,
-        expected: [science(stopTicsPath), science(resolutionPath)],
+        expected: [sourceClock(stopTicsPath), sourceClock(resolutionPath)],
       },
       {
         name: 'an on-grid stop preimage must project back to the serialized stop',
         request: mismatchedStopProjection,
-        expected: [science(stopTicsPath)],
+        expected: [sourceClock(stopTicsPath)],
       },
       {
         name: 'binary64 projection equality cannot conceal an off-grid tic',
@@ -967,16 +964,10 @@ describe('cross-language parity — TypeScript vs Python', () => {
         name: 'a multi-process execution scope is refused structurally',
         request: mpiScope,
         expected: [
-          structural('SCHEMA_ENUM_MISMATCH', '/data/window/boundary'),
-          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/captureAuthority'),
           structural(
             'SCHEMA_ENUM_MISMATCH',
             '/data/window/captureAuthority/runtimeStatus/executionScope/numProcesses',
           ),
-          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/kind'),
-          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/origin'),
-          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/recordingBackend'),
-          structural('SCHEMA_UNKNOWN_PROPERTY', '/data/window/timeEncoding'),
         ],
       },
       {
@@ -984,10 +975,10 @@ describe('cross-language parity — TypeScript vs Python', () => {
         request: independentlyInvalid,
         expected: [
           science(bufferPath),
-          science(stopTicsPath),
           science(planPath),
           science(capturePath),
-          science(resolutionPath),
+          sourceClock(stopTicsPath),
+          sourceClock(resolutionPath),
           {
             code: 'PROVENANCE_SOURCE_CLOCK_INCONSISTENT',
             stage: 'provenance',

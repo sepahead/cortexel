@@ -1,15 +1,15 @@
 import {
-  makeError,
-  pointer
-} from "./chunk-HLJSPQRG.js";
-import {
   exactBinary64MultiplyByRational,
   exactRationalToBinary64,
   finiteBinary64ToMinSubnormalUnits
 } from "./chunk-XGABDL4O.js";
 import {
+  makeError,
+  pointer
+} from "./chunk-VJN27A3U.js";
+import {
   freezeGenerated
-} from "./chunk-PZCDM4HZ.js";
+} from "./chunk-M7SHUGNL.js";
 import {
   canonicalDigest
 } from "./chunk-ZYBCCIMH.js";
@@ -734,8 +734,8 @@ var ERROR_CODE_META = freezeGenerated({
   "PROVENANCE_SOURCE_CLOCK_INCONSISTENT": {
     "stage": "provenance",
     "severity": "error",
-    "summary": "A source-specific event clock contradicts the request's source, version, digest, backend, encoding, or event unit.",
-    "correctiveAction": "For a NEST origin-relative window, export the complete memory-recorder status with time_in_steps=false, retain native milliseconds, declare NEST 3.9 or 3.10, and bind the export with its canonical SHA-256 digest. Do not relabel or reconstruct the clock."
+    "summary": "A source-specific event clock contradicts the request's source, exact runtime/build profile, digest, backend, encoding, tic authority, or event unit.",
+    "correctiveAction": "For the current NEST adapter, export one complete NEST 3.10.0 memory spike-recorder status with time_in_steps=false, preserve native binary64 milliseconds, use capture-authority v3 for finite stop or v4 for positive infinity, declare the exact supported LP64/int64/binary64-roundTiesToEven/no-excess clock profile, and bind every normalized option in the revision-5 adapter-input digest. Do not relabel, add serialized endpoints, or substitute an ideal rational projection."
   },
   "RESOURCE_BUDGET_EXCEEDED": {
     "stage": "budget",
@@ -915,7 +915,7 @@ var ERROR_CODE_META = freezeGenerated({
     "stage": "adapter",
     "severity": "error",
     "summary": "The NEST recorder time encoding is absent or cannot be represented losslessly by this adapter revision.",
-    "correctiveAction": "For adapter revision 3, configure the memory recorder with time_in_steps=false before Simulate, preserve the exact NEST integer-tic preimages and runtime grid, retain the required capture history and single-process declaration, read status only after a successful Run/Simulate return at or beyond originTics+stopTics, and apply the named lossless plain-data projection. Raw step/offset support remains fail-closed until the downstream contract preserves that pair as the canonical clock."
+    "correctiveAction": "Use exact NEST 3.10.0 memory output with time_in_steps=false, preserve the runtime grid and finite integer-tic preimages, retain the required capture history and single-process declaration, and apply the named lossless plain-data projection. A finite stop uses revision-3 authority and must be captured after originTics+stopTics. The default positive-infinity stop must be projected to the exact typed sentinel and paired with revision-4 authority whose finite capture time immediately follows a successful advancing return; raw numeric DBL_MAX is rejected. Step/offset support remains fail-closed until the downstream contract preserves that pair as the canonical clock."
   },
   "ADAPTER_UNSUPPORTED_VERSION": {
     "stage": "adapter",
@@ -1708,6 +1708,11 @@ var DISCLOSURE_RULES = freezeGenerated([
     "id": "NEST_SERIALIZED_CLOCK_BOUNDARY",
     "severity": "important",
     "text": "NEST capture declaration \u2014 Cortexel checked the declared plain-data projection, integer-tic grid, successful-return endpoint, buffer/plan history, clock-epoch continuity, sender universe, and single-process scope only for internal consistency. It did not observe or authenticate the runtime, projection, topology, resets, history, wiring, sender universe, or export; all remain caller claims."
+  },
+  {
+    "id": "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
+    "severity": "important",
+    "text": "NEST positive-infinity capture \u2014 The recorder had no finite configured stop. The plotted upper endpoint is the caller-declared successful-return capture time, not recorder deactivation; this artifact establishes nothing about events after capture."
   },
   {
     "id": "MISSING_VALUES_PRESENT",
@@ -3999,4 +4004,4 @@ export {
   verifyPeakBasisAgainstWindow,
   verifyBinnedPeakValueLattice
 };
-//# sourceMappingURL=chunk-4A4K5NRD.js.map
+//# sourceMappingURL=chunk-QKGQ343H.js.map

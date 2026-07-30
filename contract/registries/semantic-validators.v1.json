@@ -41,20 +41,20 @@
       "complexity": "O(n) in edges", "tsSymbol": "binsStrictlyIncreasing", "pySymbol": "bins_strictly_increasing", "oracle": "hand"
     },
     {
-      "id": "window.valid", "revision": 3,
-      "description": "An interval has start < stop, finite bounds, an explicit boundary convention, and—when the invocation declares unitDimension—a unit in that dimension. An origin-relative NEST event window additionally requires its two effective binary64 display endpoints to remain finite and strictly ordered after exact origin-plus-relative-bound accumulation; origin, start, stop, resolution, capture and history declarations must bind exact integer-tic projections on the runtime grid; capture must occur no earlier than originTics+stopTics after successful Run/Simulate return; and the most recent memory-buffer epoch and recording-plan mutation must be no later than originTics+startTics. Time-window consumers set unitDimension=time, while phase-plane state domains remain valid signed intervals in their own declared units.",
-      "errorCodes": ["SCIENCE_WINDOW_INVALID", "SCIENCE_UNIT_DIMENSION_MISMATCH", "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE"],
+      "id": "window.valid", "revision": 5,
+      "description": "An interval has finite, strictly ordered endpoints, an explicit boundary convention, and—when the invocation declares unitDimension—a unit in that dimension. Revision-5 NEST branches bind exact retained and combined integer tics, the explicit LP64/int64/binary64-roundTiesToEven/no-excess build profile, the resolution-adjusted finite-Time domain, grid alignment, inverse source round-trip, and distinguishable adjacent grid points. Endpoint projection reproduces pinned Time::get_ms as one stored reciprocal followed by one stored multiplication; it is not an ideal rational quotient. Finite stop requires capture no earlier than origin+stop. Positive infinity derives a finite capture endpoint without stopTics, requires capture after the open start, and keeps buffer/plan history no later than that start.",
+      "errorCodes": ["SCIENCE_WINDOW_INVALID", "SCIENCE_UNIT_DIMENSION_MISMATCH", "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE", "PROVENANCE_SOURCE_CLOCK_INCONSISTENT"],
       "complexity": "O(1)", "tsSymbol": "windowValid", "pySymbol": "window_valid", "oracle": "hand"
     },
     {
-      "id": "events.within_window", "revision": 2,
-      "description": "Event membership honors the declared start and stop closure, including NEST's open-start/closed-stop origin-relative window. Exact comparisons operate on the received binary64 quantities without an intermediate unit conversion. Under reject, outside events fail; under exclude_and_disclose they remain accepted only for the renderer to retain as table rows, count, exclude from marks, and disclose.",
+      "id": "events.within_window", "revision": 3,
+      "description": "Event membership honors the declared endpoint closure, including NEST's finite-stop (origin+start,origin+stop] device window and its separate positive-infinity (origin+start,capture] finite prefix. Exact comparisons operate on the received binary64 quantities without an intermediate unit conversion. Under reject, outside events fail; under exclude_and_disclose they remain accepted only for the renderer to retain as table rows, count, exclude from marks, and disclose.",
       "errorCodes": ["SCIENCE_EVENT_OUT_OF_WINDOW"],
       "complexity": "O(n) in events", "tsSymbol": "eventsWithinWindow", "pySymbol": "events_within_window", "oracle": "hand"
     },
     {
-      "id": "events.source_clock_declared", "revision": 2,
-      "description": "A NEST origin-relative event window is bound to absolute_clock time, the exact NEST 3.10.0 memory/native-ms source profile, an equal capture-runtime version, and a digest of the exported plain-data recorder projection. This verifies internal declaration consistency, not projection custody, source authenticity, process scope, clock/buffer/configuration history, sender wiring, or the truth of the declared integer-tic preimages.",
+      "id": "events.source_clock_declared", "revision": 4,
+      "description": "Each NEST event window is bound to absolute_clock time, exact NEST 3.10.0 memory/native-ms source identity, an equal capture-runtime version, the current adapter-revision-5 finiteStop or positiveInfinityCaptureBounded branch, its capture-authority v3/v4 shape, the explicit binary64 build/evaluation profile, and a digest of the exported plain-data projection plus normalized options. This verifies internal declaration consistency, not active floating-point environment, toolchain flags, projection custody, source authenticity, process scope, successful-return adjacency, clock/buffer/configuration history, sender wiring, or the truth of caller declarations.",
       "errorCodes": ["PROVENANCE_SOURCE_CLOCK_INCONSISTENT"],
       "complexity": "O(1)", "tsSymbol": "eventsSourceClockDeclared", "pySymbol": "events_source_clock_declared", "oracle": "hand+nest"
     },

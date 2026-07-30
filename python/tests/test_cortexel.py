@@ -939,19 +939,24 @@ class TestValidation(unittest.TestCase):
             authority["runtimeStatus"]["resolutionMs"] = 0.125
             authority["runtimeStatus"]["ticsPerMs"] = "1000"
             authority["runtimeStatus"]["resolutionTics"] = "125"
+            authority["runtimeStatus"]["timeBuildProfile"] = (
+                "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1"
+            )
 
             def fixture_tics(milliseconds):
-                candidate = milliseconds * 1000
+                scaled = milliseconds * 1000.0
                 if (
-                    math.isfinite(candidate) and
-                    candidate >= 0 and
-                    candidate.is_integer() and
-                    candidate < 10 ** 32
+                    math.isfinite(scaled) and
+                    scaled >= 0
                 ):
-                    return str(int(candidate))
-                # Collapsed/overflow tests return before capture-authority
-                # semantics. Keep their structural fixture inside the schema
-                # without pretending this fallback is a real clock preimage.
+                    candidate = math.trunc(scaled + 0.5)
+                    if (
+                        candidate <= (1 << 53) - 1 and
+                        float(candidate) * (1.0 / 1000.0) == milliseconds
+                    ):
+                        return str(candidate)
+                # Direct malformed-input tests still need a structurally shaped
+                # carrier; semantic validation must reject this non-authority.
                 return "0"
 
             authority["runtimeStatus"]["captureBiologicalTimeTics"] = (
@@ -971,6 +976,58 @@ class TestValidation(unittest.TestCase):
             normalized_window["captureAuthority"] = authority
         request["data"]["window"] = normalized_window
         request["parameters"]["outOfWindowPolicy"] = policy
+        return request
+
+    def _positive_infinity_spike_request(self, values=(110.125, 125.0)):
+        """Author one exact nonzero-origin mapping-revision-5 capture fixture.
+
+        This is deliberately assembled from the finite compatibility example rather
+        than copied from the TypeScript adapter. It exercises the independently
+        represented absolute capture endpoint and the absence of a finite stop tic.
+        """
+        request = json.loads(json.dumps(
+            self._spike_contract()["examples"]["valid"][0]
+        ))
+        authority = request["data"]["window"]["captureAuthority"]
+        authority["profile"] = "cortexel-nest-memory-spike-capture-authority.v4"
+        authority["runtimeStatus"].update({
+            "statusReadMethod":
+                "pynest_single_spike_recorder_get_status_plain_projection_v2",
+            "timeBuildProfile":
+                "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
+            "captureBiologicalTimeTics": "125000",
+            "captureBoundary":
+                "after_successful_advancing_simulate_or_run_return_at_exact_"
+                "capture_biological_time_before_any_further_advance_or_mutation",
+        })
+        authority["recordingGrid"] = {
+            "originTics": "100000",
+            "startTics": "10000",
+        }
+        authority["bufferEpoch"] = {
+            "beganBy": "recorder_creation",
+            "beganAtBiologicalTimeTics": "100000",
+        }
+        authority["recordingPlan"]["lastMutationAtBiologicalTimeTics"] = "110000"
+        request["data"]["window"] = {
+            "kind":
+                "nest_recording_device_positive_infinity_capture_bounded",
+            "origin": 100.0,
+            "start": 10.0,
+            "captureTime": 125.0,
+            "unit": "ms",
+            "boundary": "(origin+start,capture]",
+            "recordingBackend": "memory",
+            "timeEncoding": "native_binary64_ms",
+            "configuredStop": {
+                "kind": "nest_time_positive_infinity",
+                "exportedMs": sys.float_info.max,
+            },
+            "captureAuthority": authority,
+        }
+        request["data"]["eventTimes"]["values"] = list(values)
+        sender = request["data"]["recordedSenderIds"][0]
+        request["data"]["eventSenderIds"] = [sender] * len(values)
         return request
 
     def test_every_valid_example_passes(self):
@@ -1046,11 +1103,20 @@ class TestValidation(unittest.TestCase):
                                     "SCHEMA_ENUM_MISMATCH",
                                 }
                             ]
+                            # Closed oneOf branches can independently own the same
+                            # literal-unit repair (both NEST window variants require
+                            # ms). The structural mirror intentionally preserves every
+                            # branch failure for Ajv parity, so require one actionable
+                            # repair identity rather than one emitted branch record.
+                            canonical_repairs = {
+                                (error.code, error.stage, error.message)
+                                for error in canonical_owners
+                            }
                             self.assertEqual(
-                                len(canonical_owners),
+                                len(canonical_repairs),
                                 1,
                                 f"{contract['id']} valid[{example_index}] {path} -> {unit!r} "
-                                "must have exactly one canonical-code owner at the mutated path",
+                                "must have exactly one canonical-code repair at the mutated path",
                             )
                         all_dimension_errors = [
                             error for error in errors
@@ -1371,9 +1437,30 @@ class TestValidation(unittest.TestCase):
                     [(error.code, error.instance_path) for error in conditional_errors],
                     [
                         ("SCHEMA_REQUIRED_PROPERTY_MISSING", f"/{required_name}"),
-                        ("SCHEMA_VALIDATION_FAILED", ""),
                     ],
                 )
+
+        # Suppression is conditional-wrapper-specific. A combinator that genuinely
+        # has no causal failing leaf still owns one summary record: both oneOf
+        # branches accept this integer, so there is no branch error to surface.
+        summary_only_errors = []
+        _validate_schema(1, {
+            "oneOf": [
+                {"type": "number"},
+                {"type": "integer"},
+            ],
+        }, "/value", summary_only_errors)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in summary_only_errors],
+            [("SCHEMA_VALIDATION_FAILED", "/value")],
+        )
+
+        matched_not_errors = []
+        _validate_schema({}, {"not": {"type": "object"}}, "/value", matched_not_errors)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in matched_not_errors],
+            [("SCHEMA_VALIDATION_FAILED", "/value")],
+        )
 
     def test_diagnostics_follow_the_registry_unicode_code_point_order(self):
         request = self._psth_request()
@@ -1674,6 +1761,377 @@ class TestValidation(unittest.TestCase):
         closed_stop = self._spike_request([110], window, origin_relative=True)
         self.assertEqual(cortexel.validate_request_partial(closed_stop), [])
 
+    def test_spike_raster_nest_combines_tics_before_projecting_endpoints(self):
+        """Pin the real NEST get_ms operation order at a decimal edge.
+
+        NEST stores one already-rounded reciprocal and multiplies integer tics by
+        it. The absolute boundary is nevertheless formed in Time::tic_t first.
+        An evaluator must not compare an event with the rational sum of the
+        separately serialized origin and offset fields.
+        """
+        reciprocal = 1.0 / 1000.0
+
+        def projected(tics):
+            return float(tics) * reciprocal
+
+        build_profile = (
+            "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1"
+        )
+
+        finite_window = {
+            "kind": "nest_recording_device_origin_relative",
+            "origin": projected(100),
+            "start": projected(0),
+            "stop": projected(700),
+            "unit": "ms",
+            "boundary": "(origin+start,origin+stop]",
+            "recordingBackend": "memory",
+            "timeEncoding": "native_binary64_ms",
+        }
+        finite = self._spike_request(
+            [0.8], finite_window, origin_relative=True
+        )
+        finite_authority = finite["data"]["window"]["captureAuthority"]
+        finite_authority["runtimeStatus"].update({
+            "resolutionMs": projected(100),
+            "ticsPerMs": "1000",
+            "resolutionTics": "100",
+            "captureBiologicalTimeTics": "800",
+            "timeBuildProfile": build_profile,
+        })
+        finite_authority["recordingGrid"] = {
+            "originTics": "100",
+            "startTics": "0",
+            "stopTics": "700",
+        }
+        finite_authority["bufferEpoch"]["beganAtBiologicalTimeTics"] = "100"
+        finite_authority["recordingPlan"][
+            "lastMutationAtBiologicalTimeTics"
+        ] = "100"
+        self.assertEqual(projected(800), 0.8)
+        self.assertEqual(cortexel.validate_request_partial(finite), [])
+
+        # Stronger double-rounding oracle: adding the two separately serialized
+        # fields loses the source's upper endpoint, whereas adding integer tics
+        # first and projecting once preserves it.
+        finite_double_round = json.loads(json.dumps(finite))
+        combined_700_ms = projected(700)
+        finite_double_round["data"]["eventTimes"]["values"] = [
+            combined_700_ms
+        ]
+        finite_double_round["data"]["window"]["stop"] = projected(600)
+        finite_double_round["data"]["window"]["captureAuthority"][
+            "runtimeStatus"
+        ]["captureBiologicalTimeTics"] = "700"
+        finite_double_round["data"]["window"]["captureAuthority"][
+            "recordingGrid"
+        ]["stopTics"] = "600"
+        separately_added_ms = (
+            finite_double_round["data"]["window"]["origin"] +
+            finite_double_round["data"]["window"]["stop"]
+        )
+        self.assertEqual(separately_added_ms, 0.7)
+        self.assertEqual(combined_700_ms, 0.7000000000000001)
+        self.assertGreater(combined_700_ms, separately_added_ms)
+        self.assertEqual(
+            cortexel.validate_request_partial(finite_double_round),
+            [],
+        )
+
+        exact_quotient_substitution = json.loads(json.dumps(finite))
+        exact_quotient_substitution["data"]["window"]["stop"] = 0.7
+        direct_errors = []
+        _validate_spike_raster(exact_quotient_substitution, direct_errors)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in direct_errors],
+            [(
+                "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                "/data/window/captureAuthority/recordingGrid/stopTics",
+            )],
+        )
+
+        # Exact NEST 3.10.0 runtime control: SetKernelStatus resolution=0.7
+        # reports 0x1.6666666666667p-1, not the exact rational quotient 7/10.
+        wheel_resolution = json.loads(json.dumps(finite))
+        wheel_resolution_ms = projected(700)
+        self.assertEqual(
+            wheel_resolution_ms.hex(),
+            "0x1.6666666666667p-1",
+        )
+        wheel_resolution["data"]["eventTimes"]["values"] = [
+            wheel_resolution_ms
+        ]
+        wheel_resolution["data"]["window"].update({
+            "origin": 0.0,
+            "start": 0.0,
+            "stop": wheel_resolution_ms,
+        })
+        wheel_authority = wheel_resolution["data"]["window"][
+            "captureAuthority"
+        ]
+        wheel_authority["runtimeStatus"].update({
+            "resolutionMs": wheel_resolution_ms,
+            "resolutionTics": "700",
+            "captureBiologicalTimeTics": "700",
+        })
+        wheel_authority["recordingGrid"] = {
+            "originTics": "0",
+            "startTics": "0",
+            "stopTics": "700",
+        }
+        wheel_authority["bufferEpoch"]["beganAtBiologicalTimeTics"] = "0"
+        wheel_authority["recordingPlan"][
+            "lastMutationAtBiologicalTimeTics"
+        ] = "0"
+        self.assertEqual(
+            cortexel.validate_request_partial(wheel_resolution),
+            [],
+        )
+
+        capture_bounded = self._positive_infinity_spike_request(values=(0.8,))
+        capture_window = capture_bounded["data"]["window"]
+        capture_window.update({
+            "origin": projected(100),
+            "start": projected(700),
+            "captureTime": projected(900),
+        })
+        capture_authority = capture_window["captureAuthority"]
+        capture_authority["runtimeStatus"].update({
+            "resolutionMs": projected(100),
+            "ticsPerMs": "1000",
+            "resolutionTics": "100",
+            "captureBiologicalTimeTics": "900",
+            "timeBuildProfile": build_profile,
+        })
+        capture_authority["recordingGrid"] = {
+            "originTics": "100",
+            "startTics": "700",
+        }
+        capture_authority["bufferEpoch"]["beganAtBiologicalTimeTics"] = "100"
+        capture_authority["recordingPlan"][
+            "lastMutationAtBiologicalTimeTics"
+        ] = "800"
+        errors = cortexel.validate_request_partial(capture_bounded)
+        self.assertEqual(
+            [
+                (error.code, error.instance_path)
+                for error in errors
+                if error.code == "SCIENCE_EVENT_OUT_OF_WINDOW"
+            ],
+            [("SCIENCE_EVENT_OUT_OF_WINDOW", "/data/eventTimes/values/0")],
+        )
+
+        capture_double_round = self._positive_infinity_spike_request(
+            values=(combined_700_ms,)
+        )
+        double_round_window = capture_double_round["data"]["window"]
+        double_round_window.update({
+            "origin": projected(100),
+            "start": projected(600),
+            "captureTime": projected(800),
+        })
+        double_round_authority = double_round_window["captureAuthority"]
+        double_round_authority["runtimeStatus"].update({
+            "resolutionMs": projected(100),
+            "ticsPerMs": "1000",
+            "resolutionTics": "100",
+            "captureBiologicalTimeTics": "800",
+            "timeBuildProfile": build_profile,
+        })
+        double_round_authority["recordingGrid"] = {
+            "originTics": "100",
+            "startTics": "600",
+        }
+        double_round_authority["bufferEpoch"][
+            "beganAtBiologicalTimeTics"
+        ] = "100"
+        double_round_authority["recordingPlan"][
+            "lastMutationAtBiologicalTimeTics"
+        ] = "700"
+        double_round_errors = cortexel.validate_request_partial(
+            capture_double_round
+        )
+        self.assertEqual(
+            [
+                (error.code, error.instance_path)
+                for error in double_round_errors
+            ],
+            [("SCIENCE_EVENT_OUT_OF_WINDOW", "/data/eventTimes/values/0")],
+        )
+
+    def test_spike_raster_nest_clock_domain_and_resolution_fail_closed(self):
+        maximum_safe_tic = (1 << 53) - 1
+        build_profile = (
+            "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1"
+        )
+
+        # An unsafe resolution is one failed prerequisite, not permission to
+        # derive modulo, finite-domain, adjacency, or membership conclusions
+        # from a lossy binary64 integer conversion. Other safe primitives remain
+        # independently checkable, so this mutation owns exactly one diagnostic.
+        unsafe_resolution = json.loads(json.dumps(
+            self._spike_contract()["examples"]["valid"][0]
+        ))
+        unsafe_resolution["data"]["eventTimes"]["values"] = [1000.0]
+        unsafe_resolution["data"]["eventSenderIds"] = [
+            unsafe_resolution["data"]["recordedSenderIds"][0]
+        ]
+        unsafe_resolution["data"]["window"]["captureAuthority"][
+            "runtimeStatus"
+        ]["resolutionTics"] = str(maximum_safe_tic + 1)
+        unsafe_resolution_errors = cortexel.validate_request_partial(
+            unsafe_resolution
+        )
+        self.assertEqual(
+            [
+                (error.code, error.instance_path)
+                for error in unsafe_resolution_errors
+            ],
+            [(
+                "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                "/data/window/captureAuthority/runtimeStatus/resolutionTics",
+            )],
+        )
+
+        independently_unsafe = json.loads(json.dumps(unsafe_resolution))
+        independently_unsafe["data"]["window"]["captureAuthority"][
+            "runtimeStatus"
+        ].update({
+            "captureBiologicalTimeTics": str(maximum_safe_tic + 2),
+            "ticsPerMs": str(maximum_safe_tic + 3),
+        })
+        independent_errors = cortexel.validate_request_partial(
+            independently_unsafe
+        )
+        self.assertEqual(
+            [
+                (error.code, error.instance_path)
+                for error in independent_errors
+            ],
+            [
+                (
+                    "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                    "/data/window/captureAuthority/runtimeStatus/"
+                    "captureBiologicalTimeTics",
+                ),
+                (
+                    "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                    "/data/window/captureAuthority/runtimeStatus/resolutionTics",
+                ),
+                (
+                    "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                    "/data/window/captureAuthority/runtimeStatus/ticsPerMs",
+                ),
+            ],
+        )
+
+        # At this exact safe-integer boundary, NEST's reciprocal-then-multiply
+        # projection maps the retained upper tic and its +1-resolution neighbor
+        # to the same binary64 value even though the retained tic itself passes
+        # the pinned Time(ms) inverse. The interval is therefore not resolvable.
+        tics_per_ms = 3
+        upper_tics = maximum_safe_tic - 1
+        milliseconds_per_tic = 1.0 / float(tics_per_ms)
+        upper_ms = float(upper_tics) * milliseconds_per_tic
+        self.assertEqual(
+            upper_ms,
+            float(upper_tics + 1) * milliseconds_per_tic,
+        )
+        self.assertEqual(
+            math.trunc(upper_ms * float(tics_per_ms) + 0.5),
+            upper_tics,
+        )
+        aliased = self._spike_request(
+            (),
+            {
+                "kind": "nest_recording_device_origin_relative",
+                "origin": 0.0,
+                "start": 0.0,
+                "stop": upper_ms,
+                "unit": "ms",
+                "boundary": "(origin+start,origin+stop]",
+                "recordingBackend": "memory",
+                "timeEncoding": "native_binary64_ms",
+            },
+            origin_relative=True,
+        )
+        alias_authority = aliased["data"]["window"]["captureAuthority"]
+        alias_authority["runtimeStatus"].update({
+            "resolutionMs": milliseconds_per_tic,
+            "ticsPerMs": str(tics_per_ms),
+            "resolutionTics": "1",
+            "captureBiologicalTimeTics": str(upper_tics),
+            "timeBuildProfile": build_profile,
+        })
+        alias_authority["recordingGrid"] = {
+            "originTics": "0",
+            "startTics": "0",
+            "stopTics": str(upper_tics),
+        }
+        alias_authority["bufferEpoch"]["beganAtBiologicalTimeTics"] = "0"
+        alias_authority["recordingPlan"][
+            "lastMutationAtBiologicalTimeTics"
+        ] = "0"
+        alias_errors = []
+        _validate_spike_raster(aliased, alias_errors)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in alias_errors],
+            [(
+                "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
+                "/data/window/captureAuthority/recordingGrid/stopTics",
+            )],
+        )
+
+        # Each retained Time fits the conservative source subset, but the finite
+        # absolute upper sum does not. Reject that authority before membership;
+        # Python's unbounded integer must not conceal the cross-runtime overflow.
+        combined_overflow = self._spike_request(
+            (),
+            {
+                "kind": "nest_recording_device_origin_relative",
+                "origin": maximum_safe_tic - 1,
+                "start": 0,
+                "stop": 2,
+                "unit": "ms",
+                "boundary": "(origin+start,origin+stop]",
+                "recordingBackend": "memory",
+                "timeEncoding": "native_binary64_ms",
+            },
+            origin_relative=True,
+        )
+        overflow_authority = combined_overflow["data"]["window"][
+            "captureAuthority"
+        ]
+        overflow_authority["runtimeStatus"].update({
+            "resolutionMs": 1.0,
+            "ticsPerMs": "1",
+            "resolutionTics": "1",
+            "captureBiologicalTimeTics": str(maximum_safe_tic - 1),
+            "timeBuildProfile": build_profile,
+        })
+        overflow_authority["recordingGrid"] = {
+            "originTics": str(maximum_safe_tic - 1),
+            "startTics": "0",
+            "stopTics": "2",
+        }
+        overflow_authority["bufferEpoch"]["beganAtBiologicalTimeTics"] = "0"
+        overflow_authority["recordingPlan"][
+            "lastMutationAtBiologicalTimeTics"
+        ] = "0"
+        overflow_errors = []
+        _validate_spike_raster(combined_overflow, overflow_errors)
+        self.assertIn(
+            (
+                "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                "/data/window/captureAuthority/recordingGrid/stopTics",
+            ),
+            [(error.code, error.instance_path) for error in overflow_errors],
+        )
+        self.assertNotIn(
+            "SCIENCE_EVENT_OUT_OF_WINDOW",
+            [error.code for error in overflow_errors],
+        )
+
     def test_spike_raster_capture_authority_uses_exact_tics_grid_and_history(self):
         request = json.loads(json.dumps(
             self._spike_contract()["examples"]["valid"][0]
@@ -1717,46 +2175,222 @@ class TestValidation(unittest.TestCase):
         exact_authority["runtimeStatus"]["captureBiologicalTimeTics"] = "10000"
         self.assertEqual(cortexel.validate_request_partial(exact), [])
 
-    def test_spike_raster_invalid_or_collapsed_windows_preempt_membership(self):
-        origin_window = {
-            "kind": "nest_recording_device_origin_relative",
-            "origin": float(1 << 53),
-            "start": 0,
-            "stop": 1,
-            "unit": "ms",
-            "boundary": "(origin+start,origin+stop]",
-            "recordingBackend": "memory",
-            "timeEncoding": "native_binary64_ms",
-        }
-        collapsed = self._spike_request(
-            [float(1 << 53)], origin_window, origin_relative=True
-        )
-        errors = []
-        _validate_spike_raster(collapsed, errors)
+    def test_spike_raster_positive_infinity_capture_is_open_then_closed(self):
+        at_capture = self._positive_infinity_spike_request(values=(125.0,))
+        self.assertEqual(cortexel.validate_request_partial(at_capture), [])
+
+        at_open_start = self._positive_infinity_spike_request(values=(110.0,))
+        errors = cortexel.validate_request_partial(at_open_start)
         self.assertEqual(
-            [error.code for error in errors],
-            ["SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE"],
-        )
-        self.assertEqual(errors[0].instance_path, "/data/window/stop")
-        public_errors = cortexel.validate_request_partial(collapsed)
-        self.assertEqual(
-            [error.code for error in public_errors],
-            ["SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE"],
+            [
+                (error.code, error.instance_path)
+                for error in errors
+                if error.code == "SCIENCE_EVENT_OUT_OF_WINDOW"
+            ],
+            [("SCIENCE_EVENT_OUT_OF_WINDOW", "/data/eventTimes/values/0")],
         )
 
-        overflow_window = dict(origin_window)
-        overflow_window.update({
-            "origin": sys.float_info.max,
-            "stop": sys.float_info.max,
-        })
-        overflow = self._spike_request([1], overflow_window, origin_relative=True)
-        errors = []
-        _validate_spike_raster(overflow, errors)
+        beyond_capture = self._positive_infinity_spike_request(values=(125.125,))
+        errors = cortexel.validate_request_partial(beyond_capture)
         self.assertEqual(
-            [error.code for error in errors],
-            ["SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE"],
+            [
+                (error.code, error.instance_path)
+                for error in errors
+                if error.code == "SCIENCE_EVENT_OUT_OF_WINDOW"
+            ],
+            [("SCIENCE_EVENT_OUT_OF_WINDOW", "/data/eventTimes/values/0")],
         )
 
+    def test_spike_raster_positive_infinity_authority_is_exact_and_closed(self):
+        baseline = self._positive_infinity_spike_request()
+        direct_errors = []
+        _validate_spike_raster(baseline, direct_errors)
+        self.assertEqual(direct_errors, [])
+
+        empty_at_open_start = self._positive_infinity_spike_request(values=())
+        empty_at_open_start["data"]["window"]["captureTime"] = 110.0
+        empty_at_open_start["data"]["window"]["captureAuthority"][
+            "runtimeStatus"
+        ]["captureBiologicalTimeTics"] = "110000"
+        direct_errors = []
+        _validate_spike_raster(empty_at_open_start, direct_errors)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in direct_errors],
+            [(
+                "SCIENCE_WINDOW_INVALID",
+                "/data/window/captureAuthority/runtimeStatus/"
+                "captureBiologicalTimeTics",
+            )],
+        )
+
+        projection_mismatch = self._positive_infinity_spike_request()
+        projection_mismatch["data"]["window"]["captureTime"] = math.nextafter(
+            125.0, math.inf
+        )
+        direct_errors = []
+        _validate_spike_raster(projection_mismatch, direct_errors)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in direct_errors],
+            [(
+                "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                "/data/window/captureAuthority/runtimeStatus/"
+                "captureBiologicalTimeTics",
+            )],
+        )
+
+        off_grid = self._positive_infinity_spike_request()
+        off_grid_authority = off_grid["data"]["window"]["captureAuthority"]
+        off_grid_authority["runtimeStatus"][
+            "captureBiologicalTimeTics"
+        ] = "125001"
+        off_grid["data"]["window"]["captureTime"] = (
+            float(125001) * (1.0 / 1000.0)
+        )
+        direct_errors = []
+        _validate_spike_raster(off_grid, direct_errors)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in direct_errors],
+            [(
+                "SCIENCE_WINDOW_INVALID",
+                "/data/window/captureAuthority/runtimeStatus/"
+                "captureBiologicalTimeTics",
+            )],
+        )
+
+        before_open_start = self._positive_infinity_spike_request()
+        before_open_start["data"]["window"]["captureAuthority"][
+            "runtimeStatus"
+        ]["captureBiologicalTimeTics"] = "110000"
+        direct_errors = []
+        _validate_spike_raster(before_open_start, direct_errors)
+        capture_tic_path = (
+            "/data/window/captureAuthority/runtimeStatus/"
+            "captureBiologicalTimeTics"
+        )
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in direct_errors],
+            [
+                (
+                    "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
+                    capture_tic_path,
+                ),
+                ("SCIENCE_WINDOW_INVALID", capture_tic_path),
+            ],
+        )
+
+        for field_path, expected_path in (
+            (
+                ("bufferEpoch", "beganAtBiologicalTimeTics"),
+                "/data/window/captureAuthority/bufferEpoch/"
+                "beganAtBiologicalTimeTics",
+            ),
+            (
+                ("recordingPlan", "lastMutationAtBiologicalTimeTics"),
+                "/data/window/captureAuthority/recordingPlan/"
+                "lastMutationAtBiologicalTimeTics",
+            ),
+        ):
+            with self.subTest(field=field_path[0]):
+                mutated = self._positive_infinity_spike_request()
+                authority = mutated["data"]["window"]["captureAuthority"]
+                authority[field_path[0]][field_path[1]] = "110125"
+                direct_errors = []
+                _validate_spike_raster(mutated, direct_errors)
+                self.assertEqual(
+                    [(error.code, error.instance_path) for error in direct_errors],
+                    [("SCIENCE_WINDOW_INVALID", expected_path)],
+                )
+
+        stop_tics = self._positive_infinity_spike_request()
+        stop_tics["data"]["window"]["captureAuthority"]["recordingGrid"][
+            "stopTics"
+        ] = "125000"
+        errors = cortexel.validate_request_partial(stop_tics)
+        self.assertIn(
+            ("SCHEMA_UNKNOWN_PROPERTY",
+             "/data/window/captureAuthority/recordingGrid/stopTics"),
+            [(error.code, error.instance_path) for error in errors],
+        )
+
+    def test_spike_raster_positive_infinity_profile_literals_fail_closed(self):
+        baseline = self._positive_infinity_spike_request()
+        self.assertEqual(cortexel.validate_request_partial(baseline), [])
+
+        wrong_source_version = self._positive_infinity_spike_request()
+        wrong_source_version["source"]["systemVersion"] = "3.11.0"
+        clock_errors = [
+            error
+            for error in cortexel.validate_request_partial(wrong_source_version)
+            if error.code == "PROVENANCE_SOURCE_CLOCK_INCONSISTENT"
+        ]
+        self.assertEqual(
+            [error.instance_path for error in clock_errors],
+            [
+                "/data/window/captureAuthority/runtimeStatus/nestVersion",
+                "/source/systemVersion",
+            ],
+        )
+
+        mutations = (
+            (
+                ("captureAuthority", "profile"),
+                "cortexel-nest-memory-spike-capture-authority.v2",
+                "/data/window/captureAuthority/profile",
+            ),
+            (
+                ("captureAuthority", "runtimeStatus", "statusReadMethod"),
+                "pynest_single_spike_recorder_get_status_plain_projection_v1",
+                "/data/window/captureAuthority/runtimeStatus/statusReadMethod",
+            ),
+            (
+                ("captureAuthority", "runtimeStatus", "captureBoundary"),
+                "after_successful_simulate_or_run_return",
+                "/data/window/captureAuthority/runtimeStatus/captureBoundary",
+            ),
+            (
+                ("captureAuthority", "runtimeStatus", "timeBuildProfile"),
+                "nest_3_10_time_tic_int64_long_int32_ieee754_binary64_v1",
+                "/data/window/captureAuthority/runtimeStatus/timeBuildProfile",
+            ),
+            (
+                ("configuredStop", "exportedMs"),
+                math.nextafter(sys.float_info.max, 0.0),
+                "/data/window/configuredStop/exportedMs",
+            ),
+            (
+                ("configuredStop", "kind"),
+                "positive_infinity",
+                "/data/window/configuredStop/kind",
+            ),
+        )
+        for path, value, expected_path in mutations:
+            with self.subTest(path=path):
+                mutated = self._positive_infinity_spike_request()
+                node = mutated["data"]["window"]
+                for segment in path[:-1]:
+                    node = node[segment]
+                node[path[-1]] = value
+                errors = cortexel.validate_request_partial(mutated)
+                self.assertIn(
+                    expected_path,
+                    [error.instance_path for error in errors],
+                )
+
+    def test_spike_raster_positive_infinity_disclosure_does_not_hide_provenance(self):
+        request = self._positive_infinity_spike_request(values=(125.125,))
+        request["parameters"]["outOfWindowPolicy"] = "exclude_and_disclose"
+        request["source"]["system"] = "nest"
+        errors = cortexel.validate_request_partial(request)
+        self.assertNotIn(
+            "SCIENCE_EVENT_OUT_OF_WINDOW",
+            [error.code for error in errors],
+        )
+        self.assertIn(
+            ("PROVENANCE_SOURCE_CLOCK_INCONSISTENT", "/source/system"),
+            [(error.code, error.instance_path) for error in errors],
+        )
+
+    def test_spike_raster_invalid_windows_preempt_membership(self):
         invalid = self._spike_request(
             [1000],
             {"start": 1, "stop": 1, "unit": "ms", "boundary": "[start,stop)"},
@@ -1771,6 +2405,11 @@ class TestValidation(unittest.TestCase):
         # still run; the public boundary then sorts science before provenance.
         invalid_origin = json.loads(json.dumps(self._spike_contract()["examples"]["valid"][0]))
         invalid_origin["data"]["window"]["stop"] = invalid_origin["data"]["window"]["start"]
+        invalid_origin["data"]["window"]["captureAuthority"]["recordingGrid"][
+            "stopTics"
+        ] = invalid_origin["data"]["window"]["captureAuthority"]["recordingGrid"][
+            "startTics"
+        ]
         invalid_origin["source"]["system"] = "nest"
         invalid_origin["source"]["systemVersion"] = "3.11"
         invalid_origin["source"].pop("sourceDigest")
@@ -1783,7 +2422,7 @@ class TestValidation(unittest.TestCase):
         self.assertEqual(
             [error.instance_path for error in errors],
             [
-                "/data/window/stop",
+                "/data/window/captureAuthority/recordingGrid/stopTics",
                 "/data/window/captureAuthority/runtimeStatus/nestVersion",
                 "/source/sourceDigest",
                 "/source/system",
@@ -1811,7 +2450,7 @@ class TestValidation(unittest.TestCase):
             [error.code for error in errors],
         )
 
-    def test_spike_raster_public_errors_sort_science_before_provenance(self):
+    def test_spike_raster_invalid_source_suppresses_membership(self):
         request = json.loads(json.dumps(self._spike_contract()["examples"]["valid"][0]))
         request["data"]["eventTimes"]["values"] = [
             request["data"]["window"]["origin"] + request["data"]["window"]["stop"] + 1
@@ -1820,11 +2459,8 @@ class TestValidation(unittest.TestCase):
         request["source"]["system"] = "nest"
         errors = cortexel.validate_request_partial(request)
         self.assertEqual(
-            [error.code for error in errors],
-            [
-                "SCIENCE_EVENT_OUT_OF_WINDOW",
-                "PROVENANCE_SOURCE_CLOCK_INCONSISTENT",
-            ],
+            [(error.code, error.instance_path) for error in errors],
+            [("PROVENANCE_SOURCE_CLOCK_INCONSISTENT", "/source/system")],
         )
 
     def test_spike_raster_nest_source_clock_binding_is_fail_closed(self):

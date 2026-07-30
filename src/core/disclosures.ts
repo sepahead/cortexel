@@ -33,6 +33,7 @@ export interface DisclosureFacts {
   readonly nodeUniverseComplete?: boolean;
   readonly excludedOutOfWindow?: number;
   readonly nestSerializedClock?: boolean;
+  readonly nestCaptureBoundedPositiveInfinity?: boolean;
   readonly missingValueCount?: number;
   readonly unitConversions?: readonly string[];
   readonly duplicateTimeAggregateMethod?: string;
@@ -92,6 +93,8 @@ const RULE_PREDICATES: Readonly<Record<string, (facts: DisclosureFacts) => boole
 
   EVENTS_EXCLUDED_OUT_OF_WINDOW: (f) => (f.excludedOutOfWindow ?? 0) > 0,
   NEST_SERIALIZED_CLOCK_BOUNDARY: (f) => f.nestSerializedClock === true,
+  NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY: (f) =>
+    f.nestCaptureBoundedPositiveInfinity === true,
   MISSING_VALUES_PRESENT: (f) => (f.missingValueCount ?? 0) > 0,
   UNIT_CONVERTED: (f) => (f.unitConversions?.length ?? 0) > 0,
   UNCERTAINTY_NOT_PROVIDED: (f) => f.uncertaintyKind === 'none',

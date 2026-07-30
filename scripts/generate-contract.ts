@@ -95,6 +95,7 @@ import {
   directRepositoryDirectoryExists,
   ensureGeneratedOutputDirectory,
 } from './lib/generated-output-authority.js';
+import { proveAuthoredObjectClosure } from './lib/schema-object-closure.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTRACT = path.join(ROOT, 'contract');
@@ -573,10 +574,25 @@ for (const implementation of ADAPTER_IMPLEMENTATIONS_V1) {
     const implementationProfile = implementation.adapterProfile;
     const expectedAdapter =
       `${implementation.packageCapability}#${implementation.exportName}`;
+    const conformanceBranches = conformanceProfile.branches;
+    const implementationBranches = (implementationProfile as any).branches;
+    const branchProfilesAgree = implementationBranches === undefined
+      ? conformanceBranches === undefined &&
+        conformanceProfile.captureAuthorityProfile ===
+          (implementationProfile as any).captureAuthorityProfile &&
+        conformanceProfile.admittedStatus?.statusReadMethod ===
+          (implementationProfile as any).statusReadMethod
+      : conformanceBranches !== undefined &&
+        canonicalize(conformanceBranches) === canonicalize(implementationBranches);
     for (const [valid, relation] of [
       [
         conformanceProfile.adapter === expectedAdapter,
         `profile adapter must equal ${JSON.stringify(expectedAdapter)}`,
+      ],
+      [
+        conformanceProfile.lifecycle === 'current' &&
+          conformanceProfile.executable === true,
+        'implementation conformance profile must be current and executable',
       ],
       [
         conformanceProfile.adapterRevision === implementationProfile.adapterRevision,
@@ -596,14 +612,25 @@ for (const implementation of ADAPTER_IMPLEMENTATIONS_V1) {
         'profile inputDigestDomain must equal the implementation-owned digest domain',
       ],
       [
-        conformanceProfile.captureAuthorityProfile ===
-          implementationProfile.captureAuthorityProfile,
-        'profile captureAuthorityProfile must equal the implementation-owned authority profile',
+        conformanceProfile.timeBuildProfile ===
+          (implementationProfile as any).timeBuildProfile,
+        'profile timeBuildProfile must equal the implementation-owned time-build profile',
       ],
       [
-        conformanceProfile.admittedStatus?.statusReadMethod ===
-          implementationProfile.statusReadMethod,
-        'profile statusReadMethod must equal the implementation-owned projection method',
+        conformanceProfile.captureBoundary ===
+          (implementationProfile as any).captureBoundary,
+        'profile captureBoundary must equal the implementation-owned capture boundary',
+      ],
+      [
+        Object.is(
+          conformanceProfile.positiveInfinityExportedMs,
+          (implementationProfile as any).positiveInfinityExportedMs,
+        ),
+        'profile positiveInfinityExportedMs must equal the implementation-owned exported sentinel value',
+      ],
+      [
+        branchProfilesAgree,
+        'profile branch authority/method/boundary map must exactly equal the implementation-owned branch map',
       ],
     ] as const) {
       if (!valid) {
@@ -612,6 +639,7 @@ for (const implementation of ADAPTER_IMPLEMENTATIONS_V1) {
         );
       }
     }
+
   }
 
   const source = path.join(ROOT, implementation.sourcePath);
@@ -965,13 +993,14 @@ for (const skill of skills) {
   // Walk the request schema and require closed objects. An open object means a
   // typo in a scientific field is silently ignored, which is the failure mode this
   // whole contract exists to prevent.
+  const resolveClosureRef = schemaClosureRefResolver(skill.requestSchema);
   for (const key of ['data', 'parameters'] as const) {
     const schema = skill.requestSchema?.[key];
     if (!schema) {
       problems.push(`${where}: requestSchema.${key} is missing`);
       continue;
     }
-    assertClosed(schema, `${where} requestSchema.${key}`, problems);
+    assertClosed(schema, `${where} requestSchema.${key}`, problems, '', false, resolveClosureRef);
   }
 }
 
@@ -1030,13 +1059,67 @@ if (canonicalize(declaredAuthorityEvaluatorIds as never) !==
  *   it guards would silently vanish.
  *
  * So: assert closure where a shape is DECLARED, and require an `allOf` composite to
- * be closed by something — a $ref to a closed base, or `unevaluatedProperties:false`.
+ * be closed by something — a $ref to a closed base, `unevaluatedProperties:false`,
+ * or an exhaustive conditional dispatch whose every admitted leaf is closed.
  */
-function assertClosed(node: any, where: string, out: string[], at = '', inAllOfBranch = false): void {
+function resolveJsonPointer(document: unknown, fragment: string): unknown | undefined {
+  let pointer: string;
+  try {
+    pointer = decodeURIComponent(fragment);
+  } catch {
+    return undefined;
+  }
+  if (pointer === '') return document;
+  if (!pointer.startsWith('/')) return undefined;
+
+  let current: unknown = document;
+  for (const encoded of pointer.slice(1).split('/')) {
+    if (/~(?:[^01]|$)/u.test(encoded)) return undefined;
+    const token = encoded.replace(/~1/gu, '/').replace(/~0/gu, '~');
+    if (Array.isArray(current)) {
+      if (!/^(?:0|[1-9][0-9]*)$/u.test(token)) return undefined;
+      const index = Number(token);
+      if (!Number.isSafeInteger(index) || index >= current.length) return undefined;
+      current = current[index];
+      continue;
+    }
+    if (current === null || typeof current !== 'object' || !Object.hasOwn(current, token)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[token];
+  }
+  return current;
+}
+
+function schemaClosureRefResolver(
+  requestSchema: unknown,
+): (reference: string) => unknown | undefined {
+  const requestDocument = { properties: requestSchema };
+  const commonId = typeof commonSchema.$id === 'string' ? commonSchema.$id : undefined;
+  return (reference: string): unknown | undefined => {
+    const hash = reference.indexOf('#');
+    const base = hash === -1 ? reference : reference.slice(0, hash);
+    const fragment = hash === -1 ? '' : reference.slice(hash + 1);
+    if (base === '') return resolveJsonPointer(requestDocument, fragment);
+    if (commonId !== undefined && base === commonId) {
+      return resolveJsonPointer(commonSchema, fragment);
+    }
+    return undefined;
+  };
+}
+
+function assertClosed(
+  node: any,
+  where: string,
+  out: string[],
+  at = '',
+  inAllOfBranch = false,
+  resolveRef?: (reference: string) => unknown | undefined,
+): void {
   if (node === null || typeof node !== 'object') return;
   if (Array.isArray(node)) {
     node.forEach((child, index) =>
-      assertClosed(child, where, out, `${at}/${index}`, inAllOfBranch),
+      assertClosed(child, where, out, `${at}/${index}`, inAllOfBranch, resolveRef),
     );
     return;
   }
@@ -1066,16 +1149,25 @@ function assertClosed(node: any, where: string, out: string[], at = '', inAllOfB
     }
   }
 
-  // An allOf composite must be closed by SOMETHING. A $ref to a closed base does it;
-  // so does unevaluatedProperties:false. Neither, and the object is genuinely open.
+  // An allOf composite must be closed by SOMETHING. The proof helper handles direct
+  // closure, closed refs, and exhaustive conditional dispatch. For a dispatch, walk
+  // each proved leaf as a complete declaration so its nested authored objects cannot
+  // hide behind the predicate-keyword traversal exemption below.
   if (Array.isArray(node.allOf) && !closesItself) {
-    const closedByRef = node.allOf.some(
-      (branch: any) => branch && typeof branch === 'object' && typeof branch.$ref === 'string',
-    );
-    if (!closedByRef) {
+    const closure = proveAuthoredObjectClosure(node, at, resolveRef);
+    if (!closure.closed) {
+      const openAlternatives = [...new Set(closure.openPaths)]
+        .map((path) => `"${path || '(root)'}"`)
+        .join(', ');
       out.push(
-        `${where}: the allOf at "${at || '(root)'}" is closed by nothing — no $ref to a closed base and no unevaluatedProperties:false`,
+        `${where}: the allOf at "${at || '(root)'}" is closed by nothing; ` +
+          `unclosed alternatives: ${openAlternatives || 'unknown'}`,
       );
+    } else {
+      for (const leaf of closure.leaves) {
+        if (leaf.schema === node || typeof (leaf.schema as any)?.$ref === 'string') continue;
+        assertClosed(leaf.schema, where, out, leaf.path, false, resolveRef);
+      }
     }
   }
 
@@ -1091,13 +1183,13 @@ function assertClosed(node: any, where: string, out: string[], at = '', inAllOfB
         // {properties: {kind: {const: ...}}}}}` tightens `weights.kind` and says
         // nothing about `weights.unit` or `weights.values`. Closing it would reject
         // exactly the fields the base requires. So the exemption propagates inward.
-        assertClosed(child, where, out, `${at}/${key}/${name}`, inAllOfBranch);
+        assertClosed(child, where, out, `${at}/${key}/${name}`, inAllOfBranch, resolveRef);
       }
       continue;
     }
 
     // Refinement branches are exempt from closing; alternative branches are not.
-    assertClosed(value, where, out, `${at}/${key}`, key === 'allOf');
+    assertClosed(value, where, out, `${at}/${key}`, key === 'allOf', resolveRef);
   }
 }
 

@@ -5,6 +5,9 @@
   "profiles": [
     {
       "id": "nest-spike-recorder.v3",
+      "lifecycle": "historical_superseded",
+      "executable": false,
+      "supersededBy": "nest-spike-recorder.v5",
       "adapter": "cortexel/adapters/nest#nestSpikeRecorderToRaster",
       "adapterRevision": 3,
       "upstream": {
@@ -55,7 +58,91 @@
         "raw NumPy arrays without the named plain-data projection, lossy or reordered projection, step-offset, ASCII, screen, MPI, SIONlib, accessor-bearing, non-finite, sparse, decorated, or unknown authority/option input",
         "adapter-input digest insensitivity to any normalized option"
       ],
-      "evidenceBoundary": "This profile defines the cases a future R049 receipt must execute. Structural or semantic acceptance does not authenticate NEST, process topology, status custody, buffer/configuration/wiring history, or sender-universe truth. The upstream execution gate remains NOT_RUN until a receipt binds the exact profile, source commit, toolchain, test bytes, and result."
+      "evidenceBoundary": "Archival migration identity only. This superseded profile is non-executable and cannot satisfy current R049 or transfer evidence to revision 5: its old clock contract did not bind the source-faithful Time::get_ms evaluation, compiled Time domain, or floating-point build/environment. It remains recorded solely to identify historical revision-3 bytes and their limitations."
+    },
+    {
+      "id": "nest-spike-recorder.v5",
+      "lifecycle": "current",
+      "executable": true,
+      "adapter": "cortexel/adapters/nest#nestSpikeRecorderToRaster",
+      "adapterRevision": 5,
+      "upstream": {
+        "system": "NEST",
+        "version": "3.10.0",
+        "sourceCommit": "acca9704da248750219a027db99fec6cd1f9052a"
+      },
+      "inputDigestDomain": "cortexel.nest-spike-recorder-adapter-input.v5",
+      "timeBuildProfile": "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1",
+      "captureBoundary": "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation",
+      "positiveInfinityExportedMs": 1.7976931348623157e+308,
+      "branches": {
+        "finiteStop": {
+          "stopKind": "finite",
+          "captureAuthorityProfile": "cortexel-nest-memory-spike-capture-authority.v3",
+          "recordTo": "memory",
+          "timeInSteps": false,
+          "statusReadMethod": "pynest_single_spike_recorder_get_status_plain_projection_v1",
+          "executionScope": "single_process",
+          "eventBoundary": "(origin+start,origin+stop]",
+          "captureHorizon": "origin+stop_after_successful_return"
+        },
+        "positiveInfinityCaptureBounded": {
+          "stopKind": "nest_time_positive_infinity",
+          "captureAuthorityProfile": "cortexel-nest-memory-spike-capture-authority.v4",
+          "recordTo": "memory",
+          "timeInSteps": false,
+          "statusReadMethod": "pynest_single_spike_recorder_get_status_plain_projection_v2",
+          "executionScope": "single_process",
+          "eventBoundary": "(origin+start,capture]",
+          "captureHorizon": "capture_after_successful_advancing_return_before_further_advance_or_mutation"
+        }
+      },
+      "authorityFields": [
+        "capture authority kind is caller_declaration; detached acceptance is never relabelled as an authenticated live-capture receipt",
+        "the normative profile pins exact NEST 3.10.0 source commit acca9704da248750219a027db99fec6cd1f9052a and its official 64-bit tic_t build semantics; the detached input separately carries a caller-declared exact runtime version plus runtime tics-per-millisecond and positive resolution-tic integers",
+        "single-spike-recorder PyNEST status read after the required successful Simulate or Run return, projected to closed plain JSON data by finite projection revision 1 or positive-infinity projection revision 2 without reordering, deduplicating, coercing, or dropping NumPy event-array elements",
+        "the authority declares exact time-build profile nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1: int64 tic_t, int64 long, IEEE-754 binary64 roundTiesToEven, one stored reciprocal followed by one stored multiplication, and no excess precision, contraction, or fast-math reassociation; other builds or active rounding modes are outside this profile",
+        "the pinned runtime's Time::pos_inf stop is recognized by projection revision 2 and represented by the exact nest_time_positive_infinity token; an ordinary numeric DBL_MAX value is not reinterpreted as infinity",
+        "single process with rank zero and exact positive local-thread count",
+        "canonical integer-tic preimages for exported origin, start, capture biological time, and resolution, with every finite endpoint exactly on the runtime resolution grid; an infinite stop has no stop-tic preimage",
+        "a conservative clock domain in which ticsPerMs, resolutionTics, every retained tic, and each combined absolute endpoint are at most 2^53-1 and each Time is strictly below the resolution-adjusted floor((2^63-1)/8) finite ceiling",
+        "source-faithful endpoint serialization: add integer Time tics before evaluating binary64 double(tics) * (1.0 / double(ticsPerMs)); every finite status value and combined endpoint must inverse-round-trip to its declared tics and adjacent operative resolution-grid projections must remain distinguishable",
+        "finite-stop capture is no earlier than origin plus stop after successful return; positive-infinity capture exactly equals the exported finite captureTime, is strictly later than origin plus start, and precedes any further advance or mutation",
+        "most recent recorder creation or n_events=0 buffer clear is on the runtime grid and no later than origin tics plus start tics",
+        "most recent window, backend, time-encoding, or sender-wiring mutation is on the runtime grid and no later than origin tics plus start tics",
+        "biological_time remained monotonic since the most recent process initialization or ResetKernel; a live receipt may assert this only from an isolated harness that exclusively owns or intercepts kernel mutation through snapshot",
+        "recordedSenderIds exactly equal the full source universe connected for the complete finite-stop or capture-bounded window",
+        "source digest over the detached plain-data status projection and a v5 domain-separated adapter-input digest over that projection plus every normalized revision-5 option"
+      ],
+      "positiveCases": [
+        "one-thread and multi-thread single-process status merging under finite-stop and exact positive-infinity stop projections",
+        "empty and nonempty recordings with exact n_events reconciliation",
+        "nonchronological events, duplicate events, silent recorded senders, native fractional milliseconds, and non-zero origin",
+        "the 0.1 ms origin plus 0.7 ms relative-boundary case, whose 800-tic absolute endpoint is projected once and never reconstructed by adding separately serialized fields",
+        "a 700-tic status value at 1000 tics/ms exported as the pinned source result 0.7000000000000001 rather than the ideally rounded rational 0.7",
+        "event exactly at the closed capture boundary",
+        "finite-stop capture after the call that reached origin plus stop and positive-infinity capture immediately after the advancing call returned at that exact biological time and before any further advance or mutation",
+        "the exact default positive-infinity stop used by pinned official NEST 3.10.0 examples",
+        "NumPy sender/time arrays projected to dense plain arrays with identical length, order, multiplicity, and finite scalar values"
+      ],
+      "negativeCases": [
+        "capture at or before origin plus start, capture before successful advancing return, capture after a further advance or mutation, or capture on a non-resolution-grid tic",
+        "origin, start, capture, or resolution millisecond value without the declared source-faithful integer-tic preimage, or any finite endpoint off the runtime resolution grid",
+        "an ideally rounded rational quotient where pinned Time::get_ms emits a different binary64 value, addition of separately serialized millisecond fields, inverse-roundtrip failure, or adjacent-resolution projection aliasing",
+        "a tic count above 2^53-1, a combined endpoint at or beyond the resolution-adjusted finite-Time ceiling, signed-64-bit overflow, or a projection whose finite bounds collapse or reverse",
+        "a numeric DBL_MAX stop, a fabricated or decorated positive-infinity token, a finite stop paired with positive-infinity authority, or an infinity token paired with finite authority",
+        "historical capture-authority v1/v2 input presented as revision 5 without the exact time-build declaration",
+        "buffer reset after origin plus start or at a non-grid tic",
+        "recorder-window, backend, time-encoding, or sender-wiring mutation after origin plus start or at a non-grid tic",
+        "SetKernelStatus biological_time reset to zero at any point after the current kernel initialization, including a reset followed by n_events=0; only ResetKernel plus complete recorder and wiring reconstruction begins an admissible fresh epoch",
+        "rank-local, multi-process, or caller-premerged MPI status",
+        "missing, duplicate, or foreign sender-universe members",
+        "NEST 3.9, bare 3.10, any other 3.10 patch declaration, prerelease, or newer runtime",
+        "raw NumPy arrays without the named plain-data projection, lossy or reordered projection, step-offset, ASCII, screen, MPI, SIONlib, accessor-bearing, non-finite, sparse, decorated, or unknown authority/option input",
+        "adapter-input digest insensitivity to the stop discriminator, capture authority, time-build profile, or any other normalized revision-5 option",
+        "a positive-infinity request containing stopTics or claiming that capture is a configured finite deactivation endpoint"
+      ],
+      "evidenceBoundary": "This profile defines both corrected finite-stop and positive-infinity/capture-bounded cases a future R049 receipt must execute. Revision 5 supersedes historical revision 3 rather than transferring its evidence. Structural or semantic acceptance does not authenticate NEST, the declared build, the infinity projection, process topology, status custody, buffer/configuration/wiring history, capture timing, or sender-universe truth. A positive-infinity upper endpoint is the declared capture, not device deactivation, and establishes nothing after capture. R049 remains NOT_RUN until a durable receipt binds the exact v5 profile, source commit, runtime wheel, build profile, toolchain, harness bytes, and results."
     }
   ]
 }

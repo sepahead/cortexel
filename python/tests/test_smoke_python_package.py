@@ -25,7 +25,7 @@ import zlib
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, NoReturn
 from unittest.mock import patch
 
 
@@ -603,6 +603,243 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
                 if mode != "persistent_error":
                     self.assertEqual(len(eof_descriptors), 2)
                 self.assertEqual(injected_error, mode != "overflow")
+
+    def test_dual_selector_failure_holds_anchor_until_drain_deadline(self) -> None:
+        real_waitid = smoke.os.waitid
+        real_killpg = smoke.os.killpg
+        real_kill = smoke.os.kill
+        real_waitpid = smoke.os.waitpid
+        cleanup_timeout = 0.08
+        raw_wait_started = False
+        raw_wait_calls = 0
+        raw_wait_time: float | None = None
+        manual_attempts: list[float] = []
+        events: list[str] = []
+
+        def observed_waitid(*args: Any) -> Any:
+            if raw_wait_started:
+                raise AssertionError("waitid occurred after raw reap began")
+            events.append("waitid")
+            return real_waitid(*args)
+
+        def observed_killpg(process_group_id: int, signal_number: int) -> None:
+            if raw_wait_started:
+                raise AssertionError("killpg occurred after raw reap began")
+            events.append("killpg")
+            real_killpg(process_group_id, signal_number)
+
+        def observed_kill(process_id: int, signal_number: int) -> None:
+            if raw_wait_started:
+                raise AssertionError("direct kill occurred after raw reap began")
+            events.append("direct-kill")
+            real_kill(process_id, signal_number)
+
+        def failing_direct_select(*_args: Any) -> NoReturn:
+            if raw_wait_started:
+                raise AssertionError("pipe readiness occurred after raw reap began")
+            manual_attempts.append(time.monotonic())
+            raise OSError(errno.EBADF, "synthetic direct select failure")
+
+        def observed_waitpid(process_id: int, options: int) -> tuple[int, int]:
+            nonlocal raw_wait_calls, raw_wait_started, raw_wait_time
+            if raw_wait_started:
+                raise AssertionError("second raw wait began")
+            raw_wait_started = True
+            raw_wait_calls += 1
+            raw_wait_time = time.monotonic()
+            events.append("waitpid")
+            return real_waitpid(process_id, options)
+
+        with (
+            patch.object(
+                smoke.selectors,
+                "DefaultSelector",
+                side_effect=RuntimeError("synthetic primary selector failure"),
+            ),
+            patch.object(
+                smoke.selectors,
+                "SelectSelector",
+                side_effect=RuntimeError("synthetic recovery selector failure"),
+            ),
+            patch.object(smoke.select, "select", side_effect=failing_direct_select),
+            patch.object(smoke.os, "waitid", side_effect=observed_waitid),
+            patch.object(smoke.os, "killpg", side_effect=observed_killpg),
+            patch.object(smoke.os, "kill", side_effect=observed_kill),
+            patch.object(smoke.os, "waitpid", side_effect=observed_waitpid),
+            patch.object(
+                smoke.subprocess.Popen,
+                "poll",
+                autospec=True,
+                side_effect=AssertionError("selector recovery polled the child"),
+            ),
+            patch.object(
+                smoke.subprocess.Popen,
+                "wait",
+                autospec=True,
+                side_effect=AssertionError("selector recovery used Popen.wait"),
+            ),
+            patch.object(
+                smoke,
+                "PROCESS_CLEANUP_TIMEOUT_SECONDS",
+                cleanup_timeout,
+            ),
+            self.assertRaisesRegex(RuntimeError, "recovery selector failure"),
+        ):
+            smoke.run_checked(
+                [sys.executable, "-I", "-B", "-c", "import time; time.sleep(60)"],
+                cwd=ROOT,
+                environment={},
+                timeout=5,
+                label="dual-selector-failure fixture",
+                capture_output=True,
+            )
+
+        self.assertTrue(raw_wait_started)
+        self.assertEqual(raw_wait_calls, 1)
+        self.assertIsNotNone(raw_wait_time)
+        self.assertGreaterEqual(len(manual_attempts), 2)
+        self.assertLessEqual(len(manual_attempts), 20)
+        assert raw_wait_time is not None
+        self.assertGreaterEqual(
+            raw_wait_time - manual_attempts[0],
+            cleanup_timeout - 0.02,
+        )
+        self.assertEqual(events.count("killpg"), 1)
+        self.assertNotIn("direct-kill", events)
+        self.assertEqual(events[-1], "waitpid")
+
+    def test_registration_failure_directly_drains_buffered_pipes_before_reap(
+        self,
+    ) -> None:
+        real_read = smoke.os.read
+        real_select = smoke.select.select
+        real_waitid = smoke.os.waitid
+        real_killpg = smoke.os.killpg
+        real_kill = smoke.os.kill
+        real_waitpid = smoke.os.waitpid
+
+        with tempfile.TemporaryDirectory() as temporary:
+            ready_path = Path(temporary) / "ready"
+            raw_wait_started = False
+            raw_wait_calls = 0
+            eof_descriptors: set[int] = set()
+            drained = bytearray()
+            events: list[str] = []
+
+            class RegistrationFailingSelector(smoke.selectors.SelectSelector):
+                def register(
+                    self,
+                    _fileobj: Any,
+                    _events: int,
+                    _data: Any = None,
+                ) -> NoReturn:
+                    deadline = time.monotonic() + 5
+                    while not ready_path.exists():
+                        if time.monotonic() >= deadline:
+                            raise AssertionError("fixture child did not publish output")
+                        time.sleep(0.005)
+                    raise RuntimeError("synthetic selector registration failure")
+
+            def observed_read(file_descriptor: int, size: int) -> bytes:
+                if raw_wait_started:
+                    raise AssertionError("pipe read occurred after raw reap began")
+                chunk = real_read(file_descriptor, size)
+                if "killpg" in events:
+                    if chunk:
+                        drained.extend(chunk)
+                    else:
+                        eof_descriptors.add(file_descriptor)
+                return chunk
+
+            def observed_select(*args: Any) -> Any:
+                if raw_wait_started:
+                    raise AssertionError("pipe readiness occurred after raw reap began")
+                return real_select(*args)
+
+            def observed_waitid(*args: Any) -> Any:
+                if raw_wait_started:
+                    raise AssertionError("waitid occurred after raw reap began")
+                events.append("waitid")
+                return real_waitid(*args)
+
+            def observed_killpg(
+                process_group_id: int,
+                signal_number: int,
+            ) -> None:
+                if raw_wait_started:
+                    raise AssertionError("killpg occurred after raw reap began")
+                events.append("killpg")
+                real_killpg(process_group_id, signal_number)
+
+            def observed_kill(process_id: int, signal_number: int) -> None:
+                if raw_wait_started:
+                    raise AssertionError("direct kill occurred after raw reap began")
+                events.append("direct-kill")
+                real_kill(process_id, signal_number)
+
+            def observed_waitpid(
+                process_id: int,
+                options: int,
+            ) -> tuple[int, int]:
+                nonlocal raw_wait_calls, raw_wait_started
+                if raw_wait_started:
+                    raise AssertionError("second raw wait began")
+                self.assertEqual(len(eof_descriptors), 2)
+                self.assertIn(b"buffered-stdout", drained)
+                self.assertIn(b"buffered-stderr", drained)
+                raw_wait_started = True
+                raw_wait_calls += 1
+                events.append("waitpid")
+                return real_waitpid(process_id, options)
+
+            program = (
+                "import os, pathlib, time; "
+                "os.write(1, b'buffered-stdout'); "
+                "os.write(2, b'buffered-stderr'); "
+                f"pathlib.Path({str(ready_path)!r}).write_text('ready'); "
+                "time.sleep(60)"
+            )
+            with (
+                patch.object(
+                    smoke.selectors,
+                    "DefaultSelector",
+                    RegistrationFailingSelector,
+                ),
+                patch.object(smoke.select, "select", side_effect=observed_select),
+                patch.object(smoke.os, "read", side_effect=observed_read),
+                patch.object(smoke.os, "waitid", side_effect=observed_waitid),
+                patch.object(smoke.os, "killpg", side_effect=observed_killpg),
+                patch.object(smoke.os, "kill", side_effect=observed_kill),
+                patch.object(smoke.os, "waitpid", side_effect=observed_waitpid),
+                patch.object(
+                    smoke.subprocess.Popen,
+                    "poll",
+                    autospec=True,
+                    side_effect=AssertionError("registration recovery polled"),
+                ),
+                patch.object(
+                    smoke.subprocess.Popen,
+                    "wait",
+                    autospec=True,
+                    side_effect=AssertionError("registration recovery used wait"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "selector registration failure"),
+            ):
+                smoke.run_checked(
+                    [sys.executable, "-I", "-B", "-c", program],
+                    cwd=ROOT,
+                    environment={},
+                    timeout=5,
+                    label="registration-failure fixture",
+                    capture_output=True,
+                )
+
+            self.assertTrue(raw_wait_started)
+            self.assertEqual(raw_wait_calls, 1)
+            self.assertEqual(len(eof_descriptors), 2)
+            self.assertEqual(events.count("killpg"), 1)
+            self.assertNotIn("direct-kill", events)
+            self.assertEqual(events[-1], "waitpid")
 
     def test_process_cleanup_signals_only_while_leader_is_unreaped(self) -> None:
         for return_code in (0, 17):

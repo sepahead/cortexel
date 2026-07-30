@@ -1,6 +1,6 @@
 import {
   DISCLOSURE_RULES
-} from "./chunk-4A4K5NRD.js";
+} from "./chunk-QKGQ343H.js";
 
 // src/core/disclosures.ts
 var RULE_PREDICATES = {
@@ -22,6 +22,7 @@ var RULE_PREDICATES = {
   POSITIONS_MISSING: (f) => (f.positionsMissing ?? 0) > 0,
   EVENTS_EXCLUDED_OUT_OF_WINDOW: (f) => (f.excludedOutOfWindow ?? 0) > 0,
   NEST_SERIALIZED_CLOCK_BOUNDARY: (f) => f.nestSerializedClock === true,
+  NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY: (f) => f.nestCaptureBoundedPositiveInfinity === true,
   MISSING_VALUES_PRESENT: (f) => (f.missingValueCount ?? 0) > 0,
   UNIT_CONVERTED: (f) => (f.unitConversions?.length ?? 0) > 0,
   UNCERTAINTY_NOT_PROVIDED: (f) => f.uncertaintyKind === "none",
@@ -98,4 +99,4 @@ function deriveDisclosures(facts, allowedIds, forced = []) {
 export {
   deriveDisclosures
 };
-//# sourceMappingURL=chunk-3B7S6D34.js.map
+//# sourceMappingURL=chunk-SGBEOOWY.js.map

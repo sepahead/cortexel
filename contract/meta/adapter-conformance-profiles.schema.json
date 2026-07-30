@@ -19,6 +19,16 @@
             "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
             "maxLength": 96
           },
+          "lifecycle": {
+            "type": "string",
+            "enum": ["current", "historical_superseded"]
+          },
+          "executable": { "type": "boolean" },
+          "supersededBy": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "maxLength": 96
+          },
           "adapter": {
             "type": "string",
             "pattern": "^[a-z][A-Za-z0-9./_-]*#[A-Za-z][A-Za-z0-9]*$",
@@ -47,34 +57,26 @@
             "pattern": "^[a-z][a-z0-9.-]+$",
             "maxLength": 160
           },
+          "timeBuildProfile": {
+            "const": "nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1"
+          },
+          "captureBoundary": {
+            "const": "after_successful_advancing_simulate_or_run_return_at_exact_capture_biological_time_before_any_further_advance_or_mutation"
+          },
+          "positiveInfinityExportedMs": {
+            "const": 1.7976931348623157e+308
+          },
           "captureAuthorityProfile": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9.-]+$",
             "maxLength": 160
           },
+          "branches": { "$ref": "#/$defs/branchesV5" },
           "admittedStatus": {
-            "type": "object",
-            "properties": {
-              "recordTo": { "const": "memory" },
-              "timeInSteps": { "const": false },
-              "statusReadMethod": {
-                "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
-              },
-              "executionScope": { "const": "single_process" },
-              "eventBoundary": { "const": "(origin+start,origin+stop]" },
-              "captureHorizon": {
-                "const": "origin+stop_after_successful_return"
-              }
-            },
-            "required": [
-              "recordTo",
-              "timeInSteps",
-              "statusReadMethod",
-              "executionScope",
-              "eventBoundary",
-              "captureHorizon"
-            ],
-            "additionalProperties": false
+            "oneOf": [
+              { "$ref": "#/$defs/admittedStatusV3" },
+              { "$ref": "#/$defs/admittedStatusV4" }
+            ]
           },
           "authorityFields": {
             "type": "array",
@@ -101,16 +103,60 @@
         },
         "required": [
           "id",
+          "lifecycle",
+          "executable",
           "adapter",
           "adapterRevision",
           "upstream",
           "inputDigestDomain",
-          "captureAuthorityProfile",
-          "admittedStatus",
           "authorityFields",
           "positiveCases",
           "negativeCases",
           "evidenceBoundary"
+        ],
+        "oneOf": [
+          {
+            "properties": {
+              "captureAuthorityProfile": true,
+              "admittedStatus": true
+            },
+            "required": ["captureAuthorityProfile", "admittedStatus"]
+          },
+          {
+            "properties": {
+              "branches": true,
+              "timeBuildProfile": true,
+              "captureBoundary": true,
+              "positiveInfinityExportedMs": true
+            },
+            "required": [
+              "branches",
+              "timeBuildProfile",
+              "captureBoundary",
+              "positiveInfinityExportedMs"
+            ]
+          }
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": { "lifecycle": { "const": "current" } },
+              "required": ["lifecycle"]
+            },
+            "then": {
+              "properties": {
+                "executable": { "const": true },
+                "supersededBy": false
+              }
+            },
+            "else": {
+              "properties": {
+                "executable": { "const": false },
+                "supersededBy": true
+              },
+              "required": ["supersededBy"]
+            }
+          }
         ],
         "additionalProperties": false
       }
@@ -119,6 +165,125 @@
   "required": ["$schema", "registry", "version", "profiles"],
   "additionalProperties": false,
   "$defs": {
+    "admittedStatusV3": {
+      "type": "object",
+      "properties": {
+        "recordTo": { "const": "memory" },
+        "timeInSteps": { "const": false },
+        "statusReadMethod": {
+          "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
+        },
+        "executionScope": { "const": "single_process" },
+        "eventBoundary": { "const": "(origin+start,origin+stop]" },
+        "captureHorizon": {
+          "const": "origin+stop_after_successful_return"
+        }
+      },
+      "required": [
+        "recordTo",
+        "timeInSteps",
+        "statusReadMethod",
+        "executionScope",
+        "eventBoundary",
+        "captureHorizon"
+      ],
+      "additionalProperties": false
+    },
+    "admittedStatusV4": {
+      "type": "object",
+      "properties": {
+        "recordTo": { "const": "memory" },
+        "timeInSteps": { "const": false },
+        "statusReadMethod": {
+          "const": "pynest_single_spike_recorder_get_status_plain_projection_v2"
+        },
+        "executionScope": { "const": "single_process" },
+        "eventBoundary": { "const": "(origin+start,capture]" },
+        "captureHorizon": {
+          "const": "capture_after_successful_advancing_return_before_further_advance_or_mutation"
+        }
+      },
+      "required": [
+        "recordTo",
+        "timeInSteps",
+        "statusReadMethod",
+        "executionScope",
+        "eventBoundary",
+        "captureHorizon"
+      ],
+      "additionalProperties": false
+    },
+    "branchesV5": {
+      "type": "object",
+      "properties": {
+        "finiteStop": { "$ref": "#/$defs/finiteStopBranchV5" },
+        "positiveInfinityCaptureBounded": {
+          "$ref": "#/$defs/positiveInfinityBranchV5"
+        }
+      },
+      "required": ["finiteStop", "positiveInfinityCaptureBounded"],
+      "additionalProperties": false
+    },
+    "finiteStopBranchV5": {
+      "type": "object",
+      "properties": {
+        "stopKind": { "const": "finite" },
+        "captureAuthorityProfile": {
+          "const": "cortexel-nest-memory-spike-capture-authority.v3"
+        },
+        "recordTo": { "const": "memory" },
+        "timeInSteps": { "const": false },
+        "statusReadMethod": {
+          "const": "pynest_single_spike_recorder_get_status_plain_projection_v1"
+        },
+        "executionScope": { "const": "single_process" },
+        "eventBoundary": { "const": "(origin+start,origin+stop]" },
+        "captureHorizon": {
+          "const": "origin+stop_after_successful_return"
+        }
+      },
+      "required": [
+        "stopKind",
+        "captureAuthorityProfile",
+        "recordTo",
+        "timeInSteps",
+        "statusReadMethod",
+        "executionScope",
+        "eventBoundary",
+        "captureHorizon"
+      ],
+      "additionalProperties": false
+    },
+    "positiveInfinityBranchV5": {
+      "type": "object",
+      "properties": {
+        "stopKind": { "const": "nest_time_positive_infinity" },
+        "captureAuthorityProfile": {
+          "const": "cortexel-nest-memory-spike-capture-authority.v4"
+        },
+        "recordTo": { "const": "memory" },
+        "timeInSteps": { "const": false },
+        "statusReadMethod": {
+          "const": "pynest_single_spike_recorder_get_status_plain_projection_v2"
+        },
+        "executionScope": { "const": "single_process" },
+        "eventBoundary": { "const": "(origin+start,capture]" },
+        "captureHorizon": {
+          "const": "capture_after_successful_advancing_return_before_further_advance_or_mutation"
+        }
+      },
+      "required": [
+        "stopKind",
+        "captureAuthorityProfile",
+        "recordTo",
+        "timeInSteps",
+        "statusReadMethod",
+        "executionScope",
+        "eventBoundary",
+        "captureHorizon"
+      ],
+      "additionalProperties": false
+    },
     "check": {
       "type": "string",
       "minLength": 1,

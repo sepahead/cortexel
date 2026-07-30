@@ -55,9 +55,13 @@ function runCli(
   });
 }
 
-function exampleEnvelope(): Record<string, unknown> {
+type ExampleBranch = 'positiveInfinity' | 'finiteStop';
+
+function exampleEnvelope(
+  branch: ExampleBranch = 'positiveInfinity',
+): Record<string, unknown> {
   return structuredClone(
-    lookupSourceAdapter('nest-spike-recorder')!.example,
+    lookupSourceAdapter('nest-spike-recorder')!.examples[branch],
   ) as Record<string, unknown>;
 }
 
@@ -97,6 +101,26 @@ describe('executable source-adapter discovery', () => {
     expect(Object.isFrozen(
       SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example,
     )).toBe(true);
+    expect(
+      SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example,
+    ).toEqual(
+      SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].examples
+        .positiveInfinity,
+    );
+    expect(Object.keys(
+      SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].examples,
+    )).toEqual(['positiveInfinity', 'finiteStop']);
+    expect(Object.isFrozen(
+      SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].examples.finiteStop,
+    )).toBe(true);
+    expect(
+      SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].implementation,
+    ).toMatchObject({
+      profile: {
+        adapterRevision: 5,
+        inputDigestDomain: 'cortexel.nest-spike-recorder-adapter-input.v5',
+      },
+    });
     expect(() => {
       (
         SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'] as {
@@ -125,20 +149,23 @@ describe('executable source-adapter discovery', () => {
     })).not.toBe(SOURCE_ADAPTER_CATALOG_DIGEST);
   });
 
-  it('ships a copyable example accepted by the adapter and full request gate', () => {
-    const envelope = exampleEnvelope() as {
-      exportedStatus: Parameters<typeof nestSpikeRecorderToRaster>[0];
-      options: Parameters<typeof nestSpikeRecorderToRaster>[1];
-    };
-    const adapted = nestSpikeRecorderToRaster(
-      envelope.exportedStatus,
-      envelope.options,
-    );
-    expect(adapted.ok).toBe(true);
-    if (!adapted.ok) return;
-    const checked = parseAndValidateRequest(JSON.stringify(adapted.request));
-    expect(checked.ok).toBe(true);
-  });
+  it.each(['positiveInfinity', 'finiteStop'] as const)(
+    'ships a copyable $branch example accepted by the adapter and full request gate',
+    (branch) => {
+      const envelope = exampleEnvelope(branch) as {
+        exportedStatus: Parameters<typeof nestSpikeRecorderToRaster>[0];
+        options: Parameters<typeof nestSpikeRecorderToRaster>[1];
+      };
+      const adapted = nestSpikeRecorderToRaster(
+        envelope.exportedStatus,
+        envelope.options,
+      );
+      expect(adapted.ok).toBe(true);
+      if (!adapted.ok) return;
+      const checked = parseAndValidateRequest(JSON.stringify(adapted.request));
+      expect(checked.ok).toBe(true);
+    },
+  );
 });
 
 describe('source-adapter CLI', () => {
@@ -152,7 +179,7 @@ describe('source-adapter CLI', () => {
       sourceAdapterCatalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
       adapters: [{
         id: 'nest-spike-recorder',
-        revision: 3,
+        revision: 5,
         outputSkillId: 'neuro.spike_raster',
       }],
     });
@@ -169,40 +196,43 @@ describe('source-adapter CLI', () => {
     );
   });
 
-  it('adapts strict JSON from stdin, validates it, and pipes into render', async () => {
-    const input = `${JSON.stringify(exampleEnvelope())}\n`;
-    const adapted = await runCli([
-      'source',
-      'adapt',
-      'nest-spike-recorder',
-      '-',
-      '--format',
-      'json',
-    ], input);
-    expect(adapted).toMatchObject({ code: 0, stderr: '' });
+  it.each(['positiveInfinity', 'finiteStop'] as const)(
+    'adapts the $branch example from strict JSON and pipes it into render',
+    async (branch) => {
+      const input = `${JSON.stringify(exampleEnvelope(branch))}\n`;
+      const adapted = await runCli([
+        'source',
+        'adapt',
+        'nest-spike-recorder',
+        '-',
+        '--format',
+        'json',
+      ], input);
+      expect(adapted).toMatchObject({ code: 0, stderr: '' });
 
-    const checked = parseAndValidateRequest(adapted.stdout);
-    expect(checked.ok).toBe(true);
-    if (checked.ok) {
-      expect(checked.request.skillId).toBe('neuro.spike_raster');
-      expect(checked.request.inputAssurance.duplicateKeys)
-        .toBe('rejected_before_materialization');
-    }
+      const checked = parseAndValidateRequest(adapted.stdout);
+      expect(checked.ok).toBe(true);
+      if (checked.ok) {
+        expect(checked.request.skillId).toBe('neuro.spike_raster');
+        expect(checked.request.inputAssurance.duplicateKeys)
+          .toBe('rejected_before_materialization');
+      }
 
-    const rendered = await runCli([
-      'render',
-      '-',
-      '--dry-run',
-      '--format',
-      'json',
-    ], adapted.stdout);
-    expect(rendered).toMatchObject({ code: 0, stderr: '' });
-    expect(JSON.parse(rendered.stdout)).toMatchObject({
-      ok: true,
-      dryRun: true,
-      skill: 'neuro.spike_raster',
-    });
-  });
+      const rendered = await runCli([
+        'render',
+        '-',
+        '--dry-run',
+        '--format',
+        'json',
+      ], adapted.stdout);
+      expect(rendered).toMatchObject({ code: 0, stderr: '' });
+      expect(JSON.parse(rendered.stdout)).toMatchObject({
+        ok: true,
+        dryRun: true,
+        skill: 'neuro.spike_raster',
+      });
+    },
+  );
 
   it('rejects duplicate members before materialization', async () => {
     const input =

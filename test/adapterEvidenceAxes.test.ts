@@ -490,12 +490,46 @@ describe('adapter evidence axes', () => {
     const projection = resolveAdapterConformanceProfileV1(identity, registry);
     expect(projection.problems).toEqual([]);
     expect(projection.profile?.id).toBe(identity.id);
+    expect(projection.profile).toMatchObject({
+      lifecycle: 'current',
+      executable: true,
+    });
+    const implementationProfile = ADAPTER_IMPLEMENTATIONS_V1[0].adapterProfile;
+    expect(projection.profile).toMatchObject({
+      timeBuildProfile: implementationProfile.timeBuildProfile,
+      captureBoundary: implementationProfile.captureBoundary,
+      positiveInfinityExportedMs: implementationProfile.positiveInfinityExportedMs,
+    });
+    for (const [field, mutation] of [
+      ['timeBuildProfile', `${implementationProfile.timeBuildProfile}.drift`],
+      ['captureBoundary', `${implementationProfile.captureBoundary}.drift`],
+      ['positiveInfinityExportedMs', Number.MAX_VALUE / 2],
+    ] as const) {
+      const driftedMachineProfile = structuredClone(registry);
+      const profile = driftedMachineProfile.profiles.find(
+        ({ id }: JsonRecord) => id === identity.id,
+      );
+      expect(profile).toBeDefined();
+      if (!profile) continue;
+      profile[field] = mutation;
+      expect(validate(driftedMachineProfile), field).toBe(false);
+    }
+    expect(
+      registry.profiles.find(({ id }: JsonRecord) => id === 'nest-spike-recorder.v3'),
+    ).toMatchObject({
+      lifecycle: 'historical_superseded',
+      executable: false,
+      supersededBy: identity.id,
+    });
     expect(
       adapterConformanceProfileDigestV1(projection.profile!),
     ).toBe(identity.digest);
-
     const drifted = structuredClone(registry);
-    drifted.profiles[0].positiveCases.push(
+    const currentProfile = drifted.profiles.find(
+      ({ id }: JsonRecord) => id === identity.id,
+    );
+    expect(currentProfile).toBeDefined();
+    currentProfile.positiveCases.push(
       'synthetic unreviewed profile mutation',
     );
     expect(
@@ -505,7 +539,7 @@ describe('adapter evidence axes', () => {
     ]);
 
     const duplicated = structuredClone(registry);
-    duplicated.profiles.push(structuredClone(duplicated.profiles[0]));
+    duplicated.profiles.push(structuredClone(currentProfile));
     expect(
       resolveAdapterConformanceProfileV1(identity, duplicated).problems,
     ).toContainEqual(expect.stringContaining('duplicate id'));

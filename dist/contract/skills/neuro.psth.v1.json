@@ -869,7 +869,7 @@
       },
       {
         "why": "Events mode carries no per-trial coverage records, so it cannot compute a per-bin covering-trial denominator. Inferring coverage from which trials happened to spike would drop silent-but-observed trials and inflate the rate. The root envelope constraint therefore permits `per_bin_covering_trials` only with prebinned counts and exact supplied denominators.",
-        "expectedCode": "SCHEMA_VALIDATION_FAILED",
+        "expectedCode": "SCHEMA_ENUM_MISMATCH",
         "request": {
           "contract": { "name": "cortexel-figure-request", "version": "1.0" },
           "skill": { "id": "neuro.psth" },

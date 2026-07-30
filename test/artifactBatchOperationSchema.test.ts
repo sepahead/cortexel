@@ -22,7 +22,7 @@ type FixtureName =
   | 'compartmentPlain'
   | 'compartmentAggregate'
   | 'compartmentTimeConversion'
-  | 'spikeRaster';
+  | 'responseCurve';
 
 const root = path.resolve(import.meta.dirname, '..');
 
@@ -36,7 +36,7 @@ function contractExamples(skillId: string): readonly MutableRecord[] {
 
 const weightExamples = contractExamples('network.synaptic_weight_trace');
 const compartmentExamples = contractExamples('neuro.compartment_trace');
-const spikeExamples = contractExamples('neuro.spike_raster');
+const responseCurveExamples = contractExamples('neuro.response_curve');
 
 function requestFor(name: FixtureName): MutableRecord {
   if (name === 'weightMember') return structuredClone(weightExamples[0]);
@@ -44,7 +44,7 @@ function requestFor(name: FixtureName): MutableRecord {
   if (name === 'weightDeclared') return structuredClone(weightExamples[2]);
   if (name === 'compartmentPlain') return structuredClone(compartmentExamples[0]);
   if (name === 'compartmentAggregate') return structuredClone(compartmentExamples[1]);
-  if (name === 'spikeRaster') return structuredClone(spikeExamples[0]);
+  if (name === 'responseCurve') return structuredClone(responseCurveExamples[0]);
 
   if (name === 'weightCarryWitness' || name === 'weightWitnesses') {
     const request = structuredClone(weightExamples[0]);
@@ -182,15 +182,15 @@ describe('FigureArtifactV1 batch trace-preparation operation closure', () => {
   });
 
   it('preserves historical open operations only on a matching unrelated artifact', () => {
-    const artifact = artifactFor('spikeRaster');
+    const artifact = artifactFor('responseCurve');
     const legacy = legacyOperation(0);
     legacy.parameters.anotherHistoricalField = { remains: 'accepted' };
     legacy.receipt.anotherHistoricalField = [1, 2, 3];
     operationsOf(artifact).push(legacy);
     artifact.artifactDigest = canonicalDigestExcluding(artifact, 'artifactDigest');
-    expectAccepted(artifact, 'spike raster plus one historical open operation');
+    expectAccepted(artifact, 'response curve plus one historical open operation');
 
-    const sixtyFour = artifactFor('spikeRaster');
+    const sixtyFour = artifactFor('responseCurve');
     operationsOf(sixtyFour).push(
       ...Array.from({ length: 63 }, (_unused, index) => legacyOperation(index)),
     );

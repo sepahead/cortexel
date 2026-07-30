@@ -10024,7 +10024,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
   },
   "neuro.spike_raster": {
     "id": "neuro.spike_raster",
-    "revision": 5,
+    "revision": 6,
     "status": "stable",
     "availability": "packaged",
     "releaseReady": false,
@@ -10042,7 +10042,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
     ],
     "renderer": {
       "id": "figure.spike_raster",
-      "revision": 6
+      "revision": 7
     },
     "semanticValidators": [
       {
@@ -10114,6 +10114,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "REFERENCE_COMPARISON_NOT_RUN",
       "EVENTS_EXCLUDED_OUT_OF_WINDOW",
       "NEST_SERIALIZED_CLOCK_BOUNDARY",
+      "NEST_CAPTURE_BOUNDED_POSITIVE_INFINITY",
       "UNIT_CONVERTED",
       "CALLER_NOTE_UNVERIFIED",
       "NONSTANDARD_BUDGET_PROFILE"
@@ -10225,7 +10226,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "version": 1,
       "evaluator": {
         "tag": "registered_evaluator",
-        "id": "neuro.spike_raster.output_authority.v5"
+        "id": "neuro.spike_raster.output_authority.v6"
       },
       "requestPaths": [
         {
@@ -10373,7 +10374,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
         "name": "nest-simulator spike_recorder",
         "version": "3.10.0",
         "status": "not_run",
-        "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, the closed origin+stop endpoint, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
+        "notes": "The intended differential oracle is NEST's own memory spike recorder, compared fixture for fixture on the conventions that actually differ between implementations: the open origin+start endpoint, finite closed origin+stop, default-positive-infinity closed capture, non-zero origin, native fractional milliseconds, nonchronological output, duplicate rows, and clock-reset behavior. The exact NEST 3.10.0 source was inspected and limited ad hoc exact-version runtime probes were performed, but no committed isolated harness or durable profile-bound receipt exists; status therefore remains not_run and no release oracle-agreement claim is made."
       }
     },
     "adapters": [
@@ -10383,7 +10384,7 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
           {
             "system": "nest.spike_recorder",
             "role": "primary",
-            "notes": "Adapter revision 3 supports only an exact NEST 3.10.0 memory-recorder status profile when `time_in_steps` is explicitly false, the named plain-data projection preserves NumPy event-array values and order, origin/start/stop carry exact on-grid integer-tic preimages, and a closed `kind: caller_declaration` record binds the single-process runtime, successful-return closed-stop endpoint, monotonic kernel clock epoch, most recent buffer epoch, most recent recording-plan mutation, and exact sender universe. It preserves nonchronological order, duplicates, origin, and the native (origin+start,origin+stop] boundary. It does not introspect PyNEST or authenticate any declared capture fact. NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
+            "notes": "Adapter revision 5 supersedes the historical finite-stop revision-3 behavior and the unshipped positive-infinity draft instead of silently changing either identity. It accepts the same detached finite/status data shapes only under new capture-authority profile v3 for finite stop or v4 for positive infinity; both explicitly bind the pinned LP64/int64/binary64-roundTiesToEven/no-excess time build. Both branches require explicit `time_in_steps: false`, a named lossless NumPy-to-plain-data projection, source-faithful finite integer-tic preimages, single-process authority, monotonic kernel-clock and buffer/configuration/wiring history, and the exact sender universe. The admitted clock subset uses non-negative safe-integer tics, the pinned 64-bit `tic_t`/`INF_MARGIN=8` finite ceiling, source-faithful two-operation binary64 `Time::get_ms()` projection, inverse round-trip, and adjacent-grid distinguishability. Finite revision 5 preserves (origin+start,origin+stop] under capture authority v3. The positive-infinity branch accepts only the typed sentinel emitted by projection v2 and preserves (origin+start,capture] under capture authority v4. Both use the revision-5 digest domain. Capture is not device deactivation. Cortexel does not introspect PyNEST or authenticate any declared capture fact. Raw DBL_MAX, historical authority v1/v2, clocks outside the conservative profile, NEST 3.9, other 3.10 patches, step/offset, ASCII, MPI, and SIONlib inputs fail closed until separately pinned and evidenced.",
             "sourceId": "nest-spike-recorder"
           },
           {
@@ -10413,12 +10414,12 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
           },
           "conformanceProfile": {
             "registry": "cortexel-adapter-conformance-profiles.v1",
-            "id": "nest-spike-recorder.v3",
+            "id": "nest-spike-recorder.v5",
             "digestAlgorithm": "cortexel_adapter_conformance_profile_rfc8785_sha256_v1",
-            "digest": "sha256:9bf23e63c51b23239cf0438fa770323b65d58cd29ff7d25ed5c7626a9e1f2be4"
+            "digest": "sha256:d6026b042cca0f58e0104962f946410cae3becff1d4a675b52f25e2e23ffc75a"
           }
         },
-        "notes": "Executable code exists for this bounded profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
+        "notes": "Executable revision-5 code exists for finite-stop and positive-infinity/capture-bounded branches under one source-faithful build/clock profile, but Cortexel does not yet publish a separate closed machine-readable source-to-request mapping definition. The implementation inventory, request schema, source identity, conformance-profile identity, and R049 requirement establish different boundaries and must not be relabelled as an independent normative mapping specification."
       },
       {
         "mappingId": "neo-spiketrain",
@@ -10475,10 +10476,10 @@ export const SKILL_CATALOG: Readonly<Record<StableSkillId, SkillCatalogEntry>> =
       "NODE_UNIVERSE_INCOMPLETE is the nearest existing rule to that gap, but its text is about edges and degree and would be false on a raster, so it is deliberately not emitted. A wrong disclosure is worse than a missing one.",
       "There is likewise no disclosure id for a caller-sampled event set. Rather than emit a rule that does not fit, the contract refuses the sampled value outright.",
       "Cortexel verifies that every event's sender is in the declared universe. It cannot verify that the recorder observed every spike of those senders, so an empty row is evidence of no RECORDED event; reading it as silence rests on the recorder, not on Cortexel.",
-      "For a NEST origin-relative window, exact comparisons are exact over the exported finite binary64 millisecond values and declared integer-tic preimages. The required `kind: caller_declaration` capture record also binds the named plain-data projection, successful-return closed-stop endpoint, monotonic kernel clock epoch, buffer epoch, recording-plan history, sender universe, runtime profile and single-process scope. Cortexel checks those declarations for internal consistency but cannot observe or authenticate them; the mandatory NEST capture-boundary disclosure states that limitation on every such figure.",
-      "NEST `time_in_steps:true` is deliberately unsupported in revision 3. A step index plus offset is a different canonical clock representation, not a millisecond array; support requires preserving the raw pair and NEST grid authority rather than reconstructing and discarding it.",
+      "NEST membership compares exported binary64 events with source-faithful endpoint projections from declared tics. Cortexel adds Time tics before reproducing pinned NEST 3.10.0's rounded reciprocal-and-multiply `Time::get_ms()`; it never adds serialized millisecond fields. Only a safe-integer, finite-Time, inverse-round-trippable, adjacent-grid-distinguishable clock subset is admitted. The caller-declared capture record binds the plain-data projection, build/runtime profile, successful-return boundary, clock/buffer/configuration/wiring history, sender universe, and single-process scope. Finite revision 5 closes at configured origin+stop; positive infinity closes only at declared capture and establishes nothing later. Cortexel checks internal consistency but cannot authenticate those facts; mandatory disclosures say so.",
+      "NEST `time_in_steps:true` remains deliberately unsupported. A step index plus offset is a different canonical clock representation, not a millisecond array; support requires preserving the raw pair and NEST grid authority rather than reconstructing and discarding it.",
       "Below the mark budget every event is drawn, but two events closer than one device pixel overlap. The table count is authoritative; the visible tick count is not, and no figure caption can make it so.",
-      "No raster compaction or complete-table sidecar is implemented in revision 3. Requests over the exact-mark or complete-returned-table budget fail closed; the registered future raster_density_bins policy is not advertised by this skill until both surfaces exist.",
+      "No raster compaction or complete-table sidecar is implemented in revision 6. Requests over the exact-mark or complete-returned-table budget fail closed; the registered future raster_density_bins policy is not advertised by this skill until both surfaces exist.",
       "No uncertainty variant is renderable. An event is an observation, not an estimate, and a band drawn around one would be a fabrication."
     ]
   }
@@ -11368,14 +11369,14 @@ export const RENDERERS = freezeGenerated({
   },
   "figure.spike_raster": {
     "id": "figure.spike_raster",
-    "revision": 6,
+    "revision": 7,
     "status": "stable",
     "marks": [
       "rule",
       "point",
       "text"
     ],
-    "notes": "Exact ticks or points below the mark cap; over-budget input fails closed because no raster compaction plus complete-sidecar implementation ships in revision 3. Event-window closure is rendered from the request, NEST origin-relative windows are converted exactly once at the presentation edge, caller-declared capture authority remains visibly disclosed, and Y order is explicit and NEVER silently sorted by observed rate."
+    "notes": "Exact ticks or points below the mark cap; over-budget input fails closed because no raster compaction plus complete-sidecar implementation ships. Finite-stop NEST windows and positive-infinity capture-bounded windows keep distinct endpoint semantics, each endpoint is converted exactly once at the presentation edge, caller-declared capture authority remains visibly disclosed, and Y order is explicit and NEVER silently sorted by observed rate."
   },
   "figure.population_rate": {
     "id": "figure.population_rate",

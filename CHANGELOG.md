@@ -6,6 +6,45 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — source-faithful NEST spike-recorder clock profile
+
+- `neuro.spike_raster` is now revision 6, `figure.spike_raster` is revision 7, and
+  their coordinated semantic, disclosure, and OutputAuthority identities cover a
+  source-faithful NEST 3.10.0 clock profile. The contract retains finite-stop and
+  positive-infinity/capture-bounded request shapes without transferring evidence from
+  superseded adapter profiles.
+- NEST spike-recorder adapter revision 5 is the sole executable profile. Its keyed
+  `finiteStop` branch uses projection v1 and capture-authority profile v3, retaining
+  `(origin+start,origin+stop]`; `positiveInfinityCaptureBounded` uses projection v2 and
+  capture-authority profile v4, retaining `(origin+start,capture]`. Both use one v5
+  adapter-input digest domain. Historical adapter v3 and capture-authority v1/v2 records
+  remain non-executable migration identities.
+- Revision 5 reproduces pinned NEST `Time::get_ms()` as a stored binary64 reciprocal
+  followed by a stored multiplication, adds integer tics before projection, and admits
+  only a conservative safe-integer, inverse-round-trippable, adjacent-grid-distinguishable
+  clock subset below NEST's resolution-adjusted finite-Time ceiling. The exact
+  LP64/int64/binary64 build and floating-point profile is caller-declared; structural
+  acceptance is not build or active-rounding-mode attestation.
+- The positive-infinity branch admits only the typed
+  `{ "kind": "nest_time_positive_infinity" }` token. A raw numeric `DBL_MAX` is
+  rejected. Capture-authority profile v4 requires a finite `captureTime` immediately
+  after a successful *advancing* `Simulate` or `Run` return and before any further
+  advance or mutation. Capture is not a configured stop or recorder deactivation, and
+  nothing after capture is established.
+- `source describe nest-spike-recorder` now gives agents the revision-5 typed-sentinel
+  example and both exact branch boundaries. The adapter remains detached plain-data
+  code: every build, projection, capture, process, history, wiring, and sender-universe
+  fact is caller-declared, not simulator attestation.
+- The packed-runtime smoke executes both closed adapter branches from the shipped
+  digest-bound source descriptor instead of maintaining a second handwritten capture
+  authority fixture. A future adapter revision cannot leave package verification on a
+  historical profile without failing its branch-inventory regression.
+- The versioned `nest-spike-recorder.v5` conformance profile specifies both branches and
+  their positive and negative cases. Release gate R049 remains `NOT_RUN`: source
+  inspection, an exact wheel installation, official-example execution, and ad hoc probes
+  are not a durable isolated receipt binding the wheel, toolchain, floating-point
+  environment, harness bytes, and results.
+
 ### Fixed — NEST adapter capability evidence
 
 - Stable-contract adapter metadata now uses composite mappings with stable source ids,
@@ -32,17 +71,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `NOT_RUN`→`PASS` evidence-only authorization does not change generated package
   semantics or create a self-referential release.
 - `cortexel/adapters/nest` no longer claims that live PyNEST integration exists in the
-  Python package. Neither runtime starts or introspects NEST; the one packaged V1
-  adapter accepts only revision 3's bounded plain-data shape of a caller-declared exact
-  NEST 3.10.0 memory spike-recorder profile. A final status and `n_events` value cannot
+  Python package. Neither runtime starts or introspects NEST; the one packaged
+  FigureRequestV1 adapter accepts the bounded plain-data shapes of caller-declared exact
+  NEST 3.10.0 memory spike-recorder profiles. Its executable revision-5 finite-stop and
+  positive-infinity/capture-bounded branches are described above. A final
+  status and `n_events` value cannot
   prove that the buffer was not reset, configuration or wiring remained fixed, the
   capture endpoint was reached after a successful return, the kernel clock remained
   monotonic, the NumPy arrays were projected losslessly, or MPI ranks were merged. The adapter
-  therefore requires a closed capture-authority declaration covering the exact
-  successful-return closed-stop endpoint, exact integer-tic/grid preimages, most
-  recent buffer epoch and recording-plan mutation, monotonic kernel clock epoch,
-  complete sender universe, exact single-process scope, status-read method, and runtime
-  resolution. It accepts local thread-sibling merging but refuses MPI/premerged claims.
+  therefore requires a closed capture-authority declaration covering the branch-specific
+  finite-stop or finite-capture endpoint, exact integer-tic/grid preimages, most recent
+  buffer epoch and recording-plan mutation, monotonic kernel clock epoch, complete sender
+  universe, exact single-process scope, status-read method, and runtime resolution. It
+  accepts local thread-sibling merging but refuses MPI/premerged claims.
   The source digest binds only the detached plain-data projection; a second
   domain-separated digest binds that projection to every normalized option. Neither
   digest authenticates the
@@ -75,8 +116,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   inventory through `source catalog`, complete digest-bound adapter discovery through
   `source describe`, and a bounded duplicate-key-safe
   `source adapt <adapter-id> <input|->` boundary. The only living id is
-  `nest-spike-recorder`; its copyable input retains the full caller-declared revision-3
-  capture authority, and the CLI emits canonical request JSON only after both the
+  `nest-spike-recorder`; its copyable input uses the full caller-declared revision-5
+  positive-infinity branch, while finite input uses revision 5's `finiteStop` branch.
+  Historical revision-3 input is refused with a migration diagnostic. The CLI emits canonical request JSON only after both the
   adapter and the complete stable FigureRequest pipeline succeed. Candidate mappings,
   live PyNEST capture, other NEST profiles, and mutable R049 status are not promoted by
   discovery. The same deeply frozen source catalog, guarded lookup, and digest are
@@ -202,13 +244,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ownership evidence; a kqueue-backed selector may still drain pipe descriptors.
 - Output pipes are drained under fixed bounds while the group leader remains
   unreaped. The sole raw `waitpid` begins only after final `WNOWAIT` ownership
-  proof and pipe EOF; any `waitpid` exception is terminal, with no retry, signal,
-  identity probe, or second wait afterward.
+  proof and either pipe EOF or the fixed drain deadline. Selector construction or
+  registration failure cannot bypass that interval: cleanup falls back to direct
+  pipe readiness and reads; if readiness or reads also fail, it sleeps in bounded
+  increments until the original deadline before reaping and retains the initiating
+  failure. Any `waitpid` exception is terminal, with no retry, signal, identity
+  probe, or second wait afterward.
   Regression controls cover normal success and failure, timeout, output
   overflow, deferred `INT`/`TERM`/`HUP`, post-spawn interruption, an inherited
   pipe held by a same-group descendant, external reaping before and after a
-  positive observation, group-signal/reaper races, and the absence of any
-  post-reap `killpg`.
+  positive observation, group-signal/reaper races, dual selector failure,
+  registration failure with buffered output, and the absence of any post-reap
+  numeric signal, readiness probe, or wait.
 - This is bounded same-authority POSIX process-group cleanup, not process-tree
   isolation. Deliberate regrouping/detachment, a credential or security-label
   transition, hostile same-process native reaping or unrelated signal handlers,
@@ -690,7 +737,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   events, the lag-out-of-range versus edge-ineligible split remains unavailable. Zero
   eligible denominators are represented by a null rate with an explicit status, never
   by a fabricated zero or a validation exception. Caller-supplied rates and weighted
-  pair sums remain refused. The later revision-4 NEST restriction is recorded above.
+  pair sums remain refused. The later source-faithful NEST restriction is recorded above.
 - Correlogram uncertainty is narrowed to explicit `none` in revision 2. Dispersion
   and interval arrays stay refused until one branch carries them through units,
   missingness, table, summary, legend, and geometry without dropping a field.

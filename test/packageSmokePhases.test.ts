@@ -443,6 +443,19 @@ describe('two-phase package smoke contract', () => {
       .toBeLessThan(executeReader.indexOf("executableVersion(canonicalNode, 'Node')"));
   });
 
+  it('derives packaged NEST adapter probes from the shipped closed branch examples', () => {
+    const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    const probe = source.slice(
+      source.indexOf('const runtimeFigureContractProbe ='),
+      source.indexOf('interface PackageSmokeContext'),
+    );
+    expect(probe).toContain("authoring.lookupSourceAdapter('nest-spike-recorder')");
+    expect(probe).toContain('packagedNestSource.examples[branch]');
+    expect(probe).toContain("['positiveInfinity', 'finiteStop']");
+    expect(probe).not.toMatch(/cortexel-nest-memory-spike-capture-authority\.v\d+/u);
+    expect(probe).not.toContain('nest_3_10_time_tic_int64_long_int64_binary64_rne_no_excess_v1');
+  });
+
   it('binds finalized host-authored guard and probe inputs to exact bytes and mode', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-host-intent-')));
     cleanups.push(workspace);
