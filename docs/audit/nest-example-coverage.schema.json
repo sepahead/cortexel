@@ -1,27 +1,34 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cortexel.dev/schema/audit/nest-example-coverage.skeleton.v0.1.json",
-  "title": "Cortexel provisional NEST official-example coverage ledger skeleton",
+  "$id": "https://cortexel.dev/schema/audit/nest-example-coverage.v1.json",
+  "title": "Cortexel pinned NEST official-example audit V1",
   "type": "object",
   "$defs": {
-    "layer": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 6000
+    },
+    "closedAxis": {
       "type": "object",
       "properties": {
-        "id": {
-          "enum": [
-            "upstream_source_inventory",
-            "visual_output_inventory",
-            "stable_contract_mapping",
-            "packaged_adapter_implementation",
-            "renderer_coverage",
-            "upstream_execution",
-            "scientific_certification"
-          ]
-        },
-        "state": {
-          "enum": ["inventoried", "partial", "unsupported", "not_assessed", "not_run"]
-        },
-        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        "id": { "type": "string" },
+        "state": { "type": "string" },
+        "notes": { "$ref": "#/$defs/notes" }
+      },
+      "required": ["id", "state", "notes"],
+      "additionalProperties": false
+    },
+    "unsupportedInterface": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "state": { "const": "unsupported" },
+        "notes": { "$ref": "#/$defs/notes" }
       },
       "required": ["id", "state", "notes"],
       "additionalProperties": false
@@ -29,35 +36,62 @@
   },
   "properties": {
     "registry": { "const": "cortexel-nest-official-example-coverage" },
-    "version": { "const": "0.1-draft" },
-    "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
-    "upstream": {
+    "version": { "const": "1.0" },
+    "description": { "$ref": "#/$defs/notes" },
+    "upstreamAuthority": {
       "type": "object",
       "properties": {
         "project": { "const": "NEST Simulator" },
         "release": { "const": "v3.10" },
-        "repository": { "const": "https://github.com/nest/nest-simulator" },
-        "commit": { "const": "acca9704da248750219a027db99fec6cd1f9052a" },
+        "repository": {
+          "const": "https://github.com/nest/nest-simulator.git"
+        },
+        "commit": {
+          "const": "acca9704da248750219a027db99fec6cd1f9052a"
+        },
         "rootTreeGitSha1": {
           "const": "7f6f4f0407c4000cded433b86d658191dd82cd79"
         },
-        "documentationIndexPath": { "const": "doc/htmldoc/examples/index.rst" },
-        "documentationIndexGitBlobSha1": {
-          "const": "2965669bd03f128478fa107779485ad5934b73c5"
+        "documentationIndex": {
+          "type": "object",
+          "properties": {
+            "path": { "const": "doc/htmldoc/examples/index.rst" },
+            "gitMode": { "const": "100644" },
+            "gitBlobSha1": {
+              "const": "2965669bd03f128478fa107779485ad5934b73c5"
+            }
+          },
+          "required": ["path", "gitMode", "gitBlobSha1"],
+          "additionalProperties": false
         },
-        "documentationIndexGitMode": { "const": "100644" },
-        "orchestrationCmakePath": { "const": "pynest/examples/CMakeLists.txt" },
-        "orchestrationCmakeGitBlobSha1": {
-          "const": "b1c834a050be5562edb54218d960fcf255ecd8ea"
+        "runner": {
+          "type": "object",
+          "properties": {
+            "path": { "const": "pynest/examples/run_examples.sh" },
+            "gitMode": { "const": "100755" },
+            "gitBlobSha1": {
+              "const": "6b36df9dd356a419e12aa477b0d05611111052f7"
+            }
+          },
+          "required": ["path", "gitMode", "gitBlobSha1"],
+          "additionalProperties": false
         },
-        "orchestrationCmakeGitMode": { "const": "100644" },
-        "orchestrationCmakeRole": {
-          "const": "installs_run_examples_shell_only_not_entrypoint_authority"
+        "orchestrationCmake": {
+          "type": "object",
+          "properties": {
+            "path": { "const": "pynest/examples/CMakeLists.txt" },
+            "gitMode": { "const": "100644" },
+            "gitBlobSha1": {
+              "const": "b1c834a050be5562edb54218d960fcf255ecd8ea"
+            },
+            "role": {
+              "const": "installs_run_examples_shell_only_not_entrypoint_authority"
+            }
+          },
+          "required": ["path", "gitMode", "gitBlobSha1", "role"],
+          "additionalProperties": false
         },
-        "exampleTreePath": { "const": "pynest/examples" },
-        "treeApiUrl": {
-          "const": "https://api.github.com/repos/nest/nest-simulator/git/trees/acca9704da248750219a027db99fec6cd1f9052a?recursive=1"
-        }
+        "exampleTreePath": { "const": "pynest/examples" }
       },
       "required": [
         "project",
@@ -65,135 +99,140 @@
         "repository",
         "commit",
         "rootTreeGitSha1",
-        "documentationIndexPath",
-        "documentationIndexGitBlobSha1",
-        "documentationIndexGitMode",
-        "orchestrationCmakePath",
-        "orchestrationCmakeGitBlobSha1",
-        "orchestrationCmakeGitMode",
-        "orchestrationCmakeRole",
-        "exampleTreePath",
-        "treeApiUrl"
+        "documentationIndex",
+        "runner",
+        "orchestrationCmake",
+        "exampleTreePath"
       ],
       "additionalProperties": false
     },
-    "sourceUniverse": {
+    "sourceInventory": {
       "type": "object",
       "properties": {
-        "rule": {
-          "const": "recursive_git_tree_entries_ending_dot_py_split_by_git_mode"
-        },
-        "pythonPathEntryCount": { "const": 112 },
-        "regularPythonFileCount": { "const": 109 },
-        "pythonSymlinkCount": { "const": 3 },
-        "regularExecutablePythonFileCount": { "const": 13 },
-        "regularNonExecutablePythonFileCount": { "const": 96 },
-        "repositoryRecursiveTreeApiEntryCount": { "const": 1972 },
-        "repositoryRecursiveTreeApiEntryKinds": { "const": "trees_and_blobs" },
-        "repositoryLeafEntryCount": { "const": 1835 },
-        "repositoryRecursiveTreeApiResponseTruncated": { "const": false },
-        "pythonPathInventoryStatus": { "const": "count_only" },
-        "officialEntrypointInventoryStatus": { "const": "not_inventoried" },
-        "documentationIndexDirectiveOccurrences": {
+        "state": { "const": "complete" },
+        "artifact": {
           "type": "object",
           "properties": {
-            "doc": { "const": 94 },
-            "imgTop": { "const": 33 }
+            "path": {
+              "const": "docs/audit/nest-example-source-inventory.v1.json"
+            },
+            "protocol": {
+              "const": "cortexel-nest-example-source-inventory"
+            },
+            "protocolVersion": { "const": 1 },
+            "identityAlgorithm": {
+              "const": "cortexel-nest-example-source-inventory.rfc8785-sha256.v1"
+            },
+            "inventoryDigest": {
+              "const": "sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6"
+            },
+            "artifactByteLength": { "const": 196576 },
+            "artifactSha256": {
+              "const": "sha256:1d762db8c60e174f42371308093c0d091937bde2299ed8cfce4217c9e9179c1a"
+            }
           },
-          "required": ["doc", "imgTop"],
+          "required": [
+            "path",
+            "protocol",
+            "protocolVersion",
+            "identityAlgorithm",
+            "inventoryDigest",
+            "artifactByteLength",
+            "artifactSha256"
+          ],
           "additionalProperties": false
         },
-        "documentationIndexNormalizationStatus": { "const": "not_inventoried" },
-        "visualAssetPathEntryCount": { "const": 12 },
-        "visualAssetCountsByExtension": {
+        "closure": {
           "type": "object",
           "properties": {
-            "png": { "const": 9 },
-            "gif": { "const": 2 },
-            "svg": { "const": 1 }
+            "pythonSourcePaths": { "const": "complete" },
+            "orchestrationAliases": { "const": "complete" },
+            "documentationAndRunnerSelectors": { "const": "complete" },
+            "canonicalEntrypoints": { "const": "complete" },
+            "runnerTargetProfiles": { "const": "complete" },
+            "checkedInVisualAssets": { "const": "complete" }
           },
-          "required": ["png", "gif", "svg"],
+          "required": [
+            "pythonSourcePaths",
+            "orchestrationAliases",
+            "documentationAndRunnerSelectors",
+            "canonicalEntrypoints",
+            "runnerTargetProfiles",
+            "checkedInVisualAssets"
+          ],
           "additionalProperties": false
         },
-        "visualAssetInventoryStatus": { "const": "count_only" },
-        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        "counts": {
+          "type": "object",
+          "properties": {
+            "pythonPathEntryCount": { "const": 112 },
+            "regularPythonFileCount": { "const": 109 },
+            "pythonSymlinkCount": { "const": 3 },
+            "canonicalEntrypointCount": { "const": 98 },
+            "runnerTargetProfileCount": { "const": 92 },
+            "checkedInVisualAssetCount": { "const": 12 }
+          },
+          "required": [
+            "pythonPathEntryCount",
+            "regularPythonFileCount",
+            "pythonSymlinkCount",
+            "canonicalEntrypointCount",
+            "runnerTargetProfileCount",
+            "checkedInVisualAssetCount"
+          ],
+          "additionalProperties": false
+        },
+        "limitations": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/notes" }
+        },
+        "notes": { "$ref": "#/$defs/notes" }
       },
       "required": [
-        "rule",
-        "pythonPathEntryCount",
-        "regularPythonFileCount",
-        "pythonSymlinkCount",
-        "regularExecutablePythonFileCount",
-        "regularNonExecutablePythonFileCount",
-        "repositoryRecursiveTreeApiEntryCount",
-        "repositoryRecursiveTreeApiEntryKinds",
-        "repositoryLeafEntryCount",
-        "repositoryRecursiveTreeApiResponseTruncated",
-        "pythonPathInventoryStatus",
-        "officialEntrypointInventoryStatus",
-        "documentationIndexDirectiveOccurrences",
-        "documentationIndexNormalizationStatus",
-        "visualAssetPathEntryCount",
-        "visualAssetCountsByExtension",
-        "visualAssetInventoryStatus",
+        "state",
+        "artifact",
+        "closure",
+        "counts",
+        "limitations",
         "notes"
       ],
       "additionalProperties": false
     },
-    "stateDefinitions": {
-      "type": "object",
-      "properties": {
-        "inventoried": {
-          "const": "The named layer has a complete machine-readable inventory for the ledger's declared scope. It does not inherit evidence from later layers."
-        },
-        "partial": {
-          "const": "Some capability exists, but the declared scope is not closed and must not be read as complete coverage."
-        },
-        "unsupported": {
-          "const": "The current stable-contract package has no executable capability for the named interface."
-        },
-        "not_assessed": {
-          "const": "No bounded review has classified the declared scope against this layer."
-        },
-        "not_run": {
-          "const": "No execution receipt exists for this pinned upstream identity."
-        }
-      },
-      "required": ["inventoried", "partial", "unsupported", "not_assessed", "not_run"],
-      "additionalProperties": false
-    },
-    "layers": {
+    "evidenceAxes": {
       "type": "array",
       "minItems": 7,
       "maxItems": 7,
       "prefixItems": [
         {
           "allOf": [
-            { "$ref": "#/$defs/layer" },
+            { "$ref": "#/$defs/closedAxis" },
             {
               "type": "object",
               "properties": {
                 "id": { "const": "upstream_source_inventory" },
-                "state": { "const": "partial" }
+                "state": { "const": "complete" }
               }
             }
           ]
         },
         {
           "allOf": [
-            { "$ref": "#/$defs/layer" },
+            { "$ref": "#/$defs/closedAxis" },
             {
               "type": "object",
               "properties": {
                 "id": { "const": "visual_output_inventory" },
-                "state": { "const": "not_assessed" }
+                "state": { "const": "not_generated" }
               }
             }
           ]
         },
         {
           "allOf": [
-            { "$ref": "#/$defs/layer" },
+            { "$ref": "#/$defs/closedAxis" },
             {
               "type": "object",
               "properties": {
@@ -205,19 +244,19 @@
         },
         {
           "allOf": [
-            { "$ref": "#/$defs/layer" },
+            { "$ref": "#/$defs/closedAxis" },
             {
               "type": "object",
               "properties": {
                 "id": { "const": "packaged_adapter_implementation" },
-                "state": { "const": "partial" }
+                "state": { "const": "not_assessed" }
               }
             }
           ]
         },
         {
           "allOf": [
-            { "$ref": "#/$defs/layer" },
+            { "$ref": "#/$defs/closedAxis" },
             {
               "type": "object",
               "properties": {
@@ -229,7 +268,7 @@
         },
         {
           "allOf": [
-            { "$ref": "#/$defs/layer" },
+            { "$ref": "#/$defs/closedAxis" },
             {
               "type": "object",
               "properties": {
@@ -241,7 +280,7 @@
         },
         {
           "allOf": [
-            { "$ref": "#/$defs/layer" },
+            { "$ref": "#/$defs/closedAxis" },
             {
               "type": "object",
               "properties": {
@@ -256,114 +295,55 @@
     },
     "knownUnsupportedInterfaces": {
       "type": "array",
-      "minItems": 1,
-      "maxItems": 64,
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-          "state": { "const": "unsupported" },
-          "notes": { "type": "string", "minLength": 1, "maxLength": 1000 }
-        },
-        "required": ["id", "state", "notes"],
-        "additionalProperties": false
-      }
-    },
-    "reservedAssessmentModel": {
-      "description": "Vocabulary reserved for the future reviewed ledger schema. It is not an accepted assessment format in this provisional skeleton.",
-      "type": "object",
-      "properties": {
-        "status": { "const": "not_defined" },
-        "sourceRoles": {
-          "const": [
-            "official_entrypoint",
-            "support_module",
-            "orchestration_alias",
-            "nonvisual_source",
-            "unknown"
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/unsupportedInterface" },
+            { "type": "object", "properties": { "id": { "const": "figure_request_v1_connection_adapter" } } }
           ]
         },
-        "visualOutputKinds": {
-          "const": [
-            "static_figure",
-            "multi_panel_figure",
-            "overlay",
-            "table",
-            "animation",
-            "interactive",
-            "other"
+        {
+          "allOf": [
+            { "$ref": "#/$defs/unsupportedInterface" },
+            { "type": "object", "properties": { "id": { "const": "figure_request_v1_multimeter_adapter" } } }
           ]
         },
-        "compositionKinds": {
-          "const": [
-            "standalone",
-            "panel",
-            "overlay_layer",
-            "table_only",
-            "animation_sequence",
-            "interactive_surface",
-            "other"
+        {
+          "allOf": [
+            { "$ref": "#/$defs/unsupportedInterface" },
+            { "type": "object", "properties": { "id": { "const": "figure_request_v1_position_adapter" } } }
           ]
         },
-        "requiredSourceFields": {
-          "const": [
-            "sourcePath",
-            "gitMode",
-            "gitBlobSha1",
-            "sourceRole",
-            "officialEntrypointIds",
-            "visualOutputs"
+        {
+          "allOf": [
+            { "$ref": "#/$defs/unsupportedInterface" },
+            { "type": "object", "properties": { "id": { "const": "live_pynest_capture" } } }
           ]
         },
-        "requiredVisualOutputFields": {
-          "const": [
-            "outputId",
-            "callsiteOrOrdinal",
-            "outputKind",
-            "compositionKind",
-            "mappingStatus",
-            "implementationAvailability",
-            "rendererCoverage",
-            "upstreamExecution",
-            "scientificCertification"
+        {
+          "allOf": [
+            { "$ref": "#/$defs/unsupportedInterface" },
+            { "type": "object", "properties": { "id": { "const": "spike_recorder_nonmemory_backends" } } }
           ]
         },
-        "rules": {
-          "const": [
-            "Every inventoried path has exactly one explicit sourceRole.",
-            "An official entrypoint enumerates every visual output, panel, overlay, table, animation, and interactive surface it can emit under the bounded reviewed invocation.",
-            "Every visual output has a stable identity within its pinned source path; one status tuple per file is forbidden.",
-            "A support module or orchestration alias is not an independent official visualization entrypoint.",
-            "Source paths, harness candidate entrypoints, harness-executed entrypoints, documented examples, assets, and per-invocation visual outputs are distinct universes and distinct denominators.",
-            "A no-output classification is explicit and is valid only after the source path and all official entrypoints that import or invoke it are reviewed.",
-            "Upstream execution is independent of Cortexel mapping, adapter, and renderer availability.",
-            "Scientific certification requires inventoried visual semantics, mapping, executable adapter, renderer, upstream execution, and a pinned comparison receipt for that exact output.",
-            "A future complete claim quantifies over every pinned official entrypoint and every inventoried visual output, not over a Python-path count."
+        {
+          "allOf": [
+            { "$ref": "#/$defs/unsupportedInterface" },
+            { "type": "object", "properties": { "id": { "const": "spike_recorder_step_offset_clock" } } }
           ]
-        },
-        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
-      },
-      "required": [
-        "status",
-        "sourceRoles",
-        "visualOutputKinds",
-        "compositionKinds",
-        "requiredSourceFields",
-        "requiredVisualOutputFields",
-        "rules",
-        "notes"
+        }
       ],
-      "additionalProperties": false
-    },
-    "assessments": {
-      "description": "No assessment row shape is admitted by this provisional skeleton. A reviewed successor schema must implement the reserved per-output model first.",
-      "const": []
+      "items": false
     },
     "summary": {
       "type": "object",
       "properties": {
-        "classifiedPathCount": { "const": 0 },
-        "classifiedOfficialEntrypointCount": { "const": 0 },
+        "sourcePathCount": { "const": 112 },
+        "canonicalEntrypointCount": { "const": 98 },
+        "runnerTargetProfileCount": { "const": 92 },
+        "checkedInVisualAssetCount": { "const": 12 },
         "inventoriedVisualOutputCount": { "const": 0 },
         "mappedVisualOutputCount": { "const": 0 },
         "executableVisualOutputCount": { "const": 0 },
@@ -371,11 +351,13 @@
         "upstreamExecutedVisualOutputCount": { "const": 0 },
         "certifiedVisualOutputCount": { "const": 0 },
         "coverageClaim": { "const": "none" },
-        "notes": { "type": "string", "minLength": 1, "maxLength": 2000 }
+        "notes": { "$ref": "#/$defs/notes" }
       },
       "required": [
-        "classifiedPathCount",
-        "classifiedOfficialEntrypointCount",
+        "sourcePathCount",
+        "canonicalEntrypointCount",
+        "runnerTargetProfileCount",
+        "checkedInVisualAssetCount",
         "inventoriedVisualOutputCount",
         "mappedVisualOutputCount",
         "executableVisualOutputCount",
@@ -392,13 +374,10 @@
     "registry",
     "version",
     "description",
-    "upstream",
-    "sourceUniverse",
-    "stateDefinitions",
-    "layers",
+    "upstreamAuthority",
+    "sourceInventory",
+    "evidenceAxes",
     "knownUnsupportedInterfaces",
-    "reservedAssessmentModel",
-    "assessments",
     "summary"
   ],
   "additionalProperties": false

@@ -459,6 +459,8 @@ export function runEvidenceLedgerCli(
   let schema: unknown;
   let nestExampleAudit: unknown;
   let nestExampleAuditSchema: unknown;
+  let nestExampleSourceArtifact: unknown;
+  let nestExampleSourceArtifactRaw = '';
   try {
     parsed = parseLedgerJsonStrict(
       readDirectRepositoryFile(repositoryRoot, 'docs/release/evidence-ledger.v1.json'),
@@ -476,6 +478,20 @@ export function runEvidenceLedgerCli(
       readDirectRepositoryFile(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
       path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
     );
+    const nestExampleSourceArtifactBytes = readDirectRepositoryFile(
+      repositoryRoot,
+      'docs/audit/nest-example-source-inventory.v1.json',
+    );
+    nestExampleSourceArtifactRaw = new TextDecoder('utf-8', {
+      fatal: true,
+    }).decode(nestExampleSourceArtifactBytes);
+    nestExampleSourceArtifact = parseLedgerJsonStrict(
+      nestExampleSourceArtifactBytes,
+      path.resolve(
+        repositoryRoot,
+        'docs/audit/nest-example-source-inventory.v1.json',
+      ),
+    );
   } catch (error) {
     process.stderr.write(`evidence audit source/schema not readable/parseable: ${String(error)}\n`);
     return 1;
@@ -485,6 +501,10 @@ export function runEvidenceLedgerCli(
   const nestExampleAuditProblems = validateNestExampleAudit(
     nestExampleAudit,
     nestExampleAuditSchema,
+    {
+      value: nestExampleSourceArtifact,
+      rawUtf8: nestExampleSourceArtifactRaw,
+    },
   );
 
   if (errors.length > 0 || nestExampleAuditProblems.length > 0) {
@@ -503,7 +523,9 @@ export function runEvidenceLedgerCli(
   for (const status of LEDGER_STATUSES) {
     process.stdout.write(`  ${status.padEnd(15)} ${counts.get(status) ?? 0}\n`);
   }
-  process.stdout.write('NEST example audit: valid external zero-claim ledger\n');
+  process.stdout.write(
+    'NEST example audit: pinned source denominator valid; visualization coverage none\n',
+  );
 
   if (!releaseVersion) {
     process.stdout.write(

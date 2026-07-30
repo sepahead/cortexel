@@ -37,9 +37,11 @@ may be hand-edited:
 Generation first validates every `contract/skills/*.json` file against
 `meta/contract-source.schema.json`; a schema that is merely documented but never run is
 not a boundary. Mutable audit evidence is deliberately not a contract input.
-`bun run check:ledger` separately validates the external zero-claim NEST example
-audit under `docs/audit/`; its execution and certification states are never derived
-into language catalogs, the package manifest, or build identities.
+`bun run check:ledger` separately validates the external NEST example audit under
+`docs/audit/`. Its pinned source denominator is complete, but every visual-output,
+mapping, implementation, rendering, execution, and certification count remains
+zero; none of those states is derived into language catalogs, the package manifest,
+or build identities.
 `bun run check:generated` then checks committed output drift.
 Generation is deterministic: running it twice produces byte-identical output.
 

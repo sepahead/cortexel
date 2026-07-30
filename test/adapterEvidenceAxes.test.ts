@@ -631,53 +631,69 @@ describe('adapter certification requirement', () => {
 });
 
 describe('pinned NEST official-example coverage ledger', () => {
-  it('validates an external zero-claim skeleton against the pinned v3.10 identity', () => {
+  it('closes the source denominator without transferring visualization evidence', () => {
     const schema = readJson('docs/audit/nest-example-coverage.schema.json');
     const source = readJson('docs/audit/nest-example-coverage.v1.json');
+    const artifactRaw = readFileSync(
+      path.join(ROOT, 'docs/audit/nest-example-source-inventory.v1.json'),
+      'utf8',
+    );
+    const artifact = JSON.parse(artifactRaw);
+    const evidence = { value: artifact, rawUtf8: artifactRaw };
 
-    expect(validateNestExampleAudit(source, schema)).toEqual([]);
-    expect(source.version).toBe('0.1-draft');
-    expect(source.upstream).toMatchObject({
+    expect(validateNestExampleAudit(source, schema, evidence)).toEqual([]);
+    expect(source.version).toBe('1.0');
+    expect(source.upstreamAuthority).toMatchObject({
       release: 'v3.10',
       commit: 'acca9704da248750219a027db99fec6cd1f9052a',
       rootTreeGitSha1: '7f6f4f0407c4000cded433b86d658191dd82cd79',
-      documentationIndexPath: 'doc/htmldoc/examples/index.rst',
-      orchestrationCmakePath: 'pynest/examples/CMakeLists.txt',
-      orchestrationCmakeRole: 'installs_run_examples_shell_only_not_entrypoint_authority',
+      documentationIndex: {
+        path: 'doc/htmldoc/examples/index.rst',
+        gitBlobSha1: '2965669bd03f128478fa107779485ad5934b73c5',
+      },
+      runner: {
+        path: 'pynest/examples/run_examples.sh',
+        gitBlobSha1: '6b36df9dd356a419e12aa477b0d05611111052f7',
+      },
       exampleTreePath: 'pynest/examples',
     });
-    expect(source.sourceUniverse).toMatchObject({
+    expect(source.sourceInventory).toMatchObject({
+      state: 'complete',
+      artifact: {
+        inventoryDigest:
+          'sha256:cd59e82a8eb5af6d482d3042afdf91b0793865aef75843f5b10da6ee61ba3fe6',
+        artifactByteLength: 196576,
+        artifactSha256:
+          'sha256:1d762db8c60e174f42371308093c0d091937bde2299ed8cfce4217c9e9179c1a',
+      },
+      counts: {
+        canonicalEntrypointCount: 98,
+        runnerTargetProfileCount: 92,
+        checkedInVisualAssetCount: 12,
+      },
+    });
+    expect(artifact.summary).toMatchObject({
       pythonPathEntryCount: 112,
       regularPythonFileCount: 109,
       pythonSymlinkCount: 3,
       regularExecutablePythonFileCount: 13,
       regularNonExecutablePythonFileCount: 96,
-      repositoryRecursiveTreeApiEntryCount: 1972,
-      repositoryRecursiveTreeApiEntryKinds: 'trees_and_blobs',
-      repositoryLeafEntryCount: 1835,
-      repositoryRecursiveTreeApiResponseTruncated: false,
-      pythonPathInventoryStatus: 'count_only',
-      officialEntrypointInventoryStatus: 'not_inventoried',
-      documentationIndexDirectiveOccurrences: {
-        doc: 94,
-        imgTop: 33,
-      },
-      documentationIndexNormalizationStatus: 'not_inventoried',
+      canonicalPrimaryBodyCount: 98,
+      runnerAggProfileCount: 92,
       visualAssetPathEntryCount: 12,
       visualAssetCountsByExtension: {
         png: 9,
         gif: 2,
         svg: 1,
       },
-      visualAssetInventoryStatus: 'count_only',
     });
-    expect(source.reservedAssessmentModel).toMatchObject({
-      status: 'not_defined',
-    });
-    expect(source.assessments).toEqual([]);
+    expect(artifact.invocationProfiles).toHaveLength(92);
+    expect(
+      artifact.invocationProfiles.every(
+        ({ profile }: JsonRecord) => profile === 'runner_agg_default',
+      ),
+    ).toBe(true);
     expect(source.summary).toMatchObject({
-      classifiedPathCount: 0,
-      classifiedOfficialEntrypointCount: 0,
       inventoriedVisualOutputCount: 0,
       mappedVisualOutputCount: 0,
       executableVisualOutputCount: 0,
@@ -688,59 +704,88 @@ describe('pinned NEST official-example coverage ledger', () => {
     });
     expect(
       Object.fromEntries(
-        (source.layers as JsonRecord[]).map(({ id, state }) => [id, state]),
+        (source.evidenceAxes as JsonRecord[]).map(({ id, state }) => [id, state]),
       ),
     ).toEqual({
-      upstream_source_inventory: 'partial',
-      visual_output_inventory: 'not_assessed',
+      upstream_source_inventory: 'complete',
+      visual_output_inventory: 'not_generated',
       stable_contract_mapping: 'not_assessed',
-      packaged_adapter_implementation: 'partial',
+      packaged_adapter_implementation: 'not_assessed',
       renderer_coverage: 'not_assessed',
       upstream_execution: 'not_run',
       scientific_certification: 'not_run',
     });
 
     const movingCommit = structuredClone(source);
-    movingCommit.upstream.commit = 'main';
-    expect(validateNestExampleAudit(movingCommit, schema).length).toBeGreaterThan(0);
+    movingCommit.upstreamAuthority.commit = 'main';
+    expect(
+      validateNestExampleAudit(movingCommit, schema, evidence).length,
+    ).toBeGreaterThan(0);
 
-    const truncatedTree = structuredClone(source);
-    truncatedTree.sourceUniverse.repositoryRecursiveTreeApiResponseTruncated = true;
-    expect(validateNestExampleAudit(truncatedTree, schema).length).toBeGreaterThan(0);
+    const missingArtifact = validateNestExampleAudit(source, schema);
+    expect(missingArtifact).toEqual(expect.arrayContaining([
+      expect.stringContaining('source artifact was not supplied'),
+    ]));
 
     const falsePathCount = structuredClone(source);
-    falsePathCount.sourceUniverse.regularPythonFileCount = 110;
-    expect(validateNestExampleAudit(falsePathCount, schema).length).toBeGreaterThan(0);
+    falsePathCount.sourceInventory.counts.regularPythonFileCount = 110;
+    expect(
+      validateNestExampleAudit(falsePathCount, schema, evidence).length,
+    ).toBeGreaterThan(0);
 
     const falseLayerState = structuredClone(source);
-    falseLayerState.layers.find(
+    falseLayerState.evidenceAxes.find(
       ({ id }: JsonRecord) => id === 'visual_output_inventory',
     ).state = 'inventoried';
-    expect(validateNestExampleAudit(falseLayerState, schema).length).toBeGreaterThan(0);
+    expect(
+      validateNestExampleAudit(falseLayerState, schema, evidence),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('transferred evidence'),
+    ]));
 
-    const duplicateLayerSet = structuredClone(source);
-    duplicateLayerSet.layers = source.layers.map((layer: JsonRecord) => ({
-      ...layer,
-      id: 'upstream_source_inventory',
-      state: 'partial',
-    }));
-    expect(validateNestExampleAudit(duplicateLayerSet, schema)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('duplicate NEST example audit layer id'),
-      ]),
-    );
+    const whitespaceDrift = validateNestExampleAudit(source, schema, {
+      value: artifact,
+      rawUtf8: `${artifactRaw}\n`,
+    });
+    expect(whitespaceDrift).toEqual(expect.arrayContaining([
+      expect.stringContaining('bytes do not match'),
+      expect.stringContaining('not the exact canonical serialization'),
+    ]));
 
-    const inventedAssessment = structuredClone(source);
-    inventedAssessment.assessments = [{ sourcePath: 'pynest/examples/invented.py' }];
-    expect(validateNestExampleAudit(inventedAssessment, schema).length).toBeGreaterThan(0);
+    const semanticDrift = structuredClone(artifact);
+    semanticDrift.sourcePaths[0].path = 'pynest/examples/invented.py';
+    expect(
+      validateNestExampleAudit(source, schema, {
+        value: semanticDrift,
+        rawUtf8: artifactRaw,
+      }),
+    ).toEqual(expect.arrayContaining([
+      expect.stringContaining('digest does not bind'),
+      expect.stringContaining('mismatched identity'),
+    ]));
+
+    const inventedOutputRows = structuredClone(source);
+    inventedOutputRows.outputInventory = { state: 'complete', rows: [] };
+    expect(
+      validateNestExampleAudit(inventedOutputRows, schema, evidence).length,
+    ).toBeGreaterThan(0);
 
     const prematureCoverageClaim = structuredClone(source);
     prematureCoverageClaim.summary.coverageClaim = 'complete';
-    expect(validateNestExampleAudit(prematureCoverageClaim, schema).length).toBeGreaterThan(0);
+    expect(
+      validateNestExampleAudit(prematureCoverageClaim, schema, evidence).length,
+    ).toBeGreaterThan(0);
 
-    const missingReservedModel = structuredClone(source);
-    delete missingReservedModel.reservedAssessmentModel;
-    expect(validateNestExampleAudit(missingReservedModel, schema).length).toBeGreaterThan(0);
+    const alteredArtifactAuthority = structuredClone(source);
+    alteredArtifactAuthority.sourceInventory.artifact.artifactSha256 =
+      `sha256:${'0'.repeat(64)}`;
+    expect(
+      validateNestExampleAudit(alteredArtifactAuthority, schema, evidence),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('source-artifact metadata drifted'),
+      ]),
+    );
   }, 30_000);
 
   it('keeps mutable audit state outside package semantics and identities', () => {
@@ -758,8 +803,15 @@ describe('pinned NEST official-example coverage ledger', () => {
     expect(manifest.normativeSources).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ path: expect.stringContaining('nest-example-coverage') }),
     ]));
+    expect(manifest.normativeSources).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: expect.stringContaining('nest-example-source-inventory'),
+      }),
+    ]));
     expect(generatedCatalog).not.toContain('NEST_OFFICIAL_EXAMPLE_COVERAGE');
+    expect(generatedCatalog).not.toContain('NEST_EXAMPLE_SOURCE_INVENTORY');
     expect(generatedPython).not.toContain('NEST_OFFICIAL_EXAMPLE_COVERAGE');
+    expect(generatedPython).not.toContain('NEST_EXAMPLE_SOURCE_INVENTORY');
   });
 
   it('does not claim that live PyNEST integration moved to the Python reader', () => {

@@ -367,23 +367,28 @@ The machine-readable state of every release gate is in
   legacy boundary is separate from the unimplemented FigureRequestV1 NEST
   connection adapter described above, and neither has been certified against the
   pinned real-NEST oracle.
-- **The official NEST v3.10 example ledger is provisional inventory infrastructure,
-  not coverage.**
+- **The official NEST v3.10 source denominator is closed; visualization coverage is
+  still zero.**
   `docs/audit/nest-example-coverage.v1.json` pins NEST v3.10 commit
-  `acca9704da248750219a027db99fec6cd1f9052a`, its root tree, documentation index,
-  and CMake orchestration context. Version `0.1-draft` records count-only observations
-  under `pynest/examples`: 109 regular `.py` files, three `.py` path entries with Git
-  mode `120000` (orchestration symlinks), and twelve PNG/GIF/SVG paths. The recursive
-  root-tree API's 1,972 entries include directories; it is not a file count. The
-  documentation index's 94 raw `:doc:` references and 33 raw `:img-top:` occurrences
-  include repeated, shared, and external entries, and its CMake file installs only
-  `run_examples.sh`; neither source is entrypoint authority without normalization.
-  The skeleton admits no assessment rows because source roles, official entrypoints,
-  output identities, panels, overlays, tables, animations, and asset roles have not
-  been inventoried. Mapping, implementation, rendering, upstream execution, and
-  certification remain `not_assessed` or `not_run`, and its coverage claim is `none`.
-  This mutable audit state is outside `contract/`, generated catalogs, the package
-  manifest, and build identities; `bun run check:ledger` validates it separately.
+  `acca9704da248750219a027db99fec6cd1f9052a`, its root tree, documentation
+  index, exact default runner and CMake orchestration context. The separately
+  digest-bound canonical source artifact closes 112 Python paths (109 regular
+  bodies and three orchestration aliases), 98 canonical entrypoint bodies, 92
+  definition-only default-runner targets and twelve checked-in PNG/GIF/SVG
+  assets. Its semantic SHA-256 digest binds the pinned Git SHA-1 object identities;
+  it does not independently rehash every source blob. It reads Git objects without
+  importing or executing upstream Python. Documentation references remain selector
+  evidence rather than invented invocations, and runner target definitions remain
+  definitions rather than runtime receipts. The inventory has not classified
+  plotting callsites, figures, panels,
+  overlays, tables, animations, interactive surfaces, stdout reports or explicit
+  no-output results. Checked-in assets are not assumed to be emitted outputs.
+  Mapping, packaged implementation, rendering, upstream execution and scientific
+  comparison therefore remain independently `not_assessed`, `not_generated` or
+  `not_run`; every visualization count is zero and the coverage claim is `none`.
+  This mutable audit evidence is outside `contract/`, generated catalogs, the
+  package manifest and build identities; `bun run check:ledger` validates the
+  exact artifact bytes, semantic identities, ledger schema and no-transfer states.
 
 ## Packaging and release
 
