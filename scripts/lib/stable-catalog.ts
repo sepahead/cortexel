@@ -108,9 +108,10 @@ export function composeSkillRequestSchema(
     title: `${skill.id} request`,
     description:
       `GENERATED from contract/skills/${skill.id}.v1.json. ` +
-      'The complete structural request schema for this skill. Full acceptance also ' +
-      'requires Cortexel identity, semantic, scientific, provenance, budget, and ' +
-      'derivation gates.',
+      'The complete structural request schema for this skill. Request acceptance also ' +
+      'requires Cortexel identity, semantic, scientific, provenance, and request-budget ' +
+      'gates. Figure acceptance additionally requires successful derivation and output ' +
+      'budget enforcement through a rendering entrypoint.',
     type: 'object',
     properties: {
       $schema: { type: 'string' },

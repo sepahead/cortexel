@@ -18,6 +18,7 @@ export const ERROR_CODES = freezeGenerated([
   "CAPABILITY_REMOVED",
   "CONTRACT_DIGEST_MISMATCH",
   "CONTRACT_MISSING",
+  "CONTRACT_SHAPE_INVALID",
   "CONTRACT_SKILL_REVISION_UNSUPPORTED",
   "CONTRACT_UNSUPPORTED_VERSION",
   "DATA_BYTE_LENGTH_MISMATCH",
@@ -955,6 +956,12 @@ export const ERROR_CODE_META: Readonly<Record<ErrorCode, { readonly stage: Error
     "severity": "error",
     "summary": "Cortexel detected an internal invariant violation and refused to emit a result.",
     "correctiveAction": "This is a Cortexel defect. Please report it with the reproducer. Cortexel fails rather than emit an artifact it cannot vouch for."
+  },
+  "CONTRACT_SHAPE_INVALID": {
+    "stage": "identity",
+    "severity": "error",
+    "summary": "The declared request contract member is present but is not an identity object.",
+    "correctiveAction": "Inspect the input and explicitly replace the member with the intended contract identity. Cortexel will not overwrite a present caller value or infer which contract it was meant to name."
   }
 });
 

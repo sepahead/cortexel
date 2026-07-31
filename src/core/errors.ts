@@ -257,6 +257,63 @@ export function finalizeErrors(errors: readonly CortexelError[]): CortexelError[
   return kept;
 }
 
+/**
+ * Finalize an already-bounded diagnostic batch while retaining library-generated
+ * stop reasons that explain why a higher-level operation refused to continue.
+ *
+ * A nested gate may already have spent the diagnostic budget and appended its own
+ * ERROR_LIMIT_REACHED record. Blindly re-finalizing after adding a budget or internal
+ * sentinel can sort that governing reason past the cap. Fold the inherited omitted
+ * count forward, reserve space for priority records, then keep the earliest ordinary
+ * diagnostics under the same deterministic order. Callers supply only library-owned
+ * records; untrusted input never chooses priority.
+ */
+export function finalizeErrorsWithPriority(
+  errors: readonly CortexelError[],
+  priority: readonly CortexelError[],
+): CortexelError[] {
+  if (priority.length === 0) return finalizeErrors(errors);
+
+  let inheritedOmitted = 0;
+  const ordinary: CortexelError[] = [];
+  for (const error of errors) {
+    if (error.code === 'ERROR_LIMIT_REACHED') {
+      if (Number.isSafeInteger(error.omittedCount) && (error.omittedCount ?? -1) >= 0) {
+        inheritedOmitted += error.omittedCount!;
+      }
+    } else {
+      ordinary.push(error);
+    }
+  }
+
+  const priorityRecords = priority
+    .filter((error) => error.code !== 'ERROR_LIMIT_REACHED')
+    .sort(compareErrors);
+  const allKnown = ordinary.length + priorityRecords.length;
+  if (inheritedOmitted === 0 && allKnown <= MAX_ERROR_RECORDS) {
+    return [...ordinary, ...priorityRecords].sort(compareErrors);
+  }
+
+  // One slot always reports truncation. If a defective internal caller supplies more
+  // priority records than can fit, their overflow is counted rather than escaping the
+  // global amplification bound.
+  const keptPriority = priorityRecords.slice(0, MAX_ERROR_RECORDS - 1);
+  const ordinaryCapacity = MAX_ERROR_RECORDS - 1 - keptPriority.length;
+  const keptOrdinary = ordinary.sort(compareErrors).slice(0, ordinaryCapacity);
+  const omitted =
+    inheritedOmitted +
+    (priorityRecords.length - keptPriority.length) +
+    (ordinary.length - keptOrdinary.length);
+  const limitRecord = makeError({
+    code: 'ERROR_LIMIT_REACHED',
+    severity: 'warning',
+    stage: 'internal',
+    message: `${omitted} further diagnostics were suppressed by the diagnostic budget. Fix the reported errors and revalidate.`,
+  }) as { omittedCount?: number } & CortexelError;
+  limitRecord.omittedCount = omitted;
+  return [...keptOrdinary, ...keptPriority].sort(compareErrors).concat(limitRecord);
+}
+
 /** The result of any stage that can fail. */
 export type Result<T> =
   | { readonly ok: true; readonly value: T; readonly warnings: readonly CortexelError[] }

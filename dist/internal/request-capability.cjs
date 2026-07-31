@@ -582,6 +582,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 20971520,
     "sidecarBytes": 104857600,
     "returnedTableRows": 500,
+    "safeRepairOperations": 128,
     "errorRecords": 32
   },
   "agent": {
@@ -603,6 +604,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 5242880,
     "sidecarBytes": 20971520,
     "returnedTableRows": 200,
+    "safeRepairOperations": 64,
     "errorRecords": 32
   }
 });
@@ -700,725 +702,6 @@ function trySelectTighterBudgetProfile(hostProfile, requestedProfile) {
   return void 0;
 }
 
-// src/core/parse-json.ts
-var DANGEROUS_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
-var ParseFailure = class extends Error {
-  diagnostic;
-  constructor(diagnostic) {
-    super(diagnostic.message);
-    this.name = "ParseFailure";
-    this.diagnostic = diagnostic;
-  }
-};
-var Scanner = class {
-  text;
-  limits;
-  index = 0;
-  nodes = 0;
-  /** Path segments to the value being read, for a precise JSON Pointer on failure. */
-  path = [];
-  constructor(text, limits) {
-    this.text = text;
-    this.limits = limits;
-  }
-  pointer() {
-    if (this.path.length === 0) return "";
-    return this.path.map((segment) => `/${String(segment).replace(/~/g, "~0").replace(/\//g, "~1")}`).join("");
-  }
-  fail(code, message, extra) {
-    throw new ParseFailure(
-      makeError({
-        code,
-        stage: "parse",
-        instancePath: this.pointer(),
-        message,
-        ...extra?.limit ? { limit: extra.limit } : {}
-      })
-    );
-  }
-  countNode() {
-    this.nodes++;
-    if (this.nodes > this.limits.jsonTotalNodes) {
-      this.fail("JSON_TOKENS_EXCEEDED", "the document exceeds the total node limit", {
-        limit: { name: "jsonTotalNodes", limit: this.limits.jsonTotalNodes, observed: this.nodes }
-      });
-    }
-  }
-  skipWhitespace() {
-    while (this.index < this.text.length) {
-      const ch = this.text[this.index];
-      if (ch === " " || ch === "	" || ch === "\n" || ch === "\r") {
-        this.index++;
-        continue;
-      }
-      if (ch === "/") {
-        this.fail("JSON_COMMENT_NOT_ALLOWED", "comments are not valid JSON");
-      }
-      return;
-    }
-  }
-  expect(ch) {
-    if (this.text[this.index] !== ch) {
-      this.fail("JSON_SYNTAX", `expected ${JSON.stringify(ch)} at offset ${this.index}`);
-    }
-    this.index++;
-  }
-  parseTopLevel() {
-    this.skipWhitespace();
-    if (this.index >= this.text.length) {
-      this.fail("JSON_EMPTY_INPUT", "the input contained no JSON value");
-    }
-    const value = this.parseValue(0);
-    this.skipWhitespace();
-    if (this.index < this.text.length) {
-      this.fail(
-        "JSON_TRAILING_DATA",
-        `unexpected content after the top-level value at offset ${this.index}`
-      );
-    }
-    return value;
-  }
-  parseValue(depth) {
-    if (depth > this.limits.jsonDepth) {
-      this.fail("JSON_DEPTH_EXCEEDED", "nesting is deeper than the parser permits", {
-        limit: { name: "jsonDepth", limit: this.limits.jsonDepth, observed: depth }
-      });
-    }
-    this.skipWhitespace();
-    const ch = this.text[this.index];
-    switch (ch) {
-      case "{":
-        return this.parseObject(depth);
-      case "[":
-        return this.parseArray(depth);
-      case '"':
-        this.countNode();
-        return this.parseString();
-      case "t":
-        this.countNode();
-        this.literal("true");
-        return true;
-      case "f":
-        this.countNode();
-        this.literal("false");
-        return false;
-      case "n":
-        this.countNode();
-        this.literal("null");
-        return null;
-      default:
-        this.countNode();
-        return this.parseNumber();
-    }
-  }
-  literal(word) {
-    if (this.text.startsWith(word, this.index)) {
-      this.index += word.length;
-      return;
-    }
-    this.fail("JSON_SYNTAX", `expected ${word} at offset ${this.index}`);
-  }
-  parseObject(depth) {
-    this.countNode();
-    this.expect("{");
-    const object = /* @__PURE__ */ Object.create(null);
-    const seen = /* @__PURE__ */ new Set();
-    this.skipWhitespace();
-    if (this.text[this.index] === "}") {
-      this.index++;
-      return object;
-    }
-    for (; ; ) {
-      this.skipWhitespace();
-      if (this.text[this.index] === "}") {
-        this.fail("JSON_TRAILING_COMMA_NOT_ALLOWED", "trailing commas are not valid JSON");
-      }
-      if (this.text[this.index] !== '"') {
-        this.fail("JSON_SYNTAX", `expected a member name at offset ${this.index}`);
-      }
-      const key = this.parseString();
-      if (DANGEROUS_KEYS.has(key)) {
-        this.path.push(key);
-        this.fail(
-          "JSON_DANGEROUS_KEY",
-          `the member name ${JSON.stringify(key)} can reach Object.prototype and is rejected`
-        );
-      }
-      if (seen.has(key)) {
-        this.path.push(key);
-        this.fail(
-          "JSON_DUPLICATE_KEY",
-          `the member name ${JSON.stringify(key)} appears more than once; which value would win is undefined`
-        );
-      }
-      seen.add(key);
-      if (seen.size > this.limits.jsonObjectKeys) {
-        this.fail("JSON_TOO_MANY_KEYS", "the object has more members than the parser permits", {
-          limit: { name: "jsonObjectKeys", limit: this.limits.jsonObjectKeys, observed: seen.size }
-        });
-      }
-      this.skipWhitespace();
-      this.expect(":");
-      this.path.push(key);
-      object[key] = this.parseValue(depth + 1);
-      this.path.pop();
-      this.skipWhitespace();
-      const next = this.text[this.index];
-      if (next === ",") {
-        this.index++;
-        continue;
-      }
-      if (next === "}") {
-        this.index++;
-        return object;
-      }
-      this.fail("JSON_SYNTAX", `expected ',' or '}' at offset ${this.index}`);
-    }
-  }
-  parseArray(depth) {
-    this.countNode();
-    this.expect("[");
-    const array = [];
-    this.skipWhitespace();
-    if (this.text[this.index] === "]") {
-      this.index++;
-      return array;
-    }
-    for (; ; ) {
-      this.skipWhitespace();
-      if (this.text[this.index] === "]") {
-        this.fail("JSON_TRAILING_COMMA_NOT_ALLOWED", "trailing commas are not valid JSON");
-      }
-      this.path.push(array.length);
-      array.push(this.parseValue(depth + 1));
-      this.path.pop();
-      if (array.length > this.limits.jsonArrayItems) {
-        this.fail("JSON_ARRAY_TOO_LONG", "the array has more members than the parser permits", {
-          limit: {
-            name: "jsonArrayItems",
-            limit: this.limits.jsonArrayItems,
-            observed: array.length
-          }
-        });
-      }
-      this.skipWhitespace();
-      const next = this.text[this.index];
-      if (next === ",") {
-        this.index++;
-        continue;
-      }
-      if (next === "]") {
-        this.index++;
-        return array;
-      }
-      this.fail("JSON_SYNTAX", `expected ',' or ']' at offset ${this.index}`);
-    }
-  }
-  parseString() {
-    this.expect('"');
-    let out = "";
-    for (; ; ) {
-      if (this.index >= this.text.length) {
-        this.fail("JSON_SYNTAX", "the input ended inside a string");
-      }
-      const ch = this.text[this.index];
-      if (ch === '"') {
-        this.index++;
-        if (out.length > this.limits.jsonStringLength) {
-          this.fail("JSON_STRING_TOO_LONG", "a string is longer than the parser permits", {
-            limit: {
-              name: "jsonStringLength",
-              limit: this.limits.jsonStringLength,
-              observed: out.length
-            }
-          });
-        }
-        return out;
-      }
-      if (ch === "\\") {
-        this.index++;
-        out += this.parseEscape();
-        continue;
-      }
-      const code = this.text.charCodeAt(this.index);
-      if (code < 32) {
-        this.fail(
-          "JSON_SYNTAX",
-          `a raw control character (U+${code.toString(16).padStart(4, "0").toUpperCase()}) is not valid inside a JSON string`
-        );
-      }
-      if (code >= 55296 && code <= 56319) {
-        const next = this.text.charCodeAt(this.index + 1);
-        if (!(next >= 56320 && next <= 57343)) {
-          this.fail("JSON_INVALID_UNICODE", "an unpaired high surrogate is not well-formed Unicode");
-        }
-        out += this.text[this.index] + this.text[this.index + 1];
-        this.index += 2;
-        continue;
-      }
-      if (code >= 56320 && code <= 57343) {
-        this.fail("JSON_INVALID_UNICODE", "an unpaired low surrogate is not well-formed Unicode");
-      }
-      out += ch;
-      this.index++;
-    }
-  }
-  parseEscape() {
-    const ch = this.text[this.index];
-    this.index++;
-    switch (ch) {
-      case '"':
-        return '"';
-      case "\\":
-        return "\\";
-      case "/":
-        return "/";
-      case "b":
-        return "\b";
-      case "f":
-        return "\f";
-      case "n":
-        return "\n";
-      case "r":
-        return "\r";
-      case "t":
-        return "	";
-      case "u":
-        return this.parseUnicodeEscape();
-      default:
-        this.fail("JSON_SYNTAX", `invalid escape sequence \\${String(ch)}`);
-    }
-  }
-  parseUnicodeEscape() {
-    const hex = this.text.slice(this.index, this.index + 4);
-    if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
-      this.fail("JSON_INVALID_UNICODE", "a \\u escape must be followed by four hex digits");
-    }
-    this.index += 4;
-    const code = Number.parseInt(hex, 16);
-    if (code >= 55296 && code <= 56319) {
-      if (this.text[this.index] !== "\\" || this.text[this.index + 1] !== "u") {
-        this.fail("JSON_INVALID_UNICODE", "an escaped high surrogate must be followed by a low surrogate");
-      }
-      const lowHex = this.text.slice(this.index + 2, this.index + 6);
-      if (!/^[0-9a-fA-F]{4}$/.test(lowHex)) {
-        this.fail("JSON_INVALID_UNICODE", "a \\u escape must be followed by four hex digits");
-      }
-      const low = Number.parseInt(lowHex, 16);
-      if (!(low >= 56320 && low <= 57343)) {
-        this.fail("JSON_INVALID_UNICODE", "an escaped high surrogate must be followed by a low surrogate");
-      }
-      this.index += 6;
-      return String.fromCharCode(code, low);
-    }
-    if (code >= 56320 && code <= 57343) {
-      this.fail("JSON_INVALID_UNICODE", "an unpaired escaped low surrogate is not well-formed Unicode");
-    }
-    return String.fromCharCode(code);
-  }
-  parseNumber() {
-    const start = this.index;
-    if (this.text[this.index] === "-") this.index++;
-    if (this.text[this.index] === "0") {
-      this.index++;
-    } else if (this.isDigit(this.text[this.index])) {
-      while (this.isDigit(this.text[this.index])) this.index++;
-    } else {
-      this.fail("JSON_SYNTAX", `unexpected token at offset ${this.index}`);
-    }
-    if (this.text[this.index] === ".") {
-      this.index++;
-      if (!this.isDigit(this.text[this.index])) {
-        this.fail("JSON_INVALID_NUMBER", "a decimal point must be followed by at least one digit");
-      }
-      while (this.isDigit(this.text[this.index])) this.index++;
-    }
-    if (this.text[this.index] === "e" || this.text[this.index] === "E") {
-      this.index++;
-      if (this.text[this.index] === "+" || this.text[this.index] === "-") this.index++;
-      if (!this.isDigit(this.text[this.index])) {
-        this.fail("JSON_INVALID_NUMBER", "an exponent must have at least one digit");
-      }
-      while (this.isDigit(this.text[this.index])) this.index++;
-    }
-    const token = this.text.slice(start, this.index);
-    if (token.length === 0) {
-      this.fail("JSON_SYNTAX", `unexpected token at offset ${start}`);
-    }
-    if (token.length > this.limits.jsonNumberTokenLength) {
-      this.fail(
-        "JSON_NUMBER_TOKEN_TOO_LONG",
-        "the numeric token is longer than any meaningful binary64 literal",
-        {
-          limit: {
-            name: "jsonNumberTokenLength",
-            limit: this.limits.jsonNumberTokenLength,
-            observed: token.length
-          }
-        }
-      );
-    }
-    const value = Number(token);
-    if (!Number.isFinite(value)) {
-      this.fail(
-        "JSON_NON_FINITE_NUMBER",
-        "the number is outside the finite binary64 model; use null for a missing observation"
-      );
-    }
-    if (!/[.eE]/u.test(token)) {
-      const integer = BigInt(token);
-      const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
-      const isCanonicalBinary64Spelling = JSON.stringify(value) === token;
-      if ((integer < -maxSafe || integer > maxSafe) && !isCanonicalBinary64Spelling) {
-        this.fail(
-          "JSON_INTEGER_OUT_OF_RANGE",
-          "the unsafe bare integer is not the canonical spelling of its parsed binary64 value; use an exact safe integer, the canonical binary64 measurement spelling, or a string identifier"
-        );
-      }
-    }
-    return value;
-  }
-  isDigit(ch) {
-    return ch !== void 0 && ch >= "0" && ch <= "9";
-  }
-};
-function parseJsonStrict(text, options) {
-  if (typeof text !== "string") {
-    return err([
-      makeError({
-        code: "JSON_SYNTAX",
-        stage: "parse",
-        message: "the strict JSON boundary accepts a text string only"
-      })
-    ]);
-  }
-  const limitKeys = [
-    "rawInputBytes",
-    "jsonDepth",
-    "jsonTotalNodes",
-    "jsonStringLength",
-    "jsonNumberTokenLength",
-    "jsonObjectKeys",
-    "jsonArrayItems"
-  ];
-  const limitsSnapshot = /* @__PURE__ */ Object.create(null);
-  let allowBom = false;
-  try {
-    if (options === null || typeof options !== "object") throw new Error("invalid options");
-    const limitsDescriptor = Object.getOwnPropertyDescriptor(options, "limits");
-    if (limitsDescriptor === void 0 || !Object.prototype.hasOwnProperty.call(limitsDescriptor, "value")) {
-      throw new Error("invalid limits");
-    }
-    const supplied = limitsDescriptor.value;
-    if (supplied === null || typeof supplied !== "object") throw new Error("invalid limits");
-    for (const key of limitKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(supplied, key);
-      if (descriptor === void 0 || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
-        throw new Error("invalid limit");
-      }
-      const value = descriptor.value;
-      if (!Number.isSafeInteger(value) || value < 0) throw new Error("invalid limit");
-      limitsSnapshot[key] = value;
-    }
-    const bomDescriptor = Object.getOwnPropertyDescriptor(options, "allowBom");
-    if (bomDescriptor !== void 0) {
-      if (!Object.prototype.hasOwnProperty.call(bomDescriptor, "value")) {
-        throw new Error("invalid allowBom");
-      }
-      allowBom = bomDescriptor.value === true;
-    }
-  } catch {
-    return err([
-      makeError({
-        code: "INTERNAL_INVARIANT_VIOLATED",
-        stage: "internal",
-        message: "the strict parser requires a valid finite non-negative budget object"
-      })
-    ]);
-  }
-  const limits = Object.freeze(limitsSnapshot);
-  const byteLength = utf8ByteLength(text);
-  if (byteLength > limits.rawInputBytes) {
-    return err([
-      makeError({
-        code: "JSON_BYTES_EXCEEDED",
-        stage: "parse",
-        message: "the raw input is larger than the active budget profile permits",
-        limit: { name: "rawInputBytes", limit: limits.rawInputBytes, observed: byteLength }
-      })
-    ]);
-  }
-  let source = text;
-  if (source.charCodeAt(0) === 65279) {
-    if (!allowBom) {
-      return err([
-        makeError({
-          code: "JSON_BOM_NOT_ALLOWED",
-          stage: "parse",
-          message: "the input begins with a byte-order mark; strip it"
-        })
-      ]);
-    }
-    source = source.slice(1);
-  }
-  try {
-    return ok(new Scanner(source, limits).parseTopLevel());
-  } catch (error) {
-    if (error instanceof ParseFailure) {
-      return err([error.diagnostic]);
-    }
-    return err([
-      makeError({
-        code: "INTERNAL_INVARIANT_VIOLATED",
-        stage: "internal",
-        message: "the parser failed in an unexpected way; this is a Cortexel defect"
-      })
-    ]);
-  }
-}
-
-// src/core/safe-snapshot.ts
-var DANGEROUS_KEYS2 = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
-var SnapshotFailure = class extends Error {
-  diagnostic;
-  constructor(diagnostic) {
-    super(diagnostic.message);
-    this.name = "SnapshotFailure";
-    this.diagnostic = diagnostic;
-  }
-};
-function reflect(operation, path2) {
-  try {
-    return operation();
-  } catch {
-    throw new SnapshotFailure(
-      makeError({
-        code: "SNAPSHOT_HOSTILE_REFLECTION",
-        stage: "snapshot",
-        instancePath: path2,
-        message: "reflecting on this value threw; it is treated as hostile and is not inspected again"
-      })
-    );
-  }
-}
-function isWellFormedString(value) {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code >= 55296 && code <= 56319) {
-      const next = i + 1 < value.length ? value.charCodeAt(i + 1) : 0;
-      if (!(next >= 56320 && next <= 57343)) return false;
-      i++;
-    } else if (code >= 56320 && code <= 57343) {
-      return false;
-    }
-  }
-  return true;
-}
-function fail(code, path2, message, actual) {
-  throw new SnapshotFailure(
-    makeError({
-      code,
-      stage: "snapshot",
-      instancePath: path2,
-      message,
-      ...actual !== void 0 ? { actual } : {}
-    })
-  );
-}
-function snapshotNode(value, path2, depth, state) {
-  if (depth > state.limits.jsonDepth) {
-    fail("SNAPSHOT_DEPTH_EXCEEDED", path2, "the value nests deeper than the snapshot permits");
-  }
-  state.nodes++;
-  if (state.nodes > state.limits.jsonTotalNodes) {
-    fail("SNAPSHOT_NODES_EXCEEDED", path2, "the value graph exceeds the total node limit");
-  }
-  if (value === null) return null;
-  switch (typeof value) {
-    case "boolean":
-      return value;
-    case "number":
-      if (!Number.isFinite(value)) {
-        fail(
-          "SNAPSHOT_NON_FINITE_NUMBER",
-          path2,
-          "NaN and Infinity are not measurements; use null for a missing observation",
-          value
-        );
-      }
-      return value;
-    case "string":
-      if (!isWellFormedString(value)) {
-        fail(
-          "SNAPSHOT_MALFORMED_STRING",
-          path2,
-          "the string contains a lone surrogate and is not well-formed Unicode"
-        );
-      }
-      if (value.length > state.limits.jsonStringLength) {
-        fail(
-          "SNAPSHOT_STRING_TOO_LONG",
-          path2,
-          `the string contains ${value.length} UTF-16 code units, over the active limit of ${state.limits.jsonStringLength}`
-        );
-      }
-      return value;
-    case "undefined":
-      fail("SNAPSHOT_UNSUPPORTED_TYPE", path2, "undefined is not a JSON value", value);
-    // eslint-disable-next-line no-fallthrough
-    case "function":
-      fail("SNAPSHOT_UNSUPPORTED_TYPE", path2, "a function is not data", value);
-    // eslint-disable-next-line no-fallthrough
-    case "symbol":
-      fail("SNAPSHOT_UNSUPPORTED_TYPE", path2, "a symbol is not a JSON value", value);
-    // eslint-disable-next-line no-fallthrough
-    case "bigint":
-      fail(
-        "SNAPSHOT_UNSUPPORTED_TYPE",
-        path2,
-        "a bigint has no JSON representation; send a number or a string",
-        value
-      );
-    // eslint-disable-next-line no-fallthrough
-    case "object":
-      break;
-    default:
-      fail("SNAPSHOT_UNSUPPORTED_TYPE", path2, "the value is of an unsupported type", value);
-  }
-  const object = value;
-  if (state.seen.has(object)) {
-    fail("SNAPSHOT_CIRCULAR_REFERENCE", path2, "the value graph contains a cycle");
-  }
-  if (reflect(() => ArrayBuffer.isView(object), path2)) {
-    fail(
-      "SNAPSHOT_NON_PLAIN_OBJECT",
-      path2,
-      "a typed array or DataView is not part of the JSON request contract; use a plain array"
-    );
-  }
-  const isArray = reflect(() => Array.isArray(object), path2);
-  const prototype = reflect(() => Object.getPrototypeOf(object), path2);
-  if (!isArray && prototype !== Object.prototype && prototype !== null) {
-    fail(
-      "SNAPSHOT_NON_PLAIN_OBJECT",
-      path2,
-      "only plain objects and arrays are accepted; a class instance, Date, Map, Set, or Promise is not data"
-    );
-  }
-  state.seen.add(object);
-  try {
-    return isArray ? snapshotArray(object, path2, depth, state) : snapshotObject(object, path2, depth, state);
-  } finally {
-    state.seen.delete(object);
-  }
-}
-function snapshotArray(array, path2, depth, state) {
-  const lengthDescriptor = reflect(
-    () => Object.getOwnPropertyDescriptor(array, "length"),
-    path2
-  );
-  if (lengthDescriptor === void 0 || !Object.prototype.hasOwnProperty.call(lengthDescriptor, "value")) {
-    fail("SNAPSHOT_NON_PLAIN_OBJECT", path2, "the array has no intrinsic data length");
-  }
-  const length = lengthDescriptor.value;
-  if (!Number.isSafeInteger(length) || length < 0) {
-    fail("SNAPSHOT_NON_PLAIN_OBJECT", path2, "the array reports an implausible length");
-  }
-  if (length > state.limits.jsonArrayItems) {
-    fail("SNAPSHOT_NODES_EXCEEDED", path2, "the array is longer than the snapshot permits");
-  }
-  const keys = reflect(() => Reflect.ownKeys(array), path2);
-  const out = [];
-  for (let index = 0; index < length; index++) {
-    const descriptor = reflect(
-      () => Object.getOwnPropertyDescriptor(array, index),
-      `${path2}/${index}`
-    );
-    if (descriptor === void 0) {
-      fail(
-        "SNAPSHOT_SPARSE_ARRAY",
-        `${path2}/${index}`,
-        "the array has a hole; use an explicit null for a missing observation"
-      );
-    }
-    if (!("value" in descriptor)) {
-      fail(
-        "SNAPSHOT_ACCESSOR_PROPERTY",
-        `${path2}/${index}`,
-        "the element is defined by a getter; Cortexel will not invoke caller code to read data"
-      );
-    }
-    out.push(snapshotNode(descriptor.value, `${path2}/${index}`, depth + 1, state));
-  }
-  for (const key of keys) {
-    if (typeof key === "symbol") {
-      fail("SNAPSHOT_SYMBOL_KEY", path2, "the array carries a symbol-keyed property");
-    }
-    if (key === "length") continue;
-    const canonicalIndex = /^(?:0|[1-9][0-9]*)$/u.test(key) ? Number(key) : -1;
-    if (Number.isSafeInteger(canonicalIndex) && canonicalIndex >= 0 && canonicalIndex < length) {
-      continue;
-    }
-    fail(
-      "SNAPSHOT_DECORATED_ARRAY",
-      path2,
-      `the array carries the named property ${JSON.stringify(String(key))}, which a JSON array cannot represent`
-    );
-  }
-  return out;
-}
-function snapshotObject(object, path2, depth, state) {
-  const keys = reflect(() => Reflect.ownKeys(object), path2);
-  const out = /* @__PURE__ */ Object.create(null);
-  let count = 0;
-  for (const key of keys) {
-    if (typeof key === "symbol") {
-      fail("SNAPSHOT_SYMBOL_KEY", path2, "the object carries a symbol-keyed property");
-    }
-    const childPath2 = `${path2}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`;
-    if (DANGEROUS_KEYS2.has(key)) {
-      fail(
-        "SNAPSHOT_DANGEROUS_KEY",
-        childPath2,
-        `the key ${JSON.stringify(key)} can reach Object.prototype and is rejected`
-      );
-    }
-    const descriptor = reflect(() => Object.getOwnPropertyDescriptor(object, key), childPath2);
-    if (descriptor === void 0) continue;
-    if (!descriptor.enumerable) continue;
-    if (!("value" in descriptor)) {
-      fail(
-        "SNAPSHOT_ACCESSOR_PROPERTY",
-        childPath2,
-        "the property is defined by a getter or setter; Cortexel inspects descriptors and will not invoke caller code to read data"
-      );
-    }
-    count++;
-    if (count > state.limits.jsonObjectKeys) {
-      fail("SNAPSHOT_NODES_EXCEEDED", path2, "the object has more members than the snapshot permits");
-    }
-    out[key] = snapshotNode(descriptor.value, childPath2, depth + 1, state);
-  }
-  return out;
-}
-function snapshotValue(value, limits) {
-  const state = { limits, nodes: 0, seen: /* @__PURE__ */ new Set() };
-  try {
-    return ok(snapshotNode(value, "", 0, state));
-  } catch (error) {
-    if (error instanceof SnapshotFailure) {
-      return err([error.diagnostic]);
-    }
-    return err([
-      makeError({
-        code: "INTERNAL_INVARIANT_VIOLATED",
-        stage: "internal",
-        message: "the snapshot failed in an unexpected way; this is a Cortexel defect"
-      })
-    ]);
-  }
-}
-
 // src/generated/registry.ts
 var ERROR_CODES = freezeGenerated([
   "ADAPTER_ACCESSOR_INPUT_REJECTED",
@@ -1430,6 +713,7 @@ var ERROR_CODES = freezeGenerated([
   "CAPABILITY_REMOVED",
   "CONTRACT_DIGEST_MISMATCH",
   "CONTRACT_MISSING",
+  "CONTRACT_SHAPE_INVALID",
   "CONTRACT_SKILL_REVISION_UNSUPPORTED",
   "CONTRACT_UNSUPPORTED_VERSION",
   "DATA_BYTE_LENGTH_MISMATCH",
@@ -2363,6 +1647,12 @@ var ERROR_CODE_META = freezeGenerated({
     "severity": "error",
     "summary": "Cortexel detected an internal invariant violation and refused to emit a result.",
     "correctiveAction": "This is a Cortexel defect. Please report it with the reproducer. Cortexel fails rather than emit an artifact it cannot vouch for."
+  },
+  "CONTRACT_SHAPE_INVALID": {
+    "stage": "identity",
+    "severity": "error",
+    "summary": "The declared request contract member is present but is not an identity object.",
+    "correctiveAction": "Inspect the input and explicitly replace the member with the intended contract identity. Cortexel will not overwrite a present caller value or infer which contract it was meant to name."
   }
 });
 var UNIT_CODES = freezeGenerated([
@@ -14714,7 +14004,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Pure FigureRequestV1 validation and identity surface. Packaged availability is not publication or release certification."
+      "Pure FigureRequestV1 validation, identity, and closed safe-repair surface. Safe repair is TypeScript-only: the explicitly partial Python semantic port exposes no repair API, emits no repair member, and makes no repair-parity claim. Packaged availability is not publication or release certification."
     ]
   },
   "cortexel/authoring": {
@@ -14863,7 +14153,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Source input is bounded duplicate-key-safe JSON. `source render` is the recommended one-process adapter/validation/render/publication path; successful `source adapt | render` composition produces identical request, artifact, and SVG bytes, but ordinary shell pipeline status can mask upstream failure unless the host checks every stage."
     ]
   },
   "cli.validate": {
@@ -19591,17 +18881,17 @@ var DistributionDerivationError = class extends Error {
     this.path = path2;
   }
 };
-function fail2(code, path2, message) {
+function fail(code, path2, message) {
   throw new DistributionDerivationError(code, path2, message);
 }
 function assertFinite(value, path2) {
   if (!Number.isFinite(value)) {
-    fail2("SCIENCE_NORMALIZATION_UNVERIFIABLE", path2, "a quantitative observation must be finite.");
+    fail("SCIENCE_NORMALIZATION_UNVERIFIABLE", path2, "a quantitative observation must be finite.");
   }
 }
 function assertSafeCount(value, path2) {
   if (!Number.isSafeInteger(value) || value < 0) {
-    fail2(
+    fail(
       "SCIENCE_COUNT_NOT_INTEGER",
       path2,
       `a count must be an exact non-negative safe integer; got ${String(value)}.`
@@ -19610,7 +18900,7 @@ function assertSafeCount(value, path2) {
 }
 function checkedSafeNumber(value, path2) {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
-    fail2(
+    fail(
       "SCIENCE_COUNT_NOT_INTEGER",
       path2,
       "the exact integer total exceeds Number.MAX_SAFE_INTEGER and cannot be emitted as a JSON number."
@@ -19640,7 +18930,7 @@ function uniqueIds(values, path2) {
   const seen = /* @__PURE__ */ new Set();
   for (let index = 0; index < values.length; index++) {
     if (seen.has(values[index])) {
-      fail2(
+      fail(
         "SEMANTIC_DUPLICATE_ID",
         [...path2, index],
         `identifier ${JSON.stringify(values[index])} appears more than once.`
@@ -19652,7 +18942,7 @@ function uniqueIds(values, path2) {
 }
 function assertParallel(expected, actual, path2) {
   if (actual !== expected) {
-    fail2(
+    fail(
       "SEMANTIC_LENGTH_MISMATCH",
       path2,
       `parallel array has ${actual} entries; expected ${expected}.`
@@ -19661,22 +18951,22 @@ function assertParallel(expected, actual, path2) {
 }
 function validateBins(bins) {
   if (bins.edgeToleranceUlps !== void 0 && (!Number.isSafeInteger(bins.edgeToleranceUlps) || bins.edgeToleranceUlps < 0 || bins.edgeToleranceUlps > 16)) {
-    fail2(
+    fail(
       "SCIENCE_BIN_EDGES_INVALID",
       ["bins", "edgeToleranceUlps"],
       "the edge allowance must be an integer from 0 through 16 binary64 ulps."
     );
   }
   if (bins.edges.length < 2) {
-    fail2("SCIENCE_BIN_EDGES_INVALID", ["bins", "edges"], "at least two bin edges are required.");
+    fail("SCIENCE_BIN_EDGES_INVALID", ["bins", "edges"], "at least two bin edges are required.");
   }
   for (let index = 0; index < bins.edges.length; index++) {
     const edge = bins.edges[index];
     if (!Number.isFinite(edge)) {
-      fail2("SCIENCE_BIN_EDGES_INVALID", ["bins", "edges", index], "bin edges must be finite.");
+      fail("SCIENCE_BIN_EDGES_INVALID", ["bins", "edges", index], "bin edges must be finite.");
     }
     if (index > 0 && !(edge > bins.edges[index - 1])) {
-      fail2(
+      fail(
         "SCIENCE_BIN_EDGES_INVALID",
         ["bins", "edges", index],
         "bin edges must be strictly increasing."
@@ -19689,7 +18979,7 @@ function compareObservationToEdge(value, valueUnit, edge, bins) {
   try {
     converted = valueUnit === bins.unit ? value : convert(value, valueUnit, bins.unit);
   } catch (error) {
-    fail2(
+    fail(
       "SCIENCE_UNIT_DIMENSION_MISMATCH",
       ["valueUnit"],
       error instanceof Error ? error.message : "observation unit is not convertible to the bin unit."
@@ -19756,7 +19046,7 @@ function exactUnitSumBinIndex(terms, bins) {
 function normalizedValues(counts, edges, unit, normalization, denominator) {
   if (normalization === "count") return [...counts];
   if (denominator < 1) {
-    fail2(
+    fail(
       "RENDER_NO_DATA",
       ["normalization"],
       `cannot form a ${normalization} histogram from zero in-range observations.`
@@ -19793,7 +19083,7 @@ function deriveExactGroupedHistogram(input) {
   for (let ordinal = 0; ordinal < input.observations.length; ordinal++) {
     const observation = input.observations[ordinal];
     if (!groupSet.has(observation.groupId)) {
-      fail2(
+      fail(
         "SEMANTIC_UNKNOWN_REFERENCE",
         ["observations", ordinal, "groupId"],
         `group ${JSON.stringify(observation.groupId)} is absent from the declared group universe.`
@@ -19830,14 +19120,14 @@ function deriveExactGroupedHistogram(input) {
     const binnedBig = counts.reduce((total, count) => total + BigInt(count), 0n);
     const classified = binnedBig + BigInt(underRangeCount) + BigInt(overRangeCount);
     if (classified !== BigInt(observationCount)) {
-      fail2(
+      fail(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         ["groups", groupId],
         "independent histogram classification did not conserve the observation count."
       );
     }
     if (input.outOfRangePolicy === "reject" && (underRangeCount !== 0 || overRangeCount !== 0)) {
-      fail2(
+      fail(
         "SCIENCE_BIN_EDGES_INVALID",
         ["bins"],
         `group ${JSON.stringify(groupId)} has ${underRangeCount} observations below and ${overRangeCount} above the declared range under reject.`
@@ -19869,7 +19159,7 @@ function deriveExactGroupedHistogram(input) {
 }
 function derivePopulationRateCounts(input) {
   if (!Number.isSafeInteger(input.recordedSenderCount) || input.recordedSenderCount < 1) {
-    fail2(
+    fail(
       "SCIENCE_DENOMINATOR_INVALID",
       ["recordedSenderCount"],
       "the recorded-sender denominator must be a positive safe integer."
@@ -19909,7 +19199,7 @@ function declaredTrainKeys(senders, trials, maximum) {
   if (trials) uniqueIds(trials, ["trialIds"]);
   const count = BigInt(senders.length) * BigInt(trials?.length ?? 1);
   if (count > BigInt(maximum)) {
-    fail2(
+    fail(
       "RESOURCE_OBSERVATIONS_EXCEEDED",
       ["trialIds"],
       `the declared sender-by-trial train universe contains ${count} trains; maximum ${maximum}.`
@@ -19928,14 +19218,14 @@ function deriveIsiFromEvents(input) {
   if (input.eventTrialIds) {
     assertParallel(input.eventTimes.length, input.eventTrialIds.length, ["eventTrialIds"]);
     if (!input.trialIds) {
-      fail2(
+      fail(
         "SEMANTIC_UNKNOWN_REFERENCE",
         ["trialIds"],
         "event trial ids require a complete declared trial universe."
       );
     }
   } else if (input.trialIds) {
-    fail2(
+    fail(
       "SEMANTIC_LENGTH_MISMATCH",
       ["eventTrialIds"],
       "a declared multi-trial universe requires a trial id for every event."
@@ -19952,7 +19242,7 @@ function deriveIsiFromEvents(input) {
     const key = trainKey(input.eventSenderIds[ordinal], input.eventTrialIds?.[ordinal]);
     const train = timesByTrain.get(key);
     if (!train || !keySet.has(key)) {
-      fail2(
+      fail(
         "SEMANTIC_UNKNOWN_REFERENCE",
         ["eventSenderIds", ordinal],
         "an event references a train outside the declared sender-by-trial universe."
@@ -19968,7 +19258,7 @@ function deriveIsiFromEvents(input) {
       { value: input.eventTimes[ordinal], unit: input.intervalUnit }
     );
     if (lowerComparedWithEvent > 0 || upperComparedWithEvent <= 0) {
-      fail2(
+      fail(
         "SCIENCE_EVENT_OUT_OF_WINDOW",
         ["eventTimes", ordinal],
         "an event lies outside the exact half-open observation window."
@@ -19994,19 +19284,19 @@ function deriveIsiFromEvents(input) {
       );
       const roundedIndex = exactUnitBinIndex(interval, input.intervalUnit, input.bins);
       if (exactIndex !== roundedIndex) {
-        fail2(
+        fail(
           "SCIENCE_NUMERIC_RESOLUTION_UNREPRESENTABLE",
           ["eventTimes"],
           "an exact within-train difference rounds across a declared bin boundary."
         );
       }
       if (interval < 0) {
-        fail2("SCIENCE_NEGATIVE_INTERVAL", ["eventTimes"], "sorting produced a negative interval.");
+        fail("SCIENCE_NEGATIVE_INTERVAL", ["eventTimes"], "sorting produced a negative interval.");
       }
       if (interval === 0) {
         zeroIntervalCount++;
         if (input.zeroIntervalPolicy === "reject") {
-          fail2(
+          fail(
             "SCIENCE_ZERO_INTERVAL_POLICY",
             ["zeroIntervalPolicy"],
             "a same-train zero interval is present under the reject policy."
@@ -20021,7 +19311,7 @@ function deriveIsiFromEvents(input) {
     0
   );
   if (observations.length !== expectedIntervals) {
-    fail2(
+    fail(
       "SCIENCE_NORMALIZATION_UNVERIFIABLE",
       ["eventTimes"],
       "the independently derived within-train interval identity did not conserve event counts."
@@ -20048,10 +19338,10 @@ function deriveIsiFromIntervals(input) {
   if (input.intervalTrialIds) {
     assertParallel(input.intervals.length, input.intervalTrialIds.length, ["intervalTrialIds"]);
     if (!input.trialIds) {
-      fail2("SEMANTIC_UNKNOWN_REFERENCE", ["trialIds"], "interval trial ids require a trial universe.");
+      fail("SEMANTIC_UNKNOWN_REFERENCE", ["trialIds"], "interval trial ids require a trial universe.");
     }
   } else if (input.trialIds) {
-    fail2(
+    fail(
       "SEMANTIC_LENGTH_MISMATCH",
       ["intervalTrialIds"],
       "a declared multi-trial universe requires a trial id for every interval."
@@ -20063,7 +19353,7 @@ function deriveIsiFromIntervals(input) {
     input.maximumTrainCount ?? 2e6
   );
   if (input.trains.length !== keys.length) {
-    fail2(
+    fail(
       "SEMANTIC_LENGTH_MISMATCH",
       ["trains"],
       `complete train table has ${input.trains.length} rows; expected ${keys.length}.`
@@ -20076,20 +19366,20 @@ function deriveIsiFromIntervals(input) {
     assertSafeCount(train.spikeCount, ["trains", ordinal, "spikeCount"]);
     const key = trainKey(train.senderId, train.trialId);
     if (!expectedKeys.has(key)) {
-      fail2(
+      fail(
         "SEMANTIC_UNKNOWN_REFERENCE",
         ["trains", ordinal],
         "train row is outside the declared sender-by-trial universe."
       );
     }
     if (spikeCountByTrain.has(key)) {
-      fail2("SEMANTIC_DUPLICATE_ID", ["trains", ordinal], "train composite identity is duplicated.");
+      fail("SEMANTIC_DUPLICATE_ID", ["trains", ordinal], "train composite identity is duplicated.");
     }
     spikeCountByTrain.set(key, train.spikeCount);
   }
   for (const key of keys) {
     if (!spikeCountByTrain.has(key)) {
-      fail2("SEMANTIC_UNKNOWN_REFERENCE", ["trains"], `declared train ${JSON.stringify(key)} is missing.`);
+      fail("SEMANTIC_UNKNOWN_REFERENCE", ["trains"], `declared train ${JSON.stringify(key)} is missing.`);
     }
   }
   const suppliedIntervalsByTrain = new Map(keys.map((key) => [key, 0]));
@@ -20099,7 +19389,7 @@ function deriveIsiFromIntervals(input) {
   for (let ordinal = 0; ordinal < input.intervals.length; ordinal++) {
     const key = trainKey(input.intervalSenderIds[ordinal], input.intervalTrialIds?.[ordinal]);
     if (!suppliedIntervalsByTrain.has(key)) {
-      fail2(
+      fail(
         "SEMANTIC_UNKNOWN_REFERENCE",
         ["intervalSenderIds", ordinal],
         "interval references a train outside the declared train table."
@@ -20108,7 +19398,7 @@ function deriveIsiFromIntervals(input) {
     const interval = input.intervals[ordinal];
     assertFinite(interval, ["intervals", ordinal]);
     if (interval < 0) {
-      fail2("SCIENCE_NEGATIVE_INTERVAL", ["intervals", ordinal], "an inter-spike interval cannot be negative.");
+      fail("SCIENCE_NEGATIVE_INTERVAL", ["intervals", ordinal], "an inter-spike interval cannot be negative.");
     }
     const durationComparedWithInterval = compareExactUnitSumToValue(
       [
@@ -20118,7 +19408,7 @@ function deriveIsiFromIntervals(input) {
       { value: interval, unit: input.intervalUnit }
     );
     if (durationComparedWithInterval < 0) {
-      fail2(
+      fail(
         "SCIENCE_EVENT_OUT_OF_WINDOW",
         ["intervals", ordinal],
         "an interval exceeds the exact observation-window duration."
@@ -20127,7 +19417,7 @@ function deriveIsiFromIntervals(input) {
     if (interval === 0) {
       zeroIntervalCount++;
       if (input.zeroIntervalPolicy === "reject") {
-        fail2(
+        fail(
           "SCIENCE_ZERO_INTERVAL_POLICY",
           ["intervals", ordinal],
           "a zero interval is present under the reject policy."
@@ -20146,7 +19436,7 @@ function deriveIsiFromIntervals(input) {
     const expected = Math.max(spikeCount - 1, 0);
     if (expected === 0) trainsWithoutIntervalCount++;
     if (suppliedIntervalsByTrain.get(key) !== expected) {
-      fail2(
+      fail(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         ["trains"],
         `train ${JSON.stringify(key)} supplies ${suppliedIntervalsByTrain.get(key)} intervals but ${spikeCount} in-window spikes require exactly ${expected}.`
@@ -20159,7 +19449,7 @@ function deriveIsiFromIntervals(input) {
       { value: input.window.stop, unit: input.window.unit }
     );
     if (spanComparison >= 0 && expected > 0) {
-      fail2(
+      fail(
         "SCIENCE_EVENT_OUT_OF_WINDOW",
         ["intervals"],
         `successive intervals of train ${JSON.stringify(key)} do not fit strictly inside the half-open observation window.`
@@ -20169,7 +19459,7 @@ function deriveIsiFromIntervals(input) {
     spikeTotal += BigInt(spikeCount);
   }
   if (expectedTotal !== BigInt(input.intervals.length)) {
-    fail2(
+    fail(
       "SCIENCE_NORMALIZATION_UNVERIFIABLE",
       ["intervals"],
       "sum(max(spikeCount - 1, 0)) does not equal the supplied interval count."
@@ -20211,10 +19501,10 @@ function deriveDegreeDistribution(input) {
       const source = sourceIds[ordinal];
       const target = targetIds[ordinal];
       if (!universe.has(source)) {
-        fail2("SEMANTIC_UNKNOWN_REFERENCE", ["sourceIds", ordinal], "source is outside node universe.");
+        fail("SEMANTIC_UNKNOWN_REFERENCE", ["sourceIds", ordinal], "source is outside node universe.");
       }
       if (!universe.has(target)) {
-        fail2("SEMANTIC_UNKNOWN_REFERENCE", ["targetIds", ordinal], "target is outside node universe.");
+        fail("SEMANTIC_UNKNOWN_REFERENCE", ["targetIds", ordinal], "target is outside node universe.");
       }
       if (source === target && input.autapsePolicy === "exclude") {
         excluded++;
@@ -20242,7 +19532,7 @@ function deriveDegreeDistribution(input) {
     assertParallel(input.suppliedNodeIds.length, input.suppliedDegrees.length, ["suppliedDegrees"]);
     uniqueIds(input.suppliedNodeIds, ["suppliedNodeIds"]);
     if (input.suppliedNodeIds.length !== input.nodeIds.length) {
-      fail2(
+      fail(
         "SEMANTIC_LENGTH_MISMATCH",
         ["suppliedNodeIds"],
         "supplied degree rows must cover the complete node universe exactly once."
@@ -20252,13 +19542,13 @@ function deriveDegreeDistribution(input) {
     for (let ordinal = 0; ordinal < input.suppliedNodeIds.length; ordinal++) {
       const id = input.suppliedNodeIds[ordinal];
       if (!universe.has(id)) {
-        fail2("SEMANTIC_UNKNOWN_REFERENCE", ["suppliedNodeIds", ordinal], "node is outside universe.");
+        fail("SEMANTIC_UNKNOWN_REFERENCE", ["suppliedNodeIds", ordinal], "node is outside universe.");
       }
       const degree = input.suppliedDegrees[ordinal];
       assertSafeCount(degree, ["suppliedDegrees", ordinal]);
       const maximum = input.autapsePolicy === "exclude" ? Math.max(0, input.nodeIds.length - 1) : input.nodeIds.length;
       if (input.countingPolicy === "count_unique_neighbors" && degree > maximum) {
-        fail2(
+        fail(
           "SCIENCE_NORMALIZATION_UNVERIFIABLE",
           ["suppliedDegrees", ordinal],
           `unique-neighbour degree ${degree} exceeds the policy maximum ${maximum}.`
@@ -20269,13 +19559,13 @@ function deriveDegreeDistribution(input) {
     degrees = input.nodeIds.map((id) => {
       const degree = supplied.get(id);
       if (degree === void 0) {
-        fail2("SEMANTIC_UNKNOWN_REFERENCE", ["suppliedNodeIds"], `node ${JSON.stringify(id)} is missing.`);
+        fail("SEMANTIC_UNKNOWN_REFERENCE", ["suppliedNodeIds"], `node ${JSON.stringify(id)} is missing.`);
       }
       return degree;
     });
     const incidence = degrees.reduce((total, degree) => total + BigInt(degree), 0n);
     if (input.suppliedCountedConnectionCount === void 0 || input.suppliedCountedIncidenceCount === void 0) {
-      fail2(
+      fail(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         ["countedIncidenceCount"],
         "supplied degree mode requires both raw counted-connection and policy-incidence totals."
@@ -20284,21 +19574,21 @@ function deriveDegreeDistribution(input) {
     assertSafeCount(input.suppliedCountedConnectionCount, ["countedConnectionCount"]);
     assertSafeCount(input.suppliedCountedIncidenceCount, ["countedIncidenceCount"]);
     if (incidence !== BigInt(input.suppliedCountedIncidenceCount)) {
-      fail2(
+      fail(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         ["countedIncidenceCount"],
         `sum(degrees) is ${incidence}, not declared counted incidence ${input.suppliedCountedIncidenceCount}.`
       );
     }
     if (input.countingPolicy === "count_edges" && input.suppliedCountedConnectionCount !== input.suppliedCountedIncidenceCount) {
-      fail2(
+      fail(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         ["countedConnectionCount"],
         "count_edges requires raw counted connections to equal counted incidence exactly."
       );
     }
     if (input.countingPolicy === "count_unique_neighbors" && input.suppliedCountedIncidenceCount > input.suppliedCountedConnectionCount) {
-      fail2(
+      fail(
         "SCIENCE_NORMALIZATION_UNVERIFIABLE",
         ["countedIncidenceCount"],
         "unique-neighbour incidence cannot exceed the counted connection rows."
@@ -20309,7 +19599,7 @@ function deriveDegreeDistribution(input) {
     excludedAutapseCount = input.suppliedExcludedAutapseCount ?? 0;
     assertSafeCount(excludedAutapseCount, ["excludedAutapseCount"]);
   } else {
-    fail2(
+    fail(
       "SEMANTIC_LENGTH_MISMATCH",
       ["data"],
       "degree derivation requires either connection rows or one supplied degree per node."
@@ -20327,7 +19617,7 @@ function deriveDegreeDistribution(input) {
     }
   } else {
     if (!Number.isSafeInteger(input.binning.width) || input.binning.width < 2) {
-      fail2("SCIENCE_BIN_EDGES_INVALID", ["binning", "width"], "integer bin width must be at least 2.");
+      fail("SCIENCE_BIN_EDGES_INVALID", ["binning", "width"], "integer bin width must be at least 2.");
     }
     const binCount = Math.floor(maxDegree / input.binning.width) + 1;
     for (let ordinal = 0; ordinal < binCount; ordinal++) {
@@ -20342,7 +19632,7 @@ function deriveDegreeDistribution(input) {
   }
   const enumerated = nodeCounts.reduce((total, count) => total + BigInt(count), 0n);
   if (enumerated !== BigInt(input.nodeIds.length)) {
-    fail2(
+    fail(
       "SCIENCE_NORMALIZATION_UNVERIFIABLE",
       ["nodeCounts"],
       "sum(nodeCounts) does not equal the complete node-universe cardinality."
@@ -20353,7 +19643,7 @@ function deriveDegreeDistribution(input) {
     return total + BigInt(degreeLow[ordinal]) * BigInt(count);
   }, 0n);
   if (input.binning.mode === "per_integer_degree" && histogramIncidence !== BigInt(countedIncidenceCount)) {
-    fail2(
+    fail(
       "SCIENCE_NORMALIZATION_UNVERIFIABLE",
       ["nodeCounts"],
       "sum(degree * nodeCount) does not equal the independently derived counted incidence."
@@ -20374,11 +19664,11 @@ function deriveDegreeDistribution(input) {
 }
 function aggregateValues(values, aggregation, path2) {
   if (values.length === 0) {
-    fail2("SCIENCE_NORMALIZATION_UNVERIFIABLE", path2, "cannot aggregate an empty pair.");
+    fail("SCIENCE_NORMALIZATION_UNVERIFIABLE", path2, "cannot aggregate an empty pair.");
   }
   if (aggregation === "no_aggregation") {
     if (values.length !== 1) {
-      fail2(
+      fail(
         "SCIENCE_AGGREGATION_REQUIRED",
         path2,
         `no_aggregation was declared but the ordered pair has ${values.length} rows.`
@@ -20399,10 +19689,10 @@ function validateEndpointRect(sourceIds, targetIds, sourceUniverse, targetUniver
   const targets = new Set(targetUniverse);
   for (let ordinal = 0; ordinal < sourceIds.length; ordinal++) {
     if (!sources.has(sourceIds[ordinal])) {
-      fail2("SEMANTIC_UNKNOWN_REFERENCE", ["sourceIds", ordinal], "source is outside source universe.");
+      fail("SEMANTIC_UNKNOWN_REFERENCE", ["sourceIds", ordinal], "source is outside source universe.");
     }
     if (!targets.has(targetIds[ordinal])) {
-      fail2("SEMANTIC_UNKNOWN_REFERENCE", ["targetIds", ordinal], "target is outside target universe.");
+      fail("SEMANTIC_UNKNOWN_REFERENCE", ["targetIds", ordinal], "target is outside target universe.");
     }
   }
 }
@@ -20419,7 +19709,7 @@ function deriveDelayDistribution(input) {
     input.nodeUniverse
   );
   if (input.groupBy === "synapse_model" && !input.synapseModels) {
-    fail2(
+    fail(
       "SCIENCE_WEIGHT_GROUP_INCOMPATIBLE",
       ["synapseModels"],
       "grouping by synapse model requires one model label per row."
@@ -20427,20 +19717,20 @@ function deriveDelayDistribution(input) {
   }
   const groupIds = input.groupBy === "none" ? ["all"] : [...new Set(input.synapseModels)].sort(compareIdentifier);
   if (groupIds.length === 0) {
-    fail2(
+    fail(
       "RENDER_NO_DATA",
       ["synapseModels"],
       "grouping by synapse model cannot produce a figure from zero connection rows."
     );
   }
   if (groupIds.length > 8) {
-    fail2("RENDER_SERIES_LIMIT_EXCEEDED", ["synapseModels"], "at most eight groups are renderable.");
+    fail("RENDER_SERIES_LIMIT_EXCEEDED", ["synapseModels"], "at most eight groups are renderable.");
   }
   const rowCountByGroup = new Map(groupIds.map((groupId) => [groupId, 0]));
   const observations = [];
   if (input.countingPolicy === "per_connection") {
     if (input.aggregation !== void 0) {
-      fail2(
+      fail(
         "SCIENCE_AGGREGATION_REQUIRED",
         ["aggregation"],
         "per_connection preserves every multapse row and therefore forbids pair aggregation."
@@ -20449,7 +19739,7 @@ function deriveDelayDistribution(input) {
     for (let ordinal = 0; ordinal < input.delayValues.length; ordinal++) {
       const value = input.delayValues[ordinal];
       if (!(value > 0)) {
-        fail2("SCIENCE_DELAY_NONPOSITIVE", ["delayValues", ordinal], "a delay must be positive.");
+        fail("SCIENCE_DELAY_NONPOSITIVE", ["delayValues", ordinal], "a delay must be positive.");
       }
       const groupId = input.groupBy === "none" ? "all" : input.synapseModels[ordinal];
       rowCountByGroup.set(groupId, rowCountByGroup.get(groupId) + 1);
@@ -20457,7 +19747,7 @@ function deriveDelayDistribution(input) {
     }
   } else {
     if (!input.aggregation) {
-      fail2(
+      fail(
         "SCIENCE_AGGREGATION_REQUIRED",
         ["aggregation"],
         "per_ordered_pair requires a declared min, mean, max, or no_aggregation rule."
@@ -20467,7 +19757,7 @@ function deriveDelayDistribution(input) {
     for (let ordinal = 0; ordinal < input.delayValues.length; ordinal++) {
       const value = input.delayValues[ordinal];
       if (!(value > 0)) {
-        fail2("SCIENCE_DELAY_NONPOSITIVE", ["delayValues", ordinal], "a delay must be positive.");
+        fail("SCIENCE_DELAY_NONPOSITIVE", ["delayValues", ordinal], "a delay must be positive.");
       }
       const groupId = input.groupBy === "none" ? "all" : input.synapseModels[ordinal];
       rowCountByGroup.set(groupId, rowCountByGroup.get(groupId) + 1);
@@ -20508,7 +19798,7 @@ function deriveDelayDistribution(input) {
     0n
   );
   if (classifiedRows !== BigInt(input.sourceIds.length)) {
-    fail2(
+    fail(
       "SCIENCE_NORMALIZATION_UNVERIFIABLE",
       ["groups"],
       "synapse-model groups do not partition the connection rows exactly once."
@@ -20538,14 +19828,14 @@ function deriveWeightDistribution(input) {
   );
   const groupIds = input.grouping === "none" ? ["all"] : [...new Set(input.synapseModels)].sort(compareIdentifier);
   if (groupIds.length === 0) {
-    fail2(
+    fail(
       "RENDER_NO_DATA",
       ["synapseModels"],
       "grouping by synapse model cannot produce a figure from zero connection rows."
     );
   }
   if (groupIds.length > 8) {
-    fail2("RENDER_SERIES_LIMIT_EXCEEDED", ["synapseModels"], "at most eight groups are renderable.");
+    fail("RENDER_SERIES_LIMIT_EXCEEDED", ["synapseModels"], "at most eight groups are renderable.");
   }
   const rowCountByGroup = new Map(groupIds.map((groupId) => [groupId, 0]));
   const missingRowsByGroup = new Map(groupIds.map((groupId) => [groupId, 0]));
@@ -20555,7 +19845,7 @@ function deriveWeightDistribution(input) {
   const transform = (value) => input.signTreatment === "magnitude" ? Math.abs(value) : value;
   if (input.observationUnit === "synapse") {
     if (input.aggregation !== void 0) {
-      fail2(
+      fail(
         "SCIENCE_AGGREGATION_REQUIRED",
         ["aggregation"],
         "synapse observations preserve every multapse and forbid pair aggregation."
@@ -20577,7 +19867,7 @@ function deriveWeightDistribution(input) {
     }
   } else {
     if (!input.aggregation) {
-      fail2("SCIENCE_AGGREGATION_REQUIRED", ["aggregation"], "node_pair requires aggregation.");
+      fail("SCIENCE_AGGREGATION_REQUIRED", ["aggregation"], "node_pair requires aggregation.");
     }
     const pairs = /* @__PURE__ */ new Map();
     for (let ordinal = 0; ordinal < input.weightValues.length; ordinal++) {
@@ -20608,7 +19898,7 @@ function deriveWeightDistribution(input) {
     for (const key of [...pairs.keys()].sort(compareIdentifier)) {
       const pair = pairs.get(key);
       if (input.aggregation === "no_aggregation" && pair.connectionCount !== 1) {
-        fail2(
+        fail(
           "SCIENCE_AGGREGATION_REQUIRED",
           ["pairs", key],
           `no_aggregation was declared but the ordered pair has ${pair.connectionCount} rows.`
@@ -20650,7 +19940,7 @@ function deriveWeightDistribution(input) {
     0
   );
   if (classifiedRows !== BigInt(input.sourceIds.length)) {
-    fail2(
+    fail(
       "SCIENCE_NORMALIZATION_UNVERIFIABLE",
       ["groups"],
       "synapse-model groups do not partition every connection row exactly once."
@@ -25577,16 +24867,18 @@ function translate(error, skillId) {
   switch (error.keyword) {
     case "additionalProperties": {
       const property = String(error.params.additionalProperty);
+      const escapedProperty = property.replace(/~/g, "~0").replace(/\//g, "~1");
+      const propertyPath = `${instancePath}/${escapedProperty}`;
       return makeError({
         code: "SCHEMA_UNKNOWN_PROPERTY",
         stage: "structural",
-        instancePath: `${instancePath}/${property.replace(/~/g, "~0").replace(/\//g, "~1")}`,
+        instancePath: propertyPath,
         schemaPath,
         skillId,
         message: `"${property}" is not a property this contract defines. Stable schemas are closed, so a mistyped scientific field fails here rather than being silently ignored.`,
         repair: {
           operation: "remove",
-          path: `${instancePath}/${property}`,
+          path: propertyPath,
           reasonCode: "SCHEMA_UNKNOWN_PROPERTY"
         }
       });
@@ -25660,10 +24952,823 @@ function validateStructure(request, skillId) {
   return { ok: false, errors };
 }
 
+// src/core/parse-json.ts
+var DANGEROUS_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+var ParseFailure = class extends Error {
+  diagnostic;
+  constructor(diagnostic) {
+    super(diagnostic.message);
+    this.name = "ParseFailure";
+    this.diagnostic = diagnostic;
+  }
+};
+var Scanner = class {
+  text;
+  limits;
+  index = 0;
+  nodes = 0;
+  /** Path segments to the value being read, for a precise JSON Pointer on failure. */
+  path = [];
+  constructor(text, limits) {
+    this.text = text;
+    this.limits = limits;
+  }
+  pointer() {
+    if (this.path.length === 0) return "";
+    return this.path.map((segment) => `/${String(segment).replace(/~/g, "~0").replace(/\//g, "~1")}`).join("");
+  }
+  fail(code, message, extra) {
+    throw new ParseFailure(
+      makeError({
+        code,
+        stage: "parse",
+        instancePath: this.pointer(),
+        message,
+        ...extra?.limit ? { limit: extra.limit } : {}
+      })
+    );
+  }
+  countNode() {
+    this.nodes++;
+    if (this.nodes > this.limits.jsonTotalNodes) {
+      this.fail("JSON_TOKENS_EXCEEDED", "the document exceeds the total node limit", {
+        limit: { name: "jsonTotalNodes", limit: this.limits.jsonTotalNodes, observed: this.nodes }
+      });
+    }
+  }
+  skipWhitespace() {
+    while (this.index < this.text.length) {
+      const ch = this.text[this.index];
+      if (ch === " " || ch === "	" || ch === "\n" || ch === "\r") {
+        this.index++;
+        continue;
+      }
+      if (ch === "/") {
+        this.fail("JSON_COMMENT_NOT_ALLOWED", "comments are not valid JSON");
+      }
+      return;
+    }
+  }
+  expect(ch) {
+    if (this.text[this.index] !== ch) {
+      this.fail("JSON_SYNTAX", `expected ${JSON.stringify(ch)} at offset ${this.index}`);
+    }
+    this.index++;
+  }
+  parseTopLevel() {
+    this.skipWhitespace();
+    if (this.index >= this.text.length) {
+      this.fail("JSON_EMPTY_INPUT", "the input contained no JSON value");
+    }
+    const value = this.parseValue(0);
+    this.skipWhitespace();
+    if (this.index < this.text.length) {
+      this.fail(
+        "JSON_TRAILING_DATA",
+        `unexpected content after the top-level value at offset ${this.index}`
+      );
+    }
+    return value;
+  }
+  parseValue(depth) {
+    if (depth > this.limits.jsonDepth) {
+      this.fail("JSON_DEPTH_EXCEEDED", "nesting is deeper than the parser permits", {
+        limit: { name: "jsonDepth", limit: this.limits.jsonDepth, observed: depth }
+      });
+    }
+    this.skipWhitespace();
+    const ch = this.text[this.index];
+    switch (ch) {
+      case "{":
+        return this.parseObject(depth);
+      case "[":
+        return this.parseArray(depth);
+      case '"':
+        this.countNode();
+        return this.parseString();
+      case "t":
+        this.countNode();
+        this.literal("true");
+        return true;
+      case "f":
+        this.countNode();
+        this.literal("false");
+        return false;
+      case "n":
+        this.countNode();
+        this.literal("null");
+        return null;
+      default:
+        this.countNode();
+        return this.parseNumber();
+    }
+  }
+  literal(word) {
+    if (this.text.startsWith(word, this.index)) {
+      this.index += word.length;
+      return;
+    }
+    this.fail("JSON_SYNTAX", `expected ${word} at offset ${this.index}`);
+  }
+  parseObject(depth) {
+    this.countNode();
+    this.expect("{");
+    const object = /* @__PURE__ */ Object.create(null);
+    const seen = /* @__PURE__ */ new Set();
+    this.skipWhitespace();
+    if (this.text[this.index] === "}") {
+      this.index++;
+      return object;
+    }
+    for (; ; ) {
+      this.skipWhitespace();
+      if (this.text[this.index] === "}") {
+        this.fail("JSON_TRAILING_COMMA_NOT_ALLOWED", "trailing commas are not valid JSON");
+      }
+      if (this.text[this.index] !== '"') {
+        this.fail("JSON_SYNTAX", `expected a member name at offset ${this.index}`);
+      }
+      const key = this.parseString();
+      if (DANGEROUS_KEYS.has(key)) {
+        this.path.push(key);
+        this.fail(
+          "JSON_DANGEROUS_KEY",
+          `the member name ${JSON.stringify(key)} can reach Object.prototype and is rejected`
+        );
+      }
+      if (seen.has(key)) {
+        this.path.push(key);
+        this.fail(
+          "JSON_DUPLICATE_KEY",
+          `the member name ${JSON.stringify(key)} appears more than once; which value would win is undefined`
+        );
+      }
+      seen.add(key);
+      if (seen.size > this.limits.jsonObjectKeys) {
+        this.fail("JSON_TOO_MANY_KEYS", "the object has more members than the parser permits", {
+          limit: { name: "jsonObjectKeys", limit: this.limits.jsonObjectKeys, observed: seen.size }
+        });
+      }
+      this.skipWhitespace();
+      this.expect(":");
+      this.path.push(key);
+      object[key] = this.parseValue(depth + 1);
+      this.path.pop();
+      this.skipWhitespace();
+      const next = this.text[this.index];
+      if (next === ",") {
+        this.index++;
+        continue;
+      }
+      if (next === "}") {
+        this.index++;
+        return object;
+      }
+      this.fail("JSON_SYNTAX", `expected ',' or '}' at offset ${this.index}`);
+    }
+  }
+  parseArray(depth) {
+    this.countNode();
+    this.expect("[");
+    const array = [];
+    this.skipWhitespace();
+    if (this.text[this.index] === "]") {
+      this.index++;
+      return array;
+    }
+    for (; ; ) {
+      this.skipWhitespace();
+      if (this.text[this.index] === "]") {
+        this.fail("JSON_TRAILING_COMMA_NOT_ALLOWED", "trailing commas are not valid JSON");
+      }
+      this.path.push(array.length);
+      array.push(this.parseValue(depth + 1));
+      this.path.pop();
+      if (array.length > this.limits.jsonArrayItems) {
+        this.fail("JSON_ARRAY_TOO_LONG", "the array has more members than the parser permits", {
+          limit: {
+            name: "jsonArrayItems",
+            limit: this.limits.jsonArrayItems,
+            observed: array.length
+          }
+        });
+      }
+      this.skipWhitespace();
+      const next = this.text[this.index];
+      if (next === ",") {
+        this.index++;
+        continue;
+      }
+      if (next === "]") {
+        this.index++;
+        return array;
+      }
+      this.fail("JSON_SYNTAX", `expected ',' or ']' at offset ${this.index}`);
+    }
+  }
+  parseString() {
+    this.expect('"');
+    let out = "";
+    for (; ; ) {
+      if (this.index >= this.text.length) {
+        this.fail("JSON_SYNTAX", "the input ended inside a string");
+      }
+      const ch = this.text[this.index];
+      if (ch === '"') {
+        this.index++;
+        if (out.length > this.limits.jsonStringLength) {
+          this.fail("JSON_STRING_TOO_LONG", "a string is longer than the parser permits", {
+            limit: {
+              name: "jsonStringLength",
+              limit: this.limits.jsonStringLength,
+              observed: out.length
+            }
+          });
+        }
+        return out;
+      }
+      if (ch === "\\") {
+        this.index++;
+        out += this.parseEscape();
+        continue;
+      }
+      const code = this.text.charCodeAt(this.index);
+      if (code < 32) {
+        this.fail(
+          "JSON_SYNTAX",
+          `a raw control character (U+${code.toString(16).padStart(4, "0").toUpperCase()}) is not valid inside a JSON string`
+        );
+      }
+      if (code >= 55296 && code <= 56319) {
+        const next = this.text.charCodeAt(this.index + 1);
+        if (!(next >= 56320 && next <= 57343)) {
+          this.fail("JSON_INVALID_UNICODE", "an unpaired high surrogate is not well-formed Unicode");
+        }
+        out += this.text[this.index] + this.text[this.index + 1];
+        this.index += 2;
+        continue;
+      }
+      if (code >= 56320 && code <= 57343) {
+        this.fail("JSON_INVALID_UNICODE", "an unpaired low surrogate is not well-formed Unicode");
+      }
+      out += ch;
+      this.index++;
+    }
+  }
+  parseEscape() {
+    const ch = this.text[this.index];
+    this.index++;
+    switch (ch) {
+      case '"':
+        return '"';
+      case "\\":
+        return "\\";
+      case "/":
+        return "/";
+      case "b":
+        return "\b";
+      case "f":
+        return "\f";
+      case "n":
+        return "\n";
+      case "r":
+        return "\r";
+      case "t":
+        return "	";
+      case "u":
+        return this.parseUnicodeEscape();
+      default:
+        this.fail("JSON_SYNTAX", `invalid escape sequence \\${String(ch)}`);
+    }
+  }
+  parseUnicodeEscape() {
+    const hex = this.text.slice(this.index, this.index + 4);
+    if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
+      this.fail("JSON_INVALID_UNICODE", "a \\u escape must be followed by four hex digits");
+    }
+    this.index += 4;
+    const code = Number.parseInt(hex, 16);
+    if (code >= 55296 && code <= 56319) {
+      if (this.text[this.index] !== "\\" || this.text[this.index + 1] !== "u") {
+        this.fail("JSON_INVALID_UNICODE", "an escaped high surrogate must be followed by a low surrogate");
+      }
+      const lowHex = this.text.slice(this.index + 2, this.index + 6);
+      if (!/^[0-9a-fA-F]{4}$/.test(lowHex)) {
+        this.fail("JSON_INVALID_UNICODE", "a \\u escape must be followed by four hex digits");
+      }
+      const low = Number.parseInt(lowHex, 16);
+      if (!(low >= 56320 && low <= 57343)) {
+        this.fail("JSON_INVALID_UNICODE", "an escaped high surrogate must be followed by a low surrogate");
+      }
+      this.index += 6;
+      return String.fromCharCode(code, low);
+    }
+    if (code >= 56320 && code <= 57343) {
+      this.fail("JSON_INVALID_UNICODE", "an unpaired escaped low surrogate is not well-formed Unicode");
+    }
+    return String.fromCharCode(code);
+  }
+  parseNumber() {
+    const start = this.index;
+    if (this.text[this.index] === "-") this.index++;
+    if (this.text[this.index] === "0") {
+      this.index++;
+    } else if (this.isDigit(this.text[this.index])) {
+      while (this.isDigit(this.text[this.index])) this.index++;
+    } else {
+      this.fail("JSON_SYNTAX", `unexpected token at offset ${this.index}`);
+    }
+    if (this.text[this.index] === ".") {
+      this.index++;
+      if (!this.isDigit(this.text[this.index])) {
+        this.fail("JSON_INVALID_NUMBER", "a decimal point must be followed by at least one digit");
+      }
+      while (this.isDigit(this.text[this.index])) this.index++;
+    }
+    if (this.text[this.index] === "e" || this.text[this.index] === "E") {
+      this.index++;
+      if (this.text[this.index] === "+" || this.text[this.index] === "-") this.index++;
+      if (!this.isDigit(this.text[this.index])) {
+        this.fail("JSON_INVALID_NUMBER", "an exponent must have at least one digit");
+      }
+      while (this.isDigit(this.text[this.index])) this.index++;
+    }
+    const token = this.text.slice(start, this.index);
+    if (token.length === 0) {
+      this.fail("JSON_SYNTAX", `unexpected token at offset ${start}`);
+    }
+    if (token.length > this.limits.jsonNumberTokenLength) {
+      this.fail(
+        "JSON_NUMBER_TOKEN_TOO_LONG",
+        "the numeric token is longer than any meaningful binary64 literal",
+        {
+          limit: {
+            name: "jsonNumberTokenLength",
+            limit: this.limits.jsonNumberTokenLength,
+            observed: token.length
+          }
+        }
+      );
+    }
+    const value = Number(token);
+    if (!Number.isFinite(value)) {
+      this.fail(
+        "JSON_NON_FINITE_NUMBER",
+        "the number is outside the finite binary64 model; use null for a missing observation"
+      );
+    }
+    if (!/[.eE]/u.test(token)) {
+      const integer = BigInt(token);
+      const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+      const isCanonicalBinary64Spelling = JSON.stringify(value) === token;
+      if ((integer < -maxSafe || integer > maxSafe) && !isCanonicalBinary64Spelling) {
+        this.fail(
+          "JSON_INTEGER_OUT_OF_RANGE",
+          "the unsafe bare integer is not the canonical spelling of its parsed binary64 value; use an exact safe integer, the canonical binary64 measurement spelling, or a string identifier"
+        );
+      }
+    }
+    return value;
+  }
+  isDigit(ch) {
+    return ch !== void 0 && ch >= "0" && ch <= "9";
+  }
+};
+function parseJsonStrict(text, options) {
+  if (typeof text !== "string") {
+    return err([
+      makeError({
+        code: "JSON_SYNTAX",
+        stage: "parse",
+        message: "the strict JSON boundary accepts a text string only"
+      })
+    ]);
+  }
+  const limitKeys = [
+    "rawInputBytes",
+    "jsonDepth",
+    "jsonTotalNodes",
+    "jsonStringLength",
+    "jsonNumberTokenLength",
+    "jsonObjectKeys",
+    "jsonArrayItems"
+  ];
+  const limitsSnapshot = /* @__PURE__ */ Object.create(null);
+  let allowBom = false;
+  try {
+    if (options === null || typeof options !== "object") throw new Error("invalid options");
+    const limitsDescriptor = Object.getOwnPropertyDescriptor(options, "limits");
+    if (limitsDescriptor === void 0 || !Object.prototype.hasOwnProperty.call(limitsDescriptor, "value")) {
+      throw new Error("invalid limits");
+    }
+    const supplied = limitsDescriptor.value;
+    if (supplied === null || typeof supplied !== "object") throw new Error("invalid limits");
+    for (const key of limitKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(supplied, key);
+      if (descriptor === void 0 || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
+        throw new Error("invalid limit");
+      }
+      const value = descriptor.value;
+      if (!Number.isSafeInteger(value) || value < 0) throw new Error("invalid limit");
+      limitsSnapshot[key] = value;
+    }
+    const bomDescriptor = Object.getOwnPropertyDescriptor(options, "allowBom");
+    if (bomDescriptor !== void 0) {
+      if (!Object.prototype.hasOwnProperty.call(bomDescriptor, "value")) {
+        throw new Error("invalid allowBom");
+      }
+      allowBom = bomDescriptor.value === true;
+    }
+  } catch {
+    return err([
+      makeError({
+        code: "INTERNAL_INVARIANT_VIOLATED",
+        stage: "internal",
+        message: "the strict parser requires a valid finite non-negative budget object"
+      })
+    ]);
+  }
+  const limits = Object.freeze(limitsSnapshot);
+  const byteLength = utf8ByteLength(text);
+  if (byteLength > limits.rawInputBytes) {
+    return err([
+      makeError({
+        code: "JSON_BYTES_EXCEEDED",
+        stage: "parse",
+        message: "the raw input is larger than the active budget profile permits",
+        limit: { name: "rawInputBytes", limit: limits.rawInputBytes, observed: byteLength }
+      })
+    ]);
+  }
+  let source = text;
+  if (source.charCodeAt(0) === 65279) {
+    if (!allowBom) {
+      return err([
+        makeError({
+          code: "JSON_BOM_NOT_ALLOWED",
+          stage: "parse",
+          message: "the input begins with a byte-order mark; strip it"
+        })
+      ]);
+    }
+    source = source.slice(1);
+  }
+  try {
+    return ok(new Scanner(source, limits).parseTopLevel());
+  } catch (error) {
+    if (error instanceof ParseFailure) {
+      return err([error.diagnostic]);
+    }
+    return err([
+      makeError({
+        code: "INTERNAL_INVARIANT_VIOLATED",
+        stage: "internal",
+        message: "the parser failed in an unexpected way; this is a Cortexel defect"
+      })
+    ]);
+  }
+}
+
+// src/core/safe-snapshot.ts
+var DANGEROUS_KEYS2 = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+var SnapshotFailure = class extends Error {
+  diagnostic;
+  constructor(diagnostic) {
+    super(diagnostic.message);
+    this.name = "SnapshotFailure";
+    this.diagnostic = diagnostic;
+  }
+};
+function reflect(operation, path2) {
+  try {
+    return operation();
+  } catch {
+    throw new SnapshotFailure(
+      makeError({
+        code: "SNAPSHOT_HOSTILE_REFLECTION",
+        stage: "snapshot",
+        instancePath: path2,
+        message: "reflecting on this value threw; it is treated as hostile and is not inspected again"
+      })
+    );
+  }
+}
+function isWellFormedString(value) {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 55296 && code <= 56319) {
+      const next = i + 1 < value.length ? value.charCodeAt(i + 1) : 0;
+      if (!(next >= 56320 && next <= 57343)) return false;
+      i++;
+    } else if (code >= 56320 && code <= 57343) {
+      return false;
+    }
+  }
+  return true;
+}
+function fail2(code, path2, message, actual) {
+  throw new SnapshotFailure(
+    makeError({
+      code,
+      stage: "snapshot",
+      instancePath: path2,
+      message,
+      ...actual !== void 0 ? { actual } : {}
+    })
+  );
+}
+function snapshotNode(value, path2, depth, state) {
+  if (depth > state.limits.jsonDepth) {
+    fail2("SNAPSHOT_DEPTH_EXCEEDED", path2, "the value nests deeper than the snapshot permits");
+  }
+  state.nodes++;
+  if (state.nodes > state.limits.jsonTotalNodes) {
+    fail2("SNAPSHOT_NODES_EXCEEDED", path2, "the value graph exceeds the total node limit");
+  }
+  if (value === null) return null;
+  switch (typeof value) {
+    case "boolean":
+      return value;
+    case "number":
+      if (!Number.isFinite(value)) {
+        fail2(
+          "SNAPSHOT_NON_FINITE_NUMBER",
+          path2,
+          "NaN and Infinity are not measurements; use null for a missing observation",
+          value
+        );
+      }
+      return value;
+    case "string":
+      if (!isWellFormedString(value)) {
+        fail2(
+          "SNAPSHOT_MALFORMED_STRING",
+          path2,
+          "the string contains a lone surrogate and is not well-formed Unicode"
+        );
+      }
+      if (value.length > state.limits.jsonStringLength) {
+        fail2(
+          "SNAPSHOT_STRING_TOO_LONG",
+          path2,
+          `the string contains ${value.length} UTF-16 code units, over the active limit of ${state.limits.jsonStringLength}`
+        );
+      }
+      return value;
+    case "undefined":
+      fail2("SNAPSHOT_UNSUPPORTED_TYPE", path2, "undefined is not a JSON value", value);
+    // eslint-disable-next-line no-fallthrough
+    case "function":
+      fail2("SNAPSHOT_UNSUPPORTED_TYPE", path2, "a function is not data", value);
+    // eslint-disable-next-line no-fallthrough
+    case "symbol":
+      fail2("SNAPSHOT_UNSUPPORTED_TYPE", path2, "a symbol is not a JSON value", value);
+    // eslint-disable-next-line no-fallthrough
+    case "bigint":
+      fail2(
+        "SNAPSHOT_UNSUPPORTED_TYPE",
+        path2,
+        "a bigint has no JSON representation; send a number or a string",
+        value
+      );
+    // eslint-disable-next-line no-fallthrough
+    case "object":
+      break;
+    default:
+      fail2("SNAPSHOT_UNSUPPORTED_TYPE", path2, "the value is of an unsupported type", value);
+  }
+  const object = value;
+  if (state.seen.has(object)) {
+    fail2("SNAPSHOT_CIRCULAR_REFERENCE", path2, "the value graph contains a cycle");
+  }
+  if (reflect(() => ArrayBuffer.isView(object), path2)) {
+    fail2(
+      "SNAPSHOT_NON_PLAIN_OBJECT",
+      path2,
+      "a typed array or DataView is not part of the JSON request contract; use a plain array"
+    );
+  }
+  const isArray = reflect(() => Array.isArray(object), path2);
+  const prototype = reflect(() => Object.getPrototypeOf(object), path2);
+  if (!isArray && prototype !== Object.prototype && prototype !== null) {
+    fail2(
+      "SNAPSHOT_NON_PLAIN_OBJECT",
+      path2,
+      "only plain objects and arrays are accepted; a class instance, Date, Map, Set, or Promise is not data"
+    );
+  }
+  state.seen.add(object);
+  try {
+    return isArray ? snapshotArray(object, path2, depth, state) : snapshotObject(object, path2, depth, state);
+  } finally {
+    state.seen.delete(object);
+  }
+}
+function snapshotArray(array, path2, depth, state) {
+  const lengthDescriptor = reflect(
+    () => Object.getOwnPropertyDescriptor(array, "length"),
+    path2
+  );
+  if (lengthDescriptor === void 0 || !Object.prototype.hasOwnProperty.call(lengthDescriptor, "value")) {
+    fail2("SNAPSHOT_NON_PLAIN_OBJECT", path2, "the array has no intrinsic data length");
+  }
+  const length = lengthDescriptor.value;
+  if (!Number.isSafeInteger(length) || length < 0) {
+    fail2("SNAPSHOT_NON_PLAIN_OBJECT", path2, "the array reports an implausible length");
+  }
+  if (length > state.limits.jsonArrayItems) {
+    fail2("SNAPSHOT_NODES_EXCEEDED", path2, "the array is longer than the snapshot permits");
+  }
+  const keys = reflect(() => Reflect.ownKeys(array), path2);
+  const out = [];
+  for (let index = 0; index < length; index++) {
+    const descriptor = reflect(
+      () => Object.getOwnPropertyDescriptor(array, index),
+      `${path2}/${index}`
+    );
+    if (descriptor === void 0) {
+      fail2(
+        "SNAPSHOT_SPARSE_ARRAY",
+        `${path2}/${index}`,
+        "the array has a hole; use an explicit null for a missing observation"
+      );
+    }
+    if (!("value" in descriptor)) {
+      fail2(
+        "SNAPSHOT_ACCESSOR_PROPERTY",
+        `${path2}/${index}`,
+        "the element is defined by a getter; Cortexel will not invoke caller code to read data"
+      );
+    }
+    out.push(snapshotNode(descriptor.value, `${path2}/${index}`, depth + 1, state));
+  }
+  for (const key of keys) {
+    if (typeof key === "symbol") {
+      fail2("SNAPSHOT_SYMBOL_KEY", path2, "the array carries a symbol-keyed property");
+    }
+    if (key === "length") continue;
+    const canonicalIndex = /^(?:0|[1-9][0-9]*)$/u.test(key) ? Number(key) : -1;
+    if (Number.isSafeInteger(canonicalIndex) && canonicalIndex >= 0 && canonicalIndex < length) {
+      continue;
+    }
+    fail2(
+      "SNAPSHOT_DECORATED_ARRAY",
+      path2,
+      `the array carries the named property ${JSON.stringify(String(key))}, which a JSON array cannot represent`
+    );
+  }
+  return out;
+}
+function snapshotObject(object, path2, depth, state) {
+  const keys = reflect(() => Reflect.ownKeys(object), path2);
+  const out = /* @__PURE__ */ Object.create(null);
+  let count = 0;
+  for (const key of keys) {
+    if (typeof key === "symbol") {
+      fail2("SNAPSHOT_SYMBOL_KEY", path2, "the object carries a symbol-keyed property");
+    }
+    const childPath2 = `${path2}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`;
+    if (DANGEROUS_KEYS2.has(key)) {
+      fail2(
+        "SNAPSHOT_DANGEROUS_KEY",
+        childPath2,
+        `the key ${JSON.stringify(key)} can reach Object.prototype and is rejected`
+      );
+    }
+    const descriptor = reflect(() => Object.getOwnPropertyDescriptor(object, key), childPath2);
+    if (descriptor === void 0) continue;
+    if (!descriptor.enumerable) continue;
+    if (!("value" in descriptor)) {
+      fail2(
+        "SNAPSHOT_ACCESSOR_PROPERTY",
+        childPath2,
+        "the property is defined by a getter or setter; Cortexel inspects descriptors and will not invoke caller code to read data"
+      );
+    }
+    count++;
+    if (count > state.limits.jsonObjectKeys) {
+      fail2("SNAPSHOT_NODES_EXCEEDED", path2, "the object has more members than the snapshot permits");
+    }
+    out[key] = snapshotNode(descriptor.value, childPath2, depth + 1, state);
+  }
+  return out;
+}
+function snapshotValue(value, limits) {
+  const state = { limits, nodes: 0, seen: /* @__PURE__ */ new Set() };
+  try {
+    return ok(snapshotNode(value, "", 0, state));
+  } catch (error) {
+    if (error instanceof SnapshotFailure) {
+      return err([error.diagnostic]);
+    }
+    return err([
+      makeError({
+        code: "INTERNAL_INVARIANT_VIOLATED",
+        stage: "internal",
+        message: "the snapshot failed in an unexpected way; this is a Cortexel defect"
+      })
+    ]);
+  }
+}
+
+// src/core/requestBoundary.internal.ts
+function resolveBudgetProfile(options) {
+  let requested = DEFAULT_PROFILE;
+  try {
+    if (options !== null && options !== void 0) {
+      if (typeof options !== "object") throw new Error("invalid options");
+      const descriptor = Object.getOwnPropertyDescriptor(options, "budgetProfile");
+      if (descriptor !== void 0) {
+        if (!Object.prototype.hasOwnProperty.call(descriptor, "value")) {
+          throw new Error("accessor-backed options");
+        }
+        requested = descriptor.value ?? DEFAULT_PROFILE;
+      }
+    }
+  } catch {
+    requested = null;
+  }
+  return {
+    profile: typeof requested === "string" ? requested : "<invalid>",
+    limits: tryGetBudgetLimits(requested)
+  };
+}
+function requestedBudgetProfile(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_PROFILE;
+  }
+  const presentation = value.presentation;
+  if (presentation === null || typeof presentation !== "object" || Array.isArray(presentation)) {
+    return DEFAULT_PROFILE;
+  }
+  return Object.prototype.hasOwnProperty.call(presentation, "budgetProfile") ? presentation.budgetProfile : DEFAULT_PROFILE;
+}
+function assuranceFor(boundary, profile) {
+  return {
+    boundary,
+    duplicateKeys: boundary === "raw_json_text" ? "rejected_before_materialization" : "not_observable_after_materialization",
+    parserProfile: boundary === "raw_json_text" ? "cortexel-strict-json/1.0" : "cortexel-safe-snapshot/1.0",
+    budgetProfile: typeof profile === "string" ? profile : "<invalid>"
+  };
+}
+function fail3(errors, assurance) {
+  return { ok: false, errors: finalizeErrors([...errors]), assurance };
+}
+function invalidBudgetProfile(assurance) {
+  return fail3([
+    makeError({
+      code: "RESOURCE_BUDGET_PROFILE_UNKNOWN",
+      stage: "budget",
+      message: "the selected budget profile is not in this build's closed registry. Unknown and inherited profile ids cannot disable resource limits."
+    })
+  ], assurance);
+}
+function captureRawRequestInput(text, options = {}) {
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor("raw_json_text", host.profile);
+  if (!host.limits) return invalidBudgetProfile(assurance);
+  if (typeof text !== "string") {
+    return fail3([
+      makeError({
+        code: "JSON_SYNTAX",
+        stage: "parse",
+        message: "the raw request boundary accepts a JSON text string only."
+      })
+    ], assurance);
+  }
+  let parsed = parseJsonStrict(text, { limits: host.limits });
+  if (!parsed.ok) return fail3(parsed.errors, assurance);
+  const requested = requestedBudgetProfile(parsed.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor("raw_json_text", effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+  if (effective.profile !== host.profile) {
+    parsed = parseJsonStrict(text, { limits: effective.limits });
+    if (!parsed.ok) return fail3(parsed.errors, assurance);
+  }
+  return { ok: true, value: parsed.value, assurance };
+}
+function captureMaterializedRequestInput(value, options = {}) {
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor("materialized_value", host.profile);
+  if (!host.limits) return invalidBudgetProfile(assurance);
+  let snapshot = snapshotValue(value, host.limits);
+  if (!snapshot.ok) return fail3(snapshot.errors, assurance);
+  const requested = requestedBudgetProfile(snapshot.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor("materialized_value", effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+  if (effective.profile !== host.profile) {
+    snapshot = snapshotValue(snapshot.value, effective.limits);
+    if (!snapshot.ok) return fail3(snapshot.errors, assurance);
+  }
+  return { ok: true, value: snapshot.value, assurance };
+}
+
 // src/generated/identity.ts
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004";
+var CONTRACT_DIGEST = "sha256:09b41ffd58f3ba63306b1ce347943383b8b4501fe468cc5777b7431b5d6b2792";
 
 // src/core/contract-identity.ts
 var CONTRACT_VALUE = /^([a-z][a-z0-9-]*)\/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;
@@ -25689,56 +25794,7 @@ var VALIDATED_REQUESTS = /* @__PURE__ */ new WeakSet();
 function isValidatedRequest(value) {
   return typeof value === "object" && value !== null && VALIDATED_REQUESTS.has(value);
 }
-function resolveBudgetProfile(options) {
-  let requested = DEFAULT_PROFILE;
-  try {
-    if (options !== null && options !== void 0) {
-      if (typeof options !== "object") throw new Error("invalid options");
-      const descriptor = Object.getOwnPropertyDescriptor(options, "budgetProfile");
-      if (descriptor !== void 0) {
-        if (!Object.prototype.hasOwnProperty.call(descriptor, "value")) {
-          throw new Error("accessor-backed options");
-        }
-        requested = descriptor.value ?? DEFAULT_PROFILE;
-      }
-    }
-  } catch {
-    requested = null;
-  }
-  return {
-    profile: typeof requested === "string" ? requested : "<invalid>",
-    limits: tryGetBudgetLimits(requested)
-  };
-}
-function invalidBudgetProfile(assurance) {
-  return fail3(
-    [
-      makeError({
-        code: "RESOURCE_BUDGET_PROFILE_UNKNOWN",
-        stage: "budget",
-        message: "the selected budget profile is not in this build's closed registry. Unknown and inherited profile ids cannot disable resource limits."
-      })
-    ],
-    assurance
-  );
-}
-function requestedBudgetProfile(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return DEFAULT_PROFILE;
-  const presentation = value.presentation;
-  if (presentation === null || typeof presentation !== "object" || Array.isArray(presentation)) {
-    return DEFAULT_PROFILE;
-  }
-  return Object.prototype.hasOwnProperty.call(presentation, "budgetProfile") ? presentation.budgetProfile : DEFAULT_PROFILE;
-}
-function assuranceFor(boundary, profile) {
-  return {
-    boundary,
-    duplicateKeys: boundary === "raw_json_text" ? "rejected_before_materialization" : "not_observable_after_materialization",
-    parserProfile: boundary === "raw_json_text" ? "cortexel-strict-json/1.0" : "cortexel-safe-snapshot/1.0",
-    budgetProfile: typeof profile === "string" ? profile : "<invalid>"
-  };
-}
-function fail3(errors, assurance) {
+function fail4(errors, assurance) {
   return { ok: false, errors: finalizeErrors([...errors]), inputAssurance: assurance };
 }
 function readSkillId(request) {
@@ -25750,7 +25806,8 @@ function readSkillId(request) {
 function checkIdentity(request) {
   const errors = [];
   const contract = request.contract;
-  if (typeof contract !== "object" || contract === null || Array.isArray(contract)) {
+  const contractIsAbsent = !Object.prototype.hasOwnProperty.call(request, "contract");
+  if (contractIsAbsent) {
     const expectedContract = {
       name: REQUEST_CONTRACT_IDENTITY.name,
       version: REQUEST_CONTRACT_IDENTITY.version
@@ -25769,6 +25826,15 @@ function checkIdentity(request) {
         }
       })
     );
+    return errors;
+  }
+  if (typeof contract !== "object" || contract === null || Array.isArray(contract)) {
+    errors.push(makeError({
+      code: "CONTRACT_SHAPE_INVALID",
+      stage: "identity",
+      instancePath: "/contract",
+      message: "the declared contract member is not an object. Cortexel will not overwrite it or infer which contract the caller intended."
+    }));
     return errors;
   }
   const record2 = contract;
@@ -25864,7 +25930,7 @@ function canonicalizeRequest(request, resolvedSkillRevision) {
 }
 function validateSnapshot(value, assurance) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return fail3(
+    return fail4(
       [
         makeError({
           code: "SCHEMA_TYPE_MISMATCH",
@@ -25877,14 +25943,14 @@ function validateSnapshot(value, assurance) {
   }
   const request = value;
   const authorityErrors = checkCallerAuthority(request);
-  if (authorityErrors.length > 0) return fail3(authorityErrors, assurance);
+  if (authorityErrors.length > 0) return fail4(authorityErrors, assurance);
   const identityErrors = checkIdentity(request);
-  if (identityErrors.length > 0) return fail3(identityErrors, assurance);
+  if (identityErrors.length > 0) return fail4(identityErrors, assurance);
   const skillId = readSkillId(request);
   const skillErrors = checkSkill(skillId);
-  if (skillErrors.length > 0) return fail3(skillErrors, assurance);
+  if (skillErrors.length > 0) return fail4(skillErrors, assurance);
   if (skillId === void 0 || !isStableSkillId(skillId)) {
-    return fail3(
+    return fail4(
       [
         makeError({
           code: "INTERNAL_INVARIANT_VIOLATED",
@@ -25899,7 +25965,7 @@ function validateSnapshot(value, assurance) {
   const catalog = SKILL_CATALOG[skillId];
   const requestedRevision = request.skill.revision;
   if (typeof requestedRevision === "number" && requestedRevision !== catalog.revision) {
-    return fail3(
+    return fail4(
       [
         makeError({
           code: "CONTRACT_SKILL_REVISION_UNSUPPORTED",
@@ -25912,12 +25978,12 @@ function validateSnapshot(value, assurance) {
     );
   }
   const structural = validateStructure(request, skillId);
-  if (!structural.ok) return fail3(structural.errors, assurance);
+  if (!structural.ok) return fail4(structural.errors, assurance);
   const semanticErrors = runSemanticValidators(request, skillId);
   const blocking = semanticErrors.filter((error) => error.severity === "error");
-  if (blocking.length > 0) return fail3(semanticErrors, assurance);
+  if (blocking.length > 0) return fail4(semanticErrors, assurance);
   const canonicalRequest = canonicalizeRequest(request, catalog.revision);
-  const validated = deepFreeze({
+  const minted = deepFreeze({
     [VALIDATED]: true,
     skillId,
     skillRevision: catalog.revision,
@@ -25934,52 +26000,19 @@ function validateSnapshot(value, assurance) {
       ...new Set(catalog.semanticValidators.map((validator) => validator.id))
     ]
   });
+  const validated = minted;
   VALIDATED_REQUESTS.add(validated);
   return { ok: true, request: validated };
 }
 function parseAndValidateRequest(text, options = {}) {
-  const host = resolveBudgetProfile(options);
-  let assurance = assuranceFor("raw_json_text", host.profile);
-  if (!host.limits) return invalidBudgetProfile(assurance);
-  if (typeof text !== "string") {
-    return fail3(
-      [
-        makeError({
-          code: "JSON_SYNTAX",
-          stage: "parse",
-          message: "the raw request boundary accepts a JSON text string only."
-        })
-      ],
-      assurance
-    );
-  }
-  let parsed = parseJsonStrict(text, { limits: host.limits });
-  if (!parsed.ok) return fail3(parsed.errors, assurance);
-  const requested = requestedBudgetProfile(parsed.value);
-  const effective = trySelectTighterBudgetProfile(host.profile, requested);
-  assurance = assuranceFor("raw_json_text", effective?.profile ?? requested);
-  if (!effective) return invalidBudgetProfile(assurance);
-  if (effective.profile !== host.profile) {
-    parsed = parseJsonStrict(text, { limits: effective.limits });
-    if (!parsed.ok) return fail3(parsed.errors, assurance);
-  }
-  return validateSnapshot(parsed.value, assurance);
+  const captured = captureRawRequestInput(text, options);
+  if (!captured.ok) return fail4(captured.errors, captured.assurance);
+  return validateSnapshot(captured.value, captured.assurance);
 }
 function validateRequestValue(value, options = {}) {
-  const host = resolveBudgetProfile(options);
-  let assurance = assuranceFor("materialized_value", host.profile);
-  if (!host.limits) return invalidBudgetProfile(assurance);
-  let snapshot = snapshotValue(value, host.limits);
-  if (!snapshot.ok) return fail3(snapshot.errors, assurance);
-  const requested = requestedBudgetProfile(snapshot.value);
-  const effective = trySelectTighterBudgetProfile(host.profile, requested);
-  assurance = assuranceFor("materialized_value", effective?.profile ?? requested);
-  if (!effective) return invalidBudgetProfile(assurance);
-  if (effective.profile !== host.profile) {
-    snapshot = snapshotValue(value, effective.limits);
-    if (!snapshot.ok) return fail3(snapshot.errors, assurance);
-  }
-  return validateSnapshot(snapshot.value, assurance);
+  const captured = captureMaterializedRequestInput(value, options);
+  if (!captured.ok) return fail4(captured.errors, captured.assurance);
+  return validateSnapshot(captured.value, captured.assurance);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

@@ -1,5 +1,21 @@
-import { C as CortexelError } from '../errors-DUbFUu6n.cjs';
-import { B as BudgetProfileId, S as StableSkillId } from '../catalog-BjofKpmG.cjs';
+import { C as CortexelError } from '../errors-DOfZeMp8.cjs';
+import { B as BudgetProfileId, S as StableSkillId } from '../catalog-B3dXHggm.cjs';
+import { ValidatedRequestNominalBrand } from '#cortexel-validated-request-brand';
+
+/**
+ * One owned input capture for the FigureRequest validation and repair boundaries.
+ *
+ * Materialized callers may mutate their object concurrently or expose a Proxy. We
+ * therefore inspect caller authority exactly once, then apply any request-selected
+ * tighter budget to that owned JSON snapshot rather than reading the caller again.
+ */
+
+interface InputAssurance {
+    readonly boundary: 'raw_json_text' | 'materialized_value';
+    readonly duplicateKeys: 'rejected_before_materialization' | 'not_observable_after_materialization';
+    readonly parserProfile: string;
+    readonly budgetProfile: string;
+}
 
 /**
  * The validation pipeline.
@@ -21,29 +37,21 @@ import { B as BudgetProfileId, S as StableSkillId } from '../catalog-BjofKpmG.cj
  *
  * The returned success value is BRANDED. Rendering accepts only that brand, so a
  * plain object that merely looks like a validated request cannot be rendered — the
- * type system and a runtime symbol both refuse it. That is what makes "no renderer
- * may bypass validation" a fact rather than a convention.
+ * nominal type and private runtime WeakSet both refuse it. That is what makes "no
+ * renderer may bypass validation" a fact rather than a convention.
  */
 
-/** How the request entered, and what that boundary could certify. */
-interface InputAssurance {
-    readonly boundary: 'raw_json_text' | 'materialized_value';
-    readonly duplicateKeys: 'rejected_before_materialization' | 'not_observable_after_materialization';
-    readonly parserProfile: string;
-    readonly budgetProfile: string;
-}
-declare const VALIDATED: unique symbol;
 /**
  * A request that has actually been through the pipeline.
  *
- * The private symbol prevents accidental TypeScript construction. Runtime authority is
- * stronger: only object identities minted by this module are entered in a private
+ * One package-private nominal type identity prevents accidental TypeScript construction
+ * across both conditional declaration graphs. Runtime authority is stronger: only
+ * object identities minted by this module are entered in a private
  * `WeakSet`. A proxy cannot forge membership with a `get` trap, and a copied object has
  * a different identity. The whole token is deeply frozen before it is minted so the
  * request and its digest cannot diverge after validation.
  */
-interface ValidatedRequest {
-    readonly [VALIDATED]: true;
+interface ValidatedRequest extends ValidatedRequestNominalBrand {
     readonly skillId: StableSkillId;
     readonly skillRevision: number;
     readonly canonicalRequest: Record<string, unknown>;

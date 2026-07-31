@@ -13333,7 +13333,7 @@ function topologyMarkPreflight(
 /** Build a figure from an already-validated request. */
 export function buildFigureFromValidated(validated: ValidatedRequest): FigureResult | FigureFailure {
   // Check module-owned identity before reading even one property. In particular, a proxy
-  // cannot use a `get` trap to forge the private TypeScript symbol or execute code while
+  // cannot use a `get` trap to forge private WeakSet membership or execute code while
   // this failure is being diagnosed.
   if (!isValidatedRequest(validated)) {
     return {

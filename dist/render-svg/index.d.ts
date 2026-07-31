@@ -1,7 +1,8 @@
 import { ValidateOptions, ValidatedRequest } from '../internal/request-capability.js';
-import { D as Disclosure } from '../disclosures-DP59VItU.js';
-import { J as JsonValue } from '../catalog-p-MPgBs_.js';
-import { C as CortexelError } from '../errors-DUbFUu6n.js';
+import { D as Disclosure } from '../disclosures-B1yMLt1i.js';
+import { J as JsonValue } from '../catalog-DlB2whV5.js';
+import { C as CortexelError } from '../errors-DOfZeMp8.js';
+import '#cortexel-validated-request-brand';
 
 /**
  * Caller-declared source statements are presentation content, not disclosures.

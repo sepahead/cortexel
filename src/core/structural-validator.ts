@@ -205,16 +205,18 @@ function translate(error: ErrorObject, skillId: string): CortexelError {
   switch (error.keyword) {
     case 'additionalProperties': {
       const property = String((error.params as { additionalProperty?: string }).additionalProperty);
+      const escapedProperty = property.replace(/~/g, '~0').replace(/\//g, '~1');
+      const propertyPath = `${instancePath}/${escapedProperty}`;
       return makeError({
         code: 'SCHEMA_UNKNOWN_PROPERTY',
         stage: 'structural',
-        instancePath: `${instancePath}/${property.replace(/~/g, '~0').replace(/\//g, '~1')}`,
+        instancePath: propertyPath,
         schemaPath,
         skillId,
         message: `"${property}" is not a property this contract defines. Stable schemas are closed, so a mistyped scientific field fails here rather than being silently ignored.`,
         repair: {
           operation: 'remove',
-          path: `${instancePath}/${property}`,
+          path: propertyPath,
           reasonCode: 'SCHEMA_UNKNOWN_PROPERTY',
         },
       });

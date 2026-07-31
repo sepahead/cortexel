@@ -48,6 +48,7 @@ export interface BudgetLimits {
   readonly sidecarBytes: number;
   readonly returnedTableRows: number;
 
+  readonly safeRepairOperations: number;
   readonly errorRecords: number;
 }
 

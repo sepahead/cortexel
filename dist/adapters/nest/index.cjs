@@ -554,6 +554,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 20971520,
     "sidecarBytes": 104857600,
     "returnedTableRows": 500,
+    "safeRepairOperations": 128,
     "errorRecords": 32
   },
   "agent": {
@@ -575,6 +576,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 5242880,
     "sidecarBytes": 20971520,
     "returnedTableRows": 200,
+    "safeRepairOperations": 64,
     "errorRecords": 32
   }
 });

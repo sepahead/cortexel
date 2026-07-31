@@ -183,7 +183,7 @@ cortexel validate request.json
 # tableBinding=shape_only records that no canonical row-byte sidecar exists.
 cortexel render request.json --output figure.svg
 
-# Machine-readable validation and render receipts use the closed JSON format.
+# Machine-readable validation and render results use the closed JSON format.
 cortexel render request.json --dry-run --format json
 ```
 
@@ -210,11 +210,18 @@ and any authored request that the full stable pipeline refuses. The finite-stop 
 uses capture-authority profile v3 under the same revision-5 digest domain. Historical
 adapter-v3 and capture-authority-v1/v2 inputs are refused with migration diagnostics. The
 command's stdout is canonical request JSON, so it can be piped directly to `validate`
-or `render`. It remains a detached plain-data boundary—not a live PyNEST capture or an
-R049 conformance receipt.
-Schema success is not acceptance; run
-`cortexel validate` to execute the identity, semantic, scientific, provenance, budget,
-and derivation gates.
+or `render`. For agents, prefer the single-process
+`cortexel source render nest-spike-recorder capture.json --output figure.svg --format json` path:
+ordinary shell pipelines can mask an upstream adapter failure unless every pipeline
+status is checked explicitly. It remains a detached plain-data boundary—not a live
+PyNEST capture or an R049 conformance receipt.
+Its versioned success metadata binds the canonical adapted request and resulting
+artifact, not the original source-envelope bytes or their custody, and is therefore
+an execution result rather than an authenticated source receipt.
+Schema success is not request acceptance; run `cortexel validate` to execute the
+identity, semantic, scientific, provenance, and request-budget gates. Validation does
+not prove that a figure fits derivation or output budgets; run `cortexel render --dry-run`
+or `cortexel source render ... --dry-run` for that stronger check.
 
 Programmatic agents can load the same immutable resources without invoking a process:
 
@@ -284,6 +291,14 @@ A few examples of what Cortexel refuses to get subtly wrong:
 - A **unit alias** (`milliseconds`) is rejected with a repair pointing at the
   canonical code (`ms`) rather than silently converted — a conversion the caller
   never sees is a number the caller never checked.
+
+Agent hosts that want bounded mechanical correction may call `applySafeRepairs` from
+`cortexel/figure`. It accepts the request itself—not caller-supplied diagnostics—and
+can only add a wholly absent exact contract identity, canonicalize a registered unit
+alias, or remove a caller-authored library-assurance field from a private snapshot.
+It reruns the full request gate and returns either a branded `ValidatedRequest` plus an
+immutable audit, or diagnostics with no candidate. Scientific choices, migrations,
+unknown-field deletion, topology scope, direction, and layout always remain explicit.
 
 ## Contract identity
 

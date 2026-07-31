@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { C as CortexelError } from '../errors-DUbFUu6n.cjs';
+import { C as CortexelError } from '../errors-DOfZeMp8.cjs';
 
 /**
  * Closed Cortexel CLI command authority.

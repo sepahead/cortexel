@@ -1224,6 +1224,7 @@ var STABLE_CATALOG_SCHEMA_RESOURCES = freezeGenerated([
           "CAPABILITY_REMOVED",
           "CONTRACT_DIGEST_MISMATCH",
           "CONTRACT_MISSING",
+          "CONTRACT_SHAPE_INVALID",
           "CONTRACT_SKILL_REVISION_UNSUPPORTED",
           "CONTRACT_UNSUPPORTED_VERSION",
           "DATA_BYTE_LENGTH_MISMATCH",
@@ -2472,7 +2473,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.adjacency_matrix.request.v1.schema.json",
       "title": "network.adjacency_matrix request",
-      "description": "GENERATED from contract/skills/network.adjacency_matrix.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.adjacency_matrix.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -2885,7 +2886,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.connection_graph.request.v1.schema.json",
       "title": "network.connection_graph request",
-      "description": "GENERATED from contract/skills/network.connection_graph.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.connection_graph.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -3385,7 +3386,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.degree_distribution.request.v1.schema.json",
       "title": "network.degree_distribution request",
-      "description": "GENERATED from contract/skills/network.degree_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.degree_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -3740,7 +3741,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_distribution.request.v1.schema.json",
       "title": "network.delay_distribution request",
-      "description": "GENERATED from contract/skills/network.delay_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.delay_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -4294,7 +4295,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_matrix.request.v1.schema.json",
       "title": "network.delay_matrix request",
-      "description": "GENERATED from contract/skills/network.delay_matrix.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.delay_matrix.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -4776,7 +4777,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.spatial_map_2d.request.v1.schema.json",
       "title": "network.spatial_map_2d request",
-      "description": "GENERATED from contract/skills/network.spatial_map_2d.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.spatial_map_2d.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -5602,7 +5603,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.synaptic_weight_trace.request.v1.schema.json",
       "title": "network.synaptic_weight_trace request",
-      "description": "GENERATED from contract/skills/network.synaptic_weight_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.synaptic_weight_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -6754,7 +6755,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_distribution.request.v1.schema.json",
       "title": "network.weight_distribution request",
-      "description": "GENERATED from contract/skills/network.weight_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.weight_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -7525,7 +7526,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_matrix.request.v1.schema.json",
       "title": "network.weight_matrix request",
-      "description": "GENERATED from contract/skills/network.weight_matrix.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.weight_matrix.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -7947,7 +7948,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.analog_trace.request.v1.schema.json",
       "title": "neuro.analog_trace request",
-      "description": "GENERATED from contract/skills/neuro.analog_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.analog_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -8428,7 +8429,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.compartment_trace.request.v1.schema.json",
       "title": "neuro.compartment_trace request",
-      "description": "GENERATED from contract/skills/neuro.compartment_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.compartment_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -9132,7 +9133,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.correlogram.request.v1.schema.json",
       "title": "neuro.correlogram request",
-      "description": "GENERATED from contract/skills/neuro.correlogram.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.correlogram.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -9743,7 +9744,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.isi_distribution.request.v1.schema.json",
       "title": "neuro.isi_distribution request",
-      "description": "GENERATED from contract/skills/neuro.isi_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.isi_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -10148,7 +10149,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.multisignal_trace.request.v1.schema.json",
       "title": "neuro.multisignal_trace request",
-      "description": "GENERATED from contract/skills/neuro.multisignal_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.multisignal_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -10990,7 +10991,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.phase_plane.request.v1.schema.json",
       "title": "neuro.phase_plane request",
-      "description": "GENERATED from contract/skills/neuro.phase_plane.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.phase_plane.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -12240,7 +12241,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.population_rate.request.v1.schema.json",
       "title": "neuro.population_rate request",
-      "description": "GENERATED from contract/skills/neuro.population_rate.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.population_rate.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -12659,7 +12660,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.psth.request.v1.schema.json",
       "title": "neuro.psth request",
-      "description": "GENERATED from contract/skills/neuro.psth.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.psth.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -13349,7 +13350,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.response_curve.request.v1.schema.json",
       "title": "neuro.response_curve request",
-      "description": "GENERATED from contract/skills/neuro.response_curve.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.response_curve.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -15061,7 +15062,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.spike_raster.request.v1.schema.json",
       "title": "neuro.spike_raster request",
-      "description": "GENERATED from contract/skills/neuro.spike_raster.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.spike_raster.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -15940,7 +15941,7 @@ var SKILL_AUTHORING = freezeGenerated({
 });
 
 // src/generated/identity.ts
-var CATALOG_DIGEST = "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e";
+var CATALOG_DIGEST = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5";
 var CATALOG_DIGEST_DOMAIN = "cortexel-public-stable-catalog.v2";
 
 // src/generated/catalog.ts
@@ -26626,7 +26627,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Pure FigureRequestV1 validation and identity surface. Packaged availability is not publication or release certification."
+      "Pure FigureRequestV1 validation, identity, and closed safe-repair surface. Safe repair is TypeScript-only: the explicitly partial Python semantic port exposes no repair API, emits no repair member, and makes no repair-parity claim. Packaged availability is not publication or release certification."
     ]
   },
   "cortexel/authoring": {
@@ -26775,7 +26776,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Source input is bounded duplicate-key-safe JSON. `source render` is the recommended one-process adapter/validation/render/publication path; successful `source adapt | render` composition produces identical request, artifact, and SVG bytes, but ordinary shell pipeline status can mask upstream failure unless the host checks every stage."
     ]
   },
   "cli.validate": {
@@ -27971,9 +27972,11 @@ var SOURCE_ADAPTER_CATALOG_DATA = {
       },
       cli: {
         command: "cortexel source adapt nest-spike-recorder <input|->",
+        renderCommand: "cortexel source render nest-spike-recorder <input|-> --output figure.svg --format json",
         inputMediaType: "application/json",
         outputMediaType: "application/json",
-        pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg"
+        pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg --format json",
+        directRenderExample: "cortexel source render nest-spike-recorder capture.json --output figure.svg --format json"
       },
       inputEnvelope: {
         type: "object",
@@ -27985,7 +27988,7 @@ var SOURCE_ADAPTER_CATALOG_DATA = {
       acceptanceBoundary: {
         adapter: "The adapter checks one exact revision-5 source-faithful clock profile with closed finite-stop and positive-infinity/capture-bounded branches, then authors the corresponding request.",
         request: "The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.",
-        rendering: "Pipe the emitted request to `cortexel render`; adapter success alone is never render authority."
+        rendering: "`cortexel source render` applies the adapter, stable request gate, raw canonical-request boundary, derivation, render, and output-publication path in one process and is the recommended agent path. On success, the composable `source adapt | render` form produces the same canonical request, artifact, and SVG bytes. Ordinary shell pipelines can mask an upstream adapter failure unless the caller explicitly checks every pipeline status. Adapter success alone is never render authority."
       },
       authority: [
         "The source digest binds the detached JSON-compatible status projection, not a live simulator process.",

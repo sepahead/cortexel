@@ -4468,10 +4468,21 @@ def _validate_detached_request_partial(request: Any) -> ErrorList:
         return _finalize_errors(errors)
 
     # Identity.
-    contract = request.get("contract")
-    if not isinstance(contract, dict):
+    if "contract" not in request:
         errors.append(CortexelError("CONTRACT_MISSING", "identity", "/contract",
                                      "the request does not declare its contract"))
+        return _finalize_errors(errors)
+    contract = request["contract"]
+    if type(contract) is not dict:
+        errors.append(CortexelError(
+            "CONTRACT_SHAPE_INVALID",
+            "identity",
+            "/contract",
+            (
+                "the declared contract member is not an object; Cortexel will not "
+                "overwrite it or infer which contract the caller intended"
+            ),
+        ))
         return _finalize_errors(errors)
     if (
         contract.get("name") != _REQUEST_CONTRACT_NAME

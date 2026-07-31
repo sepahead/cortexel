@@ -18,8 +18,8 @@
  *
  * The returned success value is BRANDED. Rendering accepts only that brand, so a
  * plain object that merely looks like a validated request cannot be rendered — the
- * type system and a runtime symbol both refuse it. That is what makes "no renderer
- * may bypass validation" a fact rather than a convention.
+ * nominal type and private runtime WeakSet both refuse it. That is what makes "no
+ * renderer may bypass validation" a fact rather than a convention.
  */
 
 import { canonicalDigest } from './canonicalize.js';
@@ -30,16 +30,16 @@ import {
   type CortexelError,
 } from './errors.js';
 import {
-  DEFAULT_PROFILE,
-  tryGetBudgetLimits,
-  trySelectTighterBudgetProfile,
   type BudgetProfileId,
-  type BudgetLimits,
 } from './limits.js';
-import { parseJsonStrict, type JsonValue } from './parse-json.js';
-import { snapshotValue } from './safe-snapshot.js';
 import { checkCallerAuthority, runSemanticValidators } from './semantics/index.js';
 import { validateStructure } from './structural-validator.js';
+import {
+  captureMaterializedRequestInput,
+  captureRawRequestInput,
+  type InputAssurance,
+} from './requestBoundary.internal.js';
+import type { JsonValue } from './parse-json.js';
 import {
   isStableSkillId,
   lookupSkillCatalogEntry,
@@ -49,16 +49,9 @@ import {
 } from '../generated/catalog.js';
 import { CONTRACT_DIGEST, REQUEST_CONTRACT } from '../generated/identity.js';
 import { REQUEST_CONTRACT_IDENTITY } from './contract-identity.js';
+import type { ValidatedRequestNominalBrand } from '#cortexel-validated-request-brand';
 
-/** How the request entered, and what that boundary could certify. */
-export interface InputAssurance {
-  readonly boundary: 'raw_json_text' | 'materialized_value';
-  readonly duplicateKeys:
-    | 'rejected_before_materialization'
-    | 'not_observable_after_materialization';
-  readonly parserProfile: string;
-  readonly budgetProfile: string;
-}
+export type { InputAssurance } from './requestBoundary.internal.js';
 
 const VALIDATED = Symbol('cortexel.validated');
 const VALIDATED_REQUESTS = new WeakSet<object>();
@@ -66,14 +59,14 @@ const VALIDATED_REQUESTS = new WeakSet<object>();
 /**
  * A request that has actually been through the pipeline.
  *
- * The private symbol prevents accidental TypeScript construction. Runtime authority is
- * stronger: only object identities minted by this module are entered in a private
+ * One package-private nominal type identity prevents accidental TypeScript construction
+ * across both conditional declaration graphs. Runtime authority is stronger: only
+ * object identities minted by this module are entered in a private
  * `WeakSet`. A proxy cannot forge membership with a `get` trap, and a copied object has
  * a different identity. The whole token is deeply frozen before it is minted so the
  * request and its digest cannot diverge after validation.
  */
-export interface ValidatedRequest {
-  readonly [VALIDATED]: true;
+export interface ValidatedRequest extends ValidatedRequestNominalBrand {
   readonly skillId: StableSkillId;
   readonly skillRevision: number;
   readonly canonicalRequest: Record<string, unknown>;
@@ -82,6 +75,10 @@ export interface ValidatedRequest {
   readonly warnings: readonly CortexelError[];
   readonly checkedValidatorIds: readonly string[];
 }
+
+type MintedValidatedRequest =
+  Omit<ValidatedRequest, keyof ValidatedRequestNominalBrand> &
+  { readonly [VALIDATED]: true };
 
 export function isValidatedRequest(value: unknown): value is ValidatedRequest {
   return typeof value === 'object' && value !== null && VALIDATED_REQUESTS.has(value);
@@ -95,78 +92,7 @@ export interface ValidateOptions {
   readonly budgetProfile?: BudgetProfileId;
 }
 
-function resolveBudgetProfile(options: ValidateOptions): {
-  readonly profile: string;
-  readonly limits?: BudgetLimits;
-} {
-  let requested: unknown = DEFAULT_PROFILE;
-  try {
-    if (options !== null && options !== undefined) {
-      if (typeof options !== 'object') throw new Error('invalid options');
-      const descriptor = Object.getOwnPropertyDescriptor(options, 'budgetProfile');
-      if (descriptor !== undefined) {
-        if (!Object.prototype.hasOwnProperty.call(descriptor, 'value')) {
-          throw new Error('accessor-backed options');
-        }
-        requested = descriptor.value ?? DEFAULT_PROFILE;
-      }
-    }
-  } catch {
-    // An accessor or throwing Proxy is not an omission. Preserve it as invalid without
-    // invoking ordinary getters or granting inherited properties resource authority.
-    requested = null;
-  }
-
-  return {
-    profile: typeof requested === 'string' ? requested : '<invalid>',
-    limits: tryGetBudgetLimits(requested),
-  };
-}
-
-function invalidBudgetProfile(assurance: InputAssurance): ValidationOutcome {
-  return fail(
-    [
-      makeError({
-        code: 'RESOURCE_BUDGET_PROFILE_UNKNOWN',
-        stage: 'budget',
-        message:
-          'the selected budget profile is not in this build\'s closed registry. Unknown and inherited profile ids cannot disable resource limits.',
-      }),
-    ],
-    assurance,
-  );
-}
-
-/** Read the request's profile only after it has been reduced to a plain JSON tree. */
-function requestedBudgetProfile(value: JsonValue): unknown {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return DEFAULT_PROFILE;
-  const presentation = (value as Record<string, unknown>).presentation;
-  if (presentation === null || typeof presentation !== 'object' || Array.isArray(presentation)) {
-    return DEFAULT_PROFILE;
-  }
-  return Object.prototype.hasOwnProperty.call(presentation, 'budgetProfile')
-    ? (presentation as Record<string, unknown>).budgetProfile
-    : DEFAULT_PROFILE;
-}
-
-function assuranceFor(
-  boundary: InputAssurance['boundary'],
-  profile: unknown,
-): InputAssurance {
-  return {
-    boundary,
-    duplicateKeys:
-      boundary === 'raw_json_text'
-        ? 'rejected_before_materialization'
-        : 'not_observable_after_materialization',
-    parserProfile:
-      boundary === 'raw_json_text'
-        ? 'cortexel-strict-json/1.0'
-        : 'cortexel-safe-snapshot/1.0',
-    budgetProfile: typeof profile === 'string' ? profile : '<invalid>',
-  };
-}
-
+/** Finalize one fail-closed validation outcome under the captured input assurance. */
 function fail(errors: readonly CortexelError[], assurance: InputAssurance): ValidationOutcome {
   return { ok: false, errors: finalizeErrors([...errors]), inputAssurance: assurance };
 }
@@ -183,7 +109,8 @@ function checkIdentity(request: Record<string, unknown>): CortexelError[] {
   const errors: CortexelError[] = [];
 
   const contract = request.contract;
-  if (typeof contract !== 'object' || contract === null || Array.isArray(contract)) {
+  const contractIsAbsent = !Object.prototype.hasOwnProperty.call(request, 'contract');
+  if (contractIsAbsent) {
     const expectedContract = {
       name: REQUEST_CONTRACT_IDENTITY.name,
       version: REQUEST_CONTRACT_IDENTITY.version,
@@ -193,8 +120,7 @@ function checkIdentity(request: Record<string, unknown>): CortexelError[] {
         code: 'CONTRACT_MISSING',
         stage: 'identity',
         instancePath: '/contract',
-        message:
-          `the request does not declare its contract. Add ${JSON.stringify({ contract: expectedContract })} — an undeclared contract is not a ${REQUEST_CONTRACT_IDENTITY.version} request.`,
+        message: `the request does not declare its contract. Add ${JSON.stringify({ contract: expectedContract })} — an undeclared contract is not a ${REQUEST_CONTRACT_IDENTITY.version} request.`,
         repair: {
           operation: 'add',
           path: '/contract',
@@ -203,6 +129,17 @@ function checkIdentity(request: Record<string, unknown>): CortexelError[] {
         },
       }),
     );
+    return errors;
+  }
+
+  if (typeof contract !== 'object' || contract === null || Array.isArray(contract)) {
+    errors.push(makeError({
+      code: 'CONTRACT_SHAPE_INVALID',
+      stage: 'identity',
+      instancePath: '/contract',
+      message:
+        'the declared contract member is not an object. Cortexel will not overwrite it or infer which contract the caller intended.',
+    }));
     return errors;
   }
 
@@ -414,7 +351,7 @@ function validateSnapshot(
   // STAGE 6 — canonicalize.
   const canonicalRequest = canonicalizeRequest(request, catalog.revision);
 
-  const validated = deepFreeze<ValidatedRequest>({
+  const minted = deepFreeze<MintedValidatedRequest>({
     [VALIDATED]: true,
     skillId,
     skillRevision: catalog.revision,
@@ -431,6 +368,9 @@ function validateSnapshot(
       ...new Set(catalog.semanticValidators.map((validator) => validator.id)),
     ],
   });
+  // The nominal member is type-only. The exact frozen object earns the stronger
+  // runtime capability only when this private module enters it in the WeakSet.
+  const validated = minted as unknown as ValidatedRequest;
   VALIDATED_REQUESTS.add(validated);
 
   return { ok: true, request: validated };
@@ -447,41 +387,9 @@ export function parseAndValidateRequest(
   text: string,
   options: ValidateOptions = {},
 ): ValidationOutcome {
-  const host = resolveBudgetProfile(options);
-  let assurance = assuranceFor('raw_json_text', host.profile);
-
-  if (!host.limits) return invalidBudgetProfile(assurance);
-
-  if (typeof text !== 'string') {
-    return fail(
-      [
-        makeError({
-          code: 'JSON_SYNTAX',
-          stage: 'parse',
-          message: 'the raw request boundary accepts a JSON text string only.',
-        }),
-      ],
-      assurance,
-    );
-  }
-
-  let parsed = parseJsonStrict(text, { limits: host.limits });
-  if (!parsed.ok) return fail(parsed.errors, assurance);
-
-  const requested = requestedBudgetProfile(parsed.value);
-  const effective = trySelectTighterBudgetProfile(host.profile, requested);
-  assurance = assuranceFor('raw_json_text', effective?.profile ?? requested);
-  if (!effective) return invalidBudgetProfile(assurance);
-
-  // A request may narrow its own authority. Re-run the raw boundary under that tighter
-  // envelope so the recorded profile covers bytes, depth, nodes, strings, and arrays —
-  // not merely the later derivation/render stages.
-  if (effective.profile !== host.profile) {
-    parsed = parseJsonStrict(text, { limits: effective.limits });
-    if (!parsed.ok) return fail(parsed.errors, assurance);
-  }
-
-  return validateSnapshot(parsed.value, assurance);
+  const captured = captureRawRequestInput(text, options);
+  if (!captured.ok) return fail(captured.errors, captured.assurance);
+  return validateSnapshot(captured.value, captured.assurance);
 }
 
 /**
@@ -497,23 +405,7 @@ export function validateRequestValue(
   value: unknown,
   options: ValidateOptions = {},
 ): ValidationOutcome {
-  const host = resolveBudgetProfile(options);
-  let assurance = assuranceFor('materialized_value', host.profile);
-
-  if (!host.limits) return invalidBudgetProfile(assurance);
-
-  let snapshot = snapshotValue(value, host.limits);
-  if (!snapshot.ok) return fail(snapshot.errors, assurance);
-
-  const requested = requestedBudgetProfile(snapshot.value);
-  const effective = trySelectTighterBudgetProfile(host.profile, requested);
-  assurance = assuranceFor('materialized_value', effective?.profile ?? requested);
-  if (!effective) return invalidBudgetProfile(assurance);
-
-  if (effective.profile !== host.profile) {
-    snapshot = snapshotValue(value, effective.limits);
-    if (!snapshot.ok) return fail(snapshot.errors, assurance);
-  }
-
-  return validateSnapshot(snapshot.value, assurance);
+  const captured = captureMaterializedRequestInput(value, options);
+  if (!captured.ok) return fail(captured.errors, captured.assurance);
+  return validateSnapshot(captured.value, captured.assurance);
 }

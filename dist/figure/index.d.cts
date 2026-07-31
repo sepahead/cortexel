@@ -1,10 +1,54 @@
-export { A as ARTIFACT_CONTRACT, B as BuildIdentity, C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN, b as CONTRACT_DIGEST, P as PACKAGE_VERSION, R as REQUEST_CONTRACT, S as STABLE_SKILL_COUNT, g as getBuildIdentity } from '../identity-BePV0iiY.cjs';
-import { d as BudgetLimits, J as JsonValue, L as LegacyMapEntry } from '../catalog-BjofKpmG.cjs';
-export { A as AdapterCatalogEntry, B as BudgetProfileId, D as DEFAULT_PROFILE, E as EXPERIMENTAL_CAPABILITY_IDS, e as LEGACY_SKILL_MAP, R as REMOVED_CAPABILITY_IDS, f as ResolvedBudgetProfile, a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, S as StableSkillId, g as getBudgetLimits, i as isStableSkillId, l as lookupSkillCatalogEntry, p as parseJsonStrict, r as restrictLimits, t as tryGetBudgetLimits, h as trySelectTighterBudgetProfile } from '../catalog-BjofKpmG.cjs';
-import { R as Result, C as CortexelError } from '../errors-DUbFUu6n.cjs';
-export { a as CANONICALIZATION_ALGORITHMS, b as CANONICALIZATION_IDS, c as CanonicalizationId, d as DISCLOSURE_RULES, D as DisclosureId, E as ERROR_CODES, e as ERROR_CODE_META, f as ErrorCode, g as ErrorStage, Q as QUANTITY_KINDS, h as QuantityKind, i as RepairOperation, j as Severity, k as UNITS, l as UNIT_CODES, m as UnitCode, n as finalizeErrors, o as isSafeDisplayString, p as makeError, q as pointer, s as safeText } from '../errors-DUbFUu6n.cjs';
-export { InputAssurance, ValidateOptions, ValidatedRequest, ValidationOutcome, isValidatedRequest, parseAndValidateRequest, validateRequestValue } from '../internal/request-capability.cjs';
-export { D as Disclosure, a as DisclosureFacts, d as deriveDisclosures } from '../disclosures-CXzjzyrY.cjs';
+export { A as ARTIFACT_CONTRACT, B as BuildIdentity, C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN, b as CONTRACT_DIGEST, P as PACKAGE_VERSION, R as REQUEST_CONTRACT, S as STABLE_SKILL_COUNT, g as getBuildIdentity } from '../identity-D0azGxGf.cjs';
+import { J as JsonValue, d as BudgetLimits, L as LegacyMapEntry } from '../catalog-B3dXHggm.cjs';
+export { A as AdapterCatalogEntry, B as BudgetProfileId, D as DEFAULT_PROFILE, E as EXPERIMENTAL_CAPABILITY_IDS, e as LEGACY_SKILL_MAP, R as REMOVED_CAPABILITY_IDS, f as ResolvedBudgetProfile, a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, S as StableSkillId, g as getBudgetLimits, i as isStableSkillId, l as lookupSkillCatalogEntry, p as parseJsonStrict, r as restrictLimits, t as tryGetBudgetLimits, h as trySelectTighterBudgetProfile } from '../catalog-B3dXHggm.cjs';
+import { C as CortexelError, R as Result } from '../errors-DOfZeMp8.cjs';
+export { a as CANONICALIZATION_ALGORITHMS, b as CANONICALIZATION_IDS, c as CanonicalizationId, d as DISCLOSURE_RULES, D as DisclosureId, E as ERROR_CODES, e as ERROR_CODE_META, f as ErrorCode, g as ErrorStage, Q as QUANTITY_KINDS, h as QuantityKind, i as RepairOperation, j as Severity, k as UNITS, l as UNIT_CODES, m as UnitCode, n as finalizeErrors, o as isSafeDisplayString, p as makeError, q as pointer, s as safeText } from '../errors-DOfZeMp8.cjs';
+import { ValidatedRequest, InputAssurance, ValidateOptions } from '../internal/request-capability.cjs';
+export { ValidationOutcome, isValidatedRequest, parseAndValidateRequest, validateRequestValue } from '../internal/request-capability.cjs';
+export { D as Disclosure, a as DisclosureFacts, d as deriveDisclosures } from '../disclosures-tyvTPm84.cjs';
+import '#cortexel-validated-request-brand';
+
+/**
+ * Closed machine-applicable repairs for FigureRequestV1.
+ *
+ * This is deliberately much smaller than the diagnostic repair vocabulary. A repair
+ * hint may recommend a scientific or presentational choice; that does not make the
+ * choice safe to automate. This module admits only operations whose intended value can
+ * be re-derived from installed contract authority and then revalidates from stage one.
+ */
+
+/** One correction Cortexel applied to its private candidate snapshot. */
+interface AppliedSafeRepair {
+    readonly operation: 'replace' | 'remove' | 'add';
+    readonly path: string;
+    readonly value?: JsonValue;
+    readonly reasonCode: 'CONTRACT_MISSING' | 'SCIENCE_UNIT_ALIAS_NOT_CANONICAL' | 'PROVENANCE_CALLER_ASSURANCE_FORBIDDEN';
+}
+/**
+ * No unvalidated candidate is returned. The original input is never mutated; only a
+ * successful ordinary branded request can cross the render boundary.
+ */
+type SafeRepairOutcome = {
+    readonly ok: true;
+    readonly request: ValidatedRequest;
+    readonly sourceInputAssurance: InputAssurance;
+    readonly appliedRepairs: readonly AppliedSafeRepair[];
+} | {
+    readonly ok: false;
+    readonly errors: readonly CortexelError[];
+    readonly inputAssurance: InputAssurance;
+    readonly sourceInputAssurance: InputAssurance;
+    readonly appliedRepairs: readonly AppliedSafeRepair[];
+};
+/**
+ * Apply only the closed semantics-preserving subset and revalidate from stage one.
+ *
+ * Strings are raw JSON. All other inputs use the materialized-value boundary. One owned
+ * snapshot is acquired before diagnostics are derived, so caller mutation cannot swap a
+ * different tree under the repair planner. Raw candidates are canonically serialized
+ * and reparsed after each batch, retaining duplicate-key-aware final assurance.
+ */
+declare function applySafeRepairs(input: unknown, options?: ValidateOptions): SafeRepairOutcome;
 
 /** The number of UTF-8 bytes in a string, without allocating a second full-size buffer. */
 declare function utf8ByteLength(text: string): number;
@@ -226,4 +270,4 @@ interface MigrationResult {
  */
 declare function migrateLegacyRequest(input: unknown): MigrationResult;
 
-export { BudgetLimits, CanonicalizationError, CortexelError, JsonValue, LegacyMapEntry, type MigrationReport, type MigrationResult, type Quantity, type QuantitySeries, RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID, Result, axesAreCompatible, canonicalDigest, canonicalDigestExcluding, canonicalize, compareUtf16CodeUnits, convert, dimensionOf, isKnownUnit, migrateLegacyRequest, normalizeResponseEventMemberIds, resolveAlias, responseEventMembershipDigest, sha256Digest, sha256Hex, snapshotValue, toSeconds, unitLabel, utf8ByteLength };
+export { type AppliedSafeRepair, BudgetLimits, CanonicalizationError, CortexelError, InputAssurance, JsonValue, LegacyMapEntry, type MigrationReport, type MigrationResult, type Quantity, type QuantitySeries, RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID, Result, type SafeRepairOutcome, ValidateOptions, ValidatedRequest, applySafeRepairs, axesAreCompatible, canonicalDigest, canonicalDigestExcluding, canonicalize, compareUtf16CodeUnits, convert, dimensionOf, isKnownUnit, migrateLegacyRequest, normalizeResponseEventMemberIds, resolveAlias, responseEventMembershipDigest, sha256Digest, sha256Hex, snapshotValue, toSeconds, unitLabel, utf8ByteLength };

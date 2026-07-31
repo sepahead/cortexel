@@ -711,6 +711,7 @@ var ERROR_CODES = freezeGenerated([
   "CAPABILITY_REMOVED",
   "CONTRACT_DIGEST_MISMATCH",
   "CONTRACT_MISSING",
+  "CONTRACT_SHAPE_INVALID",
   "CONTRACT_SKILL_REVISION_UNSUPPORTED",
   "CONTRACT_UNSUPPORTED_VERSION",
   "DATA_BYTE_LENGTH_MISMATCH",
@@ -1644,6 +1645,12 @@ var ERROR_CODE_META = freezeGenerated({
     "severity": "error",
     "summary": "Cortexel detected an internal invariant violation and refused to emit a result.",
     "correctiveAction": "This is a Cortexel defect. Please report it with the reproducer. Cortexel fails rather than emit an artifact it cannot vouch for."
+  },
+  "CONTRACT_SHAPE_INVALID": {
+    "stage": "identity",
+    "severity": "error",
+    "summary": "The declared request contract member is present but is not an identity object.",
+    "correctiveAction": "Inspect the input and explicitly replace the member with the intended contract identity. Cortexel will not overwrite a present caller value or infer which contract it was meant to name."
   }
 });
 var UNIT_CODES = freezeGenerated([
@@ -17214,7 +17221,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Pure FigureRequestV1 validation and identity surface. Packaged availability is not publication or release certification."
+      "Pure FigureRequestV1 validation, identity, and closed safe-repair surface. Safe repair is TypeScript-only: the explicitly partial Python semantic port exposes no repair API, emits no repair member, and makes no repair-parity claim. Packaged availability is not publication or release certification."
     ]
   },
   "cortexel/authoring": {
@@ -17363,7 +17370,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Source input is bounded duplicate-key-safe JSON. `source render` is the recommended one-process adapter/validation/render/publication path; successful `source adapt | render` composition produces identical request, artifact, and SVG bytes, but ordinary shell pipeline status can mask upstream failure unless the host checks every stage."
     ]
   },
   "cli.validate": {
@@ -19597,6 +19604,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 20971520,
     "sidecarBytes": 104857600,
     "returnedTableRows": 500,
+    "safeRepairOperations": 128,
     "errorRecords": 32
   },
   "agent": {
@@ -19618,6 +19626,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 5242880,
     "sidecarBytes": 20971520,
     "returnedTableRows": 200,
+    "safeRepairOperations": 64,
     "errorRecords": 32
   }
 });
@@ -23176,8 +23185,8 @@ function formatCoordinate(value) {
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004";
-var CATALOG_DIGEST = "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e";
+var CONTRACT_DIGEST = "sha256:09b41ffd58f3ba63306b1ce347943383b8b4501fe468cc5777b7431b5d6b2792";
+var CATALOG_DIGEST = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
   return Object.freeze({

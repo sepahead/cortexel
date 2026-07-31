@@ -566,6 +566,23 @@ describe('two-phase package smoke contract', () => {
     }, 'win32')).toThrow(/authorities disagree/u);
   });
 
+  it('keeps finalized installed-CLI probes free of publication authority', () => {
+    const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    const runnerStart = source.indexOf('const runInstalledCli = (args: string[]) => {');
+    const runnerEnd = source.indexOf("phaseWriteFile(\n    join(consumer, 'import-cli.mjs')", runnerStart);
+    expect(runnerStart).toBeGreaterThan(-1);
+    expect(runnerEnd).toBeGreaterThan(runnerStart);
+    const runner = source.slice(runnerStart, runnerEnd);
+    expect(runner).toContain("args.includes('--output') || args.includes('--force')");
+    expect(runner.indexOf("args.includes('--output')"))
+      .toBeLessThan(runner.indexOf('return runResult('));
+    expect(
+      source.match(/runResult\(nodeExecutable, \[installedCliEsm, \.\.\.args\]/gu) ?? [],
+    ).toHaveLength(1);
+    expect(source).not.toContain('adapted-source-pipeline.svg');
+    expect(source).not.toContain('direct-source-render.svg');
+  });
+
   it('bounds and terminal-escapes reviewed-command failure diagnostics', () => {
     const stdoutOnly = formatReviewedNodeCommandFailure('/reviewed/bin/node', {
       status: 2,

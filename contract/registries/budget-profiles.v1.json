@@ -31,6 +31,7 @@
         "sidecarBytes": { "value": 104857600, "unit": "bytes", "rationale": "Reserved 100 MiB ceiling for a future library-owned sidecar; no current skill emits one.", "errorCode": "RESOURCE_SIDECAR_BYTES_EXCEEDED" },
         "returnedTableRows": { "value": 500, "unit": "rows", "rationale": "Current stable skills return every exact-value row and refuse when the complete table would exceed this bound. Artifact 1.0 has no excerpt or sidecar state.", "errorCode": "RESOURCE_COMPACTION_UNAVAILABLE" },
 
+        "safeRepairOperations": { "value": 128, "unit": "operations", "rationale": "Closed auto-repairs are iterative and must not turn a hostile request into unbounded validation work.", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
         "errorRecords": { "value": 32, "unit": "records", "rationale": "Diagnostics are themselves an untrusted-input amplification surface.", "errorCode": "ERROR_LIMIT_REACHED" }
       }
     },
@@ -59,6 +60,7 @@
         "sidecarBytes": { "value": 20971520, "unit": "bytes", "rationale": "Reserved future ceiling; no current skill emits a sidecar.", "errorCode": "RESOURCE_SIDECAR_BYTES_EXCEEDED" },
         "returnedTableRows": { "value": 200, "unit": "rows", "rationale": "Current stable skills require a complete returned table and refuse above this tighter bound.", "errorCode": "RESOURCE_COMPACTION_UNAVAILABLE" },
 
+        "safeRepairOperations": { "value": 64, "unit": "operations", "rationale": "Tighter iterative-work ceiling for autonomous callers.", "errorCode": "RESOURCE_BUDGET_EXCEEDED" },
         "errorRecords": { "value": 32, "unit": "records", "rationale": "", "errorCode": "ERROR_LIMIT_REACHED" }
       }
     }

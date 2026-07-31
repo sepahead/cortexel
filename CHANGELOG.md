@@ -6,6 +6,49 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — closed agent repair and direct source rendering
+
+- `cortexel/figure` now exports `applySafeRepairs`, a bounded request-in/request-out
+  boundary for autonomous hosts. It acquires one detached input snapshot and derives
+  authority from the installed contract, never from caller-supplied diagnostics. The
+  closed automatic subset can add a wholly absent exact contract identity, replace a
+  registered unit alias with its registry-owned canonical code, and remove
+  caller-authored library-assurance fields. It never overwrites a present contract,
+  deletes an unknown scientific field, migrates a skill, or chooses topology scope,
+  direction, or layout.
+- Every repair round re-enters the ordinary raw-text or materialized-value request
+  boundary under the effective monotone budget profile. Successful output is the same
+  branded, deeply frozen `ValidatedRequest` accepted by the renderer; failure returns
+  diagnostics and an immutable audit but no candidate and no render authority. The
+  caller input is never mutated. Agent and standard profiles independently cap total
+  repair operations, and stateful Proxy/options, duplicate-key, idempotence,
+  mixed-safe/unsafe, contract non-overwrite, RFC 6901, and complete unit-alias controls
+  fail closed. A governing budget or internal stop retains reserved diagnostic capacity
+  even when a nested validation batch already exhausted the 32-record cap; inherited
+  omitted counts remain exact.
+- `cortexel source render <adapter-id> <input|->` now performs source adaptation,
+  complete request validation, canonical raw-boundary re-entry, derivation, rendering,
+  and existing safe two-file publication in one process. Its versioned JSON result
+  binds adapter revision, source-catalog digest and digest domain, request digest, and
+  artifact digest while stating `sourceAuthentication: not_performed`. This metadata
+  binds the canonical adapted request, not the original source-envelope bytes or
+  custody, and is not an authenticated source receipt.
+- For successful inputs, direct source rendering and explicit `source adapt` then
+  `render` composition produce byte-identical canonical requests, artifacts, and SVGs.
+  Direct rendering is recommended for agents because ordinary shell pipeline status
+  can mask an upstream adapter failure unless every stage is checked explicitly.
+  Parse, adapter, render-budget, and prepublication occupancy/lock/symlink refusals
+  retain their existing exit classes and publish no output. Publication remains an
+  intentionally ordered two-file boundary: the SVG is installed before its completion
+  artifact, so a mid-publication failure may leave an SVG without the artifact; that
+  state is incomplete and never reported as success.
+- Request validation and figure acceptance are now described separately. `validate`
+  proves identity, structure, semantics, scientific/provenance rules, and request
+  budgets; `render --dry-run` or `source render --dry-run` is required to prove
+  derivation and output-budget acceptance. The Python port distinguishes an absent
+  contract from a present malformed member but remains explicitly partial and exposes
+  no safe-repair API or repair-parity claim.
+
 ### Changed — source-faithful NEST spike-recorder clock profile
 
 - `neuro.spike_raster` is now revision 6, `figure.spike_raster` is revision 7, and

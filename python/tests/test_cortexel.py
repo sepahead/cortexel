@@ -870,6 +870,28 @@ class TestValidation(unittest.TestCase):
         with open(path, encoding="utf-8") as handle:
             return json.load(handle)
 
+    def test_contract_absence_is_distinct_from_a_present_malformed_value(self):
+        living = self._spike_contract()["examples"]["valid"][0]
+
+        absent = json.loads(json.dumps(living))
+        del absent["contract"]
+        absent_errors = cortexel.validate_request_partial(absent)
+        self.assertEqual(
+            [(error.code, error.instance_path) for error in absent_errors],
+            [("CONTRACT_MISSING", "/contract")],
+        )
+
+        for malformed in (None, "cortexel-figure-request/1.0", []):
+            with self.subTest(malformed=malformed):
+                present = json.loads(json.dumps(living))
+                present["contract"] = malformed
+                errors = cortexel.validate_request_partial(present)
+                self.assertEqual(
+                    [(error.code, error.instance_path) for error in errors],
+                    [("CONTRACT_SHAPE_INVALID", "/contract")],
+                )
+                self.assertFalse(hasattr(errors[0], "repair"))
+
     def _psth_contract(self):
         path = os.path.join(CONTRACT_SKILLS, "neuro.psth.v1.json")
         with open(path, encoding="utf-8") as handle:

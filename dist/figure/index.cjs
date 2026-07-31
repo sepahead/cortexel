@@ -43,6 +43,7 @@ __export(figure_exports, {
   STABLE_SKILL_IDS: () => STABLE_SKILL_IDS,
   UNITS: () => UNITS,
   UNIT_CODES: () => UNIT_CODES,
+  applySafeRepairs: () => applySafeRepairs,
   axesAreCompatible: () => axesAreCompatible,
   canonicalDigest: () => canonicalDigest,
   canonicalDigestExcluding: () => canonicalDigestExcluding,
@@ -57,12 +58,12 @@ __export(figure_exports, {
   isKnownUnit: () => isKnownUnit,
   isSafeDisplayString: () => isSafeDisplayString,
   isStableSkillId: () => isStableSkillId,
-  isValidatedRequest: () => import_request.isValidatedRequest,
+  isValidatedRequest: () => import_request2.isValidatedRequest,
   lookupSkillCatalogEntry: () => lookupSkillCatalogEntry,
   makeError: () => makeError,
   migrateLegacyRequest: () => migrateLegacyRequest,
   normalizeResponseEventMemberIds: () => normalizeResponseEventMemberIds,
-  parseAndValidateRequest: () => import_request.parseAndValidateRequest,
+  parseAndValidateRequest: () => import_request2.parseAndValidateRequest,
   parseJsonStrict: () => parseJsonStrict,
   pointer: () => pointer,
   resolveAlias: () => resolveAlias,
@@ -77,7 +78,7 @@ __export(figure_exports, {
   trySelectTighterBudgetProfile: () => trySelectTighterBudgetProfile,
   unitLabel: () => unitLabel,
   utf8ByteLength: () => utf8ByteLength,
-  validateRequestValue: () => import_request.validateRequestValue
+  validateRequestValue: () => import_request2.validateRequestValue
 });
 module.exports = __toCommonJS(figure_exports);
 
@@ -85,8 +86,8 @@ module.exports = __toCommonJS(figure_exports);
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004";
-var CATALOG_DIGEST = "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e";
+var CONTRACT_DIGEST = "sha256:09b41ffd58f3ba63306b1ce347943383b8b4501fe468cc5777b7431b5d6b2792";
+var CATALOG_DIGEST = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5";
 var CATALOG_DIGEST_DOMAIN = "cortexel-public-stable-catalog.v2";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
@@ -103,6 +104,16 @@ function getBuildIdentity() {
 }
 
 // src/core/deep-freeze.ts
+function deepFreeze(value, seen = /* @__PURE__ */ new WeakSet()) {
+  if (value === null || typeof value !== "object") return value;
+  const object = value;
+  if (seen.has(object)) return value;
+  seen.add(object);
+  for (const child of Object.values(value)) {
+    deepFreeze(child, seen);
+  }
+  return Object.freeze(value);
+}
 function freezeGenerated(value) {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
@@ -10798,7 +10809,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Pure FigureRequestV1 validation and identity surface. Packaged availability is not publication or release certification."
+      "Pure FigureRequestV1 validation, identity, and closed safe-repair surface. Safe repair is TypeScript-only: the explicitly partial Python semantic port exposes no repair API, emits no repair member, and makes no repair-parity claim. Packaged availability is not publication or release certification."
     ]
   },
   "cortexel/authoring": {
@@ -10947,7 +10958,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Source input is bounded duplicate-key-safe JSON. `source render` is the recommended one-process adapter/validation/render/publication path; successful `source adapt | render` composition produces identical request, artifact, and SVG bytes, but ordinary shell pipeline status can mask upstream failure unless the host checks every stage."
     ]
   },
   "cli.validate": {
@@ -11648,6 +11659,7 @@ var ERROR_CODES = freezeGenerated([
   "CAPABILITY_REMOVED",
   "CONTRACT_DIGEST_MISMATCH",
   "CONTRACT_MISSING",
+  "CONTRACT_SHAPE_INVALID",
   "CONTRACT_SKILL_REVISION_UNSUPPORTED",
   "CONTRACT_UNSUPPORTED_VERSION",
   "DATA_BYTE_LENGTH_MISMATCH",
@@ -12581,6 +12593,12 @@ var ERROR_CODE_META = freezeGenerated({
     "severity": "error",
     "summary": "Cortexel detected an internal invariant violation and refused to emit a result.",
     "correctiveAction": "This is a Cortexel defect. Please report it with the reproducer. Cortexel fails rather than emit an artifact it cannot vouch for."
+  },
+  "CONTRACT_SHAPE_INVALID": {
+    "stage": "identity",
+    "severity": "error",
+    "summary": "The declared request contract member is present but is not an identity object.",
+    "correctiveAction": "Inspect the input and explicitly replace the member with the intended contract identity. Cortexel will not overwrite a present caller value or infer which contract it was meant to name."
   }
 });
 var UNIT_CODES = freezeGenerated([
@@ -14250,154 +14268,7 @@ var CANONICALIZATION_IDS = freezeGenerated([
 ]);
 
 // src/core/index.ts
-var import_request = require("#cortexel-request-capability");
-
-// src/core/errors.ts
-var STAGE_ORDER = Object.freeze([
-  "parse",
-  "snapshot",
-  "identity",
-  "structural",
-  "semantic",
-  "science",
-  "scope",
-  "provenance",
-  "budget",
-  "derivation",
-  "render",
-  "serialize",
-  "migrate",
-  "adapter",
-  "internal"
-]);
-var MAX_ERROR_RECORDS = 32;
-var MAX_MESSAGE_LENGTH = 500;
-var MAX_PATH_LENGTH = 240;
-var MAX_SUMMARY_LENGTH = 120;
-var UNSAFE_DISPLAY_CLASS = "[\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff\\ufffe-\\uffff]";
-function isSafeDisplayString(value) {
-  return typeof value === "string" && !new RegExp(UNSAFE_DISPLAY_CLASS, "u").test(value);
-}
-function safeText(value, max) {
-  if (typeof value !== "string" || !Number.isSafeInteger(max) || max <= 0) return "";
-  let out = "";
-  for (let index = 0; index < value.length; ) {
-    const codePoint = value.codePointAt(index);
-    const character = String.fromCodePoint(codePoint);
-    const next = index + character.length;
-    const loneSurrogate = codePoint >= 55296 && codePoint <= 57343;
-    const token = !loneSurrogate && isSafeDisplayString(character) ? character : `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
-    const capacity = next < value.length ? max - 1 : max;
-    if (out.length + token.length > capacity) return `${out}\u2026`;
-    out += token;
-    index = next;
-  }
-  return out;
-}
-function summarizeValue(value) {
-  switch (typeof value) {
-    case "string":
-      return safeText(`string(length=${value.length})`, MAX_SUMMARY_LENGTH);
-    case "number":
-      return Object.is(value, -0) ? "number(-0)" : `number(${value})`;
-    case "boolean":
-      return `boolean(${value ? "true" : "false"})`;
-    case "bigint":
-      return "bigint";
-    case "undefined":
-      return "undefined";
-    case "symbol":
-      return "<symbol>";
-    case "function":
-      return "<function>";
-    case "object": {
-      if (value === null) return "null";
-      try {
-        if (Array.isArray(value)) return "<array>";
-      } catch {
-        return "<uninspectable-object>";
-      }
-      return "<object>";
-    }
-    default:
-      return "<unknown>";
-  }
-}
-function escapePointerToken(token) {
-  return token.replace(/~/g, "~0").replace(/\//g, "~1");
-}
-function pointer(...segments) {
-  if (segments.length === 0) return "";
-  return segments.map((segment) => `/${escapePointerToken(String(segment))}`).join("");
-}
-function makeError(init) {
-  const error = {
-    code: init.code,
-    severity: init.severity ?? "error",
-    stage: init.stage,
-    instancePath: safeText(init.instancePath ?? "", MAX_PATH_LENGTH),
-    message: safeText(init.message, MAX_MESSAGE_LENGTH)
-  };
-  if (init.schemaPath !== void 0) error.schemaPath = safeText(init.schemaPath, MAX_PATH_LENGTH);
-  if (init.skillId !== void 0) error.skillId = safeText(init.skillId, 64);
-  if (init.validatorId !== void 0) error.validatorId = safeText(init.validatorId, 64);
-  if (init.limit !== void 0) error.limit = init.limit;
-  if ("actual" in init) error.actualSummary = summarizeValue(init.actual);
-  if (init.repair !== void 0) {
-    error.repair = {
-      operation: init.repair.operation,
-      path: safeText(init.repair.path, MAX_PATH_LENGTH),
-      ..."value" in init.repair ? { value: init.repair.value } : {},
-      reasonCode: init.repair.reasonCode
-    };
-  }
-  return error;
-}
-function compareUnicodeCodePoints(left, right) {
-  let leftIndex = 0;
-  let rightIndex = 0;
-  while (leftIndex < left.length && rightIndex < right.length) {
-    const leftPoint = left.codePointAt(leftIndex);
-    const rightPoint = right.codePointAt(rightIndex);
-    if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1;
-    leftIndex += leftPoint > 65535 ? 2 : 1;
-    rightIndex += rightPoint > 65535 ? 2 : 1;
-  }
-  if (leftIndex === left.length && rightIndex === right.length) return 0;
-  return leftIndex === left.length ? -1 : 1;
-}
-function compareErrors(a, b) {
-  const stageDelta = STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage);
-  if (stageDelta !== 0) return stageDelta;
-  const pathDelta = compareUnicodeCodePoints(a.instancePath, b.instancePath);
-  if (pathDelta !== 0) return pathDelta;
-  const codeDelta = compareUnicodeCodePoints(a.code, b.code);
-  if (codeDelta !== 0) return codeDelta;
-  const av = a.validatorId ?? "";
-  const bv = b.validatorId ?? "";
-  return compareUnicodeCodePoints(av, bv);
-}
-function finalizeErrors(errors) {
-  const sorted = [...errors].sort(compareErrors);
-  if (sorted.length <= MAX_ERROR_RECORDS) return sorted;
-  const kept = sorted.slice(0, MAX_ERROR_RECORDS - 1);
-  const omitted = sorted.length - kept.length;
-  const limitRecord = makeError({
-    code: "ERROR_LIMIT_REACHED",
-    severity: "warning",
-    stage: "internal",
-    message: `${omitted} further diagnostics were suppressed by the diagnostic budget. Fix the reported errors and revalidate.`
-  });
-  limitRecord.omittedCount = omitted;
-  kept.push(limitRecord);
-  return kept;
-}
-function ok(value, warnings = []) {
-  return { ok: true, value, warnings };
-}
-function err(errors) {
-  return { ok: false, errors: finalizeErrors(errors) };
-}
+var import_request2 = require("#cortexel-request-capability");
 
 // src/core/sha256.ts
 var K = new Uint32Array([
@@ -14760,245 +14631,379 @@ function canonicalDigestExcluding(value, excludeKey) {
   return canonicalDigest(copy);
 }
 
-// src/core/exact-binary64.ts
-var FRACTION_BITS = 52n;
-var FRACTION_MASK = (1n << FRACTION_BITS) - 1n;
-var HIDDEN_BIT = 1n << FRACTION_BITS;
-var SIGN_BIT = 1n << 63n;
-var scratch = new DataView(new ArrayBuffer(8));
-function finiteValueInMinSubnormalUnits(value) {
-  if (!Number.isFinite(value)) throw new Error("exact binary64 accumulation requires finite values");
-  scratch.setFloat64(0, value, false);
-  const bits = scratch.getBigUint64(0, false);
-  const negative = (bits & SIGN_BIT) !== 0n;
-  const exponentBits = Number(bits >> FRACTION_BITS & 0x7ffn);
-  const fraction = bits & FRACTION_MASK;
-  if (exponentBits === 0 && fraction === 0n) return 0n;
-  const mantissa = exponentBits === 0 ? fraction : HIDDEN_BIT + fraction;
-  const shift = exponentBits === 0 ? 0n : BigInt(exponentBits - 1);
-  const units = mantissa << shift;
-  return negative ? -units : units;
+// src/core/errors.ts
+var STAGE_ORDER = Object.freeze([
+  "parse",
+  "snapshot",
+  "identity",
+  "structural",
+  "semantic",
+  "science",
+  "scope",
+  "provenance",
+  "budget",
+  "derivation",
+  "render",
+  "serialize",
+  "migrate",
+  "adapter",
+  "internal"
+]);
+var MAX_ERROR_RECORDS = 32;
+var MAX_MESSAGE_LENGTH = 500;
+var MAX_PATH_LENGTH = 240;
+var MAX_SUMMARY_LENGTH = 120;
+var UNSAFE_DISPLAY_CLASS = "[\\u0000-\\u001f\\u061c\\u007f-\\u009f\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u2069\\ufeff\\ufffe-\\uffff]";
+function isSafeDisplayString(value) {
+  return typeof value === "string" && !new RegExp(UNSAFE_DISPLAY_CLASS, "u").test(value);
 }
-function finiteBinary64ToMinSubnormalUnits(value) {
-  return finiteValueInMinSubnormalUnits(value);
-}
-function bitLength(value) {
-  return value === 0n ? 0 : value.toString(2).length;
-}
-function roundedQuotientEven(numerator, denominator) {
-  const quotient = numerator / denominator;
-  const remainder = numerator % denominator;
-  const doubled = remainder << 1n;
-  if (doubled > denominator || doubled === denominator && (quotient & 1n) === 1n) {
-    return quotient + 1n;
+function safeText(value, max) {
+  if (typeof value !== "string" || !Number.isSafeInteger(max) || max <= 0) return "";
+  let out = "";
+  for (let index = 0; index < value.length; ) {
+    const codePoint = value.codePointAt(index);
+    const character = String.fromCodePoint(codePoint);
+    const next = index + character.length;
+    const loneSurrogate = codePoint >= 55296 && codePoint <= 57343;
+    const token = !loneSurrogate && isSafeDisplayString(character) ? character : `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+    const capacity = next < value.length ? max - 1 : max;
+    if (out.length + token.length > capacity) return `${out}\u2026`;
+    out += token;
+    index = next;
   }
-  return quotient;
+  return out;
 }
-function binary64FromBits(bits) {
-  scratch.setBigUint64(0, bits, false);
-  return scratch.getFloat64(0, false);
+function summarizeValue(value) {
+  switch (typeof value) {
+    case "string":
+      return safeText(`string(length=${value.length})`, MAX_SUMMARY_LENGTH);
+    case "number":
+      return Object.is(value, -0) ? "number(-0)" : `number(${value})`;
+    case "boolean":
+      return `boolean(${value ? "true" : "false"})`;
+    case "bigint":
+      return "bigint";
+    case "undefined":
+      return "undefined";
+    case "symbol":
+      return "<symbol>";
+    case "function":
+      return "<function>";
+    case "object": {
+      if (value === null) return "null";
+      try {
+        if (Array.isArray(value)) return "<array>";
+      } catch {
+        return "<uninspectable-object>";
+      }
+      return "<object>";
+    }
+    default:
+      return "<unknown>";
+  }
 }
-function floorBinaryLogarithmOfRational(numerator, denominator) {
-  let exponent = bitLength(numerator) - bitLength(denominator);
-  const numeratorAtExponent = exponent >= 0 ? denominator << BigInt(exponent) : denominator;
-  const denominatorAtExponent = exponent >= 0 ? numerator : numerator << BigInt(-exponent);
-  if (denominatorAtExponent < numeratorAtExponent) exponent--;
-  return exponent;
+function escapePointerToken(token) {
+  return token.replace(/~/g, "~0").replace(/\//g, "~1");
 }
-function roundedScaledQuotient(numerator, denominator, binaryShift) {
-  return binaryShift >= 0 ? roundedQuotientEven(numerator << BigInt(binaryShift), denominator) : roundedQuotientEven(numerator, denominator << BigInt(-binaryShift));
+function pointer(...segments) {
+  if (segments.length === 0) return "";
+  return segments.map((segment) => `/${escapePointerToken(String(segment))}`).join("");
 }
-function roundRationalWithBinaryExponent(signedNumerator, denominator, binaryExponent) {
-  if (denominator <= 0n) throw new Error("exact binary64 denominator must be positive");
-  if (signedNumerator === 0n) return { value: 0, exactNonZero: false };
-  const negative = signedNumerator < 0n;
-  const numerator = negative ? -signedNumerator : signedNumerator;
-  let exponentBits;
-  let fraction;
-  let valueExponent = floorBinaryLogarithmOfRational(numerator, denominator) + binaryExponent;
-  if (valueExponent < -1022) {
-    const subnormal = roundedScaledQuotient(
-      numerator,
-      denominator,
-      binaryExponent + 1074
-    );
-    if (subnormal === 0n) return { value: negative ? -0 : 0, exactNonZero: true };
-    if (subnormal >= HIDDEN_BIT) {
-      exponentBits = 1;
-      fraction = 0n;
+function makeError(init) {
+  const error = {
+    code: init.code,
+    severity: init.severity ?? "error",
+    stage: init.stage,
+    instancePath: safeText(init.instancePath ?? "", MAX_PATH_LENGTH),
+    message: safeText(init.message, MAX_MESSAGE_LENGTH)
+  };
+  if (init.schemaPath !== void 0) error.schemaPath = safeText(init.schemaPath, MAX_PATH_LENGTH);
+  if (init.skillId !== void 0) error.skillId = safeText(init.skillId, 64);
+  if (init.validatorId !== void 0) error.validatorId = safeText(init.validatorId, 64);
+  if (init.limit !== void 0) error.limit = init.limit;
+  if ("actual" in init) error.actualSummary = summarizeValue(init.actual);
+  if (init.repair !== void 0) {
+    error.repair = {
+      operation: init.repair.operation,
+      path: safeText(init.repair.path, MAX_PATH_LENGTH),
+      ..."value" in init.repair ? { value: init.repair.value } : {},
+      reasonCode: init.repair.reasonCode
+    };
+  }
+  return error;
+}
+function compareUnicodeCodePoints(left, right) {
+  let leftIndex = 0;
+  let rightIndex = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftPoint = left.codePointAt(leftIndex);
+    const rightPoint = right.codePointAt(rightIndex);
+    if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1;
+    leftIndex += leftPoint > 65535 ? 2 : 1;
+    rightIndex += rightPoint > 65535 ? 2 : 1;
+  }
+  if (leftIndex === left.length && rightIndex === right.length) return 0;
+  return leftIndex === left.length ? -1 : 1;
+}
+function compareErrors(a, b) {
+  const stageDelta = STAGE_ORDER.indexOf(a.stage) - STAGE_ORDER.indexOf(b.stage);
+  if (stageDelta !== 0) return stageDelta;
+  const pathDelta = compareUnicodeCodePoints(a.instancePath, b.instancePath);
+  if (pathDelta !== 0) return pathDelta;
+  const codeDelta = compareUnicodeCodePoints(a.code, b.code);
+  if (codeDelta !== 0) return codeDelta;
+  const av = a.validatorId ?? "";
+  const bv = b.validatorId ?? "";
+  return compareUnicodeCodePoints(av, bv);
+}
+function finalizeErrors(errors) {
+  const sorted = [...errors].sort(compareErrors);
+  if (sorted.length <= MAX_ERROR_RECORDS) return sorted;
+  const kept = sorted.slice(0, MAX_ERROR_RECORDS - 1);
+  const omitted = sorted.length - kept.length;
+  const limitRecord = makeError({
+    code: "ERROR_LIMIT_REACHED",
+    severity: "warning",
+    stage: "internal",
+    message: `${omitted} further diagnostics were suppressed by the diagnostic budget. Fix the reported errors and revalidate.`
+  });
+  limitRecord.omittedCount = omitted;
+  kept.push(limitRecord);
+  return kept;
+}
+function finalizeErrorsWithPriority(errors, priority) {
+  if (priority.length === 0) return finalizeErrors(errors);
+  let inheritedOmitted = 0;
+  const ordinary = [];
+  for (const error of errors) {
+    if (error.code === "ERROR_LIMIT_REACHED") {
+      if (Number.isSafeInteger(error.omittedCount) && (error.omittedCount ?? -1) >= 0) {
+        inheritedOmitted += error.omittedCount;
+      }
     } else {
-      exponentBits = 0;
-      fraction = subnormal;
+      ordinary.push(error);
     }
-  } else {
-    let mantissa = roundedScaledQuotient(
-      numerator,
-      denominator,
-      binaryExponent + 52 - valueExponent
-    );
-    if (mantissa === HIDDEN_BIT << 1n) {
-      mantissa >>= 1n;
-      valueExponent++;
-    }
-    exponentBits = valueExponent + 1023;
-    if (exponentBits >= 2047) {
-      throw new Error("exact binary64 result overflows the finite range");
-    }
-    fraction = mantissa - HIDDEN_BIT;
   }
-  const bits = (negative ? SIGN_BIT : 0n) | BigInt(exponentBits) << FRACTION_BITS | fraction;
-  return { value: binary64FromBits(bits), exactNonZero: true };
+  const priorityRecords = priority.filter((error) => error.code !== "ERROR_LIMIT_REACHED").sort(compareErrors);
+  const allKnown = ordinary.length + priorityRecords.length;
+  if (inheritedOmitted === 0 && allKnown <= MAX_ERROR_RECORDS) {
+    return [...ordinary, ...priorityRecords].sort(compareErrors);
+  }
+  const keptPriority = priorityRecords.slice(0, MAX_ERROR_RECORDS - 1);
+  const ordinaryCapacity = MAX_ERROR_RECORDS - 1 - keptPriority.length;
+  const keptOrdinary = ordinary.sort(compareErrors).slice(0, ordinaryCapacity);
+  const omitted = inheritedOmitted + (priorityRecords.length - keptPriority.length) + (ordinary.length - keptOrdinary.length);
+  const limitRecord = makeError({
+    code: "ERROR_LIMIT_REACHED",
+    severity: "warning",
+    stage: "internal",
+    message: `${omitted} further diagnostics were suppressed by the diagnostic budget. Fix the reported errors and revalidate.`
+  });
+  limitRecord.omittedCount = omitted;
+  return [...keptOrdinary, ...keptPriority].sort(compareErrors).concat(limitRecord);
 }
-function exactRationalToBinary64(numerator, denominator, binaryExponent = 0) {
-  const rounded = roundRationalWithBinaryExponent(numerator, denominator, binaryExponent);
-  return Object.is(rounded.value, -0) ? 0 : rounded.value;
+function ok(value, warnings = []) {
+  return { ok: true, value, warnings };
 }
-function exactBinary64MultiplyByRational(value, numerator, denominator, binaryExponent = 0) {
-  return exactRationalToBinary64(
-    finiteValueInMinSubnormalUnits(value) * numerator,
-    denominator,
-    binaryExponent - 1074
-  );
+function err(errors) {
+  return { ok: false, errors: finalizeErrors(errors) };
 }
 
-// src/core/units.ts
-function isKnownUnit(code) {
-  return typeof code === "string" && Object.prototype.hasOwnProperty.call(UNITS, code);
-}
-function dimensionOf(code) {
-  return typeof code === "string" && isKnownUnit(code) ? UNITS[code].dimension : void 0;
-}
-function resolveAlias(code) {
-  if (typeof code !== "string") return void 0;
-  if (isKnownUnit(code)) return void 0;
-  return Object.prototype.hasOwnProperty.call(UNIT_ALIASES, code) ? UNIT_ALIASES[code] : void 0;
-}
-function powerOfTen(exponent) {
-  return 10n ** BigInt(exponent);
-}
-function exactUnitScale(unit) {
-  const decimalExponent = unit.toCanonicalDecimalExponent;
-  if (decimalExponent !== null) {
-    return decimalExponent >= 0 ? { numerator: powerOfTen(decimalExponent), denominator: 1n, binaryExponent: 0 } : { numerator: 1n, denominator: powerOfTen(-decimalExponent), binaryExponent: 0 };
+// src/generated/budgets.ts
+var BUDGET_PROFILE_IDS = freezeGenerated([
+  "standard",
+  "agent"
+]);
+var BUDGET_PROFILES = freezeGenerated({
+  "standard": {
+    "rawInputBytes": 33554432,
+    "jsonDepth": 64,
+    "jsonTotalNodes": 1e6,
+    "jsonStringLength": 65536,
+    "jsonNumberTokenLength": 64,
+    "jsonObjectKeys": 4096,
+    "jsonArrayItems": 2e6,
+    "observationsPerSeries": 25e4,
+    "observationsPerRequest": 2e6,
+    "graphNodes": 1e5,
+    "graphEdges": 2e5,
+    "matrixCells": 16e6,
+    "pairwiseOperations": 5e7,
+    "visibleMarks": 1e5,
+    "svgTextNodes": 2e4,
+    "svgBytes": 20971520,
+    "sidecarBytes": 104857600,
+    "returnedTableRows": 500,
+    "safeRepairOperations": 128,
+    "errorRecords": 32
+  },
+  "agent": {
+    "rawInputBytes": 4194304,
+    "jsonDepth": 32,
+    "jsonTotalNodes": 2e5,
+    "jsonStringLength": 8192,
+    "jsonNumberTokenLength": 64,
+    "jsonObjectKeys": 1024,
+    "jsonArrayItems": 2e5,
+    "observationsPerSeries": 5e4,
+    "observationsPerRequest": 2e5,
+    "graphNodes": 2e4,
+    "graphEdges": 5e4,
+    "matrixCells": 1e6,
+    "pairwiseOperations": 5e6,
+    "visibleMarks": 25e3,
+    "svgTextNodes": 5e3,
+    "svgBytes": 5242880,
+    "sidecarBytes": 20971520,
+    "returnedTableRows": 200,
+    "safeRepairOperations": 64,
+    "errorRecords": 32
   }
-  if (unit.toCanonical === null) {
-    throw new Error("simulator-defined unit has no exact conversion scale");
+});
+var COMPACTION_POLICIES = freezeGenerated({
+  "none": {
+    "id": "none",
+    "revision": 1,
+    "appliesTo": [
+      "*"
+    ],
+    "preservesExtrema": true,
+    "preservesMass": true,
+    "deterministic": true,
+    "description": "No compaction. The figure is drawn in full or the request is refused."
+  },
+  "line_envelope_minmax": {
+    "id": "line_envelope_minmax",
+    "revision": 1,
+    "appliesTo": [
+      "trace",
+      "weight_trace"
+    ],
+    "preservesExtrema": true,
+    "preservesMass": false,
+    "deterministic": true,
+    "description": "Per horizontal pixel bucket, retain the minimum and the maximum sample, plus the first and last sample of the series and every boundary of a missing span. A one-sample transient therefore SURVIVES, which naive averaging would erase."
+  },
+  "raster_density_bins": {
+    "id": "raster_density_bins",
+    "revision": 1,
+    "appliesTo": [
+      "spike_raster"
+    ],
+    "preservesExtrema": false,
+    "preservesMass": true,
+    "deterministic": true,
+    "description": "Aggregate events into an explicit time x sender bin grid and draw density. Every event is COUNTED \u2014 none is dropped. The bin dimensions and the before/after counts are recorded."
+  },
+  "histogram_merge_adjacent": {
+    "id": "histogram_merge_adjacent",
+    "revision": 1,
+    "appliesTo": [
+      "distribution"
+    ],
+    "preservesExtrema": false,
+    "preservesMass": true,
+    "deterministic": true,
+    "description": "Merge ONLY adjacent bins, summing raw counts and probability mass (or integrating density before re-normalizing by the wider bin). Extrema sampling is INVALID for a distribution \u2014 it would destroy the mass \u2014 so it is not offered."
+  },
+  "matrix_value_quantize": {
+    "id": "matrix_value_quantize",
+    "revision": 1,
+    "appliesTo": [
+      "matrix"
+    ],
+    "preservesExtrema": true,
+    "preservesMass": true,
+    "deterministic": true,
+    "description": "Group cells that share a quantized value into one paint path. This is a PAINT optimization only: every cell is retained and remains individually addressable in the table."
+  },
+  "graph_declared_subset": {
+    "id": "graph_declared_subset",
+    "revision": 1,
+    "appliesTo": [
+      "graph"
+    ],
+    "preservesExtrema": false,
+    "preservesMass": false,
+    "deterministic": true,
+    "description": "Draw only the caller's explicitly declared edge subset. The retained and source counts are disclosed and no degree claim is permitted."
   }
-  return {
-    numerator: finiteBinary64ToMinSubnormalUnits(unit.toCanonical),
-    denominator: 1n,
-    binaryExponent: -1074
-  };
+});
+
+// src/core/limits.ts
+var DEFAULT_PROFILE = "standard";
+function tryGetBudgetLimits(profile = DEFAULT_PROFILE) {
+  if (typeof profile !== "string" || !BUDGET_PROFILE_IDS.includes(profile) || !Object.prototype.hasOwnProperty.call(BUDGET_PROFILES, profile)) {
+    return void 0;
+  }
+  return BUDGET_PROFILES[profile];
 }
-function exactScaleRatio(from, to) {
-  const source = exactUnitScale(from);
-  const target = exactUnitScale(to);
-  return {
-    numerator: source.numerator * target.denominator,
-    denominator: source.denominator * target.numerator,
-    binaryExponent: source.binaryExponent - target.binaryExponent
-  };
+function getBudgetLimits(profile = DEFAULT_PROFILE) {
+  const found = tryGetBudgetLimits(profile);
+  if (!found) {
+    throw new Error("unknown budget profile");
+  }
+  return found;
 }
-function convert(value, from, to) {
-  if (!Number.isFinite(value) || typeof from !== "string" || typeof to !== "string") {
-    throw new Error("conversion requires a finite value and two registered unit codes");
+function trySelectTighterBudgetProfile(hostProfile, requestedProfile) {
+  const host = tryGetBudgetLimits(hostProfile);
+  const requested = tryGetBudgetLimits(requestedProfile);
+  if (!host || !requested || typeof hostProfile !== "string" || typeof requestedProfile !== "string") {
+    return void 0;
   }
-  const fromUnit = UNITS[from];
-  const toUnit = UNITS[to];
-  if (!fromUnit || !toUnit) {
-    throw new Error(`unknown unit in conversion: ${from} -> ${to}`);
+  const noGreaterThan = (left, right) => Object.keys(left).every((key) => left[key] <= right[key]);
+  if (noGreaterThan(requested, host)) {
+    return { profile: requestedProfile, limits: requested };
   }
-  if (fromUnit.dimension !== toUnit.dimension) {
-    throw new Error(
-      `refusing to convert across dimensions: ${from} (${fromUnit.dimension}) -> ${to} (${toUnit.dimension})`
-    );
+  if (noGreaterThan(host, requested)) {
+    return { profile: hostProfile, limits: host };
   }
-  if (fromUnit.toCanonical === null || toUnit.toCanonical === null) {
-    throw new Error(
-      `refusing to convert a simulator-defined unit: ${from} -> ${to}. Its physical meaning depends on the source model and has no SI mapping.`
-    );
-  }
-  if (from === to) return value;
-  const ratio = exactScaleRatio(fromUnit, toUnit);
-  let converted;
+  return void 0;
+}
+function restrictLimits(base, overrides) {
+  const INVALID_BASE = /* @__PURE__ */ Symbol("invalid-base-budget");
+  const out = /* @__PURE__ */ Object.create(null);
+  const limitKeys = Object.keys(BUDGET_PROFILES[DEFAULT_PROFILE]);
   try {
-    converted = exactBinary64MultiplyByRational(
-      value,
-      ratio.numerator,
-      ratio.denominator,
-      ratio.binaryExponent
-    );
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("overflows")) {
-      throw new Error("unit conversion overflowed binary64");
+    for (const key of limitKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(base, key);
+      const value = descriptor && Object.prototype.hasOwnProperty.call(descriptor, "value") ? descriptor.value : void 0;
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+        throw INVALID_BASE;
+      }
+      out[key] = value;
     }
-    throw error;
+  } catch (error) {
+    if (error === INVALID_BASE) {
+      throw new Error("base budget limits must be own finite non-negative data properties");
+    }
+    throw new Error("base budget limits could not be inspected safely");
   }
-  if (!Number.isFinite(converted) || value !== 0 && converted === 0) {
-    throw new Error("unit conversion overflowed or underflowed binary64");
+  let keys;
+  try {
+    keys = Reflect.ownKeys(overrides);
+  } catch {
+    return freezeGenerated(out);
   }
-  return converted;
-}
-function toSeconds(value, unit) {
-  const dimension = dimensionOf(unit);
-  if (dimension !== "time") {
-    throw new Error(`${unit} is not a time unit (${String(dimension)})`);
+  for (const key of keys) {
+    if (typeof key !== "string" || !limitKeys.includes(key)) continue;
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(overrides, key);
+    } catch {
+      return freezeGenerated(out);
+    }
+    if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, "value")) continue;
+    const value = descriptor.value;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) continue;
+    const current = out[key];
+    out[key] = Math.min(current, value);
   }
-  return convert(value, unit, "s");
-}
-function axesAreCompatible(unitA, unitB) {
-  if (typeof unitA !== "string" || typeof unitB !== "string") return false;
-  const a = dimensionOf(unitA);
-  const b = dimensionOf(unitB);
-  if (a === void 0 || b === void 0) return false;
-  if (a === "simulator_defined" || b === "simulator_defined") return false;
-  return a === b;
-}
-function unitLabel(code) {
-  return typeof code === "string" && isKnownUnit(code) ? UNITS[code].label : "";
+  return freezeGenerated(out);
 }
 
-// src/core/response-curve-basis.ts
-var RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID = "cortexel_utf16_sorted_unique_identifier_array_rfc8785_v1";
-function compareUtf16CodeUnits(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-function isWellFormedUnicode(value) {
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
-    if (code >= 55296 && code <= 56319) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 56320 && next <= 57343)) return false;
-      index++;
-    } else if (code >= 56320 && code <= 57343) {
-      return false;
-    }
-  }
-  return true;
-}
-function normalizeResponseEventMemberIds(identifiers) {
-  if (!Array.isArray(identifiers) || identifiers.length === 0) {
-    throw new RangeError("identifier set must be a non-empty array");
-  }
-  const seen = /* @__PURE__ */ new Set();
-  for (let index = 0; index < identifiers.length; index++) {
-    const identifier = identifiers[index];
-    if (typeof identifier !== "string" || identifier.length === 0) {
-      throw new TypeError(`identifier-set member ${index} must be a non-empty string`);
-    }
-    if (!isWellFormedUnicode(identifier)) {
-      throw new TypeError(`identifier-set member ${index} must be well-formed Unicode`);
-    }
-    if (seen.has(identifier)) {
-      throw new RangeError(`identifier-set member ${JSON.stringify(identifier)} is duplicated`);
-    }
-    seen.add(identifier);
-  }
-  return [...seen].sort(compareUtf16CodeUnits);
-}
-function responseEventMembershipDigest(identifiers) {
-  return canonicalDigest(normalizeResponseEventMemberIds(identifiers));
-}
+// src/core/repairs.ts
+var import_request = require("#cortexel-request-capability");
 
 // src/core/parse-json.ts
 var DANGEROUS_KEYS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
@@ -15719,195 +15724,684 @@ function snapshotValue(value, limits) {
   }
 }
 
-// src/generated/budgets.ts
-var BUDGET_PROFILE_IDS = freezeGenerated([
-  "standard",
-  "agent"
-]);
-var BUDGET_PROFILES = freezeGenerated({
-  "standard": {
-    "rawInputBytes": 33554432,
-    "jsonDepth": 64,
-    "jsonTotalNodes": 1e6,
-    "jsonStringLength": 65536,
-    "jsonNumberTokenLength": 64,
-    "jsonObjectKeys": 4096,
-    "jsonArrayItems": 2e6,
-    "observationsPerSeries": 25e4,
-    "observationsPerRequest": 2e6,
-    "graphNodes": 1e5,
-    "graphEdges": 2e5,
-    "matrixCells": 16e6,
-    "pairwiseOperations": 5e7,
-    "visibleMarks": 1e5,
-    "svgTextNodes": 2e4,
-    "svgBytes": 20971520,
-    "sidecarBytes": 104857600,
-    "returnedTableRows": 500,
-    "errorRecords": 32
-  },
-  "agent": {
-    "rawInputBytes": 4194304,
-    "jsonDepth": 32,
-    "jsonTotalNodes": 2e5,
-    "jsonStringLength": 8192,
-    "jsonNumberTokenLength": 64,
-    "jsonObjectKeys": 1024,
-    "jsonArrayItems": 2e5,
-    "observationsPerSeries": 5e4,
-    "observationsPerRequest": 2e5,
-    "graphNodes": 2e4,
-    "graphEdges": 5e4,
-    "matrixCells": 1e6,
-    "pairwiseOperations": 5e6,
-    "visibleMarks": 25e3,
-    "svgTextNodes": 5e3,
-    "svgBytes": 5242880,
-    "sidecarBytes": 20971520,
-    "returnedTableRows": 200,
-    "errorRecords": 32
-  }
-});
-var COMPACTION_POLICIES = freezeGenerated({
-  "none": {
-    "id": "none",
-    "revision": 1,
-    "appliesTo": [
-      "*"
-    ],
-    "preservesExtrema": true,
-    "preservesMass": true,
-    "deterministic": true,
-    "description": "No compaction. The figure is drawn in full or the request is refused."
-  },
-  "line_envelope_minmax": {
-    "id": "line_envelope_minmax",
-    "revision": 1,
-    "appliesTo": [
-      "trace",
-      "weight_trace"
-    ],
-    "preservesExtrema": true,
-    "preservesMass": false,
-    "deterministic": true,
-    "description": "Per horizontal pixel bucket, retain the minimum and the maximum sample, plus the first and last sample of the series and every boundary of a missing span. A one-sample transient therefore SURVIVES, which naive averaging would erase."
-  },
-  "raster_density_bins": {
-    "id": "raster_density_bins",
-    "revision": 1,
-    "appliesTo": [
-      "spike_raster"
-    ],
-    "preservesExtrema": false,
-    "preservesMass": true,
-    "deterministic": true,
-    "description": "Aggregate events into an explicit time x sender bin grid and draw density. Every event is COUNTED \u2014 none is dropped. The bin dimensions and the before/after counts are recorded."
-  },
-  "histogram_merge_adjacent": {
-    "id": "histogram_merge_adjacent",
-    "revision": 1,
-    "appliesTo": [
-      "distribution"
-    ],
-    "preservesExtrema": false,
-    "preservesMass": true,
-    "deterministic": true,
-    "description": "Merge ONLY adjacent bins, summing raw counts and probability mass (or integrating density before re-normalizing by the wider bin). Extrema sampling is INVALID for a distribution \u2014 it would destroy the mass \u2014 so it is not offered."
-  },
-  "matrix_value_quantize": {
-    "id": "matrix_value_quantize",
-    "revision": 1,
-    "appliesTo": [
-      "matrix"
-    ],
-    "preservesExtrema": true,
-    "preservesMass": true,
-    "deterministic": true,
-    "description": "Group cells that share a quantized value into one paint path. This is a PAINT optimization only: every cell is retained and remains individually addressable in the table."
-  },
-  "graph_declared_subset": {
-    "id": "graph_declared_subset",
-    "revision": 1,
-    "appliesTo": [
-      "graph"
-    ],
-    "preservesExtrema": false,
-    "preservesMass": false,
-    "deterministic": true,
-    "description": "Draw only the caller's explicitly declared edge subset. The retained and source counts are disclosed and no degree claim is permitted."
-  }
-});
-
-// src/core/limits.ts
-var DEFAULT_PROFILE = "standard";
-function tryGetBudgetLimits(profile = DEFAULT_PROFILE) {
-  if (typeof profile !== "string" || !BUDGET_PROFILE_IDS.includes(profile) || !Object.prototype.hasOwnProperty.call(BUDGET_PROFILES, profile)) {
-    return void 0;
-  }
-  return BUDGET_PROFILES[profile];
-}
-function getBudgetLimits(profile = DEFAULT_PROFILE) {
-  const found = tryGetBudgetLimits(profile);
-  if (!found) {
-    throw new Error("unknown budget profile");
-  }
-  return found;
-}
-function trySelectTighterBudgetProfile(hostProfile, requestedProfile) {
-  const host = tryGetBudgetLimits(hostProfile);
-  const requested = tryGetBudgetLimits(requestedProfile);
-  if (!host || !requested || typeof hostProfile !== "string" || typeof requestedProfile !== "string") {
-    return void 0;
-  }
-  const noGreaterThan = (left, right) => Object.keys(left).every((key) => left[key] <= right[key]);
-  if (noGreaterThan(requested, host)) {
-    return { profile: requestedProfile, limits: requested };
-  }
-  if (noGreaterThan(host, requested)) {
-    return { profile: hostProfile, limits: host };
-  }
-  return void 0;
-}
-function restrictLimits(base, overrides) {
-  const INVALID_BASE = /* @__PURE__ */ Symbol("invalid-base-budget");
-  const out = /* @__PURE__ */ Object.create(null);
-  const limitKeys = Object.keys(BUDGET_PROFILES[DEFAULT_PROFILE]);
+// src/core/requestBoundary.internal.ts
+function resolveBudgetProfile(options) {
+  let requested = DEFAULT_PROFILE;
   try {
-    for (const key of limitKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(base, key);
-      const value = descriptor && Object.prototype.hasOwnProperty.call(descriptor, "value") ? descriptor.value : void 0;
-      if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-        throw INVALID_BASE;
+    if (options !== null && options !== void 0) {
+      if (typeof options !== "object") throw new Error("invalid options");
+      const descriptor = Object.getOwnPropertyDescriptor(options, "budgetProfile");
+      if (descriptor !== void 0) {
+        if (!Object.prototype.hasOwnProperty.call(descriptor, "value")) {
+          throw new Error("accessor-backed options");
+        }
+        requested = descriptor.value ?? DEFAULT_PROFILE;
       }
-      out[key] = value;
     }
-  } catch (error) {
-    if (error === INVALID_BASE) {
-      throw new Error("base budget limits must be own finite non-negative data properties");
-    }
-    throw new Error("base budget limits could not be inspected safely");
-  }
-  let keys;
-  try {
-    keys = Reflect.ownKeys(overrides);
   } catch {
-    return freezeGenerated(out);
+    requested = null;
   }
-  for (const key of keys) {
-    if (typeof key !== "string" || !limitKeys.includes(key)) continue;
-    let descriptor;
-    try {
-      descriptor = Object.getOwnPropertyDescriptor(overrides, key);
-    } catch {
-      return freezeGenerated(out);
+  return {
+    profile: typeof requested === "string" ? requested : "<invalid>",
+    limits: tryGetBudgetLimits(requested)
+  };
+}
+function requestedBudgetProfile(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_PROFILE;
+  }
+  const presentation = value.presentation;
+  if (presentation === null || typeof presentation !== "object" || Array.isArray(presentation)) {
+    return DEFAULT_PROFILE;
+  }
+  return Object.prototype.hasOwnProperty.call(presentation, "budgetProfile") ? presentation.budgetProfile : DEFAULT_PROFILE;
+}
+function assuranceFor(boundary, profile) {
+  return {
+    boundary,
+    duplicateKeys: boundary === "raw_json_text" ? "rejected_before_materialization" : "not_observable_after_materialization",
+    parserProfile: boundary === "raw_json_text" ? "cortexel-strict-json/1.0" : "cortexel-safe-snapshot/1.0",
+    budgetProfile: typeof profile === "string" ? profile : "<invalid>"
+  };
+}
+function fail2(errors, assurance) {
+  return { ok: false, errors: finalizeErrors([...errors]), assurance };
+}
+function invalidBudgetProfile(assurance) {
+  return fail2([
+    makeError({
+      code: "RESOURCE_BUDGET_PROFILE_UNKNOWN",
+      stage: "budget",
+      message: "the selected budget profile is not in this build's closed registry. Unknown and inherited profile ids cannot disable resource limits."
+    })
+  ], assurance);
+}
+function captureRawRequestInput(text, options = {}) {
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor("raw_json_text", host.profile);
+  if (!host.limits) return invalidBudgetProfile(assurance);
+  if (typeof text !== "string") {
+    return fail2([
+      makeError({
+        code: "JSON_SYNTAX",
+        stage: "parse",
+        message: "the raw request boundary accepts a JSON text string only."
+      })
+    ], assurance);
+  }
+  let parsed = parseJsonStrict(text, { limits: host.limits });
+  if (!parsed.ok) return fail2(parsed.errors, assurance);
+  const requested = requestedBudgetProfile(parsed.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor("raw_json_text", effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+  if (effective.profile !== host.profile) {
+    parsed = parseJsonStrict(text, { limits: effective.limits });
+    if (!parsed.ok) return fail2(parsed.errors, assurance);
+  }
+  return { ok: true, value: parsed.value, assurance };
+}
+function captureMaterializedRequestInput(value, options = {}) {
+  const host = resolveBudgetProfile(options);
+  let assurance = assuranceFor("materialized_value", host.profile);
+  if (!host.limits) return invalidBudgetProfile(assurance);
+  let snapshot = snapshotValue(value, host.limits);
+  if (!snapshot.ok) return fail2(snapshot.errors, assurance);
+  const requested = requestedBudgetProfile(snapshot.value);
+  const effective = trySelectTighterBudgetProfile(host.profile, requested);
+  assurance = assuranceFor("materialized_value", effective?.profile ?? requested);
+  if (!effective) return invalidBudgetProfile(assurance);
+  if (effective.profile !== host.profile) {
+    snapshot = snapshotValue(snapshot.value, effective.limits);
+    if (!snapshot.ok) return fail2(snapshot.errors, assurance);
+  }
+  return { ok: true, value: snapshot.value, assurance };
+}
+
+// src/core/semantics/provenance.ts
+var LIBRARY_AUTHORED_FIELDS = /* @__PURE__ */ new Set([
+  // FigureArtifactV1 — library-generated, never caller-settable.
+  "artifact",
+  "artifactDigest",
+  "buildIdentity",
+  "canonicalRequest",
+  "inputAssurance",
+  "validation",
+  "derivation",
+  "budgetDecision",
+  "assurance",
+  "assurances",
+  "attestations",
+  "disclosures",
+  "render",
+  "accessibility",
+  "outputs",
+  "catalogDigest",
+  // Pre-1.0 honesty flags. Removed, not renamed: they let a caller influence a
+  // conclusion, which is the defect, and a new spelling would not fix it.
+  "calibrated_posterior",
+  "calibratedPosterior",
+  "advisory_only",
+  "advisoryOnly",
+  "is_paper_local_evidence",
+  "isPaperLocalEvidence",
+  "honesty",
+  "trustedEnvelope",
+  // Assertions of a conclusion, in any spelling an agent might reach for.
+  "verified",
+  "certified",
+  "validated",
+  "reproduced",
+  "conformant",
+  "referenceComparison",
+  "sourceContentVerified",
+  "signatureVerified"
+]);
+function isLibraryAuthoredField(value) {
+  return LIBRARY_AUTHORED_FIELDS.has(value);
+}
+
+// src/core/exact-binary64.ts
+var FRACTION_BITS = 52n;
+var FRACTION_MASK = (1n << FRACTION_BITS) - 1n;
+var HIDDEN_BIT = 1n << FRACTION_BITS;
+var SIGN_BIT = 1n << 63n;
+var scratch = new DataView(new ArrayBuffer(8));
+function finiteValueInMinSubnormalUnits(value) {
+  if (!Number.isFinite(value)) throw new Error("exact binary64 accumulation requires finite values");
+  scratch.setFloat64(0, value, false);
+  const bits = scratch.getBigUint64(0, false);
+  const negative = (bits & SIGN_BIT) !== 0n;
+  const exponentBits = Number(bits >> FRACTION_BITS & 0x7ffn);
+  const fraction = bits & FRACTION_MASK;
+  if (exponentBits === 0 && fraction === 0n) return 0n;
+  const mantissa = exponentBits === 0 ? fraction : HIDDEN_BIT + fraction;
+  const shift = exponentBits === 0 ? 0n : BigInt(exponentBits - 1);
+  const units = mantissa << shift;
+  return negative ? -units : units;
+}
+function finiteBinary64ToMinSubnormalUnits(value) {
+  return finiteValueInMinSubnormalUnits(value);
+}
+function bitLength(value) {
+  return value === 0n ? 0 : value.toString(2).length;
+}
+function roundedQuotientEven(numerator, denominator) {
+  const quotient = numerator / denominator;
+  const remainder = numerator % denominator;
+  const doubled = remainder << 1n;
+  if (doubled > denominator || doubled === denominator && (quotient & 1n) === 1n) {
+    return quotient + 1n;
+  }
+  return quotient;
+}
+function binary64FromBits(bits) {
+  scratch.setBigUint64(0, bits, false);
+  return scratch.getFloat64(0, false);
+}
+function floorBinaryLogarithmOfRational(numerator, denominator) {
+  let exponent = bitLength(numerator) - bitLength(denominator);
+  const numeratorAtExponent = exponent >= 0 ? denominator << BigInt(exponent) : denominator;
+  const denominatorAtExponent = exponent >= 0 ? numerator : numerator << BigInt(-exponent);
+  if (denominatorAtExponent < numeratorAtExponent) exponent--;
+  return exponent;
+}
+function roundedScaledQuotient(numerator, denominator, binaryShift) {
+  return binaryShift >= 0 ? roundedQuotientEven(numerator << BigInt(binaryShift), denominator) : roundedQuotientEven(numerator, denominator << BigInt(-binaryShift));
+}
+function roundRationalWithBinaryExponent(signedNumerator, denominator, binaryExponent) {
+  if (denominator <= 0n) throw new Error("exact binary64 denominator must be positive");
+  if (signedNumerator === 0n) return { value: 0, exactNonZero: false };
+  const negative = signedNumerator < 0n;
+  const numerator = negative ? -signedNumerator : signedNumerator;
+  let exponentBits;
+  let fraction;
+  let valueExponent = floorBinaryLogarithmOfRational(numerator, denominator) + binaryExponent;
+  if (valueExponent < -1022) {
+    const subnormal = roundedScaledQuotient(
+      numerator,
+      denominator,
+      binaryExponent + 1074
+    );
+    if (subnormal === 0n) return { value: negative ? -0 : 0, exactNonZero: true };
+    if (subnormal >= HIDDEN_BIT) {
+      exponentBits = 1;
+      fraction = 0n;
+    } else {
+      exponentBits = 0;
+      fraction = subnormal;
     }
-    if (!descriptor || !Object.prototype.hasOwnProperty.call(descriptor, "value")) continue;
-    const value = descriptor.value;
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) continue;
-    const current = out[key];
-    out[key] = Math.min(current, value);
+  } else {
+    let mantissa = roundedScaledQuotient(
+      numerator,
+      denominator,
+      binaryExponent + 52 - valueExponent
+    );
+    if (mantissa === HIDDEN_BIT << 1n) {
+      mantissa >>= 1n;
+      valueExponent++;
+    }
+    exponentBits = valueExponent + 1023;
+    if (exponentBits >= 2047) {
+      throw new Error("exact binary64 result overflows the finite range");
+    }
+    fraction = mantissa - HIDDEN_BIT;
   }
-  return freezeGenerated(out);
+  const bits = (negative ? SIGN_BIT : 0n) | BigInt(exponentBits) << FRACTION_BITS | fraction;
+  return { value: binary64FromBits(bits), exactNonZero: true };
+}
+function exactRationalToBinary64(numerator, denominator, binaryExponent = 0) {
+  const rounded = roundRationalWithBinaryExponent(numerator, denominator, binaryExponent);
+  return Object.is(rounded.value, -0) ? 0 : rounded.value;
+}
+function exactBinary64MultiplyByRational(value, numerator, denominator, binaryExponent = 0) {
+  return exactRationalToBinary64(
+    finiteValueInMinSubnormalUnits(value) * numerator,
+    denominator,
+    binaryExponent - 1074
+  );
+}
+
+// src/core/units.ts
+function isKnownUnit(code) {
+  return typeof code === "string" && Object.prototype.hasOwnProperty.call(UNITS, code);
+}
+function dimensionOf(code) {
+  return typeof code === "string" && isKnownUnit(code) ? UNITS[code].dimension : void 0;
+}
+function resolveAlias(code) {
+  if (typeof code !== "string") return void 0;
+  if (isKnownUnit(code)) return void 0;
+  return Object.prototype.hasOwnProperty.call(UNIT_ALIASES, code) ? UNIT_ALIASES[code] : void 0;
+}
+function powerOfTen(exponent) {
+  return 10n ** BigInt(exponent);
+}
+function exactUnitScale(unit) {
+  const decimalExponent = unit.toCanonicalDecimalExponent;
+  if (decimalExponent !== null) {
+    return decimalExponent >= 0 ? { numerator: powerOfTen(decimalExponent), denominator: 1n, binaryExponent: 0 } : { numerator: 1n, denominator: powerOfTen(-decimalExponent), binaryExponent: 0 };
+  }
+  if (unit.toCanonical === null) {
+    throw new Error("simulator-defined unit has no exact conversion scale");
+  }
+  return {
+    numerator: finiteBinary64ToMinSubnormalUnits(unit.toCanonical),
+    denominator: 1n,
+    binaryExponent: -1074
+  };
+}
+function exactScaleRatio(from, to) {
+  const source = exactUnitScale(from);
+  const target = exactUnitScale(to);
+  return {
+    numerator: source.numerator * target.denominator,
+    denominator: source.denominator * target.numerator,
+    binaryExponent: source.binaryExponent - target.binaryExponent
+  };
+}
+function convert(value, from, to) {
+  if (!Number.isFinite(value) || typeof from !== "string" || typeof to !== "string") {
+    throw new Error("conversion requires a finite value and two registered unit codes");
+  }
+  const fromUnit = UNITS[from];
+  const toUnit = UNITS[to];
+  if (!fromUnit || !toUnit) {
+    throw new Error(`unknown unit in conversion: ${from} -> ${to}`);
+  }
+  if (fromUnit.dimension !== toUnit.dimension) {
+    throw new Error(
+      `refusing to convert across dimensions: ${from} (${fromUnit.dimension}) -> ${to} (${toUnit.dimension})`
+    );
+  }
+  if (fromUnit.toCanonical === null || toUnit.toCanonical === null) {
+    throw new Error(
+      `refusing to convert a simulator-defined unit: ${from} -> ${to}. Its physical meaning depends on the source model and has no SI mapping.`
+    );
+  }
+  if (from === to) return value;
+  const ratio = exactScaleRatio(fromUnit, toUnit);
+  let converted;
+  try {
+    converted = exactBinary64MultiplyByRational(
+      value,
+      ratio.numerator,
+      ratio.denominator,
+      ratio.binaryExponent
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("overflows")) {
+      throw new Error("unit conversion overflowed binary64");
+    }
+    throw error;
+  }
+  if (!Number.isFinite(converted) || value !== 0 && converted === 0) {
+    throw new Error("unit conversion overflowed or underflowed binary64");
+  }
+  return converted;
+}
+function toSeconds(value, unit) {
+  const dimension = dimensionOf(unit);
+  if (dimension !== "time") {
+    throw new Error(`${unit} is not a time unit (${String(dimension)})`);
+  }
+  return convert(value, unit, "s");
+}
+function axesAreCompatible(unitA, unitB) {
+  if (typeof unitA !== "string" || typeof unitB !== "string") return false;
+  const a = dimensionOf(unitA);
+  const b = dimensionOf(unitB);
+  if (a === void 0 || b === void 0) return false;
+  if (a === "simulator_defined" || b === "simulator_defined") return false;
+  return a === b;
+}
+function unitLabel(code) {
+  return typeof code === "string" && isKnownUnit(code) ? UNITS[code].label : "";
+}
+
+// src/core/contract-identity.ts
+var CONTRACT_VALUE = /^([a-z][a-z0-9-]*)\/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;
+function splitContractIdentity(value, axis) {
+  const match = CONTRACT_VALUE.exec(value);
+  if (!match) {
+    throw new Error(`${axis} is not a canonical contract-name/major.minor identity`);
+  }
+  return Object.freeze({ value, name: match[1], version: match[2] });
+}
+var REQUEST_CONTRACT_IDENTITY = splitContractIdentity(
+  REQUEST_CONTRACT,
+  "REQUEST_CONTRACT"
+);
+var ARTIFACT_CONTRACT_IDENTITY = splitContractIdentity(
+  ARTIFACT_CONTRACT,
+  "ARTIFACT_CONTRACT"
+);
+
+// src/core/repairs.ts
+function decodePointer(path) {
+  if (path === "") return [];
+  if (!path.startsWith("/")) return void 0;
+  const tokens = path.slice(1).split("/");
+  const decoded = [];
+  for (const token of tokens) {
+    if (/~(?:[^01]|$)/u.test(token)) return void 0;
+    decoded.push(token.replace(/~1/gu, "/").replace(/~0/gu, "~"));
+  }
+  return decoded;
+}
+function locateRepairMember(root, path) {
+  const tokens = decodePointer(path);
+  if (tokens === void 0 || tokens.length === 0) return void 0;
+  let current = root;
+  for (let index = 0; index < tokens.length - 1; index++) {
+    const token = tokens[index];
+    if (current === null || typeof current !== "object") return void 0;
+    if (Array.isArray(current)) {
+      if (!/^(?:0|[1-9][0-9]*)$/u.test(token)) return void 0;
+      const arrayIndex = Number(token);
+      if (!Number.isSafeInteger(arrayIndex) || arrayIndex >= current.length) return void 0;
+      const descriptor3 = Object.getOwnPropertyDescriptor(current, token);
+      if (descriptor3 === void 0 || !Object.prototype.hasOwnProperty.call(descriptor3, "value")) {
+        return void 0;
+      }
+      current = descriptor3.value;
+      continue;
+    }
+    const descriptor2 = Object.getOwnPropertyDescriptor(current, token);
+    if (descriptor2 === void 0 || !Object.prototype.hasOwnProperty.call(descriptor2, "value")) {
+      return void 0;
+    }
+    current = descriptor2.value;
+  }
+  if (current === null || typeof current !== "object" || Array.isArray(current)) {
+    return void 0;
+  }
+  const key = tokens[tokens.length - 1];
+  const descriptor = Object.getOwnPropertyDescriptor(current, key);
+  if (descriptor === void 0 || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
+    return void 0;
+  }
+  return {
+    parent: current,
+    key,
+    value: descriptor.value
+  };
+}
+function repairMetadataMatches(error, operation) {
+  return error.repair?.operation === operation && error.repair.path === error.instancePath && error.repair.reasonCode === error.code;
+}
+function planSafeRepair(error, candidate) {
+  if (error.code === "CONTRACT_MISSING") {
+    if (error.instancePath !== "/contract" || !repairMetadataMatches(error, "add") || candidate === null || typeof candidate !== "object" || Array.isArray(candidate) || Object.prototype.hasOwnProperty.call(candidate, "contract")) {
+      return { kind: "metadata_invalid" };
+    }
+    const expected = {
+      name: REQUEST_CONTRACT_IDENTITY.name,
+      version: REQUEST_CONTRACT_IDENTITY.version
+    };
+    const supplied = error.repair?.value;
+    if (supplied === null || typeof supplied !== "object" || Array.isArray(supplied) || Object.keys(supplied).length !== 2 || supplied.name !== expected.name || supplied.version !== expected.version) {
+      return { kind: "metadata_invalid" };
+    }
+    return {
+      kind: "planned",
+      plan: {
+        audit: {
+          operation: "add",
+          path: "/contract",
+          value: expected,
+          reasonCode: "CONTRACT_MISSING"
+        },
+        location: {
+          parent: candidate,
+          key: "contract",
+          value: expected
+        }
+      }
+    };
+  }
+  if (error.code === "SCIENCE_UNIT_ALIAS_NOT_CANONICAL") {
+    if (error.validatorId !== "unit.canonical_code" || !repairMetadataMatches(error, "replace")) {
+      return { kind: "metadata_invalid" };
+    }
+    const location = locateRepairMember(candidate, error.instancePath);
+    if (location === void 0 || typeof location.value !== "string") {
+      return { kind: "metadata_invalid" };
+    }
+    const canonical = resolveAlias(location.value);
+    if (canonical === void 0 || error.repair?.value !== canonical) {
+      return { kind: "metadata_invalid" };
+    }
+    return {
+      kind: "planned",
+      plan: {
+        audit: {
+          operation: "replace",
+          path: error.instancePath,
+          value: canonical,
+          reasonCode: "SCIENCE_UNIT_ALIAS_NOT_CANONICAL"
+        },
+        location: { ...location, value: canonical }
+      }
+    };
+  }
+  if (error.code === "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN") {
+    if (error.validatorId !== "provenance.no_caller_assurance" || !repairMetadataMatches(error, "remove")) {
+      return { kind: "metadata_invalid" };
+    }
+    const location = locateRepairMember(candidate, error.instancePath);
+    if (location === void 0 || !isLibraryAuthoredField(location.key)) {
+      return { kind: "metadata_invalid" };
+    }
+    return {
+      kind: "planned",
+      plan: {
+        audit: {
+          operation: "remove",
+          path: error.instancePath,
+          reasonCode: "PROVENANCE_CALLER_ASSURANCE_FORBIDDEN"
+        },
+        location
+      }
+    };
+  }
+  return { kind: "not_allowlisted" };
+}
+function applyPlannedRepair(plan) {
+  if (plan.audit.operation === "remove") {
+    if (!delete plan.location.parent[plan.location.key]) {
+      throw new Error("safe repair could not remove an owned member");
+    }
+    return;
+  }
+  Object.defineProperty(plan.location.parent, plan.location.key, {
+    value: plan.location.value,
+    enumerable: true,
+    configurable: true,
+    writable: true
+  });
+}
+function immutableRepairAudit(repairs) {
+  return deepFreeze(repairs.map((repair) => ({
+    ...repair,
+    ..."value" in repair ? { value: repair.value } : {}
+  })));
+}
+function failure(outcome, sourceInputAssurance, applied, extra = []) {
+  return {
+    ok: false,
+    errors: extra.length === 0 ? outcome.errors : finalizeErrorsWithPriority(outcome.errors, extra),
+    inputAssurance: outcome.inputAssurance,
+    sourceInputAssurance,
+    appliedRepairs: immutableRepairAudit(applied)
+  };
+}
+function revalidateCandidate(candidate, rawBoundary, budgetProfile) {
+  const profile = budgetProfile;
+  return rawBoundary ? (0, import_request.parseAndValidateRequest)(canonicalize(candidate), { budgetProfile: profile }) : (0, import_request.validateRequestValue)(candidate, { budgetProfile: profile });
+}
+function applySafeRepairs(input, options = {}) {
+  const rawBoundary = typeof input === "string";
+  const captured = rawBoundary ? captureRawRequestInput(input, options) : captureMaterializedRequestInput(input, options);
+  const applied = [];
+  if (!captured.ok) {
+    return {
+      ok: false,
+      errors: captured.errors,
+      inputAssurance: captured.assurance,
+      sourceInputAssurance: captured.assurance,
+      appliedRepairs: immutableRepairAudit(applied)
+    };
+  }
+  const candidate = captured.value;
+  let outcome;
+  try {
+    outcome = revalidateCandidate(
+      candidate,
+      rawBoundary,
+      captured.assurance.budgetProfile
+    );
+  } catch {
+    return {
+      ok: false,
+      errors: [makeError({
+        code: "INTERNAL_INVARIANT_VIOLATED",
+        stage: "internal",
+        message: "the owned request snapshot could not enter the repair-validation boundary."
+      })],
+      inputAssurance: captured.assurance,
+      sourceInputAssurance: captured.assurance,
+      appliedRepairs: immutableRepairAudit(applied)
+    };
+  }
+  if (outcome.ok) {
+    return {
+      ok: true,
+      request: outcome.request,
+      sourceInputAssurance: captured.assurance,
+      appliedRepairs: immutableRepairAudit(applied)
+    };
+  }
+  const appliedKeys = /* @__PURE__ */ new Set();
+  while (!outcome.ok) {
+    const plans = /* @__PURE__ */ new Map();
+    let invalidMetadata = false;
+    for (const error of outcome.errors) {
+      const decision = planSafeRepair(error, candidate);
+      if (decision.kind === "not_allowlisted") continue;
+      if (decision.kind === "metadata_invalid") {
+        invalidMetadata = true;
+        continue;
+      }
+      const plan = decision.plan;
+      const key = `${plan.audit.operation}\0${plan.audit.path}\0${plan.audit.reasonCode}`;
+      const prior = plans.get(key);
+      if (prior !== void 0) {
+        if (canonicalize(prior.audit) !== canonicalize(plan.audit)) invalidMetadata = true;
+        continue;
+      }
+      if (appliedKeys.has(key)) invalidMetadata = true;
+      plans.set(key, plan);
+    }
+    if (invalidMetadata) {
+      return failure(outcome, captured.assurance, applied, [makeError({
+        code: "INTERNAL_INVARIANT_VIOLATED",
+        stage: "internal",
+        message: "an allow-listed diagnostic did not reproduce one exact safe correction from the owned request snapshot."
+      })]);
+    }
+    if (plans.size === 0) return failure(outcome, captured.assurance, applied);
+    const repairLimit = getBudgetLimits(
+      captured.assurance.budgetProfile
+    ).safeRepairOperations;
+    if (applied.length + plans.size > repairLimit) {
+      return failure(outcome, captured.assurance, applied, [makeError({
+        code: "RESOURCE_BUDGET_EXCEEDED",
+        stage: "budget",
+        message: "the closed safe-repair operation budget was exceeded; no validated output was returned.",
+        limit: {
+          name: "safeRepairOperations",
+          limit: repairLimit,
+          observed: applied.length + plans.size
+        }
+      })]);
+    }
+    try {
+      for (const [key, plan] of plans) {
+        applyPlannedRepair(plan);
+        appliedKeys.add(key);
+        applied.push(plan.audit);
+      }
+    } catch {
+      return failure(outcome, captured.assurance, applied, [makeError({
+        code: "INTERNAL_INVARIANT_VIOLATED",
+        stage: "internal",
+        message: "a preflighted safe repair could not be applied to Cortexel's private snapshot."
+      })]);
+    }
+    const priorFailure = outcome;
+    try {
+      outcome = revalidateCandidate(
+        candidate,
+        rawBoundary,
+        captured.assurance.budgetProfile
+      );
+    } catch {
+      return failure(priorFailure, captured.assurance, applied, [makeError({
+        code: "INTERNAL_INVARIANT_VIOLATED",
+        stage: "internal",
+        message: "the repaired owned snapshot could not re-enter the request boundary."
+      })]);
+    }
+  }
+  return {
+    ok: true,
+    request: outcome.request,
+    sourceInputAssurance: captured.assurance,
+    appliedRepairs: immutableRepairAudit(applied)
+  };
+}
+
+// src/core/response-curve-basis.ts
+var RESPONSE_EVENT_MEMBERSHIP_CANONICALIZATION_ID = "cortexel_utf16_sorted_unique_identifier_array_rfc8785_v1";
+function compareUtf16CodeUnits(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function isWellFormedUnicode(value) {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code >= 55296 && code <= 56319) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 56320 && next <= 57343)) return false;
+      index++;
+    } else if (code >= 56320 && code <= 57343) {
+      return false;
+    }
+  }
+  return true;
+}
+function normalizeResponseEventMemberIds(identifiers) {
+  if (!Array.isArray(identifiers) || identifiers.length === 0) {
+    throw new RangeError("identifier set must be a non-empty array");
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (let index = 0; index < identifiers.length; index++) {
+    const identifier = identifiers[index];
+    if (typeof identifier !== "string" || identifier.length === 0) {
+      throw new TypeError(`identifier-set member ${index} must be a non-empty string`);
+    }
+    if (!isWellFormedUnicode(identifier)) {
+      throw new TypeError(`identifier-set member ${index} must be well-formed Unicode`);
+    }
+    if (seen.has(identifier)) {
+      throw new RangeError(`identifier-set member ${JSON.stringify(identifier)} is duplicated`);
+    }
+    seen.add(identifier);
+  }
+  return [...seen].sort(compareUtf16CodeUnits);
+}
+function responseEventMembershipDigest(identifiers) {
+  return canonicalDigest(normalizeResponseEventMemberIds(identifiers));
 }
 
 // src/core/disclosures.ts
@@ -16003,24 +16497,6 @@ function deriveDisclosures(facts, allowedIds, forced = []) {
   });
   return out;
 }
-
-// src/core/contract-identity.ts
-var CONTRACT_VALUE = /^([a-z][a-z0-9-]*)\/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))$/u;
-function splitContractIdentity(value, axis) {
-  const match = CONTRACT_VALUE.exec(value);
-  if (!match) {
-    throw new Error(`${axis} is not a canonical contract-name/major.minor identity`);
-  }
-  return Object.freeze({ value, name: match[1], version: match[2] });
-}
-var REQUEST_CONTRACT_IDENTITY = splitContractIdentity(
-  REQUEST_CONTRACT,
-  "REQUEST_CONTRACT"
-);
-var ARTIFACT_CONTRACT_IDENTITY = splitContractIdentity(
-  ARTIFACT_CONTRACT,
-  "ARTIFACT_CONTRACT"
-);
 
 // src/core/migrate-v0.ts
 function migrateLegacyRequest(input) {
@@ -16244,6 +16720,7 @@ function migrateLegacyRequest(input) {
   STABLE_SKILL_IDS,
   UNITS,
   UNIT_CODES,
+  applySafeRepairs,
   axesAreCompatible,
   canonicalDigest,
   canonicalDigestExcluding,

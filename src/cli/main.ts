@@ -38,7 +38,7 @@ import {
   parseAndValidateRequest,
   validateRequestValue,
 } from '../core/request.js';
-import { parseJsonStrict } from '../core/parse-json.js';
+import { parseJsonStrict, type JsonValue } from '../core/parse-json.js';
 import { getBudgetLimits } from '../core/limits.js';
 import { migrateLegacyRequest } from '../core/migrate-v0.js';
 import {
@@ -58,7 +58,11 @@ import {
   STABLE_CATALOG_SCHEMA_RESOURCES,
 } from '../generated/authoring.js';
 import { ERROR_STAGES } from '../generated/registry.js';
-import { buildFigureFromJson } from '../render/buildFigure.js';
+import {
+  buildFigureFromJson,
+  type FigureFailure,
+  type FigureResult,
+} from '../render/buildFigure.js';
 import {
   isSourceAdapterId,
   lookupSourceAdapter,
@@ -277,6 +281,17 @@ function writeInputIoDiagnostic(asJson = false): void {
     }, process.stderr);
   } else {
     process.stderr.write(`I/O error: ${message}\n`);
+  }
+}
+
+function writeInternalCliDiagnostic(message: string, asJson = false): void {
+  if (asJson) {
+    writeCliJson({
+      ok: false,
+      cliError: { kind: 'internal', message },
+    }, process.stderr);
+  } else {
+    process.stderr.write(`Internal error: ${message}\n`);
   }
 }
 
@@ -933,7 +948,8 @@ function cmdDescribe(args: readonly string[]): number {
         command: 'cortexel validate <request.json>',
         note:
           'Structural schema success is not acceptance. Cortexel validation also runs ' +
-          'identity, semantic, scientific, provenance, budget, and derivation gates.',
+          'identity, semantic, scientific, provenance, and request-budget gates. ' +
+          'Use render --dry-run to prove derivation and output-budget acceptance.',
       },
     };
     if (section === 'example' || section === 'all') {
@@ -1035,6 +1051,7 @@ function cmdSourceCatalog(args: readonly string[]): number {
           admittedSourceVersions: descriptor.admittedSourceVersions,
           outputSkillId: descriptor.outputSkillId,
           command: descriptor.cli.command,
+          renderCommand: descriptor.cli.renderCommand,
         };
       }),
     });
@@ -1079,6 +1096,7 @@ function cmdSourceDescribe(args: readonly string[]): number {
       `(${descriptor.admittedSourceVersions.join(', ')})\n` +
       `Output skill: ${descriptor.outputSkillId}\n` +
       `Command: ${descriptor.cli.command}\n` +
+      `Direct render: ${descriptor.cli.renderCommand}\n` +
       'Use --json for the complete authority statement, limitations, and copyable input.\n',
   );
   return EXIT.ok;
@@ -1100,6 +1118,91 @@ function isPlainJsonRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+type ParsedSourceInput =
+  | { readonly ok: true; readonly value: JsonValue }
+  | { readonly ok: false; readonly exitCode: number };
+
+function readSourceInput(input: string, asJson: boolean): ParsedSourceInput {
+  let text: string;
+  try {
+    text = readInput(input);
+  } catch (error) {
+    return { ok: false, exitCode: handleInputReadFailure(error, asJson) };
+  }
+  const parsed = parseJsonStrict(text, { limits: getBudgetLimits('standard') });
+  if (!parsed.ok) {
+    printDiagnostics(parsed.errors, asJson);
+    return { ok: false, exitCode: exitCodeForErrors(parsed.errors) };
+  }
+  return { ok: true, value: parsed.value };
+}
+
+type PreparedSourceRequest =
+  | { readonly ok: true; readonly canonicalRequestText: string }
+  | { readonly ok: false; readonly errors: readonly CortexelError[] }
+  | { readonly ok: false; readonly internal: true };
+
+/** One adapter execution + complete materialized request gate, shared by emit/render. */
+function prepareSourceRequest(
+  id: (typeof SOURCE_ADAPTER_IDS)[number],
+  value: JsonValue,
+): PreparedSourceRequest {
+  if (!isPlainJsonRecord(value)) {
+    return {
+      ok: false,
+      errors: adapterEnvelopeFailure(
+        '',
+        'source-adapter input must be one object with exportedStatus and options members.',
+      ),
+    };
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'exportedStatus' || keys[1] !== 'options') {
+    return {
+      ok: false,
+      errors: adapterEnvelopeFailure(
+        '',
+        'source-adapter input must contain exactly exportedStatus and options.',
+      ),
+    };
+  }
+
+  // Discovery remains separate from dispatch: catalog data alone grants no execution.
+  let adapted: ReturnType<typeof nestSpikeRecorderToRaster>;
+  switch (id) {
+    case 'nest-spike-recorder':
+      adapted = nestSpikeRecorderToRaster(
+        value.exportedStatus,
+        value.options as unknown as NestSpikeOptionsInput,
+      );
+      break;
+  }
+  if (!adapted.ok) return { ok: false, errors: adapted.errors };
+
+  const checked = validateRequestValue(adapted.request);
+  if (!checked.ok) return { ok: false, errors: checked.errors };
+  try {
+    return {
+      ok: true,
+      canonicalRequestText: `${canonicalize(checked.request.canonicalRequest)}\n`,
+    };
+  } catch {
+    return { ok: false, internal: true };
+  }
+}
+
+function reportPreparedSourceFailure(
+  prepared: Exclude<PreparedSourceRequest, { readonly ok: true }>,
+  asJson: boolean,
+): number {
+  if ('internal' in prepared) {
+    writeInternalCliDiagnostic('adapted request canonicalization failed', asJson);
+    return EXIT.internal;
+  }
+  printDiagnostics(prepared.errors, asJson);
+  return exitCodeForErrors(prepared.errors);
+}
+
 function cmdSourceAdapt(args: readonly string[]): number {
   const parsed = parseOrReport(args, {
     valueOptions: ['--format'],
@@ -1110,69 +1213,41 @@ function cmdSourceAdapt(args: readonly string[]): number {
   const asJson = parsed.values.get('--format') === 'json';
   if (!isSourceAdapterId(id)) return reportUnknownSourceAdapter(id, asJson);
 
-  let text: string;
-  try {
-    text = readInput(input);
-  } catch (error) {
-    return handleInputReadFailure(error, asJson);
-  }
-  const parsedInput = parseJsonStrict(text, {
-    limits: getBudgetLimits('standard'),
-  });
-  if (!parsedInput.ok) {
-    printDiagnostics(parsedInput.errors, asJson);
-    return exitCodeForErrors(parsedInput.errors);
-  }
-  if (!isPlainJsonRecord(parsedInput.value)) {
-    const errors = adapterEnvelopeFailure(
-      '',
-      'source-adapter input must be one object with exportedStatus and options members.',
-    );
-    printDiagnostics(errors, asJson);
-    return exitCodeForErrors(errors);
-  }
-  const keys = Object.keys(parsedInput.value).sort();
-  if (
-    keys.length !== 2 ||
-    keys[0] !== 'exportedStatus' ||
-    keys[1] !== 'options'
-  ) {
-    const errors = adapterEnvelopeFailure(
-      '',
-      'source-adapter input must contain exactly exportedStatus and options.',
-    );
-    printDiagnostics(errors, asJson);
-    return exitCodeForErrors(errors);
-  }
-
-  // The finite id gate above is intentionally separate from dispatch: a future
-  // descriptor can never become callable merely by appearing in discovery data.
-  let adapted: ReturnType<typeof nestSpikeRecorderToRaster>;
-  switch (id) {
-    case 'nest-spike-recorder':
-      adapted = nestSpikeRecorderToRaster(
-        parsedInput.value.exportedStatus,
-        parsedInput.value.options as unknown as NestSpikeOptionsInput,
-      );
-      break;
-  }
-  if (!adapted.ok) {
-    printDiagnostics(adapted.errors, asJson);
-    return exitCodeForErrors(adapted.errors);
-  }
-
-  const checked = validateRequestValue(adapted.request);
-  if (!checked.ok) {
-    printDiagnostics(checked.errors, asJson);
-    return exitCodeForErrors(checked.errors);
-  }
-  try {
-    process.stdout.write(`${canonicalize(checked.request.canonicalRequest)}\n`);
-  } catch {
-    process.stderr.write('internal error: adapted request canonicalization failed\n');
-    return EXIT.internal;
-  }
+  const sourceInput = readSourceInput(input, asJson);
+  if (!sourceInput.ok) return sourceInput.exitCode;
+  const prepared = prepareSourceRequest(id, sourceInput.value);
+  if (!prepared.ok) return reportPreparedSourceFailure(prepared, asJson);
+  process.stdout.write(prepared.canonicalRequestText);
   return EXIT.ok;
+}
+
+function cmdSourceRender(args: readonly string[]): number {
+  const parsed = parseOrReport(args, {
+    flags: ['--force', '--dry-run'],
+    valueOptions: ['--output', '--format'],
+    positionalCount: 2,
+  });
+  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
+  const renderOptions = parseRenderInvocation(parsed);
+  if (renderOptions === undefined) return EXIT.usage;
+
+  const [id, input] = parsed.positionals;
+  if (!isSourceAdapterId(id)) {
+    return reportUnknownSourceAdapter(id, renderOptions.asJson);
+  }
+  const sourceInput = readSourceInput(input, renderOptions.asJson);
+  if (!sourceInput.ok) return sourceInput.exitCode;
+  const prepared = prepareSourceRequest(id, sourceInput.value);
+  if (!prepared.ok) return reportPreparedSourceFailure(prepared, renderOptions.asJson);
+
+  // Re-enter through the raw boundary using the exact canonical bytes that `source
+  // adapt` emits. Thus direct source rendering and `source adapt | render` mint the
+  // same request assurance, request digest, artifact bytes, and SVG bytes.
+  return finishFigureRender(
+    buildFigureFromJson(prepared.canonicalRequestText),
+    renderOptions,
+    id,
+  );
 }
 
 function cmdSource(args: readonly string[]): number {
@@ -1184,9 +1259,11 @@ function cmdSource(args: readonly string[]): number {
       return cmdSourceDescribe(rest);
     case 'adapt':
       return cmdSourceAdapt(rest);
+    case 'render':
+      return cmdSourceRender(rest);
     default:
       process.stderr.write(
-        'usage error: source requires catalog, describe, or adapt\n',
+        'usage error: source requires catalog, describe, adapt, or render\n',
       );
       return EXIT.usage;
   }
@@ -1224,14 +1301,14 @@ function cmdValidate(args: readonly string[]): number {
   return exitCodeForErrors(outcome.errors);
 }
 
-function cmdRender(args: readonly string[]): number {
-  const parsed = parseOrReport(args, {
-    flags: ['--force', '--dry-run'],
-    valueOptions: ['--output', '--format'],
-    positionalCount: 1,
-  });
-  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
-  const input = parsed.positionals[0];
+interface RenderInvocation {
+  readonly output?: string;
+  readonly force: boolean;
+  readonly dryRun: boolean;
+  readonly asJson: boolean;
+}
+
+function parseRenderInvocation(parsed: ParsedArguments): RenderInvocation | undefined {
   const output = parsed.values.get('--output');
   const force = parsed.flags.has('--force');
   const dryRun = parsed.flags.has('--dry-run');
@@ -1239,39 +1316,67 @@ function cmdRender(args: readonly string[]): number {
 
   if (output === '-') {
     process.stderr.write('usage error: --output requires a filesystem path\n');
-    return EXIT.usage;
+    return undefined;
   }
   if (output !== undefined && (
     !output.endsWith('.svg') || path.basename(output).length <= '.svg'.length
   )) {
     process.stderr.write('usage error: --output must name a nonempty .svg file\n');
-    return EXIT.usage;
+    return undefined;
   }
   if (!dryRun && !output) {
     process.stderr.write('usage error: render requires --output <figure.svg> unless --dry-run is set\n');
-    return EXIT.usage;
+    return undefined;
   }
   if (dryRun && output) {
     process.stderr.write('usage error: --dry-run cannot be combined with --output\n');
-    return EXIT.usage;
+    return undefined;
   }
   if (dryRun && force) {
     process.stderr.write('usage error: --force requires --output\n');
-    return EXIT.usage;
+    return undefined;
   }
+  return { output, force, dryRun, asJson };
+}
 
-  let text: string;
-  try {
-    text = readInput(input);
-  } catch (error) {
-    return handleInputReadFailure(error, asJson);
-  }
+function sourceAdapterExecutionMetadata(
+  id: (typeof SOURCE_ADAPTER_IDS)[number],
+  result: FigureResult,
+): Record<string, unknown> {
+  const requestDigest = (
+    result.artifact.provenance as { readonly requestDigest: string }
+  ).requestDigest;
+  return {
+    id,
+    revision: lookupSourceAdapter(id)!.revision,
+    catalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
+    catalogDigestDomain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+    requestDigest,
+    artifactDigest: result.artifact.artifactDigest,
+    sourceAuthentication: 'not_performed',
+  };
+}
 
-  const result = buildFigureFromJson(text);
+function finishFigureRender(
+  result: FigureResult | FigureFailure,
+  invocation: RenderInvocation,
+  sourceAdapterId?: (typeof SOURCE_ADAPTER_IDS)[number],
+): number {
+  const { output, force, dryRun, asJson } = invocation;
+
   if (!result.ok) {
     printDiagnostics(result.errors, asJson);
     return exitCodeForErrors(result.errors);
   }
+  const sourceExecution = sourceAdapterId === undefined
+    ? undefined
+    : sourceAdapterExecutionMetadata(sourceAdapterId, result);
+  const sourceProtocol = sourceExecution === undefined
+    ? {}
+    : {
+        protocol: 'cortexel-cli-source-render',
+        protocolVersion: 1,
+      };
 
   const renderedSkill =
     (result.artifact.canonicalRequest as { skill?: { id?: string } })?.skill?.id ?? 'figure';
@@ -1280,22 +1385,27 @@ function cmdRender(args: readonly string[]): number {
     const svgByteLength = Buffer.byteLength(result.svg, 'utf8');
     if (asJson) {
       writeCliJson({
+        ...sourceProtocol,
         ok: true,
         dryRun: true,
         skill: renderedSkill,
         svgByteLength,
         tableRowsTotal: result.table.rowsTotal,
+        ...(sourceExecution === undefined
+          ? {}
+          : { sourceAdapterExecution: sourceExecution }),
       });
     } else {
       process.stdout.write(
-        `would render ${renderedSkill}: ` +
-          `${svgByteLength} SVG bytes, ${result.table.rowsTotal} in-memory table rows\n`,
+        `would render ${renderedSkill}` +
+          (sourceAdapterId === undefined ? '' : ` via ${sourceAdapterId}`) +
+          `: ${svgByteLength} SVG bytes, ${result.table.rowsTotal} in-memory table rows\n`,
       );
     }
     return EXIT.ok;
   }
 
-  // A successful non-dry render has an output path by the usage gate above.
+  // A successful non-dry render has an output path by the shared usage gate.
   const svgTarget = output!;
   const base = svgTarget.slice(0, -'.svg'.length);
   const artifactTarget = `${base}.artifact.json`;
@@ -1303,17 +1413,7 @@ function cmdRender(args: readonly string[]): number {
   try {
     artifactJson = canonicalize(result.artifact);
   } catch {
-    if (asJson) {
-      writeCliJson({
-        ok: false,
-        cliError: {
-          kind: 'internal',
-          message: 'artifact canonicalization failed',
-        },
-      }, process.stderr);
-    } else {
-      process.stderr.write('Internal error: artifact canonicalization failed\n');
-    }
+    writeInternalCliDiagnostic('artifact canonicalization failed', asJson);
     return EXIT.internal;
   }
 
@@ -1326,16 +1426,22 @@ function cmdRender(args: readonly string[]): number {
     // digest binding, verifier, and byte-for-byte CLI passthrough.
     if (asJson) {
       writeCliJson({
+        ...sourceProtocol,
         ok: true,
         dryRun: false,
         skill: renderedSkill,
         artifactDigest: result.artifact.artifactDigest,
         outputs: result.artifact.outputs,
         tableSidecar: null,
+        ...(sourceExecution === undefined
+          ? {}
+          : { sourceAdapterExecution: sourceExecution }),
       });
     } else {
       process.stdout.write(
-        'wrote figure SVG and completion artifact (no canonical table sidecar)\n',
+        'wrote figure SVG and completion artifact' +
+          (sourceAdapterId === undefined ? '' : ` via ${sourceAdapterId}`) +
+          ' (no canonical table sidecar)\n',
       );
     }
   } catch (error) {
@@ -1344,6 +1450,26 @@ function cmdRender(args: readonly string[]): number {
   }
 
   return EXIT.ok;
+}
+
+function cmdRender(args: readonly string[]): number {
+  const parsed = parseOrReport(args, {
+    flags: ['--force', '--dry-run'],
+    valueOptions: ['--output', '--format'],
+    positionalCount: 1,
+  });
+  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
+  const invocation = parseRenderInvocation(parsed);
+  if (invocation === undefined) return EXIT.usage;
+  const input = parsed.positionals[0];
+
+  let text: string;
+  try {
+    text = readInput(input);
+  } catch (error) {
+    return handleInputReadFailure(error, invocation.asJson);
+  }
+  return finishFigureRender(buildFigureFromJson(text), invocation);
 }
 
 function cmdInspect(args: readonly string[]): number {
@@ -1404,6 +1530,8 @@ Usage:
   cortexel source catalog [--json]
   cortexel source describe <source-adapter-id> [--json]
   cortexel source adapt <source-adapter-id> <input|-> [--format json]
+  cortexel source render <source-adapter-id> <input|-> --output figure.svg [--force] [--format json]
+  cortexel source render <source-adapter-id> <input|-> --dry-run [--format json]
   cortexel validate <input|-> [--format json]
   cortexel render   <input|-> --output figure.svg [--force] [--format json]
   cortexel render   <input|-> --dry-run [--format json]

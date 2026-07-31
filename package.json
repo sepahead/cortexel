@@ -135,7 +135,12 @@
     "./package.json": "./package.json"
   },
   "imports": {
-    "#cortexel-request-capability": "./dist/internal/request-capability.cjs"
+    "#cortexel-request-capability": "./dist/internal/request-capability.cjs",
+    "#cortexel-validated-request-brand": {
+      "types": "./dist/internal/validated-request-brand.d.ts",
+      "import": "./dist/internal/validated-request-brand.js",
+      "require": "./dist/internal/validated-request-brand.cjs"
+    }
   },
   "bin": {
     "cortexel": "./dist/cli/main.js"

@@ -159,12 +159,21 @@ describe('capability maturity and concrete availability', () => {
     expect((tsupEntry as Record<string, unknown>)['internal/request-capability']).toBe(
       'src/core/request.ts',
     );
+    expect((tsupEntry as Record<string, unknown>)['internal/validated-request-brand']).toBe(
+      'src/core/validated-request-brand.ts',
+    );
     expect(packageJson.imports).toEqual({
       '#cortexel-request-capability': './dist/internal/request-capability.cjs',
+      '#cortexel-validated-request-brand': {
+        types: './dist/internal/validated-request-brand.d.ts',
+        import: './dist/internal/validated-request-brand.js',
+        require: './dist/internal/validated-request-brand.cjs',
+      },
     });
     expect(buildEntryIds({
       'figure/index': 'src/figure/index.ts',
       'internal/request-capability': 'src/core/request.ts',
+      'internal/validated-request-brand': 'src/core/validated-request-brand.ts',
       'cli/main': 'src/cli/main.ts',
     })).toEqual(new Set(['cortexel/figure']));
   });

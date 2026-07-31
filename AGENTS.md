@@ -36,6 +36,8 @@ cortexel describe neuro.spike_raster --json --section example
 cortexel describe neuro.spike_raster --json --section schema
 cortexel source catalog --json
 cortexel source describe nest-spike-recorder --json
+cortexel source render nest-spike-recorder capture.json --output figure.svg --format json
+# When an intermediate request is useful for composition or review:
 cortexel source adapt nest-spike-recorder capture.json > request.json
 cortexel validate request.json
 cortexel render request.json --output figure.svg
@@ -57,9 +59,12 @@ is the closed digest-bound list of adapters the installed package can actually e
 At present it contains only `nest-spike-recorder`. `source describe` returns its exact
 authority statement, limitations, and copyable `{ exportedStatus, options }` envelope;
 `source adapt` reads bounded duplicate-key-safe JSON and emits a canonical request only
-after the adapter and the complete stable FigureRequest gate both succeed. Its stdout
-can be piped directly to `validate` or `render`. It does not import PyNEST, authenticate
-the producing process, or turn the external R049 gate into package evidence.
+after the adapter and the complete stable FigureRequest gate both succeed. Prefer
+`source render` when no intermediate request is needed: it keeps adapter, validation,
+derivation, rendering, and publication in one process. `source adapt | render` remains
+useful for composition, but ordinary shell pipeline status can mask an upstream adapter
+failure unless the host checks every stage. Neither path imports PyNEST, authenticates
+the producing process, or turns the external R049 gate into package evidence.
 
 The same resources are importable without a subprocess:
 
@@ -69,7 +74,8 @@ import {
   SOURCE_ADAPTER_CATALOG,
   lookupSourceAdapter,
 } from 'cortexel/authoring';
-import { validateRequestValue } from 'cortexel/figure';
+import { applySafeRepairs, validateRequestValue } from 'cortexel/figure';
+import { buildFigureFromValidated } from 'cortexel/render-svg';
 
 const sourceAdapter = lookupSourceAdapter('nest-spike-recorder');
 if (sourceAdapter !== SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) {
@@ -79,9 +85,27 @@ if (sourceAdapter !== SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) {
 const draft = structuredClone(
   SKILL_AUTHORING['neuro.spike_raster'].authoringExample,
 );
-const result = validateRequestValue(draft);
-if (!result.ok) repair(result.errors);
+const firstPass = validateRequestValue(draft);
+const accepted = firstPass.ok ? firstPass : applySafeRepairs(draft);
+if (!accepted.ok) {
+  throw new Error(JSON.stringify(accepted.errors)); // return these bounded errors to the agent
+}
+
+const figure = buildFigureFromValidated(accepted.request);
+if (!figure.ok) {
+  throw new Error(JSON.stringify(figure.errors));
+}
+// figure.svg and figure.artifact are now derived from the validated capability.
 ```
+
+`applySafeRepairs` is deliberately narrow. It can add an entirely absent exact
+contract identity, replace a registered unit alias with its registry-owned canonical
+code, and remove caller-authored library-assurance fields from Cortexel's private
+snapshot. It never deletes unknown scientific fields, migrates a skill, chooses a
+topology scope, changes direction/layout, or overwrites a present contract member.
+Do not feed diagnostic `repair` objects back as commands: they are untrusted candidate
+corrections. On failure, the API returns diagnostics and an immutable audit of any safe
+subset it tried, but no candidate object and no render authority.
 
 The compile profile intentionally disables Ajv's `strictRequired` and `strictTypes`
 lints. Cortexel's generator applies context-aware equivalents because mechanically

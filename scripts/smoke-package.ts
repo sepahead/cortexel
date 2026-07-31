@@ -4572,6 +4572,33 @@ const runtimeFigureContractProbe = `
   if (!validated.ok || validated.request.skillId !== 'neuro.spike_raster') {
     throw new Error('packed validator cannot validate a shipped living example');
   }
+  const repairInput = JSON.parse(JSON.stringify(spikeContract.examples.valid[0]));
+  delete repairInput.contract;
+  repairInput.verified = true;
+  repairInput.data.eventTimes.unit = 'milliseconds';
+  const repaired = figure.applySafeRepairs(repairInput);
+  if (!repaired.ok || repaired.request.skillId !== 'neuro.spike_raster' ||
+      JSON.stringify(repaired.appliedRepairs.map((entry) => entry.reasonCode)) !==
+        JSON.stringify([
+          'PROVENANCE_CALLER_ASSURANCE_FORBIDDEN',
+          'CONTRACT_MISSING',
+          'SCIENCE_UNIT_ALIAS_NOT_CANONICAL',
+        ]) ||
+      Object.hasOwn(repairInput, 'contract') || repairInput.verified !== true ||
+      repairInput.data.eventTimes.unit !== 'milliseconds') {
+    throw new Error('packed safe-repair boundary is absent, non-deterministic, or mutated input');
+  }
+  const cappedRepairInput = JSON.parse(JSON.stringify(spikeContract.examples.valid[0]));
+  cappedRepairInput.presentation = { budgetProfile: 'agent' };
+  for (let index = 0; index < 200; index++) {
+    cappedRepairInput['wrapper' + String(index).padStart(3, '0')] = { verified: true };
+  }
+  const cappedRepair = figure.applySafeRepairs(cappedRepairInput, { budgetProfile: 'agent' });
+  if (cappedRepair.ok || cappedRepair.errors.length !== 32 ||
+      !cappedRepair.errors.some((error) => error.code === 'RESOURCE_BUDGET_EXCEEDED') ||
+      !cappedRepair.errors.some((error) => error.code === 'ERROR_LIMIT_REACHED')) {
+    throw new Error('packed safe-repair boundary hid its governing operation-budget stop');
+  }
   const renderedValidated = validated.ok
     ? renderSvg.buildFigureFromValidated(validated.request)
     : null;
@@ -4603,7 +4630,13 @@ const runtimeFigureContractProbe = `
   if (capabilityRegistry.registry !== 'cortexel-capabilities' ||
       requestSchema.$id !== 'https://sepahead.github.io/cortexel/schemas/v1/figure-request.v1.schema.json' ||
       packageMetadata.imports?.['#cortexel-request-capability'] !==
-        './dist/internal/request-capability.cjs') {
+        './dist/internal/request-capability.cjs' ||
+      JSON.stringify(packageMetadata.imports?.['#cortexel-validated-request-brand']) !==
+        JSON.stringify({
+          types: './dist/internal/validated-request-brand.d.ts',
+          import: './dist/internal/validated-request-brand.js',
+          require: './dist/internal/validated-request-brand.cjs',
+        })) {
     throw new Error('packaged registry/schema exports are incomplete');
   }
 `;
@@ -4721,8 +4754,32 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   if (!packedPaths.includes('dist/internal/request-capability.cjs')) {
     throw new Error('tarball is missing the shared request-capability runtime');
   }
+  for (const nominalBrandPath of [
+    'dist/internal/validated-request-brand.cjs',
+    'dist/internal/validated-request-brand.d.cts',
+    'dist/internal/validated-request-brand.d.ts',
+    'dist/internal/validated-request-brand.js',
+  ]) {
+    if (!packedPaths.includes(nominalBrandPath)) {
+      throw new Error(`tarball is missing the shared nominal type module: ${nominalBrandPath}`);
+    }
+  }
 
   let installedRoot = join(consumer, 'node_modules', 'cortexel');
+  for (const declarationPath of packedPaths.filter(
+    (entry) => entry.endsWith('.d.ts') || entry.endsWith('.d.cts'),
+  )) {
+    const declaration = readUtf8RegularFileStable(
+      join(installedRoot, ...declarationPath.split('/')),
+      `packed declaration ${declarationPath}`,
+      PACKAGE_TARBALL_LIMITS.fileBytes,
+    );
+    if (declaration.includes('requestBoundary.internal')) {
+      throw new Error(
+        `packed declaration leaks the private request-boundary module path: ${declarationPath}`,
+      );
+    }
+  }
   for (const requiredNotice of [
     'THIRD_PARTY_NOTICES.md',
     'LICENSES/Apache-2.0.txt',
@@ -4952,6 +5009,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       // mutation or the private WeakSet itself.
       const packageScopedRequire = createRequire(require.resolve('cortexel/package.json'));
       const internalCapability = packageScopedRequire('#cortexel-request-capability');
+      const nominalBrandRuntime = packageScopedRequire('#cortexel-validated-request-brand');
       const expectedInternalExports = [
         'isValidatedRequest',
         'parseAndValidateRequest',
@@ -4963,11 +5021,18 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
           internalCapability.parseAndValidateRequest !== cjsFigure.parseAndValidateRequest) {
         throw new Error('shared request-capability runtime exposes excess authority or split identity');
       }
+      if (JSON.stringify(Object.keys(nominalBrandRuntime)) !== JSON.stringify([])) {
+        throw new Error('type-only validated-request brand exposes runtime authority');
+      }
       const contract = require('cortexel/contract/skills/neuro.spike_raster.v1.json');
       const input = JSON.stringify(contract.examples.valid[0]);
       const esmValidated = esmFigure.parseAndValidateRequest(input);
       const cjsValidated = cjsFigure.parseAndValidateRequest(input);
-      if (!esmValidated.ok || !cjsValidated.ok) {
+      const repairInput = JSON.parse(input);
+      delete repairInput.contract;
+      const esmRepaired = esmFigure.applySafeRepairs(repairInput);
+      const cjsRepaired = cjsFigure.applySafeRepairs(repairInput);
+      if (!esmValidated.ok || !cjsValidated.ok || !esmRepaired.ok || !cjsRepaired.ok) {
         throw new Error('mixed-format probe could not mint validated requests');
       }
       const combinations = [
@@ -4975,6 +5040,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         ['CJS to CJS', cjsRenderer.buildFigureFromValidated(cjsValidated.request)],
         ['ESM to CJS', cjsRenderer.buildFigureFromValidated(esmValidated.request)],
         ['CJS to ESM', esmRenderer.buildFigureFromValidated(cjsValidated.request)],
+        ['repaired ESM to CJS', cjsRenderer.buildFigureFromValidated(esmRepaired.request)],
+        ['repaired CJS to ESM', esmRenderer.buildFigureFromValidated(cjsRepaired.request)],
       ];
       for (const [label, result] of combinations) {
         if (!result.ok || !result.svg.startsWith('<svg')) {
@@ -5038,6 +5105,20 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       if (!privateImportBlocked || !privateRequireBlocked) {
         throw new Error('consumer reached Cortexel package-private import mapping');
       }
+      for (const specifier of ['#cortexel-validated-request-brand']) {
+        let importBlocked = false;
+        let requireBlocked = false;
+        try { await import(specifier); } catch (error) {
+          importBlocked = error?.code === 'ERR_PACKAGE_IMPORT_NOT_DEFINED';
+        }
+        try { require(specifier); } catch (error) {
+          requireBlocked =
+            error?.code === 'ERR_PACKAGE_IMPORT_NOT_DEFINED' || error?.code === 'MODULE_NOT_FOUND';
+        }
+        if (!importBlocked || !requireBlocked) {
+          throw new Error('consumer reached Cortexel package-private nominal brand mapping');
+        }
+      }
     `,
   );
   phaseRun(nodeExecutable, [join(consumer, 'mixed-capability-probe.mjs')], consumer);
@@ -5081,8 +5162,16 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   const installedCliEsm = join(installedRoot, 'dist', 'cli', 'main.js');
   const installedCliCjs = join(installedRoot, 'dist', 'cli', 'main.cjs');
   assertInstalledNodeBinShim(consumer, 'cortexel', installedCliEsm);
-  const runInstalledCli = (args: string[]) =>
-    runResult(nodeExecutable, [installedCliEsm, ...args], unrelated);
+  const runInstalledCli = (args: string[]) => {
+    // Execute is a finalized, globally write-denied evidence phase. Publication
+    // semantics have their own CLI tests; the installed-package probe exercises the
+    // complete adapter/validation/derivation/render path through --dry-run without
+    // weakening this phase or running target code before the workspace seal.
+    if (args.includes('--output') || args.includes('--force')) {
+      fail('finalized installed-CLI probe requested forbidden publication authority');
+    }
+    return runResult(nodeExecutable, [installedCliEsm, ...args], unrelated);
+  };
 
   phaseWriteFile(
     join(consumer, 'import-cli.mjs'),
@@ -5285,6 +5374,53 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       adaptedRender.stderr !== ''
     ) {
       throw new Error('packed CLI adapted request did not validate and render end to end');
+    }
+    const adaptedRenderValue = strictJson(
+      adaptedRender.stdout,
+      'installed CLI adapted-request dry render',
+    );
+    const directSourceDryRun = runInstalledCli([
+      'source',
+      'render',
+      'nest-spike-recorder',
+      sourceAdapterFixturePath,
+      '--dry-run',
+      '--format',
+      'json',
+    ]);
+    if (directSourceDryRun.status !== 0 || directSourceDryRun.stderr !== '') {
+      throw new Error('packed CLI direct source dry render failed');
+    }
+    const directSourceDryRunValue = strictJson(
+      directSourceDryRun.stdout,
+      'installed CLI direct source dry render',
+    );
+    if (
+      !isRecord(directSourceDryRunValue) ||
+      directSourceDryRunValue.protocol !== 'cortexel-cli-source-render' ||
+      directSourceDryRunValue.protocolVersion !== 1 ||
+      directSourceDryRunValue.ok !== true ||
+      directSourceDryRunValue.dryRun !== true ||
+      !isRecord(directSourceDryRunValue.sourceAdapterExecution) ||
+      directSourceDryRunValue.sourceAdapterExecution.id !== 'nest-spike-recorder' ||
+      directSourceDryRunValue.sourceAdapterExecution.revision !== 5 ||
+      directSourceDryRunValue.sourceAdapterExecution.catalogDigest !==
+        cliSourceCatalog.sourceAdapterCatalogDigest ||
+      directSourceDryRunValue.sourceAdapterExecution.catalogDigestDomain !==
+        cliSourceCatalog.sourceAdapterCatalogDigestDomain ||
+      directSourceDryRunValue.sourceAdapterExecution.sourceAuthentication !==
+        'not_performed' ||
+      directSourceDryRunValue.sourceAdapterExecution.requestDigest !==
+        sourceAdaptedValidation.request.requestDigest ||
+      typeof directSourceDryRunValue.sourceAdapterExecution.artifactDigest !== 'string' ||
+      !/^sha256:[0-9a-f]{64}$/u.test(
+        directSourceDryRunValue.sourceAdapterExecution.artifactDigest,
+      ) ||
+      !isRecord(adaptedRenderValue) ||
+      directSourceDryRunValue.svgByteLength !== adaptedRenderValue.svgByteLength ||
+      directSourceDryRunValue.tableRowsTotal !== adaptedRenderValue.tableRowsTotal
+    ) {
+      throw new Error('packed CLI direct source-render protocol or dry-run parity failed');
     }
 
     let discoveryCompilationProfile: Record<string, JsonValue> | undefined;
@@ -5563,7 +5699,14 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         jsx: 'react-jsx',
         types: ['node'],
       },
-      include: ['consumer.ts', 'consumer.cts'],
+      include: [
+        'consumer.ts',
+        'consumer.cts',
+        'brand-producer.mts',
+        'brand-consumer.cts',
+        'brand-producer.cts',
+        'brand-consumer.mts',
+      ],
     }),
   );
   phaseWriteFile(
@@ -5571,9 +5714,12 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     `
       import { buildVizSpec } from 'cortexel';
       import {
+        applySafeRepairs,
         getBuildIdentity,
         parseAndValidateRequest,
+        type AppliedSafeRepair,
         type InputAssurance,
+        type SafeRepairOutcome,
         type ValidatedRequest,
       } from 'cortexel/figure';
       import {
@@ -5656,6 +5802,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       });
       const checkedRequest = parseAndValidateRequest('{}');
       if (checkedRequest.ok) buildFigureFromValidated(checkedRequest.request);
+      const safeRepairOutcome: SafeRepairOutcome = applySafeRepairs('{}');
+      const safeRepairAudit = {} as AppliedSafeRepair;
       const args = {} as RenderSceneArgs;
       const graphOptions = {} as ConnectionGraphOptions;
       const delayOptions = {} as DelayDistributionOptions;
@@ -5717,6 +5865,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      // @ts-expect-error the package-private nominal brand is not a consumer import
+      type ForbiddenNominalBrandImport = typeof import('#cortexel-validated-request-brand');
       // @ts-expect-error unknown stable skill ids are rejected by the authoring map
       void SKILL_AUTHORING['not.a.skill'];
       const unknownCatalogEntry: SkillCatalogEntry | undefined =
@@ -5728,6 +5878,9 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       void AUTHORING_SKILL_CATALOG['not.a.skill'];
       void [
         authored,
+        safeRepairOutcome,
+        safeRepairAudit,
+        applySafeRepairs,
         getBuildIdentity,
         parseAndValidateRequest,
         buildFigure,
@@ -5820,6 +5973,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const nestOptions = {} as nestAdapter.NestSpikeOptions;
       const checkedRequest = figure.parseAndValidateRequest('{}');
       if (checkedRequest.ok) renderSvg.buildFigureFromValidated(checkedRequest.request);
+      const safeRepairOutcome: figure.SafeRepairOutcome = figure.applySafeRepairs('{}');
+      const safeRepairAudit = {} as figure.AppliedSafeRepair;
       // @ts-expect-error the raw serializer is intentionally compiler-internal
       void renderSvg.renderSvg;
       // @ts-expect-error resource accounting is intentionally compiler-internal
@@ -5864,6 +6019,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      // @ts-expect-error the package-private nominal brand is not a consumer import
+      type ForbiddenNominalBrandImport = typeof import('#cortexel-validated-request-brand');
       // @ts-expect-error unknown stable skill ids are rejected by the authoring map
       void authoring.SKILL_AUTHORING['not.a.skill'];
       const unknownCatalogEntry: authoring.SkillCatalogEntry | undefined =
@@ -5875,6 +6032,9 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       void authoring.SKILL_CATALOG['not.a.skill'];
       void [
         build,
+        safeRepairOutcome,
+        safeRepairAudit,
+        figure.applySafeRepairs,
         figure.getBuildIdentity,
         figure.parseAndValidateRequest,
         renderSvg.buildFigure,
@@ -5928,6 +6088,40 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         graph.KnowledgeGraph3DScene,
         graph.KnowledgeGraphLegend,
       ];
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'brand-producer.mts'),
+    `
+      import { applySafeRepairs } from 'cortexel/figure';
+      export type EsmRepairedRequest =
+        Extract<ReturnType<typeof applySafeRepairs>, { readonly ok: true }>['request'];
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'brand-consumer.cts'),
+    `
+      import renderSvg = require('cortexel/render-svg');
+      import type { EsmRepairedRequest } from './brand-producer.mjs';
+      declare const request: EsmRepairedRequest;
+      renderSvg.buildFigureFromValidated(request);
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'brand-producer.cts'),
+    `
+      import figure = require('cortexel/figure');
+      export type CjsRepairedRequest =
+        Extract<ReturnType<typeof figure.applySafeRepairs>, { readonly ok: true }>['request'];
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'brand-consumer.mts'),
+    `
+      import { buildFigureFromValidated } from 'cortexel/render-svg';
+      import type { CjsRepairedRequest } from './brand-producer.cjs';
+      declare const request: CjsRepairedRequest;
+      buildFigureFromValidated(request);
     `,
   );
   const installedTsc = join(consumer, 'node_modules', 'typescript', 'bin', 'tsc');

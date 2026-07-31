@@ -1078,6 +1078,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 20971520,
     "sidecarBytes": 104857600,
     "returnedTableRows": 500,
+    "safeRepairOperations": 128,
     "errorRecords": 32
   },
   "agent": {
@@ -1099,6 +1100,7 @@ var BUDGET_PROFILES = freezeGenerated({
     "svgBytes": 5242880,
     "sidecarBytes": 20971520,
     "returnedTableRows": 200,
+    "safeRepairOperations": 64,
     "errorRecords": 32
   }
 });
@@ -11883,7 +11885,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Pure FigureRequestV1 validation and identity surface. Packaged availability is not publication or release certification."
+      "Pure FigureRequestV1 validation, identity, and closed safe-repair surface. Safe repair is TypeScript-only: the explicitly partial Python semantic port exposes no repair API, emits no repair member, and makes no repair-parity claim. Packaged availability is not publication or release certification."
     ]
   },
   "cortexel/authoring": {
@@ -12032,7 +12034,7 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Adapt input is bounded duplicate-key-safe JSON, and the emitted request must pass the complete stable validation pipeline."
+      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Source input is bounded duplicate-key-safe JSON. `source render` is the recommended one-process adapter/validation/render/publication path; successful `source adapt | render` composition produces identical request, artifact, and SVG bytes, but ordinary shell pipeline status can mask upstream failure unless the host checks every stage."
     ]
   },
   "cli.validate": {
@@ -12726,8 +12728,8 @@ var UNCERTAINTY_STYLES_BY_KIND = freezeGenerated({
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004";
-var CATALOG_DIGEST = "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e";
+var CONTRACT_DIGEST = "sha256:09b41ffd58f3ba63306b1ce347943383b8b4501fe468cc5777b7431b5d6b2792";
+var CATALOG_DIGEST = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5";
 var CATALOG_DIGEST_DOMAIN = "cortexel-public-stable-catalog.v2";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {
@@ -14374,6 +14376,7 @@ var STABLE_CATALOG_SCHEMA_RESOURCES = freezeGenerated([
           "CAPABILITY_REMOVED",
           "CONTRACT_DIGEST_MISMATCH",
           "CONTRACT_MISSING",
+          "CONTRACT_SHAPE_INVALID",
           "CONTRACT_SKILL_REVISION_UNSUPPORTED",
           "CONTRACT_UNSUPPORTED_VERSION",
           "DATA_BYTE_LENGTH_MISMATCH",
@@ -15622,7 +15625,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.adjacency_matrix.request.v1.schema.json",
       "title": "network.adjacency_matrix request",
-      "description": "GENERATED from contract/skills/network.adjacency_matrix.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.adjacency_matrix.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -16035,7 +16038,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.connection_graph.request.v1.schema.json",
       "title": "network.connection_graph request",
-      "description": "GENERATED from contract/skills/network.connection_graph.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.connection_graph.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -16535,7 +16538,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.degree_distribution.request.v1.schema.json",
       "title": "network.degree_distribution request",
-      "description": "GENERATED from contract/skills/network.degree_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.degree_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -16890,7 +16893,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_distribution.request.v1.schema.json",
       "title": "network.delay_distribution request",
-      "description": "GENERATED from contract/skills/network.delay_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.delay_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -17444,7 +17447,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.delay_matrix.request.v1.schema.json",
       "title": "network.delay_matrix request",
-      "description": "GENERATED from contract/skills/network.delay_matrix.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.delay_matrix.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -17926,7 +17929,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.spatial_map_2d.request.v1.schema.json",
       "title": "network.spatial_map_2d request",
-      "description": "GENERATED from contract/skills/network.spatial_map_2d.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.spatial_map_2d.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -18752,7 +18755,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.synaptic_weight_trace.request.v1.schema.json",
       "title": "network.synaptic_weight_trace request",
-      "description": "GENERATED from contract/skills/network.synaptic_weight_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.synaptic_weight_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -19904,7 +19907,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_distribution.request.v1.schema.json",
       "title": "network.weight_distribution request",
-      "description": "GENERATED from contract/skills/network.weight_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.weight_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -20675,7 +20678,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/network.weight_matrix.request.v1.schema.json",
       "title": "network.weight_matrix request",
-      "description": "GENERATED from contract/skills/network.weight_matrix.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/network.weight_matrix.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -21097,7 +21100,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.analog_trace.request.v1.schema.json",
       "title": "neuro.analog_trace request",
-      "description": "GENERATED from contract/skills/neuro.analog_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.analog_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -21578,7 +21581,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.compartment_trace.request.v1.schema.json",
       "title": "neuro.compartment_trace request",
-      "description": "GENERATED from contract/skills/neuro.compartment_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.compartment_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -22282,7 +22285,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.correlogram.request.v1.schema.json",
       "title": "neuro.correlogram request",
-      "description": "GENERATED from contract/skills/neuro.correlogram.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.correlogram.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -22893,7 +22896,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.isi_distribution.request.v1.schema.json",
       "title": "neuro.isi_distribution request",
-      "description": "GENERATED from contract/skills/neuro.isi_distribution.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.isi_distribution.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -23298,7 +23301,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.multisignal_trace.request.v1.schema.json",
       "title": "neuro.multisignal_trace request",
-      "description": "GENERATED from contract/skills/neuro.multisignal_trace.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.multisignal_trace.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -24140,7 +24143,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.phase_plane.request.v1.schema.json",
       "title": "neuro.phase_plane request",
-      "description": "GENERATED from contract/skills/neuro.phase_plane.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.phase_plane.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -25390,7 +25393,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.population_rate.request.v1.schema.json",
       "title": "neuro.population_rate request",
-      "description": "GENERATED from contract/skills/neuro.population_rate.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.population_rate.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -25809,7 +25812,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.psth.request.v1.schema.json",
       "title": "neuro.psth request",
-      "description": "GENERATED from contract/skills/neuro.psth.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.psth.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -26499,7 +26502,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.response_curve.request.v1.schema.json",
       "title": "neuro.response_curve request",
-      "description": "GENERATED from contract/skills/neuro.response_curve.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.response_curve.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -28211,7 +28214,7 @@ var SKILL_AUTHORING = freezeGenerated({
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.spike_raster.request.v1.schema.json",
       "title": "neuro.spike_raster request",
-      "description": "GENERATED from contract/skills/neuro.spike_raster.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+      "description": "GENERATED from contract/skills/neuro.spike_raster.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
       "type": "object",
       "properties": {
         "$schema": {
@@ -29100,6 +29103,7 @@ var ERROR_CODES = freezeGenerated([
   "CAPABILITY_REMOVED",
   "CONTRACT_DIGEST_MISMATCH",
   "CONTRACT_MISSING",
+  "CONTRACT_SHAPE_INVALID",
   "CONTRACT_SKILL_REVISION_UNSUPPORTED",
   "CONTRACT_UNSUPPORTED_VERSION",
   "DATA_BYTE_LENGTH_MISMATCH",
@@ -30033,6 +30037,12 @@ var ERROR_CODE_META = freezeGenerated({
     "severity": "error",
     "summary": "Cortexel detected an internal invariant violation and refused to emit a result.",
     "correctiveAction": "This is a Cortexel defect. Please report it with the reproducer. Cortexel fails rather than emit an artifact it cannot vouch for."
+  },
+  "CONTRACT_SHAPE_INVALID": {
+    "stage": "identity",
+    "severity": "error",
+    "summary": "The declared request contract member is present but is not an identity object.",
+    "correctiveAction": "Inspect the input and explicitly replace the member with the intended contract identity. Cortexel will not overwrite a present caller value or infer which contract it was meant to name."
   }
 });
 var UNIT_CODES = freezeGenerated([
@@ -62762,9 +62772,11 @@ var SOURCE_ADAPTER_CATALOG_DATA = {
       },
       cli: {
         command: "cortexel source adapt nest-spike-recorder <input|->",
+        renderCommand: "cortexel source render nest-spike-recorder <input|-> --output figure.svg --format json",
         inputMediaType: "application/json",
         outputMediaType: "application/json",
-        pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg"
+        pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg --format json",
+        directRenderExample: "cortexel source render nest-spike-recorder capture.json --output figure.svg --format json"
       },
       inputEnvelope: {
         type: "object",
@@ -62776,7 +62788,7 @@ var SOURCE_ADAPTER_CATALOG_DATA = {
       acceptanceBoundary: {
         adapter: "The adapter checks one exact revision-5 source-faithful clock profile with closed finite-stop and positive-infinity/capture-bounded branches, then authors the corresponding request.",
         request: "The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.",
-        rendering: "Pipe the emitted request to `cortexel render`; adapter success alone is never render authority."
+        rendering: "`cortexel source render` applies the adapter, stable request gate, raw canonical-request boundary, derivation, render, and output-publication path in one process and is the recommended agent path. On success, the composable `source adapt | render` form produces the same canonical request, artifact, and SVG bytes. Ordinary shell pipelines can mask an upstream adapter failure unless the caller explicitly checks every pipeline status. Adapter success alone is never render authority."
       },
       authority: [
         "The source digest binds the detached JSON-compatible status projection, not a live simulator process.",
@@ -63946,6 +63958,17 @@ function writeInputIoDiagnostic(asJson = false) {
 `);
   }
 }
+function writeInternalCliDiagnostic(message, asJson = false) {
+  if (asJson) {
+    writeCliJson({
+      ok: false,
+      cliError: { kind: "internal", message }
+    }, process.stderr);
+  } else {
+    process.stderr.write(`Internal error: ${message}
+`);
+  }
+}
 function outputIoMessage(error) {
   if (error instanceof CliIoError) {
     if (error.kind === "destination-exists") {
@@ -64448,7 +64471,7 @@ function cmdDescribe(args) {
       skill: section === "all" ? describeSkillProjection(skill) : describeSkillSummaryProjection(skill),
       acceptanceBoundary: {
         command: "cortexel validate <request.json>",
-        note: "Structural schema success is not acceptance. Cortexel validation also runs identity, semantic, scientific, provenance, budget, and derivation gates."
+        note: "Structural schema success is not acceptance. Cortexel validation also runs identity, semantic, scientific, provenance, and request-budget gates. Use render --dry-run to prove derivation and output-budget acceptance."
       }
     };
     if (section === "example" || section === "all") {
@@ -64541,7 +64564,8 @@ function cmdSourceCatalog(args) {
           sourceSystem: descriptor.sourceSystem,
           admittedSourceVersions: descriptor.admittedSourceVersions,
           outputSkillId: descriptor.outputSkillId,
-          command: descriptor.cli.command
+          command: descriptor.cli.command,
+          renderCommand: descriptor.cli.renderCommand
         };
       })
     });
@@ -64583,6 +64607,7 @@ function cmdSourceDescribe(args) {
 Source: ${safeText(descriptor.sourceSystem, 256)} (${descriptor.admittedSourceVersions.join(", ")})
 Output skill: ${descriptor.outputSkillId}
 Command: ${descriptor.cli.command}
+Direct render: ${descriptor.cli.renderCommand}
 Use --json for the complete authority statement, limitations, and copyable input.
 `
   );
@@ -64599,6 +64624,70 @@ function adapterEnvelopeFailure(instancePath, message) {
 function isPlainJsonRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
+function readSourceInput(input, asJson) {
+  let text;
+  try {
+    text = readInput(input);
+  } catch (error) {
+    return { ok: false, exitCode: handleInputReadFailure(error, asJson) };
+  }
+  const parsed = parseJsonStrict(text, { limits: getBudgetLimits("standard") });
+  if (!parsed.ok) {
+    printDiagnostics(parsed.errors, asJson);
+    return { ok: false, exitCode: exitCodeForErrors(parsed.errors) };
+  }
+  return { ok: true, value: parsed.value };
+}
+function prepareSourceRequest(id, value) {
+  if (!isPlainJsonRecord(value)) {
+    return {
+      ok: false,
+      errors: adapterEnvelopeFailure(
+        "",
+        "source-adapter input must be one object with exportedStatus and options members."
+      )
+    };
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== "exportedStatus" || keys[1] !== "options") {
+    return {
+      ok: false,
+      errors: adapterEnvelopeFailure(
+        "",
+        "source-adapter input must contain exactly exportedStatus and options."
+      )
+    };
+  }
+  let adapted;
+  switch (id) {
+    case "nest-spike-recorder":
+      adapted = nestSpikeRecorderToRaster(
+        value.exportedStatus,
+        value.options
+      );
+      break;
+  }
+  if (!adapted.ok) return { ok: false, errors: adapted.errors };
+  const checked = (0, import_request3.validateRequestValue)(adapted.request);
+  if (!checked.ok) return { ok: false, errors: checked.errors };
+  try {
+    return {
+      ok: true,
+      canonicalRequestText: `${canonicalize(checked.request.canonicalRequest)}
+`
+    };
+  } catch {
+    return { ok: false, internal: true };
+  }
+}
+function reportPreparedSourceFailure(prepared, asJson) {
+  if ("internal" in prepared) {
+    writeInternalCliDiagnostic("adapted request canonicalization failed", asJson);
+    return EXIT.internal;
+  }
+  printDiagnostics(prepared.errors, asJson);
+  return exitCodeForErrors(prepared.errors);
+}
 function cmdSourceAdapt(args) {
   const parsed = parseOrReport(args, {
     valueOptions: ["--format"],
@@ -64608,62 +64697,35 @@ function cmdSourceAdapt(args) {
   const [id, input] = parsed.positionals;
   const asJson = parsed.values.get("--format") === "json";
   if (!isSourceAdapterId(id)) return reportUnknownSourceAdapter(id, asJson);
-  let text;
-  try {
-    text = readInput(input);
-  } catch (error) {
-    return handleInputReadFailure(error, asJson);
-  }
-  const parsedInput = parseJsonStrict(text, {
-    limits: getBudgetLimits("standard")
-  });
-  if (!parsedInput.ok) {
-    printDiagnostics(parsedInput.errors, asJson);
-    return exitCodeForErrors(parsedInput.errors);
-  }
-  if (!isPlainJsonRecord(parsedInput.value)) {
-    const errors = adapterEnvelopeFailure(
-      "",
-      "source-adapter input must be one object with exportedStatus and options members."
-    );
-    printDiagnostics(errors, asJson);
-    return exitCodeForErrors(errors);
-  }
-  const keys = Object.keys(parsedInput.value).sort();
-  if (keys.length !== 2 || keys[0] !== "exportedStatus" || keys[1] !== "options") {
-    const errors = adapterEnvelopeFailure(
-      "",
-      "source-adapter input must contain exactly exportedStatus and options."
-    );
-    printDiagnostics(errors, asJson);
-    return exitCodeForErrors(errors);
-  }
-  let adapted;
-  switch (id) {
-    case "nest-spike-recorder":
-      adapted = nestSpikeRecorderToRaster(
-        parsedInput.value.exportedStatus,
-        parsedInput.value.options
-      );
-      break;
-  }
-  if (!adapted.ok) {
-    printDiagnostics(adapted.errors, asJson);
-    return exitCodeForErrors(adapted.errors);
-  }
-  const checked = (0, import_request3.validateRequestValue)(adapted.request);
-  if (!checked.ok) {
-    printDiagnostics(checked.errors, asJson);
-    return exitCodeForErrors(checked.errors);
-  }
-  try {
-    process.stdout.write(`${canonicalize(checked.request.canonicalRequest)}
-`);
-  } catch {
-    process.stderr.write("internal error: adapted request canonicalization failed\n");
-    return EXIT.internal;
-  }
+  const sourceInput = readSourceInput(input, asJson);
+  if (!sourceInput.ok) return sourceInput.exitCode;
+  const prepared = prepareSourceRequest(id, sourceInput.value);
+  if (!prepared.ok) return reportPreparedSourceFailure(prepared, asJson);
+  process.stdout.write(prepared.canonicalRequestText);
   return EXIT.ok;
+}
+function cmdSourceRender(args) {
+  const parsed = parseOrReport(args, {
+    flags: ["--force", "--dry-run"],
+    valueOptions: ["--output", "--format"],
+    positionalCount: 2
+  });
+  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
+  const renderOptions = parseRenderInvocation(parsed);
+  if (renderOptions === void 0) return EXIT.usage;
+  const [id, input] = parsed.positionals;
+  if (!isSourceAdapterId(id)) {
+    return reportUnknownSourceAdapter(id, renderOptions.asJson);
+  }
+  const sourceInput = readSourceInput(input, renderOptions.asJson);
+  if (!sourceInput.ok) return sourceInput.exitCode;
+  const prepared = prepareSourceRequest(id, sourceInput.value);
+  if (!prepared.ok) return reportPreparedSourceFailure(prepared, renderOptions.asJson);
+  return finishFigureRender(
+    buildFigureFromJson(prepared.canonicalRequestText),
+    renderOptions,
+    id
+  );
 }
 function cmdSource(args) {
   const [subcommand, ...rest] = args;
@@ -64674,9 +64736,11 @@ function cmdSource(args) {
       return cmdSourceDescribe(rest);
     case "adapt":
       return cmdSourceAdapt(rest);
+    case "render":
+      return cmdSourceRender(rest);
     default:
       process.stderr.write(
-        "usage error: source requires catalog, describe, or adapt\n"
+        "usage error: source requires catalog, describe, adapt, or render\n"
       );
       return EXIT.usage;
   }
@@ -64710,63 +64774,72 @@ function cmdValidate(args) {
   printDiagnostics(outcome.errors, asJson);
   return exitCodeForErrors(outcome.errors);
 }
-function cmdRender(args) {
-  const parsed = parseOrReport(args, {
-    flags: ["--force", "--dry-run"],
-    valueOptions: ["--output", "--format"],
-    positionalCount: 1
-  });
-  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
-  const input = parsed.positionals[0];
+function parseRenderInvocation(parsed) {
   const output = parsed.values.get("--output");
   const force = parsed.flags.has("--force");
   const dryRun = parsed.flags.has("--dry-run");
   const asJson = parsed.values.get("--format") === "json";
   if (output === "-") {
     process.stderr.write("usage error: --output requires a filesystem path\n");
-    return EXIT.usage;
+    return void 0;
   }
   if (output !== void 0 && (!output.endsWith(".svg") || import_node_path2.default.basename(output).length <= ".svg".length)) {
     process.stderr.write("usage error: --output must name a nonempty .svg file\n");
-    return EXIT.usage;
+    return void 0;
   }
   if (!dryRun && !output) {
     process.stderr.write("usage error: render requires --output <figure.svg> unless --dry-run is set\n");
-    return EXIT.usage;
+    return void 0;
   }
   if (dryRun && output) {
     process.stderr.write("usage error: --dry-run cannot be combined with --output\n");
-    return EXIT.usage;
+    return void 0;
   }
   if (dryRun && force) {
     process.stderr.write("usage error: --force requires --output\n");
-    return EXIT.usage;
+    return void 0;
   }
-  let text;
-  try {
-    text = readInput(input);
-  } catch (error) {
-    return handleInputReadFailure(error, asJson);
-  }
-  const result = buildFigureFromJson(text);
+  return { output, force, dryRun, asJson };
+}
+function sourceAdapterExecutionMetadata(id, result) {
+  const requestDigest = result.artifact.provenance.requestDigest;
+  return {
+    id,
+    revision: lookupSourceAdapter(id).revision,
+    catalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
+    catalogDigestDomain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+    requestDigest,
+    artifactDigest: result.artifact.artifactDigest,
+    sourceAuthentication: "not_performed"
+  };
+}
+function finishFigureRender(result, invocation, sourceAdapterId) {
+  const { output, force, dryRun, asJson } = invocation;
   if (!result.ok) {
     printDiagnostics(result.errors, asJson);
     return exitCodeForErrors(result.errors);
   }
+  const sourceExecution = sourceAdapterId === void 0 ? void 0 : sourceAdapterExecutionMetadata(sourceAdapterId, result);
+  const sourceProtocol = sourceExecution === void 0 ? {} : {
+    protocol: "cortexel-cli-source-render",
+    protocolVersion: 1
+  };
   const renderedSkill = result.artifact.canonicalRequest?.skill?.id ?? "figure";
   if (dryRun) {
     const svgByteLength = Buffer.byteLength(result.svg, "utf8");
     if (asJson) {
       writeCliJson({
+        ...sourceProtocol,
         ok: true,
         dryRun: true,
         skill: renderedSkill,
         svgByteLength,
-        tableRowsTotal: result.table.rowsTotal
+        tableRowsTotal: result.table.rowsTotal,
+        ...sourceExecution === void 0 ? {} : { sourceAdapterExecution: sourceExecution }
       });
     } else {
       process.stdout.write(
-        `would render ${renderedSkill}: ${svgByteLength} SVG bytes, ${result.table.rowsTotal} in-memory table rows
+        `would render ${renderedSkill}` + (sourceAdapterId === void 0 ? "" : ` via ${sourceAdapterId}`) + `: ${svgByteLength} SVG bytes, ${result.table.rowsTotal} in-memory table rows
 `
       );
     }
@@ -64779,33 +64852,25 @@ function cmdRender(args) {
   try {
     artifactJson = canonicalize(result.artifact);
   } catch {
-    if (asJson) {
-      writeCliJson({
-        ok: false,
-        cliError: {
-          kind: "internal",
-          message: "artifact canonicalization failed"
-        }
-      }, process.stderr);
-    } else {
-      process.stderr.write("Internal error: artifact canonicalization failed\n");
-    }
+    writeInternalCliDiagnostic("artifact canonicalization failed", asJson);
     return EXIT.internal;
   }
   try {
     writeFigureEmission(svgTarget, result.svg, artifactTarget, artifactJson, force);
     if (asJson) {
       writeCliJson({
+        ...sourceProtocol,
         ok: true,
         dryRun: false,
         skill: renderedSkill,
         artifactDigest: result.artifact.artifactDigest,
         outputs: result.artifact.outputs,
-        tableSidecar: null
+        tableSidecar: null,
+        ...sourceExecution === void 0 ? {} : { sourceAdapterExecution: sourceExecution }
       });
     } else {
       process.stdout.write(
-        "wrote figure SVG and completion artifact (no canonical table sidecar)\n"
+        "wrote figure SVG and completion artifact" + (sourceAdapterId === void 0 ? "" : ` via ${sourceAdapterId}`) + " (no canonical table sidecar)\n"
       );
     }
   } catch (error) {
@@ -64813,6 +64878,24 @@ function cmdRender(args) {
     return EXIT.io;
   }
   return EXIT.ok;
+}
+function cmdRender(args) {
+  const parsed = parseOrReport(args, {
+    flags: ["--force", "--dry-run"],
+    valueOptions: ["--output", "--format"],
+    positionalCount: 1
+  });
+  if (!parsed || !validateJsonFormat(parsed)) return EXIT.usage;
+  const invocation = parseRenderInvocation(parsed);
+  if (invocation === void 0) return EXIT.usage;
+  const input = parsed.positionals[0];
+  let text;
+  try {
+    text = readInput(input);
+  } catch (error) {
+    return handleInputReadFailure(error, invocation.asJson);
+  }
+  return finishFigureRender(buildFigureFromJson(text), invocation);
 }
 function cmdInspect(args) {
   const parsed = parseOrReport(args, { positionalCount: 1 });
@@ -64868,6 +64951,8 @@ Usage:
   cortexel source catalog [--json]
   cortexel source describe <source-adapter-id> [--json]
   cortexel source adapt <source-adapter-id> <input|-> [--format json]
+  cortexel source render <source-adapter-id> <input|-> --output figure.svg [--force] [--format json]
+  cortexel source render <source-adapter-id> <input|-> --dry-run [--format json]
   cortexel validate <input|-> [--format json]
   cortexel render   <input|-> --output figure.svg [--force] [--format json]
   cortexel render   <input|-> --dry-run [--format json]

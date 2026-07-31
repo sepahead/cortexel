@@ -21,8 +21,8 @@ PACKAGE_VERSION: str = "0.10.0-dev.0"
 PYTHON_DISTRIBUTION_VERSION: str = "0.10.0.dev0"
 REQUEST_CONTRACT: str = "cortexel-figure-request/1.0"
 ARTIFACT_CONTRACT: str = "cortexel-figure-artifact/1.0"
-CONTRACT_DIGEST: str = "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004"
-CATALOG_DIGEST: str = "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e"
+CONTRACT_DIGEST: str = "sha256:09b41ffd58f3ba63306b1ce347943383b8b4501fe468cc5777b7431b5d6b2792"
+CATALOG_DIGEST: str = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5"
 CATALOG_DIGEST_DOMAIN: str = "cortexel-public-stable-catalog.v2"
 AUTHORING_SCHEMA_COMPILATION_PROFILE_V1: Final[Mapping[str, Any]] = _freeze({
     "id": "cortexel-authoring-schema-compilation-profile.v1",
@@ -14362,6 +14362,7 @@ ERROR_CODES: Final[tuple[str, ...]] = _freeze([
     "CAPABILITY_REMOVED",
     "CONTRACT_DIGEST_MISMATCH",
     "CONTRACT_MISSING",
+    "CONTRACT_SHAPE_INVALID",
     "CONTRACT_SKILL_REVISION_UNSUPPORTED",
     "CONTRACT_UNSUPPORTED_VERSION",
     "DATA_BYTE_LENGTH_MISMATCH",
@@ -15858,6 +15859,7 @@ BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze({
         "svgBytes": 20971520,
         "sidecarBytes": 104857600,
         "returnedTableRows": 500,
+        "safeRepairOperations": 128,
         "errorRecords": 32
     },
     "agent": {
@@ -15879,6 +15881,7 @@ BUDGET_PROFILES: Final[Mapping[str, Mapping[str, int]]] = _freeze({
         "svgBytes": 5242880,
         "sidecarBytes": 20971520,
         "returnedTableRows": 200,
+        "safeRepairOperations": 64,
         "errorRecords": 32
     }
 })

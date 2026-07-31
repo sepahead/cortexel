@@ -20,6 +20,9 @@
     "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
+    "paths": {
+      "#cortexel-validated-request-brand": ["./src/core/validated-request-brand.ts"]
+    },
     "types": ["node"]
   },
   "include": ["index.ts", "core/**/*", "react/**/*", "src/**/*", "test/**/*", "scripts/**/*", "tsup.config.ts", "types/**/*"]

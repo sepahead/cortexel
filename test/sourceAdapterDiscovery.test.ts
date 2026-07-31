@@ -1,4 +1,14 @@
 import { spawn } from 'node:child_process';
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -21,7 +31,7 @@ const CLI_ENTRY = path.join(REPOSITORY, 'src/cli/main.ts');
 
 function runCli(
   args: readonly string[],
-  stdin?: string,
+  stdin?: string | Buffer,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn('bun', [CLI_ENTRY, ...args], {
@@ -53,6 +63,21 @@ function runCli(
       stderr,
     }));
   });
+}
+
+async function withTempDirectory<T>(
+  fn: (directory: string) => Promise<T>,
+): Promise<T> {
+  const directory = mkdtempSync(path.join(tmpdir(), 'cortexel-source-cli-'));
+  try {
+    return await fn(directory);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function artifactPath(output: string): string {
+  return output.replace(/\.svg$/u, '.artifact.json');
 }
 
 type ExampleBranch = 'positiveInfinity' | 'finiteStop';
@@ -121,6 +146,17 @@ describe('executable source-adapter discovery', () => {
         inputDigestDomain: 'cortexel.nest-spike-recorder-adapter-input.v5',
       },
     });
+    expect(
+      SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].cli,
+    ).toMatchObject({
+      command: 'cortexel source adapt nest-spike-recorder <input|->',
+      renderCommand:
+        'cortexel source render nest-spike-recorder <input|-> --output figure.svg --format json',
+      pipeExample:
+        'cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg --format json',
+      directRenderExample:
+        'cortexel source render nest-spike-recorder capture.json --output figure.svg --format json',
+    });
     expect(() => {
       (
         SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'] as {
@@ -181,6 +217,8 @@ describe('source-adapter CLI', () => {
         id: 'nest-spike-recorder',
         revision: 5,
         outputSkillId: 'neuro.spike_raster',
+        renderCommand:
+          'cortexel source render nest-spike-recorder <input|-> --output figure.svg --format json',
       }],
     });
 
@@ -233,6 +271,355 @@ describe('source-adapter CLI', () => {
       });
     },
   );
+
+  it.each(['positiveInfinity', 'finiteStop'] as const)(
+    'directly renders the $branch example through one versioned metadata dry run',
+    async (branch) => {
+      const result = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        '-',
+        '--dry-run',
+        '--format',
+        'json',
+      ], `${JSON.stringify(exampleEnvelope(branch))}\n`);
+      expect(result).toMatchObject({ code: 0, stderr: '' });
+      const payload = JSON.parse(result.stdout);
+      expect(payload).toMatchObject({
+        protocol: 'cortexel-cli-source-render',
+        protocolVersion: 1,
+        ok: true,
+        dryRun: true,
+        skill: 'neuro.spike_raster',
+        tableRowsTotal: 3,
+        sourceAdapterExecution: {
+          id: 'nest-spike-recorder',
+          revision: 5,
+          catalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
+          catalogDigestDomain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+          sourceAuthentication: 'not_performed',
+        },
+      });
+      expect(payload.svgByteLength).toBeGreaterThan(0);
+      expect(payload.sourceAdapterExecution.requestDigest)
+        .toMatch(/^sha256:[0-9a-f]{64}$/u);
+      expect(payload.sourceAdapterExecution.artifactDigest)
+        .toMatch(/^sha256:[0-9a-f]{64}$/u);
+    },
+  );
+
+  it.each(['positiveInfinity', 'finiteStop'] as const)(
+    'is byte-identical to source adapt then render for the $branch branch',
+    async (branch) => {
+      await withTempDirectory(async (directory) => {
+        const input = `${JSON.stringify(exampleEnvelope(branch))}\n`;
+        const adapted = await runCli([
+          'source',
+          'adapt',
+          'nest-spike-recorder',
+          '-',
+          '--format',
+          'json',
+        ], input);
+        expect(adapted).toMatchObject({ code: 0, stderr: '' });
+
+        const composedOutput = path.join(directory, 'composed.svg');
+        const composed = await runCli([
+          'render',
+          '-',
+          '--output',
+          composedOutput,
+          '--format',
+          'json',
+        ], adapted.stdout);
+        expect(composed).toMatchObject({ code: 0, stderr: '' });
+
+        const directOutput = path.join(directory, 'direct.svg');
+        const direct = await runCli([
+          'source',
+          'render',
+          'nest-spike-recorder',
+          '-',
+          '--output',
+          directOutput,
+          '--format',
+          'json',
+        ], input);
+        expect(direct).toMatchObject({ code: 0, stderr: '' });
+
+        expect(readFileSync(directOutput))
+          .toEqual(readFileSync(composedOutput));
+        expect(readFileSync(artifactPath(directOutput)))
+          .toEqual(readFileSync(artifactPath(composedOutput)));
+
+        const artifact = JSON.parse(
+          readFileSync(artifactPath(directOutput), 'utf8'),
+        );
+        const resultMetadata = JSON.parse(direct.stdout);
+        expect(resultMetadata).toMatchObject({
+          protocol: 'cortexel-cli-source-render',
+          protocolVersion: 1,
+          ok: true,
+          dryRun: false,
+          skill: 'neuro.spike_raster',
+          artifactDigest: artifact.artifactDigest,
+          outputs: artifact.outputs,
+          tableSidecar: null,
+          sourceAdapterExecution: {
+            requestDigest: artifact.provenance.requestDigest,
+            artifactDigest: artifact.artifactDigest,
+            sourceAuthentication: 'not_performed',
+          },
+        });
+      });
+    },
+    15_000,
+  );
+
+  it.each([
+    {
+      label: 'duplicate member',
+      input: Buffer.from(
+        '{"exportedStatus":{},"exportedStatus":{},"options":{}}',
+        'utf8',
+      ),
+      expectedCode: 'JSON_DUPLICATE_KEY',
+    },
+    {
+      label: 'UTF-8 BOM',
+      input: Buffer.concat([
+        Buffer.from([0xef, 0xbb, 0xbf]),
+        Buffer.from('{}', 'utf8'),
+      ]),
+      expectedCode: 'JSON_BOM_NOT_ALLOWED',
+    },
+    {
+      label: 'malformed UTF-8',
+      input: Buffer.from([0x7b, 0x22, 0x78, 0x22, 0x3a, 0xff, 0x7d]),
+      expectedCode: 'JSON_INVALID_UNICODE',
+    },
+  ])(
+    'rejects $label at the direct raw source boundary',
+    async ({ input, expectedCode }) => {
+      const result = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        '-',
+        '--dry-run',
+        '--format',
+        'json',
+      ], input);
+      expect(result.code).toBe(3);
+      expect(result.stdout).toBe('');
+      expect(JSON.parse(result.stderr).errors)
+        .toContainEqual(expect.objectContaining({ code: expectedCode }));
+      expectSafeBoundedDiagnostic(result.stderr);
+    },
+  );
+
+  it('resolves adapter identity before touching the selected input', async () => {
+    const missing = path.join(
+      tmpdir(),
+      'cortexel-source-input-that-must-not-exist.json',
+    );
+    const unknown = await runCli([
+      'source',
+      'render',
+      'nest-multimeter',
+      missing,
+      '--dry-run',
+      '--format',
+      'json',
+    ]);
+    expect(unknown.code).toBe(2);
+    expect(unknown.stdout).toBe('');
+    expect(JSON.parse(unknown.stderr).error.code)
+      .toBe('CLI_UNKNOWN_SOURCE_ADAPTER');
+    expect(unknown.stderr).not.toContain('input_io');
+
+    const known = await runCli([
+      'source',
+      'render',
+      'nest-spike-recorder',
+      missing,
+      '--dry-run',
+      '--format',
+      'json',
+    ]);
+    expect(known.code).toBe(7);
+    expect(known.stdout).toBe('');
+    expect(JSON.parse(known.stderr).cliError.kind).toBe('input_io');
+    expect(known.stderr).not.toContain(missing);
+  });
+
+  it.each([
+    ['missing output', []],
+    ['dry run plus output', ['--dry-run', '--output', 'figure.svg']],
+    ['dry run plus force', ['--dry-run', '--force']],
+    ['invalid extension', ['--output', 'figure.png']],
+    ['duplicate flag', ['--dry-run', '--dry-run']],
+    ['duplicate option', ['--output', 'first.svg', '--output', 'second.svg']],
+    ['unknown option', ['--dry-run', '--url', 'https://example.invalid']],
+  ] as const)(
+    'rejects %s before touching source input',
+    async (_label, suffix) => {
+      const missing = path.join(
+        tmpdir(),
+        'cortexel-source-grammar-input-that-must-not-exist.json',
+      );
+      const result = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        missing,
+        ...suffix,
+      ]);
+      expect(result.code).toBe(2);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain('usage error');
+      expect(result.stderr).not.toContain('I/O error');
+      expect(result.stderr).not.toContain(missing);
+    },
+  );
+
+  it('preserves adapter failure exit 5 without publishing any output', async () => {
+    await withTempDirectory(async (directory) => {
+      const invalid = exampleEnvelope() as {
+        exportedStatus: Record<string, unknown>;
+      };
+      invalid.exportedStatus.record_to = 'ascii';
+      const output = path.join(directory, 'figure.svg');
+      const result = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        '-',
+        '--output',
+        output,
+        '--format',
+        'json',
+      ], JSON.stringify(invalid));
+      expect(result.code).toBe(5);
+      expect(result.stdout).toBe('');
+      expect(JSON.parse(result.stderr).errors)
+        .toContainEqual(expect.objectContaining({
+          code: 'ADAPTER_NEST_TIME_ENCODING_UNSUPPORTED',
+        }));
+      expect(existsSync(output)).toBe(false);
+      expect(existsSync(artifactPath(output))).toBe(false);
+    });
+  });
+
+  it('preserves render-budget refusal without publishing partial output', async () => {
+    await withTempDirectory(async (directory) => {
+      const oversized = exampleEnvelope('finiteStop') as {
+        exportedStatus: {
+          n_events: number;
+          events: { senders: number[]; times: number[] };
+        };
+      };
+      oversized.exportedStatus.n_events = 501;
+      oversized.exportedStatus.events = {
+        senders: Array.from({ length: 501 }, () => 1),
+        times: Array.from({ length: 501 }, () => 1),
+      };
+      const output = path.join(directory, 'figure.svg');
+      const result = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        '-',
+        '--output',
+        output,
+        '--format',
+        'json',
+      ], JSON.stringify(oversized));
+      expect(result.code).toBe(6);
+      expect(result.stdout).toBe('');
+      expect(JSON.parse(result.stderr).errors)
+        .toContainEqual(expect.objectContaining({
+          code: 'RESOURCE_COMPACTION_UNAVAILABLE',
+        }));
+      expect(existsSync(output)).toBe(false);
+      expect(existsSync(artifactPath(output))).toBe(false);
+    });
+  });
+
+  it('uses the shared publication boundary for occupancy and stale locks', async () => {
+    await withTempDirectory(async (directory) => {
+      const input = `${JSON.stringify(exampleEnvelope('finiteStop'))}\n`;
+      const occupiedOutput = path.join(directory, 'occupied.svg');
+      writeFileSync(occupiedOutput, 'sentinel-svg', 'utf8');
+      const occupied = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        '-',
+        '--output',
+        occupiedOutput,
+        '--format',
+        'json',
+      ], input);
+      expect(occupied.code).toBe(7);
+      expect(occupied.stdout).toBe('');
+      expect(JSON.parse(occupied.stderr).cliError.kind).toBe('output_io');
+      expect(readFileSync(occupiedOutput, 'utf8')).toBe('sentinel-svg');
+      expect(existsSync(artifactPath(occupiedOutput))).toBe(false);
+
+      const lockedOutput = path.join(directory, 'locked.svg');
+      const lock = path.join(directory, '.cortexel.figure-emission.lock');
+      writeFileSync(lock, 'held', { flag: 'wx', mode: 0o600 });
+      const locked = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        '-',
+        '--output',
+        lockedOutput,
+        '--format',
+        'json',
+      ], input);
+      expect(locked.code).toBe(7);
+      expect(locked.stdout).toBe('');
+      expect(JSON.parse(locked.stderr).cliError.kind).toBe('output_io');
+      expect(readFileSync(lock, 'utf8')).toBe('held');
+      expect(existsSync(lockedOutput)).toBe(false);
+      expect(existsSync(artifactPath(lockedOutput))).toBe(false);
+    });
+  });
+
+  it('force-replaces output symlink entries without touching their targets', async () => {
+    await withTempDirectory(async (directory) => {
+      const input = `${JSON.stringify(exampleEnvelope('finiteStop'))}\n`;
+      const output = path.join(directory, 'figure.svg');
+      const artifact = artifactPath(output);
+      const svgTarget = path.join(directory, 'outside-svg-target');
+      const artifactTarget = path.join(directory, 'outside-artifact-target');
+      writeFileSync(svgTarget, 'sentinel-svg', 'utf8');
+      writeFileSync(artifactTarget, 'sentinel-artifact', 'utf8');
+      symlinkSync(svgTarget, output);
+      symlinkSync(artifactTarget, artifact);
+
+      const result = await runCli([
+        'source',
+        'render',
+        'nest-spike-recorder',
+        '-',
+        '--output',
+        output,
+        '--force',
+        '--format',
+        'json',
+      ], input);
+      expect(result).toMatchObject({ code: 0, stderr: '' });
+      expect(lstatSync(output).isSymbolicLink()).toBe(false);
+      expect(lstatSync(artifact).isSymbolicLink()).toBe(false);
+      expect(readFileSync(svgTarget, 'utf8')).toBe('sentinel-svg');
+      expect(readFileSync(artifactTarget, 'utf8')).toBe('sentinel-artifact');
+    });
+  });
 
   it('rejects duplicate members before materialization', async () => {
     const input =

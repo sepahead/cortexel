@@ -275,11 +275,17 @@ scientific review (§7), not a runtime gate.
   diagnostic's `actualSummary` is a bounded *type/length category*, never the raw
   offending token, a secret, a filesystem path, or a large array. At most 32 error
   records are returned; overflow appends a single `ERROR_LIMIT_REACHED` with the
-  omitted count so nothing is hidden while nothing is dumped.
-- **Repairs are structured data, not prose.** A `repair` is
+  omitted count so nothing is hidden while nothing is dumped. When a higher-level
+  repair loop adds the governing budget or internal stop after a nested batch is
+  already full, that library-owned stop reserves one slot and the inherited omitted
+  count is folded forward; the reason execution stopped cannot be cap-elided.
+- **Repairs are structured data, not prose.** A diagnostic `repair` is
   `{operation, path, value?, reasonCode}` and is marked untrusted; it is never
   free-form instruction-shaped text that a downstream model could be steered by, and
-  it is never auto-applied.
+  ordinary validation never applies it. The separate `applySafeRepairs` boundary does
+  not accept diagnostics: it snapshots the request once, re-derives only three closed
+  corrections from installed authority, mutates only its private copy, and reruns the
+  full request gate. It never returns an unvalidated candidate.
 - **The SVG metadata block is public identities only.** It carries the contract id,
   the skill id, and the canonical request digest — no raw source data, no local path,
   no token, no prompt (`src/render/svg.ts`). The artifact digest cannot appear in the
@@ -370,8 +376,10 @@ scientific review (§7), not a runtime gate.
   package-private CommonJS module-cache instance, so the registry is shared across all
   four producer/renderer format pairings without a forgeable `Symbol.for` or global.
   The package export map is API encapsulation, not a sandbox against code already
-  executing in the host process; the physical shared module therefore exports only the
-  same validating functions as `cortexel/figure`, never registry membership mutation.
+  executing in the host process; the physical shared module therefore exports exactly
+  the three token-validation functions needed by both module formats, never registry
+  membership mutation. `applySafeRepairs` lives outside that physical module and can
+  mint authority only by re-entering one of those ordinary validation boundaries.
   `buildFigureFromValidated` checks that identity before reading any property; the other
   public builders validate their input first. Raw plan
   construction, resource accounting, formatting/scaling primitives, and SVG serialization

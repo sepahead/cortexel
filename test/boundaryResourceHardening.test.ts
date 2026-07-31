@@ -21,6 +21,7 @@ import {
   type BudgetLimits,
 } from '../src/core/limits.js';
 import { parseJsonStrict } from '../src/core/parse-json.js';
+import { validateRequestValue } from '../src/core/request.js';
 import {
   buildFigure,
   buildFigureFromJson,
@@ -119,6 +120,39 @@ describe('closed and monotone budget authority', () => {
       buildFigureFromJson(JSON.stringify(request), { budgetProfile: 'standard' }),
       'JSON_STRING_TOO_LONG',
     );
+  });
+
+  it('never re-reads a mutable caller Proxy when enforcing a tighter request budget', () => {
+    const target = structuredClone(populationRate);
+    target.presentation = { budgetProfile: 'standard' };
+    let presentationDescriptorReads = 0;
+    const request = new Proxy(target, {
+      getOwnPropertyDescriptor(object, key) {
+        const descriptor = Object.getOwnPropertyDescriptor(object, key);
+        if (key !== 'presentation' || descriptor === undefined || !('value' in descriptor)) {
+          return descriptor;
+        }
+        presentationDescriptorReads++;
+        return {
+          ...descriptor,
+          value: presentationDescriptorReads === 1
+            ? { budgetProfile: 'agent' }
+            : {
+                budgetProfile: 'standard',
+                hostileSecondSnapshot: 'x'.repeat(
+                  getBudgetLimits('agent').jsonStringLength + 1,
+                ),
+              },
+        };
+      },
+    });
+
+    const result = validateRequestValue(request, { budgetProfile: 'standard' });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.request.inputAssurance.budgetProfile).toBe('agent');
+    }
+    expect(presentationDescriptorReads).toBe(1);
   });
 
   it('uses the stricter host profile through buildFigureFromJson', () => {

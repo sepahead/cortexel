@@ -164,10 +164,14 @@ const SOURCE_ADAPTER_CATALOG_DATA = {
       },
       cli: {
         command: 'cortexel source adapt nest-spike-recorder <input|->',
+        renderCommand:
+          'cortexel source render nest-spike-recorder <input|-> --output figure.svg --format json',
         inputMediaType: 'application/json',
         outputMediaType: 'application/json',
         pipeExample:
-          'cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg',
+          'cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg --format json',
+        directRenderExample:
+          'cortexel source render nest-spike-recorder capture.json --output figure.svg --format json',
       },
       inputEnvelope: {
         type: 'object',
@@ -182,7 +186,7 @@ const SOURCE_ADAPTER_CATALOG_DATA = {
         request:
           'The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.',
         rendering:
-          'Pipe the emitted request to `cortexel render`; adapter success alone is never render authority.',
+          '`cortexel source render` applies the adapter, stable request gate, raw canonical-request boundary, derivation, render, and output-publication path in one process and is the recommended agent path. On success, the composable `source adapt | render` form produces the same canonical request, artifact, and SVG bytes. Ordinary shell pipelines can mask an upstream adapter failure unless the caller explicitly checks every pipeline status. Adapter success alone is never render authority.',
       },
       authority: [
         'The source digest binds the detached JSON-compatible status projection, not a live simulator process.',

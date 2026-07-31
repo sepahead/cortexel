@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sepahead.github.io/cortexel/schemas/v1/skills/neuro.population_rate.request.v1.schema.json",
   "title": "neuro.population_rate request",
-  "description": "GENERATED from contract/skills/neuro.population_rate.v1.json. The complete structural request schema for this skill. Full acceptance also requires Cortexel identity, semantic, scientific, provenance, budget, and derivation gates.",
+  "description": "GENERATED from contract/skills/neuro.population_rate.v1.json. The complete structural request schema for this skill. Request acceptance also requires Cortexel identity, semantic, scientific, provenance, and request-budget gates. Figure acceptance additionally requires successful derivation and output budget enforcement through a rendering entrypoint.",
   "type": "object",
   "properties": {
     "$schema": {

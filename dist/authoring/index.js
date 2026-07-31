@@ -8,18 +8,18 @@ import {
   STABLE_CATALOG_SCHEMA_RESOURCES,
   isSourceAdapterId,
   lookupSourceAdapter
-} from "../chunk-DV5EIOBF.js";
-import "../chunk-3A56EAOW.js";
+} from "../chunk-XCBHVI3B.js";
 import {
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
   isStableSkillId,
   lookupSkillCatalogEntry
-} from "../chunk-AJMFQ6OE.js";
+} from "../chunk-Q34UTU3M.js";
+import "../chunk-3A56EAOW.js";
 import {
   CATALOG_DIGEST,
   CATALOG_DIGEST_DOMAIN
-} from "../chunk-M7SHUGNL.js";
+} from "../chunk-QJQCUS5E.js";
 import "../chunk-ZYBCCIMH.js";
 export {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,

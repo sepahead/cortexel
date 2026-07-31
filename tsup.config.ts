@@ -40,6 +40,8 @@ export default defineConfig({
     'render-svg/index': 'src/render/index.ts',
     'adapters/nest/index': 'src/adapters/nest/index.ts',
     'cli/main': 'src/cli/main.ts',
+    // One type-only nominal identity shared by import/require declaration graphs.
+    'internal/validated-request-brand': 'src/core/validated-request-brand.ts',
     // Private runtime singleton: package `imports` points both module formats to
     // this CJS file, while the public `exports` map keeps it off the API surface.
     'internal/request-capability': 'src/core/request.ts',
@@ -67,6 +69,7 @@ export default defineConfig({
   treeshake: false,
   esbuildPlugins: [requestCapabilityExternalizer],
   external: [
+    '#cortexel-validated-request-brand',
     'react',
     'react/jsx-runtime',
     'three',

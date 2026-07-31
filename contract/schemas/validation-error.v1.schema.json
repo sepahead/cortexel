@@ -41,7 +41,7 @@
     },
     "repair": {
       "type": "object",
-      "description": "A machine-applicable correction. `applySafeRepairs` accepts only allow-listed operations and always revalidates from the start; `validate` never auto-applies one.",
+      "description": "Untrusted structured candidate-correction data, not automatic mutation authority. Some diagnostics express decision-changing suggestions such as migration, field deletion, topology scope, or layout changes; agents must not replay them blindly. Ordinary validation applies nothing. `applySafeRepairs` accepts only request input, derives a smaller closed correction subset from one owned snapshot and installed authority (never from caller-supplied diagnostics), and reruns the complete request gate.",
       "properties": {
         "operation": { "type": "string", "enum": ["replace", "remove", "add", "migrate"] },
         "path": { "type": "string", "maxLength": 240 },

@@ -1,7 +1,7 @@
-import { S as StableSkillId } from '../catalog-BjofKpmG.cjs';
-export { a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, i as isStableSkillId, l as lookupSkillCatalogEntry } from '../catalog-BjofKpmG.cjs';
-export { C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN } from '../identity-BePV0iiY.cjs';
-import '../errors-DUbFUu6n.cjs';
+import { S as StableSkillId } from '../catalog-B3dXHggm.cjs';
+export { a as SKILL_CATALOG, b as STABLE_SKILL_IDS, c as SkillCatalogEntry, i as isStableSkillId, l as lookupSkillCatalogEntry } from '../catalog-B3dXHggm.cjs';
+export { C as CATALOG_DIGEST, a as CATALOG_DIGEST_DOMAIN } from '../identity-D0azGxGf.cjs';
+import '../errors-DOfZeMp8.cjs';
 
 /**
  * GENERATED FILE — DO NOT EDIT.
@@ -98,9 +98,11 @@ declare const SOURCE_ADAPTER_CATALOG: {
             };
             readonly cli: {
                 readonly command: "cortexel source adapt nest-spike-recorder <input|->";
+                readonly renderCommand: "cortexel source render nest-spike-recorder <input|-> --output figure.svg --format json";
                 readonly inputMediaType: "application/json";
                 readonly outputMediaType: "application/json";
-                readonly pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg";
+                readonly pipeExample: "cortexel source adapt nest-spike-recorder capture.json | cortexel render - --output figure.svg --format json";
+                readonly directRenderExample: "cortexel source render nest-spike-recorder capture.json --output figure.svg --format json";
             };
             readonly inputEnvelope: {
                 readonly type: "object";
@@ -112,7 +114,7 @@ declare const SOURCE_ADAPTER_CATALOG: {
             readonly acceptanceBoundary: {
                 readonly adapter: "The adapter checks one exact revision-5 source-faithful clock profile with closed finite-stop and positive-infinity/capture-bounded branches, then authors the corresponding request.";
                 readonly request: "The CLI then runs the complete stable FigureRequest validation pipeline before emitting JSON.";
-                readonly rendering: "Pipe the emitted request to `cortexel render`; adapter success alone is never render authority.";
+                readonly rendering: "`cortexel source render` applies the adapter, stable request gate, raw canonical-request boundary, derivation, render, and output-publication path in one process and is the recommended agent path. On success, the composable `source adapt | render` form produces the same canonical request, artifact, and SVG bytes. Ordinary shell pipelines can mask an upstream adapter failure unless the caller explicitly checks every pipeline status. Adapter success alone is never render authority.";
             };
             readonly authority: readonly ["The source digest binds the detached JSON-compatible status projection, not a live simulator process.", "The adapter-input digest additionally binds the normalized options and caller-declared capture authority.", "Revision 5 binds the exact LP64/int64/IEEE-binary64 time-build profile and reproduces NEST 3.10.0 Time::get_ms as rounded reciprocal followed by rounded multiplication.", "The exact positive-infinity projection token maps to a finite window ending at the declared successful-return capture time; it never relabels that time as recorder deactivation.", "The emitted configuredStop records the pinned NEST 3.10.0 profile constant exportedMs=DBL_MAX; the typed input sentinel asserts that projection revision 2 recognized that value, but this version-bound interpretation remains unauthenticated.", "Projection v2 with capture-authority profile v4 requires the caller to declare that the last advancing Simulate or Run ended exactly at captureTime and that status was projected before any further advance or mutation.", "Finite-stop and positive-infinity requests use capture-authority v3/v4 respectively and one domain-separated revision-5 input digest; historical v1/v2 authority fails with an explicit migration error.", "The complete sender universe, recorder history, wiring history, process scope, run id, and recorder id remain caller declarations.", "Events retain source order and multiplicity; the scientific view owns any scoped sorting or aggregation."];
             readonly limitations: readonly ["Only record_to=memory and time_in_steps=false are admitted.", "Only the exact declared NEST 3.10.0 LP64/int64/IEEE-binary64 time-build profile and conservative safe-integer clock subset are admitted.", "Only a single-process capture scope is admitted.", "Positive-infinity status must pass through projection revision 2, which emits the exact typed sentinel; raw DBL_MAX is rejected.", "The package does not import PyNEST, inspect a live simulation, or authenticate caller declarations.", "ASCII, screen, MPI, SIONlib, step-plus-offset clocks, non-LP64 builds, clocks outside the safe source-round-trippable subset, and every other stable NEST mapping remain unsupported by this adapter revision.", "Real-NEST conformance gate R049 remains external release evidence; packaged code is not certification."];

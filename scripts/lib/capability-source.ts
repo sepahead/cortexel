@@ -61,6 +61,7 @@ const KINDS = new Set(['skill', 'export', 'data_export', 'contract_source', 'cli
 const PRIVATE_BUILD_ENTRY_KEYS = new Set([
   'cli/main',
   'internal/request-capability',
+  'internal/validated-request-brand',
 ]);
 
 /** Map a package export key to the public capability id named by that key. */

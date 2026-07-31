@@ -3,8 +3,8 @@
   "manifestVersion": 1,
   "requestContract": "cortexel-figure-request/1.0",
   "artifactContract": "cortexel-figure-artifact/1.0",
-  "contractDigest": "sha256:5fc7d5002259dc12b9195a086558a392e12032c6fda834ea3c4ec359b4b68004",
-  "catalogDigest": "sha256:e6779a03f2732831c3500df67b5a692d4348ed540f2cea744ad58cba9e615d6e",
+  "contractDigest": "sha256:09b41ffd58f3ba63306b1ce347943383b8b4501fe468cc5777b7431b5d6b2792",
+  "catalogDigest": "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5",
   "catalogDigestDomain": "cortexel-public-stable-catalog.v2",
   "stableSkillCount": 19,
   "capabilityAvailabilities": [
@@ -9109,7 +9109,7 @@
     "standard",
     "agent"
   ],
-  "errorCodeCount": 132,
+  "errorCodeCount": 133,
   "semanticValidatorCount": 42,
   "numericPolicyCount": 3,
   "numericPolicies": {
@@ -9938,7 +9938,7 @@
     },
     {
       "path": "contract/registries/budget-profiles.v1.json",
-      "digest": "sha256:4d8acd7fc4e2e7a2f5fd0fde8e0800457ad7479716dd8b8324dcaaaa56d6f844"
+      "digest": "sha256:e58c70d4d3e69f8065d0f331c444c8931e54dd8177685241e75efa7858621253"
     },
     {
       "path": "contract/registries/canonicalizations.v1.json",
@@ -9946,7 +9946,7 @@
     },
     {
       "path": "contract/registries/capabilities.v1.json",
-      "digest": "sha256:775f65e203fa6d04a568aba47371f33198e414844bc930eb0219705d44be2728"
+      "digest": "sha256:34ea0b3fe328f206b4c8f875b56d639080994667afe7717e9469e23ec7ef0589"
     },
     {
       "path": "contract/registries/disclosures.v1.json",
@@ -9954,7 +9954,7 @@
     },
     {
       "path": "contract/registries/error-codes.v1.json",
-      "digest": "sha256:9d8aa4c14d0b91dc98de6758b3475de1ae3214a0d7fb61613d89d12bea55489f"
+      "digest": "sha256:fab7d882d186250e630feef1caab5b101c15f077bf163d24ce2b417c33597421"
     },
     {
       "path": "contract/registries/identity.v1.json",
@@ -9998,83 +9998,83 @@
     },
     {
       "path": "contract/schemas/generated/registry-enums.v1.schema.json",
-      "digest": "sha256:4057441a376e5afab263b33c31b49e11fa5767848b42680bc77aae8d2fe0501f"
+      "digest": "sha256:a7bd076825ff49bcca90638b1f84171e60f8fcd409799e96dd8a2301b6932b1b"
     },
     {
       "path": "contract/schemas/skills/network.adjacency_matrix.request.v1.schema.json",
-      "digest": "sha256:c0b1c31885be3e6d38905e6324052ae3c0f844583b5743ddbc3cbd23ef48bfd0"
+      "digest": "sha256:098d0f25747d5821a081cd9913d6900007bdef699ee5b79dbf8cd2dc6d73f84b"
     },
     {
       "path": "contract/schemas/skills/network.connection_graph.request.v1.schema.json",
-      "digest": "sha256:4d647f9c2e014c5cbc8480339870150864f7e3656286cbd99ba1dc20b3c50398"
+      "digest": "sha256:965e728b69b7d436ee91dc046df1f4d9cdab75848bc41c5c0c24ff32333982df"
     },
     {
       "path": "contract/schemas/skills/network.degree_distribution.request.v1.schema.json",
-      "digest": "sha256:49b6d88406d8e415057fe7da5f6143c4edb765b86dda017db9984c531e06c4ea"
+      "digest": "sha256:268e85ac05ad0baae23e6767e55f0b6f66cba18fa86f5872e5d23d30d84dc1fa"
     },
     {
       "path": "contract/schemas/skills/network.delay_distribution.request.v1.schema.json",
-      "digest": "sha256:4c02da4a31c5767f4f49c8c70586846643fc5c902e61745a214be0314f1d29ee"
+      "digest": "sha256:941e9fe4718bd452bbd76d6953b4fa841e91e4efa55dcc638937520d566ddfee"
     },
     {
       "path": "contract/schemas/skills/network.delay_matrix.request.v1.schema.json",
-      "digest": "sha256:6c6063bcff6b14cf6c30ad254d954262c9b34dccbc328d3f77b8810a813e6a97"
+      "digest": "sha256:1e730461d417a485ea2b5027caff64c44cb7088d9069defef91fdd35a3d66e5b"
     },
     {
       "path": "contract/schemas/skills/network.spatial_map_2d.request.v1.schema.json",
-      "digest": "sha256:a9b22e59420db69e1cd944e1c7677179458ff1c60fcc5a73d702bbfbcf4a729a"
+      "digest": "sha256:e6810e79aa61a582467aa40183c570adf7743d42184acc6edbe0a1701433bd52"
     },
     {
       "path": "contract/schemas/skills/network.synaptic_weight_trace.request.v1.schema.json",
-      "digest": "sha256:86bc395e82a265b6c52767f1a05a68330f106f8c9767b1d037b9adc82aa8a4e3"
+      "digest": "sha256:6da5dc550bd40b176f01e718b1af4faeaab00d3f7b53df2093891b7df1540d83"
     },
     {
       "path": "contract/schemas/skills/network.weight_distribution.request.v1.schema.json",
-      "digest": "sha256:51e41aed4aac9314e88bea53d56917653fbabe6a33205144bb2ce44b1a83622f"
+      "digest": "sha256:991438ef2a9a29100e437a1be61735b54b82717bdb8f625765414165efaf8914"
     },
     {
       "path": "contract/schemas/skills/network.weight_matrix.request.v1.schema.json",
-      "digest": "sha256:6777a2f0b6f67385d5ceb736bcba639fabb7873b126707e55b9bf2f9949867fb"
+      "digest": "sha256:e588ca39311c6ffa65fdde07e8ea9b4c3df8c311f8936bc6da44a31d8e3e383d"
     },
     {
       "path": "contract/schemas/skills/neuro.analog_trace.request.v1.schema.json",
-      "digest": "sha256:eb65a980ceee94b7cdec66b7e1ce901a138b0d354a6a7666efe70ba4bf486662"
+      "digest": "sha256:428c0d6e9af18b507529cf5dbf57452466f1e65d3cf0c436a5ef427419d2692a"
     },
     {
       "path": "contract/schemas/skills/neuro.compartment_trace.request.v1.schema.json",
-      "digest": "sha256:bb02f77bd1edd2f960060e9a002a61dea5763f73f00053910f3f4131467bf929"
+      "digest": "sha256:2de009ae681481544e3c493b7b0a0e0877cd4c0e9d7cdf0eb65c362a18acd490"
     },
     {
       "path": "contract/schemas/skills/neuro.correlogram.request.v1.schema.json",
-      "digest": "sha256:5c6933542d0b43f81bb4d5086f8e20b0365222e0b930ae39acc74711c1122071"
+      "digest": "sha256:68548cf2b5e42cc1dec8c06104c7407d67fc864547da2d11d635d03d6e341984"
     },
     {
       "path": "contract/schemas/skills/neuro.isi_distribution.request.v1.schema.json",
-      "digest": "sha256:f805a709c2d8af0eb8fcae9503d382dc082b14646885afe81dff87384d5f077a"
+      "digest": "sha256:16dd140203bb84ace6a4cd72e8c9fd9f763f93d8058ffa9109c64c32e5d87f20"
     },
     {
       "path": "contract/schemas/skills/neuro.multisignal_trace.request.v1.schema.json",
-      "digest": "sha256:f9567ab4bb2b60418aeefa18424185b7fc09cac8f61a8c191e69336ba086b3d2"
+      "digest": "sha256:ee6f686f166c5b356083f11034f8e333c3e963cc61501b5c4fa7d09e48714403"
     },
     {
       "path": "contract/schemas/skills/neuro.phase_plane.request.v1.schema.json",
-      "digest": "sha256:171a7ecf92493bf7622f695b164b5809020375b956ae235baf162bf9318b9f84"
+      "digest": "sha256:37fe8c4d0f1b491011eb13f166342b30a3a46be12a07463fb1792cbd34e781ff"
     },
     {
       "path": "contract/schemas/skills/neuro.population_rate.request.v1.schema.json",
-      "digest": "sha256:86c8901343ad33d75e2f1974a63bcf830e3f9118fbfd8d3a857c5dea6117ca8a"
+      "digest": "sha256:0d803ed9358c6cfe93fc32f324ee7b252371de7fa4eceee20322946248e0108c"
     },
     {
       "path": "contract/schemas/skills/neuro.psth.request.v1.schema.json",
-      "digest": "sha256:b815903398cee2f63e3830fa97c20ad5eef061f3f011b6991c291cc490f4ac91"
+      "digest": "sha256:bcc0d76a079a3bcd2918eb3c353c60d0607b9f3d505d41fb4f80525e32b1474d"
     },
     {
       "path": "contract/schemas/skills/neuro.response_curve.request.v1.schema.json",
-      "digest": "sha256:45c1eabb64ca5d9af1d6c4a777664c95bd7cfdc9c5981e500ac062c43659b2fa"
+      "digest": "sha256:ab8616bf71168680f776f33e3475ca4c522f4395ebedfc34314aa28d22cfc7df"
     },
     {
       "path": "contract/schemas/skills/neuro.spike_raster.request.v1.schema.json",
-      "digest": "sha256:d8ed356de2db27e36fc06b9b7b1d2eb88d13698ae80648ca32c31ae3314e565d"
+      "digest": "sha256:b1e7ee784dffc9b2ef05f7548468292387cce104d3217e2ab59a94c499e14cb1"
     },
     {
       "path": "contract/schemas/stable-figure-request-union.v1.schema.json",
@@ -10082,7 +10082,7 @@
     },
     {
       "path": "contract/schemas/validation-error.v1.schema.json",
-      "digest": "sha256:ab93a2bb6afcfc1ba189b385d249b8ce2c389a1f33ac9f71ba3c8e114d4d7e6d"
+      "digest": "sha256:88c29a255ffb2728b2ed76b861ba5fffcf29f278df0ce78b96b5984ddb7cd78b"
     },
     {
       "path": "contract/skills/network.adjacency_matrix.v1.json",

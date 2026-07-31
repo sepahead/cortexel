@@ -77,6 +77,11 @@ const LIBRARY_AUTHORED_FIELDS = new Set([
   'signatureVerified',
 ]);
 
+/** Internal repair predicate: one authority owns both detection and removal. */
+export function isLibraryAuthoredField(value: string): boolean {
+  return LIBRARY_AUTHORED_FIELDS.has(value);
+}
+
 /** Walk the request and report every attempt to author a library conclusion. */
 function findLibraryAuthoredFields(
   node: unknown,

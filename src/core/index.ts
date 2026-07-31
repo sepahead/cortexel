@@ -63,6 +63,12 @@ export {
   type InputAssurance,
 } from './request.js';
 
+export {
+  applySafeRepairs,
+  type AppliedSafeRepair,
+  type SafeRepairOutcome,
+} from './repairs.js';
+
 // Diagnostics
 export {
   makeError,
