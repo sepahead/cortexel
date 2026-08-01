@@ -410,7 +410,7 @@ describe('two-phase package smoke contract', () => {
     const result = runReviewedNodeCommandWithStagedRuntime(
       reviewedRuntime.sourceNodeExecutable,
       ['--input-type=module', '--eval', program],
-      root,
+      reviewedRuntime.runtimeRoot,
       {
         environment: {},
         timeoutMs: 5_000,
