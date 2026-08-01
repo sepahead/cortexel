@@ -95,6 +95,10 @@ FigureRequestV1 capabilities alongside them:
   and single-process scope. Strict validation resolves their output against the
   installed contract revision. This is not a live PyNEST bridge, broad NEST coverage,
   or upstream certification;
+- `cortexel/knowledge-graph` — experimental, peer-free bounded graph preparation,
+  strict corpus-VizSpec binding, exact-source view filtering, and canonical record
+  serialization. It is not a renderer, evidence resolver, or stable FigureRequestV1
+  skill;
 - `cortexel/contract/manifest.json` and `cortexel/contract/*` — the exact normative
   registries, schemas, and skill sources copied once under `dist/contract`;
 - `cortexel` (bin) — the offline CLI.
@@ -141,17 +145,35 @@ does not authenticate the projection, producing runtime or build, active floatin
 environment, kernel clock, recorder wiring, sender-universe completeness, capture timing,
 or export custody. Neither JavaScript nor the current Python package starts PyNEST.
 Historical adapter v3 and capture-authority v1/v2 inputs are migration identities only.
+The pinned
+[NEST 3.10 visualization-demand audit](./docs/audit/NEST-EXAMPLE-VISUALIZATION-COVERAGE-V2.md)
+classifies all official example bodies and makes the remaining representability,
+composition, adapter, execution, parity, and certification gaps explicit; it is not a
+claim that those examples are currently supported.
 
 ## Offline CLI
 
-After installing the artifact, invoke the bin directly; from a repository checkout,
-`bun src/cli/main.ts ...` exercises the same implementation:
+The unreleased development package must be installed from a reviewed full Git commit
+or a locally reviewed tarball, never from a floating branch. Its engine range is Node
+22, 24, or 26; that declared range is not evidence that the still-open release matrix
+has passed. Inside an npm project, replace the placeholder once and invoke the local bin
+without relying on a global install:
+
+```bash
+npm install --save-exact github:sepahead/cortexel#<REVIEWED_FULL_COMMIT_SHA>
+npm exec -- cortexel identity --json
+```
+
+The examples below use bare `cortexel` for readability. Prefix them with `npm exec --`
+for a project-local install. From a repository checkout, `bun src/cli/main.ts ...`
+exercises the same implementation:
 
 ```bash
 # What contract and identity is this build?
 cortexel identity --json
 
-# List the 19 stable figure contracts (experiments are hidden unless asked).
+# List the 19 stable figure contracts. This revision has no experimental
+# FigureRequest skills; --include-experimental is reserved for that skill axis.
 cortexel catalog
 
 # Start with the small synthetic request fixture. Ask for the large schema only
@@ -167,9 +189,12 @@ cortexel describe neuro.spike_raster --json --section all
 # mappings in skill prose are intentionally absent from this list.
 cortexel source catalog --json
 
-# Get the exact authority statement, limitations, and a copyable input envelope,
-# then adapt it into a request that has already passed the full stable gate.
+# Get the exact authority statement, limitations, and a guarded synthetic template.
+# It is deliberately non-executable. Replace every fixture value with a caller-owned
+# capture, then remove its nested guard and submit only inputTemplate.
 cortexel source describe nest-spike-recorder --json
+cortexel source example nest-spike-recorder > capture.template.json
+# after truthful caller-owned replacement: write only inputTemplate to capture.json
 cortexel source adapt nest-spike-recorder capture.json > request.json
 
 # Validate a request from a file or stdin. Exit code 0 = valid.
@@ -201,9 +226,15 @@ supplies its complete schema, versioned compiler profile, and reference resource
 while `all` returns the complete scientific/evidence/authority bundle. Its example
 illustrates the structural schema—it
 neither adapts a live source nor proves the truth of external provenance claims.
-`source catalog` is a separate, digest-bound executable inventory. Today it contains
-only `nest-spike-recorder`; `source describe` returns that adapter's complete
-caller-authority statement and copyable revision-5 positive-infinity input. Its typed
+`source catalog` is a separate executable inventory. It emits its exact compact digest
+preimage, and each entry digest-binds the complete descriptor returned by `source
+describe`; verification needs no hidden package constant. Today it contains only
+`nest-spike-recorder`. `source describe` returns that adapter's complete
+caller-authority statement and a versioned, guarded, template-only revision-5
+positive-infinity fixture. Passing the outer example to `source adapt`/`source render`,
+or passing its unchanged guarded options to the programmatic adapter, fails closed.
+Cortexel never strips the marker or relabels its own synthetic bytes as simulation
+evidence. Its typed
 stop sentinel must come from the named projection-v2 boundary; `source adapt` rejects a
 raw `DBL_MAX`, duplicate members, unknown envelope fields, unsupported source profiles,
 and any authored request that the full stable pipeline refuses. The finite-stop branch
@@ -226,27 +257,19 @@ or `cortexel source render ... --dry-run` for that stronger check.
 Programmatic agents can load the same immutable resources without invoking a process:
 
 ```ts
-import {
-  SKILL_AUTHORING,
-  SOURCE_ADAPTER_CATALOG,
-  lookupSourceAdapter,
-} from 'cortexel/authoring';
+import { nestSpikeRecorderToRaster } from 'cortexel/adapters/nest';
 import { validateRequestValue } from 'cortexel/figure';
 
-const nestRasterAdapter = lookupSourceAdapter('nest-spike-recorder');
-if (nestRasterAdapter !== SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) {
-  throw new Error('installed source-adapter discovery is incoherent');
-}
-
-const request = structuredClone(
-  SKILL_AUTHORING['neuro.spike_raster'].authoringExample,
-);
-// Replace the synthetic data/source with truthful caller-owned declarations.
-const checked = validateRequestValue(request);
+// Acquire both values at a real caller-owned capture boundary. Do not pass the
+// guarded bytes emitted by `source example` unchanged.
+const { exportedStatus, options } = await acquireCallerOwnedNestCapture();
+const adapted = nestSpikeRecorderToRaster(exportedStatus, options);
+if (!adapted.ok) throw new Error(adapted.errors.map(({ code }) => code).join(', '));
+const checked = validateRequestValue(adapted.request);
 if (!checked.ok) throw new Error(checked.errors.map(({ code }) => code).join(', '));
 ```
 
-The fixture is a copyable shape, not simulator evidence. A mapping marked feasible or
+The guarded fixture is a copyable template, not simulator evidence. A mapping marked feasible or
 not implemented does not become a live NEST adapter. The only packaged stable NEST
 adapter currently accepts the bounded plain-data shape of a caller-declared exact
 NEST 3.10.0 memory spike-recorder profile documented above. Structural acceptance
@@ -266,15 +289,85 @@ Nineteen single-figure contracts:
 `network.delay_distribution`, `network.weight_distribution`,
 `network.spatial_map_2d`, `network.synaptic_weight_trace`.
 
-Each contract lives in [`contract/skills/`](./contract/skills/) with its scientific
-purpose, closed request schema, named validators, budgets, disclosures, an
-accessibility table, migration mapping, and living valid/invalid examples that the
+Each source contract lives under `contract/skills/`; the package carries the exact
+generated copies in [`dist/contract/skills/`](./dist/contract/skills/). They contain
+the scientific purpose, closed request schema, named validators, budgets, disclosures,
+an accessibility table, migration mapping, and living valid/invalid examples that the
 test suite executes.
 
 The packaged pre-1.0 React surface still contains legacy WebGL scenes, and its explicit
 `cortexel/react/knowledge-graph` subpath is experimental. No 3D, knowledge-graph,
 animation, NCP-adapter, or bundle skill/compiler exists in the FigureRequestV1 catalog;
 stable validation fails closed instead of inventing those capabilities.
+
+The experimental graph API is split deliberately:
+
+- `cortexel/knowledge-graph` is the agent/server boundary. It has no visualization
+  peers and can strictly bind a complete corpus `VizSpec` to its derived caption and
+  one immutable presentation from either a materialized value or duplicate-safe raw
+  text.
+- `cortexel/react/knowledge-graph` is the interactive host boundary. It additionally
+  requires React 19, Three 0.184–0.185, R3F 9.6, and the declared compatible
+  d3-force-3d 3.x range from 3.0.5. Current allocation-path evidence covers only the
+  exact repository/package-smoke lock at 3.0.6; it does not transfer to another 3.x.
+  Its canonical
+  `KnowledgeGraphAccessibleFigure` owns validation and presentation preparation; the
+  host supplies only Canvas/runtime policy and controlled interaction state.
+
+Because `0.10.0-dev.0` is not published, install a reviewed full Git SHA (or a locally
+packed tarball), never a floating branch:
+
+```bash
+npm install github:sepahead/cortexel#<FULL_COMMIT_SHA>
+# Only for the interactive 3D graph entry:
+npm install react@^19 react-dom@^19 three@">=0.184 <0.186" \
+  @react-three/fiber@^9.6 d3-force-3d@3.0.6
+npm install --save-dev @types/react@^19 @types/three@">=0.184 <0.186"
+```
+
+Every surface inside the canonical corpus composition consumes the same deeply frozen,
+runtime-branded capability across ESM and CommonJS. The peer-free entry exposes no
+corpus mapper, and the four direct React primitives runtime-reject corpus presentations;
+they remain available for separate caller-declared `generic_visual` graphs. Exact kind
+filters produce a source-bound view without copying or minting records. The visible
+caption and paginated DOM surfaces remain when the host declares the WebGL region
+unavailable or a React descendant client render/lifecycle failure is caught. The
+deterministic record browser exposes one bounded page at a time;
+SSR/no-JS contains only its initial page, while hydrated controls make all accepted
+records reachable. `serializePreparedKnowledgeGraphPresentation` returns the complete
+canonical *presentation inspection record*, not its bound caption, view policy, theme,
+camera, host policy, or a FigureArtifact. Its bytes carry no runtime brand and are not
+an evidence receipt or complete figure export.
+
+The canonical corpus mapper redundantly encodes node kind with three closed 3D shells
+and relationship kind with four closed stroke patterns; directed relationships retain
+static arrowheads even when motion is reduced. It contrast-normalizes undimmed opaque
+node and edge colors against the exact light/dark `hostPolicy.backgroundColor` and
+discloses both source and intended undimmed scene colors in the DOM legend. The host must paint that
+background behind the Canvas. These are bounded structural/contrast regressions, not
+CVD, grayscale, browser, assistive-technology, or whole-view WCAG conformance evidence.
+
+Presentation preparation, the caption, legend, paginated DOM navigation, and complete
+static records admit at most 1,000 nodes and 4,000 edges. The allocating d3 live-force
+region has a separate 250-node/1,000-edge ceiling. Above the live ceiling, the canonical
+figure does not create the 3D solver or call the host visual renderer; it retains every
+non-WebGL surface and reports exact active counts and limits. An exact source-bound
+filter that falls within the live ceiling can restore the visual without sampling or
+inventing records. Cortexel schedules at most one allocating d3 tick per rendered frame,
+so settlement slows below 60 FPS and no frame-rate or latency guarantee is claimed.
+
+`prepareCorpusKnowledgeGraphFigureJson` owns the bounded duplicate-member-safe raw
+corpus-VizSpec boundary; `parseKnowledgeGraphPresentationJson` does the same for the
+separate generic-visual presentation input. Their result assurance records the raw-text
+boundary. The materialized-value APIs honestly record that duplicates are no longer
+observable and JavaScript Proxy traps cannot be made inert. Runtime capabilities
+are local to one physical installed package and realm: that installation shares ESM/CJS
+identity, but serialization, structured clone, workers/processes, another realm, or a
+duplicate package copy does not. These controls prevent cross-surface drift, but they
+do not authenticate a snapshot/reference, resolve evidence, make force geometry
+quantitative, establish whole-view accessibility conformance, or promote the legacy
+graph into the stable catalog. No experimental graph CLI exists in this revision;
+`cortexel catalog` remains the stable FigureRequestV1 catalog.
 
 ## Why the invariants matter
 
@@ -302,10 +395,11 @@ unknown-field deletion, topology scope, direction, and layout always remain expl
 
 ## Contract identity
 
-Everything under [`contract/`](./contract/) is the single normative source. TypeScript
-types, the runtime catalog, per-skill schemas, the Python mirror, and a SHA-256
-contract digest are all **generated** from it (`bun run generate`) and CI fails if any
-generated file drifts. Run twice, it is byte-identical.
+Everything under the repository's `contract/` tree is the single normative source.
+TypeScript types, the runtime catalog, per-skill schemas, the Python mirror, and the
+[`dist/contract/`](./dist/contract/) package copy are all **generated** from it (`bun run
+generate`) and bound by a SHA-256 contract digest. CI fails if any generated file drifts.
+Run twice, generation is byte-identical.
 
 ## Working on Cortexel
 

@@ -159,6 +159,25 @@ describe('strict JSON parser — resource limits bite before materialization', (
     expect(codes(huge)).toContain('JSON_BYTES_EXCEEDED');
   });
 
+  it('stops raw UTF-8 counting at the first complete code point over budget', () => {
+    const tightLimits = Object.freeze({ ...limits, rawInputBytes: 8 });
+    const ascii = parseJsonStrict(`${'x'.repeat(9)}${'y'.repeat(100_000)}`, {
+      limits: tightLimits,
+    });
+    expect(ascii.ok).toBe(false);
+    if (!ascii.ok) {
+      expect(ascii.errors[0]).toMatchObject({
+        code: 'JSON_BYTES_EXCEEDED',
+        limit: { limit: 8, observed: 9 },
+      });
+    }
+    const astral = parseJsonStrict('😂', {
+      limits: { ...tightLimits, rawInputBytes: 3 },
+    });
+    expect(astral.ok).toBe(false);
+    if (!astral.ok) expect(astral.errors[0]?.limit?.observed).toBe(4);
+  });
+
   it('rejects nesting deeper than the depth limit', () => {
     const deep = '['.repeat(limits.jsonDepth + 5) + ']'.repeat(limits.jsonDepth + 5);
     expect(codes(deep)).toContain('JSON_DEPTH_EXCEEDED');
@@ -169,9 +188,101 @@ describe('strict JSON parser — resource limits bite before materialization', (
     expect(codes(long)).toContain('JSON_STRING_TOO_LONG');
   });
 
+  it('stops decoded-string work at the first fragment beyond the limit', () => {
+    const tightLimits = Object.freeze({
+      ...limits,
+      rawInputBytes: 1_000_000,
+      jsonStringLength: 8,
+    });
+    const result = parseJsonStrict(
+      `"${'y'.repeat(9)}${'z'.repeat(100_000)}\\ud800"`,
+      { limits: tightLimits },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'JSON_STRING_TOO_LONG',
+        limit: {
+          name: 'jsonStringLength',
+          limit: 8,
+          observed: 9,
+        },
+      });
+    }
+
+    const scalar = parseJsonStrict('"😂"', {
+      limits: { ...tightLimits, jsonStringLength: 1 },
+    });
+    expect(scalar.ok).toBe(false);
+    if (!scalar.ok) expect(scalar.errors[0]?.limit?.observed).toBe(2);
+
+    const escapedScalar = parseJsonStrict('"\\ud83d\\ude02"', {
+      limits: { ...tightLimits, jsonStringLength: 1 },
+    });
+    expect(escapedScalar.ok).toBe(false);
+    if (!escapedScalar.ok) expect(escapedScalar.errors[0]?.limit?.observed).toBe(2);
+
+    const malformedEscape = parseJsonStrict('"a\\ud800"', {
+      limits: { ...tightLimits, jsonStringLength: 1 },
+    });
+    expect(malformedEscape.ok).toBe(false);
+    if (!malformedEscape.ok) {
+      expect(malformedEscape.errors[0]?.code).toBe('JSON_INVALID_UNICODE');
+    }
+  });
+
   it('rejects an over-long numeric token before parsing it', () => {
     const token = `1${'0'.repeat(limits.jsonNumberTokenLength + 5)}`;
     expect(codes(token)).toContain('JSON_NUMBER_TOKEN_TOO_LONG');
+  });
+
+  it('stops numeric scanning at exactly limit plus one code unit', () => {
+    const tightLimits = Object.freeze({
+      ...limits,
+      rawInputBytes: 1_000_000,
+      jsonNumberTokenLength: 8,
+    });
+    const result = parseJsonStrict(`1${'0'.repeat(100_000)}not-json`, {
+      limits: tightLimits,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0]).toMatchObject({
+        code: 'JSON_NUMBER_TOKEN_TOO_LONG',
+        limit: {
+          name: 'jsonNumberTokenLength',
+          limit: 8,
+          observed: 9,
+        },
+      });
+    }
+
+    const oneCodeUnit = { ...tightLimits, jsonNumberTokenLength: 1 };
+    for (const malformed of ['1.', '1e', '1e+']) {
+      const malformedResult = parseJsonStrict(malformed, { limits: oneCodeUnit });
+      expect(malformedResult.ok).toBe(false);
+      if (!malformedResult.ok) {
+        expect(malformedResult.errors[0]?.code).toBe('JSON_INVALID_NUMBER');
+      }
+    }
+    for (const validOverLimit of ['12', '1.2', '1e2']) {
+      const overLimit = parseJsonStrict(validOverLimit, { limits: oneCodeUnit });
+      expect(overLimit.ok).toBe(false);
+      if (!overLimit.ok) {
+        expect(overLimit.errors[0]).toMatchObject({
+          code: 'JSON_NUMBER_TOKEN_TOO_LONG',
+          limit: { observed: 2 },
+        });
+      }
+    }
+    const zeroCodeUnits = { ...tightLimits, jsonNumberTokenLength: 0 };
+    for (const malformed of ['-', '-.5', '--1']) {
+      const malformedResult = parseJsonStrict(malformed, { limits: zeroCodeUnits });
+      expect(malformedResult.ok).toBe(false);
+      if (!malformedResult.ok) {
+        expect(malformedResult.errors[0]?.code).toBe('JSON_SYNTAX');
+      }
+    }
   });
 });
 

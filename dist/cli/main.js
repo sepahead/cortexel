@@ -1,51 +1,61 @@
 #!/usr/bin/env node
 import {
   migrateLegacyRequest
-} from "../chunk-WBBRHXEW.js";
-import {
-  parseJsonStrict
-} from "../chunk-ARN3SAJ7.js";
+} from "../chunk-A2GUFIQI.js";
 import {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
   SKILL_AUTHORING,
   SOURCE_ADAPTER_CATALOG_DIGEST,
   SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_DISCOVERY_CATALOG,
   SOURCE_ADAPTER_IDS,
   STABLE_CATALOG_SCHEMA_RESOURCES,
   isSourceAdapterId,
-  lookupSourceAdapter
-} from "../chunk-XCBHVI3B.js";
+  lookupSourceAdapter,
+  lookupSourceAdapterDescriptorDigest
+} from "../chunk-HNZNJAWH.js";
 import {
   buildFigureFromJson
-} from "../chunk-VH2OVHKE.js";
-import "../chunk-N467QYNJ.js";
-import "../chunk-JYXJGMON.js";
+} from "../chunk-2GFPFZUJ.js";
+import "../chunk-U7D5HKZJ.js";
+import "../chunk-QZWIZIZR.js";
 import {
   ERROR_STAGES
-} from "../chunk-RAMNFATS.js";
+} from "../chunk-3R5OZ4HO.js";
 import "../chunk-XGABDL4O.js";
 import {
   EXPERIMENTAL_CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
   isStableSkillId
-} from "../chunk-Q34UTU3M.js";
+} from "../chunk-3YDCB72V.js";
 import {
   nestSpikeRecorderToRaster
-} from "../chunk-WA2ZPXJX.js";
-import "../chunk-ZWGJHLFO.js";
-import "../chunk-3A56EAOW.js";
+} from "../chunk-CLHJSX5J.js";
+import "../chunk-OGJBOXWL.js";
+import {
+  SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER,
+  classifySourceAdapterExampleEnvelope
+} from "../chunk-WVFXQTTZ.js";
 import "../chunk-2N3ZC6OE.js";
 import {
-  UNSAFE_DISPLAY_PATTERN_SOURCE,
-  getBudgetLimits,
-  makeError,
-  safeText
-} from "../chunk-WSSRXH4T.js";
+  getBudgetLimits
+} from "../chunk-AHJODCDL.js";
 import {
   CATALOG_DIGEST_DOMAIN,
   getBuildIdentity
-} from "../chunk-QJQCUS5E.js";
+} from "../chunk-5FW7Q3ZT.js";
+import "../chunk-Z2GYUK7B.js";
+import {
+  parseJsonStrict
+} from "../chunk-EVZW37W7.js";
+import {
+  UNSAFE_DISPLAY_PATTERN_SOURCE,
+  makeError,
+  safeText
+} from "../chunk-RF2EM75L.js";
 import {
   canonicalize
 } from "../chunk-ZYBCCIMH.js";
@@ -687,15 +697,17 @@ function cmdCatalog(args) {
 `);
   }
   if (includeExperimental) {
-    process.stdout.write(`
-Experimental (not covered by the stable contract):
-`);
+    process.stdout.write(
+      `
+Experimental FigureRequest skills (${EXPERIMENTAL_CAPABILITY_IDS.length}):
+`
+    );
     for (const id of EXPERIMENTAL_CAPABILITY_IDS) process.stdout.write(`  ${id}
 `);
   } else {
-    process.stdout.write(`
-Use --include-experimental to also list experimental capabilities.
-`);
+    process.stdout.write(
+      "\nThis revision has no experimental FigureRequest skills; --include-experimental is a forward-compatible skill-only opt-in.\n"
+    );
   }
   return EXIT.ok;
 }
@@ -839,19 +851,8 @@ function cmdSourceCatalog(args) {
       protocol: "cortexel-cli-source-catalog",
       protocolVersion: 1,
       ...sourceDiscoveryIdentity(),
-      adapters: SOURCE_ADAPTER_IDS.map((id) => {
-        const descriptor = lookupSourceAdapter(id);
-        return {
-          id: descriptor.id,
-          revision: descriptor.revision,
-          title: descriptor.title,
-          sourceSystem: descriptor.sourceSystem,
-          admittedSourceVersions: descriptor.admittedSourceVersions,
-          outputSkillId: descriptor.outputSkillId,
-          command: descriptor.cli.command,
-          renderCommand: descriptor.cli.renderCommand
-        };
-      })
+      sourceAdapterCatalogDigestPreimage: SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+      adapters: SOURCE_ADAPTER_DISCOVERY_CATALOG.adapters
     });
     return EXIT.ok;
   }
@@ -882,6 +883,8 @@ function cmdSourceDescribe(args) {
       protocol: "cortexel-cli-source-describe",
       protocolVersion: 1,
       ...sourceDiscoveryIdentity(),
+      sourceAdapterDescriptorDigest: lookupSourceAdapterDescriptorDigest(id),
+      sourceAdapterDescriptorDigestDomain: SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
       adapter: descriptor
     });
     return EXIT.ok;
@@ -892,9 +895,17 @@ Source: ${safeText(descriptor.sourceSystem, 256)} (${descriptor.admittedSourceVe
 Output skill: ${descriptor.outputSkillId}
 Command: ${descriptor.cli.command}
 Direct render: ${descriptor.cli.renderCommand}
-Use --json for the complete authority statement, limitations, and copyable input.
+Use --json for the complete authority statement, limitations, and guarded template.
 `
   );
+  return EXIT.ok;
+}
+function cmdSourceExample(args) {
+  const parsed = parseOrReport(args, { positionalCount: 1 });
+  if (!parsed) return EXIT.usage;
+  const id = parsed.positionals[0];
+  if (!isSourceAdapterId(id)) return reportUnknownSourceAdapter(id, true);
+  writeCliJson(lookupSourceAdapter(id).example);
   return EXIT.ok;
 }
 function adapterEnvelopeFailure(instancePath, message) {
@@ -923,6 +934,16 @@ function readSourceInput(input, asJson) {
   return { ok: true, value: parsed.value };
 }
 function prepareSourceRequest(id, value) {
+  const exampleClassification = classifySourceAdapterExampleEnvelope(value);
+  if (exampleClassification.kind !== "not_example") {
+    return {
+      ok: false,
+      errors: adapterEnvelopeFailure(
+        exampleClassification.kind === "template_only" ? "" : "/protocol",
+        exampleClassification.kind === "template_only" ? `This is Cortexel's synthetic, template-only source example, not simulator output. Replace every synthetic value with a caller-owned detached NEST capture and authority record; then remove the options.${SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER} marker and submit only inputTemplate. Cortexel never strips the guard or relabels the fixture as simulation evidence.` : "This resembles a Cortexel source-example envelope but is not the exact closed version-1 shape. Generate a fresh template with `cortexel source example nest-spike-recorder`; do not delete or repair metadata to make synthetic values executable."
+      )
+    };
+  }
   if (!isPlainJsonRecord(value)) {
     return {
       ok: false,
@@ -1018,13 +1039,15 @@ function cmdSource(args) {
       return cmdSourceCatalog(rest);
     case "describe":
       return cmdSourceDescribe(rest);
+    case "example":
+      return cmdSourceExample(rest);
     case "adapt":
       return cmdSourceAdapt(rest);
     case "render":
       return cmdSourceRender(rest);
     default:
       process.stderr.write(
-        "usage error: source requires catalog, describe, adapt, or render\n"
+        "usage error: source requires catalog, describe, example, adapt, or render\n"
       );
       return EXIT.usage;
   }
@@ -1092,6 +1115,8 @@ function sourceAdapterExecutionMetadata(id, result) {
     revision: lookupSourceAdapter(id).revision,
     catalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
     catalogDigestDomain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+    descriptorDigest: lookupSourceAdapterDescriptorDigest(id),
+    descriptorDigestDomain: SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
     requestDigest,
     artifactDigest: result.artifact.artifactDigest,
     sourceAuthentication: "not_performed"
@@ -1234,6 +1259,7 @@ Usage:
   cortexel describe <stable-skill-id> [--json [--section summary|example|schema|all]]
   cortexel source catalog [--json]
   cortexel source describe <source-adapter-id> [--json]
+  cortexel source example <source-adapter-id>
   cortexel source adapt <source-adapter-id> <input|-> [--format json]
   cortexel source render <source-adapter-id> <input|-> --output figure.svg [--force] [--format json]
   cortexel source render <source-adapter-id> <input|-> --dry-run [--format json]

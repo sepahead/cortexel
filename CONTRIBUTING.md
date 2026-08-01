@@ -285,13 +285,17 @@ receives a boolean
 carried as bounded JSON and installed only for the target, so they cannot preload
 the supervisor, guardian, or worker.
 
-The launcher seals its exact FIFO/socket lifetime endpoint by signed-decimal
-`dev`/`ino`/`mode`/`nlink`/`uid`/`gid`/`rdev` plus endpoint kind. The supervisor proves
-that identity at its inherited descriptor, retains it through the guardian's canonical
-READY echo, rechecks it, and closes its copy exactly once before publishing the armed
-handshake or sending GO. The guardian likewise proves the same identity before it can
-spawn the worker. A numeric fd reused by Node for an unrelated internal pipe therefore
-cannot satisfy the lifetime gate.
+The launcher creates a dedicated FIFO/socket pair, immediately installs and activates
+the parent-side drain, and only then sends one exact `ARM` frame over the separate
+launcher lease. The supervisor cannot create the guardian, publish the public armed
+handshake, or send `GO` before that frame. Because the two socket/pipe peers need not
+have the same inode identity, authority begins at the supervisor's inherited child
+endpoint: it derives signed-decimal `dev`/`ino`/`mode`/`nlink`/`uid`/`gid`/`rdev` plus
+endpoint kind, binds that value into the guardian payload, retains it through the
+guardian's canonical READY echo, rechecks it, and closes its copy exactly once. The
+guardian proves that same child-endpoint identity before it can spawn the worker and
+never passes the descriptor to the worker or target. A numeric fd reused by Node for an
+unrelated internal pipe therefore cannot satisfy the lifetime gate.
 
 The supervisor is the sole writer of the guardian's control lease. A worker target
 completion or guardian-local worker/protocol failure makes the guardian sweep
@@ -307,8 +311,12 @@ The supervisor observes the guardian's exit exactly once, performs no signal or
 identity probe after that reap, and separately gives stdout, stderr, and the private
 status pipe a bounded interval to reach EOF. It accepts a result only after one
 canonical intent, guardian termination by `SIGKILL`, complete protocol framing, and
-clean pipe EOF. A retained pipe instead produces a bounded failure. The outer caller
-has no numeric fallback on either success or failure. `EPERM`, `ESRCH`, direct
+clean pipe EOF. A retained output pipe instead produces a bounded failure. Separately,
+the still-live exact launcher actively drains the zero-data lifetime pipe and withholds
+all buffered supervisor protocol until both real peer `end` and supervisor `close` have
+occurred; a lifetime byte or local stream error fails closed and is never promoted to
+EOF. This join does not depend on Bun waiting for a descendant-held stdout pipe. The
+outer caller has no numeric fallback on either success or failure. `EPERM`, `ESRCH`, direct
 guardian death, malformed protocol, or uncertain cleanup therefore fail closed
 without signaling a potentially reused PID/PGID.
 
@@ -332,10 +340,13 @@ process group, retain inherited pipes, or change credentials/security labels so 
 guardian's sweep no longer reaches it. Killing the guardian before its self-sweep
 also removes the only in-process cleanup authority. A target can also stop the whole
 group. `SIGSTOP` cannot be handled: a stopped guardian cannot consume lease EOF, and
-retained descriptors can keep the synchronous outer caller blocked beyond both the
-selected command timeout and its outer timeout. Those are cooperative bounds, not a
-hostile hard deadline. Use an external cgroup, sandbox, VM, or equivalent lifetime
-primitive when those capabilities are in scope.
+the dedicated lifetime descriptor keeps the launcher joined until the synchronous
+caller's outer timeout kills that launcher. `SIGKILL`, OOM termination, or that hard
+timeout can remove the launcher itself; Bun may then return before asynchronous guardian
+cleanup, because descendant-held stdout is not a reliable join on Linux. Those are
+cooperative bounds, not hostile hard deadlines or owner-death containment. Use an
+external cgroup, sandbox, VM, or equivalent lifetime primitive when those capabilities
+are in scope.
 
 ```bash
 bun scripts/smoke-package.ts prepare \
@@ -357,7 +368,7 @@ bun scripts/smoke-package.ts execute \
 envelope: `prepared`/`passed` is written to stdout on exit 0, while `failed` is
 written to stderr on exit 1 with the closed `PACKAGE_SMOKE_FAILED` shape. It is not
 a durable cleanup or release receipt. In particular, it does not embed the
-internal reviewed-command v3 guardian records, a digest of every reviewed command result, or
+internal reviewed-command v4 guardian records, a digest of every reviewed command result, or
 the complete harness-source/dependency identity. A release system may retain and
 hash the success envelope as one input, but must also bind the exact Cortexel
 commit/harness bytes, process exit, logs, inspected workspace, and external
@@ -429,8 +440,11 @@ These keep visualizations scientifically honest and visually consistent:
    the mandatory caption. Caller notes remain explicitly unverified.
    Scene-less skills use the strict host-renderer envelope and its returned caption;
    params-only validation is not an honesty boundary.
-4. **`useFrame` is allocation-free.** Reuse refs/scratch objects; never allocate
-   per frame.
+4. **First-party frame callbacks reuse state.** Reuse refs/scratch objects, use
+   indexed loops, and do not set React state from `useFrame`. The source guard is
+   lexical and proves only that Cortexel-authored callback syntax contains no reviewed
+   direct allocation pattern; it cannot prove allocation-free callees. In particular,
+   the exactly installed `d3-force-3d` 3.0.6 allocates octrees during force ticks.
 5. **The library stays host-agnostic; the host owns the frame.** No imports from
    any host app. Concrete scene components are injected via `renderScene`, and
    scene primitives are Canvas-less — the host owns `<Canvas>`, OrbitControls,

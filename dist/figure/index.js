@@ -2,16 +2,13 @@ import {
   captureMaterializedRequestInput,
   captureRawRequestInput,
   isLibraryAuthoredField
-} from "../chunk-QNZIAVKF.js";
+} from "../chunk-V65HI63Y.js";
 import {
   migrateLegacyRequest
-} from "../chunk-WBBRHXEW.js";
-import {
-  parseJsonStrict
-} from "../chunk-ARN3SAJ7.js";
+} from "../chunk-A2GUFIQI.js";
 import {
   deriveDisclosures
-} from "../chunk-JYXJGMON.js";
+} from "../chunk-QZWIZIZR.js";
 import {
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
@@ -32,34 +29,33 @@ import {
   responseEventMembershipDigest,
   toSeconds,
   unitLabel
-} from "../chunk-RAMNFATS.js";
+} from "../chunk-3R5OZ4HO.js";
 import "../chunk-XGABDL4O.js";
 import {
+  CAPABILITY_AVAILABILITIES,
+  CAPABILITY_CATALOG,
+  CAPABILITY_IDS,
   EXPERIMENTAL_CAPABILITY_IDS,
   LEGACY_SKILL_MAP,
   REMOVED_CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
+  isCapabilityId,
   isStableSkillId,
+  lookupCapabilityCatalogEntry,
   lookupSkillCatalogEntry
-} from "../chunk-Q34UTU3M.js";
+} from "../chunk-3YDCB72V.js";
 import {
   snapshotValue
-} from "../chunk-ZWGJHLFO.js";
+} from "../chunk-OGJBOXWL.js";
 import {
   DEFAULT_PROFILE,
   REQUEST_CONTRACT_IDENTITY,
-  finalizeErrors,
-  finalizeErrorsWithPriority,
   getBudgetLimits,
-  isSafeDisplayString,
-  makeError,
-  pointer,
   restrictLimits,
-  safeText,
   tryGetBudgetLimits,
   trySelectTighterBudgetProfile
-} from "../chunk-WSSRXH4T.js";
+} from "../chunk-AHJODCDL.js";
 import {
   ARTIFACT_CONTRACT,
   CATALOG_DIGEST,
@@ -68,9 +64,22 @@ import {
   PACKAGE_VERSION,
   REQUEST_CONTRACT,
   STABLE_SKILL_COUNT,
-  deepFreeze,
   getBuildIdentity
-} from "../chunk-QJQCUS5E.js";
+} from "../chunk-5FW7Q3ZT.js";
+import {
+  deepFreeze
+} from "../chunk-Z2GYUK7B.js";
+import {
+  parseJsonStrict
+} from "../chunk-EVZW37W7.js";
+import {
+  finalizeErrors,
+  finalizeErrorsWithPriority,
+  isSafeDisplayString,
+  makeError,
+  pointer,
+  safeText
+} from "../chunk-RF2EM75L.js";
 import {
   CanonicalizationError,
   canonicalDigest,
@@ -380,6 +389,9 @@ export {
   ARTIFACT_CONTRACT,
   CANONICALIZATION_ALGORITHMS,
   CANONICALIZATION_IDS,
+  CAPABILITY_AVAILABILITIES,
+  CAPABILITY_CATALOG,
+  CAPABILITY_IDS,
   CATALOG_DIGEST,
   CATALOG_DIGEST_DOMAIN,
   CONTRACT_DIGEST,
@@ -412,10 +424,12 @@ export {
   finalizeErrors,
   getBudgetLimits,
   getBuildIdentity,
+  isCapabilityId,
   isKnownUnit,
   isSafeDisplayString,
   isStableSkillId,
   isValidatedRequest,
+  lookupCapabilityCatalogEntry,
   lookupSkillCatalogEntry,
   makeError,
   migrateLegacyRequest,

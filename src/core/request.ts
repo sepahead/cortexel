@@ -222,7 +222,7 @@ function checkSkill(skillId: string | undefined): CortexelError[] {
         code: 'CAPABILITY_EXPERIMENTAL',
         stage: 'structural',
         instancePath: '/skill/id',
-        message: `"${skillId}" is experimental and cannot be selected through the stable entry point. Consult CAPABILITY_CATALOG and its availability field; no experimental FigureRequestV1 skill is currently callable, and a legacy experimental package export is not a replacement.`,
+        message: `"${skillId}" is experimental and cannot be selected through the stable entry point. Inspect CAPABILITY_CATALOG from cortexel/figure or cortexel/authoring and its availability field; no experimental FigureRequestV1 skill is currently callable, and a legacy experimental package export is not a replacement.`,
       }),
     ];
   }

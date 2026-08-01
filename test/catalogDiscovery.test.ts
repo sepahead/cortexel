@@ -12,7 +12,11 @@ import {
   STABLE_CATALOG_SCHEMA_RESOURCES,
 } from '../src/generated/authoring.js';
 import {
+  CAPABILITY_CATALOG,
+  CAPABILITY_IDS,
   isStableSkillId,
+  isCapabilityId,
+  lookupCapabilityCatalogEntry,
   lookupSkillCatalogEntry,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
@@ -114,6 +118,20 @@ function mutateField(record: Record<string, unknown>, key: string): boolean {
 }
 
 describe('stable agent discovery and authoring projection', () => {
+  it('keeps the complete capability catalog finite for untrusted lookup keys', () => {
+    expect(CAPABILITY_IDS).toEqual(Object.keys(CAPABILITY_CATALOG).sort());
+    expect(Object.isFrozen(CAPABILITY_IDS)).toBe(true);
+    expect(Object.isFrozen(CAPABILITY_CATALOG)).toBe(true);
+    for (const id of CAPABILITY_IDS) {
+      expect(isCapabilityId(id), id).toBe(true);
+      expect(lookupCapabilityCatalogEntry(id), id).toBe(CAPABILITY_CATALOG[id]);
+    }
+    for (const id of ['', 'not.a.capability', '__proto__', 'constructor']) {
+      expect(isCapabilityId(id), id).toBe(false);
+      expect(lookupCapabilityCatalogEntry(id), id).toBeUndefined();
+    }
+  });
+
   it('keeps the finite catalog total for stable ids and optional for raw strings', () => {
     for (const id of STABLE_SKILL_IDS) {
       expect(isStableSkillId(id), id).toBe(true);

@@ -32,9 +32,12 @@ import {
   type ReviewedExecutableAcquisition,
 } from '../scripts/lib/reviewed-posix-command';
 import {
+  REVIEWED_POSIX_COMMAND_RESULT_SCHEMA,
   REVIEWED_POSIX_GUARDIAN_PAYLOAD_ENV,
+  REVIEWED_POSIX_GUARDIAN_READY_SCHEMA,
   REVIEWED_POSIX_GUARDIAN_SOURCE,
   REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA,
+  REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE,
   REVIEWED_POSIX_SUPERVISOR_SOURCE,
 } from '../scripts/lib/reviewed-posix-supervisor';
 
@@ -47,6 +50,7 @@ interface LifecycleFifo {
   readonly path: string;
   readonly reader: number;
   readonly marker: string;
+  readonly prefetched: Buffer[];
 }
 
 interface HookFrame {
@@ -133,12 +137,30 @@ function createLifecycleFifo(workspace: string, name: string, marker: string): L
     path,
     reader: openSync(path, fsConstants.O_RDONLY | fsConstants.O_NONBLOCK),
     marker,
+    prefetched: [],
   };
+}
+
+function expectLifecycleOpen(fifo: LifecycleFifo): void {
+  const chunk = Buffer.alloc(256);
+  while (true) {
+    try {
+      const count = readSync(fifo.reader, chunk, 0, chunk.byteLength, null);
+      if (count === 0) {
+        throw new Error('lifecycle FIFO had no writer at the negative-control observation');
+      }
+      fifo.prefetched.push(Buffer.from(chunk.subarray(0, count)));
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EAGAIN' || code === 'EWOULDBLOCK') return;
+      throw error;
+    }
+  }
 }
 
 function expectLifecycleClosed(fifo: LifecycleFifo, timeoutMs = 3_000): void {
   const deadline = Date.now() + timeoutMs;
-  const chunks: Buffer[] = [];
+  const chunks: Buffer[] = fifo.prefetched.splice(0);
   const chunk = Buffer.alloc(256);
   try {
     while (true) {
@@ -1271,7 +1293,7 @@ describe('reviewed POSIX command boundary', () => {
     }
   }, 240_000);
 
-  it('sweeps the live group when the outer launcher receives KILL, TERM, INT, or HUP', async () => {
+  it('joins handled launcher cancellation and observes eventual KILL lease cleanup', async () => {
     if (workspace === '') return;
     for (const signal of ['SIGKILL', 'SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
       const slug = signal.toLowerCase();
@@ -1288,13 +1310,59 @@ describe('reviewed POSIX command boundary', () => {
       expect(processParentPid(launcherPid)).toBe(runner.process.pid);
       process.kill(launcherPid, signal);
       waitForPath(runner.outcomePath, 60_000);
-      expectLifecycleClosed(fifo, 0);
+      // Handled signals keep the launcher alive to join its dedicated lifetime
+      // endpoint. SIGKILL removes that join process; ordinary lease EOF still
+      // cleans this cooperative fixture, but return ordering is not claimed.
+      expectLifecycleClosed(fifo, signal === 'SIGKILL' ? 5_000 : 0);
       expect(await waitForChildClose(runner.process)).toEqual({ code: 0, signal: null });
       expect(JSON.parse(readFileSync(runner.outcomePath, 'utf8'))).toMatchObject({
         kind: 'error',
       });
     }
   }, 300_000);
+
+  it('does not claim a join after abrupt launcher loss while the guardian is stopped', async () => {
+    if (process.platform !== 'linux' || workspace === '') return;
+    const fifo = createLifecycleFifo(
+      workspace,
+      'launcher-sigkill-stopped-guardian-lifecycle',
+      'launcher-sigkill-stopped-guardian',
+    );
+    const runner = startHookedRunner({
+      hookPhase: 'go-sent',
+      name: 'launcher-sigkill-stopped-guardian',
+      target: lifecycleTarget(fifo, 'setInterval(() => {}, 1_000);'),
+    });
+    waitForRunnerHook(runner);
+    waitForPath(`${fifo.path}.ready`, 60_000);
+    const hook = JSON.parse(readFileSync(runner.hookPath, 'utf8')) as HookFrame;
+    expect(
+      Number.isSafeInteger(hook.guardianPid) && Number(hook.guardianPid) > 1,
+    ).toBe(true);
+    const launcherPid = processParentPid(hook.supervisorPid);
+    expect(processParentPid(launcherPid)).toBe(runner.process.pid);
+
+    // These identities come from one live rendezvous. Hold the still-live,
+    // unreaped guardian across the one launcher KILL; the planned CONT below is
+    // not a post-reap PID action because STOP prevents the guardian from exiting.
+    process.kill(hook.guardianPid!, 'SIGSTOP');
+    let resumed = false;
+    try {
+      process.kill(launcherPid, 'SIGKILL');
+      waitForPath(runner.outcomePath, 10_000);
+      expectLifecycleOpen(fifo);
+      process.kill(hook.guardianPid!, 'SIGCONT');
+      resumed = true;
+    } finally {
+      if (!resumed) process.kill(hook.guardianPid!, 'SIGCONT');
+    }
+
+    expectLifecycleClosed(fifo, 5_000);
+    expect(await waitForChildClose(runner.process)).toEqual({ code: 0, signal: null });
+    expect(JSON.parse(readFileSync(runner.outcomePath, 'utf8'))).toMatchObject({
+      kind: 'error',
+    });
+  }, 120_000);
 
   it('fails closed without claiming containment when the guardian is killed directly', async () => {
     if (workspace === '') return;
@@ -1627,6 +1695,48 @@ describe('reviewed POSIX command boundary', () => {
         'guardian READY frame failed closed predicates: ' +
           failedPredicates.join(','),
       );`);
+    expect(REVIEWED_POSIX_COMMAND_RESULT_SCHEMA).toBe(
+      'cortexel-reviewed-posix-command.v4',
+    );
+    expect(REVIEWED_POSIX_GUARDIAN_READY_SCHEMA).toBe(
+      'cortexel-reviewed-posix-guardian-ready.v3',
+    );
+    expect(REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA).toBe(
+      'cortexel-reviewed-posix-lifetime-authority.v2',
+    );
+    expect(REVIEWED_POSIX_SUPERVISOR_SOURCE).toContain(
+      'lifetimeAuthority = inspectLifetimeAuthority(7);',
+    );
+    expect(REVIEWED_POSIX_SUPERVISOR_SOURCE).toContain(
+      'if (!sameLifetimeAuthority(lifetimeAuthority, inspectLifetimeAuthority(7)))',
+    );
+    expect(REVIEWED_POSIX_SUPERVISOR_SOURCE).toContain('fs.closeSync(7);');
+    expect(REVIEWED_POSIX_GUARDIAN_SOURCE).toContain(
+      'const observedLifetime = inspectLifetimeAuthority(6);',
+    );
+    expect(REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE).toContain(
+      'const lifetime = supervisor.stdio[7];',
+    );
+    expect(REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE).toContain(
+      "if (chunk.length > 0) latchFailure('unexpected_lifetime_data');",
+    );
+    expect(
+      REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE.match(/lifetimeEnded = true/gu) ?? [],
+    ).toEqual(['lifetimeEnded = true']);
+    const lifetimeListenerIndex = REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE.indexOf(
+      "lifetime.on('data'",
+    );
+    const launcherArmIndex = REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE.indexOf(
+      "supervisor.stdin.write('ARM\\n'",
+    );
+    expect(lifetimeListenerIndex).toBeGreaterThan(-1);
+    expect(launcherArmIndex).toBeGreaterThan(lifetimeListenerIndex);
+    expect(REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE).toContain(
+      'if (completed || !supervisorClosed || !lifetimeEnded) return;',
+    );
+    expect(REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE).toContain(
+      "latchFailure('supervisor_' + failureKind(error));\n    retainUntilOuterHardTimeout();",
+    );
     expect(hostSource).not.toMatch(/process\.kill\(|\.kill\(|killpg|getpgid/u);
     expect(hostSource).not.toMatch(/guardianPid|workerPid/u);
   }, 30_000);

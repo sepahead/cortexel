@@ -1,8 +1,7 @@
-export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CATEGORICAL, a as CORTEXEL_PALETTE, b as CORTICAL_LAYER_COLORS, c as ColormapName, O as OKABE_ITO, P as PALETTE_REGISTRY_POLICY, d as PaletteEntry, e as PaletteMetadata, f as PaletteName, g as RGB, h as ReadonlyPaletteMetadata, R as ReadonlySemanticPalette, S as SEMANTIC_PALETTE_KEYS, i as SYNAPSE_COLORS, j as SemanticPalette, T as TURBO_GLSL, V as VIK_GLSL, k as VIRIDIS_GLSL, l as categorical, m as colormapGradient, n as colormapHex, o as colormapRgba, p as colormapSvgStops, q as getPalette, r as getPaletteEntry, s as isRegisteredPalette, t as listPalettes, u as registerPalette, v as sampleColormap, w as validatePalette } from '../colormaps-CZ6XejJa.cjs';
-import { N as NestSkillId, b as NestDeviceFamily, S as SceneName, R as RendererRoute, V as VizSpec, H as HostRendererInvocation, c as HostRendererInvocationResult, d as SkillInvocationResult, a as SkillInvocationError, e as SceneData } from '../hostInvocation-DWfbQ71f.cjs';
-export { C as CAMERA_PRESETS, f as CONSERVATIVE_PROVENANCE, g as CORTEXEL_JSON_LIMITS, h as CORTEXEL_JSON_POLICY, i as CORTEXEL_SPEC_VERSION, j as CameraPreset, k as CameraPresetName, D as DECLARED_INPUTS_PORTABLE_SCHEMA, E as ENVELOPE_NORMALIZATION_POLICY, l as HONESTY_POLICY, m as HostRendererInvocationSchema, J as JSON_BUDGET_SEMANTICS, n as JSON_PARAMS_PORTABLE_SCHEMA, o as JsonParamsSchema, L as LayerConfig, p as NEST_DEVICE_FAMILIES, q as NEST_SKILL_IDS, r as NUMERIC_MODEL_POLICY, s as NeuralSceneHandle, t as NeuralSceneMode, u as NeuralSceneProps, v as PlaybackState, P as ProvenanceMetadata, w as ProvenanceSchema, x as SCENE_FRAMING, y as SCENE_NAMES, z as SKILL_IDS, A as STDPSynapse, B as STRING_NORMALIZATION_POLICY, F as SceneFraming, G as SkillId, I as SkillParamsResult, K as VALID_RENDERER_ROUTES, M as VIZ_ROUTER_ID, O as VizRouterId, Q as VizSpecSchema, T as VizSpecValidation, U as composeHonestyCaption, W as defaultHonestyCaption, X as isNestSkillId, Y as isSkillId, Z as mandatoryDisclosure, _ as requiresHonestyCaption, $ as validateHostRendererInvocation, a0 as validateHostRendererSpec, a1 as validateSkillInvocation, a2 as validateSkillParams, a3 as validateVizSpec } from '../hostInvocation-DWfbQ71f.cjs';
-import { K as KnowledgeGraph3DParams, C as CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, a as CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, b as CorrelogramParams, I as IsiDistributionParams, P as PopulationRateParams, c as PsthParams, S as SnapshotScope, d as PositionScope, e as SpatialMap2DParams, A as AdjacencyMatrixParams, f as ConnectionGraphParams, D as DelayDistributionParams, g as DelayMatrixParams, h as InDegreeDistributionParams, O as OutDegreeDistributionParams, W as WeightHistogramParams, i as WeightMatrixParams } from '../params-BDdHygs4.cjs';
-export { j as AdjacencyMatrixParamsSchema, k as AnimationReplayParams, l as AnimationReplayParamsSchema, m as AstrocyteParams, n as AstrocyteParamsSchema, o as CompartmentalParams, p as CompartmentalParamsSchema, q as ConnectionGraphParamsSchema, r as CorrelogramParamsSchema, s as DelayDistributionParamsSchema, t as DelayMatrixParamsSchema, G as GEOMETRY_MAX_ROUNDOFF_FRACTION, H as HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE, u as HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE, v as HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS, w as HISTOGRAM_MASS_TOLERANCE, x as InDegreeDistributionParamsSchema, y as IsiDistributionParamsSchema, z as KnowledgeGraph3DParamsSchema, N as NetworkParams, B as NetworkParamsSchema, E as OutDegreeDistributionParamsSchema, F as PARAM_LIMITS, J as POPULATION_RATE_ABSOLUTE_TOLERANCE, L as POPULATION_RATE_RELATIVE_TOLERANCE, M as PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE, Q as PhasePlaneParams, R as PhasePlaneParamsSchema, T as PlasticityParams, U as PlasticityParamsSchema, V as PopulationRateParamsSchema, X as PositionScopeSchema, Y as PsthParamsSchema, Z as RateResponseParams, _ as RateResponseParamsSchema, $ as Rfc3339TimestampSchema, a0 as SPATIAL_BOUNDS_ROUNDOFF_ULPS, a1 as SnapshotScopeSchema, a2 as Spatial2DParams, a3 as Spatial2DParamsSchema, a4 as Spatial3DParams, a5 as Spatial3DParamsSchema, a6 as SpatialMap2DParamsSchema, a7 as SpikeRasterParams, a8 as SpikeRasterParamsSchema, a9 as StimulusResponseParams, aa as StimulusResponseParamsSchema, ab as VoltageTraceParams, ac as VoltageTraceParamsSchema, ad as WeightHistogramParamsSchema, ae as WeightMatrixParamsSchema } from '../params-BDdHygs4.cjs';
+import { V as VizSpec } from '../vizSpec-Bfwh_kq9.cjs';
+export { A as AXIS_COLORS, B as BATLOW_GLSL, C as CATEGORICAL, a as CORTEXEL_JSON_LIMITS, b as CORTEXEL_JSON_POLICY, c as CORTEXEL_PALETTE, d as CORTEXEL_SPEC_VERSION, e as CORTICAL_LAYER_COLORS, f as ColormapName, D as DECLARED_INPUTS_PORTABLE_SCHEMA, E as ENVELOPE_NORMALIZATION_POLICY, J as JSON_BUDGET_SEMANTICS, g as JSON_PARAMS_PORTABLE_SCHEMA, h as JsonParamsSchema, N as NUMERIC_MODEL_POLICY, O as OKABE_ITO, P as PALETTE_REGISTRY_POLICY, i as PaletteEntry, j as PaletteMetadata, k as PaletteName, l as ProvenanceSchema, m as RGB, n as ReadonlyPaletteMetadata, R as ReadonlySemanticPalette, S as SEMANTIC_PALETTE_KEYS, o as STRING_NORMALIZATION_POLICY, p as SYNAPSE_COLORS, q as SemanticPalette, T as TURBO_GLSL, r as VIK_GLSL, s as VIRIDIS_GLSL, t as VizSpecSchema, u as VizSpecValidation, v as categorical, w as colormapGradient, x as colormapHex, y as colormapRgba, z as colormapSvgStops, F as getPalette, G as getPaletteEntry, H as isRegisteredPalette, I as listPalettes, K as registerPalette, L as sampleColormap, M as validatePalette, Q as validateVizSpec } from '../vizSpec-Bfwh_kq9.cjs';
+import { N as NestSkillId, b as NestDeviceFamily, S as SceneName, R as RendererRoute, H as HostRendererInvocation, c as HostRendererInvocationResult, d as SkillInvocationResult, a as SkillInvocationError, e as SceneData } from '../hostInvocation-CQH54EH3.cjs';
+export { C as CAMERA_PRESETS, f as CONSERVATIVE_PROVENANCE, g as CameraPreset, h as CameraPresetName, i as HONESTY_POLICY, j as HostRendererInvocationSchema, L as LayerConfig, k as NEST_DEVICE_FAMILIES, l as NEST_SKILL_IDS, m as NeuralSceneHandle, n as NeuralSceneMode, o as NeuralSceneProps, p as PlaybackState, P as ProvenanceMetadata, q as SCENE_FRAMING, r as SCENE_NAMES, s as SKILL_IDS, t as STDPSynapse, u as SceneFraming, v as SkillId, w as SkillParamsResult, V as VALID_RENDERER_ROUTES, x as VIZ_ROUTER_ID, y as VizRouterId, z as composeHonestyCaption, A as defaultHonestyCaption, B as isNestSkillId, D as isSkillId, E as mandatoryDisclosure, F as requiresHonestyCaption, G as validateHostRendererInvocation, I as validateHostRendererSpec, J as validateSkillInvocation, K as validateSkillParams } from '../hostInvocation-CQH54EH3.cjs';
 import { z } from 'zod';
 
 declare const PROVENANCE_KEYS: readonly ["device_id", "recorded_variable", "units", "sampling_interval", "recorder_id", "sender_ids", "population_labels", "time_units", "source_ids", "target_ids", "synapse_model", "weight_units", "extent", "spatial_units", "mask", "kernel", "projection_sample_policy", "morphology_disclaimer", "frame_rate", "state_variables", "derivation_method", "model_context", "fixed_parameters", "bin_ms", "histogram_normalization", "interval_scope", "event_alignment", "psth_aggregation", "connection_sample_policy", "snapshot_time_ms", "snapshot_scope", "parallel_edge_policy", "matrix_axis_order", "matrix_aggregation", "delay_units", "degree_direction", "degree_counting", "zero_degree_policy", "node_ids", "position_scope", "detector_id", "reference_population", "target_population", "correlation_normalization", "correlation_units", "lag_convention", "binning_policy", "stim_units", "rate_normalization", "graph_source", "graph_snapshot_id", "graph_scope", "identity_advisory"];
@@ -255,6 +254,33 @@ declare function provenanceParamConstraintError(constraint: ProvenanceParamConst
  * Render-only entrypoints enforce these without pulling zod into their bundle.
  */
 declare const KNOWLEDGE_GRAPH_LIMITS: Readonly<{
+    /** Accepted presentation/inspection limits. These match the legacy params gate. */
+    maxPresentationNodes: 1000;
+    maxPresentationEdges: 4000;
+    /**
+     * Main-thread d3-force refinement limits. Above either bound the canonical
+     * composition retains the caption and complete DOM records but does not mount
+     * the live 3D solver. These are resource ceilings, not portable FPS claims.
+     */
+    maxLiveForceNodes: 250;
+    maxLiveForceEdges: 1000;
+    /**
+     * Aggregate presentation limits apply across every retained occurrence. Aliased
+     * containers receive no amortization: each occurrence is inspected and copied.
+     */
+    maxPresentationRetainedOccurrences: 250000;
+    maxPresentationStringCodeUnits: 4000000;
+    maxPresentationInspectionWork: 1000000;
+    /** A view can explicitly name every kind present in its bounded source. */
+    maxViewNodeKinds: 1000;
+    maxViewEdgeKinds: 4000;
+    /** Equivalent hot-path policies reuse one token without unbounded cache growth. */
+    maxCachedViewsPerPresentation: 128;
+    /** Strong raw-JSON boundary, before a presentation object is materialized. */
+    maxPresentationRawInputBytes: 16000000;
+    maxPresentationJsonDepth: 8;
+    maxPresentationJsonNodes: 300000;
+    maxPresentationJsonNumberTokenLength: 100;
     maxNodeIdLength: 120;
     maxNodeLabelLength: 240;
     maxEdgeIdLength: 320;
@@ -278,6 +304,663 @@ declare const KNOWLEDGE_GRAPH_LIMITS: Readonly<{
     maxAttributeStringLength: 500;
     maxExcerptLength: 1000;
 }>;
+
+/** Public validation budgets. Hosts with larger corpora should pass handles or
+ *  pre-aggregate instead of sending an unbounded inline payload to a browser. */
+declare const PARAM_LIMITS: Readonly<{
+    maxSamples: 50000;
+    maxSeries: 256;
+    maxTopologyNodes: 25000;
+    maxTopologyEdges: 20000;
+    maxSpatialObjects: 50000;
+    maxGraphNodes: 1000;
+    maxGraphEdges: 4000;
+}>;
+/** RFC 3339 timestamp with a required seconds component and explicit UTC/
+ * numeric offset. Zod's ISO datetime check validates calendar dates and offset
+ * ranges; the second pattern closes its optional-seconds extension so portable
+ * hosts receive the same strict contract. */
+declare const Rfc3339TimestampSchema: z.ZodISODateTime;
+declare const VoltageTraceParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    series: z.ZodArray<z.ZodArray<z.ZodNumber>>;
+    series_labels: z.ZodArray<z.ZodString>;
+    units: z.ZodString;
+}, z.core.$strict>;
+type VoltageTraceParams = z.infer<typeof VoltageTraceParamsSchema>;
+declare const SpikeRasterParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    senders: z.ZodArray<z.ZodNumber>;
+}, z.core.$strict>;
+type SpikeRasterParams = z.infer<typeof SpikeRasterParamsSchema>;
+/** Portable tolerances shared by the TypeScript gate and manifest constraints.
+ * Geometry is purely scale-relative: a fixed absolute epsilon would have physical
+ * units and could dwarf a legitimately tiny time or weight bin. Normalized-mass
+ * comparisons use a wider tolerance because they accumulate many binary64 values. */
+declare const HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE = 0;
+declare const HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE = 1e-9;
+/** Bounded allowance for binary64 center ± half-width edge arithmetic. */
+declare const HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS = 4;
+/** No geometry repair may move a boundary by more than this fraction of its
+ * local bin width or half-extent, regardless of absolute coordinate origin. */
+declare const GEOMETRY_MAX_ROUNDOFF_FRACTION = 1e-7;
+declare const HISTOGRAM_MASS_TOLERANCE = 0.000001;
+declare const PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE = 0.000001;
+/** Population-rate values are derived from integer event counts. Binary64
+ * hosts compare the published rate with the specified operation order and this
+ * mixed tolerance; a relative component is necessary for legitimately high
+ * rates while the absolute term keeps zero/small rates stable. */
+declare const POPULATION_RATE_ABSOLUTE_TOLERANCE = 1e-9;
+declare const POPULATION_RATE_RELATIVE_TOLERANCE = 1e-9;
+declare const IsiDistributionParamsSchema: z.ZodObject<{
+    bin_centers_ms: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    bin_width_ms: z.ZodNumber;
+    normalization: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+        probability_density: "probability_density";
+    }>;
+    value_units: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+        "1/ms": "1/ms";
+    }>;
+    interval_scope: z.ZodEnum<{
+        per_sender: "per_sender";
+        single_train: "single_train";
+    }>;
+}, z.core.$strict>;
+type IsiDistributionParams = z.infer<typeof IsiDistributionParamsSchema>;
+declare const PsthParamsSchema: z.ZodObject<{
+    bin_centers_ms: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    bin_width_ms: z.ZodNumber;
+    normalization: z.ZodEnum<{
+        count: "count";
+        count_per_trial: "count_per_trial";
+        rate_hz: "rate_hz";
+    }>;
+    value_units: z.ZodEnum<{
+        count: "count";
+        "count/trial": "count/trial";
+        Hz: "Hz";
+    }>;
+    trial_count: z.ZodNumber;
+    alignment_event: z.ZodString;
+    aggregation: z.ZodLiteral<"selected_senders_per_trial">;
+}, z.core.$strict>;
+type PsthParams = z.infer<typeof PsthParamsSchema>;
+declare const PopulationRateParamsSchema: z.ZodObject<{
+    bin_centers_ms: z.ZodArray<z.ZodNumber>;
+    bin_width_ms: z.ZodNumber;
+    window_start_ms: z.ZodNumber;
+    window_stop_ms: z.ZodNumber;
+    series: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        label: z.ZodString;
+        recorded_sender_count: z.ZodNumber;
+        spike_counts: z.ZodArray<z.ZodNumber>;
+        rates_hz: z.ZodArray<z.ZodNumber>;
+    }, z.core.$strict>>;
+    normalization: z.ZodLiteral<"mean_per_recorded_sender_hz">;
+    aggregation: z.ZodLiteral<"selected_senders">;
+    binning: z.ZodLiteral<"left_closed_right_open">;
+}, z.core.$strict>;
+type PopulationRateParams = z.infer<typeof PopulationRateParamsSchema>;
+declare const RateResponseParamsSchema: z.ZodObject<{
+    stimulus_amplitudes: z.ZodArray<z.ZodNumber>;
+    rates_hz: z.ZodArray<z.ZodNumber>;
+    stimulus_units: z.ZodString;
+}, z.core.$strict>;
+type RateResponseParams = z.infer<typeof RateResponseParamsSchema>;
+declare const NetworkParamsSchema: z.ZodObject<{
+    sources: z.ZodArray<z.ZodNumber>;
+    targets: z.ZodArray<z.ZodNumber>;
+    weights: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
+    delays: z.ZodOptional<z.ZodArray<z.ZodNumber>>;
+    weight_units: z.ZodOptional<z.ZodString>;
+    delay_units: z.ZodOptional<z.ZodString>;
+}, z.core.$strict>;
+type NetworkParams = z.infer<typeof NetworkParamsSchema>;
+declare const SnapshotScopeSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
+    kind: z.ZodLiteral<"single_process_complete">;
+}, z.core.$strict>, z.ZodObject<{
+    kind: z.ZodLiteral<"mpi_target_rank_local">;
+    rank: z.ZodNumber;
+    world_size: z.ZodNumber;
+}, z.core.$strict>, z.ZodObject<{
+    kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+    world_size: z.ZodNumber;
+}, z.core.$strict>], "kind">;
+type SnapshotScope = z.infer<typeof SnapshotScopeSchema>;
+declare const PositionScopeSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
+    kind: z.ZodLiteral<"single_process_complete">;
+}, z.core.$strict>, z.ZodObject<{
+    kind: z.ZodLiteral<"mpi_rank_local">;
+    rank: z.ZodNumber;
+    world_size: z.ZodNumber;
+}, z.core.$strict>, z.ZodObject<{
+    kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+    world_size: z.ZodNumber;
+}, z.core.$strict>], "kind">;
+type PositionScope = z.infer<typeof PositionScopeSchema>;
+declare const ConnectionGraphParamsSchema: z.ZodObject<{
+    nodes: z.ZodArray<z.ZodObject<{
+        id: z.ZodNumber;
+        label: z.ZodString;
+    }, z.core.$strict>>;
+    edges: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        source: z.ZodNumber;
+        target: z.ZodNumber;
+        weight: z.ZodOptional<z.ZodNumber>;
+        delay_ms: z.ZodOptional<z.ZodNumber>;
+        synapse_model: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>;
+    weight_units: z.ZodOptional<z.ZodString>;
+    delay_units: z.ZodOptional<z.ZodLiteral<"ms">>;
+    layout: z.ZodLiteral<"schematic_circle">;
+    parallel_edges: z.ZodLiteral<"preserved">;
+    self_connections: z.ZodLiteral<"preserved">;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+    sample_policy: z.ZodEnum<{
+        complete: "complete";
+        deterministic_even_stride: "deterministic_even_stride";
+    }>;
+    source_connection_count: z.ZodNumber;
+    edge_identity: z.ZodEnum<{
+        nest_connection_identifier: "nest_connection_identifier";
+        canonical_sorted_ordinal: "canonical_sorted_ordinal";
+    }>;
+}, z.core.$strict>;
+type ConnectionGraphParams = z.infer<typeof ConnectionGraphParamsSchema>;
+declare const AdjacencyMatrixParamsSchema: z.ZodObject<{
+    cells: z.ZodArray<z.ZodObject<{
+        source_id: z.ZodNumber;
+        target_id: z.ZodNumber;
+        connection_count: z.ZodNumber;
+    }, z.core.$strict>>;
+    display: z.ZodLiteral<"binary_presence">;
+    aggregation: z.ZodLiteral<"any_connection">;
+    source_ids: z.ZodArray<z.ZodNumber>;
+    target_ids: z.ZodArray<z.ZodNumber>;
+    axis_order: z.ZodLiteral<"target_rows_source_columns">;
+    absent_cell: z.ZodLiteral<"no_connection">;
+    sample_policy: z.ZodLiteral<"complete">;
+    connection_count: z.ZodNumber;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type AdjacencyMatrixParams = z.infer<typeof AdjacencyMatrixParamsSchema>;
+declare const WeightMatrixParamsSchema: z.ZodObject<{
+    cells: z.ZodArray<z.ZodObject<{
+        source_id: z.ZodNumber;
+        target_id: z.ZodNumber;
+        connection_count: z.ZodNumber;
+        value: z.ZodNumber;
+    }, z.core.$strict>>;
+    weight_units: z.ZodString;
+    aggregation: z.ZodEnum<{
+        minimum: "minimum";
+        maximum: "maximum";
+        sum: "sum";
+        mean: "mean";
+        single_connection: "single_connection";
+    }>;
+    source_ids: z.ZodArray<z.ZodNumber>;
+    target_ids: z.ZodArray<z.ZodNumber>;
+    axis_order: z.ZodLiteral<"target_rows_source_columns">;
+    absent_cell: z.ZodLiteral<"no_connection">;
+    sample_policy: z.ZodLiteral<"complete">;
+    connection_count: z.ZodNumber;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type WeightMatrixParams = z.infer<typeof WeightMatrixParamsSchema>;
+declare const DelayMatrixParamsSchema: z.ZodObject<{
+    cells: z.ZodArray<z.ZodObject<{
+        source_id: z.ZodNumber;
+        target_id: z.ZodNumber;
+        connection_count: z.ZodNumber;
+        value: z.ZodNumber;
+    }, z.core.$strict>>;
+    delay_units: z.ZodLiteral<"ms">;
+    aggregation: z.ZodEnum<{
+        minimum: "minimum";
+        maximum: "maximum";
+        mean: "mean";
+        single_connection: "single_connection";
+    }>;
+    source_ids: z.ZodArray<z.ZodNumber>;
+    target_ids: z.ZodArray<z.ZodNumber>;
+    axis_order: z.ZodLiteral<"target_rows_source_columns">;
+    absent_cell: z.ZodLiteral<"no_connection">;
+    sample_policy: z.ZodLiteral<"complete">;
+    connection_count: z.ZodNumber;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type DelayMatrixParams = z.infer<typeof DelayMatrixParamsSchema>;
+declare const InDegreeDistributionParamsSchema: z.ZodObject<{
+    degrees: z.ZodArray<z.ZodNumber>;
+    node_counts: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    node_count: z.ZodNumber;
+    connection_count: z.ZodNumber;
+    direction: z.ZodLiteral<"in">;
+    normalization: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+    }>;
+    value_units: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+    }>;
+    edge_counting: z.ZodLiteral<"each_synapse_collection_entry">;
+    zero_degree_policy: z.ZodLiteral<"include_declared_universe">;
+    sample_policy: z.ZodLiteral<"complete">;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type InDegreeDistributionParams = z.infer<typeof InDegreeDistributionParamsSchema>;
+declare const OutDegreeDistributionParamsSchema: z.ZodObject<{
+    degrees: z.ZodArray<z.ZodNumber>;
+    node_counts: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    node_count: z.ZodNumber;
+    connection_count: z.ZodNumber;
+    direction: z.ZodLiteral<"out">;
+    normalization: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+    }>;
+    value_units: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+    }>;
+    edge_counting: z.ZodLiteral<"each_synapse_collection_entry">;
+    zero_degree_policy: z.ZodLiteral<"include_declared_universe">;
+    sample_policy: z.ZodLiteral<"complete">;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type OutDegreeDistributionParams = z.infer<typeof OutDegreeDistributionParamsSchema>;
+declare const DelayDistributionParamsSchema: z.ZodObject<{
+    bin_centers_ms: z.ZodArray<z.ZodNumber>;
+    delay_counts: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    bin_width_ms: z.ZodNumber;
+    window_start_ms: z.ZodNumber;
+    window_stop_ms: z.ZodNumber;
+    normalization: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+        probability_density: "probability_density";
+    }>;
+    value_units: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+        "1/ms": "1/ms";
+    }>;
+    delay_units: z.ZodLiteral<"ms">;
+    aggregation: z.ZodLiteral<"each_connection">;
+    binning: z.ZodLiteral<"left_closed_right_open">;
+    sample_policy: z.ZodLiteral<"complete">;
+    connection_count: z.ZodNumber;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type DelayDistributionParams = z.infer<typeof DelayDistributionParamsSchema>;
+/** Spatial bounds use a dimensionless extent-relative tolerance plus a small,
+ * explicitly bounded allowance for the two binary64 operations that derive an
+ * axis bound from center ± extent/2. */
+declare const SPATIAL_BOUNDS_ROUNDOFF_ULPS = 2;
+declare const SpatialMap2DParamsSchema: z.ZodObject<{
+    nodes: z.ZodArray<z.ZodObject<{
+        id: z.ZodNumber;
+        label: z.ZodString;
+        x: z.ZodNumber;
+        y: z.ZodNumber;
+    }, z.core.$strict>>;
+    coordinate_units: z.ZodString;
+    extent: z.ZodTuple<[z.ZodNumber, z.ZodNumber], null>;
+    center: z.ZodTuple<[z.ZodNumber, z.ZodNumber], null>;
+    edge_wrap: z.ZodBoolean;
+    position_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+    marker_size: z.ZodLiteral<"fixed_screen_space">;
+}, z.core.$strict>;
+type SpatialMap2DParams = z.infer<typeof SpatialMap2DParamsSchema>;
+declare const WeightHistogramParamsSchema: z.ZodObject<{
+    bin_centers: z.ZodArray<z.ZodNumber>;
+    weight_counts: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    bin_width: z.ZodNumber;
+    window_start: z.ZodNumber;
+    window_stop: z.ZodNumber;
+    weight_units: z.ZodString;
+    normalization: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+    }>;
+    value_units: z.ZodEnum<{
+        count: "count";
+        probability: "probability";
+    }>;
+    aggregation: z.ZodLiteral<"each_connection">;
+    binning: z.ZodLiteral<"left_closed_right_open">;
+    sample_policy: z.ZodLiteral<"complete">;
+    connection_count: z.ZodNumber;
+    snapshot_time_ms: z.ZodNumber;
+    snapshot_scope: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"single_process_complete">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_target_rank_local">;
+        rank: z.ZodNumber;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"mpi_all_ranks_merged">;
+        world_size: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type WeightHistogramParams = z.infer<typeof WeightHistogramParamsSchema>;
+declare const Spatial3DParamsSchema: z.ZodObject<{
+    objects: z.ZodArray<z.ZodObject<{
+        x: z.ZodNumber;
+        y: z.ZodNumber;
+        z: z.ZodNumber;
+    }, z.core.$loose>>;
+    coordinate_units: z.ZodString;
+}, z.core.$strict>;
+type Spatial3DParams = z.infer<typeof Spatial3DParamsSchema>;
+declare const PlasticityParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    weights: z.ZodArray<z.ZodNumber>;
+    weight_units: z.ZodString;
+}, z.core.$strict>;
+type PlasticityParams = z.infer<typeof PlasticityParamsSchema>;
+declare const PhasePlaneParamsSchema: z.ZodObject<{
+    grid: z.ZodRecord<z.ZodString, z.ZodArray<z.ZodNumber>>;
+    derivatives: z.ZodRecord<z.ZodString, z.ZodArray<z.ZodNumber>>;
+    axis_units: z.ZodRecord<z.ZodString, z.ZodString>;
+    derivative_units: z.ZodRecord<z.ZodString, z.ZodString>;
+    derivative_time_unit: z.ZodEnum<{
+        ms: "ms";
+        s: "s";
+    }>;
+    axis_order: z.ZodTuple<[z.ZodString, z.ZodString], null>;
+    flattening: z.ZodLiteral<"row-major-last-axis-fastest">;
+}, z.core.$strict>;
+type PhasePlaneParams = z.infer<typeof PhasePlaneParamsSchema>;
+declare const AstrocyteParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    ca_trace: z.ZodArray<z.ZodNumber>;
+    units: z.ZodEnum<{
+        uM: "uM";
+        µM: "µM";
+        μM: "μM";
+    }>;
+}, z.core.$strict>;
+type AstrocyteParams = z.infer<typeof AstrocyteParamsSchema>;
+declare const CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS: readonly ["paper", "model", "family"];
+declare const CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS: readonly ["cites", "same_as", "variant_of", "instantiates", "belongs_to_family"];
+declare const KnowledgeGraph3DParamsSchema: z.ZodObject<{
+    graph_id: z.ZodString;
+    graph_source: z.ZodString;
+    graph_snapshot_id: z.ZodString;
+    graph_scope: z.ZodLiteral<"corpus_entity">;
+    generated_at: z.ZodISODateTime;
+    nodes: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        kind: z.ZodEnum<{
+            paper: "paper";
+            model: "model";
+            family: "family";
+        }>;
+        label: z.ZodString;
+        detail: z.ZodOptional<z.ZodString>;
+        attributes: z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodNull]>, z.ZodArray<z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodNull]>>]>>;
+        epistemic: z.ZodObject<{
+            status: z.ZodLiteral<"derived_advisory">;
+            advisory_only: z.ZodLiteral<true>;
+            is_paper_local_evidence: z.ZodLiteral<false>;
+            calibrated_posterior: z.ZodLiteral<false>;
+        }, z.core.$strict>;
+        evidence: z.ZodArray<z.ZodDiscriminatedUnion<[z.ZodObject<{
+            kind: z.ZodLiteral<"graph_snapshot_record">;
+            evidence_id: z.ZodString;
+            record_id: z.ZodString;
+            locator: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>, z.ZodObject<{
+            kind: z.ZodLiteral<"graph_node">;
+            evidence_id: z.ZodString;
+            node_id: z.ZodString;
+            locator: z.ZodOptional<z.ZodString>;
+            excerpt: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>, z.ZodObject<{
+            kind: z.ZodLiteral<"citation">;
+            evidence_id: z.ZodString;
+            paper_id: z.ZodString;
+            citation_id: z.ZodString;
+            page: z.ZodOptional<z.ZodNumber>;
+            locator: z.ZodOptional<z.ZodString>;
+            excerpt: z.ZodOptional<z.ZodString>;
+            doi: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>, z.ZodObject<{
+            kind: z.ZodLiteral<"external_source">;
+            evidence_id: z.ZodString;
+            source_id: z.ZodString;
+            locator: z.ZodOptional<z.ZodString>;
+            excerpt: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>], "kind">>;
+        uncalibrated_score: z.ZodOptional<z.ZodObject<{
+            kind: z.ZodEnum<{
+                extraction_confidence: "extraction_confidence";
+                citation_resolution_confidence: "citation_resolution_confidence";
+                structural_similarity: "structural_similarity";
+                behavioral_agreement: "behavioral_agreement";
+                retrieval_relevance: "retrieval_relevance";
+            }>;
+            value: z.ZodNumber;
+            calibrated_posterior: z.ZodLiteral<false>;
+        }, z.core.$strict>>;
+    }, z.core.$strict>>;
+    edges: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        source: z.ZodString;
+        target: z.ZodString;
+        kind: z.ZodEnum<{
+            cites: "cites";
+            same_as: "same_as";
+            variant_of: "variant_of";
+            instantiates: "instantiates";
+            belongs_to_family: "belongs_to_family";
+        }>;
+        label: z.ZodString;
+        attributes: z.ZodRecord<z.ZodString, z.ZodUnion<readonly [z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodNull]>, z.ZodArray<z.ZodUnion<readonly [z.ZodString, z.ZodNumber, z.ZodBoolean, z.ZodNull]>>]>>;
+        epistemic: z.ZodObject<{
+            status: z.ZodLiteral<"derived_advisory">;
+            advisory_only: z.ZodLiteral<true>;
+            is_paper_local_evidence: z.ZodLiteral<false>;
+            calibrated_posterior: z.ZodLiteral<false>;
+        }, z.core.$strict>;
+        evidence: z.ZodArray<z.ZodDiscriminatedUnion<[z.ZodObject<{
+            kind: z.ZodLiteral<"graph_snapshot_record">;
+            evidence_id: z.ZodString;
+            record_id: z.ZodString;
+            locator: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>, z.ZodObject<{
+            kind: z.ZodLiteral<"graph_node">;
+            evidence_id: z.ZodString;
+            node_id: z.ZodString;
+            locator: z.ZodOptional<z.ZodString>;
+            excerpt: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>, z.ZodObject<{
+            kind: z.ZodLiteral<"citation">;
+            evidence_id: z.ZodString;
+            paper_id: z.ZodString;
+            citation_id: z.ZodString;
+            page: z.ZodOptional<z.ZodNumber>;
+            locator: z.ZodOptional<z.ZodString>;
+            excerpt: z.ZodOptional<z.ZodString>;
+            doi: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>, z.ZodObject<{
+            kind: z.ZodLiteral<"external_source">;
+            evidence_id: z.ZodString;
+            source_id: z.ZodString;
+            locator: z.ZodOptional<z.ZodString>;
+            excerpt: z.ZodOptional<z.ZodString>;
+        }, z.core.$strict>], "kind">>;
+        uncalibrated_score: z.ZodOptional<z.ZodObject<{
+            kind: z.ZodEnum<{
+                extraction_confidence: "extraction_confidence";
+                citation_resolution_confidence: "citation_resolution_confidence";
+                structural_similarity: "structural_similarity";
+                behavioral_agreement: "behavioral_agreement";
+                retrieval_relevance: "retrieval_relevance";
+            }>;
+            value: z.ZodNumber;
+            calibrated_posterior: z.ZodLiteral<false>;
+        }, z.core.$strict>>;
+    }, z.core.$strict>>;
+}, z.core.$strict>;
+type KnowledgeGraph3DParams = z.infer<typeof KnowledgeGraph3DParamsSchema>;
+declare const Spatial2DParamsSchema: z.ZodObject<{
+    positions: z.ZodArray<z.ZodTuple<[z.ZodNumber, z.ZodNumber], null>>;
+    coordinate_units: z.ZodString;
+}, z.core.$strict>;
+type Spatial2DParams = z.infer<typeof Spatial2DParamsSchema>;
+declare const CorrelogramParamsSchema: z.ZodObject<{
+    lags_ms: z.ZodArray<z.ZodNumber>;
+    values: z.ZodArray<z.ZodNumber>;
+    bin_width_ms: z.ZodNumber;
+    tau_max_ms: z.ZodNumber;
+    counting_start_ms: z.ZodNumber;
+    counting_stop_ms: z.ZodNumber;
+    pair: z.ZodObject<{
+        reference_label: z.ZodString;
+        target_label: z.ZodString;
+    }, z.core.$strict>;
+    lag_convention: z.ZodLiteral<"positive_target_after_reference">;
+    binning: z.ZodLiteral<"left_closed_right_open">;
+    zero_lag_policy: z.ZodEnum<{
+        included: "included";
+        excluded_self_pairs: "excluded_self_pairs";
+    }>;
+    statistic: z.ZodDiscriminatedUnion<[z.ZodObject<{
+        kind: z.ZodLiteral<"raw_pair_count">;
+        units: z.ZodLiteral<"count">;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"weighted_pair_sum">;
+        units: z.ZodString;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"pair_rate_hz">;
+        units: z.ZodLiteral<"Hz">;
+        exposure_s: z.ZodNumber;
+    }, z.core.$strict>, z.ZodObject<{
+        kind: z.ZodLiteral<"pearson_coefficient">;
+        units: z.ZodLiteral<"1">;
+        sample_count: z.ZodNumber;
+    }, z.core.$strict>], "kind">;
+}, z.core.$strict>;
+type CorrelogramParams = z.infer<typeof CorrelogramParamsSchema>;
+declare const StimulusResponseParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    stimulus: z.ZodArray<z.ZodNumber>;
+    response: z.ZodArray<z.ZodNumber>;
+}, z.core.$strict>;
+type StimulusResponseParams = z.infer<typeof StimulusResponseParamsSchema>;
+declare const CompartmentalParamsSchema: z.ZodObject<{
+    times_ms: z.ZodArray<z.ZodNumber>;
+    compartments: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        parent_id: z.ZodNullable<z.ZodString>;
+        label: z.ZodOptional<z.ZodString>;
+        values: z.ZodArray<z.ZodNumber>;
+    }, z.core.$strict>>;
+}, z.core.$strict>;
+type CompartmentalParams = z.infer<typeof CompartmentalParamsSchema>;
+declare const AnimationReplayParamsSchema: z.ZodObject<{
+    frames: z.ZodArray<z.ZodObject<{
+        time_ms: z.ZodNumber;
+        state: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+        annotation: z.ZodOptional<z.ZodString>;
+    }, z.core.$strict>>;
+}, z.core.$strict>;
+type AnimationReplayParams = z.infer<typeof AnimationReplayParamsSchema>;
 
 type EngramCorpusEntityNodeKind = (typeof CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS)[number];
 type EngramCorpusEntityEdgeKind = (typeof CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS)[number];
@@ -1215,4 +1898,4 @@ declare function synapseCollectionToWeightHistogramParams(input: unknown, option
 declare function getPositionToSpatialMap2DParams(input: unknown, options: SpatialMap2DOptions): NestTopologyResult<SpatialMap2DParams>;
 declare function getPositionToSpatialMap2DParams(input: unknown, options: unknown): NestTopologyResult<SpatialMap2DParams>;
 
-export { type AdaptEngramCorpusEntityGraphOptions, type AdaptEngramCorpusEntityGraphResult, type AdapterResult, AdjacencyMatrixParams, type BuildHostRendererInvocationInput, type BuildVizSpecInput, CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, CORTEXEL_SKILL_VERSION, type ConnectionGraphOptions, ConnectionGraphParams, type ConnectionSnapshotOptions, type CorrelationDetectorOptions, type CorrelationDetectorSourceConfiguration, type CorrelationDetectorStatus, CorrelationDetectorStatusSchema, CorrelogramParams, type DeclaredInputs, type DegreeDistributionOptions, type DelayDistributionOptions, DelayDistributionParams, type DelayMatrixOptions, DelayMatrixParams, type Disambiguator, type EmptySceneResult, type EngramCorpusEntityEdge, type EngramCorpusEntityEdgeKind, type EngramCorpusEntityGraphResponse, type EngramCorpusEntityNode, type EngramCorpusEntityNodeKind, type EngramCorpusEvidenceReference, type ExternalProvenanceClaim, type GetConnections, type GetConnectionsDataKind, type GetConnectionsSceneOptions, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type GetPositionDataKind, HOST_RENDERER_EXAMPLE_PAYLOADS, HostRendererInvocation, HostRendererInvocationResult, InDegreeDistributionParams, type IsiAnalysisOptions, IsiDistributionParams, KNOWLEDGE_GRAPH_LIMITS, KnowledgeGraph3DParams, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_ADAPTER_LIMITS, NEST_ANALYSIS_LIMITS, NEST_INPUT_LIMITS, NEST_SKILL_REGISTRY, NEST_TOPOLOGY_LIMITS, type NestAnalysisResult, NestDeviceFamily, NestSkillId, type NestTopologyResult, type NormalizedSynapseCollectionSnapshot, OutDegreeDistributionParams, PARAM_CONSTRAINT_LANGUAGE, PARAM_VALIDATION_CONSTRAINTS, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE, PROVENANCE_VALUE_CONSTRAINTS, type ParamValidationConstraint, type PopulationRateOptions, PopulationRateParams, type PopulationRatePopulation, PositionScope, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceOverrides, type ProvenanceParamConstraint, type ProvenanceValueConstraint, type ProvenanceVerification, type ProvenanceVerificationKind, type PsthAnalysisOptions, PsthParams, ROUTING_DISCRIMINATORS, RendererRoute, type RequiredProvenanceFlags, type RouteDataKind, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SKILL_REGISTRY, STRICT_INVOCATION_POLICY, STRICT_PROVENANCE_POLICY, SYNAPSE_MEASUREMENT_FIELD_SEMANTICS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, SkillInvocationError, SkillInvocationResult, SnapshotScope, type SpatialMap2DOptions, SpatialMap2DParams, type SpikeDataKind, type SpikeRecorderEvents, SpikeRecorderEventsSchema, type SynapseMeasurementFieldSemantics, type SynapseModelMeasurementSemantics, VizSpec, type WeightHistogramOptions, WeightHistogramParams, type WeightMatrixOptions, WeightMatrixParams, type WeightRecorderEvents, WeightRecorderEventsSchema, type WeightRecorderSplitResult, type WeightSynapseSeries, adaptEngramCorpusEntityGraph, buildHostRendererInvocation, buildVizSpec, conservativeProvenance, correlationDetectorToCorrelogramParams, declaredProvenanceValueError, describeSkill, describeSkills, detectEmptyScene, externalProvenanceDisclosure, formatInvocationErrors, getConnectionsToSceneData, getExamplePayload, getHostRendererExamplePayload, getInvocationExamplePayload, getPositionToSceneData, getPositionToSpatialMap2DParams, getSkill, isProvenanceKey, listSkills, multimeterToSceneData, normalizeDeclaredProvenanceInputs, normalizeDeclaredProvenanceValue, normalizeSynapseCollectionSnapshot, provenanceParamConstraintError, provenanceVerificationForContract, routeToScene, skillParamsJsonSchema, spikeRecorderToIsiParams, spikeRecorderToPopulationRateParams, spikeRecorderToSceneData, spikeTrialsToPsthParams, splitMultimeterBySender, splitWeightRecorderBySynapse, synapseCollectionToAdjacencyMatrixParams, synapseCollectionToConnectionGraphParams, synapseCollectionToDelayDistributionParams, synapseCollectionToDelayMatrixParams, synapseCollectionToInDegreeDistributionParams, synapseCollectionToOutDegreeDistributionParams, synapseCollectionToWeightHistogramParams, synapseCollectionToWeightMatrixParams, toPortableJsonSchema, validateSpec, weightRecorderToSceneData };
+export { type AdaptEngramCorpusEntityGraphOptions, type AdaptEngramCorpusEntityGraphResult, type AdapterResult, type AdjacencyMatrixParams, AdjacencyMatrixParamsSchema, type AnimationReplayParams, AnimationReplayParamsSchema, type AstrocyteParams, AstrocyteParamsSchema, type BuildHostRendererInvocationInput, type BuildVizSpecInput, CORPUS_KNOWLEDGE_GRAPH_EDGE_KINDS, CORPUS_KNOWLEDGE_GRAPH_NODE_KINDS, CORTEXEL_SKILL_VERSION, type CompartmentalParams, CompartmentalParamsSchema, type ConnectionGraphOptions, type ConnectionGraphParams, ConnectionGraphParamsSchema, type ConnectionSnapshotOptions, type CorrelationDetectorOptions, type CorrelationDetectorSourceConfiguration, type CorrelationDetectorStatus, CorrelationDetectorStatusSchema, type CorrelogramParams, CorrelogramParamsSchema, type DeclaredInputs, type DegreeDistributionOptions, type DelayDistributionOptions, type DelayDistributionParams, DelayDistributionParamsSchema, type DelayMatrixOptions, type DelayMatrixParams, DelayMatrixParamsSchema, type Disambiguator, type EmptySceneResult, type EngramCorpusEntityEdge, type EngramCorpusEntityEdgeKind, type EngramCorpusEntityGraphResponse, type EngramCorpusEntityNode, type EngramCorpusEntityNodeKind, type EngramCorpusEvidenceReference, type ExternalProvenanceClaim, GEOMETRY_MAX_ROUNDOFF_FRACTION, type GetConnections, type GetConnectionsDataKind, type GetConnectionsSceneOptions, GetConnectionsSchema, type GetPosition2D, GetPosition2DSchema, type GetPosition3D, GetPosition3DSchema, type GetPositionDataKind, HISTOGRAM_GEOMETRY_ABSOLUTE_TOLERANCE, HISTOGRAM_GEOMETRY_RELATIVE_TOLERANCE, HISTOGRAM_GEOMETRY_ROUNDOFF_ULPS, HISTOGRAM_MASS_TOLERANCE, HOST_RENDERER_EXAMPLE_PAYLOADS, HostRendererInvocation, HostRendererInvocationResult, type InDegreeDistributionParams, InDegreeDistributionParamsSchema, type IsiAnalysisOptions, type IsiDistributionParams, IsiDistributionParamsSchema, KNOWLEDGE_GRAPH_LIMITS, type KnowledgeGraph3DParams, KnowledgeGraph3DParamsSchema, type MultimeterEvents, MultimeterEventsSchema, type MultimeterMultiSender, MultimeterMultiSenderSchema, type MultimeterSenderSeries, type MultimeterSplitResult, NEST_ADAPTER_LIMITS, NEST_ANALYSIS_LIMITS, NEST_INPUT_LIMITS, NEST_SKILL_REGISTRY, NEST_TOPOLOGY_LIMITS, type NestAnalysisResult, NestDeviceFamily, NestSkillId, type NestTopologyResult, type NetworkParams, NetworkParamsSchema, type NormalizedSynapseCollectionSnapshot, type OutDegreeDistributionParams, OutDegreeDistributionParamsSchema, PARAM_CONSTRAINT_LANGUAGE, PARAM_LIMITS, PARAM_VALIDATION_CONSTRAINTS, POPULATION_RATE_ABSOLUTE_TOLERANCE, POPULATION_RATE_RELATIVE_TOLERANCE, PROVENANCE_KEYS, PROVENANCE_KEY_LABELS, PROVENANCE_PARAM_CONSTRAINT_LANGUAGE, PROVENANCE_VALUE_CONSTRAINTS, PSTH_DERIVED_COUNT_ABSOLUTE_TOLERANCE, type ParamValidationConstraint, type PhasePlaneParams, PhasePlaneParamsSchema, type PlasticityParams, PlasticityParamsSchema, type PopulationRateOptions, type PopulationRateParams, PopulationRateParamsSchema, type PopulationRatePopulation, type PositionScope, PositionScopeSchema, type ProvenanceKey, ProvenanceKeyEnum, type ProvenanceOverrides, type ProvenanceParamConstraint, type ProvenanceValueConstraint, type ProvenanceVerification, type ProvenanceVerificationKind, type PsthAnalysisOptions, type PsthParams, PsthParamsSchema, ROUTING_DISCRIMINATORS, type RateResponseParams, RateResponseParamsSchema, RendererRoute, type RequiredProvenanceFlags, Rfc3339TimestampSchema, type RouteDataKind, type RouteInput, type RouteResult, SKILL_EXAMPLE_PAYLOADS, SKILL_REGISTRY, SPATIAL_BOUNDS_ROUNDOFF_ULPS, STRICT_INVOCATION_POLICY, STRICT_PROVENANCE_POLICY, SYNAPSE_MEASUREMENT_FIELD_SEMANTICS, SceneData, SceneName, type SkillContract, type SkillDescriptor, type SkillExample, SkillInvocationError, SkillInvocationResult, type SnapshotScope, SnapshotScopeSchema, type Spatial2DParams, Spatial2DParamsSchema, type Spatial3DParams, Spatial3DParamsSchema, type SpatialMap2DOptions, type SpatialMap2DParams, SpatialMap2DParamsSchema, type SpikeDataKind, type SpikeRasterParams, SpikeRasterParamsSchema, type SpikeRecorderEvents, SpikeRecorderEventsSchema, type StimulusResponseParams, StimulusResponseParamsSchema, type SynapseMeasurementFieldSemantics, type SynapseModelMeasurementSemantics, VizSpec, type VoltageTraceParams, VoltageTraceParamsSchema, type WeightHistogramOptions, type WeightHistogramParams, WeightHistogramParamsSchema, type WeightMatrixOptions, type WeightMatrixParams, WeightMatrixParamsSchema, type WeightRecorderEvents, WeightRecorderEventsSchema, type WeightRecorderSplitResult, type WeightSynapseSeries, adaptEngramCorpusEntityGraph, buildHostRendererInvocation, buildVizSpec, conservativeProvenance, correlationDetectorToCorrelogramParams, declaredProvenanceValueError, describeSkill, describeSkills, detectEmptyScene, externalProvenanceDisclosure, formatInvocationErrors, getConnectionsToSceneData, getExamplePayload, getHostRendererExamplePayload, getInvocationExamplePayload, getPositionToSceneData, getPositionToSpatialMap2DParams, getSkill, isProvenanceKey, listSkills, multimeterToSceneData, normalizeDeclaredProvenanceInputs, normalizeDeclaredProvenanceValue, normalizeSynapseCollectionSnapshot, provenanceParamConstraintError, provenanceVerificationForContract, routeToScene, skillParamsJsonSchema, spikeRecorderToIsiParams, spikeRecorderToPopulationRateParams, spikeRecorderToSceneData, spikeTrialsToPsthParams, splitMultimeterBySender, splitWeightRecorderBySynapse, synapseCollectionToAdjacencyMatrixParams, synapseCollectionToConnectionGraphParams, synapseCollectionToDelayDistributionParams, synapseCollectionToDelayMatrixParams, synapseCollectionToInDegreeDistributionParams, synapseCollectionToOutDegreeDistributionParams, synapseCollectionToWeightHistogramParams, synapseCollectionToWeightMatrixParams, toPortableJsonSchema, validateSpec, weightRecorderToSceneData };

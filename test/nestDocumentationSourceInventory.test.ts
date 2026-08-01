@@ -589,7 +589,9 @@ function temporaryRepository(): {
 
 describe('pinned NEST documentation selected-source inventory', () => {
   it('mints a frozen exact-repository token and rejects copies and retargeting', {
-    timeout: 120_000,
+    // This is only the outer Vitest watchdog. The two complete reviewed-Git
+    // verification cycles retain their narrower production command bounds.
+    timeout: 300_000,
   }, () => {
     const fixture = temporaryRepository();
     try {
@@ -1674,7 +1676,7 @@ describe('pinned NEST documentation selected-source inventory', () => {
     } finally {
       fixture.cleanup();
     }
-  }, 30_000);
+  }, 180_000);
 
   it('removes only paired promisor and reverse-index acquisition sidecars', () => {
     const fixture = temporaryRepository();

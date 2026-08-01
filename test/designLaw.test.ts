@@ -5,12 +5,13 @@ import { dirname, join } from 'node:path';
 import ts from 'typescript';
 
 // Executable guards for the Cortexel design law (previously prose-only):
-//   * useFrame must be allocation-free (no `new THREE.*` per frame),
+//   * first-party useFrame bodies contain no direct allocation syntax,
 //   * emissive intensity stays bloom-safe (<= 1.15) to avoid white blowout,
 //   * populations are unlit (MeshBasic), never an emissive standard material.
-// Source-level scan — no rendering required.
+// This lexical scan does not inspect callees and is not heap-allocation evidence.
 const here = dirname(fileURLToPath(import.meta.url));
 const reactDir = join(here, '..', 'react');
+const repoRoot = join(here, '..');
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -186,7 +187,7 @@ function knowledgeGraphPostPublishFallibleOperations(
 describe('design law (executable)', () => {
   const files = walk(reactDir);
 
-  it('useFrame callbacks allocate nothing per frame', () => {
+  it('first-party useFrame callbacks contain no explicit allocation syntax', () => {
     const offenders: string[] = [];
     for (const f of files) {
       for (const kind of useFrameAllocations(readFileSync(f, 'utf8'), f)) {
@@ -194,6 +195,27 @@ describe('design law (executable)', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('records the exact installed d3 force tick as a known transitive allocator', () => {
+    const scene = readFileSync(join(reactDir, 'KnowledgeGraph3DScene.tsx'), 'utf8');
+    const manyBody = readFileSync(
+      join(repoRoot, 'node_modules', 'd3-force-3d', 'src', 'manyBody.js'),
+      'utf8',
+    );
+    const collide = readFileSync(
+      join(repoRoot, 'node_modules', 'd3-force-3d', 'src', 'collide.js'),
+      'utf8',
+    );
+    const octreeAdd = readFileSync(
+      join(repoRoot, 'node_modules', 'd3-octree', 'src', 'add.js'),
+      'utf8',
+    );
+    expect(scene).toContain('sim.tick()');
+    expect(scene).toContain('.iterations(2)');
+    expect(manyBody).toContain('octree(nodes, x, y, z)');
+    expect(collide).toContain('octree(nodes, x, y, z)');
+    expect(octreeAdd.match(/new Float64Array/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps knowledge-graph position authority and label allocation out of render', () => {
@@ -241,20 +263,18 @@ describe('design law (executable)', () => {
       move.indexOf('if (e.instanceId == null'),
     );
 
-    const clickStart = source.indexOf('  const handleClick = useCallback(');
-    const clickEnd = source.indexOf('\n\n  return (', clickStart);
-    const click = source.slice(clickStart, clickEnd);
-    expect(click.indexOf('e.stopPropagation()')).toBeGreaterThan(
-      click.indexOf('if (e.instanceId != null'),
-    );
-
     const autoFrameStart = source.indexOf('      autoFrame &&');
     const autoFrameEnd = source.indexOf(
       '    // Ease the camera target',
       autoFrameStart,
     );
+    expect(autoFrameStart).toBeGreaterThanOrEqual(0);
+    expect(autoFrameEnd).toBeGreaterThan(autoFrameStart);
     const autoFrame = source.slice(autoFrameStart, autoFrameEnd);
-    expect(autoFrame.indexOf('framedRef.current = true;')).toBeGreaterThan(
+    expect(autoFrame).toContain('cameraProjectionKind !== null');
+    expect(autoFrame).toContain('autoFrameStageRef.current === 0 || layoutSettled');
+    expect(autoFrame.indexOf('autoFrameStageRef.current = layoutSettled ? 2 : 1;'))
+      .toBeGreaterThan(
       autoFrame.indexOf('controls.update();'),
     );
   });

@@ -8,11 +8,30 @@ import {
 } from '../react/VizSpecRenderer';
 import { KnowledgeGraphA11yList } from '../react/KnowledgeGraphA11yList';
 import {
+  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+  prepareKnowledgeGraphPresentation,
+  type KnowledgeGraph3DEdge,
+  type KnowledgeGraph3DNode,
+} from '../react/KnowledgeGraph3DScene';
+import {
   NeuronA11yPager,
   PopulationA11yList,
 } from '../react/SelectionA11yControls';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+function prepareGraph(
+  nodes: readonly KnowledgeGraph3DNode[],
+  edges: readonly KnowledgeGraph3DEdge[],
+) {
+  return prepareKnowledgeGraphPresentation({
+    contract: KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+    profile: 'generic_visual',
+    graphIdentity: 'graph:test',
+    nodes,
+    edges,
+  });
+}
 
 describe('VizSpecRenderer binds the strict gate at the DOM boundary', () => {
   it('passes parsed params to the host and renders the mandatory caption', () => {
@@ -235,12 +254,10 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
   it('renders real buttons, selection state, kinds, and directed relationships', () => {
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
-        graphIdentity="graph:test"
-        nodes={[
+        presentation={prepareGraph([
           { id: 'p1', label: 'Paper', kind: 'paper', color: '#ffffff', radius: 4 },
           { id: 'm1', label: 'Model', kind: 'model', color: '#ffffff', radius: 4 },
-        ]}
-        edges={[
+        ], [
           {
             source: 'p1',
             target: 'm1',
@@ -248,7 +265,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
             color: '#ffffff',
             directed: true,
           },
-        ]}
+        ])}
         selectedId="p1"
         onSelect={() => {}}
       />,
@@ -263,15 +280,13 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
   it('has an explicit empty state', () => {
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
-        graphIdentity="graph:test"
-        nodes={[]}
-        edges={[]}
+        presentation={prepareGraph([], [])}
         selectedId={null}
         onSelect={() => {}}
       />,
     );
     expect(html).toContain('role="status"');
-    expect(html).toContain('No graph nodes match this view');
+    expect(html).toContain('This graph contains no nodes.');
   });
 
   it('bounds relationship announcements and paginates full selected-node detail', () => {
@@ -294,9 +309,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
     }));
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
-        graphIdentity="graph:test"
-        nodes={nodes}
-        edges={edges}
+        presentation={prepareGraph(nodes, edges)}
         selectedId="hub"
         query="Hub"
         onSelect={() => {}}
@@ -304,7 +317,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
     );
     expect(html).toContain('991 more relationships');
     expect(html).toContain('Browse all 999 relationships');
-    expect(html).toContain('Page 1 of 40');
+    expect(html).toContain('Page 1 of 125');
     expect(html.length).toBeLessThan(30_000);
   });
 
@@ -318,16 +331,14 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
     }));
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
-        graphIdentity="graph:test"
-        nodes={nodes}
-        edges={[]}
+        presentation={prepareGraph(nodes, [])}
         selectedId={null}
         onSelect={() => {}}
       />,
     );
-    expect(html).toContain('Node page 1 of 10; 1000 nodes');
-    expect(html).toContain('Node 99');
-    expect(html).not.toContain('Node 100</button>');
+    expect(html).toContain('Node page 1 of 40; 1000 nodes');
+    expect(html).toContain('Node 24');
+    expect(html).not.toContain('Node 25</button>');
     expect(html.length).toBeLessThan(100_000);
   });
 
@@ -341,38 +352,24 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
     }));
     const html = renderToStaticMarkup(
       <KnowledgeGraphA11yList
-        graphIdentity="graph:test"
-        nodes={nodes}
-        edges={[]}
+        presentation={prepareGraph(nodes, [])}
         selectedId="n950"
         onSelect={() => {}}
       />,
     );
-    expect(html).toContain('Node page 10 of 10; 1000 nodes');
+    expect(html).toContain('Node page 39 of 40; 1000 nodes');
     expect(html).toContain('Node 950');
     expect(html).toContain('aria-pressed="true"');
   });
 
-  it('does not derive DOM ids from ill-formed graph identifiers', () => {
-    expect(() => renderToStaticMarkup(
-      <KnowledgeGraphA11yList
-        graphIdentity="graph:test"
-        nodes={[
+  it('rejects ill-formed graph identifiers before any DOM surface runs', () => {
+    expect(() => prepareGraph([
           { id: '\ud800', label: 'Surrogate id', kind: 'paper', color: '#fff', radius: 4 },
-        ]}
-        edges={[]}
-        selectedId={null}
-        onSelect={() => {}}
-      />,
-    )).not.toThrow();
+        ], [])).toThrow(/display-safe string/);
   });
 
-  it('escapes visual-order controls even when the graph companion is called directly', () => {
-    const html = renderToStaticMarkup(
-      <KnowledgeGraphA11yList
-        graphIdentity="graph:test"
-        label={'Graph\u202econtrols'}
-        nodes={[
+  it('rejects visual-order controls at the presentation boundary', () => {
+    expect(() => prepareGraph([
           {
             id: 'p1',
             label: 'Paper\u202eevil',
@@ -380,17 +377,7 @@ describe('KnowledgeGraphA11yList mirrors WebGL semantics into operable DOM', () 
             color: '#fff',
             radius: 4,
           },
-        ]}
-        edges={[]}
-        selectedId={null}
-        onSelect={() => {}}
-      />,
-    );
-    expect(html).not.toContain('\u202e');
-    expect(html).not.toContain('\u061c');
-    expect(html).toContain('Paper\\u202eevil');
-    expect(html).toContain('paper\\u061cspoof');
-    expect(html).toContain('Graph\\u202econtrols');
+        ], [])).toThrow(/display-safe string/);
   });
 });
 

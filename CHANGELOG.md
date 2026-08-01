@@ -6,6 +6,151 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — coherent knowledge-graph presentation boundary
+
+- A new experimental, peer-free `cortexel/knowledge-graph` subpath exposes
+  `PreparedKnowledgeGraphPresentationV1`. `prepareKnowledgeGraphPresentation` checks,
+  detaches, deeply freezes, and registers one presentation in a module-private WeakSet;
+  `parseKnowledgeGraphPresentationJson` adds a bounded raw-text boundary for the generic
+  visual input that rejects duplicate object members before materialization.
+  `prepareCorpusKnowledgeGraphFigureJson` provides the corresponding no-throw raw-text
+  boundary for a complete corpus VizSpec and returns explicit source-input assurance.
+  The complete
+  accepted presentation record has an
+  RFC 8785 canonical serializer that deliberately does not recreate runtime authority.
+  A copied, serialized,
+  Proxy-wrapped, or structurally similar object has no presentation authority.
+- `prepareCorpusKnowledgeGraphFigure` gives agents and servers one no-throw path from a
+  complete self-describing legacy `VizSpec` through the strict corpus gate to the exact
+  bound caption, mapped presentation, palette snapshot, theme mode, and camera policy.
+  It rejects the wrong skill and export mode and performs no I/O.
+- All surfaces inside the canonical corpus composition now consume the exact same
+  prepared capability. This removes independent scene/legend/DOM snapshots and binds
+  nodes, relationships, context, budgets, and corpus lifecycle identity to one
+  publication event. The
+  package build routes ESM and CommonJS to the same private runtime registry and shares
+  one nominal declaration brand in both directions; packed-runtime probes cover all
+  producer/consumer format pairings and public/private import boundaries.
+- Preparation uses data descriptors rather than property reads, rejects accessors,
+  applies aggregate retained-occurrence/string/inspection budgets, revalidates every
+  observed prototype/key/descriptor before publication, and derives corpus identity
+  from the complete checked context. The materialized-value assurance states the
+  unavoidable limit honestly: JavaScript cannot inspect an arbitrary Proxy without
+  executing its internal-method traps. Runtime tokens remain local to one physical
+  package instance and realm; serialization, structured clone, workers/processes,
+  another realm, or a duplicate install does not transfer them.
+- `PreparedKnowledgeGraphViewV1` provides exact-source-bound node/edge-kind filtering.
+  Omission means all, `[]` means none, duplicate or source-absent kinds reject, kind and
+  endpoint pruning are separately counted, and visible arrays reuse exact frozen source
+  record objects. A bounded per-source LRU preserves exact tokens for equivalent hot
+  policies.
+- `KnowledgeGraphStaticRecordView` provides deterministic paginated access to the
+  accepted context, nodes, assertions, typed evidence references, epistemic records,
+  attributes, and discriminated uncalibrated scores without force coordinates.
+  `KnowledgeGraphAccessibleFigure` is the canonical host-owned-Canvas composition: it
+  accepts either a materialized spec or raw `specJson` (never an independent caption),
+  keeps the visible honesty caption,
+  legend, paginated operable DOM, and full source-record browser mounted, and replaces
+  only a failed visual region with an availability status. Its boundary is precisely
+  limited to descendant client render/lifecycle failures; hosts report WebGL/context
+  availability and explicitly key retries. SSR/no-JS contains only the bounded initial
+  record page; hydrated controls expose all pages. The canonical serializer emits the
+  complete presentation inspection record, not caption, view, host policy, or a figure
+  artifact. Invalid view policy retains the accepted caption and source-record browser;
+  source/view transitions invalidate controlled focus that has become hidden. The
+  canonical composition gives an eligible camera a provisional deterministic-seed fit
+  and at most one final correction after the force layout settles, including without
+  controls; user control and selection intent cancel the final whole-graph correction.
+  Each fit works in either direction and includes the node glyph geometry actually
+  rendered on that frame plus bounded routed-edge extents. It no longer reserves the
+  maximum hypothetical focus-label envelope around every node—a real-browser defect
+  that made small graphs unreadably tiny—and hover never restarts either whole-graph
+  fit stage. It preserves viewing direction, supports orthographic cameras, and repairs
+  near/far clipping only as required to contain the fitted sphere. Only canonical centered
+  Three perspective/orthographic projections with identity parent transforms and
+  ordinary unit-scale camera matrices/methods qualify; ArrayCamera, view/film offsets,
+  asymmetric or reversed orthographic frusta, and custom projection matrices/methods
+  fail closed without a camera write. It emits the exact host background required by
+  its contrast policy, normalizes undimmed opaque node/edge colors to 3:1 against it,
+  discloses source and intended undimmed scene colors, redundantly encodes corpus node/edge kind with
+  closed glyph/stroke channels, sizes collision/framing/label/arrow geometry around the
+  full glyph envelope, and omits hidden dash chords from GPU buffers. These checks do
+  not establish CVD, grayscale, browser, or whole-view accessibility conformance. It
+  consumes drag hits without selecting or
+  bubbling, toggles selection consistently, and provides identified query-match
+  navigation with focus transfer only on explicit activation. Manual pages with no
+  query match no longer announce an off-page row.
+- Camera classification and projection geometry fail closed before either fit stage:
+  unsupported or ambiguous camera flags, zero/nonfinite FOV/aspect/span/zoom, and
+  nonfinite position/target/direction make no camera or clipping write and do not mark
+  that stage complete. A later valid resize can retry. The Cortexel-authored frame
+  callback reuses scratch, including an explicit clipping result object, and does not
+  set React state. Its lexical source guard establishes only the absence of reviewed
+  direct allocation syntax: the exactly installed d3-force-3d 3.0.6 transitively
+  allocates octrees during many-body and collision ticks. The force clock runs at most
+  one tick per rendered frame and at most 60 per second, deliberately settling more
+  slowly below 60 FPS rather than catching up. This is not an FPS or frame-time
+  guarantee. The package peer remains `^3.0.5`; this 3.0.6 inspection does not transfer
+  to a future 3.x resolution, so evidence-sensitive hosts must exact-lock or re-audit.
+- Preparation and DOM inspection admit at most 1,000 nodes and 4,000 relationships;
+  the allocating main-thread live force scene separately admits at most 250 nodes and
+  1,000 relationships. Above the live ceiling the canonical composition does not invoke
+  the visual renderer but keeps the caption, legend, operable DOM, and complete
+  paginated source-record browser. An exact source-bound filtered view can regain the
+  visual when it falls within both live limits; some sources have no nonempty eligible
+  filter.
+- The canonical React boundary runtime-enforces an own-property XOR between `spec` and
+  `specJson`; both, neither, `spec={undefined}`, and a non-string `specJson` fail before
+  graph preparation.
+- Raw JSON byte, decoded-string, and numeric-token limits now stop their respective
+  loops at the first complete unit beyond the active bound. Tight malformed-number and
+  Unicode controls preserve grammar-error precedence while preventing oversized token
+  materialization.
+- Packed browser evidence now builds both public graph entrypoints with the exact locked
+  esbuild and peer closure during the reviewed prepare phase, records only a narrowly
+  reviewed class of redundant tsup bare-import warnings whose targets independently
+  contribute bundle bytes, seals the bundle and canonical receipt, and executes the
+  sealed handoff under the unchanged network/write/child-process-denying guard.
+- **Breaking (experimental pre-1.0 subpath):** `KnowledgeGraph3DScene`,
+  `KnowledgeGraphLegend`, and `KnowledgeGraphA11yList` no longer accept independent raw
+  `nodes`, `edges`, `context`, or `graphIdentity` props. They require one exact
+  `presentation` capability, and the canonical figure no longer accepts independent
+  `presentation` or `honestyCaption` props. The direct primitives now accept only a
+  runtime-checked `generic_visual` capability. `mapCorpusKnowledgeGraph` and all
+  package-internal corpus components are absent from both public graph entries; corpus
+  rendering goes through `KnowledgeGraphAccessibleFigure`, whose composition owns the
+  bound caption. Peer-free corpus preparation remains available for inspection,
+  serialization, and view derivation. Scene/list selection callbacks now accept `null`
+  so an active node can be cleared. This coherence and focused
+  failure-containment evidence
+  does not authenticate snapshots or references, make schematic geometry quantitative,
+  establish whole-view accessibility conformance, or promote the legacy graph into the
+  FigureRequestV1 catalog.
+
+### Added — pinned NEST 3.10 visualization-demand audit
+
+- A canonical, schema-validated V2 audit classifies the exact source bytes of all 98
+  official PyNEST example bodies at pinned NEST commit
+  `acca9704da248750219a027db99fec6cd1f9052a`, plus the disjoint 11 support/coordinated
+  Python bodies. The closed reconciliation is 84 active, one visualization-import-only,
+  and 13 non-visual canonical bodies; two active and nine non-visual support bodies;
+  three aliases, 92 runner profiles, 12 checked-in visual assets, and the selected
+  documentation corpus remain separate denominators.
+- The audit names 24 semantic visualization-demand families and keeps source
+  classification, stable representability, executable adapters, packaged renderers,
+  upstream parity, and scientific certification independent. It records zero
+  execution-bound outputs, zero example-specific mappings or executable-adapter
+  matches, zero renderer/upstream comparisons, zero upstream executions, and zero
+  scientific certifications. Thirteen demands have a plausible complete stable-skill
+  candidate, four only a partial candidate, and seven no current stable candidate;
+  none of those candidate labels transfers runtime or scientific evidence.
+- The accompanying design note specifies a bounded `FigureBundleV1` direction for
+  panels, overlays, shared axes, aggregate budgets, artifacts, and disclosure binding;
+  a source-adapter sequence for multimeters, step-plus-offset spikes, connection and
+  position snapshots, weight/correlation recorders, and later image/animation sources;
+  and a non-guessing `source suggest` CLI direction. These are reviewed design inputs,
+  not implemented capability or release claims.
+
 ### Added — closed agent repair and direct source rendering
 
 - `cortexel/figure` now exports `applySafeRepairs`, a bounded request-in/request-out
@@ -149,7 +294,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documentation-script figures/saves, authored diagrams, and public plotting modules.
   These scopes are not a Sphinx/CMake build closure, visualization-definition closure,
   execution receipt, stable mapping, renderer-parity result, or scientific certificate.
-  Every downstream visualization count remains zero and `coverageClaim` remains `none`.
+  In that retained V1 source-authority artifact, every downstream visualization count
+  remains zero and `coverageClaim` remains `none`. The separate V2 semantic
+  classification described above closes the reviewed Python bodies without changing
+  any execution, example-specific mapping, parity, or certification count from zero.
   The limitations ledger now correctly distinguishes representability from adapter
   evidence: stable `neuro.phase_plane` can encode supplied vector fields,
   trajectories, nullclines, and fixed points, but no executable adapter or executed
@@ -332,9 +480,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retained across content-equal parent rerenders and clamps synchronously when a live
   graph shrinks, so assistive technology never receives an empty out-of-range page.
 - The bounded flow-particle budget is distributed across every marked relationship
-  instead of assigning four markers only to the first edges under the cap. At the
-  maximum 4,000-edge browser budget every flow edge retains one static/animated cue,
-  so the text legend no longer promises a marker that the scene omitted.
+  instead of assigning four markers only to the first edges under the live-force cap.
+  At the 1,000-edge live ceiling every flow edge retains one static/animated cue, so the
+  text legend no longer promises a marker that the scene omitted. The separate 4,000-
+  relationship presentation/DOM ceiling does not imply a mounted force scene.
 - The experimental legacy knowledge-graph memo signature now uses
   type-and-presence-tagged length framing. An absent optional assertion id, kind, or
   color can no longer collide with an explicit empty string and retain stale
@@ -404,7 +553,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only `SIGCHLD` plus `INT`/`TERM`/`HUP` and restores the caller's exact mask; the target
   receives default, unblocked cancellation signals. The `Popen` destructor
   is disarmed before the one-way syscall, and no signal, query, or second wait follows
-  the reap. Parent launch-resource closes are exhaustive. Any close exception is
+  the reap. A negative control raw-reaps the child behind the `Popen` object's back and
+  proves that the resulting `ECHILD` path fails closed without `killpg`, numeric PID
+  signal, `waitid`, or any other post-reap identity action. Parent launch-resource
+  closes are exhaustive. Any close exception is
   ambiguous, so the standalone smoke worker immediately `_exit(70)` and lets kernel
   teardown revoke every possibly-live capability rather than retrying a reusable fd.
 - Regression controls cover success, nonzero and signaled targets, timeout, output
@@ -421,13 +573,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   independent receipt that the guardian, rather than a same-UID target in the
   status/self-sweep interval, delivered the signal.
 
-- The reviewed Node lifetime capability now binds the exact launcher FIFO/socket
-  endpoint across launcher fd1, supervisor fd6, and guardian fd5. Stable `fstat`
-  identity is proved at each hop; the guardian echoes it in one canonical READY frame,
-  the supervisor rechecks and closes its retained copy exactly once, and only then may
-  it publish `guardianArmed` and send GO. Node's reuse of a closed numeric fd for an
-  unrelated internal FIFO therefore fails closed rather than blessing the wrong
-  lifetime object.
+- Reviewed Node command records advance to v4, with guardian READY v3 and lifetime
+  authority v2. The exact launcher now creates and actively drains a dedicated
+  zero-data lifetime pipe instead of relying on Bun `spawnSync` to wait for an inherited
+  stdout writer. It installs data/end/error observers before one exact `ARM` frame lets
+  the supervisor create the guardian. The supervisor derives the child endpoint's exact
+  `fstat` identity, binds it through the guardian's canonical READY echo, rechecks it,
+  and closes its copy exactly once; the guardian retains the endpoint but never passes
+  it to the worker or target. The launcher publishes buffered protocol only after both
+  supervisor `close` and real peer `end`; bytes and local close/error fail closed without
+  masquerading as EOF. This closes the observed Linux/Bun supervisor-`SIGKILL` return
+  race while the launcher remains alive. Launcher `SIGKILL`, OOM loss, and the outer
+  hard kill still require external owner-death containment and are documented without
+  claiming that descendant-held stdout delays Bun's return.
 
 ### Fixed — restrictive-umask Python package fixture
 
@@ -653,6 +811,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   changes and state/seal circularity. Execute retains its first exact file
   authority and revalidates the leaf's digest, identity, ownership, and `0444`
   mode after active work.
+  The staged reviewed Node executes a closed identity probe before dependency
+  selection; prepared state binds its exact POSIX platform and architecture, requires
+  platform agreement with the supervising host, and derives lock `os`/`cpu` selection
+  from that runtime rather than Bun's architecture. Selector arrays have canonical
+  positive/negative semantics, the singleton `any` spelling is explicit, and `libc`
+  remains outside the supported closure. The exact fixture lock was regenerated under
+  the reviewed legacy-peer policy: present `dev`, `optional`, and `devOptional` flags
+  must be exactly `true`, `devOptional` cannot coexist with either constituent flag,
+  and no normalization is allowed to bless an npm-rewritten hidden lock.
   A trusted detached guardian is the live leader of a fresh POSIX session/process
   group. It creates a gated non-leader worker, which alone starts the reviewed
   target. The supervisor holds the guardian's exclusive control lease and publishes
@@ -679,11 +846,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   same-authority descendants that remain in the group, but it is not a sandbox
   against guardian discovery/signaling, deliberate detachment/re-grouping,
   inherited-pipe retention, a credential/security-label change, or whole-group
-  `SIGSTOP`. A stopped guardian cannot consume lease EOF, and retained descriptors can
-  keep the synchronous outer caller blocked beyond both configured timeouts; those
-  timeouts are not hostile hard deadlines. These capabilities require an external
-  cgroup/sandbox/VM. Windows fails closed until an equivalent reviewed Job Object
-  boundary exists.
+  `SIGSTOP`. A stopped guardian cannot consume lease EOF; the still-live launcher joins
+  until its synchronous caller applies the outer hard kill. That kill can return before
+  asynchronous group cleanup and is not hostile owner-death containment. These
+  capabilities require an external cgroup/sandbox/VM. Windows fails closed until an
+  equivalent reviewed Job Object boundary exists.
   One-way regression rendezvous cover pre-`GO` worker/guardian/supervisor
   killpoints, active supervisor `SIGKILL` lease EOF, direct guardian loss, target
   attempts to kill its immediate parent, and the absence of any post-reap signal.
@@ -694,11 +861,24 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   omit-filtered prepared lock at every nested depth; concealed package-management
   subtrees are rejected. npm 10's exact empty omitted-scope residue is modeled
   separately, while npm 11 admits no such residue.
+- Generated browser-bundle helpers now construct their sealed import matchers from
+  JSON-encoded pattern strings. A focused test executes those exact declarations under
+  the reviewed Node and proves both accepted and rejected import spellings, preventing
+  template-literal escape loss from turning prepare-time evidence into invalid code.
 - The prepare boundary now independently decodes the produced gzip/USTAR bytes
   before any install. It rejects extension/link/special entries and archive
   ambiguity, proves exact path/size/mode/content parity with both npm's JSON and
   the reviewed source closure, and then proves each tar-owned installed file is
-  byte-for-byte identical. The execute boundary repeats the archive proof.
+  byte-for-byte identical. Every bounded packed Markdown document is also scanned
+  exactly once for a conservative syntactic over-approximation of inline/reference
+  destinations, URI/email autolinks, and raw-HTML-like `href`/`src`/`srcset` targets.
+  Code, comments, fences, raw-HTML blocks, and indentation do not suppress this scan;
+  it deliberately fails closed on false positives instead of claiming CommonMark
+  render equivalence. Angle-reference inspection advances monotonically through nested
+  delimiters and has an explicit source-length work bound, so repeated `<` prefixes
+  cannot induce suffix rescans. Relative targets must resolve inside the exact tar
+  inventory, while external targets require explicit HTTPS. The execute boundary
+  repeats the archive proof.
 
 ### Fixed — Python artifact and build-runtime closure
 
@@ -1634,11 +1814,14 @@ regenerate cached descriptors/manifests before adopting this release.
   Noninteractive clouds register no pointer handlers, interactive linear picking has
   a lower safety cap, and population geometry rejects poisoned/unbounded coordinates.
 - `KnowledgeGraph3DScene` no longer mutates the host camera unless explicitly opted
-  into `autoFrame`/selection fly-to, avoids per-frame allocations and wall-clock
-  animation, advances force layout on a capped fixed-60-Hz clock, handles demand
+  into `autoFrame`/selection fly-to. Its callback reuses first-party scratch and avoids
+  wall-clock animation; this is not an allocation-free claim because D3 force ticks
+  allocate their spatial index. The clock advances at most one tick per rendered frame
+  and no more than 60 per second, with slower settlement below 60 FPS. It handles demand
   rendering and reduced motion, scopes pointer state to the canvas, disposes resources,
-  and uses collision-resistant content signatures. Direct scene/A11y entrypoints share
-  the strict graph-size ceiling, and reduced motion does not re-upload static particles.
+  and uses collision-resistant content signatures. The direct scene now enforces the
+  live-force ceiling while the accessible DOM surface retains its separate, larger
+  presentation ceiling; reduced motion does not re-upload static particles.
   Directed relationships now retain arrowheads in reduced motion and still exports.
 - `VizSpecRenderer` reports validation errors after commit rather than during render,
   exposes structured invocation errors, and never treats an explicitly blank skill as
@@ -1770,7 +1953,8 @@ regenerate cached descriptors/manifests before adopting this release.
   arrowheads, and flow particles instead of leaving a bright unrelated edge field behind. Selected
   selected nodes remain present in the DOM companion through filtered views, duplicate
   ids fail closed at both direct React entrypoints, relationship disclosures have a
-  touch-sized target, and the force-layout clock no longer allocates from `useFrame`.
+  touch-sized target, and the force-layout clock now mutates a reused result object
+  instead of directly allocating one from `useFrame`; D3's force tick remains allocating.
 
 - The React peer set is now `react`, `react-dom`, `three`, and
   `@react-three/fiber`; `@react-three/drei` is no longer required.
@@ -1815,8 +1999,9 @@ breaking changes to the entry points (see **Changed**).
   strict gate instead of rendering blank: `spatial_3d` `objects` now require
   numeric `x/y/z`; `phase_plane` `grid` now requires numeric-array axes.
 - **Hardened `KnowledgeGraph3DScene`** (adversarial review of the one complete
-  shipped scene): removed a per-frame array allocation in `useFrame` (Design Law
-  L4 — remembered positions are now mutated in place); a stale focus id no longer
+  shipped scene): removed a direct per-frame array allocation from `useFrame`
+  (remembered positions are now mutated in place; this did not prove callees
+  allocation-free); a stale focus id no longer
   dims the entire graph or freezes an empty label; the camera auto-frame is now
   once-per-mount and the simulation warm-restarts (α 0.5) on a data change instead
   of hard-snapping the camera and re-scattering the settled layout; `node.radius`
@@ -1868,16 +2053,19 @@ breaking changes to the entry points (see **Changed**).
   host owns Canvas/OrbitControls/bloom/background). Now shipped at its own subpath
   **`cortexel/react/knowledge-graph`** so `d3-force-3d` stays a truly optional
   peer (the base `cortexel/react` entry no longer imports it). A d3-force-3d
-  simulation ticked in an allocation-free `useFrame`, instanced unlit sphere
-  nodes, additive line edges, citation-flow particles, and a Billboard focus label.
+  simulation ticked from a scratch-reusing `useFrame` callback with no React state
+  update; this was not allocation-free execution because D3 ticks allocate spatial
+  indexes. The scene used instanced unlit sphere nodes, additive line edges,
+  citation-flow particles, and a Billboard focus label.
 - **Validated data reaches the renderer.** `RenderSceneArgs` now carries `params`
   (the per-skill-validated scene data) and `provenance`, so a host scene renders
   from Cortexel's checked output instead of re-parsing the raw spec.
-- **`mapCorpusKnowledgeGraph`** (`cortexel/react/knowledge-graph`) — the missing
-  agent→scene bridge: turns validated `corpus.knowledge_graph` params (id/kind/
-  label) + a semantic palette into ready-to-render `KnowledgeGraph3DNode`/`Edge`
-  props (colour by kind, radius by degree, citation-flow particles on `cites`
-  edges). Ships with the THREE-free graph helpers `filterGraphEdges` /
+- **Corpus mapping bridge** — turns strictly gated `corpus.knowledge_graph` params
+  (id/kind/label) plus a semantic palette into ready-to-render
+  `KnowledgeGraph3DNode`/`Edge` records (colour by kind, radius by degree,
+  citation-flow particles on `cites` edges). The bridge is now package-internal so
+  supported callers cannot detach its output from the canonical honesty caption.
+  The public subpath still ships the THREE-free graph helpers `filterGraphEdges` /
   `buildAdjacency` / `flowParticleCount` / `graphSignature` (unit-tested, one
   source of truth for the scene's "renderable edge" definition).
 - **Self-describing specs.** `VizSpec` gains optional `skill` and `specVersion`
@@ -1933,7 +2121,8 @@ breaking changes to the entry points (see **Changed**).
 - `ExpandableNeurons` (`cortexel/react`) — the companion to ExpandablePopulation:
   a population voxel hub collapses and this reveals its constituent neurons as
   ray-cast sphere points, clustered at the hub centre and blooming to a 3D grid
-  on expand. Single neuron = sphere (design law); allocation-free useFrame.
+  on expand. Single neuron = sphere (design law); its `useFrame` callback reuses
+  first-party scratch and contains no reviewed direct allocation syntax.
 - `neuronLocalGrid(count, spacing)` / `neuronExpandedScale(expansion)` /
   `NEURON_CLUSTER_SCALE` — the shared grid layout + morph math so an owning scene
   can place synapses on the exact same neuron positions without duplicating it.
@@ -1955,8 +2144,8 @@ breaking changes to the entry points (see **Changed**).
   without rendering pixels.
 - `splitMultimeterBySender(events)` — splits a flattened multi-sender multimeter
   dump into one monotonic series per sender (the honest alternative to rejecting).
-- Per-skill provenance snapshot test, design-law executable guards (allocation-
-  free useFrame, bloom-safe emissive ≤1.15, unlit populations), and a published
+- Per-skill provenance snapshot test, design-law executable guards (first-party
+  `useFrame` source discipline, bloom-safe emissive ≤1.15, unlit populations), and a published
   `.d.ts` Node-type leak scan.
 
 ## [0.2.0] — Agent skill axis

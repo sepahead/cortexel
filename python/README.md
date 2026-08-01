@@ -7,8 +7,10 @@ scientific figure contracts.
 > the private, unreleased PEP 440 version `0.10.0.dev0`, paired with npm
 > `0.10.0-dev.0`.** Not published to PyPI.
 
-This package validates, canonicalizes, and digests Cortexel requests **without invoking
-Node and without importing any generated JavaScript**. That independence is the whole
+This package strictly parses, canonicalizes, digests, structurally checks, and applies
+an explicitly partial semantic port to Cortexel requests **without invoking Node and
+without importing any generated JavaScript**. It currently refuses to issue a complete
+validity certificate. That independence is the whole
 point: agreement between this implementation and the TypeScript one on the same corpus is
 *evidence*, not a tautology. The cross-language parity test in the repository
 (`test/crossLanguageParity.test.ts`) confirms the two agree byte-for-byte on the canonical
@@ -49,19 +51,29 @@ The base package is **pure standard library**: no `jsonschema`, no NumPy, no Nod
 
 ## Use
 
+From a Cortexel checkout, install the unreleased reader into an isolated environment:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install ./python
+```
+
+The runnable first path is offline discovery. The example is synthetic and the complete
+validator is expected to fail closed until its named semantic-validator set is ported:
+
 ```python
 import cortexel
 
-request = {
-    "contract": {"name": "cortexel-figure-request", "version": "1.0"},
-    "skill": {"id": "neuro.population_rate"},
-    "data": {...},
-    "parameters": {...},
-    "source": {"kind": "simulation"},
-}
+catalog = cortexel.list_skills()
+assert len(catalog["skills"]) == 19
+description = cortexel.describe_skill("neuro.spike_raster", section="example")
+request = description["authoringExample"]
 
-errors = cortexel.validate_request(request)   # empty only after complete validation
-digest = cortexel.canonical_digest(request)   # sha256:<64 hex>, byte-identical to TS
+errors = cortexel.validate_request(request)
+assert any(error.code == "SEMANTIC_VALIDATOR_UNAVAILABLE" for error in errors)
+digest = cortexel.canonical_digest(request)
+assert digest.startswith("sha256:")
 
 # Development inspection only; [] means "the documented subset found no error",
 # not "valid Cortexel request".
@@ -79,18 +91,25 @@ seed. Callers must not infer those absent assurances from an empty partial error
 ## Test
 
 ```bash
-python -m unittest discover -s python/tests
+python3.14 -B -m unittest discover -s python/tests
 mypy --config-file python/pyproject.toml python/src/cortexel
-ruff check python/src python/tests scripts/smoke-python-package.py
-python scripts/smoke-python-package.py
+ruff check python/src python/tests scripts/smoke-python-package.py scripts/inspect-posix-acl.py
+python3.14 -B -m py_compile scripts/smoke-python-package.py scripts/inspect-posix-acl.py
 ```
 
 `mypy` is a development-only check configured in `pyproject.toml`; it is not a runtime
-dependency. The package smoke builds the wheel and sdist once from the repository and
-once from an exact VCS-free source copy, requires byte identity and a closed full-sdist
-plus schema/license/type-marker inventory, then validates every packaged skill schema
-from a clean installation in an unrelated directory. The base package metadata remains
-pure standard library.
+dependency. Do not invoke `scripts/smoke-python-package.py` directly from an ambient
+interpreter. From a Cortexel source checkout, follow the complete **Python 3.14 package
+evidence** recipe in the root `CONTRIBUTING.md`: it provisions the exact isolated
+Python 3.14 runtime, uv 0.11.16 executable, retained five-wheel backend authority,
+empty-environment offline install, and `-I -S -B` smoke entry point. For release
+evidence, use that recipe's result-mode block and independent strict receipt reader.
+
+The package smoke builds the wheel and sdist once from the repository and once from an
+exact VCS-free source copy, requires byte identity and a closed full-sdist plus
+schema/license/type-marker inventory, then validates every packaged skill schema from a
+clean installation in an unrelated directory. The base package metadata remains pure
+standard library.
 
 ## Not yet done in the current development reader
 

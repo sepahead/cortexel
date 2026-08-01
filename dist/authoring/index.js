@@ -4,25 +4,46 @@ import {
   SOURCE_ADAPTER_CATALOG,
   SOURCE_ADAPTER_CATALOG_DIGEST,
   SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGESTS,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_DISCOVERY_CATALOG,
   SOURCE_ADAPTER_IDS,
   STABLE_CATALOG_SCHEMA_RESOURCES,
   isSourceAdapterId,
-  lookupSourceAdapter
-} from "../chunk-XCBHVI3B.js";
+  lookupSourceAdapter,
+  lookupSourceAdapterDescriptorDigest
+} from "../chunk-HNZNJAWH.js";
 import {
+  CAPABILITY_AVAILABILITIES,
+  CAPABILITY_CATALOG,
+  CAPABILITY_IDS,
   SKILL_CATALOG,
   STABLE_SKILL_IDS,
+  isCapabilityId,
   isStableSkillId,
+  lookupCapabilityCatalogEntry,
   lookupSkillCatalogEntry
-} from "../chunk-Q34UTU3M.js";
-import "../chunk-3A56EAOW.js";
+} from "../chunk-3YDCB72V.js";
+import {
+  SOURCE_ADAPTER_EXAMPLE_ACTION,
+  SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER,
+  SOURCE_ADAPTER_EXAMPLE_PROTOCOL,
+  SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION,
+  classifySourceAdapterExampleEnvelope,
+  isSourceAdapterExampleGuard
+} from "../chunk-WVFXQTTZ.js";
 import {
   CATALOG_DIGEST,
   CATALOG_DIGEST_DOMAIN
-} from "../chunk-QJQCUS5E.js";
+} from "../chunk-5FW7Q3ZT.js";
+import "../chunk-Z2GYUK7B.js";
 import "../chunk-ZYBCCIMH.js";
 export {
   AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+  CAPABILITY_AVAILABILITIES,
+  CAPABILITY_CATALOG,
+  CAPABILITY_IDS,
   CATALOG_DIGEST,
   CATALOG_DIGEST_DOMAIN,
   SKILL_AUTHORING,
@@ -30,12 +51,25 @@ export {
   SOURCE_ADAPTER_CATALOG,
   SOURCE_ADAPTER_CATALOG_DIGEST,
   SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGESTS,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_DISCOVERY_CATALOG,
+  SOURCE_ADAPTER_EXAMPLE_ACTION,
+  SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER,
+  SOURCE_ADAPTER_EXAMPLE_PROTOCOL,
+  SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION,
   SOURCE_ADAPTER_IDS,
   STABLE_CATALOG_SCHEMA_RESOURCES,
   STABLE_SKILL_IDS,
+  classifySourceAdapterExampleEnvelope,
+  isCapabilityId,
+  isSourceAdapterExampleGuard,
   isSourceAdapterId,
   isStableSkillId,
+  lookupCapabilityCatalogEntry,
   lookupSkillCatalogEntry,
-  lookupSourceAdapter
+  lookupSourceAdapter,
+  lookupSourceAdapterDescriptorDigest
 };
 //# sourceMappingURL=index.js.map

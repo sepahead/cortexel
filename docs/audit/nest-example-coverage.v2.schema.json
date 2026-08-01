@@ -1,0 +1,537 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cortexel.dev/schema/audit/nest-example-coverage.v2.json",
+  "title": "Cortexel pinned NEST PyNEST-example visualization classification V2",
+  "type": "object",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "gitSha1": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000
+    },
+    "semanticDemandId": {
+      "enum": [
+        "analog_trace",
+        "animation_sequence",
+        "categorical_state_grid",
+        "compartment_trace",
+        "connection_graph",
+        "covariance_matrix_lag_series",
+        "generic_distribution",
+        "image_frame",
+        "isi_distribution",
+        "learning_metric_series",
+        "multisignal_trace",
+        "optimization_search",
+        "phase_plane",
+        "population_rate",
+        "population_summary_trace",
+        "psth",
+        "response_curve",
+        "spatial_connectivity_2d",
+        "spatial_map_3d",
+        "spike_raster",
+        "structural_plasticity_history",
+        "synaptic_weight_trace",
+        "weight_distribution",
+        "weight_matrix"
+      ]
+    },
+    "presentationDemandId": {
+      "enum": [
+        "animation_frames",
+        "color_scale",
+        "cross_capability_bundle",
+        "dual_y_axis",
+        "error_bars",
+        "live_incremental_redraw",
+        "multi_panel",
+        "same_axis_overlay",
+        "single_panel",
+        "static_file_export",
+        "uncertainty_band"
+      ]
+    },
+    "visualOperationId": {
+      "enum": [
+        "bar",
+        "error_bar",
+        "filled_band",
+        "heatmap",
+        "histogram",
+        "image",
+        "line",
+        "network_edges",
+        "point",
+        "raster",
+        "spatial_points_2d",
+        "spatial_points_3d",
+        "step",
+        "vector_field"
+      ]
+    },
+    "body": {
+      "type": "object",
+      "properties": {
+        "entrypointId": { "$ref": "#/$defs/sha256" },
+        "canonicalSourceId": { "$ref": "#/$defs/sha256" },
+        "aliasPaths": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonEmpty" }
+        },
+        "documentationSelectedPaths": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonEmpty" }
+        },
+        "runnerSelectedPaths": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonEmpty" }
+        },
+        "role": {
+          "enum": ["support_module", "coordinated_component"]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^pynest/examples/.+\\.py$",
+          "maxLength": 300
+        },
+        "sourceId": { "$ref": "#/$defs/sha256" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "gitBlobSha1": { "$ref": "#/$defs/gitSha1" },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "gitMode": { "enum": ["100644", "100755"] },
+        "selectorMembership": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "docs_direct",
+              "runner_candidate",
+              "runner_default",
+              "runner_skipped"
+            ]
+          }
+        },
+        "visualizationStatus": {
+          "enum": [
+            "active_visualization",
+            "visualization_import_only",
+            "no_visualization_operation"
+          ]
+        },
+        "semanticDemands": {
+          "type": "array",
+          "maxItems": 25,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/semanticDemandId" }
+        },
+        "presentationDemands": {
+          "type": "array",
+          "maxItems": 11,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/presentationDemandId" }
+        },
+        "visualOperations": {
+          "type": "array",
+          "maxItems": 14,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/visualOperationId" }
+        },
+        "sourceEvidence": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "const": "complete_pinned_source_body_review_not_executed"
+            },
+            "lineAnchors": {
+              "type": "array",
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              }
+            },
+            "lineAnchorMeaning": {
+              "const": "review_navigation_only_full_source_hash_is_the_byte_authority"
+            }
+          },
+          "required": ["state", "lineAnchors", "lineAnchorMeaning"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "path",
+        "sourceId",
+        "sha256",
+        "gitBlobSha1",
+        "byteLength",
+        "gitMode",
+        "selectorMembership",
+        "visualizationStatus",
+        "semanticDemands",
+        "presentationDemands",
+        "visualOperations",
+        "sourceEvidence"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "visualizationStatus": { "const": "active_visualization" }
+            },
+            "required": ["visualizationStatus"]
+          },
+          "then": {
+            "properties": {
+              "semanticDemands": { "type": "array", "minItems": 1 },
+              "presentationDemands": { "type": "array", "minItems": 1 },
+              "visualOperations": { "type": "array", "minItems": 1 },
+              "sourceEvidence": {
+                "type": "object",
+                "properties": {
+                  "lineAnchors": { "type": "array", "minItems": 1 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "visualizationStatus": { "const": "visualization_import_only" }
+            },
+            "required": ["visualizationStatus"]
+          },
+          "then": {
+            "properties": {
+              "semanticDemands": { "type": "array", "maxItems": 0 },
+              "presentationDemands": { "type": "array", "maxItems": 0 },
+              "visualOperations": { "type": "array", "maxItems": 0 },
+              "sourceEvidence": {
+                "type": "object",
+                "properties": {
+                  "lineAnchors": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "visualizationStatus": { "const": "no_visualization_operation" }
+            },
+            "required": ["visualizationStatus"]
+          },
+          "then": {
+            "properties": {
+              "semanticDemands": { "type": "array", "maxItems": 0 },
+              "presentationDemands": { "type": "array", "maxItems": 0 },
+              "visualOperations": { "type": "array", "maxItems": 0 },
+              "sourceEvidence": {
+                "type": "object",
+                "properties": {
+                  "lineAnchors": { "type": "array", "maxItems": 0 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "semanticDemandDefinition": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/semanticDemandId" },
+        "description": { "$ref": "#/$defs/nonEmpty" },
+        "stableRepresentability": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": [
+                "source_review_candidate",
+                "partial_source_review_candidate",
+                "no_stable_candidate"
+              ]
+            },
+            "skillCandidates": {
+              "type": "array",
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/nonEmpty" }
+            }
+          },
+          "required": ["state", "skillCandidates"],
+          "additionalProperties": false
+        },
+        "executableAdapter": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": ["one_profile_available_no_example_match", "none"]
+            },
+            "adapterCandidates": {
+              "type": "array",
+              "maxItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/nonEmpty" }
+            }
+          },
+          "required": ["state", "adapterCandidates"],
+          "additionalProperties": false
+        },
+        "renderer": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": [
+                "packaged_candidate_no_upstream_comparison",
+                "partial_candidate_no_upstream_comparison",
+                "none"
+              ]
+            },
+            "rendererCandidates": {
+              "type": "array",
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/nonEmpty" }
+            }
+          },
+          "required": ["state", "rendererCandidates"],
+          "additionalProperties": false
+        },
+        "upstreamParity": { "const": "not_run" },
+        "scientificCertification": { "const": "not_run" },
+        "notes": { "$ref": "#/$defs/nonEmpty" }
+      },
+      "required": [
+        "id",
+        "description",
+        "stableRepresentability",
+        "executableAdapter",
+        "renderer",
+        "upstreamParity",
+        "scientificCertification",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "axis": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmpty" },
+        "state": { "$ref": "#/$defs/nonEmpty" }
+      },
+      "required": ["id", "state"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "protocol": { "const": "cortexel-nest-example-visualization-coverage" },
+    "protocolVersion": { "const": 2 },
+    "semanticBinding": {
+      "type": "object",
+      "properties": {
+        "identityAlgorithm": {
+          "const": "cortexel-nest-example-visualization-coverage.semantic.rfc8785-sha256.v2"
+        },
+        "digestScope": {
+          "const": "all_top_level_members_except_semanticBinding"
+        },
+        "semanticDigest": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["identityAlgorithm", "digestScope", "semanticDigest"],
+      "additionalProperties": false
+    },
+    "description": { "$ref": "#/$defs/nonEmpty" },
+    "upstream": {
+      "type": "object",
+      "properties": {
+        "project": { "const": "NEST Simulator" },
+        "release": { "const": "v3.10" },
+        "repository": {
+          "const": "https://github.com/nest/nest-simulator.git"
+        },
+        "commit": {
+          "const": "acca9704da248750219a027db99fec6cd1f9052a"
+        },
+        "rootTreeGitSha1": {
+          "const": "7f6f4f0407c4000cded433b86d658191dd82cd79"
+        },
+        "exampleRoot": { "const": "pynest/examples" }
+      },
+      "required": [
+        "project",
+        "release",
+        "repository",
+        "commit",
+        "rootTreeGitSha1",
+        "exampleRoot"
+      ],
+      "additionalProperties": false
+    },
+    "authorities": {
+      "type": "object",
+      "properties": {
+        "predecessor": { "type": "object" },
+        "exampleSourceInventory": { "type": "object" },
+        "documentationSourceInventory": { "type": "object" }
+      },
+      "required": [
+        "predecessor",
+        "exampleSourceInventory",
+        "documentationSourceInventory"
+      ],
+      "additionalProperties": false
+    },
+    "axisSemantics": {
+      "type": "object",
+      "properties": {
+        "stableRepresentability": { "$ref": "#/$defs/nonEmpty" },
+        "executableAdapter": { "$ref": "#/$defs/nonEmpty" },
+        "renderer": { "$ref": "#/$defs/nonEmpty" },
+        "upstreamParity": { "$ref": "#/$defs/nonEmpty" },
+        "scientificCertification": { "$ref": "#/$defs/nonEmpty" }
+      },
+      "required": [
+        "stableRepresentability",
+        "executableAdapter",
+        "renderer",
+        "upstreamParity",
+        "scientificCertification"
+      ],
+      "additionalProperties": false
+    },
+    "semanticDemandDefinitions": {
+      "type": "array",
+      "minItems": 24,
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/semanticDemandDefinition" }
+    },
+    "canonicalExamples": {
+      "type": "array",
+      "minItems": 98,
+      "maxItems": 98,
+      "items": {
+        "allOf": [
+          { "$ref": "#/$defs/body" },
+          {
+            "type": "object",
+            "properties": {
+              "entrypointId": true,
+              "canonicalSourceId": true,
+              "aliasPaths": true,
+              "documentationSelectedPaths": true,
+              "runnerSelectedPaths": true
+            },
+            "required": [
+              "entrypointId",
+              "canonicalSourceId",
+              "aliasPaths",
+              "documentationSelectedPaths",
+              "runnerSelectedPaths"
+            ],
+            "not": {
+              "type": "object",
+              "properties": { "role": true },
+              "required": ["role"]
+            }
+          }
+        ]
+      }
+    },
+    "supportAndCoordinatedBodies": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": {
+        "allOf": [
+          { "$ref": "#/$defs/body" },
+          {
+            "type": "object",
+            "properties": { "role": true },
+            "required": ["role"],
+            "not": {
+              "type": "object",
+              "properties": { "entrypointId": true },
+              "required": ["entrypointId"]
+            }
+          }
+        ]
+      }
+    },
+    "orchestrationAliases": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": { "type": "object" }
+    },
+    "checkedInVisualAssets": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": { "type": "object" }
+    },
+    "documentationSurfaces": { "type": "object" },
+    "evidenceAxes": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "$ref": "#/$defs/axis" }
+    },
+    "summary": { "type": "object" },
+    "limitations": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmpty" }
+    }
+  },
+  "required": [
+    "protocol",
+    "protocolVersion",
+    "semanticBinding",
+    "description",
+    "upstream",
+    "authorities",
+    "axisSemantics",
+    "semanticDemandDefinitions",
+    "canonicalExamples",
+    "supportAndCoordinatedBodies",
+    "orchestrationAliases",
+    "checkedInVisualAssets",
+    "documentationSurfaces",
+    "evidenceAxes",
+    "summary",
+    "limitations"
+  ],
+  "additionalProperties": false
+}

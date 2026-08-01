@@ -2318,6 +2318,33 @@ var import_zod3 = require("zod");
 
 // core/skills/knowledgeGraphLimits.ts
 var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
+  /** Accepted presentation/inspection limits. These match the legacy params gate. */
+  maxPresentationNodes: 1e3,
+  maxPresentationEdges: 4e3,
+  /**
+   * Main-thread d3-force refinement limits. Above either bound the canonical
+   * composition retains the caption and complete DOM records but does not mount
+   * the live 3D solver. These are resource ceilings, not portable FPS claims.
+   */
+  maxLiveForceNodes: 250,
+  maxLiveForceEdges: 1e3,
+  /**
+   * Aggregate presentation limits apply across every retained occurrence. Aliased
+   * containers receive no amortization: each occurrence is inspected and copied.
+   */
+  maxPresentationRetainedOccurrences: 25e4,
+  maxPresentationStringCodeUnits: 4e6,
+  maxPresentationInspectionWork: 1e6,
+  /** A view can explicitly name every kind present in its bounded source. */
+  maxViewNodeKinds: 1e3,
+  maxViewEdgeKinds: 4e3,
+  /** Equivalent hot-path policies reuse one token without unbounded cache growth. */
+  maxCachedViewsPerPresentation: 128,
+  /** Strong raw-JSON boundary, before a presentation object is materialized. */
+  maxPresentationRawInputBytes: 16e6,
+  maxPresentationJsonDepth: 8,
+  maxPresentationJsonNodes: 3e5,
+  maxPresentationJsonNumberTokenLength: 100,
   maxNodeIdLength: 120,
   maxNodeLabelLength: 240,
   maxEdgeIdLength: 320,
@@ -2341,6 +2368,19 @@ var KNOWLEDGE_GRAPH_LIMITS = Object.freeze({
   maxAttributeStringLength: 500,
   maxExcerptLength: 1e3
 });
+var KNOWLEDGE_GRAPH_JSON_PARSE_LIMITS = Object.freeze({
+  rawInputBytes: KNOWLEDGE_GRAPH_LIMITS.maxPresentationRawInputBytes,
+  jsonDepth: KNOWLEDGE_GRAPH_LIMITS.maxPresentationJsonDepth,
+  jsonTotalNodes: KNOWLEDGE_GRAPH_LIMITS.maxPresentationJsonNodes,
+  jsonStringLength: Math.max(
+    1024,
+    KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength,
+    KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength
+  ),
+  jsonNumberTokenLength: KNOWLEDGE_GRAPH_LIMITS.maxPresentationJsonNumberTokenLength,
+  jsonObjectKeys: KNOWLEDGE_GRAPH_LIMITS.maxAttributes,
+  jsonArrayItems: KNOWLEDGE_GRAPH_LIMITS.maxPresentationEdges
+});
 
 // core/skills/params.ts
 var PARAM_LIMITS = Object.freeze({
@@ -2352,8 +2392,8 @@ var PARAM_LIMITS = Object.freeze({
   maxTopologyNodes: 25e3,
   maxTopologyEdges: 2e4,
   maxSpatialObjects: 5e4,
-  maxGraphNodes: 1e3,
-  maxGraphEdges: 4e3
+  maxGraphNodes: KNOWLEDGE_GRAPH_LIMITS.maxPresentationNodes,
+  maxGraphEdges: KNOWLEDGE_GRAPH_LIMITS.maxPresentationEdges
 });
 var FLOAT32_MAX3 = 34028234663852886e22;
 var timeArray = import_zod3.z.array(import_zod3.z.number()).max(PARAM_LIMITS.maxSamples);
@@ -3820,7 +3860,7 @@ var KnowledgeGraphEvidenceRefSchema = import_zod3.z.discriminatedUnion("kind", [
     evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
     paper_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxPaperIdLength),
     citation_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxCitationIdLength),
-    page: import_zod3.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    page: import_zod3.z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).refine((value) => !Object.is(value, -0), "page must not be negative zero").optional(),
     locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
     excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
     doi: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDoiLength).optional()

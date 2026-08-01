@@ -6,6 +6,55 @@ export interface VisibilityTarget {
   visible: boolean;
 }
 
+export const KNOWLEDGE_GRAPH_CLICK_MAX_DELTA = 2;
+
+export function isKnowledgeGraphInstanceId(
+  instanceId: number | null | undefined,
+  instanceCount: number,
+): instanceId is number {
+  return instanceId !== undefined && instanceId !== null &&
+    Number.isSafeInteger(instanceId) &&
+    instanceId >= 0 &&
+    Number.isSafeInteger(instanceCount) &&
+    instanceCount >= 0 &&
+    instanceId < instanceCount;
+}
+
+/** R3F click events retain pointer travel; a controls drag is not selection. */
+export function isIntentionalKnowledgeGraphClick(delta: number): boolean {
+  return Number.isFinite(delta) && delta >= 0 &&
+    delta <= KNOWLEDGE_GRAPH_CLICK_MAX_DELTA;
+}
+
+/**
+ * Consume every ready, in-range node hit before interpreting pointer travel.
+ * A controls drag that ends over a node is not a selection, but it must not
+ * bubble into a host/background click handler and become a different action.
+ */
+export function handleKnowledgeGraphNodeClick(
+  ready: boolean,
+  instanceId: number | undefined,
+  instanceCount: number,
+  delta: number,
+  stopPropagation: () => void,
+  activate: (instanceId: number) => void,
+): void {
+  if (
+    !ready ||
+    !isKnowledgeGraphInstanceId(instanceId, instanceCount)
+  ) return;
+  stopPropagation();
+  if (isIntentionalKnowledgeGraphClick(delta)) activate(instanceId);
+}
+
+/** One selection rule shared by the mesh and its operable DOM companion. */
+export function toggledKnowledgeGraphSelection(
+  selectedId: string | null,
+  activatedId: string,
+): string | null {
+  return selectedId === activatedId ? null : activatedId;
+}
+
 export interface StartEventSurface {
   addEventListener?(type: 'start', listener: () => void): void;
   removeEventListener?(type: 'start', listener: () => void): void;

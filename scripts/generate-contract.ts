@@ -1718,17 +1718,44 @@ export interface CapabilityCatalogEntry {
   readonly status: 'stable' | 'experimental' | 'deprecated' | 'removed';
   readonly availability: CapabilityAvailability;
   readonly renderer?: string;
+  readonly determinismClass?: 'deterministic_svg';
+  readonly exportClass?: 'svg+table';
   readonly requiredPeers?: readonly string[];
+  readonly owner: string;
   readonly replacement?: string | null;
+  readonly removalVersion?: string;
   readonly limitations?: readonly string[];
 }
 
-/** Contract maturity and concrete delivery are separate, mandatory axes. */
-export const CAPABILITY_CATALOG: Readonly<Record<string, CapabilityCatalogEntry>> = freezeGenerated(${JSON.stringify(
-  Object.fromEntries(capabilities.capabilities.map((capability: any) => [capability.id, capability])),
+/** Every capability id in deterministic lexicographic order. */
+export const CAPABILITY_IDS = freezeGenerated(${JSON.stringify(
+  capabilities.capabilities.map((capability: any) => capability.id).sort(),
+  null,
+  2,
+)} as const);
+export type CapabilityId = (typeof CAPABILITY_IDS)[number];
+
+// This is a finite total map. An arbitrary caller/agent string is not a proven key;
+// cross it through isCapabilityId / lookupCapabilityCatalogEntry first.
+export const CAPABILITY_CATALOG: Readonly<Record<CapabilityId, CapabilityCatalogEntry>> = freezeGenerated(${JSON.stringify(
+  Object.fromEntries(
+    [...capabilities.capabilities]
+      .sort((left: any, right: any) => left.id.localeCompare(right.id))
+      .map((capability: any) => [capability.id, capability]),
+  ),
   null,
   2,
 )});
+
+export function isCapabilityId(value: unknown): value is CapabilityId {
+  return typeof value === 'string' && Object.hasOwn(CAPABILITY_CATALOG, value);
+}
+
+export function lookupCapabilityCatalogEntry(
+  value: string,
+): CapabilityCatalogEntry | undefined {
+  return isCapabilityId(value) ? CAPABILITY_CATALOG[value] : undefined;
+}
 
 export const EXPERIMENTAL_CAPABILITY_IDS = freezeGenerated(${JSON.stringify(
   capabilities.capabilities

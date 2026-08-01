@@ -12,12 +12,14 @@ that attach to them once the project reaches `1.0`. It is the authoritative refe
 for anyone pinning Cortexel as a dependency, archiving its output, or building a
 second implementation against its contract.
 
-The normative source for the axes below is
-[`contract/registries/identity.v1.json`](../contract/registries/identity.v1.json).
-The stable/experimental/removed capability matrix is
-[`contract/registries/capabilities.v1.json`](../contract/registries/capabilities.v1.json).
-The append-only error codes referenced here live in
-[`contract/registries/error-codes.v1.json`](../contract/registries/error-codes.v1.json).
+The normative source paths for the axes, capability matrix, and error vocabulary are
+`contract/registries/identity.v1.json`, `contract/registries/capabilities.v1.json`,
+and `contract/registries/error-codes.v1.json`. The package carries their exact
+generated copies at
+[`dist/contract/registries/identity.v1.json`](../dist/contract/registries/identity.v1.json),
+[`dist/contract/registries/capabilities.v1.json`](../dist/contract/registries/capabilities.v1.json),
+and
+[`dist/contract/registries/error-codes.v1.json`](../dist/contract/registries/error-codes.v1.json).
 
 ## Why more than one version number
 
@@ -319,9 +321,19 @@ The nineteen FigureRequestV1 skills are semantically `stable`, `packaged`, and
 `releaseReady: false`. Thus they form a usable development catalog without claiming
 that a 1.0 release gate passed. The packaged `cortexel`, `cortexel/core`, and React
 exports remain the legacy VizSpec surfaces alongside the additive FigureRequestV1
-entries; their registry limitations say so explicitly. The packaged
-`cortexel/react/knowledge-graph` export remains experimental legacy code, not a
-FigureRequestV1 skill.
+entries; their registry limitations say so explicitly. The packaged peer-free
+`cortexel/knowledge-graph` and interactive `cortexel/react/knowledge-graph` exports
+remain experimental legacy code, not FigureRequestV1 skills. Before 1.0 their function,
+record, and component contracts may change fail-closed: the scene, legend, DOM mirror,
+and record browser now require one runtime-branded
+`PreparedKnowledgeGraphPresentationV1` instead of independently accepting raw arrays and
+caller-supplied cache identities. That breaking experimental change prevents different
+surfaces from blessing different mutable snapshots; the subordinate filtered-view token
+is likewise bound to one exact source capability. Canonical serialization preserves the
+presentation record but omits caption/view/host policy and intentionally does not
+rehydrate the runtime brand. Runtime identity is local to one physical package instance
+and realm, although that installation shares ESM/CommonJS identity. None of this is
+promotion to stable status.
 
 Adapter records inside a skill are versioned composite mappings.
 `feasibilityStatus` records a bounded assessment, `definitionStatus` distinguishes
@@ -375,9 +387,9 @@ promise compatibility.
 
 ## See also
 
-- [`contract/registries/identity.v1.json`](../contract/registries/identity.v1.json) — the normative axis definitions.
-- [`contract/registries/capabilities.v1.json`](../contract/registries/capabilities.v1.json) — the stable / experimental / removed matrix.
-- [`contract/registries/error-codes.v1.json`](../contract/registries/error-codes.v1.json) — the append-only public error codes.
+- [`dist/contract/registries/identity.v1.json`](../dist/contract/registries/identity.v1.json) — the packaged generated copy of the normative axis definitions.
+- [`dist/contract/registries/capabilities.v1.json`](../dist/contract/registries/capabilities.v1.json) — the packaged generated copy of the stable / experimental / removed matrix.
+- [`dist/contract/registries/error-codes.v1.json`](../dist/contract/registries/error-codes.v1.json) — the packaged generated copy of the append-only public error codes.
 - [`docs/KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md) — what the current development tree does not yet do.
 - [`docs/release/BASELINE-2026-07-14.md`](./release/BASELINE-2026-07-14.md) and [`docs/release/evidence-ledger.v1.json`](./release/evidence-ledger.v1.json) — the frozen baseline and gate ledger.
 - [`SECURITY.md`](../SECURITY.md) — the fail-closed honesty and input boundaries this identity model protects.

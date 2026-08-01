@@ -54,8 +54,9 @@ The legacy entrypoints ascend in dependency weight: `cortexel/core` (zod only) �
 (+ react/react-dom/three/r3f) → `cortexel/react/knowledge-graph` (+ d3-force-3d).
 The root `cortexel` re-exports **only** `core`, so a server import never pulls in
 React or Three. Additive FigureRequestV1 capabilities live at `cortexel/figure`,
-`cortexel/authoring`, `cortexel/render-svg`, and `cortexel/adapters/nest`; none loads
-React/Three/R3F/D3.
+`cortexel/authoring`, `cortexel/render-svg`, and `cortexel/adapters/nest`. The
+experimental agent/server graph boundary is `cortexel/knowledge-graph`; none of these
+five paths loads React/Three/R3F/D3.
 Normative JSON is exported under `cortexel/contract/*`, and the `cortexel` bin is
 offline. Do not replace or silently redirect a legacy path during the migration.
 
@@ -120,8 +121,11 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
 2. Passive data uses unlit `MeshBasic`; emissive > 1.0 is only for active events,
    kept bloom-safe (≤ ~1.15).
 3. Honesty fails closed (see §2).
-4. `useFrame` is allocation-free — module-scope scratch objects / refs and indexed
-   loops only; no literals, constructors, or `for…of` iterators per frame.
+4. Cortexel-authored `useFrame` callbacks reuse scratch objects / refs, avoid React
+   state updates, and use indexed loops. Keep direct first-party frame code free of
+   literals, constructors, `for…of` iterators, and allocating compatibility helpers.
+   The executable guard is lexical: it constrains Cortexel source, not heap allocation
+   inside callees.
 5. The library stays host-agnostic; the host owns the frame. No host-app imports;
    scene components are injected via `renderScene`; scene primitives are Canvas-less
    (the host owns `<Canvas>`, OrbitControls, bloom, background, fog).
@@ -131,10 +135,57 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
 - **`d3-force-3d` ships no types.** `types/d3-force-3d.d.ts` hand-declares the surface
   used; `test/d3ForceContract.test.ts` pins the real API so an upgrade or ambient
   drift fails in CI, not at runtime.
+- **D3 force evidence is version-exact.** The repository and package smoke install
+  `d3-force-3d` 3.0.6 exactly, and inspection of that installed source shows that its
+  many-body and collision ticks transitively allocate octrees. The package peer range
+  remains `^3.0.5`, which can select a future 3.x release; evidence-sensitive hosts must
+  exact-lock 3.0.6 or re-audit another resolved version. Neither the lexical first-party
+  guard nor the 3.0.6 inspection transfers an allocation or performance claim to that
+  wider peer range.
 - **`KnowledgeGraph3DScene` is not re-exported from `cortexel/react`** — it's the only
   scene needing the d3 peer, so it lives at `cortexel/react/knowledge-graph` to keep
   the base react entry d3-free. Its pure logic is in `react/knowledgeGraph.ts`
   (THREE-free, unit-tested) — put testable graph logic there, not in the GPU scene.
+- **One prepared graph capability owns every canonical corpus surface.** The internal
+  scene, legend, paginated DOM, deterministic record browser, and accessible composition
+  accept the exact same deeply frozen `PreparedCorpusKnowledgeGraphPresentationV1`;
+  never restore independent raw-array snapshots. Public direct primitives accept and
+  runtime-check only `PreparedGenericKnowledgeGraphPresentationV1`, and neither public
+  package entry may export the corpus mapper or internal corpus components. The
+  package-private WeakSet authority and nominal brand must remain singletons across
+  ESM/CJS, with both directions exercised by package smoke. Corpus identities are
+  derived from complete validated context.
+- **Do not promise inert inspection of a materialized Proxy.** The ordinary-value
+  preparer rejects accessors and performs descriptor/key/prototype revalidation, but
+  those operations necessarily execute Proxy internal methods. Hostile text belongs at
+  `parseKnowledgeGraphPresentationJson` for the generic-visual input contract or
+  `prepareCorpusKnowledgeGraphFigureJson` for the complete corpus VizSpec; both use the
+  same bounded strict parser and reject duplicate members before materialization. Keep
+  source-input and presentation-input assurance profiles explicit and never promote a
+  presentation capability into evidence authentication or custody.
+- **Bind the corpus spec, mapper, and caption once.** Agent/server code uses the
+  peer-free `prepareCorpusKnowledgeGraphFigure` for a materialized value or its `Json`
+  sibling for raw text; the canonical React composition runtime-enforces exactly one
+  own `spec` or `specJson` property and invokes the corresponding boundary. A present
+  property with the wrong value type still rejects. Never accept an independent caption
+  prop. `mode=export` fails closed because the WebGL composition has no stable artifact
+  contract.
+- **A filtered view is subordinate to one exact source capability.** Omission means all,
+  an empty kind set means none, and duplicate or unknown kinds reject. Views reuse exact
+  frozen record references and every consumer checks the source identity. Filtering must
+  not hide or rewrite the full caption or full source-record browser. Keep a host's policy
+  object identity stable across ordinary interaction renders; the bounded per-source LRU
+  must also preserve exact token identity for equivalent hot policies. The canonical
+  composition invalidates controlled selected/hovered ids when a new source/view hides
+  them.
+- **Presentation admission is not live-force admission.** Preparation, captions,
+  legends, DOM controls, and the source-record browser admit at most 1,000 nodes and
+  4,000 relationships. The allocating main-thread force scene separately admits at
+  most 250 nodes and 1,000 relationships. Above the live ceiling the canonical
+  composition does not mount or invoke the visual renderer, but it retains the bound
+  caption, legend, operable DOM, and complete paginated source-record browser. An exact
+  source-bound filtered view can regain the visual when it is within both live limits;
+  not every source has such a nonempty filter.
 - **Canonical charts have their own light subpath.** `cortexel/react/charts` must
   stay free of Three, R3F and d3 imports. `ReferenceVizSpecFigure` always routes
   through the strict `VizSpecRenderer`; it exposes no `trustedEnvelope` escape
@@ -185,8 +236,43 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
 - **No implicit network loaders.** The graph label intentionally uses a local
   CanvasTexture rather than Drei/Troika Text (whose defaults fetch CDN fonts and
   create Blob workers). Hosts own any external assets.
-- **Camera writes are opt-in.** `KnowledgeGraph3DScene` mutates host controls only
-  when `autoFrame` / `flyToSelection` is explicitly enabled.
+- **Bound force work; do not promise a frame rate.** Cortexel's frame callback reuses
+  scratch state and does not set React state, but an exact 3.0.6 D3 force tick allocates
+  its spatial index. The clock schedules at most one solver tick per rendered frame and
+  no more than 60 ticks per second. Below 60 FPS the layout deliberately settles more
+  slowly instead of catching up with multiple ticks in one frame, and suspended-tab
+  backlog is discarded. These are work bounds, not an FPS or frame-time guarantee.
+- **Camera writes are opt-in and projection-aware.** `KnowledgeGraph3DScene` mutates
+  the host camera/controls only when `autoFrame` / `flyToSelection` is explicitly
+  enabled. A supported camera receives a provisional fit of the deterministic seed
+  layout on the first eligible frame and at most one final correction after the bounded
+  force layout settles. User control and selection intent cancel that final whole-graph
+  correction. Each fit includes the node glyph geometry actually rendered on that
+  frame (including an already-active focus scale) and bounded routed-edge extents; it
+  never reserves the maximum hypothetical label envelope around every node. Hover does
+  not restart either whole-graph fit stage. Fits work in either direction against the
+  limiting perspective FOV or orthographic span, preserve the current viewing
+  direction, and repair the host near/far planes only as needed to contain the fitted
+  sphere. `autoFrame: false` is the retain-zoom path. Only canonical centered Three
+  perspective/orthographic
+  projections with identity camera-parent transforms and ordinary unit-scale camera
+  matrices/methods are eligible. ArrayCamera, view offsets, film offsets,
+  asymmetric/reversed orthographic frusta, custom projection matrices/methods,
+  unsupported/ambiguous camera classes, nonfinite vectors, and zero/nonfinite
+  projection geometry make no camera write and do not commit the pending fit stage; a
+  later valid resize may retry. Do not restore the old center-only `+Z` frame,
+  containment-only zoom rule, or projection fallbacks inside the scene.
+- **Theme and interaction semantics are shared.** The canonical composition passes the
+  validated theme and exact required background into the host. Undimmed opaque
+  node/edge source colors are normalized to at least 3:1 against that painted
+  background, and the legend discloses both source and intended undimmed scene colors.
+  Corpus node/edge kinds also use closed, bounded glyph/stroke channels; hidden dash chords
+  are omitted from GPU buffers rather than emitted as degenerate primitives. These
+  regressions are not CVD, grayscale, browser, or whole-view accessibility
+  certification. Mesh and DOM activation both toggle an
+  active selection to `null`; pointer travel above the reviewed click threshold is a
+  consumed controls drag, not a host/background click; and a text query must provide
+  identified, explicitly focusable match navigation while retaining all nodes as context.
 - **Direction cannot depend on motion.** Directed knowledge-graph edges retain
   arrowheads under reduced motion and in still exports.
 - **Evidence cannot terminate inside the graph.** Every corpus node/edge evidence
@@ -195,9 +281,19 @@ Mirrored in [CONTRIBUTING.md](./CONTRIBUTING.md); laws 3–5 have executable gua
   flags bound to the element epistemic contract, preserve immutable snapshot
   context in the DOM legend, and reject accessor-bearing adapter input before any
   getter can run.
-- Pair every interactive WebGL graph with `KnowledgeGraphA11yList`; meshes do not
-  enter the browser accessibility tree on their own. Keep per-node announcements
-  bounded and paginate nodes plus full relationship detail.
+- Prefer `KnowledgeGraphAccessibleFigure` for interactive WebGL graphs: it keeps the
+  visible caption, legend, and paginated `KnowledgeGraphA11yList` in normal DOM flow,
+  and retains the deterministic paginated source-record browser if only the visual
+  region fails. Its error boundary covers descendant client render/lifecycle errors,
+  not SSR, event/async errors, or unreported WebGL context loss. SSR/no-JS renders only
+  the bounded first record page; complete canonical record bytes come from the peer-free
+  serializer, which omits caption/view/host policy and is not a figure artifact. The
+  canonical composition defaults to a provisional seed fit plus at most one final
+  settled-layout correction; the Canvas-less scene keeps camera mutation opt-in and can
+  frame without controls, while fly-to still needs the host-owned controls ref. Meshes
+  do not enter the browser accessibility tree. These
+  invariants are regression evidence, not whole-view WCAG/browser/assistive-technology
+  conformance.
 - Evidence-bearing multiedges need stable assertion ids. Render each assertion on
   its deterministic routed lane, use one force spring per unordered endpoint pair,
   and keep the core/React maximum parallel-edge bundle in parity. Typed evidence

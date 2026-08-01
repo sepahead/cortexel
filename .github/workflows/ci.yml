@@ -373,7 +373,7 @@ jobs:
 
   package-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -388,17 +388,240 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.3.14
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Package smoke under private copied runtime authority
+      - name: Materialize exact commit under private ACL-free authority
+        id: package_source
         shell: bash
         run: |
           set -euo pipefail
           export LC_ALL=C
           umask 077
 
-          source_node="$(realpath -e -- "$(command -v node)")"
-          source_npm_cli="$(realpath -e -- "$(command -v npm)")"
+          command -v setfacl >/dev/null
+          command -v getfacl >/dev/null
+          bun_executable="$(realpath -e -- "$(command -v bun)")"
+          node_executable="$(realpath -e -- "$(command -v node)")"
+          npm_cli="$(realpath -e -- "$(command -v npm)")"
+          workspace="$(realpath -e -- "$GITHUB_WORKSPACE")"
+          workspace_parent="$(dirname -- "$workspace")"
+          if [[ "$workspace" != "$GITHUB_WORKSPACE" \
+            || "$(dirname -- "$workspace_parent")" != /home/runner/work ]]; then
+            echo "::error::package-smoke checkout is outside the reviewed hosted-runner topology"
+            exit 1
+          fi
+          commit="$(git -C "$workspace" rev-parse --verify 'HEAD^{commit}')"
+          if [[ "$commit" != "$GITHUB_SHA" \
+            || -n "$(git -C "$workspace" status --porcelain=v1 --untracked-files=all)" ]]; then
+            echo "::error::package-smoke checkout is not the exact clean workflow commit"
+            exit 1
+          fi
+
+          # The production ACL helper admits only reviewed ext-family/tmpfs
+          # authority. Check the fixed parents before creating anything that
+          # could inherit an unsupported ACL.
+          set +e
+          getfacl -c -p -P -- / /tmp \
+            | awk '
+              /^(default:|user:[^:]+:|group:[^:]+:|mask::)/ { extended = 1 }
+              END { exit extended ? 42 : 0 }
+            '
+          acl_status=("${PIPESTATUS[@]}")
+          set -e
+          if (( acl_status[0] != 0 )); then
+            echo "::error::package-smoke private-parent ACL authority could not be inspected"
+            exit 1
+          fi
+          if (( acl_status[1] == 42 )); then
+            echo "::error::package-smoke private parent retains an extended ACL"
+            exit 1
+          elif (( acl_status[1] != 0 )); then
+            echo "::error::package-smoke private-parent ACL inspection failed"
+            exit 1
+          fi
+
+          authority_root="$(mktemp -d \
+            "/tmp/cortexel-package-smoke-node-${{ matrix.node }}.XXXXXXXX")"
+          setfacl -b -k -- "$authority_root"
+          chmod 0700 -- "$authority_root"
+          source_root="$authority_root/source"
+          mkdir -m 0755 -- "$source_root"
+          mkdir -m 0700 -- "$authority_root/tmp"
+          setfacl -b -k -- "$source_root" "$authority_root/tmp"
+          if [[ "$(realpath -e -- "$authority_root")" != "$authority_root" \
+            || "$(stat -c '%u:%a' -- "$authority_root")" != "$(id -u):700" \
+            || "$(realpath -e -- "$source_root")" != "$source_root" \
+            || "$(stat -c '%u:%a' -- "$source_root")" != "$(id -u):755" \
+            || "$(realpath -e -- "$authority_root/tmp")" != "$authority_root/tmp" \
+            || "$(stat -c '%u:%a' -- "$authority_root/tmp")" != "$(id -u):700" ]]; then
+            echo "::error::package-smoke private source authority is not canonical"
+            exit 1
+          fi
+
+          # Git trees used by this package contain only ordinary regular files.
+          # Reject a future link/special entry before asking tar to materialize
+          # the commit, then apply the repository's 0644/0755 mode projection
+          # through the reviewed 0022 extraction mask.
+          set +e
+          git -C "$workspace" ls-tree -r \
+            --format='%(objectmode) %(objecttype)' "$commit" \
+            | awk '
+              $0 != "100644 blob" && $0 != "100755 blob" { invalid = 1 }
+              END { exit invalid ? 42 : 0 }
+            '
+          tree_status=("${PIPESTATUS[@]}")
+          set -e
+          if (( tree_status[0] != 0 )); then
+            echo "::error::package-smoke commit tree could not be inspected"
+            exit 1
+          fi
+          if (( tree_status[1] == 42 )); then
+            echo "::error::package-smoke commit tree contains a link or unsupported entry"
+            exit 1
+          elif (( tree_status[1] != 0 )); then
+            echo "::error::package-smoke commit-tree inspection failed"
+            exit 1
+          fi
+
+          umask 022
+          git -C "$workspace" archive --format=tar "$commit" \
+            | tar --extract --directory="$source_root" \
+                --no-same-owner --no-same-permissions
+          umask 077
+          if ! git --no-optional-locks \
+            --git-dir="$workspace/.git" --work-tree="$source_root" \
+            diff --quiet --no-ext-diff --no-textconv "$commit" -- \
+            || [[ -n "$(git --no-optional-locks \
+              --git-dir="$workspace/.git" --work-tree="$source_root" \
+              status --porcelain=v1 --untracked-files=all)" ]]; then
+            echo "::error::materialized package-smoke bytes or executable modes differ from the commit"
+            exit 1
+          fi
+          unexpected_entry="$(find -P "$source_root" ! -type d ! -type f -print -quit)"
+          linked_file="$(find -P "$source_root" -type f -links +1 -print -quit)"
+          mode_drift="$(find -P "$source_root" \
+            \( -type d ! -perm 0755 -o -type f ! -perm 0644 ! -perm 0755 \) \
+            -print -quit)"
+          if [[ -n "$unexpected_entry" || -n "$linked_file" || -n "$mode_drift" ]]; then
+            echo "::error::materialized package-smoke source has unsupported filesystem authority"
+            exit 1
+          fi
+
+          set +e
+          getfacl -R -c -p -P -- "$source_root" \
+            | awk '
+              /^(default:|user:[^:]+:|group:[^:]+:|mask::)/ { extended = 1 }
+              END { exit extended ? 42 : 0 }
+            '
+          acl_status=("${PIPESTATUS[@]}")
+          set -e
+          if (( acl_status[0] != 0 )); then
+            echo "::error::materialized package-smoke source ACLs could not be inspected"
+            exit 1
+          fi
+          if (( acl_status[1] == 42 )); then
+            echo "::error::materialized package-smoke source retains an extended ACL"
+            exit 1
+          elif (( acl_status[1] != 0 )); then
+            echo "::error::materialized package-smoke source ACL inspection failed"
+            exit 1
+          fi
+
+          {
+            printf 'authority_root=%s\n' "$authority_root"
+            printf 'bun_executable=%s\n' "$bun_executable"
+            printf 'node_executable=%s\n' "$node_executable"
+            printf 'npm_cli=%s\n' "$npm_cli"
+            printf 'source_root=%s\n' "$source_root"
+            printf 'tool_path=%s\n' "$PATH"
+          } >> "$GITHUB_OUTPUT"
+      - name: Install in private package-smoke source
+        shell: bash
+        env:
+          CORTEXEL_CI_BUN: ${{ steps.package_source.outputs.bun_executable }}
+          CORTEXEL_CI_PACKAGE_SOURCE_ROOT: ${{ steps.package_source.outputs.source_root }}
+          PATH: ${{ steps.package_source.outputs.tool_path }}
+        run: |
+          set -euo pipefail
+          cd -- "$CORTEXEL_CI_PACKAGE_SOURCE_ROOT"
+          "$CORTEXEL_CI_BUN" install --frozen-lockfile
+      - name: Build in private package-smoke source
+        shell: bash
+        env:
+          CORTEXEL_CI_BUN: ${{ steps.package_source.outputs.bun_executable }}
+          CORTEXEL_CI_PACKAGE_SOURCE_ROOT: ${{ steps.package_source.outputs.source_root }}
+          PATH: ${{ steps.package_source.outputs.tool_path }}
+        run: |
+          set -euo pipefail
+          cd -- "$CORTEXEL_CI_PACKAGE_SOURCE_ROOT"
+          "$CORTEXEL_CI_BUN" run build
+          commit="$(git -C "$GITHUB_WORKSPACE" rev-parse --verify 'HEAD^{commit}')"
+          if [[ "$commit" != "$GITHUB_SHA" \
+            || -n "$(git --no-optional-locks \
+              --git-dir="$GITHUB_WORKSPACE/.git" \
+              --work-tree="$CORTEXEL_CI_PACKAGE_SOURCE_ROOT" \
+              status --porcelain=v1 --untracked-files=all)" ]]; then
+            echo "::error::private package-smoke build differs from the exact committed tree"
+            exit 1
+          fi
+      - name: Package smoke under private copied runtime authority
+        shell: bash
+        env:
+          CORTEXEL_CI_BUN: ${{ steps.package_source.outputs.bun_executable }}
+          CORTEXEL_CI_NODE: ${{ steps.package_source.outputs.node_executable }}
+          CORTEXEL_CI_NPM_CLI: ${{ steps.package_source.outputs.npm_cli }}
+          CORTEXEL_CI_PACKAGE_AUTHORITY_ROOT: ${{ steps.package_source.outputs.authority_root }}
+          CORTEXEL_CI_PACKAGE_SOURCE_ROOT: ${{ steps.package_source.outputs.source_root }}
+          PATH: ${{ steps.package_source.outputs.tool_path }}
+        run: |
+          set -euo pipefail
+          export LC_ALL=C
+          umask 077
+
+          command -v setfacl >/dev/null
+          command -v getfacl >/dev/null
+          authority_root="$(realpath -e -- "$CORTEXEL_CI_PACKAGE_AUTHORITY_ROOT")"
+          source_root="$(realpath -e -- "$CORTEXEL_CI_PACKAGE_SOURCE_ROOT")"
+          if [[ "$authority_root" != "$CORTEXEL_CI_PACKAGE_AUTHORITY_ROOT" \
+            || "$source_root" != "$CORTEXEL_CI_PACKAGE_SOURCE_ROOT" \
+            || "$(dirname -- "$source_root")" != "$authority_root" \
+            || "$(stat -c '%u:%a' -- "$authority_root")" != "$(id -u):700" \
+            || "$(stat -c '%u:%a' -- "$source_root")" != "$(id -u):755" ]]; then
+            echo "::error::package-smoke private source authority changed before execution"
+            exit 1
+          fi
+          export TMPDIR="$authority_root/tmp"
+
+          set +e
+          getfacl -c -p -P -- \
+            / \
+            /tmp \
+            "$authority_root" \
+            "$TMPDIR" \
+            "$source_root" \
+            | awk '
+              /^(default:|user:[^:]+:|group:[^:]+:|mask::)/ { extended = 1 }
+              END { exit extended ? 42 : 0 }
+            '
+          acl_status=("${PIPESTATUS[@]}")
+          set -e
+          if (( acl_status[0] != 0 )); then
+            echo "::error::package-smoke ACL authority could not be inspected"
+            exit 1
+          fi
+          if (( acl_status[1] == 42 )); then
+            echo "::error::package-smoke authority retains an extended ACL"
+            exit 1
+          elif (( acl_status[1] != 0 )); then
+            echo "::error::package-smoke ACL inspection failed"
+            exit 1
+          fi
+
+          source_node="$(realpath -e -- "$CORTEXEL_CI_NODE")"
+          source_npm_cli="$(realpath -e -- "$CORTEXEL_CI_NPM_CLI")"
+          if [[ "$source_node" != "$CORTEXEL_CI_NODE" \
+            || "$source_npm_cli" != "$CORTEXEL_CI_NPM_CLI" ]]; then
+            echo "::error::setup-node authority changed before private acquisition"
+            exit 1
+          fi
           if [[ "$(basename -- "$source_npm_cli")" != npm-cli.js \
             || "$(basename -- "$(dirname -- "$source_npm_cli")")" != bin ]]; then
             echo "::error::setup-node npm did not resolve to an npm package bin/npm-cli.js"
@@ -406,7 +629,7 @@ jobs:
           fi
           source_npm_root="$(dirname -- "$(dirname -- "$source_npm_cli")")"
 
-          runtime_root="$RUNNER_TEMP/cortexel-package-runtime-node-${{ matrix.node }}"
+          runtime_root="$authority_root/runtime"
           if [[ -e "$runtime_root" || -L "$runtime_root" ]]; then
             echo "::error::private package runtime path already exists"
             exit 1
@@ -439,6 +662,26 @@ jobs:
             exit 1
           fi
 
+          set +e
+          getfacl -R -c -p -P -- "$runtime_root" \
+            | awk '
+              /^(default:|user:[^:]+:|group:[^:]+:|mask::)/ { extended = 1 }
+              END { exit extended ? 42 : 0 }
+            '
+          runtime_acl_status=("${PIPESTATUS[@]}")
+          set -e
+          if (( runtime_acl_status[0] != 0 )); then
+            echo "::error::copied package runtime ACLs could not be inspected"
+            exit 1
+          fi
+          if (( runtime_acl_status[1] == 42 )); then
+            echo "::error::copied package runtime retains an extended ACL"
+            exit 1
+          elif (( runtime_acl_status[1] != 0 )); then
+            echo "::error::copied package runtime ACL inspection failed"
+            exit 1
+          fi
+
           node_major="$("$runtime_root/bin/node" -p 'process.versions.node.split(".")[0]')"
           npm_version="$("$runtime_root/bin/node" "$runtime_root/npm/bin/npm-cli.js" --version)"
           if [[ "$node_major" != "${{ matrix.node }}" \
@@ -449,5 +692,8 @@ jobs:
 
           # The runtime modes are now explicit and immutable for this job. Use the
           # reviewed package-install mask so extracted files retain tar member modes.
+          # Hosted-VM teardown owns final deletion: after target code has run, do
+          # not recursively remove a pathname that same-UID code could have rebound.
           umask 022
-          PATH="$runtime_root/bin:$PATH" bun run test:package
+          cd -- "$source_root"
+          PATH="$runtime_root/bin:$PATH" "$CORTEXEL_CI_BUN" run test:package

@@ -4,6 +4,8 @@
  * Production authority is deliberately asymmetric:
  *
  * - the outer synchronous caller never receives a PID or PGID;
+ * - its exact launcher actively joins a dedicated guardian-only pipe before
+ *   publishing buffered protocol, while that launcher remains live;
  * - the supervisor owns one exclusive guardian-lease writer and never signals a
  *   process or process group;
  * - the guardian is a live POSIX session/process-group leader and is the only
@@ -13,12 +15,12 @@
  * The guardian's intent frame plus its observed SIGKILL exit is accepted
  * cooperative lifecycle evidence under the reviewed-code boundary. It does not
  * prove group closure or signal origin. Deliberate guardian discovery/killing,
- * regrouping, detachment, or signal-authority changes require external
- * containment.
+ * regrouping, detachment, signal-authority changes, or abrupt launcher loss
+ * require external containment.
  */
 
 export const REVIEWED_POSIX_COMMAND_RESULT_SCHEMA =
-  'cortexel-reviewed-posix-command.v3' as const;
+  'cortexel-reviewed-posix-command.v4' as const;
 export const REVIEWED_POSIX_COMMAND_HANDSHAKE_SCHEMA =
   'cortexel-reviewed-posix-command-handshake.v1' as const;
 export const REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA =
@@ -26,9 +28,9 @@ export const REVIEWED_POSIX_TARGET_COMPLETION_SCHEMA =
 export const REVIEWED_POSIX_WORKER_READY_SCHEMA =
   'cortexel-reviewed-posix-worker-ready.v1' as const;
 export const REVIEWED_POSIX_GUARDIAN_READY_SCHEMA =
-  'cortexel-reviewed-posix-guardian-ready.v2' as const;
+  'cortexel-reviewed-posix-guardian-ready.v3' as const;
 export const REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA =
-  'cortexel-reviewed-posix-lifetime-authority.v1' as const;
+  'cortexel-reviewed-posix-lifetime-authority.v2' as const;
 export const REVIEWED_POSIX_GUARDIAN_SWEEP_INTENT_SCHEMA =
   'cortexel-reviewed-posix-guardian-sweep-intent.v1' as const;
 export const REVIEWED_POSIX_COMMAND_TEST_HOOK_SCHEMA =
@@ -42,8 +44,6 @@ export const REVIEWED_POSIX_WORKER_PAYLOAD_ENV =
   'CORTEXEL_REVIEWED_POSIX_WORKER_PAYLOAD' as const;
 export const REVIEWED_POSIX_TEST_HOOK_ENV =
   'CORTEXEL_REVIEWED_POSIX_TRUSTED_COMMAND_TEST_HOOK' as const;
-export const REVIEWED_POSIX_LIFETIME_AUTHORITY_ENV =
-  'CORTEXEL_REVIEWED_POSIX_LIFETIME_AUTHORITY' as const;
 
 export const REVIEWED_POSIX_ARM_TIMEOUT_MS = 5_000;
 export const REVIEWED_POSIX_GATE_TIMEOUT_MS = 7_000;
@@ -432,8 +432,9 @@ if (!sweepStarted) {
   try {
     // The numeric slot is not authority: Node can reuse a closed inherited slot
     // for an internal FIFO/socket before this source runs. Bind the exact kernel
-    // object sealed by the outer launcher and retained by the supervisor.
-    const observedLifetime = inspectLifetimeAuthority(5);
+    // object derived by the supervisor from its dedicated child-side pipe and
+    // retained by the outer launcher's active reader.
+    const observedLifetime = inspectLifetimeAuthority(6);
     if (!sameLifetimeAuthority(payload.lifetimeAuthority, observedLifetime)) {
       throw new Error('guardian lifetime descriptor identity mismatch');
     }
@@ -462,8 +463,10 @@ if (!sweepStarted) {
         'inherit',
         'pipe',
         payload.hasStdin ? 4 : 'ignore',
-        // Never propagate the outer-held guardian lifetime descriptor to the
-        // worker or target. A detached descendant therefore cannot pin it.
+        // Never propagate either the compatibility stdout hold or the dedicated
+        // guardian lifetime descriptor to the worker or target. A detached
+        // descendant therefore cannot pin either control-plane capability.
+        'ignore',
         'ignore',
       ],
       windowsHide: true,
@@ -494,7 +497,6 @@ const fs = require('node:fs');
 const payloadName = ${JSON.stringify(REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV)};
 const guardianPayloadName = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_PAYLOAD_ENV)};
 const testHookPayloadName = ${JSON.stringify(REVIEWED_POSIX_TEST_HOOK_ENV)};
-const lifetimeAuthorityPayloadName = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_ENV)};
 const guardianSource = ${JSON.stringify(REVIEWED_POSIX_GUARDIAN_SOURCE)};
 const resultSchema = ${JSON.stringify(REVIEWED_POSIX_COMMAND_RESULT_SCHEMA)};
 const handshakeSchema = ${JSON.stringify(REVIEWED_POSIX_COMMAND_HANDSHAKE_SCHEMA)};
@@ -598,15 +600,11 @@ try {
       throw new Error('invalid trusted command test hook');
     }
   }
-  lifetimeAuthority = normalizeLifetimeAuthority(
-    JSON.parse(process.env[lifetimeAuthorityPayloadName] || 'null'),
-  );
-  if (
-    lifetimeAuthority === null ||
-    !sameLifetimeAuthority(lifetimeAuthority, inspectLifetimeAuthority(6))
-  ) {
-    throw new Error('invalid supervisor lifetime authority');
-  }
+  // Descriptor 7 is one fresh child-side pipe created by the exact outer
+  // launcher. Authority begins here: the supervisor derives its identity from
+  // the inherited descriptor, binds that value into the guardian payload, and
+  // retains its copy until the guardian echoes the same identity in READY.
+  lifetimeAuthority = inspectLifetimeAuthority(7);
 } catch {
   fs.writeSync(1, JSON.stringify({
     guardianSweepIntentCount: 0,
@@ -625,7 +623,6 @@ try {
 }
 delete process.env[payloadName];
 delete process.env[testHookPayloadName];
-delete process.env[lifetimeAuthorityPayloadName];
 
 const outputDescriptors = { stdout: 4, stderr: 5 };
 const outputBytes = { stdout: 0, stderr: 0 };
@@ -638,6 +635,8 @@ let outputOverflow = false;
 let timedOut = false;
 let hardStopCause = null;
 let settled = false;
+let launcherArm = '';
+let launcherArmed = false;
 let handshakePublished = false;
 let goSent = false;
 let controlClosed = false;
@@ -660,6 +659,7 @@ let settlementTimer = null;
 let drainTimer = null;
 let testHookTimer = null;
 let finalizeGuardian = () => {};
+let startGuardian = () => {};
 
 const terminalFailure = (reason) => {
   try {
@@ -752,13 +752,29 @@ const cancelSupervisor = (exitCode) => {
   }
   closeSupervisorLease();
 };
-// The exact outer launcher owns this additional supervisor-lifetime lease. If
-// the launcher is killed by its synchronous caller, EOF forces cancellation;
-// unref keeps an otherwise completed supervisor from waiting on an open lease.
+// The exact outer launcher owns this supervisor-lifetime lease. It installs the
+// dedicated fd-7 reader before sending one exact ARM frame here, so no guardian
+// can reach READY, the public handshake, or GO before the lifetime observer is
+// active. After ARM, EOF or any further byte is cancellation. Keep the stream
+// referenced: before guardian spawn it is the only active launch/owner boundary.
 process.stdin.once('end', () => cancelSupervisor(70));
 process.stdin.once('error', () => cancelSupervisor(70));
-process.stdin.on('data', () => cancelSupervisor(70));
-if (typeof process.stdin.unref === 'function') process.stdin.unref();
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  if (launcherArmed) {
+    cancelSupervisor(70);
+    return;
+  }
+  launcherArm += chunk;
+  if (launcherArm.length > 4 || !'ARM\n'.startsWith(launcherArm)) {
+    cancelSupervisor(70);
+    return;
+  }
+  if (launcherArm === 'ARM\n') {
+    launcherArmed = true;
+    startGuardian();
+  }
+});
 for (const [signal, exitCode] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) {
   process.on(signal, () => cancelSupervisor(exitCode));
 }
@@ -951,13 +967,18 @@ const acceptGuardianFrame = (raw) => {
       return;
     }
     try {
-      if (!sameLifetimeAuthority(lifetimeAuthority, inspectLifetimeAuthority(6))) {
+      if (!sameLifetimeAuthority(lifetimeAuthority, inspectLifetimeAuthority(7))) {
         throw new Error('supervisor lifetime descriptor identity changed');
       }
-      // Close exactly once only after the guardian has echoed the bound identity
-      // and the retained supervisor endpoint still names that same kernel object.
-      // A close exception is ambiguous; never retry or address the numeric slot.
+      // Close each pass-through exactly once only after the guardian has echoed
+      // the bound dedicated identity and the retained supervisor endpoint still
+      // names that same kernel object. Descriptor 6 retains the historical
+      // standard-output hold for outer runtimes that honor descendant-held
+      // pipes; descriptor 7 is the authoritative pipe actively observed by the
+      // still-live launcher. A close exception is ambiguous: never retry or
+      // address either numeric slot.
       fs.closeSync(6);
+      fs.closeSync(7);
     } catch {
       failProtocol('guardian lifetime descriptor revalidation/close failed');
       return;
@@ -1029,45 +1050,50 @@ const captureGuardianProtocol = (chunk) => {
   }
 };
 
-const guardianPayload = JSON.stringify({
-  args: payload.args,
-  cwd: payload.cwd,
-  environment: payload.environment,
-  hasStdin: payload.hasStdin,
-  lifetimeAuthority,
-  targetExecutable: payload.targetExecutable,
-});
-try {
-  guardian = childProcess.spawn(process.execPath, ['-e', guardianSource], {
+startGuardian = () => {
+  if (cancellationStarted || controlClosed || guardian !== null || settled) return;
+  const guardianPayload = JSON.stringify({
+    args: payload.args,
     cwd: payload.cwd,
-    // POSIX Node documents detached children as leaders of a new session and
-    // process group. Successful sweeping requires that contract. If it were to
-    // fail silently, a still-live process PID cannot concurrently identify an
-    // unrelated extant PGID/SID; kill(-selfPID) therefore fails closed rather
-    // than aliasing another group. The non-detached regression exercises this.
-    detached: true,
-    env: { ...process.env, [guardianPayloadName]: guardianPayload },
-    // Descriptor 3 is the outer host's input spool; guardian descriptor 4 merely
-    // propagates it toward the gated worker without exposing it as control stdin.
-    stdio: [
-      'pipe',
-      'pipe',
-      'pipe',
-      'pipe',
-      payload.hasStdin ? 3 : 'ignore',
-      // Supervisor descriptor 6 is the exact outer-host pipe identity. Retain it
-      // through the guardian's bound READY frame, recheck it, then close it once;
-      // the guardian alone retains the write capability during target execution.
-      6,
-    ],
-    windowsHide: true,
+    environment: payload.environment,
+    hasStdin: payload.hasStdin,
+    lifetimeAuthority,
+    targetExecutable: payload.targetExecutable,
   });
-} catch {
-  guardian = null;
-}
-if (!guardian || !Number.isSafeInteger(guardian.pid)) {
-  finish(null, null, 'reviewed Node guardian could not be spawned', 0);
-} else {
+  try {
+    guardian = childProcess.spawn(process.execPath, ['-e', guardianSource], {
+      cwd: payload.cwd,
+      // POSIX Node documents detached children as leaders of a new session and
+      // process group. Successful sweeping requires that contract. If it were to
+      // fail silently, a still-live process PID cannot concurrently identify an
+      // unrelated extant PGID/SID; kill(-selfPID) therefore fails closed rather
+      // than aliasing another group. The non-detached regression exercises this.
+      detached: true,
+      env: { ...process.env, [guardianPayloadName]: guardianPayload },
+      // Descriptor 3 is the outer host's input spool; guardian descriptor 4 merely
+      // propagates it toward the gated worker without exposing it as control stdin.
+      stdio: [
+        'pipe',
+        'pipe',
+        'pipe',
+        'pipe',
+        payload.hasStdin ? 3 : 'ignore',
+        // Supervisor descriptor 6 retains the exact outer stdout endpoint only
+        // as a compatibility hold. Descriptor 7 is the dedicated child-side
+        // lifetime pipe: its identity was derived before ARM, and the guardian
+        // alone retains it after the bound READY frame.
+        6,
+        7,
+      ],
+      windowsHide: true,
+    });
+  } catch {
+    guardian = null;
+  }
+  if (!guardian || !Number.isSafeInteger(guardian.pid)) {
+    finish(null, null, 'reviewed Node guardian could not be spawned', 0);
+    return;
+  }
   // Arming has its own bounded control-plane deadline. The caller-selected
   // command timeout begins only after the exact GO frame is sent.
   commandTimer = setTimeout(() => {
@@ -1159,25 +1185,29 @@ if (!guardian || !Number.isSafeInteger(guardian.pid)) {
     }
     finalizeGuardian();
   });
-}
+};
 `;
 
 /**
  * Exact-Node adapter around the asynchronous supervisor.
  *
- * The launcher's stdout is both the outer caller's ordinary protocol pipe and
- * the guardian's exclusive lifetime capability. The supervisor passes a
- * duplicate straight to the guardian and closes its own copy. Thus even a
- * runtime such as Bun that does not expose fd>2 spawnSync output cannot return
- * until both launcher and guardian close this standard stdout endpoint.
+ * The launcher actively drains one dedicated parent-side pipe and publishes no
+ * protocol until that stream reaches real peer EOF and the supervisor reaches
+ * close. Its exact ARM frame gates guardian creation until those listeners are
+ * installed. The supervisor derives the child endpoint's identity, passes it
+ * only to the guardian, and closes its copy after the bound READY echo.
+ *
+ * The guardian also retains the launcher's standard stdout as a compatibility
+ * hold for outer runtimes that honor descendant-held output pipes. That is not
+ * the authoritative join: Bun on Linux may return from spawnSync when its direct
+ * child exits despite a descendant retaining stdout. The still-live launcher's
+ * active dedicated reader is the join boundary.
  */
 export const REVIEWED_POSIX_OUTER_LAUNCHER_SOURCE = String.raw`'use strict';
 const childProcess = require('node:child_process');
 const fs = require('node:fs');
 const supervisorSource = ${JSON.stringify(REVIEWED_POSIX_SUPERVISOR_SOURCE)};
 const supervisorPayloadName = ${JSON.stringify(REVIEWED_POSIX_SUPERVISOR_PAYLOAD_ENV)};
-const lifetimeAuthorityPayloadName = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_ENV)};
-const lifetimeAuthoritySchema = ${JSON.stringify(REVIEWED_POSIX_LIFETIME_AUTHORITY_SCHEMA)};
 const protocolLimit = 65536;
 let supervisor = null;
 let stdoutBytes = 0;
@@ -1186,29 +1216,12 @@ let stdoutChunks = [];
 let stderrChunks = [];
 let overflow = false;
 let completed = false;
-let outerLifetimeAuthority = null;
-
-const inspectLifetimeAuthority = (descriptor) => {
-  const stat = fs.fstatSync(descriptor, { bigint: true });
-  const fifo = stat.isFIFO();
-  const socket = stat.isSocket();
-  if (Number(fifo) + Number(socket) !== 1) {
-    throw new Error('outer lifetime descriptor is not a pipe endpoint');
-  }
-  return {
-    dev: stat.dev.toString(),
-    gid: stat.gid.toString(),
-    ino: stat.ino.toString(),
-    kind: fifo ? 'fifo' : 'socket',
-    mode: stat.mode.toString(),
-    nlink: stat.nlink.toString(),
-    rdev: stat.rdev.toString(),
-    schema: lifetimeAuthoritySchema,
-    uid: stat.uid.toString(),
-  };
-};
-const sameLifetimeAuthority = (left, right) =>
-  left !== null && right !== null && JSON.stringify(left) === JSON.stringify(right);
+let failureReason = null;
+let supervisorClosed = false;
+let supervisorStatus = undefined;
+let supervisorSignal = undefined;
+let lifetimeEnded = false;
+let uncertainLifetimeHold = null;
 
 const cancel = () => {
   if (!supervisor || !supervisor.stdin || supervisor.stdin.destroyed) return;
@@ -1216,6 +1229,20 @@ const cancel = () => {
     supervisor.stdin.end();
   } catch {
     try { supervisor.stdin.destroy(); } catch {}
+  }
+};
+const latchFailure = (reason = 'unknown') => {
+  if (completed) return;
+  if (failureReason === null) failureReason = String(reason).slice(0, 96);
+  cancel();
+};
+const retainUntilOuterHardTimeout = () => {
+  if (completed) return;
+  if (uncertainLifetimeHold === null) {
+    // A local stream close/error is not peer EOF. Retain the launcher until its
+    // synchronous caller's independent hard timeout rather than publishing a
+    // result that could race a live guardian.
+    uncertainLifetimeHold = setInterval(() => {}, 1000);
   }
 };
 const capture = (channel) => (chunk) => {
@@ -1233,7 +1260,7 @@ const capture = (channel) => (chunk) => {
   }
   if (chunk.length > remaining) {
     overflow = true;
-    cancel();
+    latchFailure('protocol_overflow');
   }
 };
 const writeAll = (descriptor, chunks) => {
@@ -1252,10 +1279,32 @@ const failureKind = (error) => {
     ? candidate.slice(0, 64)
     : 'unknown';
 };
-const failClosed = (reason = 'unknown') => {
-  if (completed) return;
+const finishIfJoined = () => {
+  if (completed || !supervisorClosed || !lifetimeEnded) return;
   completed = true;
-  cancel();
+  if (uncertainLifetimeHold !== null) clearInterval(uncertainLifetimeHold);
+  const clean =
+    failureReason === null && !overflow && supervisorStatus === 0 && supervisorSignal === null;
+  try {
+    writeAll(1, stdoutChunks);
+    writeAll(2, stderrChunks);
+    if (!clean && stderrChunks.length === 0) {
+      const diagnostic = Buffer.from(
+        'reviewed POSIX outer launcher observed supervisor failure ' +
+          '(status ' + String(supervisorStatus) + ', signal ' +
+          String(supervisorSignal) + ', reason ' +
+          String(failureReason === null ? 'supervisor_terminal' : failureReason) + ')\n',
+        'utf8',
+      );
+      writeAll(2, [diagnostic]);
+    }
+  } catch {
+    process.exitCode = 70;
+    return;
+  }
+  process.exitCode = clean ? 0 : 70;
+};
+const failWithoutSupervisor = (reason) => {
   try {
     fs.writeSync(
       2,
@@ -1264,36 +1313,79 @@ const failClosed = (reason = 'unknown') => {
   } catch {}
   process.exitCode = 70;
 };
-process.on('uncaughtException', (error) => failClosed('uncaught_' + failureKind(error)));
-process.on('unhandledRejection', (error) => failClosed('rejection_' + failureKind(error)));
+process.on('uncaughtException', (error) => {
+  latchFailure('uncaught_' + failureKind(error));
+  retainUntilOuterHardTimeout();
+});
+process.on('unhandledRejection', (error) => {
+  latchFailure('rejection_' + failureKind(error));
+  retainUntilOuterHardTimeout();
+});
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+  process.on(signal, () => latchFailure('launcher_' + signal));
+}
 
 try {
   const outerPayload = JSON.parse(process.env[supervisorPayloadName] || 'null');
   if (!outerPayload || typeof outerPayload.hasStdin !== 'boolean') {
     throw new Error('invalid outer payload');
   }
-  outerLifetimeAuthority = inspectLifetimeAuthority(1);
   supervisor = childProcess.spawn(process.execPath, ['-e', supervisorSource], {
     cwd: process.cwd(),
     detached: false,
-    env: {
-      ...process.env,
-      [lifetimeAuthorityPayloadName]: JSON.stringify(outerLifetimeAuthority),
-    },
+    env: process.env,
     // fd0 is a launcher-lifetime lease. fd1/fd2 are bounded protocol pipes.
     // fds3-5 are opaque host spool capabilities. fd6 duplicates this launcher's
-    // standard stdout directly into the guardian lifetime chain.
+    // standard stdout as a compatibility hold. fd7 is a fresh bidirectional
+    // pipe; this launcher actively drains its parent endpoint, while the
+    // supervisor derives and passes the child endpoint only to the guardian.
     // Node closes an additional host stdio slot declared as "ignore", whereas
     // Bun currently materializes it. Forward numeric fd 3 only when the sealed
     // payload declares an input spool; otherwise create an ignored supervisor
     // slot and never address the outer process's intentionally absent fd 3.
-    stdio: ['pipe', 'pipe', 'pipe', outerPayload.hasStdin ? 3 : 'ignore', 4, 5, 1],
+    stdio: [
+      'pipe',
+      'pipe',
+      'pipe',
+      outerPayload.hasStdin ? 3 : 'ignore',
+      4,
+      5,
+      1,
+      'pipe',
+    ],
     windowsHide: true,
   });
 } catch (error) {
-  failClosed('supervisor_spawn_' + failureKind(error));
+  failWithoutSupervisor('supervisor_spawn_' + failureKind(error));
 }
 if (supervisor) {
+  const lifetime = supervisor.stdio[7];
+  if (!lifetime || typeof lifetime.on !== 'function') {
+    latchFailure('missing_lifetime_stream');
+    retainUntilOuterHardTimeout();
+  } else {
+    // Install all lifetime observations before ARM. The data listener actively
+    // drains the zero-data capability: every byte is failure, but the launcher
+    // keeps draining and waiting for the independent real end event.
+    lifetime.on('data', (chunk) => {
+      if (chunk.length > 0) latchFailure('unexpected_lifetime_data');
+    });
+    lifetime.once('end', () => {
+      lifetimeEnded = true;
+      finishIfJoined();
+    });
+    lifetime.once('error', () => {
+      latchFailure('lifetime_stream_error');
+      retainUntilOuterHardTimeout();
+    });
+    lifetime.once('close', () => {
+      if (!lifetimeEnded) {
+        latchFailure('lifetime_stream_closed_without_eof');
+        retainUntilOuterHardTimeout();
+      }
+    });
+    lifetime.resume();
+  }
   // A fast supervisor can close its stdin before the outer launcher observes
   // child close. Node may surface that ordinary writer-end teardown as EPIPE or
   // ECONNRESET even though this launcher never writes command data. Do not let
@@ -1303,44 +1395,30 @@ if (supervisor) {
   supervisor.stdin.on('error', () => {});
   supervisor.stdout.on('data', capture('stdout'));
   supervisor.stderr.on('data', capture('stderr'));
-  supervisor.once('error', (error) => failClosed('supervisor_' + failureKind(error)));
-  supervisor.once('close', (status, signal) => {
-    if (completed) return;
-    let lifetimeStable = false;
-    try {
-      lifetimeStable = sameLifetimeAuthority(
-        outerLifetimeAuthority,
-        inspectLifetimeAuthority(1),
-      );
-    } catch {
-      lifetimeStable = false;
-    }
-    if (!lifetimeStable) {
-      completed = true;
-      try {
-        fs.writeSync(2, 'reviewed POSIX outer lifetime authority changed\n');
-      } catch {}
-      process.exitCode = 70;
-      return;
-    }
-    completed = true;
-    const clean = !overflow && status === 0 && signal === null;
-    try {
-      writeAll(1, stdoutChunks);
-      writeAll(2, stderrChunks);
-      if (!clean && stderrChunks.length === 0) {
-        const diagnostic = Buffer.from(
-          'reviewed POSIX outer launcher observed supervisor failure ' +
-            '(status ' + String(status) + ', signal ' + String(signal) + ')\n',
-          'utf8',
-        );
-        writeAll(2, [diagnostic]);
-      }
-    } catch {
-      process.exitCode = 70;
-      return;
-    }
-    process.exitCode = clean ? 0 : 70;
+  supervisor.stdout.once('error', (error) => {
+    latchFailure('supervisor_stdout_' + failureKind(error));
   });
+  supervisor.stderr.once('error', (error) => {
+    latchFailure('supervisor_stderr_' + failureKind(error));
+  });
+  supervisor.once('error', (error) => {
+    // ChildProcess documents that "exit" need not follow "error"; do not make
+    // safe publication depend on an undocumented local-close sequence either.
+    // Only the independent lifetime EOF plus child "close" can complete this
+    // launcher, so retain it for the outer hard timeout if "close" never arrives.
+    latchFailure('supervisor_' + failureKind(error));
+    retainUntilOuterHardTimeout();
+  });
+  supervisor.once('close', (status, signal) => {
+    supervisorClosed = true;
+    supervisorStatus = status;
+    supervisorSignal = signal;
+    finishIfJoined();
+  });
+  if (lifetime && typeof lifetime.on === 'function') {
+    supervisor.stdin.write('ARM\n', (error) => {
+      if (error) latchFailure('launcher_arm_write_' + failureKind(error));
+    });
+  }
 }
 `;

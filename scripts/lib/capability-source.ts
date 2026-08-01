@@ -60,9 +60,15 @@ const STATUSES = new Set(['stable', 'experimental', 'deprecated', 'removed']);
 const KINDS = new Set(['skill', 'export', 'data_export', 'contract_source', 'cli']);
 const PRIVATE_BUILD_ENTRY_KEYS = new Set([
   'cli/main',
+  'internal/knowledge-graph-presentation-brand',
+  'internal/knowledge-graph-presentation-capability',
   'internal/request-capability',
   'internal/validated-request-brand',
 ]);
+
+function isPrivateBuildEntry(key: string): boolean {
+  return PRIVATE_BUILD_ENTRY_KEYS.has(key);
+}
 
 /** Map a package export key to the public capability id named by that key. */
 export function packageExportId(key: string): string {
@@ -91,14 +97,14 @@ export function packageExportIds(packageJson: unknown): Set<string> {
 export function buildEntryIds(entry: unknown): Set<string> {
   if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return new Set();
   return new Set(Object.keys(entry as Record<string, unknown>)
-    .filter((key) => !PRIVATE_BUILD_ENTRY_KEYS.has(key))
+    .filter((key) => !isPrivateBuildEntry(key))
     .map(buildEntryId));
 }
 
 export function buildEntryOutputBases(entry: unknown): Map<string, string> {
   if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return new Map();
   return new Map(Object.keys(entry as Record<string, unknown>)
-    .filter((key) => !PRIVATE_BUILD_ENTRY_KEYS.has(key))
+    .filter((key) => !isPrivateBuildEntry(key))
     .map((key) => [
       buildEntryId(key),
       `./dist/${key}`,

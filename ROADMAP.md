@@ -177,11 +177,12 @@ receipts before the Python gates can pass.
 
 ## Milestone: Adapters (NEST / Neo / NWB / NCP)
 
-**Status today.** The narrow plain-data NEST spike-recorder adapter exists and admits a
-revision-2 declaration profile for NEST 3.9/3.10 memory exports with
-`time_in_steps: false`. It has not been executed against a real pinned NEST environment,
-so that admitted profile is not an upstream certification. Other NEST recorder/
-connection mappings and the Neo, Elephant, NWB, and NCP adapters are not implemented.
+**Status today.** The narrow plain-data NEST spike-recorder adapter exists and admits
+only its revision-5 declaration profile for exact NEST 3.10.0 memory exports with
+`time_in_steps: false`. Its finite-stop and positive-infinity/capture-bounded branches
+remain distinct. It has not been executed against a real pinned NEST environment, so
+that admitted profile is not an upstream certification. Other NEST recorder/connection
+mappings and the Neo, Elephant, NWB, and NCP adapters are not implemented.
 
 **What remains.**
 

@@ -36,6 +36,9 @@ cortexel describe neuro.spike_raster --json --section example
 cortexel describe neuro.spike_raster --json --section schema
 cortexel source catalog --json
 cortexel source describe nest-spike-recorder --json
+cortexel source example nest-spike-recorder > capture.template.json
+# Replace every synthetic value with a caller-owned capture, remove the nested
+# guard, and write only inputTemplate to capture.json before continuing.
 cortexel source render nest-spike-recorder capture.json --output figure.svg --format json
 # When an intermediate request is useful for composition or review:
 cortexel source adapt nest-spike-recorder capture.json > request.json
@@ -56,8 +59,13 @@ scientific/evidence/authority catalog record.
 
 Skill adapter metadata is not an invocation surface. `cortexel source catalog --json`
 is the closed digest-bound list of adapters the installed package can actually execute.
-At present it contains only `nest-spike-recorder`. `source describe` returns its exact
-authority statement, limitations, and copyable `{ exportedStatus, options }` envelope;
+At present it contains only `nest-spike-recorder`. `source catalog` emits its exact
+compact digest preimage, and each entry digest-binds the full descriptor returned by
+`source describe`. `source example` emits a versioned, guarded, template-only envelope;
+it is not simulator output, capture authority, or provenance evidence. The outer
+envelope and its unchanged guarded `inputTemplate` both fail closed. Replace every
+fixture value with caller-owned capture data and authority, then explicitly remove the
+guard and submit only `inputTemplate`; Cortexel never performs that transition for you.
 `source adapt` reads bounded duplicate-key-safe JSON and emits a canonical request only
 after the adapter and the complete stable FigureRequest gate both succeed. Prefer
 `source render` when no intermediate request is needed: it keeps adapter, validation,
@@ -70,11 +78,11 @@ The same resources are importable without a subprocess:
 
 ```ts
 import {
-  SKILL_AUTHORING,
   SOURCE_ADAPTER_CATALOG,
   lookupSourceAdapter,
 } from 'cortexel/authoring';
-import { applySafeRepairs, validateRequestValue } from 'cortexel/figure';
+import { nestSpikeRecorderToRaster } from 'cortexel/adapters/nest';
+import { validateRequestValue } from 'cortexel/figure';
 import { buildFigureFromValidated } from 'cortexel/render-svg';
 
 const sourceAdapter = lookupSourceAdapter('nest-spike-recorder');
@@ -82,13 +90,19 @@ if (sourceAdapter !== SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) {
   throw new Error('source adapter unavailable');
 }
 
-const draft = structuredClone(
-  SKILL_AUTHORING['neuro.spike_raster'].authoringExample,
+// Acquire these values from the caller's actual detached capture boundary. The
+// sourceAdapter.example value is deliberately guarded and cannot be executed.
+const sourceInput = await acquireCallerOwnedNestCapture();
+const adapted = nestSpikeRecorderToRaster(
+  sourceInput.exportedStatus,
+  sourceInput.options,
 );
-const firstPass = validateRequestValue(draft);
-const accepted = firstPass.ok ? firstPass : applySafeRepairs(draft);
+if (!adapted.ok) {
+  throw new Error(JSON.stringify(adapted.errors));
+}
+const accepted = validateRequestValue(adapted.request);
 if (!accepted.ok) {
-  throw new Error(JSON.stringify(accepted.errors)); // return these bounded errors to the agent
+  throw new Error(JSON.stringify(accepted.errors));
 }
 
 const figure = buildFigureFromValidated(accepted.request);
@@ -97,6 +111,11 @@ if (!figure.ok) {
 }
 // figure.svg and figure.artifact are now derived from the validated capability.
 ```
+
+Programmatic dispatch is intentionally explicit in this revision: discovery metadata
+does not execute an export name dynamically. The closed adapter id above resolves to the
+single concrete `nestSpikeRecorderToRaster` implementation; use the CLI when a generic
+id-dispatching process boundary is preferable.
 
 `applySafeRepairs` is deliberately narrow. It can add an entirely absent exact
 contract identity, replace a registered unit alias with its registry-owned canonical
@@ -337,25 +356,217 @@ import { VizSpecRenderer } from 'cortexel/react';
 />
 ```
 
-Interactive WebGL meshes are not accessibility controls. Pair
-`KnowledgeGraph3DScene` with both `KnowledgeGraphLegend` and
-`KnowledgeGraphA11yList`, `ExpandablePopulation` with
-`PopulationA11yList`, and selectable `ExpandableNeurons` with the paginated
-`NeuronA11yPager`; render these DOM companions outside the Canvas.
-Pass the `context` returned by `mapCorpusKnowledgeGraph` to
-`KnowledgeGraphLegend` so the graph id, source, caller-declared snapshot namespace, scope and
-generation time remain available in the DOM alongside the visual encoding. Pass
-the returned `graphIdentity` to both `KnowledgeGraph3DScene` and
-`KnowledgeGraphA11yList`; retain it across filters
-of that snapshot and change it when declared graph context changes. That remounts
-scene-owned layout positions, framing status, pending camera intent, and
-accessible pager/disclosure state. The host still owns the actual camera/controls
-target plus controlled selection and hover; reset or reframe those when cross-graph
-isolation requires it. This identity is a
-caller-context cache namespace, not a graph-content digest or independent
-authentication. The strict bound honesty caption must
-remain visibly expanded adjacent to the figure; a collapsed metadata disclosure
-does not satisfy that display obligation.
+Interactive WebGL meshes are not accessibility controls. Use the peer-free
+`cortexel/knowledge-graph` entry in agents, workers, and servers; it loads no React,
+Three, R3F, d3, browser, network, or filesystem module. Use the heavier
+`cortexel/react/knowledge-graph` entry only in an interactive host. Because this
+development package is not published, pin a reviewed Git commit (or install a locally
+packed tarball). A host using the 3D entry also installs its explicit optional peers:
+
+```bash
+npm install github:sepahead/cortexel#<FULL_COMMIT_SHA>
+npm install react@^19 react-dom@^19 three@">=0.184 <0.186" \
+  @react-three/fiber@^9.6 d3-force-3d@3.0.6
+npm install --save-dev @types/react@^19 @types/three@">=0.184 <0.186"
+```
+
+The package peer range is `d3-force-3d@^3.0.5`, but current source and package-smoke
+evidence covers exactly 3.0.6. That release allocates octrees transitively during its
+many-body and collision ticks. Exact-lock 3.0.6 for evidence-sensitive use, or re-audit
+the resolved source after an upgrade; neither the reviewed behavior nor performance
+evidence transfers automatically to a future 3.x release.
+
+There is no knowledge-graph CLI in this development revision. `cortexel catalog`
+discovers only the stable FigureRequestV1 catalog; the experimental legacy graph is
+programmatic. An agent/server can bind and inspect a corpus graph without visualization
+peers:
+
+```ts
+import {
+  prepareCorpusKnowledgeGraphFigureJson,
+  serializePreparedKnowledgeGraphPresentation,
+} from 'cortexel/knowledge-graph';
+
+export function prepareCorpusGraphJson(text: string) {
+  const result = prepareCorpusKnowledgeGraphFigureJson(text);
+  if (!result.ok) return result; // bounded structured errors for ordinary data rejection
+  return {
+    caption: result.caption, // retain and display separately
+    sourceInputAssurance: result.sourceInputAssurance,
+    presentationRecord: serializePreparedKnowledgeGraphPresentation(
+      result.presentation,
+    ),
+  };
+}
+```
+
+`prepareCorpusKnowledgeGraphFigureJson` bounds the decoded string's UTF-8 encoded
+length, depth, nodes, member/array
+counts, string and number tokens, rejects malformed JSON/BOM/dangerous keys/duplicate
+members before materialization, and returns bounded errors instead of throwing for
+ordinary rejection. Use `prepareCorpusKnowledgeGraphFigure` only when the host already
+has a materialized ordinary value; its assurance correctly says duplicate members are
+no longer observable. Neither path is a sandbox or a nontermination guarantee against
+same-realm executable Proxy code supplied to the materialized-value API.
+
+For a corpus graph, do not separately pair mapped arrays with a caller-supplied
+caption. Give the canonical composition the complete self-describing `VizSpec`; it
+reruns the strict gate, requires exactly `corpus.knowledge_graph` in interactive mode,
+derives the bound honesty caption, maps only the checked params, and publishes one
+deeply frozen `PreparedKnowledgeGraphPresentationV1` capability. A copied, serialized,
+Proxy-wrapped, or independently reconstructed lookalike is rejected by every graph
+surface.
+
+```tsx
+import { useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { KnowledgeGraphAccessibleFigure } from 'cortexel/react/knowledge-graph';
+
+export function CorpusGraphFigure({ spec }: { spec: unknown }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  return (
+    <KnowledgeGraphAccessibleFigure
+      spec={spec}
+      selectedId={selectedId}
+      onSelect={setSelectedId}
+      hoverId={hoverId}
+      onHover={setHoverId}
+      renderVisual={(scene, hostPolicy) => (
+        <div
+          data-theme={hostPolicy.themeMode}
+          style={{ height: 640, background: hostPolicy.backgroundColor }}
+        >
+          <Canvas
+            frameloop="demand"
+            camera={{ position: [0, 0, 260], fov: 50, near: 0.1, far: 10_000 }}
+          >
+            <color attach="background" args={[hostPolicy.backgroundColor]} />
+            {scene}
+          </Canvas>
+        </div>
+      )}
+    />
+  );
+}
+```
+
+If the host still has the original JSON text, pass `specJson={text}` instead of
+`spec={value}`. The runtime requires exactly one own property—both, neither, or a
+present property with the wrong value type rejects. The raw form preserves
+duplicate-member rejection through the canonical React composition.
+
+The canonical composition defaults to two-stage auto-framing for a plain, centered,
+unmodified R3F perspective or orthographic camera: it fits the deterministic seed on
+the first eligible frame, then makes at most one final correction after the bounded
+force layout settles. User control and selection intent cancel that final whole-graph
+correction. Each fit includes the node glyph geometry actually rendered on that frame
+(including an already-active focus scale) and bounded edge routing. It never reserves a
+maximum hypothetical focus-label envelope around every node, and hover does not restart
+either whole-graph fit stage. It fits in either direction, uses the limiting field of
+view, preserves the host camera's viewing direction, and lowers/repairs `near` or
+extends/repairs `far` only when needed to contain the fitted sphere. ArrayCamera, view
+offsets, perspective
+film offsets, asymmetric/reversed orthographic frusta, transformed camera ancestors or
+camera scale, custom camera/projection methods or matrices, unsupported or ambiguous
+camera types, zero/nonfinite projection geometry, and nonfinite camera/target vectors
+make no camera write and leave framing retryable for a later valid resize; set `autoFrame={false}`
+when retaining the host's existing zoom and clipping policy is required. The validated
+light/dark theme selects the exact `hostPolicy.backgroundColor`, contrast-normalized
+undimmed node/edge colors, three closed node glyph shells, four closed relationship
+stroke patterns, contrast-paired label defaults, and safe dim/flow-marker defaults.
+Directed edges retain static arrowheads, so direction does not depend on motion. The
+host must actually paint `hostPolicy.backgroundColor`; transparency over an unrelated
+page background invalidates the mark-contrast premise. A custom label color makes label
+contrast against that background the host's responsibility. The minimal
+host above supports pointer selection/hover; selection activates and clears as a
+toggle, while control drags are consumed but not treated as clicks. Query-match
+navigation identifies the current row and moves keyboard focus only after explicit
+previous/next activation. A manually selected page with no match reports that state
+instead of announcing an off-page row; explicit match navigation selects and focuses
+the matching page. Add host-owned camera controls and pass their `controlsRef` for
+orbit/zoom and selection fly-to.
+
+Presentation, captions, legends, DOM controls, and the source-record browser admit at
+most 1,000 nodes and 4,000 relationships. The allocating main-thread force scene has a
+separate live ceiling of 250 nodes and 1,000 relationships. Above that live ceiling
+`KnowledgeGraphAccessibleFigure` does not call `renderVisual`; it retains the bound
+caption, legend, operable DOM, and complete paginated source-record browser. An exact
+source-bound kind filter can regain the 3D visual if the resulting view is within both
+live limits, though some sources have no nonempty eligible filter. Do not infer that
+every presentation accepted for inspection is browser-interactive.
+
+The Cortexel-authored frame callback reuses scratch state and does not set React state.
+Its solver clock performs at most one tick per rendered frame and at most 60 ticks per
+second, drops suspended-tab backlog, and therefore settles more slowly below 60 FPS
+instead of doing multi-tick catch-up work. The source guard is lexical and covers only
+reviewed direct Cortexel syntax; it does not make D3 allocation-free or establish any
+FPS or frame-time guarantee.
+
+Omit `viewPolicy` for the full graph, as above. Filter members must be exact kind names
+actually present in that source:
+omission means all, `[]` deliberately means none, and duplicates or unknown kinds
+reject. Keep an equivalent policy object stable when practical; Cortexel also reuses
+equivalent recent policies through a bounded per-source LRU. Filtering never changes
+the full bound caption or source record browser;
+relationships whose endpoints are hidden are counted and removed from the visual,
+legend, and operable-node view. The host receives the exact source-bound view in
+`hostPolicy.view`. Cortexel suppresses a controlled selected/hovered id outside that
+view, but the host should also clear its own controlled state. Text queries retain all
+nodes as context and provide direct previous/next match navigation instead of requiring
+an agent or keyboard user to traverse unrelated pages.
+
+`KnowledgeGraphAccessibleFigure` keeps the caption as its first direct figure child,
+followed by the host-owned visual, legend, paginated operable node list, and paginated
+source-record browser. A caught descendant client render/lifecycle failure replaces
+only the visual region. React error boundaries do not catch SSR, event-handler or async
+errors, and cannot observe WebGL context loss; report those through `visualAvailable`
+and change `visualRetryKey` only after the host has repaired its renderer. During SSR
+or without JavaScript only the bounded initial record page exists in the document;
+after hydration every accepted source record is reachable page by page.
+`serializePreparedKnowledgeGraphPresentation` returns a complete canonical
+*presentation inspection record*. It omits the bound caption, view policy, theme,
+camera, host policy, and any FigureArtifact, so retain those separately; it is not a
+complete figure/export artifact. A corpus presentation returned by the peer-free
+preparer is inspection/view authority, not direct render authority.
+
+Runtime capabilities are local to one physical Cortexel installation and JavaScript
+realm. That installation shares identity between ESM and CommonJS, but serialization,
+structured cloning, workers/processes, another realm, or a duplicate installed package
+does not. Reprepare from the original input in the consuming realm; canonical bytes do
+not rehydrate authority or authenticate their contents.
+
+Do not pass a corpus presentation directly to `KnowledgeGraph3DScene`,
+`KnowledgeGraphLegend`, `KnowledgeGraphA11yList`, or
+`KnowledgeGraphStaticRecordView`: their public types and runtime gates accept only
+`generic_visual`. The package exposes no corpus mapper. Corpus rendering is available
+only through `KnowledgeGraphAccessibleFigure`, which keeps its caption and complete DOM
+record surfaces in the same composition while still letting the host wrap the supplied
+scene in its Canvas. The host callback is trusted presentation code and can always hide
+DOM with CSS or replace its return value; Cortexel closes supported API bypasses, not a
+malicious host that already controls the page.
+
+Within that canonical composition, the corpus lifecycle identity is derived from the
+complete validated context. It remounts scene-owned layout/framing and accessible
+disclosure state when that context changes. It remains a caller-context cache
+namespace—not a graph-content digest, snapshot authentication, evidence resolution, or
+custody proof. The host still owns camera/controls state plus controlled selection and
+hover and must reset or reframe those when cross-graph isolation requires it.
+
+For generic visual graphs (not the corpus VizSpec mapping), use
+`parseKnowledgeGraphPresentationJson`, which rejects duplicate members before
+materialization, or use `prepareKnowledgeGraphPresentation` only for an already
+materialized ordinary JavaScript value. The latter rejects accessors without invoking
+their getters and detaches/revalidates the value, but JavaScript cannot inspect an
+arbitrary Proxy without executing its traps. Its machine-readable `inputAssurance`
+records that limitation. These are same-process validation capabilities, not a sandbox
+against code already executing in the realm. In every composition, keep the strict
+bound honesty caption visibly expanded next to the figure; collapsed metadata does not
+satisfy that obligation.
+
+Pair `ExpandablePopulation` with `PopulationA11yList`, and selectable
+`ExpandableNeurons` with the paginated `NeuronA11yPager`; render those DOM companions
+outside the Canvas too.
 
 Legacy regressions bind a rendered honesty caption to its figure group and keep a
 singleton plasticity sample and zero-derivative phase-plane samples visible. Those

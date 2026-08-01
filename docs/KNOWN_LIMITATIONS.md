@@ -108,7 +108,12 @@ The machine-readable state of every release gate is in
   figure group and has visible-mark regressions for singleton plasticity and
   zero-derivative phase samples. Those fixes likewise do not establish host-page,
   focus-order, browser, assistive-technology, CVD, grayscale, or whole-figure WCAG
-  conformance. Several multi-series and matrix-sign distinctions remain
+  conformance. The experimental corpus graph now has closed glyph/stroke redundancies
+  and 3:1 undimmed opaque-mark normalization against an exact host-policy background,
+  but it has not been perceptually tested across browsers, GPUs, CVD simulation,
+  grayscale, zoom, touch, or assistive technologies. Focus/query dimming intentionally
+  reduces peripheral salience, and a host that does not paint the declared background
+  voids the contrast premise. Several multi-series and matrix-sign distinctions remain
   color-dependent, and the legacy React surface lacks exact paginated DOM rows for
   ten of nineteen supported skills. The new FigureRequest tables and mandatory
   disclosure footer remain complete, but broader DOM-companion and host integration
@@ -164,12 +169,29 @@ The machine-readable state of every release gate is in
   discriminated uncalibrated scores, but the legacy envelope has no closed top-level
   evidence-record inventory that can resolve those references or authenticate a graph
   snapshot. Its caller-supplied snapshot id is a cache namespace rather than a digest or
-  receipt. The `knowledge-graph-3d` React scene uses a force simulation and is not a
-  deterministic FigureRequest renderer; its geometry is schematic, cannot carry
-  quantitative distance meaning, and has no stable SVG/table artifact or detached
-  verifier. Required DOM companions improve operability but do not establish whole-view
-  accessibility, and a host that hides the honesty caption inside collapsed disclosure
-  does not satisfy Cortexel's visible-caption obligation. A future stable evidence-graph
+  receipt. The peer-free and React graph subpaths now share one detached, deeply frozen
+  runtime capability across preparation, exact-source views, scene, legend, paginated
+  DOM, and deterministic source-record browsing. The canonical composition preserves
+  the DOM surfaces and visible caption when a descendant client render/lifecycle failure
+  is caught or the host declares the visual unavailable. It does not catch SSR,
+  event-handler or asynchronous errors, and it cannot infer WebGL context loss. Only one
+  bounded record page exists during SSR/no-JS; all records become reachable after
+  hydration, or are available as complete canonical presentation-inspection bytes.
+  Those bytes omit caption/view/host policy, do not rehydrate runtime authority, and do
+  not establish a figure or evidence artifact. Runtime tokens are local to one physical
+  package instance and realm; structured clone, workers/processes, another realm, or a
+  duplicate install requires preparation from original input. Separate built-in
+  raw-text preparers reject duplicate members before materialization for the generic
+  visual input and the complete corpus VizSpec; their assurances are not transferable
+  to a value that arrived through an ordinary JSON parser.
+  The materialized-value preparer rejects accessors but cannot inspect an arbitrary
+  JavaScript Proxy without executing traps, and says so in `inputAssurance`.
+  None of that turns the force simulation into a deterministic FigureRequest renderer:
+  its geometry remains schematic, cannot carry quantitative distance meaning, and has no
+  stable SVG/table artifact or detached verifier. Required DOM companions improve
+  operability but do not establish whole-view accessibility, and a host that hides the
+  honesty caption inside collapsed disclosure does not satisfy Cortexel's visible-caption
+  obligation. A future stable evidence-graph
   capability must bind a closed evidence inventory, immutable snapshot digest, source
   revision, stable multigraph assertions and score semantics, then emit a deterministic
   2D SVG plus a complete canonical evidence table. Optional 3D may consume that same
@@ -200,6 +222,19 @@ The machine-readable state of every release gate is in
   Node/OS tuple, or cross-platform byte-identity claim.
   The per-family derivation and rendering gates therefore remain `NOT_RUN`.
   *Gates: R047, R060–R066, R074–R083.*
+- **The pinned NEST example audit is a source classification, not broad NEST support.**
+  [`NEST-EXAMPLE-VISUALIZATION-COVERAGE-V2.md`](./audit/NEST-EXAMPLE-VISUALIZATION-COVERAGE-V2.md)
+  closes all 98 canonical PyNEST example bodies and 11 support/coordinated Python
+  bodies against the exact NEST 3.10 source inventory, then identifies 24 semantic
+  visualization-demand families. Thirteen have a plausible complete stable-skill
+  candidate, four have only a partial candidate, and seven have no current stable
+  candidate. Every execution-bound output, example-specific mapping, executable-adapter
+  match, upstream execution, renderer-parity result, and scientific-certification count
+  is zero. The one packaged spike-recorder adapter is not asserted to match any official
+  example without an example-specific detached capture and receipt. Presentation gaps
+  include multi-panel composition, compatible overlays/shared axes, uncertainty,
+  source-bound image/animation artifacts, categorical grids, covariance histories, and
+  measured 3D geometry.
 - **Render compilers are family-based, not one-file-per-skill.** The blueprint's target is
   one compiler file per stable skill for reviewability. The current tree uses shared compiler
   functions per geometric family (trace, step, bars, raster, matrix, scatter, stems,
@@ -682,10 +717,13 @@ The machine-readable state of every release gate is in
   guardian exit, then only drains local pipes under a separate bound; neither it nor
   the outer caller signals or probes any numeric identity after the reap. The outer
   caller receives no PID/PGID and has no fallback.
-  Launcher, supervisor, and guardian bind one exact retained FIFO/socket lifetime
-  endpoint through stable `fstat` identity before READY and GO; a reused numeric fd is
-  not authority. The supervisor retains and rechecks its endpoint through the
-  guardian's canonical identity echo, then closes it once without retry.
+  Before guardian creation, the launcher activates a dedicated parent-side drain and
+  sends one exact ARM frame. The supervisor derives stable `fstat` identity from the
+  different child-side FIFO/socket endpoint, binds it through the guardian's canonical
+  identity echo, then rechecks and closes its copy once without retry. A reused numeric
+  fd is not authority, and neither worker nor target receives this endpoint. While the
+  launcher remains live, it withholds buffered protocol until both supervisor close and
+  real lifetime peer EOF; bytes, local close, and stream errors are not EOF evidence.
   Host-side expected-regular reads use POSIX `O_NOFOLLOW|O_NONBLOCK` before
   descriptor type/identity proof, so a file-to-FIFO exchange cannot block at
   `open`; reviewed directory opens additionally require `O_DIRECTORY`.
@@ -696,8 +734,10 @@ The machine-readable state of every release gate is in
   credential/security-label transition can escape or defeat the group sweep and
   require external cgroup/sandbox/VM containment. A target can also stop the complete
   group. Because `SIGSTOP` is uncatchable, a stopped guardian cannot consume lease
-  EOF; retained descriptors can then keep the synchronous outer caller blocked beyond
-  both configured timeouts. Neither timeout is a hostile hard deadline.
+  EOF, so the launcher remains joined until the synchronous caller applies its outer
+  hard kill. Launcher `SIGKILL`, OOM loss, and that hard kill can let Bun return before
+  asynchronous guardian cleanup; a descendant-held stdout pipe is not a reliable Linux
+  join. Neither timeout is a hostile hard deadline or owner-death containment.
   The prepared
   workspace's root, parent ancestry, modes, topology, and bytes are change-bound,
   but mode hardening is not a substitute for an externally enforced read-only

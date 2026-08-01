@@ -1082,6 +1082,35 @@ var NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5 = Object.freeze({
   positiveInfinityExportedMs: Number.MAX_VALUE
 });
 
+// src/adapters/source-example.ts
+var SOURCE_ADAPTER_EXAMPLE_PROTOCOL = "cortexel-source-adapter-example";
+var SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION = 1;
+var SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER = "cortexelSyntheticExampleGuard";
+var SOURCE_ADAPTER_EXAMPLE_GUARD_STATUS = "synthetic_unreplaced";
+var EXAMPLE_GUARD = Object.freeze({
+  protocol: SOURCE_ADAPTER_EXAMPLE_PROTOCOL,
+  protocolVersion: SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION,
+  status: SOURCE_ADAPTER_EXAMPLE_GUARD_STATUS
+});
+var EXAMPLE_KEYS = Object.freeze([
+  "action",
+  "adapter",
+  "exampleKind",
+  "execution",
+  "inputTemplate",
+  "protocol",
+  "protocolVersion"
+]);
+var EXAMPLE_KEY_SET = new Set(EXAMPLE_KEYS);
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function isSourceAdapterExampleGuard(value) {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value).sort();
+  return keys.length === 3 && keys[0] === "protocol" && keys[1] === "protocolVersion" && keys[2] === "status" && value.protocol === SOURCE_ADAPTER_EXAMPLE_PROTOCOL && value.protocolVersion === SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION && value.status === SOURCE_ADAPTER_EXAMPLE_GUARD_STATUS;
+}
+
 // src/adapters/nest/recorders.ts
 var ADMITTED_NEST_VERSION = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5.nestVersion;
 var NEST_SPIKE_ADAPTER_INPUT_DIGEST_DOMAIN_V3 = NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3.inputDigestDomain;
@@ -1207,6 +1236,19 @@ function nestSpikeRecorderToRaster(exported, options) {
       "ADAPTER_MAPPING_REQUIRED",
       "",
       "NEST adapter options must be a plain object containing a version and the complete recorded sender universe."
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(
+    optionValue,
+    SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER
+  )) {
+    const exactGuard = isSourceAdapterExampleGuard(
+      optionValue[SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER]
+    );
+    return adapterFailure(
+      "ADAPTER_MAPPING_REQUIRED",
+      `/${SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER}`,
+      exactGuard ? "Cortexel's shipped source example is a synthetic, template-only shape, not a NEST capture. Replace every fixture value with caller-owned exported status and capture authority, then explicitly remove this guard before invoking the adapter. The adapter never removes it or authors simulation provenance from the unchanged fixture." : `NEST adapter options contain the reserved ${JSON.stringify(SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER)} member with a malformed value. Do not repair or remove an unrecognized guard at this authority boundary; start from caller-owned detached NEST data.`
     );
   }
   const adapterRevision = 5;

@@ -25,8 +25,8 @@ export const PARAM_LIMITS = Object.freeze({
   maxTopologyNodes: 25_000,
   maxTopologyEdges: 20_000,
   maxSpatialObjects: 50_000,
-  maxGraphNodes: 1_000,
-  maxGraphEdges: 4_000,
+  maxGraphNodes: KNOWLEDGE_GRAPH_LIMITS.maxPresentationNodes,
+  maxGraphEdges: KNOWLEDGE_GRAPH_LIMITS.maxPresentationEdges,
 });
 
 const FLOAT32_MAX = 3.4028234663852886e38;
@@ -1936,7 +1936,9 @@ const KnowledgeGraphEvidenceRefSchema = z.discriminatedUnion('kind', [
       evidence_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength),
       paper_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxPaperIdLength),
       citation_id: displayText(KNOWLEDGE_GRAPH_LIMITS.maxCitationIdLength),
-      page: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+      page: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+        .refine((value) => !Object.is(value, -0), 'page must not be negative zero')
+        .optional(),
       locator: displayText(KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength).optional(),
       excerpt: displayText(KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength).optional(),
       doi: displayText(KNOWLEDGE_GRAPH_LIMITS.maxDoiLength).optional(),

@@ -298,15 +298,16 @@ scientific review (§7), not a runtime gate.
 
 ### Denial of service — making the process do too much
 
-- **Byte length is checked first, before a single character is parsed.** Checking the
-  size of a parse tree you already built is checking too late
-  (`JSON_BYTES_EXCEEDED`).
+- **Byte length is checked first, before token parsing.** Its UTF-8 counter stops at
+  the first complete code point over budget; checking the size of a parse tree you
+  already built is checking too late (`JSON_BYTES_EXCEEDED`).
 - **Limits bite *during* scanning, not after.** Depth, total nodes, array length,
   object member count, string length, and numeric-token length are all enforced while
   the scanner advances (`JSON_DEPTH_EXCEEDED`, `JSON_TOKENS_EXCEEDED`,
   `JSON_ARRAY_TOO_LONG`, `JSON_TOO_MANY_KEYS`, `JSON_STRING_TOO_LONG`,
-  `JSON_NUMBER_TOKEN_TOO_LONG`), so a hostile document is abandoned early rather than
-  materialized and then measured. The snapshot boundary enforces the same ceilings.
+  `JSON_NUMBER_TOKEN_TOO_LONG`), so the relevant scanner loop stops at the first
+  excess decoded/token unit rather than materializing the rest and measuring it later.
+  The snapshot boundary enforces the same ceilings.
 - **A throwing `Proxy` cannot spin the snapshotter.** Every reflective operation is
   wrapped; a trap that throws collapses to `SNAPSHOT_HOSTILE_REFLECTION` and the value
   is abandoned — the thrown value is *not* re-inspected, because inspecting it would be
@@ -368,6 +369,17 @@ scientific review (§7), not a runtime gate.
   fails closed instead of inventing an `experimental.*` replacement. The separately
   packaged legacy `cortexel/react/knowledge-graph` export is explicitly experimental
   and nondeterministic; it is not a FigureRequestV1 skill or a byte-stable output path.
+  Its peer-free/runtime-branded prepared-presentation boundary prevents independently
+  sampled mapper/scene/legend/DOM inputs and is shared across ESM/CommonJS. Exact-source
+  view tokens cannot be rebound to another presentation, but that capability proves
+  only that Cortexel copied and checked one coherent presentation. It does not
+  authenticate caller context, evidence identifiers, source custody, or force geometry.
+  Tokens are local to one physical package instance and JavaScript realm; serialization,
+  structured clone, workers/processes, another realm, or a duplicate package copy does
+  not transfer them. Separate generic-presentation and corpus-VizSpec raw JSON
+  boundaries reject duplicate members before materialization. The materialized
+  JavaScript boundary explicitly cannot recover duplicate members or promise that
+  Proxy traps were not executed.
 - **Closed schemas.** Stable request schemas reject unknown properties
   (`SCHEMA_UNKNOWN_PROPERTY`) and perform no type coercion, so a typo in a scientific
   field fails rather than being silently ignored, and a request cannot smuggle an
@@ -448,6 +460,12 @@ release ledger — that bounds or will close it.
 
 - **Legacy WebGL carries no FigureRequestV1 security guarantee.** GPU output is
   nondeterministic, and the packaged legacy knowledge-graph force layout is schematic.
+  A visual-region error in the canonical graph composition retains the visible honesty
+  caption and paginated operable DOM views when the host reports unavailability or a
+  descendant client render/lifecycle error is caught. React boundaries do not cover SSR,
+  event/async errors, or unreported WebGL context loss; SSR/no-JS contains only a bounded
+  initial record page. This focused failure-containment invariant is not browser,
+  assistive-technology, or WCAG conformance evidence.
   No current-contract 3D, animation, NCP, resolver, or MCP capability exists; a future
   record must prove concrete availability before it can be callable. **Gate:** the
   package/source availability checker, stable-entry rejection, host-owned I/O, and the

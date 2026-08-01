@@ -21,6 +21,7 @@
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
     "paths": {
+      "#cortexel-knowledge-graph-presentation-brand": ["./src/core/knowledge-graph-presentation-brand.ts"],
       "#cortexel-validated-request-brand": ["./src/core/validated-request-brand.ts"]
     },
     "types": ["node"]

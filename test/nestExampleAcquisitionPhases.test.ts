@@ -187,7 +187,12 @@ describe('NEST example acquisition phase ordering', () => {
     );
     expect(offlineLibrary).toContain('VERIFIED_OFFLINE_GIT_READ_AUTHORITIES');
   });
-  it('reads complete local blobs after remote removal and fails locally when one is missing', () => {
+  it('reads complete local blobs after remote removal and fails locally when one is missing', {
+    // Two independently sealed reviewed-Git runtimes and their offline authority
+    // transitions compose here. Their command bounds remain narrower than this
+    // outer integration-test watchdog.
+    timeout: 180_000,
+  }, () => {
     const root = realpathSync(mkdtempSync(
       path.join(tmpdir(), 'cortexel-nest-phase-test-'),
     ));
@@ -384,5 +389,5 @@ describe('NEST example acquisition phase ordering', () => {
         disposeReviewedGitRuntime(reviewedGit);
       }
     }
-  }, 60_000);
+  });
 });

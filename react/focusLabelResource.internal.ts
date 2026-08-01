@@ -1,10 +1,67 @@
 import * as THREE from 'three';
+import {
+  knowledgeGraphRenderedNodeRadialExtent,
+} from './knowledgeGraphVisualEncoding.internal';
+import type { KnowledgeGraphNodeGlyph } from './knowledgeGraphPresentation.types';
+
+export const FOCUS_LABEL_MAX_WORLD_WIDTH = 160;
+export const FOCUS_LABEL_WORLD_HEIGHT = 7;
+export const FOCUS_LABEL_NODE_GAP = 4;
+
+/** Center the billboard with an exact edge gap above the complete node glyph. */
+export function knowledgeGraphFocusLabelCenterOffset(
+  nodeRadius: number,
+  nodeGlyph: KnowledgeGraphNodeGlyph,
+): number {
+  return knowledgeGraphRenderedNodeRadialExtent(nodeRadius, nodeGlyph, true) +
+    FOCUS_LABEL_NODE_GAP + FOCUS_LABEL_WORLD_HEIGHT / 2;
+}
+
+/**
+ * Anchor the Sprite at the node and apply a camera-facing world-unit offset from
+ * the focused glyph's conservative radial extent. The algebra is exact in the
+ * sprite plane (and orthographic projection); perspective silhouette separation
+ * remains camera-dependent. Placement does not read a stale camera matrix.
+ */
+export function knowledgeGraphFocusLabelSpriteCenterY(
+  nodeRadius: number,
+  nodeGlyph: KnowledgeGraphNodeGlyph,
+): number {
+  return -(
+    knowledgeGraphRenderedNodeRadialExtent(nodeRadius, nodeGlyph, true) +
+    FOCUS_LABEL_NODE_GAP
+  ) / FOCUS_LABEL_WORLD_HEIGHT;
+}
+
+/** Orientation-independent sphere enclosing the focused glyph and label. */
+export function knowledgeGraphFocusedNodeAndLabelRadius(
+  nodeRadius: number,
+  nodeGlyph: KnowledgeGraphNodeGlyph,
+): number {
+  return knowledgeGraphFocusLabelCenterOffset(nodeRadius, nodeGlyph) +
+    Math.hypot(
+      FOCUS_LABEL_MAX_WORLD_WIDTH / 2,
+      FOCUS_LABEL_WORLD_HEIGHT / 2,
+    );
+}
+
+const FOCUS_LABEL_THEME = Object.freeze({
+  dark: Object.freeze({
+    background: '#030711',
+    text: '#e2e8f0',
+  }),
+  light: Object.freeze({
+    background: '#f8fafc',
+    text: '#0f172a',
+  }),
+});
 
 export interface FocusLabelResourceOptions {
   sprite: THREE.Sprite;
   material: THREE.SpriteMaterial;
   label: string;
   color: string;
+  themeMode: 'dark' | 'light';
   invalidate: () => void;
   /** Test seam; production deliberately uses a local DOM canvas. */
   createCanvas?: () => HTMLCanvasElement | null;
@@ -24,6 +81,7 @@ export function installFocusLabelResource({
   material,
   label,
   color,
+  themeMode,
   invalidate,
   createCanvas = () => (
     typeof document === 'undefined' ? null : document.createElement('canvas')
@@ -56,11 +114,15 @@ export function installFocusLabelResource({
   context.font = `600 ${fontSize}px system-ui, sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillStyle = 'rgba(3, 7, 17, 0.9)';
+  const theme = FOCUS_LABEL_THEME[themeMode];
+  // Seed both assignments with a theme-owned readable pair. Canvas silently
+  // ignores invalid CSS colour assignments, so neither an invalid override nor
+  // a browser parser difference can inherit a prior draw's foreground/background.
+  context.fillStyle = theme.background;
   context.fillRect(0, 0, canvas.width, canvas.height);
   // Canvas ignores an invalid fillStyle assignment. Seed a readable fallback
-  // first so an untyped caller cannot leave the text using the dark background.
-  context.fillStyle = '#e2e8f0';
+  // first so an untyped caller cannot leave text matching the background.
+  context.fillStyle = theme.text;
   context.fillStyle = color;
   context.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - paddingX * 2);
 
@@ -72,7 +134,14 @@ export function installFocusLabelResource({
     texture.generateMipmaps = false;
     material.map = texture;
     material.needsUpdate = true;
-    sprite.scale.set(Math.min(160, (canvas.width / canvas.height) * 7), 7, 1);
+    sprite.scale.set(
+      Math.min(
+        FOCUS_LABEL_MAX_WORLD_WIDTH,
+        (canvas.width / canvas.height) * FOCUS_LABEL_WORLD_HEIGHT,
+      ),
+      FOCUS_LABEL_WORLD_HEIGHT,
+      1,
+    );
     sprite.visible = true;
     invalidate();
   } catch (setupError) {

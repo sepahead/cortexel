@@ -24,6 +24,9 @@ import {
 } from './lib/release-identity.js';
 import { readDirectRepositoryFile } from './lib/direct-repository-file.js';
 import { validateNestExampleAudit } from './lib/nest-example-audit.js';
+import {
+  validateNestExampleVisualizationCoverage,
+} from './lib/nest-example-visualization-coverage.js';
 import { parseJsonSourceStrict } from './lib/strict-json-source.js';
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,6 +46,14 @@ export const NEST_EXAMPLE_AUDIT_PATH = path.resolve(
 export const NEST_EXAMPLE_AUDIT_SCHEMA_PATH = path.resolve(
   REPOSITORY_ROOT,
   'docs/audit/nest-example-coverage.schema.json',
+);
+export const NEST_EXAMPLE_VISUALIZATION_AUDIT_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-coverage.v2.json',
+);
+export const NEST_EXAMPLE_VISUALIZATION_AUDIT_SCHEMA_PATH = path.resolve(
+  REPOSITORY_ROOT,
+  'docs/audit/nest-example-coverage.v2.schema.json',
 );
 
 /** Closed status set. A status outside this set is a ledger defect, not a new state. */
@@ -459,6 +470,9 @@ export function runEvidenceLedgerCli(
   let schema: unknown;
   let nestExampleAudit: unknown;
   let nestExampleAuditSchema: unknown;
+  let nestExampleVisualizationAudit: unknown;
+  let nestExampleVisualizationAuditSchema: unknown;
+  let nestExampleVisualizationAuditRaw = '';
   let nestExampleSourceArtifact: unknown;
   let nestExampleSourceArtifactRaw = '';
   let nestExampleHistoricalSourceArtifact: unknown;
@@ -481,6 +495,24 @@ export function runEvidenceLedgerCli(
     nestExampleAuditSchema = parseLedgerJsonStrict(
       readDirectRepositoryFile(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
       path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.schema.json'),
+    );
+    const nestExampleVisualizationAuditBytes = readDirectRepositoryFile(
+      repositoryRoot,
+      'docs/audit/nest-example-coverage.v2.json',
+    );
+    nestExampleVisualizationAuditRaw = new TextDecoder('utf-8', {
+      fatal: true,
+    }).decode(nestExampleVisualizationAuditBytes);
+    nestExampleVisualizationAudit = parseLedgerJsonStrict(
+      nestExampleVisualizationAuditBytes,
+      path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.v2.json'),
+    );
+    nestExampleVisualizationAuditSchema = parseLedgerJsonStrict(
+      readDirectRepositoryFile(
+        repositoryRoot,
+        'docs/audit/nest-example-coverage.v2.schema.json',
+      ),
+      path.resolve(repositoryRoot, 'docs/audit/nest-example-coverage.v2.schema.json'),
     );
     const nestExampleHistoricalSourceArtifactBytes = readDirectRepositoryFile(
       repositoryRoot,
@@ -546,12 +578,27 @@ export function runEvidenceLedgerCli(
       rawUtf8: nestDocumentationSourceArtifactRaw,
     },
   );
+  const nestExampleVisualizationAuditProblems =
+    validateNestExampleVisualizationCoverage(
+      nestExampleVisualizationAudit,
+      nestExampleVisualizationAuditSchema,
+      nestExampleSourceArtifact,
+      nestDocumentationSourceArtifact,
+      nestExampleVisualizationAuditRaw,
+    );
 
-  if (errors.length > 0 || nestExampleAuditProblems.length > 0) {
+  if (
+    errors.length > 0 ||
+    nestExampleAuditProblems.length > 0 ||
+    nestExampleVisualizationAuditProblems.length > 0
+  ) {
     process.stderr.write('Evidence audit state is invalid:\n');
     for (const error of errors) process.stderr.write(`  - release ledger: ${error}\n`);
     for (const problem of nestExampleAuditProblems) {
-      process.stderr.write(`  - NEST example audit: ${problem}\n`);
+      process.stderr.write(`  - NEST example audit V1: ${problem}\n`);
+    }
+    for (const problem of nestExampleVisualizationAuditProblems) {
+      process.stderr.write(`  - NEST visualization audit V2: ${problem}\n`);
     }
     return 1;
   }
@@ -564,7 +611,10 @@ export function runEvidenceLedgerCli(
     process.stdout.write(`  ${status.padEnd(15)} ${counts.get(status) ?? 0}\n`);
   }
   process.stdout.write(
-    'NEST audit: pinned PyNEST pynest/examples source/selector scope and selected documentation source scopes valid; visualization coverage none\n',
+    'NEST audit: V1 source inventories valid with coverageClaim none; ' +
+    'V2 closes 98 canonical and 11 support/coordinated Python bodies as ' +
+    'source_semantic_classification_only, with zero execution, parity, or ' +
+    'scientific-certification evidence\n',
   );
 
   if (!releaseVersion) {

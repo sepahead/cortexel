@@ -28,10 +28,14 @@
   ],
   "files": [
     "dist",
+    "assets",
+    "docs",
     "README.md",
     "AGENTS.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
+    "GOVERNANCE.md",
+    "ROADMAP.md",
     "SECURITY.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
@@ -99,6 +103,16 @@
         "default": "./dist/adapters/nest/index.cjs"
       }
     },
+    "./knowledge-graph": {
+      "import": {
+        "types": "./dist/knowledge-graph/index.d.ts",
+        "default": "./dist/knowledge-graph/index.js"
+      },
+      "require": {
+        "types": "./dist/knowledge-graph/index.d.cts",
+        "default": "./dist/knowledge-graph/index.cjs"
+      }
+    },
     "./react": {
       "import": {
         "types": "./dist/react/index.d.ts",
@@ -135,6 +149,12 @@
     "./package.json": "./package.json"
   },
   "imports": {
+    "#cortexel-knowledge-graph-presentation-capability": "./dist/internal/knowledge-graph-presentation-capability.cjs",
+    "#cortexel-knowledge-graph-presentation-brand": {
+      "types": "./dist/internal/knowledge-graph-presentation-brand.d.ts",
+      "import": "./dist/internal/knowledge-graph-presentation-brand.js",
+      "require": "./dist/internal/knowledge-graph-presentation-brand.cjs"
+    },
     "#cortexel-request-capability": "./dist/internal/request-capability.cjs",
     "#cortexel-validated-request-brand": {
       "types": "./dist/internal/validated-request-brand.d.ts",
@@ -209,7 +229,7 @@
       "optional": true
     }
   },
-  "_peerNote": "ajv and zod are normal dependencies: `cortexel/figure` compiles the packaged JSON Schemas with Ajv, while the legacy `cortexel/core` VizSpec contract uses zod. `cortexel/figure`, `cortexel/render-svg`, and `cortexel/adapters/nest` load no React/Three/R3F/D3 peer. react is the only runtime peer used by `cortexel/react/charts`; react/react-dom/three/@react-three/fiber are optional runtime peers needed by `cortexel/react`; @types/react/@types/three are optional declaration peers for TypeScript consumers; d3-force-3d is needed only by `cortexel/react/knowledge-graph`.",
+  "_peerNote": "ajv and zod are normal dependencies: `cortexel/figure` compiles the packaged JSON Schemas with Ajv, while the legacy `cortexel/core` VizSpec contract uses zod. `cortexel/figure`, `cortexel/render-svg`, `cortexel/adapters/nest`, and the experimental peer-free `cortexel/knowledge-graph` preparation/inspection entry load no React/Three/R3F/D3 peer. react is the only runtime peer used by `cortexel/react/charts`; react/react-dom/three/@react-three/fiber are optional runtime peers needed by `cortexel/react`; @types/react/@types/three are optional declaration peers for TypeScript consumers; d3-force-3d is needed only by `cortexel/react/knowledge-graph`.",
   "devDependencies": {
     "@react-three/fiber": "^9.6.1",
     "@types/node": "^26.1.1",

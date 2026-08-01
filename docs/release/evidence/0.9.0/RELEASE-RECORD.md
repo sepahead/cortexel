@@ -5,7 +5,7 @@ collaborators can review the design and implementation. It makes **no stable-con
 claim**, publishes **no package** to npm or PyPI, and mints **no DOI**. The full 1.0
 release process (immutable build, trusted publishing, three-pass certification,
 external scientific review) is deliberately *not* run here; see
-[`ROADMAP.md`](../../../../ROADMAP.md).
+the [0.9.0 roadmap](https://github.com/sepahead/cortexel/blob/v0.9.0/ROADMAP.md).
 
 ## What this release is
 
@@ -33,7 +33,7 @@ remains `PASS`.
 - **Evidence ledger:** 4 of 155 gates remain `PASS`; 151 are `NOT_RUN`. The retained
   receipts directly support R009, R012, R013, and R023. See
   [`KNOWN_LIMITATIONS.md`](../../../KNOWN_LIMITATIONS.md). The ledger checker
-  ([`scripts/check-evidence-ledger.ts`](../../../../scripts/check-evidence-ledger.ts))
+  ([tagged ledger checker](https://github.com/sepahead/cortexel/blob/v0.9.0/scripts/check-evidence-ledger.ts))
   rejects a `PASS` without a structurally complete receipt; this audit additionally
   checked that each retained receipt proves the gate it is attached to.
 - **Generated files:** a deterministic freshness checker exists, but the original R020

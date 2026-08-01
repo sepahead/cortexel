@@ -20,9 +20,13 @@ import {
   lookupSourceAdapter,
   SOURCE_ADAPTER_CATALOG,
   SOURCE_ADAPTER_CATALOG_DIGEST,
+  SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
   SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGESTS,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
   SOURCE_ADAPTER_IDS,
 } from '../src/adapters/source-catalog.js';
+import { SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER } from '../src/adapters/source-example.js';
 import { canonicalDigest } from '../src/core/canonicalize.js';
 import { parseAndValidateRequest } from '../src/core/request.js';
 
@@ -82,12 +86,22 @@ function artifactPath(output: string): string {
 
 type ExampleBranch = 'positiveInfinity' | 'finiteStop';
 
-function exampleEnvelope(
+function callerOwnedTestCapture(
   branch: ExampleBranch = 'positiveInfinity',
 ): Record<string, unknown> {
-  return structuredClone(
+  const example = structuredClone(
     lookupSourceAdapter('nest-spike-recorder')!.examples[branch],
-  ) as Record<string, unknown>;
+  );
+  const input = example.inputTemplate;
+  const options = { ...input.options } as Record<string, unknown>;
+  // This test fixture explicitly models the post-replacement caller boundary. The
+  // shipped guarded object itself is tested separately and must never execute.
+  delete options[SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER];
+  options.captureAuthority = {
+    ...(options.captureAuthority as Record<string, unknown>),
+    kind: 'caller_declaration',
+  };
+  return { exportedStatus: input.exportedStatus, options };
 }
 
 function expectSafeBoundedDiagnostic(value: string): void {
@@ -166,11 +180,10 @@ describe('executable source-adapter discovery', () => {
     }).toThrow(TypeError);
   });
 
-  it('binds every descriptor byte to a domain-separated catalog digest', () => {
-    expect(SOURCE_ADAPTER_CATALOG_DIGEST).toBe(canonicalDigest({
-      domain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
-      catalog: SOURCE_ADAPTER_CATALOG,
-    }));
+  it('binds compact discovery and every complete descriptor independently', () => {
+    expect(SOURCE_ADAPTER_CATALOG_DIGEST).toBe(
+      canonicalDigest(SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE),
+    );
     const mutated = structuredClone(SOURCE_ADAPTER_CATALOG) as unknown as {
       adapters: {
         'nest-spike-recorder': {
@@ -180,15 +193,15 @@ describe('executable source-adapter discovery', () => {
     };
     mutated.adapters['nest-spike-recorder'].limitations[0] = 'mutated';
     expect(canonicalDigest({
-      domain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
-      catalog: mutated,
-    })).not.toBe(SOURCE_ADAPTER_CATALOG_DIGEST);
+      domain: SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+      descriptor: mutated.adapters['nest-spike-recorder'],
+    })).not.toBe(SOURCE_ADAPTER_DESCRIPTOR_DIGESTS['nest-spike-recorder']);
   });
 
   it.each(['positiveInfinity', 'finiteStop'] as const)(
-    'ships a copyable $branch example accepted by the adapter and full request gate',
+    'accepts an explicit caller-owned $branch test capture through the full request gate',
     (branch) => {
-      const envelope = exampleEnvelope(branch) as {
+      const envelope = callerOwnedTestCapture(branch) as {
         exportedStatus: Parameters<typeof nestSpikeRecorderToRaster>[0];
         options: Parameters<typeof nestSpikeRecorderToRaster>[1];
       };
@@ -235,9 +248,9 @@ describe('source-adapter CLI', () => {
   });
 
   it.each(['positiveInfinity', 'finiteStop'] as const)(
-    'adapts the $branch example from strict JSON and pipes it into render',
+    'adapts a caller-owned $branch test capture from strict JSON and pipes it into render',
     async (branch) => {
-      const input = `${JSON.stringify(exampleEnvelope(branch))}\n`;
+      const input = `${JSON.stringify(callerOwnedTestCapture(branch))}\n`;
       const adapted = await runCli([
         'source',
         'adapt',
@@ -273,7 +286,7 @@ describe('source-adapter CLI', () => {
   );
 
   it.each(['positiveInfinity', 'finiteStop'] as const)(
-    'directly renders the $branch example through one versioned metadata dry run',
+    'directly renders a caller-owned $branch test capture through one metadata dry run',
     async (branch) => {
       const result = await runCli([
         'source',
@@ -283,7 +296,7 @@ describe('source-adapter CLI', () => {
         '--dry-run',
         '--format',
         'json',
-      ], `${JSON.stringify(exampleEnvelope(branch))}\n`);
+      ], `${JSON.stringify(callerOwnedTestCapture(branch))}\n`);
       expect(result).toMatchObject({ code: 0, stderr: '' });
       const payload = JSON.parse(result.stdout);
       expect(payload).toMatchObject({
@@ -313,7 +326,7 @@ describe('source-adapter CLI', () => {
     'is byte-identical to source adapt then render for the $branch branch',
     async (branch) => {
       await withTempDirectory(async (directory) => {
-        const input = `${JSON.stringify(exampleEnvelope(branch))}\n`;
+        const input = `${JSON.stringify(callerOwnedTestCapture(branch))}\n`;
         const adapted = await runCli([
           'source',
           'adapt',
@@ -486,7 +499,7 @@ describe('source-adapter CLI', () => {
 
   it('preserves adapter failure exit 5 without publishing any output', async () => {
     await withTempDirectory(async (directory) => {
-      const invalid = exampleEnvelope() as {
+      const invalid = callerOwnedTestCapture() as {
         exportedStatus: Record<string, unknown>;
       };
       invalid.exportedStatus.record_to = 'ascii';
@@ -514,7 +527,7 @@ describe('source-adapter CLI', () => {
 
   it('preserves render-budget refusal without publishing partial output', async () => {
     await withTempDirectory(async (directory) => {
-      const oversized = exampleEnvelope('finiteStop') as {
+      const oversized = callerOwnedTestCapture('finiteStop') as {
         exportedStatus: {
           n_events: number;
           events: { senders: number[]; times: number[] };
@@ -549,7 +562,7 @@ describe('source-adapter CLI', () => {
 
   it('uses the shared publication boundary for occupancy and stale locks', async () => {
     await withTempDirectory(async (directory) => {
-      const input = `${JSON.stringify(exampleEnvelope('finiteStop'))}\n`;
+      const input = `${JSON.stringify(callerOwnedTestCapture('finiteStop'))}\n`;
       const occupiedOutput = path.join(directory, 'occupied.svg');
       writeFileSync(occupiedOutput, 'sentinel-svg', 'utf8');
       const occupied = await runCli([
@@ -592,7 +605,7 @@ describe('source-adapter CLI', () => {
 
   it('force-replaces output symlink entries without touching their targets', async () => {
     await withTempDirectory(async (directory) => {
-      const input = `${JSON.stringify(exampleEnvelope('finiteStop'))}\n`;
+      const input = `${JSON.stringify(callerOwnedTestCapture('finiteStop'))}\n`;
       const output = path.join(directory, 'figure.svg');
       const artifact = artifactPath(output);
       const svgTarget = path.join(directory, 'outside-svg-target');
@@ -641,7 +654,7 @@ describe('source-adapter CLI', () => {
 
   it('rejects envelope drift, unimplemented mappings, and prototype-shaped ids', async () => {
     const extra = {
-      ...exampleEnvelope(),
+      ...callerOwnedTestCapture(),
       ignored: true,
     };
     const extraResult = await runCli([
@@ -675,7 +688,7 @@ describe('source-adapter CLI', () => {
   });
 
   it('keeps adapter diagnostics bounded and does not emit a partial request', async () => {
-    const invalid = exampleEnvelope() as {
+    const invalid = callerOwnedTestCapture() as {
       exportedStatus: Record<string, unknown>;
     };
     invalid.exportedStatus.record_to = 'ascii';

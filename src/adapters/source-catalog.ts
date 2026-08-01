@@ -12,9 +12,12 @@ import { freezeGenerated } from '../core/deep-freeze.js';
 import {
   NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5,
 } from './nest/profile.js';
+import { makeSourceAdapterExampleEnvelope } from './source-example.js';
 
 export const SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN =
-  'cortexel-source-adapter-catalog.rfc8785-sha256.v1';
+  'cortexel-source-adapter-discovery-catalog.rfc8785-sha256.v2';
+export const SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN =
+  'cortexel-source-adapter-descriptor.rfc8785-sha256.v1';
 
 export const SOURCE_ADAPTER_IDS = Object.freeze(['nest-spike-recorder'] as const);
 
@@ -46,7 +49,7 @@ const NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE = {
     recordedSenderIds: [1, 2, 3],
     nestVersion: '3.10.0',
     captureAuthority: {
-      kind: 'caller_declaration',
+      kind: 'replace_with_caller_declaration_from_actual_capture',
       profile: 'cortexel-nest-memory-spike-capture-authority.v4',
       runtimeStatus: {
         nestVersion: '3.10.0',
@@ -105,7 +108,7 @@ const NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE = {
     recordedSenderIds: [1, 2, 3],
     nestVersion: '3.10.0',
     captureAuthority: {
-      kind: 'caller_declaration',
+      kind: 'replace_with_caller_declaration_from_actual_capture',
       profile: 'cortexel-nest-memory-spike-capture-authority.v3',
       runtimeStatus: {
         nestVersion: '3.10.0',
@@ -146,6 +149,19 @@ const NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE = {
   },
 } as const;
 
+const NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE_ENVELOPE =
+  makeSourceAdapterExampleEnvelope(
+    'nest-spike-recorder',
+    5,
+    NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE,
+  );
+const NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE_ENVELOPE =
+  makeSourceAdapterExampleEnvelope(
+    'nest-spike-recorder',
+    5,
+    NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE,
+  );
+
 const SOURCE_ADAPTER_CATALOG_DATA = {
   protocol: 'cortexel-source-adapter-catalog',
   protocolVersion: 1,
@@ -164,6 +180,8 @@ const SOURCE_ADAPTER_CATALOG_DATA = {
       },
       cli: {
         command: 'cortexel source adapt nest-spike-recorder <input|->',
+        exampleCommand:
+          'cortexel source example nest-spike-recorder > capture.template.json',
         renderCommand:
           'cortexel source render nest-spike-recorder <input|-> --output figure.svg --format json',
         inputMediaType: 'application/json',
@@ -181,6 +199,8 @@ const SOURCE_ADAPTER_CATALOG_DATA = {
         options: 'Complete recorded sender universe plus the caller-retained capture authority.',
       },
       acceptanceBoundary: {
+        example:
+          'The shipped example is a known synthetic, versioned, template-only envelope. Both the outer envelope and its unchanged guarded input are deliberately non-executable; the caller must replace every value with a caller-owned capture before explicitly removing the guard and submitting only inputTemplate.',
         adapter:
           'The adapter checks one exact revision-5 source-faithful clock profile with closed finite-stop and positive-infinity/capture-bounded branches, then authors the corresponding request.',
         request:
@@ -207,13 +227,14 @@ const SOURCE_ADAPTER_CATALOG_DATA = {
         'The package does not import PyNEST, inspect a live simulation, or authenticate caller declarations.',
         'ASCII, screen, MPI, SIONlib, step-plus-offset clocks, non-LP64 builds, clocks outside the safe source-round-trippable subset, and every other stable NEST mapping remain unsupported by this adapter revision.',
         'Real-NEST conformance gate R049 remains external release evidence; packaged code is not certification.',
+        'Removing the synthetic-example guard is only an explicit caller acknowledgement; Cortexel cannot verify that the caller actually replaced every fixture value.',
       ],
       examples: {
-        positiveInfinity: NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE,
-        finiteStop: NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE,
+        positiveInfinity: NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE_ENVELOPE,
+        finiteStop: NEST_SPIKE_RECORDER_FINITE_STOP_V5_EXAMPLE_ENVELOPE,
       },
-      /** Prompt-budget compatibility field: the current branch remains directly copyable. */
-      example: NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE,
+      /** Prompt-budget default: a synthetic, guarded template—not executable evidence. */
+      example: NEST_SPIKE_RECORDER_POSITIVE_INFINITY_V5_EXAMPLE_ENVELOPE,
     },
   },
 } as const;
@@ -227,7 +248,49 @@ export function lookupSourceAdapter(value: string): SourceAdapterDescriptor | un
   return SOURCE_ADAPTER_CATALOG.adapters[value];
 }
 
-export const SOURCE_ADAPTER_CATALOG_DIGEST = canonicalDigest({
-  domain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
-  catalog: SOURCE_ADAPTER_CATALOG,
+/** Digests bind the complete descriptor returned by `source describe`. */
+export const SOURCE_ADAPTER_DESCRIPTOR_DIGESTS: Readonly<Record<SourceAdapterId, string>> =
+  freezeGenerated({
+    'nest-spike-recorder': canonicalDigest({
+      domain: SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+      descriptor: SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'],
+    }),
+  });
+
+export function lookupSourceAdapterDescriptorDigest(value: string): string | undefined {
+  return isSourceAdapterId(value) ? SOURCE_ADAPTER_DESCRIPTOR_DIGESTS[value] : undefined;
+}
+
+/**
+ * Compact executable discovery records. Each record binds its complete descriptor,
+ * so catalog consumers need not download every example and authority paragraph merely
+ * to discover an adapter, while `source describe` remains independently verifiable.
+ */
+export const SOURCE_ADAPTER_DISCOVERY_CATALOG = freezeGenerated({
+  protocol: 'cortexel-source-adapter-discovery-catalog',
+  protocolVersion: 1,
+  adapters: SOURCE_ADAPTER_IDS.map((id) => {
+    const descriptor = SOURCE_ADAPTER_CATALOG.adapters[id];
+    return {
+      id: descriptor.id,
+      revision: descriptor.revision,
+      title: descriptor.title,
+      sourceSystem: descriptor.sourceSystem,
+      admittedSourceVersions: descriptor.admittedSourceVersions,
+      outputSkillId: descriptor.outputSkillId,
+      command: descriptor.cli.command,
+      renderCommand: descriptor.cli.renderCommand,
+      descriptorDigest: SOURCE_ADAPTER_DESCRIPTOR_DIGESTS[id],
+    };
+  }),
 });
+
+/** Exact, emitted digest preimage; no hidden package bytes are needed to reproduce it. */
+export const SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE = freezeGenerated({
+  domain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  catalog: SOURCE_ADAPTER_DISCOVERY_CATALOG,
+});
+
+export const SOURCE_ADAPTER_CATALOG_DIGEST = canonicalDigest(
+  SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+);

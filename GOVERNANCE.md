@@ -32,7 +32,7 @@ Cortexel has exactly one maintainer:
 
 | Role | Holder | Scope |
 |------|--------|-------|
-| Maintainer / release authority | **Sepehr Mahmoudian** | All merges, all releases, security triage, code of conduct enforcement, roadmap. Named `owner` on every capability in [`contract/registries/capabilities.v1.json`](./contract/registries/capabilities.v1.json). |
+| Maintainer / release authority | **Sepehr Mahmoudian** | All merges, all releases, security triage, code of conduct enforcement, roadmap. Named `owner` on every capability in the source authority at `contract/registries/capabilities.v1.json` and its [packaged generated copy](./dist/contract/registries/capabilities.v1.json). |
 
 There is **no** second maintainer, no review board, no rotating on-call, no staffed
 support desk, and no response-time SLA. Stating otherwise would itself be a violation
@@ -58,7 +58,8 @@ durable, machine-readable records, not to a person's recollection:
    recorded under the working version's `Unreleased` heading. This is required by the
    pull-request checklist in [CONTRIBUTING.md](./CONTRIBUTING.md).
 2. **The coordinated identity model**
-   ([`contract/registries/identity.v1.json`](./contract/registries/identity.v1.json)).
+   (source authority `contract/registries/identity.v1.json`; [packaged generated
+   copy](./dist/contract/registries/identity.v1.json)).
    Any change to the normative contract changes the `contractDigest`; a change to the
    stable catalog changes the `catalogDigest`; a change to a skill's accepted meaning
    bumps that skill's `skillRevision`. These are derived deterministically by
@@ -160,8 +161,9 @@ gate.
 
 ## 5. Breaking changes and deprecation
 
-Compatibility is defined per **named identity axis**
-([`identity.v1.json`](./contract/registries/identity.v1.json)); a "version" with no
+Compatibility is defined per **named identity axis** (source authority
+`contract/registries/identity.v1.json`; [packaged generated
+copy](./dist/contract/registries/identity.v1.json)); a "version" with no
 axis label is a number, not a promise.
 
 **Pre-1.0 (now).** The project is in active pre-1.0 development and `main` may break
@@ -184,7 +186,8 @@ Downstream consumers pin a specific commit and update deliberately.
   pinned revision **refuses** rather than approximating it.
 
 **Deprecation and removal** follow the status ladder in
-[`capabilities.v1.json`](./contract/registries/capabilities.v1.json), whose four
+[the packaged generated capability registry](./dist/contract/registries/capabilities.v1.json),
+whose source authority is `contract/registries/capabilities.v1.json` and whose four
 statuses (`stable`, `experimental`, `deprecated`, `removed`) are enforceable rather
 than rhetorical:
 

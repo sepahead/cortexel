@@ -13,10 +13,14 @@ export interface PackageModeReceipt {
 
 export const CLOSED_PACKAGE_FILES = Object.freeze([
   'dist',
+  'assets',
+  'docs',
   'README.md',
   'AGENTS.md',
   'CLAUDE.md',
   'CONTRIBUTING.md',
+  'GOVERNANCE.md',
+  'ROADMAP.md',
   'SECURITY.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
@@ -24,9 +28,20 @@ export const CLOSED_PACKAGE_FILES = Object.freeze([
   'CHANGELOG.md',
 ] as const);
 
+/** Tracked package trees verified recursively without mutating their modes. */
+export const CLOSED_PACKAGE_SOURCE_TREES = Object.freeze([
+  'assets',
+  'docs',
+  'LICENSES',
+] as const);
+const CLOSED_PACKAGE_SOURCE_TREE_SET: ReadonlySet<string> = new Set(
+  CLOSED_PACKAGE_SOURCE_TREES,
+);
+
 const ROOT_REGULAR_FILES = Object.freeze([
   'package.json',
-  ...CLOSED_PACKAGE_FILES.filter((entry) => entry !== 'dist' && entry !== 'LICENSES'),
+  ...CLOSED_PACKAGE_FILES.filter((entry) =>
+    entry !== 'dist' && !CLOSED_PACKAGE_SOURCE_TREE_SET.has(entry)),
 ]);
 
 const REGULAR_MODE = 0o644;
@@ -169,11 +184,18 @@ export function finalizePackageModes(repositoryRoot: string): PackageModeReceipt
     requireExactMode(target, relative, REGULAR_MODE);
     sourceRegularFiles += 1;
   }
-  const licenses = verifyClosedRegularTree(repositoryRoot, 'LICENSES');
+  const sourceTrees = CLOSED_PACKAGE_SOURCE_TREES.map((relative) =>
+    verifyClosedRegularTree(repositoryRoot, relative));
   const dist = normalizePackageModes(path.join(repositoryRoot, 'dist'));
   return {
-    directories: dist.directories + licenses.directories,
-    regularFiles: dist.regularFiles + sourceRegularFiles + licenses.regularFiles,
+    directories: dist.directories + sourceTrees.reduce(
+      (total, receipt) => total + receipt.directories,
+      0,
+    ),
+    regularFiles: dist.regularFiles + sourceRegularFiles + sourceTrees.reduce(
+      (total, receipt) => total + receipt.regularFiles,
+      0,
+    ),
     executableFiles: dist.executableFiles,
   };
 }

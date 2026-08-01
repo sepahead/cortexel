@@ -6,6 +6,8 @@
  * receives or addresses a PID/PGID. Only the still-live guardian sends the one
  * self-addressed group SIGKILL, before its parent can reap it. After guardian
  * exit, the supervisor only drains already-open pipes and validates the receipt.
+ * A still-live exact launcher additionally waits for real EOF on a dedicated
+ * guardian-only endpoint before publishing the buffered supervisor protocol.
  *
  * Input and output use unlinked descriptor-backed spools. Target stdin is passed
  * through supervisor, guardian, and worker descriptor slots without becoming a
@@ -2040,10 +2042,12 @@ export function runReviewedPosixCommand(
       },
     );
 
-    // Revalidation performs no process signalling or probing. The exact Node
-    // launcher passes this ordinary stdout writer straight to the guardian; the
-    // synchronous call cannot observe EOF/return until the live leader closes it,
-    // including when the caller hard-killed the launcher or supervisor.
+    // Revalidation performs no process signalling or probing. While the exact
+    // Node launcher remains live, it actively drains a dedicated guardian-only
+    // lifetime pipe and withholds protocol publication until real peer EOF plus
+    // supervisor close. Its inherited stdout is only a compatibility hold; Bun
+    // does not guarantee descendant-held stdout delays return after launcher
+    // SIGKILL or a spawnSync hard kill.
     assertExecutableAuthority(controlAuthority, 'post-command control runtime');
     if (!sharedExecutableAuthority) {
       assertExecutableAuthority(targetAuthority, 'post-command target executable');

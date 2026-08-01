@@ -1,9 +1,14 @@
 import { graphSignature, normalizeGraphNodeRadius } from './knowledgeGraph';
 import type { SimNode } from 'd3-force-3d';
+import type {
+  KnowledgeGraphEdgeStrokePattern,
+  KnowledgeGraphNodeGlyph,
+} from './knowledgeGraphPresentation.types';
 
 export interface GraphLayoutInputNode {
   id: string;
   radius: number;
+  nodeGlyph?: KnowledgeGraphNodeGlyph;
 }
 
 export interface GraphLayoutInputEdge {
@@ -14,6 +19,7 @@ export interface GraphLayoutInputEdge {
   kind: string;
   directed?: boolean;
   particles?: boolean;
+  edgeStrokePattern?: KnowledgeGraphEdgeStrokePattern;
 }
 
 export interface GraphLayoutInputSnapshot {
@@ -29,7 +35,11 @@ export interface GraphLayoutInputSnapshot {
  * mutate the same object/array identities between renders.
  */
 export function snapshotGraphLayoutInputs(
-  nodes: readonly { readonly id: string; readonly radius: number }[],
+  nodes: readonly {
+    readonly id: string;
+    readonly radius: number;
+    readonly nodeGlyph?: KnowledgeGraphNodeGlyph;
+  }[],
   edges: readonly {
     readonly id?: string;
     readonly source: string;
@@ -38,9 +48,14 @@ export function snapshotGraphLayoutInputs(
     readonly kind: string;
     readonly directed?: boolean;
     readonly particles?: boolean;
+    readonly edgeStrokePattern?: KnowledgeGraphEdgeStrokePattern;
   }[],
 ): GraphLayoutInputSnapshot {
-  const nodeSnapshot = nodes.map(({ id, radius }) => ({ id, radius }));
+  const nodeSnapshot = nodes.map(({ id, radius, nodeGlyph }) => ({
+    id,
+    radius,
+    nodeGlyph,
+  }));
   const edgeSnapshot = edges.map(({
     id,
     source,
@@ -49,7 +64,17 @@ export function snapshotGraphLayoutInputs(
     kind,
     directed,
     particles,
-  }) => ({ id, source, target, color, kind, directed, particles }));
+    edgeStrokePattern,
+  }) => ({
+    id,
+    source,
+    target,
+    color,
+    kind,
+    directed,
+    particles,
+    edgeStrokePattern,
+  }));
   return {
     graphKey: graphSignature(nodeSnapshot, edgeSnapshot),
     nodes: nodeSnapshot,

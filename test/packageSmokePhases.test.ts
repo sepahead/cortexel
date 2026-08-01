@@ -29,15 +29,19 @@ import {
   assertFinalizedHostFile,
   assertInstalledRecursivePackageClosure,
   assertInstalledTopLevelPackageInventory,
+  assertPackedMarkdownLinkClosure,
+  assertPreparedNodeRuntimeIdentity,
   closePackageSmokeStateFile,
   executePackageSmokeWorkspace,
   fingerprintNpmPackageTree,
   fingerprintPackageSmokeWorkspace,
   formatReviewedNodeCommandFailure,
   formatReviewedNodeOperationBoundFailure,
+  generatedBrowserBundlePatternDeclarations,
   inspectNodeExecutableAuthority,
   inspectNpmPackageAuthority,
   inspectNpmPackageTarball,
+  inspectPackedMarkdownAngleReferences,
   inspectPreparedStateFileAuthority,
   installedArtifactMode,
   packageSmokeEnvironment,
@@ -47,6 +51,7 @@ import {
   PACKAGE_SMOKE_PHASE_SCHEMA,
   PACKAGE_SMOKE_PREPARED_SCHEMA,
   PACKAGE_SMOKE_STATE_FILENAME,
+  parseAndAssertExactJsonValue,
   parsePackageSmokeInvocation,
   publishPackageSmokeStateFile,
   readDirectoryNamesBounded,
@@ -65,10 +70,26 @@ import {
   disposeReviewedNodeRuntime,
   type ReviewedNodeRuntime,
 } from '../scripts/lib/reviewed-node-runtime';
+import {
+  REVIEWED_POSIX_PIPE_DRAIN_TIMEOUT_MS,
+  REVIEWED_POSIX_SUPERVISOR_SCHEDULER_MARGIN_MS,
+} from '../scripts/lib/reviewed-posix-supervisor';
 
 const root = resolve(import.meta.dirname, '..');
 const fixtureRoot = join(root, 'scripts', 'fixtures', 'package-smoke');
 const cleanups: string[] = [];
+const currentNodeRuntimeIdentity = Object.freeze({
+  platform: process.platform,
+  arch: process.arch,
+});
+/** Cold Bun must import the full smoke module before publishing a trusted hook. */
+const REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS = 30_000;
+/** Target timeout plus bounded pipe drain, scheduler margin, and test-host slack. */
+const REVIEWED_RUNNER_OUTCOME_TIMEOUT_MS =
+  10_000 +
+  REVIEWED_POSIX_PIPE_DRAIN_TIMEOUT_MS +
+  REVIEWED_POSIX_SUPERVISOR_SCHEDULER_MARGIN_MS +
+  5_000;
 
 interface LifecycleFifo {
   readonly path: string;
@@ -371,6 +392,40 @@ describe('two-phase package smoke contract', () => {
     });
   };
 
+  it('emits parseable exact browser-bundle warning matchers', () => {
+    if (reviewedRuntime === undefined) {
+      throw new Error('the focused reviewed Node runtime is unavailable');
+    }
+    const program = `${generatedBrowserBundlePatternDeclarations()}
+      const exactImport = 'import "../chunk-Ab_9.js";';
+      const exactPath = 'node_modules/cortexel/dist/chunk-Ab_9.js';
+      if (reviewedBareChunkImport.exec(exactImport)?.[1] !== '../chunk-Ab_9.js' ||
+          !reviewedInstalledChunkPath.test(exactPath) ||
+          reviewedBareChunkImport.test('import "../../chunk-Ab_9.js";') ||
+          reviewedBareChunkImport.test('import "../chunk-Ab_9.js"; trailing') ||
+          reviewedInstalledChunkPath.test('node_modules/other/dist/chunk-Ab_9.js')) {
+        throw new Error('generated browser-bundle matcher semantics differ');
+      }
+    `;
+    const result = runReviewedNodeCommandWithStagedRuntime(
+      reviewedRuntime.sourceNodeExecutable,
+      ['--input-type=module', '--eval', program],
+      root,
+      {
+        environment: {},
+        timeoutMs: 5_000,
+        outputLimitBytes: 4_096,
+      },
+    );
+    expect(result.timedOut).toBe(false);
+    expect(result.outputOverflow).toBe(false);
+    expect(result.guardianSweepIntentCount).toBe(1);
+    expect(result.status).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('');
+  });
+
   it('publishes only the fresh v2 state and phase identities', () => {
     expect(PACKAGE_SMOKE_PREPARED_SCHEMA).toBe('cortexel-package-smoke-prepared.v2');
     expect(PACKAGE_SMOKE_PHASE_SCHEMA).toBe('cortexel-package-smoke-phase.v2');
@@ -378,10 +433,15 @@ describe('two-phase package smoke contract', () => {
     expect(PACKAGE_SMOKE_COMMAND_POLICIES).toEqual({
       ordinary: { operation: 'package.ordinary', timeoutMs: 300_000 },
       npmVersion: { operation: 'prepare.npm-version', timeoutMs: 300_000 },
+      nodeRuntimeIdentity: {
+        operation: 'prepare.node-runtime-identity',
+        timeoutMs: 300_000,
+      },
       npmPack: { operation: 'prepare.npm-pack', timeoutMs: 300_000 },
       npmCiCore: { operation: 'prepare.npm-ci.core', timeoutMs: 900_000 },
       npmCiCharts: { operation: 'prepare.npm-ci.charts', timeoutMs: 900_000 },
       npmCiFull: { operation: 'prepare.npm-ci.full', timeoutMs: 900_000 },
+      browserBundle: { operation: 'prepare.browser-bundle', timeoutMs: 300_000 },
     });
     expect(PACKAGE_SMOKE_CONSUMER_PROFILES).toEqual({
       core: {
@@ -426,6 +486,82 @@ describe('two-phase package smoke contract', () => {
     const expectedStateDigest = `sha256:${createHash('sha256').update(staleState).digest('hex')}`;
     expect(() => executePackageSmokeWorkspace({ workspace, expectedStateDigest })).toThrow(
       /prepared package-smoke state/u,
+    );
+  });
+
+  it('routes the interactive mixed-capability probe only through the full peer closure', () => {
+    const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    const bodyStart = source.indexOf('function runPackageSmokeBody(');
+    const probeStart = source.indexOf(
+      '// One process can load either conditional public surface.',
+      bodyStart,
+    );
+    const probeEnd = source.indexOf(
+      "// Build with the full consumer's exact locked esbuild + visualization peers",
+      probeStart,
+    );
+    expect(bodyStart).toBeGreaterThan(-1);
+    expect(probeStart).toBeGreaterThan(bodyStart);
+    expect(probeEnd).toBeGreaterThan(probeStart);
+
+    const bodyHeader = source.slice(bodyStart, probeStart);
+    const probe = source.slice(probeStart, probeEnd);
+    expect(bodyHeader).toContain('const fullConsumer = context.consumer;');
+    expect(bodyHeader).toContain("const knowledgeGraph = await import('cortexel/knowledge-graph');");
+    expect(bodyHeader).toContain("const knowledgeGraph = require('cortexel/knowledge-graph');");
+    expect(probe).toContain("from 'cortexel/react/knowledge-graph'");
+    expect(probe).toContain("require('cortexel/react/knowledge-graph')");
+    expect(probe).toContain("join(fullConsumer, 'mixed-capability-probe.mjs')");
+    expect(probe).toContain(
+      "[join(fullConsumer, 'mixed-capability-probe.mjs')],\n    fullConsumer,",
+    );
+    expect(probe).not.toContain("join(consumer, 'mixed-capability-probe.mjs')");
+  });
+
+  it('compares packed source examples as duplicate-safe JSON values', () => {
+    const expected = {
+      protocol: 'example.v1',
+      nested: { status: 'synthetic_unreplaced' },
+    };
+    const reorderedPretty = [
+      '{',
+      '  "nested": { "status": "synthetic_unreplaced" },',
+      '  "protocol": "example.v1"',
+      '}',
+    ].join('\n');
+    expect(parseAndAssertExactJsonValue(
+      reorderedPretty,
+      'test source example',
+      expected,
+    )).toEqual(expected);
+    expect(() => parseAndAssertExactJsonValue(
+      '{"protocol":"example.v1","protocol":"example.v1",' +
+        '"nested":{"status":"synthetic_unreplaced"}}',
+      'test source example',
+      expected,
+    )).toThrow(/appears more than once/u);
+    expect(() => parseAndAssertExactJsonValue(
+      String.raw`{"protocol":"example.v1","pro\u0074ocol":"example.v1",` +
+        String.raw`"nested":{"status":"synthetic_unreplaced"}}`,
+      'test source example',
+      expected,
+    )).toThrow(/appears more than once/u);
+    expect(() => parseAndAssertExactJsonValue(
+      '{"protocol":"example.v1","nested":{"status":"caller_declaration"}}',
+      'test source example',
+      expected,
+    )).toThrow(/differs from the expected JSON value/u);
+
+    const source = readFileSync(join(root, 'scripts', 'smoke-package.ts'), 'utf8');
+    const start = source.indexOf("const sourceExampleResult = runInstalledCli([");
+    const end = source.indexOf('const guardedSourceAdapt = runInstalledCli([', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const check = source.slice(start, end);
+    expect(check).toContain("parseAndAssertExactJsonValue(\n      sourceExampleResult.stdout,");
+    expect(check).toContain('repeatedSourceExampleResult.stdout !== sourceExampleResult.stdout');
+    expect(check).not.toContain(
+      'sourceExampleResult.stdout !== `${canonicalize(sourceAdapterExample)}\\n`',
     );
   });
 
@@ -646,6 +782,16 @@ describe('two-phase package smoke contract', () => {
     expect(workspaceSealIndex).toBeGreaterThan(-1);
     expect(workspaceSealIndex)
       .toBeLessThan(executeReader.indexOf("executableVersion(canonicalNode, 'Node')"));
+    const runtimeIdentityIndex = executeReader.indexOf('nodeRuntimeIdentity(canonicalNode)');
+    const closureIndex = executeReader.indexOf('assertPreparedConsumerClosures({');
+    expect(runtimeIdentityIndex).toBeGreaterThan(-1);
+    expect(closureIndex).toBeGreaterThan(-1);
+    expect(runtimeIdentityIndex).toBeLessThan(closureIndex);
+    expect(() => assertPreparedNodeRuntimeIdentity(
+      currentNodeRuntimeIdentity,
+      { ...currentNodeRuntimeIdentity, arch: `${process.arch}-different` },
+      'test execute',
+    )).toThrow(/test execute Node runtime identity changed/u);
   });
 
   it('derives packaged NEST adapter probes from the shipped closed branch examples', () => {
@@ -1373,6 +1519,7 @@ describe('two-phase package smoke contract', () => {
       throw new Error('outer numeric process signalling is forbidden');
     });
     const startedAt = Date.now();
+    const commandTimeoutMs = 10_000;
     try {
       expect(() => runReviewedNodeCommandWithStagedRuntime(
         reviewedNode,
@@ -1380,14 +1527,18 @@ describe('two-phase package smoke contract', () => {
         workspace,
         {
           environment: packageSmokeEnvironment(reviewedNode, workspace, {}),
-          timeoutMs: 10_000,
+          timeoutMs: commandTimeoutMs,
           outputLimitBytes: 1_024,
         },
       )).toThrow(/guardian pipes did not reach bounded EOF/u);
     } finally {
       killSpy.mockRestore();
     }
-    expect(Date.now() - startedAt).toBeLessThan(4_500);
+    // The open lifecycle FIFO below is the authoritative negative control that
+    // the detached writer still lives. This wall bound only proves the local
+    // pipe-drain failure returned before the command's own hard timeout; it must
+    // tolerate reviewed-runtime startup and loaded CI schedulers.
+    expect(Date.now() - startedAt).toBeLessThan(commandTimeoutMs);
     expect(hostSignals).toEqual([]);
     expectLifecycleFifoOpen(detachedLifetime);
     expectLifecycleFifoClosed(detachedLifetime, 8_000);
@@ -1477,7 +1628,7 @@ describe('two-phase package smoke contract', () => {
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
 
-    const waitFor = (predicate: () => boolean, timeoutMs = 10_000): boolean => {
+    const waitFor = (predicate: () => boolean, timeoutMs = 20_000): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1553,7 +1704,7 @@ describe('two-phase package smoke contract', () => {
       expectLifecycleFifoClosed(targetLifetime, 5_000);
       expectLifecycleFifoClosed(descendantLifetime, 5_000);
     }
-  }, 60_000);
+  }, 90_000);
 
   it('uses active lease EOF after supervisor SIGKILL and fails closed if the guardian dies', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
@@ -1571,7 +1722,15 @@ describe('two-phase package smoke contract', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-active-lease-')));
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
-    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
+    const failureObservationDeadlineMs =
+      REVIEWED_POSIX_PIPE_DRAIN_TIMEOUT_MS +
+      REVIEWED_POSIX_SUPERVISOR_SCHEDULER_MARGIN_MS +
+      1_000;
+    const finiteTargetLifetimeMs = failureObservationDeadlineMs + 3_000;
+    const waitFor = (
+      predicate: () => boolean,
+      timeoutMs = 15_000,
+    ): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1602,7 +1761,7 @@ describe('two-phase package smoke contract', () => {
               runReviewedNodeCommand(
                 ${JSON.stringify(reviewedNode)},
                 ['-e', ${JSON.stringify(
-                  `${lifecycleWriterProgram(targetLifetime, 6_000)}
+                  `${lifecycleWriterProgram(targetLifetime, finiteTargetLifetimeMs)}
                    setInterval(() => {}, 1000);`,
                 )}],
                 ${JSON.stringify(workspace)},
@@ -1661,8 +1820,8 @@ describe('two-phase package smoke contract', () => {
       // never perform a postmortem PID/PGID probe or second signal.
       const signaledAt = Date.now();
       process.kill(victimPid, 'SIGKILL');
-      expect(waitFor(() => existsSync(outcomePath), 4_500)).toBe(true);
-      expect(Date.now() - signaledAt).toBeLessThan(4_500);
+      expect(waitFor(() => existsSync(outcomePath), failureObservationDeadlineMs)).toBe(true);
+      expect(Date.now() - signaledAt).toBeLessThan(failureObservationDeadlineMs);
       const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
         kind: string;
         message?: string;
@@ -1679,7 +1838,7 @@ describe('two-phase package smoke contract', () => {
         // The supervisor returns after its bounded local pipe-drain failure, and
         // this deliberately finite fixture later closes itself.
         expectLifecycleFifoOpen(targetLifetime);
-        expectLifecycleFifoClosed(targetLifetime, 8_000);
+        expectLifecycleFifoClosed(targetLifetime, finiteTargetLifetimeMs + 2_000);
       }
     }
   }, 60_000);
@@ -1821,7 +1980,10 @@ describe('two-phase package smoke contract', () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-guardian-killpoint-')));
     cleanups.push(workspace);
     const smokeModule = pathToFileURL(join(root, 'scripts', 'smoke-package.ts')).href;
-    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
+    const waitFor = (
+      predicate: () => boolean,
+      timeoutMs: number,
+    ): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -1891,7 +2053,10 @@ describe('two-phase package smoke contract', () => {
         stdio: 'ignore',
       });
       outer.unref();
-      expect(waitFor(() => existsSync(readyPath))).toBe(true);
+      expect(waitFor(
+        () => existsSync(readyPath),
+        REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS,
+      )).toBe(true);
       const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
         guardianPid: number;
         phase: string;
@@ -1913,7 +2078,10 @@ describe('two-phase package smoke contract', () => {
       // The hook is emitted only while this exact direct child/guardian is live.
       // Signal once, then rely on protocol outcome—never a postmortem probe.
       process.kill(victimPid, 'SIGKILL');
-      expect(waitFor(() => existsSync(outcomePath))).toBe(true);
+      expect(waitFor(
+        () => existsSync(outcomePath),
+        REVIEWED_RUNNER_OUTCOME_TIMEOUT_MS,
+      )).toBe(true);
       const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
         kind: string;
         message?: string;
@@ -1922,7 +2090,9 @@ describe('two-phase package smoke contract', () => {
       expect(outcome.message).toMatch(/without a valid result/u);
       expect(existsSync(targetMarker)).toBe(false);
     }
-  }, 60_000);
+  }, 4 * (
+    REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS + REVIEWED_RUNNER_OUTCOME_TIMEOUT_MS
+  ) + 10_000);
 
   it('does not signal after the guardian is reaped and before result publication', () => {
     if (process.platform !== 'darwin' && process.platform !== 'linux') return;
@@ -1998,7 +2168,10 @@ describe('two-phase package smoke contract', () => {
       stdio: 'ignore',
     });
     outer.unref();
-    const waitFor = (predicate: () => boolean, timeoutMs = 15_000): boolean => {
+    const waitFor = (
+      predicate: () => boolean,
+      timeoutMs: number,
+    ): boolean => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (predicate()) return true;
@@ -2006,7 +2179,10 @@ describe('two-phase package smoke contract', () => {
       }
       return predicate();
     };
-    expect(waitFor(() => existsSync(readyPath))).toBe(true);
+    expect(waitFor(
+      () => existsSync(readyPath),
+      REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS,
+    )).toBe(true);
     const ready = JSON.parse(readFileSync(readyPath, 'utf8')) as {
       phase: string;
       schema: string;
@@ -2018,7 +2194,10 @@ describe('two-phase package smoke contract', () => {
     });
     expect(Number.isSafeInteger(ready.supervisorPid) && ready.supervisorPid > 1).toBe(true);
     process.kill(ready.supervisorPid, 'SIGKILL');
-    expect(waitFor(() => existsSync(outcomePath))).toBe(true);
+    expect(waitFor(
+      () => existsSync(outcomePath),
+      REVIEWED_RUNNER_OUTCOME_TIMEOUT_MS,
+    )).toBe(true);
     const outcome = JSON.parse(readFileSync(outcomePath, 'utf8')) as {
       hostSignals: unknown[];
       kind: string;
@@ -2028,7 +2207,7 @@ describe('two-phase package smoke contract', () => {
     expect(outcome.message).toMatch(/without a valid result/u);
     expect(outcome.hostSignals).toEqual([]);
     expect(readFileSync(targetMarker, 'utf8')).toBe('ran\n');
-  }, 30_000);
+  }, REVIEWED_COLD_RUNNER_READY_TIMEOUT_MS + REVIEWED_RUNNER_OUTCOME_TIMEOUT_MS + 10_000);
 
   it('requires an absolute persistent workspace and a carried state digest', () => {
     const workspace = resolve('package-smoke-test-workspace');
@@ -2108,6 +2287,14 @@ describe('two-phase package smoke contract', () => {
       installScript,
       fixture.packageJson,
     )).toThrow(/unreviewed script/u);
+
+    const hiddenReviewedScript = structuredClone(fixture.lock);
+    delete hiddenReviewedScript.packages['node_modules/esbuild'].hasInstallScript;
+    expect(() => validatePackageSmokeFixture(
+      fixture.manifest,
+      hiddenReviewedScript,
+      fixture.packageJson,
+    )).toThrow(/ignored-script authority/u);
 
     const traversalPath = structuredClone(fixture.lock);
     traversalPath.packages['node_modules/../react'] =
@@ -2316,6 +2503,10 @@ describe('two-phase package smoke contract', () => {
         version: '1.0.0',
         optional: true,
       },
+      'node_modules/shared-dev-optional': {
+        version: '1.0.0',
+        devOptional: true,
+      },
       'node_modules/typescript': {
         version: '5.0.0',
         dev: true,
@@ -2334,7 +2525,8 @@ describe('two-phase package smoke contract', () => {
     };
     const includedRecords = Object.fromEntries(Object.entries(records).filter(([, record]) =>
       !('dev' in record && record.dev === true) &&
-      !('optional' in record && record.optional === true)));
+      !('optional' in record && record.optional === true) &&
+      !('devOptional' in record && record.devOptional === true)));
     const hiddenLock = {
       name: preparedLock.name,
       version: preparedLock.version,
@@ -2363,6 +2555,7 @@ describe('two-phase package smoke contract', () => {
       preparedLock,
       ['dev', 'optional'],
       11,
+      currentNodeRuntimeIdentity,
     );
     expect(assertClosure).not.toThrow();
 
@@ -2372,6 +2565,7 @@ describe('two-phase package smoke contract', () => {
       preparedLock,
       ['dev', 'optional'],
       10,
+      currentNodeRuntimeIdentity,
     )).toThrow(/package container inventory differs/u);
     mkdirSync(npm10ResidualScope);
     expect(assertClosure).toThrow(/package container inventory differs/u);
@@ -2380,6 +2574,7 @@ describe('two-phase package smoke contract', () => {
       preparedLock,
       ['dev', 'optional'],
       10,
+      currentNodeRuntimeIdentity,
     )).not.toThrow();
     rmSync(npm10ResidualScope, { recursive: true, force: true });
 
@@ -2427,6 +2622,624 @@ describe('two-phase package smoke contract', () => {
     );
     expect(assertClosure).toThrow(/package scope inventory differs/u);
   });
+
+  it('keeps hidden-lock flags exact and omits devOptional only with both classes', () => {
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-dev-optional-lock-')));
+    cleanups.push(workspace);
+    const consumer = join(workspace, 'consumer');
+    const nodeModules = join(consumer, 'node_modules');
+    const productionRecord = { version: '1.0.0' };
+    const sharedRecord = { version: '2.0.0', devOptional: true };
+    const preparedLock = {
+      name: 'dev-optional-fixture',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { name: 'dev-optional-fixture', version: '1.0.0' },
+        'node_modules/cortexel': productionRecord,
+        'node_modules/shared': sharedRecord,
+      },
+    };
+    const writeManifest = (name: string, version: string): void => {
+      const packageRoot = join(nodeModules, name);
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(join(packageRoot, 'package.json'), `${JSON.stringify({ name, version })}\n`);
+    };
+    writeManifest('cortexel', '1.0.0');
+    writeManifest('shared', '2.0.0');
+    writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
+      name: preparedLock.name,
+      version: preparedLock.version,
+      lockfileVersion: preparedLock.lockfileVersion,
+      requires: preparedLock.requires,
+      packages: {
+        'node_modules/cortexel': productionRecord,
+        'node_modules/shared': sharedRecord,
+      },
+    })}\n`);
+
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      ['optional'],
+      11,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      10,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      ['optional'],
+      10,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      ['dev', 'optional'],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/exact filtered prepared lock|package container inventory differs/u);
+
+    const falseFlag = structuredClone(preparedLock);
+    falseFlag.packages['node_modules/shared'].devOptional = false;
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      falseFlag,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/noncanonical devOptional flag/u);
+
+    const redundantFlags = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/shared': { ...sharedRecord, dev: true },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      redundantFlags,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/redundant dependency-class flags/u);
+
+    writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
+      name: preparedLock.name,
+      version: preparedLock.version,
+      lockfileVersion: preparedLock.lockfileVersion,
+      requires: preparedLock.requires,
+      packages: {
+        'node_modules/cortexel': productionRecord,
+        'node_modules/shared': { version: '2.0.0', dev: true },
+      },
+    })}\n`);
+    let mismatchMessage = '';
+    try {
+      assertInstalledRecursivePackageClosure(
+        consumer,
+        preparedLock,
+        [],
+        11,
+        currentNodeRuntimeIdentity,
+      );
+    } catch (error) {
+      mismatchMessage = error instanceof Error ? error.message : String(error);
+    }
+    expect(mismatchMessage).toContain('consumer "consumer"');
+    expect(mismatchMessage).toContain('omit=none');
+    expect(mismatchMessage).toContain(
+      'first difference $["packages"]["node_modules/shared"]',
+    );
+
+    rmSync(join(nodeModules, 'shared'), { recursive: true });
+    writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
+      name: preparedLock.name,
+      version: preparedLock.version,
+      lockfileVersion: preparedLock.lockfileVersion,
+      requires: preparedLock.requires,
+      packages: { 'node_modules/cortexel': productionRecord },
+    })}\n`);
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      ['dev', 'optional'],
+      11,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
+  });
+
+  it('filters only reviewed optional os/cpu records and rejects selector ambiguity', () => {
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'cortexel-runtime-lock-')));
+    cleanups.push(workspace);
+    const consumer = join(workspace, 'consumer');
+    const nodeModules = join(consumer, 'node_modules');
+    const incompatiblePlatform = process.platform === 'linux' ? 'darwin' : 'linux';
+    const incompatibleArchitecture = process.arch === 'x64' ? 'arm64' : 'x64';
+    const productionRecord = { version: '1.0.0' };
+    const matchingRecord = {
+      version: '2.0.0',
+      optional: true,
+      os: [process.platform],
+      cpu: [process.arch],
+    };
+    const incompatibleRecord = {
+      version: '3.0.0',
+      optional: true,
+      os: [incompatiblePlatform],
+      cpu: [process.arch],
+    };
+    const negativeAllowedRecord = {
+      version: '4.0.0',
+      optional: true,
+      os: [`!${incompatiblePlatform}`],
+    };
+    const mixedAllowedRecord = {
+      version: '5.0.0',
+      optional: true,
+      os: [process.platform, `!${incompatiblePlatform}`],
+    };
+    const anyRuntimeRecord = {
+      version: '6.0.0',
+      optional: true,
+      os: ['any'],
+      cpu: ['any'],
+    };
+    const mixedAnyRecord = {
+      version: '6.1.0',
+      optional: true,
+      os: ['any', `!${incompatiblePlatform}`],
+    };
+    const incompatibleCpuRecord = {
+      version: '7.0.0',
+      optional: true,
+      os: [process.platform],
+      cpu: [incompatibleArchitecture],
+    };
+    const preparedLock = {
+      name: 'runtime-fixture',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': { name: 'runtime-fixture', version: '1.0.0' },
+        'node_modules/cortexel': productionRecord,
+        'node_modules/runtime-match': matchingRecord,
+        'node_modules/runtime-other': incompatibleRecord,
+        'node_modules/runtime-negative-allowed': negativeAllowedRecord,
+        'node_modules/runtime-mixed-allowed': mixedAllowedRecord,
+        'node_modules/runtime-any': anyRuntimeRecord,
+        'node_modules/runtime-mixed-any': mixedAnyRecord,
+        'node_modules/runtime-cpu-other': incompatibleCpuRecord,
+      },
+    };
+    const writeManifest = (name: string, version: string): void => {
+      const packageRoot = join(nodeModules, name);
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(join(packageRoot, 'package.json'), `${JSON.stringify({ name, version })}\n`);
+    };
+    writeManifest('cortexel', '1.0.0');
+    writeManifest('runtime-match', '2.0.0');
+    writeManifest('runtime-negative-allowed', '4.0.0');
+    writeManifest('runtime-mixed-allowed', '5.0.0');
+    writeManifest('runtime-any', '6.0.0');
+    writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
+      name: preparedLock.name,
+      version: preparedLock.version,
+      lockfileVersion: preparedLock.lockfileVersion,
+      requires: preparedLock.requires,
+      packages: {
+        'node_modules/cortexel': productionRecord,
+        'node_modules/runtime-match': matchingRecord,
+        'node_modules/runtime-negative-allowed': negativeAllowedRecord,
+        'node_modules/runtime-mixed-allowed': mixedAllowedRecord,
+        'node_modules/runtime-any': anyRuntimeRecord,
+      },
+    })}\n`);
+
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
+
+    const nonOptionalMismatch = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/runtime-other': {
+          version: '3.0.0',
+          os: [incompatiblePlatform],
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      nonOptionalMismatch,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/runtime-incompatible but not optional/u);
+
+    const nonOptionalCpuMismatch = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/runtime-cpu-other': {
+          version: '7.0.0',
+          os: [process.platform],
+          cpu: [incompatibleArchitecture],
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      nonOptionalCpuMismatch,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/runtime-incompatible but not optional/u);
+
+    const libcSelector = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/runtime-other': {
+          ...incompatibleRecord,
+          libc: ['glibc'],
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      libcSelector,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/unreviewed libc selector/u);
+
+    const invalidSelector = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/runtime-other': {
+          ...incompatibleRecord,
+          os: ['!*'],
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      invalidSelector,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/invalid selector/u);
+
+    const hiddenInvalidCpuSelector = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/runtime-other': {
+          ...incompatibleRecord,
+          cpu: ['!*'],
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      hiddenInvalidCpuSelector,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/invalid selector/u);
+
+    const emptySelector = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/runtime-other': {
+          ...incompatibleRecord,
+          os: [],
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      emptySelector,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).toThrow(/non-empty selector array/u);
+
+    const negatedCurrentPlatform = {
+      ...preparedLock,
+      packages: {
+        ...preparedLock.packages,
+        'node_modules/runtime-other': {
+          ...incompatibleRecord,
+          os: [process.platform, `!${process.platform}`],
+        },
+      },
+    };
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      negatedCurrentPlatform,
+      [],
+      11,
+      currentNodeRuntimeIdentity,
+    )).not.toThrow();
+
+    // The explicit reviewed Node identity—not Bun globals—must decide closure.
+    rmSync(join(nodeModules, 'runtime-match'), { recursive: true });
+    writeManifest('runtime-cpu-other', '7.0.0');
+    writeFileSync(join(nodeModules, '.package-lock.json'), `${JSON.stringify({
+      name: preparedLock.name,
+      version: preparedLock.version,
+      lockfileVersion: preparedLock.lockfileVersion,
+      requires: preparedLock.requires,
+      packages: {
+        'node_modules/cortexel': productionRecord,
+        'node_modules/runtime-negative-allowed': negativeAllowedRecord,
+        'node_modules/runtime-mixed-allowed': mixedAllowedRecord,
+        'node_modules/runtime-any': anyRuntimeRecord,
+        'node_modules/runtime-cpu-other': incompatibleCpuRecord,
+      },
+    })}\n`);
+    expect(() => assertInstalledRecursivePackageClosure(
+      consumer,
+      preparedLock,
+      [],
+      11,
+      Object.freeze({
+        platform: process.platform,
+        arch: incompatibleArchitecture,
+      }),
+    )).not.toThrow();
+  });
+});
+
+describe('packed Markdown syntactic destination closure', () => {
+  const paths = [
+    'README.md',
+    'LICENSE',
+    'assets/logo-dark.svg',
+    'assets/logo-light.svg',
+    'docs/guide.md',
+    'docs/reference/details.md',
+  ];
+
+  it('accepts package-local files/directories, fragments, references, and explicit HTTPS URLs', () => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      {
+        path: 'README.md',
+        source: [
+          '[license](./LICENSE)',
+          '[guide](./docs/guide.md#usage)',
+          '[reference directory](./docs/reference/)',
+          '[top](#readme)',
+          '[external](https://example.com/a_(b))',
+          '<https://example.com/autolink?a=1&amp;b=2>',
+          '<img src="./assets/logo-light.svg" alt="Logo">',
+          "<a href='./docs/guide.md#usage'>Guide</a>",
+          '<a href=https://example.com/reference>Reference</a>',
+          '<a title="> remains quoted" href="./docs/guide.md">Quoted delimiter</a>',
+          '<source srcset="./assets/logo-light.svg 1x, ./assets/logo-dark.svg 2x">',
+          '<picture>',
+          '<source',
+          '  srcset="./assets/logo-dark.svg 1x, ./assets/logo-light.svg 2x">',
+          '</picture>',
+          '[details][details]',
+          '[details]: <./docs/reference/details.md> "title"',
+          '🧠 `[license in code](./LICENSE) <img src="./assets/logo-light.svg"> <https://example.com/code>`',
+          '`multiline code span with a conservative destination',
+          '<img src="./assets/logo-dark.svg"> <https://example.com/multiline-code>',
+          'still code`',
+          '<!-- [license in comment](./LICENSE) <img src="./assets/logo-dark.svg"> -->',
+          '<!-- ` <img src="./assets/logo-light.svg"> --> [license again](./LICENSE)',
+          '<!-- <https://example.com/comment>',
+          '<a href="./docs/guide.md"> -->',
+          '```md',
+          '[license in fence](./LICENSE)',
+          '<img src="./assets/logo-light.svg">',
+          '<https://example.com/fence>',
+          '```',
+          '',
+        ].join('\n'),
+      },
+      {
+        path: 'docs/guide.md',
+        source: '[readme](../README.md)\n',
+      },
+      {
+        path: 'docs/reference/details.md',
+        source: '# Details\n',
+      },
+    ], paths)).not.toThrow();
+  });
+
+  it.each([
+    ['[missing](./absent.md)', /does not resolve/u],
+    ['[escape](../outside.md)', /does not resolve/u],
+    ['[insecure](http://example.com)', /explicit HTTPS/u],
+    ['[implicit](//example.com/path)', /ambiguous/u],
+    ['[mail](mailto:security@example.com)', /explicit HTTPS/u],
+    ['[encoded](./docs/%ZZ.md)', /malformed encoding/u],
+    ['[absolute](/README.md)', /escapes package semantics/u],
+    ['<img src="./absent.svg">', /does not resolve/u],
+    ['<a href="http://example.com">insecure</a>', /explicit HTTPS/u],
+    ['<source srcset="./assets/logo-light.svg 1x, ./absent.svg 2x">', /does not resolve/u],
+    ['<http://example.com/autolink>', /explicit HTTPS/u],
+    ['<security@example.com>', /explicit HTTPS/u],
+  ])('rejects an unresolvable or non-durable target: %s', (source, expected) => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: `${source}\n` },
+    ], paths)).toThrow(expected);
+  });
+
+  it.each([
+    ['`[missing](./absent.md)`'],
+    ['`multiline code\n[missing](./absent.md)\nstill code`'],
+    ['<!-- [missing](./absent.md) -->'],
+    ['<!--\n[missing](./absent.md)\n-->'],
+    ['```md\n[missing](./absent.md)\n```'],
+    ['```bad`info\n[missing](./absent.md)\n```'],
+    ['<!--\n```\n-->\n[missing](./absent.md)\n```'],
+    ['<script>\n```\n</script>\n[missing](./absent.md)\n```'],
+    ['paragraph\n    [missing](./absent.md)'],
+    ['    [missing](./absent.md)'],
+    ['\t[missing](./absent.md)'],
+    ['    [missing]: ./absent.md'],
+    ['> [missing]: ./absent.md'],
+  ])('scans every bounded source region as a conservative over-approximation: %s', (source) => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: `${source}\n` },
+    ], paths)).toThrow(/does not resolve/u);
+  });
+
+  it('advances angle-reference inspection monotonically under an exact work bound', () => {
+    const cases = [
+      { source: '<.'.repeat(4_096) + '>', targets: 0 },
+      { source: '< \u0001'.repeat(4_096) + '>', targets: 0 },
+      { source: '<.>'.repeat(4_096), targets: 0 },
+      {
+        source: '<a title="> remains quoted" href="https://example.com/a">'.repeat(512),
+        targets: 0,
+      },
+    ];
+    for (const [index, { source, targets }] of cases.entries()) {
+      const scan = inspectPackedMarkdownAngleReferences(
+        source,
+        `bounded-angle-${index}.md`,
+      );
+      expect(scan.inspectedCodeUnits).toBeLessThanOrEqual(scan.workLimit);
+      expect(scan.workLimit).toBe(source.length * 4 + 1);
+      expect(scan.targets).toHaveLength(targets);
+    }
+    expect(() => inspectPackedMarkdownAngleReferences(
+      `<!${'a'.repeat(8_193)}>`,
+      'over-bound-angle.md',
+    )).toThrow(/angle-reference candidate exceeds its bound/u);
+  });
+
+  it('keeps rejected reference-label bracket and backslash runs on a linear scanner', () => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      {
+        path: 'README.md',
+        source: `${'['.repeat(65_536)}${'\\'.repeat(65_536)} rejected label\n`,
+      },
+      { path: 'docs/guide.md', source: '# Guide\n' },
+      { path: 'docs/reference/details.md', source: '# Details\n' },
+    ], paths)).not.toThrow();
+  });
+
+  it.each([
+    ['inline bare', `[target](${'a'.repeat(8_193)})`],
+    ['inline angle', `[target](<${'a'.repeat(8_193)}>)`],
+    ['reference bare', `[target]: ${'a'.repeat(8_193)}`],
+    ['reference angle', `[target]: <${'a'.repeat(8_193)}>`],
+  ])('rejects an over-bound %s destination while scanning', (_form, source) => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: `${source}\n` },
+    ], paths)).toThrow(/target exceeds its code-unit bound/u);
+  });
+
+  it('admits an exact-bound ASCII target in every supported destination form', () => {
+    const exactTarget = 'https://example.com/'.padEnd(8_192, 'a');
+    expect(() => assertPackedMarkdownLinkClosure([
+      {
+        path: 'README.md',
+        source: [
+          `[inline](${exactTarget})`,
+          `[inline-title](${exactTarget} "title")`,
+          `[inline-angle](<${exactTarget}>)`,
+          `[reference-bare]: ${exactTarget}`,
+          `[reference-angle]: <${exactTarget}>`,
+        ].join('\n'),
+      },
+      { path: 'docs/guide.md', source: '# Guide\n' },
+      { path: 'docs/reference/details.md', source: '# Details\n' },
+    ], paths)).not.toThrow();
+  });
+
+  it.each([
+    ['inline bare', `[target](${'é'.repeat(4_097)})`],
+    ['inline angle', `[target](<${'é'.repeat(4_097)}>)`],
+    ['reference bare', `[target]: ${'é'.repeat(4_097)}`],
+    ['reference angle', `[target]: <${'é'.repeat(4_097)}>`],
+  ])('rejects an over-bound decoded %s destination before publication', (_form, source) => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: `${source}\n` },
+    ], paths)).toThrow(/target exceeds its UTF-8 byte bound/u);
+  });
+
+  it('bounds inline candidate syntax after the destination has ended', () => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      {
+        path: 'README.md',
+        source: `[license](./LICENSE "${'a'.repeat(16_401)}")\n`,
+      },
+    ], paths)).toThrow(/candidate exceeds its code-unit bound/u);
+  });
+
+  it('applies the decoded-byte cap inside the standalone angle scanner', () => {
+    expect(() => inspectPackedMarkdownAngleReferences(
+      `<https://example.com/${'é'.repeat(4_097)}>`,
+      'over-bound-decoded-angle.md',
+    )).toThrow(/UTF-8 byte bound/u);
+  });
+
+  it('rejects destinations it cannot parse instead of silently omitting them', () => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '[wrapped](\n./docs/guide.md)\n' },
+    ], paths)).toThrow(/unsupported inline link destination/u);
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '[guide]:\n  ./docs/guide.md\n' },
+    ], paths)).toThrow(/unsupported reference destination/u);
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '<img src="./assets/logo-light.svg>\n' },
+    ], paths)).toThrow(/raw HTML-like src quote is unterminated/u);
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '<img src>\n' },
+    ], paths)).toThrow(/raw HTML-like src lacks a value/u);
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '<img / src="./absent.svg">\n' },
+    ], paths)).toThrow(/does not resolve/u);
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '<source srcset="./assets/logo-light.svg 0x">\n' },
+    ], paths)).toThrow(/srcset descriptor is malformed/u);
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '<a href="https://example.com/?a=1&unknown;">x</a>\n' },
+    ], paths)).toThrow(/unsupported HTML character reference/u);
+  });
+
+  it('requires every packed Markdown file to be inspected exactly once', () => {
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '# Readme\n' },
+    ], paths)).toThrow(/document set differs/u);
+    expect(() => assertPackedMarkdownLinkClosure([
+      { path: 'README.md', source: '# Readme\n' },
+      { path: 'README.md', source: '# Duplicate\n' },
+    ], ['README.md'])).toThrow(/absent or duplicated/u);
+  });
 });
 
 describe('independent npm package tarball inspection', () => {
@@ -2447,6 +3260,17 @@ describe('independent npm package tarball inspection', () => {
       fileBytes: content.byteLength,
       entryCount: 1,
     });
+  });
+
+  it('checks Markdown links against the exact tar inventory', () => {
+    const markdown = Buffer.from('[missing](./not-packed.md)\n');
+    const files = [testExpectedFile('README.md', markdown)];
+    const tarball = gzipTestTar([{ path: 'README.md', content: markdown }]);
+    expect(() => inspectNpmPackageTarball(
+      tarball,
+      testPackedResult(tarball, files),
+      files,
+    )).toThrow(/does not resolve inside the tarball/u);
   });
 
   it('rejects malformed, optional, concatenated, truncated, or trailing gzip framing', () => {

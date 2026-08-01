@@ -99,7 +99,7 @@ describe('evidence ledger — the committed ledger', () => {
     }
   });
 
-  it('requires the exact retained NEST V1 predecessor bytes at the CLI boundary', () => {
+  it('requires exact retained NEST predecessor and visualization-audit bytes at the CLI boundary', () => {
     const repository = realpathSync(
       mkdtempSync(path.join(tmpdir(), 'cortexel-ledger-predecessor-')),
     );
@@ -108,6 +108,8 @@ describe('evidence ledger — the committed ledger', () => {
       'docs/release/evidence-ledger.schema.json',
       'docs/audit/nest-example-coverage.v1.json',
       'docs/audit/nest-example-coverage.schema.json',
+      'docs/audit/nest-example-coverage.v2.json',
+      'docs/audit/nest-example-coverage.v2.schema.json',
       'docs/audit/nest-example-source-inventory.v1.json',
       'docs/audit/nest-example-source-inventory.v2.json',
       'docs/audit/nest-documentation-source-inventory.v1.json',
@@ -130,6 +132,19 @@ describe('evidence ledger — the committed ledger', () => {
 
       writeFileSync(predecessorPath, Buffer.concat([
         predecessorBytes,
+        Buffer.from('\n', 'utf8'),
+      ]));
+      expect(runEvidenceLedgerCli([], repository)).toBe(1);
+
+      writeFileSync(predecessorPath, predecessorBytes);
+      expect(runEvidenceLedgerCli([], repository)).toBe(0);
+      const visualizationAuditPath = path.join(
+        repository,
+        'docs/audit/nest-example-coverage.v2.json',
+      );
+      const visualizationAuditBytes = readFileSync(visualizationAuditPath);
+      writeFileSync(visualizationAuditPath, Buffer.concat([
+        visualizationAuditBytes,
         Buffer.from('\n', 'utf8'),
       ]));
       expect(runEvidenceLedgerCli([], repository)).toBe(1);

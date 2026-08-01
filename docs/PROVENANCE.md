@@ -100,9 +100,11 @@ that Cortexel inspected the recording, the upstream dataset, or their bytes.
 
 ## 3. The disclosure engine
 
-This is where honesty is *mechanized*. The rule set lives in
-[`contract/registries/disclosures.v1.json`](../contract/registries/disclosures.v1.json),
-a **closed registry**. Every disclosure obeys one invariant:
+This is where honesty is *mechanized*. The source authority lives at
+`contract/registries/disclosures.v1.json`; the package carries its exact generated
+copy at
+[`dist/contract/registries/disclosures.v1.json`](../dist/contract/registries/disclosures.v1.json).
+It is a **closed registry**. Every disclosure obeys one invariant:
 
 > **A disclosure fires from a machine-checkable fact in the artifact — never from
 > caller text, and never from a caller flag.**
@@ -308,9 +310,9 @@ time, toward disclosing a limitation rather than asserting a result.
 
 ## References
 
-- [`contract/registries/disclosures.v1.json`](../contract/registries/disclosures.v1.json) — the closed disclosure rule registry
-- [`contract/registries/capabilities.v1.json`](../contract/registries/capabilities.v1.json) — the stable / experimental / removed matrix
-- [`contract/registries/error-codes.v1.json`](../contract/registries/error-codes.v1.json) — stable error codes (`PROVENANCE_*`, `SCOPE_*`, `SCIENCE_*`, …)
+- [`dist/contract/registries/disclosures.v1.json`](../dist/contract/registries/disclosures.v1.json) — the packaged generated copy of the closed disclosure rule registry
+- [`dist/contract/registries/capabilities.v1.json`](../dist/contract/registries/capabilities.v1.json) — the packaged generated copy of the stable / experimental / removed matrix
+- [`dist/contract/registries/error-codes.v1.json`](../dist/contract/registries/error-codes.v1.json) — the packaged generated copy of stable error codes (`PROVENANCE_*`, `SCOPE_*`, `SCIENCE_*`, …)
 - [SECURITY.md](../SECURITY.md) — the honesty boundary as a security property
 - [docs/KNOWN_LIMITATIONS.md](./KNOWN_LIMITATIONS.md) — what the current development tree does not yet do
 - [docs/release/BASELINE-2026-07-14.md](./release/BASELINE-2026-07-14.md) and [`docs/release/evidence-ledger.v1.json`](./release/evidence-ledger.v1.json) — the frozen baseline and per-gate evidence state

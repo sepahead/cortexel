@@ -24,7 +24,6 @@
  */
 
 import { makeError, type CortexelError, type Result, err, ok } from './errors.js';
-import { utf8ByteLength } from './sha256.js';
 
 /** A value inside the JSON domain, with objects null-prototyped. */
 export type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
@@ -66,6 +65,33 @@ class ParseFailure extends Error {
     this.name = 'ParseFailure';
     this.diagnostic = diagnostic;
   }
+}
+
+/** Count only until the first complete code point that exceeds the raw budget. */
+function boundedUtf8ByteLength(text: string, limit: number): number {
+  let bytes = 0;
+  for (let index = 0; index < text.length; index++) {
+    const first = text.charCodeAt(index);
+    if (first <= 0x7f) {
+      bytes += 1;
+    } else if (first <= 0x7ff) {
+      bytes += 2;
+    } else if (first >= 0xd800 && first <= 0xdbff) {
+      const second = index + 1 < text.length ? text.charCodeAt(index + 1) : 0;
+      if (second >= 0xdc00 && second <= 0xdfff) {
+        bytes += 4;
+        index++;
+      } else {
+        // Match TextEncoder: an unpaired surrogate is U+FFFD (three bytes).
+        bytes += 3;
+      }
+    } else {
+      // Ordinary BMP code points and lone low surrogates are three bytes.
+      bytes += 3;
+    }
+    if (bytes > limit) return bytes;
+  }
+  return bytes;
 }
 
 class Scanner {
@@ -323,21 +349,12 @@ class Scanner {
 
       if (ch === '"') {
         this.index++;
-        if (out.length > this.limits.jsonStringLength) {
-          this.fail('JSON_STRING_TOO_LONG', 'a string is longer than the parser permits', {
-            limit: {
-              name: 'jsonStringLength',
-              limit: this.limits.jsonStringLength,
-              observed: out.length,
-            },
-          });
-        }
         return out;
       }
 
       if (ch === '\\') {
         this.index++;
-        out += this.parseEscape();
+        out = this.appendStringFragment(out, this.parseEscape());
         continue;
       }
 
@@ -360,7 +377,10 @@ class Scanner {
         if (!(next >= 0xdc00 && next <= 0xdfff)) {
           this.fail('JSON_INVALID_UNICODE', 'an unpaired high surrogate is not well-formed Unicode');
         }
-        out += this.text[this.index] + this.text[this.index + 1];
+        out = this.appendStringFragment(
+          out,
+          this.text[this.index] + this.text[this.index + 1],
+        );
         this.index += 2;
         continue;
       }
@@ -368,9 +388,24 @@ class Scanner {
         this.fail('JSON_INVALID_UNICODE', 'an unpaired low surrogate is not well-formed Unicode');
       }
 
-      out += ch;
+      out = this.appendStringFragment(out, ch);
       this.index++;
     }
+  }
+
+  /** Enforce the decoded UTF-16 budget before appending the next fragment. */
+  private appendStringFragment(current: string, fragment: string): string {
+    const observed = current.length + fragment.length;
+    if (observed > this.limits.jsonStringLength) {
+      this.fail('JSON_STRING_TOO_LONG', 'a string is longer than the parser permits', {
+        limit: {
+          name: 'jsonStringLength',
+          limit: this.limits.jsonStringLength,
+          observed,
+        },
+      });
+    }
+    return current + fragment;
   }
 
   private parseEscape(): string {
@@ -436,32 +471,45 @@ class Scanner {
   private parseNumber(): number {
     const start = this.index;
 
-    if (this.text[this.index] === '-') this.index++;
+    if (this.text[this.index] === '-') {
+      const first = this.text[this.index + 1];
+      if (first !== '0' && !this.isDigit(first)) {
+        this.fail('JSON_SYNTAX', `unexpected token at offset ${this.index + 1}`);
+      }
+      this.advanceNumberCodeUnit(start);
+    }
 
     // JSON forbids a leading zero followed by more digits: `01` is not a number.
     if (this.text[this.index] === '0') {
-      this.index++;
+      this.advanceNumberCodeUnit(start);
     } else if (this.isDigit(this.text[this.index])) {
-      while (this.isDigit(this.text[this.index])) this.index++;
+      while (this.isDigit(this.text[this.index])) this.advanceNumberCodeUnit(start);
     } else {
       this.fail('JSON_SYNTAX', `unexpected token at offset ${this.index}`);
     }
 
     if (this.text[this.index] === '.') {
-      this.index++;
-      if (!this.isDigit(this.text[this.index])) {
+      if (!this.isDigit(this.text[this.index + 1])) {
         this.fail('JSON_INVALID_NUMBER', 'a decimal point must be followed by at least one digit');
       }
-      while (this.isDigit(this.text[this.index])) this.index++;
+      this.advanceNumberCodeUnit(start);
+      while (this.isDigit(this.text[this.index])) this.advanceNumberCodeUnit(start);
     }
 
     if (this.text[this.index] === 'e' || this.text[this.index] === 'E') {
-      this.index++;
-      if (this.text[this.index] === '+' || this.text[this.index] === '-') this.index++;
-      if (!this.isDigit(this.text[this.index])) {
+      let requiredDigitIndex = this.index + 1;
+      if (
+        this.text[requiredDigitIndex] === '+' ||
+        this.text[requiredDigitIndex] === '-'
+      ) requiredDigitIndex++;
+      if (!this.isDigit(this.text[requiredDigitIndex])) {
         this.fail('JSON_INVALID_NUMBER', 'an exponent must have at least one digit');
       }
-      while (this.isDigit(this.text[this.index])) this.index++;
+      this.advanceNumberCodeUnit(start);
+      if (this.text[this.index] === '+' || this.text[this.index] === '-') {
+        this.advanceNumberCodeUnit(start);
+      }
+      while (this.isDigit(this.text[this.index])) this.advanceNumberCodeUnit(start);
     }
 
     const token = this.text.slice(start, this.index);
@@ -469,20 +517,6 @@ class Scanner {
     if (token.length === 0) {
       this.fail('JSON_SYNTAX', `unexpected token at offset ${start}`);
     }
-    if (token.length > this.limits.jsonNumberTokenLength) {
-      this.fail(
-        'JSON_NUMBER_TOKEN_TOO_LONG',
-        'the numeric token is longer than any meaningful binary64 literal',
-        {
-          limit: {
-            name: 'jsonNumberTokenLength',
-            limit: this.limits.jsonNumberTokenLength,
-            observed: token.length,
-          },
-        },
-      );
-    }
-
     const value = Number(token);
 
     // `1e400` is grammatically valid JSON and evaluates to Infinity. It is outside
@@ -514,6 +548,25 @@ class Scanner {
     }
 
     return value;
+  }
+
+  /** Stop scanning a number at the first code unit beyond its token budget. */
+  private advanceNumberCodeUnit(start: number): void {
+    this.index++;
+    const observed = this.index - start;
+    if (observed > this.limits.jsonNumberTokenLength) {
+      this.fail(
+        'JSON_NUMBER_TOKEN_TOO_LONG',
+        'the numeric token is longer than any meaningful binary64 literal',
+        {
+          limit: {
+            name: 'jsonNumberTokenLength',
+            limit: this.limits.jsonNumberTokenLength,
+            observed,
+          },
+        },
+      );
+    }
   }
 
   private isDigit(ch: string | undefined): boolean {
@@ -588,9 +641,9 @@ export function parseJsonStrict(text: string, options: ParseOptions): Result<Jso
   }
   const limits = Object.freeze(limitsSnapshot) as unknown as JsonParseLimits;
 
-  // Byte length first, before a single character is examined. Checking the size of
-  // a parse tree you already built is checking too late.
-  const byteLength = utf8ByteLength(text);
+  // Byte length first, before token scanning or tree construction. The bounded
+  // counter itself stops at the first complete code point beyond the limit.
+  const byteLength = boundedUtf8ByteLength(text, limits.rawInputBytes);
   if (byteLength > limits.rawInputBytes) {
     return err([
       makeError({

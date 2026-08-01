@@ -1,8 +1,8 @@
 import * as react from 'react';
-export { C as CameraHint, R as RenderSceneArgs, V as VizSpecRenderer, a as VizSpecRendererProps } from '../VizSpecRenderer-DzYFnh-s.cjs';
-import '../hostInvocation-DWfbQ71f.cjs';
+export { C as CameraHint, R as RenderSceneArgs, V as VizSpecRenderer, a as VizSpecRendererProps } from '../VizSpecRenderer-7BhuW89M.cjs';
+import '../hostInvocation-CQH54EH3.cjs';
+import '../vizSpec-Bfwh_kq9.cjs';
 import 'zod';
-import '../colormaps-CZ6XejJa.cjs';
 
 interface PopulationExpandController {
     selectedPopId: string | null;

@@ -1,7 +1,7 @@
 import * as react from 'react';
-import { R as RenderSceneArgs } from '../VizSpecRenderer-BWkH_3OM.js';
-import { R as ReadonlySemanticPalette } from '../colormaps-CZ6XejJa.js';
-import { a as SkillInvocationError } from '../hostInvocation-DWfbQ71f.js';
+import { R as RenderSceneArgs } from '../VizSpecRenderer-CKsLkbRR.js';
+import { R as ReadonlySemanticPalette } from '../vizSpec-Bfwh_kq9.js';
+import { a as SkillInvocationError } from '../hostInvocation-CUlnBIV1.js';
 import 'zod';
 
 interface ChartDomain {

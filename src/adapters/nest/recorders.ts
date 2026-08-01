@@ -47,6 +47,10 @@ import {
   NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V3,
   NEST_SPIKE_RECORDER_ADAPTER_PROFILE_V5,
 } from './profile.js';
+import {
+  isSourceAdapterExampleGuard,
+  SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER,
+} from '../source-example.js';
 
 interface NestSpikeExportBase {
   /** The only NEST recording backend admitted by this adapter revision. */
@@ -477,6 +481,21 @@ export function nestSpikeRecorderToRaster(
       'ADAPTER_MAPPING_REQUIRED',
       '',
       'NEST adapter options must be a plain object containing a version and the complete recorded sender universe.',
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(
+    optionValue,
+    SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER,
+  )) {
+    const exactGuard = isSourceAdapterExampleGuard(
+      optionValue[SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER],
+    );
+    return adapterFailure(
+      'ADAPTER_MAPPING_REQUIRED',
+      `/${SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER}`,
+      exactGuard
+        ? 'Cortexel\'s shipped source example is a synthetic, template-only shape, not a NEST capture. Replace every fixture value with caller-owned exported status and capture authority, then explicitly remove this guard before invoking the adapter. The adapter never removes it or authors simulation provenance from the unchanged fixture.'
+        : `NEST adapter options contain the reserved ${JSON.stringify(SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER)} member with a malformed value. Do not repair or remove an unrecognized guard at this authority boundary; start from caller-owned detached NEST data.`,
     );
   }
   const adapterRevision = 5;

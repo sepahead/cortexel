@@ -3,7 +3,9 @@
 // The companion to ExpandablePopulation: a population voxel hub collapses and
 // THIS reveals its constituent neurons as ray-cast sphere points, clustered at
 // the hub centre and blooming out to a 3D grid as it expands. Single neuron =
-// sphere (design law). useFrame is allocation-free (uniforms mutated in place).
+// sphere (design law). The frame callback reuses refs/uniforms and contains no
+// explicit first-party allocation syntax; that lexical fact is not a transitive
+// heap-allocation or frame-time guarantee.
 //
 // The grid layout is exported (`neuronLocalGrid`, `neuronClusterScale`) so an
 // owning scene can place synapses on the exact same neuron positions without

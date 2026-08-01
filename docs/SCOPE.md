@@ -10,10 +10,12 @@
 > list of what is not yet done is in [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).
 
 This file is **normative**: it defines what falls inside Cortexel's contract and what
-does not. The stable/experimental/removed matrix it refers to is enforced by
-[`contract/registries/capabilities.v1.json`](../contract/registries/capabilities.v1.json),
-and the failure vocabulary it refers to is
-[`contract/registries/error-codes.v1.json`](../contract/registries/error-codes.v1.json).
+does not. The source authorities are `contract/registries/capabilities.v1.json` and
+`contract/registries/error-codes.v1.json`; the package carries their exact generated
+copies as
+[`dist/contract/registries/capabilities.v1.json`](../dist/contract/registries/capabilities.v1.json)
+and
+[`dist/contract/registries/error-codes.v1.json`](../dist/contract/registries/error-codes.v1.json).
 When prose here and those registries disagree, the registries win and this document
 is the bug.
 
@@ -361,11 +363,21 @@ rejected by a named gate or is impossible to express in the request schema.
 
 The package export map preserves the pre-1.0 root, `core/`, and `react/` implementation
 while adding FigureRequestV1 at `cortexel/figure`, `cortexel/render-svg`, and
-`cortexel/adapters/nest`. It packages `cortexel/react/knowledge-graph` as an
-experimental legacy export and also
-contains legacy WebGL scenes through `cortexel/react`. Those surfaces use `VizSpec`; they
-are not new-contract skill ids, do not participate in the nineteen-skill catalog, and do
-not inherit the FigureRequestV1 deterministic-SVG or artifact guarantees.
+`cortexel/adapters/nest`. It also packages peer-free experimental graph preparation at
+`cortexel/knowledge-graph` and interactive presentation at
+`cortexel/react/knowledge-graph` as legacy exports, and
+contains legacy WebGL scenes through `cortexel/react`. The corpus bind path uses legacy
+`VizSpec`; generic graph preparation has its own versioned visual-record input. Neither
+is a new-contract skill, participates in the nineteen-skill catalog, or inherits the
+FigureRequestV1 deterministic-SVG or artifact guarantees.
+The graph exports' prepared-presentation capability, exact-source filtered views,
+canonical record serialization, paginated DOM browser, and visual-failure fallback
+establish coherent bounded presentation only. SSR/no-JS contains only the initial
+bounded record page; complete canonical presentation bytes omit caption, view, and host
+policy and are an inspection record, not a complete visual/evidence artifact. These
+surfaces do not
+resolve evidence references, authenticate the caller-declared snapshot namespace, make
+force-layout geometry quantitative, or create a stable evidence artifact.
 
 The packaged FigureRequestV1 catalog currently declares **no** experimental 3D,
 knowledge-graph, animation, NCP-adapter, or bundle skill/compiler. The old ids

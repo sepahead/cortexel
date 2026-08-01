@@ -66,10 +66,18 @@ import {
 import {
   isSourceAdapterId,
   lookupSourceAdapter,
+  lookupSourceAdapterDescriptorDigest,
   SOURCE_ADAPTER_CATALOG_DIGEST,
+  SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
   SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_DISCOVERY_CATALOG,
   SOURCE_ADAPTER_IDS,
 } from '../adapters/source-catalog.js';
+import {
+  classifySourceAdapterExampleEnvelope,
+  SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER,
+} from '../adapters/source-example.js';
 import {
   nestSpikeRecorderToRaster,
   type NestSpikeOptionsInput,
@@ -876,10 +884,15 @@ function cmdCatalog(args: readonly string[]): number {
     process.stdout.write(`  ${id.padEnd(32)} ${safeText(SKILL_CATALOG[id].title, 512)}\n`);
   }
   if (includeExperimental) {
-    process.stdout.write(`\nExperimental (not covered by the stable contract):\n`);
+    process.stdout.write(
+      `\nExperimental FigureRequest skills (${EXPERIMENTAL_CAPABILITY_IDS.length}):\n`,
+    );
     for (const id of EXPERIMENTAL_CAPABILITY_IDS) process.stdout.write(`  ${id}\n`);
   } else {
-    process.stdout.write(`\nUse --include-experimental to also list experimental capabilities.\n`);
+    process.stdout.write(
+      '\nThis revision has no experimental FigureRequest skills; ' +
+      '--include-experimental is a forward-compatible skill-only opt-in.\n',
+    );
   }
   return EXIT.ok;
 }
@@ -1041,19 +1054,8 @@ function cmdSourceCatalog(args: readonly string[]): number {
       protocol: 'cortexel-cli-source-catalog',
       protocolVersion: 1,
       ...sourceDiscoveryIdentity(),
-      adapters: SOURCE_ADAPTER_IDS.map((id) => {
-        const descriptor = lookupSourceAdapter(id)!;
-        return {
-          id: descriptor.id,
-          revision: descriptor.revision,
-          title: descriptor.title,
-          sourceSystem: descriptor.sourceSystem,
-          admittedSourceVersions: descriptor.admittedSourceVersions,
-          outputSkillId: descriptor.outputSkillId,
-          command: descriptor.cli.command,
-          renderCommand: descriptor.cli.renderCommand,
-        };
-      }),
+      sourceAdapterCatalogDigestPreimage: SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+      adapters: SOURCE_ADAPTER_DISCOVERY_CATALOG.adapters,
     });
     return EXIT.ok;
   }
@@ -1085,6 +1087,8 @@ function cmdSourceDescribe(args: readonly string[]): number {
       protocol: 'cortexel-cli-source-describe',
       protocolVersion: 1,
       ...sourceDiscoveryIdentity(),
+      sourceAdapterDescriptorDigest: lookupSourceAdapterDescriptorDigest(id),
+      sourceAdapterDescriptorDigestDomain: SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
       adapter: descriptor,
     });
     return EXIT.ok;
@@ -1097,8 +1101,18 @@ function cmdSourceDescribe(args: readonly string[]): number {
       `Output skill: ${descriptor.outputSkillId}\n` +
       `Command: ${descriptor.cli.command}\n` +
       `Direct render: ${descriptor.cli.renderCommand}\n` +
-      'Use --json for the complete authority statement, limitations, and copyable input.\n',
+      'Use --json for the complete authority statement, limitations, and guarded template.\n',
   );
+  return EXIT.ok;
+}
+
+/** Emit one versioned, guarded, deliberately non-executable synthetic template. */
+function cmdSourceExample(args: readonly string[]): number {
+  const parsed = parseOrReport(args, { positionalCount: 1 });
+  if (!parsed) return EXIT.usage;
+  const id = parsed.positionals[0];
+  if (!isSourceAdapterId(id)) return reportUnknownSourceAdapter(id, true);
+  writeCliJson(lookupSourceAdapter(id)!.example);
   return EXIT.ok;
 }
 
@@ -1147,6 +1161,20 @@ function prepareSourceRequest(
   id: (typeof SOURCE_ADAPTER_IDS)[number],
   value: JsonValue,
 ): PreparedSourceRequest {
+  const exampleClassification = classifySourceAdapterExampleEnvelope(value);
+  if (exampleClassification.kind !== 'not_example') {
+    return {
+      ok: false,
+      errors: adapterEnvelopeFailure(
+        exampleClassification.kind === 'template_only' ? '' : '/protocol',
+        exampleClassification.kind === 'template_only'
+          ? 'This is Cortexel\'s synthetic, template-only source example, not simulator output. Replace every synthetic value with a caller-owned detached NEST capture and authority record; then remove the options.' +
+            `${SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER} marker and submit only inputTemplate. Cortexel never strips the guard or relabels the fixture as simulation evidence.`
+          : 'This resembles a Cortexel source-example envelope but is not the exact closed version-1 shape. Generate a fresh template with `cortexel source example nest-spike-recorder`; do not delete or repair metadata to make synthetic values executable.',
+      ),
+    };
+  }
+
   if (!isPlainJsonRecord(value)) {
     return {
       ok: false,
@@ -1257,13 +1285,15 @@ function cmdSource(args: readonly string[]): number {
       return cmdSourceCatalog(rest);
     case 'describe':
       return cmdSourceDescribe(rest);
+    case 'example':
+      return cmdSourceExample(rest);
     case 'adapt':
       return cmdSourceAdapt(rest);
     case 'render':
       return cmdSourceRender(rest);
     default:
       process.stderr.write(
-        'usage error: source requires catalog, describe, adapt, or render\n',
+        'usage error: source requires catalog, describe, example, adapt, or render\n',
       );
       return EXIT.usage;
   }
@@ -1351,6 +1381,8 @@ function sourceAdapterExecutionMetadata(
     revision: lookupSourceAdapter(id)!.revision,
     catalogDigest: SOURCE_ADAPTER_CATALOG_DIGEST,
     catalogDigestDomain: SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+    descriptorDigest: lookupSourceAdapterDescriptorDigest(id),
+    descriptorDigestDomain: SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
     requestDigest,
     artifactDigest: result.artifact.artifactDigest,
     sourceAuthentication: 'not_performed',
@@ -1529,6 +1561,7 @@ Usage:
   cortexel describe <stable-skill-id> [--json [--section summary|example|schema|all]]
   cortexel source catalog [--json]
   cortexel source describe <source-adapter-id> [--json]
+  cortexel source example <source-adapter-id>
   cortexel source adapt <source-adapter-id> <input|-> [--format json]
   cortexel source render <source-adapter-id> <input|-> --output figure.svg [--force] [--format json]
   cortexel source render <source-adapter-id> <input|-> --dry-run [--format json]

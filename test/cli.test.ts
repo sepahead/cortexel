@@ -17,7 +17,11 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { exitCodeForErrors, run, serializeCliJson } from '../src/cli/main.js';
-import { canonicalDigestExcluding, canonicalize } from '../src/core/canonicalize.js';
+import {
+  canonicalDigest,
+  canonicalDigestExcluding,
+  canonicalize,
+} from '../src/core/canonicalize.js';
 import type { CortexelError } from '../src/core/errors.js';
 import { getBudgetLimits } from '../src/core/limits.js';
 import { sha256Digest } from '../src/core/sha256.js';
@@ -28,6 +32,11 @@ import {
   type ErrorStage,
 } from '../src/generated/registry.js';
 import { STABLE_SKILL_IDS } from '../src/generated/catalog.js';
+import {
+  SOURCE_ADAPTER_CATALOG,
+  SOURCE_ADAPTER_CATALOG_DIGEST,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+} from '../src/adapters/source-catalog.js';
 
 /**
  * The CLI exit values and argument grammar are stable process contracts. `run` returns
@@ -237,6 +246,65 @@ describe('cli — identity, catalog, and direct execution', () => {
     const all = capture(() => run(['catalog', '--include-experimental', '--json']));
     expect(all.code).toBe(0);
     expect(Array.isArray(JSON.parse(all.stdout).experimentalSkillIds)).toBe(true);
+  });
+
+  it('emits a compact source catalog with its exact independently reproducible preimage', () => {
+    const result = capture(() => run(['source', 'catalog', '--json']));
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const payload = JSON.parse(result.stdout);
+    expect(payload.adapters).toEqual(
+      payload.sourceAdapterCatalogDigestPreimage.catalog.adapters,
+    );
+    expect(canonicalDigest(payload.sourceAdapterCatalogDigestPreimage)).toBe(
+      payload.sourceAdapterCatalogDigest,
+    );
+    expect(payload.sourceAdapterCatalogDigest).toBe(SOURCE_ADAPTER_CATALOG_DIGEST);
+
+    const described = capture(() => run([
+      'source',
+      'describe',
+      'nest-spike-recorder',
+      '--json',
+    ]));
+    expect(described.code).toBe(0);
+    expect(described.stderr).toBe('');
+    const description = JSON.parse(described.stdout);
+    expect(canonicalDigest({
+      domain: description.sourceAdapterDescriptorDigestDomain,
+      descriptor: description.adapter,
+    })).toBe(description.sourceAdapterDescriptorDigest);
+    expect(description.sourceAdapterDescriptorDigestDomain).toBe(
+      SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+    );
+    expect(payload.adapters[0].descriptorDigest).toBe(
+      description.sourceAdapterDescriptorDigest,
+    );
+  });
+
+  it('emits one guarded template-only source-adapter example', () => {
+    const result = capture(() => run([
+      'source',
+      'example',
+      'nest-spike-recorder',
+    ]));
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    const example = JSON.parse(result.stdout);
+    expect(example).toEqual(
+      SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example,
+    );
+    expect(example).toMatchObject({
+      exampleKind: 'synthetic_fixture',
+      execution: 'template_only',
+      inputTemplate: {
+        options: {
+          captureAuthority: {
+            kind: 'replace_with_caller_declaration_from_actual_capture',
+          },
+        },
+      },
+    });
   });
 
   it('describes one stable skill with complete agent-authoring and adapter evidence', () => {
@@ -507,6 +575,9 @@ describe('cli — every command has a closed argv grammar', () => {
     ['source', 'describe'],
     ['source', 'describe', 'nest-spike-recorder', 'extra'],
     ['source', 'describe', 'nest-spike-recorder', '--json', '--json'],
+    ['source', 'example'],
+    ['source', 'example', 'nest-spike-recorder', 'extra'],
+    ['source', 'example', 'nest-spike-recorder', '--json'],
     ['source', 'adapt'],
     ['source', 'adapt', 'nest-spike-recorder'],
     ['source', 'adapt', 'nest-spike-recorder', '-', 'extra'],

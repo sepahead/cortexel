@@ -1282,6 +1282,50 @@ class PythonPackageSmokeBoundaryTest(unittest.TestCase):
             smoke._reap_guardian_once(process, label="cached status fixture")
         self.assertFalse(process._child_created)
 
+    def test_external_raw_reap_loses_ownership_without_numeric_followup(self) -> None:
+        process = subprocess.Popen(
+            [sys.executable, "-I", "-B", "-c", "import time; time.sleep(60)"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+        process.kill()
+        waited_pid, raw_status = os.waitpid(process.pid, 0)
+        self.assertEqual(waited_pid, process.pid)
+        self.assertTrue(os.WIFSIGNALED(raw_status))
+        self.assertEqual(os.WTERMSIG(raw_status), signal.SIGKILL)
+        # A raw external reaper does not populate Popen's cache. This is the
+        # dangerous negative control: numeric identity may now be reusable even
+        # though the Python object still looks unreaped.
+        self.assertIsNone(process.returncode)
+        self.assertTrue(process._child_created)
+        with (
+            patch.object(
+                smoke.os,
+                "killpg",
+                side_effect=AssertionError("external reap caused a group signal"),
+            ),
+            patch.object(
+                smoke.os,
+                "kill",
+                side_effect=AssertionError("external reap caused a PID signal"),
+            ),
+            patch.object(
+                smoke.os,
+                "waitid",
+                create=True,
+                side_effect=AssertionError("external reap caused a process probe"),
+            ),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "reap ownership was lost or interrupted",
+            ),
+        ):
+            smoke._reap_guardian_once(process, label="external raw reap fixture")
+        self.assertFalse(process._child_created)
+        self.assertIsNone(process.returncode)
+
     def test_cancellation_closes_lease_before_signal_delivery(self) -> None:
         for cancellation_signal in (
             signal.SIGINT,

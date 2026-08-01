@@ -44,6 +44,7 @@ const sourceEntryFiles = [
   'src/authoring/index.ts',
   'src/render/index.ts',
   'src/adapters/nest/index.ts',
+  'src/knowledge-graph/index.ts',
 ];
 const sourceExportIds = new Set(sourceEntryFiles.flatMap((relative) => {
   const id = sourceEntryId(readFileSync(path.join(ROOT, relative), 'utf8'));
@@ -130,6 +131,7 @@ describe('capability maturity and concrete availability', () => {
       'cortexel/contract',
       'cortexel/core',
       'cortexel/figure',
+      'cortexel/knowledge-graph',
       'cortexel/package.json',
       'cortexel/react',
       'cortexel/react/charts',
@@ -159,10 +161,27 @@ describe('capability maturity and concrete availability', () => {
     expect((tsupEntry as Record<string, unknown>)['internal/request-capability']).toBe(
       'src/core/request.ts',
     );
+    expect(
+      (tsupEntry as Record<string, unknown>)[
+        'internal/knowledge-graph-presentation-capability'
+      ],
+    ).toBe('react/knowledgeGraphPresentation.internal.ts');
+    expect(
+      (tsupEntry as Record<string, unknown>)[
+        'internal/knowledge-graph-presentation-brand'
+      ],
+    ).toBe('src/core/knowledge-graph-presentation-brand.ts');
     expect((tsupEntry as Record<string, unknown>)['internal/validated-request-brand']).toBe(
       'src/core/validated-request-brand.ts',
     );
     expect(packageJson.imports).toEqual({
+      '#cortexel-knowledge-graph-presentation-capability':
+        './dist/internal/knowledge-graph-presentation-capability.cjs',
+      '#cortexel-knowledge-graph-presentation-brand': {
+        types: './dist/internal/knowledge-graph-presentation-brand.d.ts',
+        import: './dist/internal/knowledge-graph-presentation-brand.js',
+        require: './dist/internal/knowledge-graph-presentation-brand.cjs',
+      },
       '#cortexel-request-capability': './dist/internal/request-capability.cjs',
       '#cortexel-validated-request-brand': {
         types: './dist/internal/validated-request-brand.d.ts',
@@ -172,10 +191,27 @@ describe('capability maturity and concrete availability', () => {
     });
     expect(buildEntryIds({
       'figure/index': 'src/figure/index.ts',
+      'internal/knowledge-graph-presentation-capability':
+        'react/knowledgeGraphPresentation.internal.ts',
+      'internal/knowledge-graph-presentation-brand':
+        'src/core/knowledge-graph-presentation-brand.ts',
       'internal/request-capability': 'src/core/request.ts',
       'internal/validated-request-brand': 'src/core/validated-request-brand.ts',
       'cli/main': 'src/cli/main.ts',
     })).toEqual(new Set(['cortexel/figure']));
+    expect(buildEntryIds({
+      'internal/unreviewed-backdoor': 'src/internal/unreviewed-backdoor.ts',
+    })).toEqual(new Set(['cortexel/internal/unreviewed-backdoor']));
+    expectProblem(
+      packageExportTargetProblems(
+        packageJson,
+        buildEntryOutputBases({
+          ...(tsupEntry as Record<string, unknown>),
+          'internal/unreviewed-backdoor': 'src/internal/unreviewed-backdoor.ts',
+        }),
+      ),
+      'tsup entry cortexel/internal/unreviewed-backdoor: missing package export target',
+    );
   });
 
   it('documents build identity on the additive figure subpath, not the legacy core subpath', () => {

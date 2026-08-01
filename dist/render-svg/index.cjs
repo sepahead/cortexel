@@ -16930,265 +16930,125 @@ var SKILL_CATALOG = freezeGenerated({
     ]
   }
 });
+var CAPABILITY_IDS = freezeGenerated([
+  "cli.catalog",
+  "cli.describe",
+  "cli.identity",
+  "cli.inspect",
+  "cli.migrate",
+  "cli.render",
+  "cli.source",
+  "cli.validate",
+  "cortexel",
+  "cortexel/adapters/nest",
+  "cortexel/authoring",
+  "cortexel/contract",
+  "cortexel/core",
+  "cortexel/figure",
+  "cortexel/knowledge-graph",
+  "cortexel/package.json",
+  "cortexel/react",
+  "cortexel/react/charts",
+  "cortexel/react/knowledge-graph",
+  "cortexel/render-svg",
+  "cortexel/skills.manifest.json",
+  "nest.animation_replay",
+  "nest.connectivity_matrix",
+  "nest.spatial_2d",
+  "nest.stimulus_response",
+  "network.adjacency_matrix",
+  "network.connection_graph",
+  "network.degree_distribution",
+  "network.delay_distribution",
+  "network.delay_matrix",
+  "network.spatial_map_2d",
+  "network.synaptic_weight_trace",
+  "network.weight_distribution",
+  "network.weight_matrix",
+  "neuro.analog_trace",
+  "neuro.compartment_trace",
+  "neuro.correlogram",
+  "neuro.isi_distribution",
+  "neuro.multisignal_trace",
+  "neuro.phase_plane",
+  "neuro.population_rate",
+  "neuro.psth",
+  "neuro.response_curve",
+  "neuro.spike_raster"
+]);
 var CAPABILITY_CATALOG = freezeGenerated({
-  "neuro.analog_trace": {
-    "id": "neuro.analog_trace",
-    "kind": "skill",
+  "cli.catalog": {
+    "id": "cli.catalog",
+    "kind": "cli",
     "status": "stable",
     "availability": "packaged",
-    "renderer": "figure.analog_trace",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.spike_raster": {
-    "id": "neuro.spike_raster",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.spike_raster",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Revision 2 returns only a complete in-memory table alongside the artifact. It refuses any request that would require an excerpt, sidecar, or raster compaction."
+      "Lists FigureRequest skill capabilities only. No experimental FigureRequest skill currently exists; `--include-experimental` is a forward-compatible explicit opt-in and does not list packaged legacy experimental exports."
     ]
   },
-  "neuro.population_rate": {
-    "id": "neuro.population_rate",
-    "kind": "skill",
+  "cli.describe": {
+    "id": "cli.describe",
+    "kind": "cli",
     "status": "stable",
     "availability": "packaged",
-    "renderer": "figure.population_rate",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.response_curve": {
-    "id": "neuro.response_curve",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.response_curve",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.isi_distribution": {
-    "id": "neuro.isi_distribution",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.distribution",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.psth": {
-    "id": "neuro.psth",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.psth",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.correlogram": {
-    "id": "neuro.correlogram",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.correlogram",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.phase_plane": {
-    "id": "neuro.phase_plane",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.phase_plane",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.multisignal_trace": {
-    "id": "neuro.multisignal_trace",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.multisignal_trace",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "neuro.compartment_trace": {
-    "id": "neuro.compartment_trace",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.compartment_trace",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.connection_graph": {
-    "id": "network.connection_graph",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.connection_graph",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.adjacency_matrix": {
-    "id": "network.adjacency_matrix",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.matrix",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.weight_matrix": {
-    "id": "network.weight_matrix",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.matrix",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.delay_matrix": {
-    "id": "network.delay_matrix",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.matrix",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.degree_distribution": {
-    "id": "network.degree_distribution",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.distribution",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.delay_distribution": {
-    "id": "network.delay_distribution",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.distribution",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.weight_distribution": {
-    "id": "network.weight_distribution",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.distribution",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.spatial_map_2d": {
-    "id": "network.spatial_map_2d",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.spatial_map_2d",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "network.synaptic_weight_trace": {
-    "id": "network.synaptic_weight_trace",
-    "kind": "skill",
-    "status": "stable",
-    "availability": "packaged",
-    "renderer": "figure.synaptic_weight_trace",
-    "determinismClass": "deterministic_svg",
-    "exportClass": "svg+table",
-    "requiredPeers": [],
-    "owner": "Sepehr Mahmoudian"
-  },
-  "nest.connectivity_matrix": {
-    "id": "nest.connectivity_matrix",
-    "kind": "skill",
-    "status": "removed",
-    "availability": "unavailable",
     "owner": "Sepehr Mahmoudian",
-    "replacement": "network.connection_graph",
-    "removalVersion": "1.0.0",
     "limitations": [
-      "The pre-1.0 id named a schematic edge-list topology despite its misleading name. Migration targets network.connection_graph but remains partial until the caller supplies the node universe, identities, snapshot scope, and multapse/autapse policies; it is never reinterpreted as a matrix from whichever optional channel happens to be present."
+      "Offline and stable-skill-only. JSON output is generated from the exact packaged catalog; closed summary, example, schema and all sections let prompt-budgeted agents request only what they need. The complete bundle includes the composed per-skill acceptance schema with explicit common-contract references, one living illustrative request, source mappings, evidence limits and implementation/certification metadata. The example is not a source-to-request adapter and does not establish external provenance."
     ]
   },
-  "nest.spatial_2d": {
-    "id": "nest.spatial_2d",
-    "kind": "skill",
-    "status": "removed",
-    "availability": "unavailable",
+  "cli.identity": {
+    "id": "cli.identity",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian"
+  },
+  "cli.inspect": {
+    "id": "cli.inspect",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian"
+  },
+  "cli.migrate": {
+    "id": "cli.migrate",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
-    "replacement": "network.spatial_map_2d",
-    "removalVersion": "1.0.0",
     "limitations": [
-      "A host-only (`scene: null`) duplicate. Cortexel could validate the request but could not enforce the caption or own the output, so it was never a stable guarantee."
+      "Machine output is always JSON; it uses the same bounded fatal-UTF-8 and strict raw-JSON input boundary as validation."
     ]
   },
-  "nest.stimulus_response": {
-    "id": "nest.stimulus_response",
-    "kind": "skill",
-    "status": "removed",
-    "availability": "unavailable",
+  "cli.render": {
+    "id": "cli.render",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
-    "replacement": null,
-    "removalVersion": "1.0.0",
     "limitations": [
-      "There is no one-to-one replacement and no FigureBundleV1 implementation. Migration returns a manual recipe for separately validated trace, rate, and response-curve requests; it does not emit or name a bundle capability."
+      "Offline. One fixed O_EXCL lock serializes cooperative publication in the resolved physical output directory, including case/Unicode filename aliases; an existing lock is never guessed stale. Non-force publication uses same-directory O_EXCL temporaries plus atomic hard-link no-replace publication (or refuses when unavailable); force installs the artifact last. The two output files are still not one transaction, and a trusted output-directory owner remains required."
     ]
   },
-  "nest.animation_replay": {
-    "id": "nest.animation_replay",
-    "kind": "skill",
-    "status": "removed",
-    "availability": "unavailable",
+  "cli.source": {
+    "id": "cli.source",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
     "owner": "Sepehr Mahmoudian",
-    "replacement": null,
-    "removalVersion": "1.0.0",
     "limitations": [
-      "No FigureRequestV1 skill schema or compiler exists. A pre-1.0 package may still recognize the legacy id, but that does not make it a current contract capability."
+      "Offline and executable-adapter-only. Discovery is a closed inventory, not a projection of every candidate source mapping in skill prose; the compact catalog emits its exact digest preimage and each entry digest-binds the complete descriptor. `source example` emits a versioned synthetic, template-only envelope with a nested guard. The outer envelope and the unchanged guarded input both fail closed: Cortexel never strips the marker or authors simulation provenance from its own fixture. The caller must replace every fixture value with a caller-owned detached capture, explicitly remove the guard, and submit only `inputTemplate`; this acknowledgement is not authentication. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Source input is bounded duplicate-key-safe JSON. `source render` is the recommended one-process adapter/validation/render/publication path; successful `source adapt | render` composition produces identical request, artifact, and SVG bytes, but ordinary shell pipeline status can mask upstream failure unless the host checks every stage."
+    ]
+  },
+  "cli.validate": {
+    "id": "cli.validate",
+    "kind": "cli",
+    "status": "stable",
+    "availability": "packaged",
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Bounds raw file/stdin bytes before fatal UTF-8 decoding and uses the strict raw-text parser, so malformed encoding, a BOM, and duplicate JSON members remain rejectable rather than being normalized away."
     ]
   },
   "cortexel": {
@@ -17200,6 +17060,39 @@ var CAPABILITY_CATALOG = freezeGenerated({
     "owner": "Sepehr Mahmoudian",
     "limitations": [
       "The package root intentionally remains the legacy 0.9 pure-core export. FigureRequestV1 is additive at cortexel/figure."
+    ]
+  },
+  "cortexel/adapters/nest": {
+    "id": "cortexel/adapters/nest",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "The packaged plain-data bridge implements only the bounded shape of a caller-declared exact NEST 3.10.0 memory spike-recorder profile with time_in_steps false. It digest-binds the detached plain-data status projection, not raw NEST or NumPy bytes, and does not authenticate the producing runtime, recorder wiring, sender-universe completeness or export custody; unsupported versions and shapes fail closed. This availability record is not upstream-execution or certification evidence."
+    ]
+  },
+  "cortexel/authoring": {
+    "id": "cortexel/authoring",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Offline structural schemas and synthetic authoring fixtures for stable FigureRequestV1 skills. A schema-valid fixture is illustrative data, not live NEST adapter support, authenticated provenance, external-oracle evidence, or full-pipeline acceptance; validate every authored request through cortexel/figure."
+    ]
+  },
+  "cortexel/contract": {
+    "id": "cortexel/contract",
+    "kind": "data_export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Normative JSON is copied once under dist/contract and exported as cortexel/contract/manifest.json plus exact registry, schema, and skill paths. Packaged does not mean published or release-ready."
     ]
   },
   "cortexel/core": {
@@ -17224,26 +17117,26 @@ var CAPABILITY_CATALOG = freezeGenerated({
       "Pure FigureRequestV1 validation, identity, and closed safe-repair surface. Safe repair is TypeScript-only: the explicitly partial Python semantic port exposes no repair API, emits no repair member, and makes no repair-parity claim. Packaged availability is not publication or release certification."
     ]
   },
-  "cortexel/authoring": {
-    "id": "cortexel/authoring",
+  "cortexel/knowledge-graph": {
+    "id": "cortexel/knowledge-graph",
     "kind": "export",
-    "status": "stable",
+    "status": "experimental",
     "availability": "packaged",
     "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Offline structural schemas and synthetic authoring fixtures for stable FigureRequestV1 skills. A schema-valid fixture is illustrative data, not live NEST adapter support, authenticated provenance, external-oracle evidence, or full-pipeline acceptance; validate every authored request through cortexel/figure."
+      "Peer-free bounded generic-visual and corpus-VizSpec preparation with duplicate-member-safe raw parsing, materialized-value assurance, exact-source views, and canonical presentation inspection records for the pre-1.0 advisory graph. Runtime tokens are local to one physical package instance and realm. This is not a CLI, FigureRequestV1 skill/compiler, complete figure artifact, evidence resolver, snapshot authentication, custody proof, or deterministic renderer."
     ]
   },
-  "cortexel/render-svg": {
-    "id": "cortexel/render-svg",
-    "kind": "export",
+  "cortexel/package.json": {
+    "id": "cortexel/package.json",
+    "kind": "data_export",
     "status": "stable",
     "availability": "packaged",
     "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Headless deterministic FigureRequestV1 builders only: each public rendering entrypoint validates its input or requires Cortexel's live validated-request capability. Raw RenderPlan construction, resource accounting, formatting/scaling primitives, and SVG serialization are internal and not exported. No React, browser, WebGL, or network dependency."
+      "Explicit metadata export makes package metadata addressable without weakening exports-map encapsulation."
     ]
   },
   "cortexel/react": {
@@ -17292,6 +17185,17 @@ var CAPABILITY_CATALOG = freezeGenerated({
       "The packaged force-directed legacy knowledge-graph view is nondeterministic and is not a FigureRequestV1 skill/compiler."
     ]
   },
+  "cortexel/render-svg": {
+    "id": "cortexel/render-svg",
+    "kind": "export",
+    "status": "stable",
+    "availability": "packaged",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian",
+    "limitations": [
+      "Headless deterministic FigureRequestV1 builders only: each public rendering entrypoint validates its input or requires Cortexel's live validated-request capability. Raw RenderPlan construction, resource accounting, formatting/scaling primitives, and SVG serialization are internal and not exported. No React, browser, WebGL, or network dependency."
+    ]
+  },
   "cortexel/skills.manifest.json": {
     "id": "cortexel/skills.manifest.json",
     "kind": "data_export",
@@ -17303,111 +17207,264 @@ var CAPABILITY_CATALOG = freezeGenerated({
       "This packaged data export continues to describe the legacy VizSpec skill axis. FigureRequestV1 contract data is separately exported under cortexel/contract/*."
     ]
   },
-  "cortexel/adapters/nest": {
-    "id": "cortexel/adapters/nest",
-    "kind": "export",
-    "status": "stable",
-    "availability": "packaged",
-    "requiredPeers": [],
+  "nest.animation_replay": {
+    "id": "nest.animation_replay",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
     "owner": "Sepehr Mahmoudian",
+    "replacement": null,
+    "removalVersion": "1.0.0",
     "limitations": [
-      "The packaged plain-data bridge implements only the bounded shape of a caller-declared exact NEST 3.10.0 memory spike-recorder profile with time_in_steps false. It digest-binds the detached plain-data status projection, not raw NEST or NumPy bytes, and does not authenticate the producing runtime, recorder wiring, sender-universe completeness or export custody; unsupported versions and shapes fail closed. This availability record is not upstream-execution or certification evidence."
+      "No FigureRequestV1 skill schema or compiler exists. A pre-1.0 package may still recognize the legacy id, but that does not make it a current contract capability."
     ]
   },
-  "cortexel/contract": {
-    "id": "cortexel/contract",
-    "kind": "data_export",
-    "status": "stable",
-    "availability": "packaged",
-    "requiredPeers": [],
+  "nest.connectivity_matrix": {
+    "id": "nest.connectivity_matrix",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
     "owner": "Sepehr Mahmoudian",
+    "replacement": "network.connection_graph",
+    "removalVersion": "1.0.0",
     "limitations": [
-      "Normative JSON is copied once under dist/contract and exported as cortexel/contract/manifest.json plus exact registry, schema, and skill paths. Packaged does not mean published or release-ready."
+      "The pre-1.0 id named a schematic edge-list topology despite its misleading name. Migration targets network.connection_graph but remains partial until the caller supplies the node universe, identities, snapshot scope, and multapse/autapse policies; it is never reinterpreted as a matrix from whichever optional channel happens to be present."
     ]
   },
-  "cortexel/package.json": {
-    "id": "cortexel/package.json",
-    "kind": "data_export",
-    "status": "stable",
-    "availability": "packaged",
-    "requiredPeers": [],
+  "nest.spatial_2d": {
+    "id": "nest.spatial_2d",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
     "owner": "Sepehr Mahmoudian",
+    "replacement": "network.spatial_map_2d",
+    "removalVersion": "1.0.0",
     "limitations": [
-      "Explicit metadata export makes package metadata addressable without weakening exports-map encapsulation."
+      "A host-only (`scene: null`) duplicate. Cortexel could validate the request but could not enforce the caption or own the output, so it was never a stable guarantee."
     ]
   },
-  "cli.identity": {
-    "id": "cli.identity",
-    "kind": "cli",
+  "nest.stimulus_response": {
+    "id": "nest.stimulus_response",
+    "kind": "skill",
+    "status": "removed",
+    "availability": "unavailable",
+    "owner": "Sepehr Mahmoudian",
+    "replacement": null,
+    "removalVersion": "1.0.0",
+    "limitations": [
+      "There is no one-to-one replacement and no FigureBundleV1 implementation. Migration returns a manual recipe for separately validated trace, rate, and response-curve requests; it does not emit or name a bundle capability."
+    ]
+  },
+  "network.adjacency_matrix": {
+    "id": "network.adjacency_matrix",
+    "kind": "skill",
     "status": "stable",
     "availability": "packaged",
+    "renderer": "figure.matrix",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
     "owner": "Sepehr Mahmoudian"
   },
-  "cli.catalog": {
-    "id": "cli.catalog",
-    "kind": "cli",
+  "network.connection_graph": {
+    "id": "network.connection_graph",
+    "kind": "skill",
     "status": "stable",
     "availability": "packaged",
-    "owner": "Sepehr Mahmoudian",
-    "limitations": [
-      "Lists FigureRequest skill capabilities only. No experimental FigureRequest skill currently exists; `--include-experimental` is a forward-compatible explicit opt-in and does not list packaged legacy experimental exports."
-    ]
-  },
-  "cli.describe": {
-    "id": "cli.describe",
-    "kind": "cli",
-    "status": "stable",
-    "availability": "packaged",
-    "owner": "Sepehr Mahmoudian",
-    "limitations": [
-      "Offline and stable-skill-only. JSON output is generated from the exact packaged catalog; closed summary, example, schema and all sections let prompt-budgeted agents request only what they need. The complete bundle includes the composed per-skill acceptance schema with explicit common-contract references, one living illustrative request, source mappings, evidence limits and implementation/certification metadata. The example is not a source-to-request adapter and does not establish external provenance."
-    ]
-  },
-  "cli.source": {
-    "id": "cli.source",
-    "kind": "cli",
-    "status": "stable",
-    "availability": "packaged",
-    "owner": "Sepehr Mahmoudian",
-    "limitations": [
-      "Offline and executable-adapter-only. Discovery is a closed digest-bound inventory, not a projection of every candidate source mapping in skill prose. The only current adapter accepts the exact caller-declared NEST 3.10.0 single-process memory spike-recorder profile; it does not import PyNEST, authenticate a live simulation, certify R049, or support other recorder backends, clocks, versions, or stable NEST mappings. Source input is bounded duplicate-key-safe JSON. `source render` is the recommended one-process adapter/validation/render/publication path; successful `source adapt | render` composition produces identical request, artifact, and SVG bytes, but ordinary shell pipeline status can mask upstream failure unless the host checks every stage."
-    ]
-  },
-  "cli.validate": {
-    "id": "cli.validate",
-    "kind": "cli",
-    "status": "stable",
-    "availability": "packaged",
-    "owner": "Sepehr Mahmoudian",
-    "limitations": [
-      "Bounds raw file/stdin bytes before fatal UTF-8 decoding and uses the strict raw-text parser, so malformed encoding, a BOM, and duplicate JSON members remain rejectable rather than being normalized away."
-    ]
-  },
-  "cli.render": {
-    "id": "cli.render",
-    "kind": "cli",
-    "status": "stable",
-    "availability": "packaged",
-    "owner": "Sepehr Mahmoudian",
-    "limitations": [
-      "Offline. One fixed O_EXCL lock serializes cooperative publication in the resolved physical output directory, including case/Unicode filename aliases; an existing lock is never guessed stale. Non-force publication uses same-directory O_EXCL temporaries plus atomic hard-link no-replace publication (or refuses when unavailable); force installs the artifact last. The two output files are still not one transaction, and a trusted output-directory owner remains required."
-    ]
-  },
-  "cli.inspect": {
-    "id": "cli.inspect",
-    "kind": "cli",
-    "status": "stable",
-    "availability": "packaged",
+    "renderer": "figure.connection_graph",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
     "owner": "Sepehr Mahmoudian"
   },
-  "cli.migrate": {
-    "id": "cli.migrate",
-    "kind": "cli",
+  "network.degree_distribution": {
+    "id": "network.degree_distribution",
+    "kind": "skill",
     "status": "stable",
     "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.delay_distribution": {
+    "id": "network.delay_distribution",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.delay_matrix": {
+    "id": "network.delay_matrix",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.matrix",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.spatial_map_2d": {
+    "id": "network.spatial_map_2d",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.spatial_map_2d",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.synaptic_weight_trace": {
+    "id": "network.synaptic_weight_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.synaptic_weight_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.weight_distribution": {
+    "id": "network.weight_distribution",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "network.weight_matrix": {
+    "id": "network.weight_matrix",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.matrix",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.analog_trace": {
+    "id": "neuro.analog_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.analog_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.compartment_trace": {
+    "id": "neuro.compartment_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.compartment_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.correlogram": {
+    "id": "neuro.correlogram",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.correlogram",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.isi_distribution": {
+    "id": "neuro.isi_distribution",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.distribution",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.multisignal_trace": {
+    "id": "neuro.multisignal_trace",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.multisignal_trace",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.phase_plane": {
+    "id": "neuro.phase_plane",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.phase_plane",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.population_rate": {
+    "id": "neuro.population_rate",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.population_rate",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.psth": {
+    "id": "neuro.psth",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.psth",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.response_curve": {
+    "id": "neuro.response_curve",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.response_curve",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
+    "owner": "Sepehr Mahmoudian"
+  },
+  "neuro.spike_raster": {
+    "id": "neuro.spike_raster",
+    "kind": "skill",
+    "status": "stable",
+    "availability": "packaged",
+    "renderer": "figure.spike_raster",
+    "determinismClass": "deterministic_svg",
+    "exportClass": "svg+table",
+    "requiredPeers": [],
     "owner": "Sepehr Mahmoudian",
     "limitations": [
-      "Machine output is always JSON; it uses the same bounded fatal-UTF-8 and strict raw-JSON input boundary as validation."
+      "Revision 2 returns only a complete in-memory table alongside the artifact. It refuses any request that would require an excerpt, sidecar, or raster compaction."
     ]
   }
 });
@@ -23185,7 +23242,7 @@ function formatCoordinate(value) {
 var PACKAGE_VERSION = "0.10.0-dev.0";
 var REQUEST_CONTRACT = "cortexel-figure-request/1.0";
 var ARTIFACT_CONTRACT = "cortexel-figure-artifact/1.0";
-var CONTRACT_DIGEST = "sha256:09b41ffd58f3ba63306b1ce347943383b8b4501fe468cc5777b7431b5d6b2792";
+var CONTRACT_DIGEST = "sha256:a710ef28247ab8c3e49ebf80b30bfcbacc6c64768d8a836828f78eeb4cac597b";
 var CATALOG_DIGEST = "sha256:e6ef9014ca56f4bd159f8b3545ba8d7cf0241550ff25b9de44b05fde826f0dd5";
 var STABLE_SKILL_COUNT = 19;
 function getBuildIdentity() {

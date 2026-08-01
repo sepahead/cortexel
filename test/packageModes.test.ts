@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CLOSED_PACKAGE_FILES,
+  CLOSED_PACKAGE_SOURCE_TREES,
   finalizePackageModes,
   normalizePackageModes,
   PACKAGE_FILE_MODES,
@@ -79,11 +80,15 @@ describe('deterministic package modes', () => {
         'utf8',
       );
       for (const relative of CLOSED_PACKAGE_FILES) {
-        if (relative === 'dist' || relative === 'LICENSES') continue;
+        if (relative === 'dist' || CLOSED_PACKAGE_SOURCE_TREES.includes(
+          relative as (typeof CLOSED_PACKAGE_SOURCE_TREES)[number],
+        )) continue;
         writeFileSync(path.join(root, relative), `${relative}\n`, 'utf8');
       }
-      mkdirSync(path.join(root, 'LICENSES'));
-      writeFileSync(path.join(root, 'LICENSES', 'license.txt'), 'license\n', 'utf8');
+      for (const relative of CLOSED_PACKAGE_SOURCE_TREES) {
+        mkdirSync(path.join(root, relative));
+        writeFileSync(path.join(root, relative, 'fixture.txt'), `${relative}\n`, 'utf8');
+      }
       mkdirSync(path.join(root, 'dist', 'cli'), { recursive: true });
       writeFileSync(path.join(root, 'dist', 'index.js'), 'export {};\n', 'utf8');
       writeFileSync(path.join(root, 'dist', 'cli', 'main.js'), '#!/usr/bin/env node\n', 'utf8');
@@ -99,16 +104,20 @@ describe('deterministic package modes', () => {
         const target = path.join(root, relative);
         chmodSync(
           target,
-          relative === 'LICENSES'
+          CLOSED_PACKAGE_SOURCE_TREES.includes(
+            relative as (typeof CLOSED_PACKAGE_SOURCE_TREES)[number],
+          )
             ? PACKAGE_FILE_MODES.directory
             : PACKAGE_FILE_MODES.regular,
         );
       }
-      chmodSync(path.join(root, 'LICENSES', 'license.txt'), PACKAGE_FILE_MODES.regular);
+      for (const relative of CLOSED_PACKAGE_SOURCE_TREES) {
+        chmodSync(path.join(root, relative, 'fixture.txt'), PACKAGE_FILE_MODES.regular);
+      }
 
       const receipt = finalizePackageModes(root);
-      expect(receipt).toEqual({ directories: 3, regularFiles: 13, executableFiles: 1 });
-      for (const relative of ['package.json', 'README.md', 'LICENSES/license.txt', 'dist/index.js']) {
+      expect(receipt).toEqual({ directories: 5, regularFiles: 17, executableFiles: 1 });
+      for (const relative of ['package.json', 'README.md', 'LICENSES/fixture.txt', 'dist/index.js']) {
         expect(permissions(path.join(root, relative)), relative).toBe(PACKAGE_FILE_MODES.regular);
       }
       expect(permissions(path.join(root, 'LICENSES'))).toBe(PACKAGE_FILE_MODES.directory);

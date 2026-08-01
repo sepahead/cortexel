@@ -1,16 +1,84 @@
 import {
+  CORPUS_GRAPH_RADIUS_MEANING,
+  DEFAULT_GRAPH_NODE_RADIUS,
+  GRAPH_EDGE_CURVE_SEGMENTS,
+  GRAPH_EDGE_LANE_SPACING,
+  GRAPH_EDGE_TARGET_BOUNDARY_SOLVE_ITERATIONS,
+  GRAPH_LAYOUT_TICK_SECONDS,
+  MAX_GRAPH_EDGE_LANE_OFFSET,
+  MAX_GRAPH_LAYOUT_TICKS_PER_FRAME,
+  MAX_GRAPH_NODE_RADIUS,
+  MAX_GRAPH_PARALLEL_EDGES,
+  MAX_GRAPH_QUERY_LENGTH,
+  MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+  MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+  MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES,
+  MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES,
+  advanceGraphLayoutClock,
+  advanceGraphLayoutClockInto,
+  assertKnowledgeGraphIdentity,
+  assertKnowledgeGraphLiveForceBudget,
+  assertKnowledgeGraphPresentationBudget,
+  assertRenderableGraphEdges,
+  assertUniqueGraphNodeIds,
+  assignGraphEdgeLanes,
+  buildAdjacency,
+  corpusGraphInstanceIdentity,
+  corpusGraphRadiusMeaning,
+  defaultEdgeStyles,
+  defaultNodeColors,
+  filterGraphEdges,
+  flowParticleCount,
+  graphCameraTargetDamping,
+  graphEdgeControlPointInto,
+  graphEdgeCurvePointInto,
+  graphEdgeMatchesQuery,
+  graphEdgeTargetBoundaryInto,
+  graphQueryMatchIds,
+  graphSignature,
+  isKnowledgeGraphLiveForceWithinBudget,
+  knowledgeGraphLiveForceAvailability,
+  matchesGraphQuery,
+  normalizeGraphNodeRadius,
+  normalizeGraphQuery,
+  prepareCorpusKnowledgeGraphFigure,
+  prepareCorpusKnowledgeGraphFigureJson,
+  reducedMotionLayoutTickBudget,
+  uniqueGraphTopologyLinks
+} from "../chunk-22DS5UXH.js";
+import {
+  KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
+  KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH,
+  KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE,
+  graphEdgeIdentityKey,
+  knowledgeGraphAutoFrameNodeRadialExtent,
+  knowledgeGraphContrastSafeColor,
+  knowledgeGraphEdgeStrokeDescription,
+  knowledgeGraphEdgeStrokeSegmentVisible,
+  knowledgeGraphNodeEmphasisDimAmount,
+  knowledgeGraphNodeGlyphDescription,
+  knowledgeGraphRenderedNodeRadialExtent,
+  knowledgeGraphRenderedNodeScale
+} from "../chunk-VINPKPR3.js";
+import "../chunk-FFYJVPAY.js";
+import {
   KNOWLEDGE_GRAPH_LIMITS,
-  safeDiagnosticText
-} from "../chunk-AHFTSYTV.js";
+  SAFE_DISPLAY_STRING_PATTERN,
+  safeDiagnosticText,
+  safeErrorMessage
+} from "../chunk-VSZKJBXV.js";
+import "../chunk-EVZW37W7.js";
+import "../chunk-RF2EM75L.js";
+import "../chunk-ZYBCCIMH.js";
 
 // react/KnowledgeGraph3DScene.tsx
 import {
   useCallback,
-  useEffect as useEffect2,
+  useEffect as useEffect4,
   useLayoutEffect,
-  useMemo,
-  useRef,
-  useState as useState2
+  useMemo as useMemo4,
+  useRef as useRef3,
+  useState as useState3
 } from "react";
 import {
   useFrame,
@@ -25,588 +93,13 @@ import {
   forceCollide
 } from "d3-force-3d";
 
-// react/knowledgeGraphIdentity.internal.ts
-function canonicalGraphNodePair(source, target) {
-  return source <= target ? [source, target] : [target, source];
-}
-function graphEdgeIdentityKey(edge) {
-  if (typeof edge.id === "string") return JSON.stringify(["id", edge.id]);
-  const kind = typeof edge.kind === "string" ? edge.kind : "";
-  if (edge.directed === false) {
-    const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
-    return JSON.stringify(["legacy-undirected", source, target, kind]);
-  }
-  return JSON.stringify(["legacy-directed", edge.source, edge.target, kind]);
-}
-
-// react/knowledgeGraph.ts
-var MAX_GRAPH_QUERY_LENGTH = 500;
-var DEFAULT_GRAPH_NODE_RADIUS = 4;
-var MAX_GRAPH_NODE_RADIUS = 64;
-var MAX_KNOWLEDGE_GRAPH_SCENE_NODES = 1e3;
-var MAX_KNOWLEDGE_GRAPH_SCENE_EDGES = 4e3;
-var GRAPH_EDGE_CURVE_SEGMENTS = 4;
-var GRAPH_EDGE_LANE_SPACING = 6;
-var MAX_GRAPH_PARALLEL_EDGES = 9;
-var MAX_GRAPH_EDGE_LANE_OFFSET = (MAX_GRAPH_PARALLEL_EDGES - 1) / 2 * GRAPH_EDGE_LANE_SPACING;
-var DEFAULT_CORPUS_GRAPH_BASE_RADIUS = 4;
-var DEFAULT_CORPUS_GRAPH_DEGREE_SCALE = 1.4;
-var DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP = 8;
-function corpusGraphRadiusMeaning(baseRadius, degreeScale, maxRadiusBump) {
-  if (degreeScale === 0 || maxRadiusBump === 0) {
-    return `Constant schematic radius ${String(baseRadius)} world units; relationship degree is not encoded; not quantitative evidence.`;
-  }
-  return `Schematic radius = ${String(baseRadius)} + min(${String(maxRadiusBump)}, sqrt(relationship degree in the complete mapped snapshot before host-side view filters) \xD7 ${String(degreeScale)}) world units; not quantitative evidence.`;
-}
-var CORPUS_GRAPH_RADIUS_MEANING = corpusGraphRadiusMeaning(
-  DEFAULT_CORPUS_GRAPH_BASE_RADIUS,
-  DEFAULT_CORPUS_GRAPH_DEGREE_SCALE,
-  DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP
-);
-function assertKnowledgeGraphBudget(nodeCount, edgeCount) {
-  if (!Number.isSafeInteger(nodeCount) || nodeCount < 0 || nodeCount > MAX_KNOWLEDGE_GRAPH_SCENE_NODES) {
-    throw new RangeError(
-      `knowledge graph nodes must be a non-negative integer <= ${MAX_KNOWLEDGE_GRAPH_SCENE_NODES}`
-    );
-  }
-  if (!Number.isSafeInteger(edgeCount) || edgeCount < 0 || edgeCount > MAX_KNOWLEDGE_GRAPH_SCENE_EDGES) {
-    throw new RangeError(
-      `knowledge graph edges must be a non-negative integer <= ${MAX_KNOWLEDGE_GRAPH_SCENE_EDGES}`
-    );
-  }
-}
-function assertKnowledgeGraphIdentity(graphIdentity) {
-  if (typeof graphIdentity !== "string" || graphIdentity.length < 1 || graphIdentity.length > 1024) {
-    throw new Error(
-      "knowledge graph identity must be a non-empty string <= 1024 characters"
-    );
-  }
-}
-function assertUniqueGraphNodeIds(nodes) {
-  const ids = /* @__PURE__ */ new Set();
-  for (let index = 0; index < nodes.length; index++) {
-    const id = nodes[index].id;
-    if (ids.has(id)) {
-      throw new Error(`knowledge graph node id is duplicated at index ${index}`);
-    }
-    ids.add(id);
-  }
-}
-function assertRenderableGraphEdges(nodes, edges) {
-  const ids = /* @__PURE__ */ new Set();
-  for (let index = 0; index < nodes.length; index++) ids.add(nodes[index].id);
-  const relationships = /* @__PURE__ */ new Set();
-  const pairCounts = /* @__PURE__ */ new Map();
-  for (let index = 0; index < edges.length; index++) {
-    const edge = edges[index];
-    if (!ids.has(edge.source) || !ids.has(edge.target)) {
-      throw new Error(`knowledge graph edge at index ${index} has a missing endpoint`);
-    }
-    if (edge.source === edge.target) {
-      throw new Error(`knowledge graph edge at index ${index} is a self-loop`);
-    }
-    if (edge.directed === false && edge.particles === true) {
-      throw new Error(
-        `knowledge graph edge at index ${index} is undirected but carries directional particles`
-      );
-    }
-    const key = graphEdgeIdentityKey(edge);
-    if (relationships.has(key)) {
-      const identity = typeof edge.id === "string" ? "id" : "relationship";
-      throw new Error(`knowledge graph edge ${identity} is duplicated at index ${index}`);
-    }
-    relationships.add(key);
-    const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
-    const pairKey = JSON.stringify([source, target]);
-    const pairCount = (pairCounts.get(pairKey) ?? 0) + 1;
-    if (pairCount > MAX_GRAPH_PARALLEL_EDGES) {
-      throw new RangeError(
-        `knowledge graph edge bundle exceeds ${MAX_GRAPH_PARALLEL_EDGES} at index ${index}`
-      );
-    }
-    pairCounts.set(pairKey, pairCount);
-  }
-}
-function reducedMotionLayoutTickBudget(nodeCount, edgeCount) {
-  assertKnowledgeGraphBudget(nodeCount, edgeCount);
-  const estimatedWork = Math.max(1, nodeCount + Math.ceil(edgeCount / 4));
-  return Math.min(8, Math.max(2, Math.floor(2e3 / estimatedWork)));
-}
-function graphCameraTargetDamping(deltaSeconds, reducedMotion) {
-  if (reducedMotion) return 1;
-  if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return 0;
-  return -Math.expm1(-3 * deltaSeconds);
-}
-function normalizeGraphQuery(query) {
-  return query.slice(0, MAX_GRAPH_QUERY_LENGTH).trim().toLowerCase();
-}
-function matchesGraphQuery(idOrLabel, labelOrKind, kindOrQuery, maybeNormalizedQuery) {
-  const hasId = maybeNormalizedQuery !== void 0;
-  const id = hasId ? idOrLabel : "";
-  const label = hasId ? labelOrKind : idOrLabel;
-  const kind = hasId ? kindOrQuery : labelOrKind;
-  const normalizedQuery = hasId ? maybeNormalizedQuery : kindOrQuery;
-  return normalizedQuery.length === 0 || id.toLowerCase().includes(normalizedQuery) || label.toLowerCase().includes(normalizedQuery) || kind.toLowerCase().includes(normalizedQuery);
-}
-var MAX_GRAPH_SEARCH_ARRAY_ITEMS = 24;
-var MAX_GRAPH_SEARCH_RECORD_KEYS = 32;
-var MAX_GRAPH_SEARCH_DEPTH = 3;
-function graphMetadataMatchesQuery(value, normalizedQuery, depth = 0) {
-  if (typeof value === "string") {
-    return value.toLowerCase().includes(normalizedQuery);
-  }
-  if (typeof value === "number" || typeof value === "boolean" || value === null) {
-    return String(value).toLowerCase().includes(normalizedQuery);
-  }
-  if (value === void 0 || depth >= MAX_GRAPH_SEARCH_DEPTH) return false;
-  if (Array.isArray(value)) {
-    const count2 = Math.min(value.length, MAX_GRAPH_SEARCH_ARRAY_ITEMS);
-    for (let index = 0; index < count2; index++) {
-      if (graphMetadataMatchesQuery(value[index], normalizedQuery, depth + 1)) return true;
-    }
-    return false;
-  }
-  if (typeof value !== "object") return false;
-  const record = value;
-  const keys = Object.keys(record);
-  const count = Math.min(keys.length, MAX_GRAPH_SEARCH_RECORD_KEYS);
-  for (let index = 0; index < count; index++) {
-    const key = keys[index];
-    if (key.toLowerCase().includes(normalizedQuery) || graphMetadataMatchesQuery(record[key], normalizedQuery, depth + 1)) {
-      return true;
-    }
-  }
-  return false;
-}
-function graphNodeMatchesQuery(node, normalizedQuery) {
-  return matchesGraphQuery(node.id, node.label, node.kind, normalizedQuery) || graphMetadataMatchesQuery(node.radius, normalizedQuery) || graphMetadataMatchesQuery(node.radiusMeaning, normalizedQuery) || graphMetadataMatchesQuery(node.detail, normalizedQuery) || graphMetadataMatchesQuery(node.attributes, normalizedQuery) || graphMetadataMatchesQuery(node.epistemic, normalizedQuery) || graphMetadataMatchesQuery(node.evidence, normalizedQuery) || graphMetadataMatchesQuery(node.uncalibrated_score, normalizedQuery);
-}
-function graphEdgeMetadataMatchesQuery(edge, normalizedQuery) {
-  return graphMetadataMatchesQuery(edge.id, normalizedQuery) || graphMetadataMatchesQuery(edge.kind, normalizedQuery) || graphMetadataMatchesQuery(edge.label, normalizedQuery) || graphMetadataMatchesQuery(edge.attributes, normalizedQuery) || graphMetadataMatchesQuery(edge.epistemic, normalizedQuery) || graphMetadataMatchesQuery(edge.evidence, normalizedQuery) || graphMetadataMatchesQuery(edge.uncalibrated_score, normalizedQuery);
-}
-function graphQueryMatchIds(nodes, normalizedQuery, edges = []) {
-  const matches = /* @__PURE__ */ new Set();
-  const knownIds = /* @__PURE__ */ new Set();
-  for (let index = 0; index < nodes.length; index++) {
-    const node = nodes[index];
-    knownIds.add(node.id);
-    if (normalizedQuery.length === 0 || graphNodeMatchesQuery(node, normalizedQuery)) {
-      matches.add(node.id);
-    }
-  }
-  if (normalizedQuery.length > 0) {
-    for (let index = 0; index < edges.length; index++) {
-      const edge = edges[index];
-      if (!graphEdgeMetadataMatchesQuery(edge, normalizedQuery)) continue;
-      if (knownIds.has(edge.source)) matches.add(edge.source);
-      if (knownIds.has(edge.target)) matches.add(edge.target);
-    }
-  }
-  return matches;
-}
-function graphEdgeMatchesQuery(source, target, matchingNodeIds, normalizedQuery) {
-  return normalizedQuery.length === 0 || matchingNodeIds.has(source) || matchingNodeIds.has(target);
-}
-var GRAPH_LAYOUT_TICK_SECONDS = 1 / 60;
-var MAX_GRAPH_LAYOUT_TICKS_PER_FRAME = 2;
-function advanceGraphLayoutClockInto(accumulatorSeconds, deltaSeconds, out) {
-  const remainder = Number.isFinite(accumulatorSeconds) && accumulatorSeconds > 0 ? Math.min(accumulatorSeconds, GRAPH_LAYOUT_TICK_SECONDS) : 0;
-  const delta = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? Math.min(
-    deltaSeconds,
-    GRAPH_LAYOUT_TICK_SECONDS * MAX_GRAPH_LAYOUT_TICKS_PER_FRAME
-  ) : 0;
-  const available = remainder + delta;
-  const ticks = Math.min(
-    MAX_GRAPH_LAYOUT_TICKS_PER_FRAME,
-    Math.floor((available + Number.EPSILON) / GRAPH_LAYOUT_TICK_SECONDS)
-  );
-  out.ticks = ticks;
-  out.remainderSeconds = Math.min(
-    GRAPH_LAYOUT_TICK_SECONDS,
-    Math.max(0, available - ticks * GRAPH_LAYOUT_TICK_SECONDS)
-  );
-  return out;
-}
-function advanceGraphLayoutClock(accumulatorSeconds, deltaSeconds) {
-  return advanceGraphLayoutClockInto(
-    accumulatorSeconds,
-    deltaSeconds,
-    { ticks: 0, remainderSeconds: 0 }
-  );
-}
-function normalizeGraphNodeRadius(radius) {
-  return Number.isFinite(radius) && radius > 0 && radius <= MAX_GRAPH_NODE_RADIUS ? radius : DEFAULT_GRAPH_NODE_RADIUS;
-}
-function filterGraphEdges(ids, edges) {
-  const seen = /* @__PURE__ */ new Set();
-  return edges.filter((edge) => {
-    if (!ids.has(edge.source) || !ids.has(edge.target) || edge.source === edge.target) {
-      return false;
-    }
-    const key = graphEdgeIdentityKey(edge);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-function assignGraphEdgeLanes(edges) {
-  const bundles = /* @__PURE__ */ new Map();
-  for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
-    const edge = edges[edgeIndex];
-    const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
-    const pairKey = JSON.stringify([source, target]);
-    const semanticKey = JSON.stringify([
-      graphEdgeIdentityKey(edge),
-      typeof edge.kind === "string" ? edge.kind : "",
-      edge.source,
-      edge.target
-    ]);
-    const bundle = bundles.get(pairKey);
-    const candidate = { edge, edgeIndex, semanticKey };
-    if (bundle) bundle.push(candidate);
-    else bundles.set(pairKey, [candidate]);
-  }
-  const lanes = new Array(edges.length);
-  for (const bundle of bundles.values()) {
-    if (bundle.length > MAX_GRAPH_PARALLEL_EDGES) {
-      throw new RangeError(
-        `knowledge graph edge bundle exceeds ${MAX_GRAPH_PARALLEL_EDGES}`
-      );
-    }
-    bundle.sort(
-      (a, b) => a.semanticKey < b.semanticKey ? -1 : a.semanticKey > b.semanticKey ? 1 : a.edgeIndex - b.edgeIndex
-    );
-    const center = (bundle.length - 1) / 2;
-    for (let rank = 0; rank < bundle.length; rank++) {
-      const candidate = bundle[rank];
-      lanes[candidate.edgeIndex] = {
-        edge: candidate.edge,
-        edgeIndex: candidate.edgeIndex,
-        laneOffset: rank - center,
-        bundleSize: bundle.length,
-        canonicalDirectionSign: candidate.edge.source <= candidate.edge.target ? 1 : -1
-      };
-    }
-  }
-  return lanes;
-}
-function uniqueGraphTopologyLinks(edges) {
-  const seen = /* @__PURE__ */ new Set();
-  const links = [];
-  for (let index = 0; index < edges.length; index++) {
-    const edge = edges[index];
-    if (edge.source === edge.target) continue;
-    const [source, target] = canonicalGraphNodePair(edge.source, edge.target);
-    const key = JSON.stringify([source, target]);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    links.push({ source, target });
-  }
-  links.sort(
-    (a, b) => a.source < b.source ? -1 : a.source > b.source ? 1 : a.target < b.target ? -1 : a.target > b.target ? 1 : 0
-  );
-  return links;
-}
-function graphEdgeControlPointInto(source, target, lane, out) {
-  const midpointX = (source.x + target.x) * 0.5;
-  const midpointY = (source.y + target.y) * 0.5;
-  const midpointZ = (source.z + target.z) * 0.5;
-  const sign = lane.canonicalDirectionSign;
-  let dx = (target.x - source.x) * sign;
-  let dy = (target.y - source.y) * sign;
-  let dz = (target.z - source.z) * sign;
-  const length = Math.hypot(dx, dy, dz);
-  if (!(length > 1e-12) || lane.laneOffset === 0) {
-    out.x = midpointX;
-    out.y = midpointY;
-    out.z = midpointZ;
-    return out;
-  }
-  dx /= length;
-  dy /= length;
-  dz /= length;
-  let basisX;
-  let basisY;
-  let basisZ;
-  if (dz < -0.9999999) {
-    basisX = 0;
-    basisY = -1;
-    basisZ = 0;
-  } else {
-    const scale = 1 / (1 + dz);
-    const xy = -dx * dy * scale;
-    basisX = 1 - dx * dx * scale;
-    basisY = xy;
-    basisZ = -dx;
-  }
-  const laneOffset = lane.laneOffset * GRAPH_EDGE_LANE_SPACING;
-  out.x = midpointX + basisX * laneOffset;
-  out.y = midpointY + basisY * laneOffset;
-  out.z = midpointZ + basisZ * laneOffset;
-  return out;
-}
-function graphEdgeCurvePointInto(source, control, target, t, out) {
-  const clamped = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0;
-  const inverse = 1 - clamped;
-  const sourceWeight = inverse * inverse;
-  const controlWeight = 2 * inverse * clamped;
-  const targetWeight = clamped * clamped;
-  out.x = source.x * sourceWeight + control.x * controlWeight + target.x * targetWeight;
-  out.y = source.y * sourceWeight + control.y * controlWeight + target.y * targetWeight;
-  out.z = source.z * sourceWeight + control.z * controlWeight + target.z * targetWeight;
-  return out;
-}
-function buildAdjacency(ids, edges) {
-  const m = /* @__PURE__ */ new Map();
-  for (const id of ids) m.set(id, /* @__PURE__ */ new Set());
-  for (const e of edges) {
-    if (!ids.has(e.source) || !ids.has(e.target)) continue;
-    m.get(e.source).add(e.target);
-    m.get(e.target).add(e.source);
-  }
-  return m;
-}
-function flowParticleCount(flowEdgeCount, perEdge, max) {
-  if (![flowEdgeCount, perEdge, max].every(Number.isFinite)) return 0;
-  const edges = Math.max(0, Math.floor(flowEdgeCount));
-  const each = Math.max(0, Math.floor(perEdge));
-  const ceiling = Math.max(0, Math.floor(max));
-  return Math.min(ceiling, edges * each);
-}
-function graphSignature(nodes, edges) {
-  const field = (value) => {
-    if (value === void 0) return "u;";
-    const type = typeof value === "string" ? "s" : typeof value === "number" ? "n" : "b";
-    const text = typeof value === "number" && Object.is(value, -0) ? "-0" : String(value);
-    return `${type}${text.length}:${text}`;
-  };
-  let s = "";
-  for (const n of nodes) s += `N${field(n.id)}${field(n.radius)}`;
-  s += "|";
-  for (const e of edges) {
-    s += `E${field(e.id)}${field(e.source)}${field(e.target)}${field(e.color)}${field(
-      e.kind
-    )}${field((e.directed !== false ? 1 : 0) + (e.particles ? 2 : 0))}`;
-  }
-  return s;
-}
-function defaultNodeColors(palette) {
-  return {
-    paper: palette.cyan,
-    // sources — cool
-    model: palette.amber,
-    // implementations — warm
-    family: palette.violet
-    // groupings — the palette endpoint
-  };
-}
-function defaultEdgeStyles(palette) {
-  return {
-    cites: { color: palette.excitatory, directed: true, particles: true },
-    instantiates: { color: palette.teal, directed: true, particles: false },
-    belongs_to_family: { color: palette.inkFaint, directed: true, particles: false },
-    same_as: { color: palette.orange, directed: false, particles: false },
-    variant_of: { color: palette.pink, directed: true, particles: false }
-  };
-}
-var MAP_CORPUS_GRAPH_OPTION_KEYS = /* @__PURE__ */ new Set([
-  "baseRadius",
-  "degreeScale",
-  "maxRadiusBump",
-  "nodeColors",
-  "edgeColors"
-]);
-var KNOWLEDGE_GRAPH_NODE_KINDS = /* @__PURE__ */ new Set([
-  "paper",
-  "model",
-  "family"
-]);
-var KNOWLEDGE_GRAPH_EDGE_KINDS = /* @__PURE__ */ new Set([
-  "cites",
-  "same_as",
-  "variant_of",
-  "instantiates",
-  "belongs_to_family"
-]);
-var HEX_COLOR = /^#[0-9a-f]{6}$/iu;
-function ownDataRecord(value, label, allowedKeys) {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
-    throw new TypeError(`${label} must be a plain object`);
-  }
-  const result = /* @__PURE__ */ Object.create(null);
-  for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== "string" || !allowedKeys.has(key)) {
-      throw new TypeError(`${label} contains an unknown member`);
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
-      throw new TypeError(`${label}.${key} must be an enumerable data property`);
-    }
-    result[key] = descriptor.value;
-  }
-  return result;
-}
-function finiteRadiusOption(options, key, fallback, strictlyPositive) {
-  const value = options[key];
-  if (value === void 0) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value) || Object.is(value, -0) || (strictlyPositive ? value <= 0 : value < 0)) {
-    const domain = strictlyPositive ? "positive" : "non-negative";
-    throw new RangeError(`mapCorpusKnowledgeGraph ${key} must be a finite ${domain} number`);
-  }
-  return value;
-}
-function normalizeHexColor(value, label) {
-  if (typeof value !== "string" || !HEX_COLOR.test(value)) {
-    throw new TypeError(`${label} must be an exact #rrggbb hex color`);
-  }
-  return value.toLowerCase();
-}
-function colorOverrides(value, label, allowedKeys) {
-  if (value === void 0) return {};
-  const record = ownDataRecord(value, label, allowedKeys);
-  const result = {};
-  for (const [key, color] of Object.entries(record)) {
-    result[key] = normalizeHexColor(color, `${label}.${key}`);
-  }
-  return result;
-}
-function corpusGraphInstanceIdentity(context) {
-  const field = (value) => `${value.length}:${value}`;
-  return `cortexel-corpus-graph-instance.v1:${field(context.graph_id)}${field(
-    context.graph_source
-  )}${field(context.graph_snapshot_id)}${field(context.graph_scope)}${field(
-    context.generated_at
-  )}`;
-}
-function mapCorpusKnowledgeGraph(params, palette, opts = {}) {
-  assertKnowledgeGraphBudget(params.nodes.length, params.edges.length);
-  assertUniqueGraphNodeIds(params.nodes);
-  assertRenderableGraphEdges(params.nodes, params.edges);
-  const optionValues = ownDataRecord(
-    opts,
-    "mapCorpusKnowledgeGraph options",
-    MAP_CORPUS_GRAPH_OPTION_KEYS
-  );
-  const baseRadius = finiteRadiusOption(
-    optionValues,
-    "baseRadius",
-    DEFAULT_CORPUS_GRAPH_BASE_RADIUS,
-    true
-  );
-  const degreeScale = finiteRadiusOption(
-    optionValues,
-    "degreeScale",
-    DEFAULT_CORPUS_GRAPH_DEGREE_SCALE,
-    false
-  );
-  const maxRadiusBump = finiteRadiusOption(
-    optionValues,
-    "maxRadiusBump",
-    DEFAULT_CORPUS_GRAPH_MAX_RADIUS_BUMP,
-    false
-  );
-  if (baseRadius + maxRadiusBump > MAX_GRAPH_NODE_RADIUS) {
-    throw new RangeError(
-      `mapCorpusKnowledgeGraph baseRadius + maxRadiusBump must be <= ${MAX_GRAPH_NODE_RADIUS}`
-    );
-  }
-  const nodeColorOverrides = colorOverrides(
-    optionValues.nodeColors,
-    "mapCorpusKnowledgeGraph nodeColors",
-    KNOWLEDGE_GRAPH_NODE_KINDS
-  );
-  const edgeColorOverrides = colorOverrides(
-    optionValues.edgeColors,
-    "mapCorpusKnowledgeGraph edgeColors",
-    KNOWLEDGE_GRAPH_EDGE_KINDS
-  );
-  const nodeColors = {
-    ...Object.fromEntries(
-      Object.entries(defaultNodeColors(palette)).map(([kind, color]) => [
-        kind,
-        normalizeHexColor(color, `palette node color ${kind}`)
-      ])
-    ),
-    ...nodeColorOverrides
-  };
-  const edgeStyles = defaultEdgeStyles(palette);
-  for (const [kind, style] of Object.entries(edgeStyles)) {
-    style.color = normalizeHexColor(style.color, `palette edge color ${kind}`);
-  }
-  const radiusMeaning = corpusGraphRadiusMeaning(
-    baseRadius,
-    degreeScale,
-    maxRadiusBump
-  );
-  const renderableEdges = params.edges;
-  const degree = /* @__PURE__ */ new Map();
-  for (const e of renderableEdges) {
-    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
-    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
-  }
-  const nodes = params.nodes.map((n) => {
-    const d = degree.get(n.id) ?? 0;
-    const radius = baseRadius + Math.min(maxRadiusBump, Math.sqrt(d) * degreeScale);
-    return {
-      id: n.id,
-      label: n.label,
-      ...n.detail === void 0 ? {} : { detail: n.detail },
-      attributes: n.attributes,
-      epistemic: n.epistemic,
-      evidence: n.evidence,
-      ...n.uncalibrated_score === void 0 ? {} : { uncalibrated_score: n.uncalibrated_score },
-      color: nodeColors[n.kind] ?? palette.inkDim,
-      radius,
-      radiusMeaning,
-      kind: n.kind
-    };
-  });
-  const edges = renderableEdges.map((e) => {
-    const style = edgeStyles[e.kind] ?? {
-      color: palette.inkFaint,
-      directed: true,
-      particles: false
-    };
-    const id = "id" in e && typeof e.id === "string" ? e.id : void 0;
-    return {
-      ...id === void 0 ? {} : { id },
-      label: e.label,
-      attributes: e.attributes,
-      epistemic: e.epistemic,
-      evidence: e.evidence,
-      ...e.uncalibrated_score === void 0 ? {} : { uncalibrated_score: e.uncalibrated_score },
-      source: e.source,
-      target: e.target,
-      color: edgeColorOverrides[e.kind] ?? style.color,
-      directed: style.directed,
-      kind: e.kind,
-      particles: style.particles
-    };
-  });
-  assertRenderableGraphEdges(nodes, edges);
-  return {
-    context: {
-      graph_id: params.graph_id,
-      graph_source: params.graph_source,
-      graph_snapshot_id: params.graph_snapshot_id,
-      graph_scope: params.graph_scope,
-      generated_at: params.generated_at
-    },
-    graphIdentity: corpusGraphInstanceIdentity({
-      graph_id: params.graph_id,
-      graph_source: params.graph_source,
-      graph_snapshot_id: params.graph_snapshot_id,
-      graph_scope: params.graph_scope,
-      generated_at: params.generated_at
-    }),
-    nodes,
-    edges
-  };
-}
-
 // react/knowledgeGraphLayout.internal.ts
 function snapshotGraphLayoutInputs(nodes, edges) {
-  const nodeSnapshot = nodes.map(({ id, radius }) => ({ id, radius }));
+  const nodeSnapshot = nodes.map(({ id, radius, nodeGlyph }) => ({
+    id,
+    radius,
+    nodeGlyph
+  }));
   const edgeSnapshot = edges.map(({
     id,
     source,
@@ -614,8 +107,18 @@ function snapshotGraphLayoutInputs(nodes, edges) {
     color,
     kind,
     directed,
-    particles
-  }) => ({ id, source, target, color, kind, directed, particles }));
+    particles,
+    edgeStrokePattern
+  }) => ({
+    id,
+    source,
+    target,
+    color,
+    kind,
+    directed,
+    particles,
+    edgeStrokePattern
+  }));
   return {
     graphKey: graphSignature(nodeSnapshot, edgeSnapshot),
     nodes: nodeSnapshot,
@@ -693,11 +196,28 @@ function publishGraphLayoutCache(authority, buffered, completedBufferIndex) {
 
 // react/focusLabelResource.internal.ts
 import * as THREE from "three";
+var FOCUS_LABEL_MAX_WORLD_WIDTH = 160;
+var FOCUS_LABEL_WORLD_HEIGHT = 7;
+var FOCUS_LABEL_NODE_GAP = 4;
+function knowledgeGraphFocusLabelSpriteCenterY(nodeRadius, nodeGlyph) {
+  return -(knowledgeGraphRenderedNodeRadialExtent(nodeRadius, nodeGlyph, true) + FOCUS_LABEL_NODE_GAP) / FOCUS_LABEL_WORLD_HEIGHT;
+}
+var FOCUS_LABEL_THEME = Object.freeze({
+  dark: Object.freeze({
+    background: "#030711",
+    text: "#e2e8f0"
+  }),
+  light: Object.freeze({
+    background: "#f8fafc",
+    text: "#0f172a"
+  })
+});
 function installFocusLabelResource({
   sprite,
   material,
   label,
   color,
+  themeMode,
   invalidate,
   createCanvas = () => typeof document === "undefined" ? null : document.createElement("canvas"),
   createTexture = (canvas) => new THREE.CanvasTexture(canvas)
@@ -725,9 +245,10 @@ function installFocusLabelResource({
   context.font = `600 ${fontSize}px system-ui, sans-serif`;
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillStyle = "rgba(3, 7, 17, 0.9)";
+  const theme = FOCUS_LABEL_THEME[themeMode];
+  context.fillStyle = theme.background;
   context.fillRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#e2e8f0";
+  context.fillStyle = theme.text;
   context.fillStyle = color;
   context.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - paddingX * 2);
   const texture = createTexture(canvas);
@@ -738,7 +259,14 @@ function installFocusLabelResource({
     texture.generateMipmaps = false;
     material.map = texture;
     material.needsUpdate = true;
-    sprite.scale.set(Math.min(160, canvas.width / canvas.height * 7), 7, 1);
+    sprite.scale.set(
+      Math.min(
+        FOCUS_LABEL_MAX_WORLD_WIDTH,
+        canvas.width / canvas.height * FOCUS_LABEL_WORLD_HEIGHT
+      ),
+      FOCUS_LABEL_WORLD_HEIGHT,
+      1
+    );
     sprite.visible = true;
     invalidate();
   } catch (setupError) {
@@ -797,351 +325,63 @@ function installFocusLabelResource({
   };
 }
 
-// react/knowledgeGraphPresentation.internal.ts
-function boundedString(value, label, maxLength) {
-  if (typeof value !== "string" || value.length < 1 || value.length > maxLength) {
-    throw new TypeError(`${label} must be a non-empty string <= ${maxLength} characters`);
+// react/KnowledgeGraph3DScene.tsx
+import {
+  assertPreparedCorpusKnowledgeGraphPresentation as assertPreparedCorpusKnowledgeGraphPresentation3,
+  assertPreparedGenericKnowledgeGraphPresentation as assertPreparedGenericKnowledgeGraphPresentation3,
+  assertPreparedKnowledgeGraphView as assertPreparedKnowledgeGraphView3,
+  assertPreparedKnowledgeGraphPresentation as assertPreparedKnowledgeGraphPresentation3,
+  knowledgeGraphViewContainsNode as knowledgeGraphViewContainsNode3
+} from "#cortexel-knowledge-graph-presentation-capability";
+
+// react/knowledgeGraphPresentationProps.internal.ts
+function hasWellFormedUtf16(value) {
+  for (let index = 0; index < value.length; index++) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 55296 && unit <= 56319) {
+      if (index + 1 >= value.length) return false;
+      const next = value.charCodeAt(index + 1);
+      if (next < 56320 || next > 57343) return false;
+      index += 1;
+    } else if (unit >= 56320 && unit <= 57343) {
+      return false;
+    }
   }
-  return value;
-}
-function optionalBoundedString(value, label, maxLength) {
-  return value === void 0 ? void 0 : boundedString(value, label, maxLength);
+  return true;
 }
 function assertKnowledgeGraphNodeReference(value, label) {
   if (value === null) return;
-  boundedString(value, label, KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength);
+  if (typeof value !== "string" || value.length < 1 || value.length > KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength || !hasWellFormedUtf16(value) || !SAFE_DISPLAY_STRING_PATTERN.test(value)) {
+    throw new TypeError(
+      `${label} must be a non-empty well-formed display-safe string <= ${KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength} characters or null`
+    );
+  }
 }
 function assertKnowledgeGraphColor(value, label) {
   if (value === void 0) return;
-  boundedString(value, label, KNOWLEDGE_GRAPH_LIMITS.maxColorLength);
-}
-function finiteNumber(value, label) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new TypeError(`${label} must be a finite number`);
-  }
-  return value;
-}
-function optionalBoolean(value, label) {
-  if (value !== void 0 && typeof value !== "boolean") {
-    throw new TypeError(`${label} must be boolean when present`);
-  }
-  return value;
-}
-function assertAttributeScalar(value) {
-  if (value !== null && typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
-    throw new TypeError("knowledge-graph attribute values must be JSON scalars or arrays");
-  }
-  if (typeof value === "number" && !Number.isFinite(value)) {
-    throw new TypeError("knowledge-graph numeric attributes must be finite");
-  }
-  if (typeof value === "string" && value.length > KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength) {
-    throw new RangeError(
-      `knowledge-graph attribute strings may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxAttributeStringLength} characters`
+  if (typeof value !== "string" || value.length < 1 || value.length > KNOWLEDGE_GRAPH_LIMITS.maxColorLength || !hasWellFormedUtf16(value) || !SAFE_DISPLAY_STRING_PATTERN.test(value)) {
+    throw new TypeError(
+      `${label} must be a non-empty well-formed display-safe string <= ${KNOWLEDGE_GRAPH_LIMITS.maxColorLength} characters`
     );
   }
-}
-function snapshotAttributes(attributes) {
-  if (attributes === void 0) return void 0;
-  if (attributes === null || typeof attributes !== "object" || Array.isArray(attributes)) {
-    throw new TypeError("knowledge-graph attributes must be a plain record");
-  }
-  const prototype = Object.getPrototypeOf(attributes);
-  if (prototype !== Object.prototype && prototype !== null) {
-    throw new TypeError("knowledge-graph attributes must use a plain or null prototype");
-  }
-  const snapshot = /* @__PURE__ */ Object.create(null);
-  let count = 0;
-  for (const key in attributes) {
-    if (!Object.hasOwn(attributes, key)) continue;
-    count += 1;
-    if (count > KNOWLEDGE_GRAPH_LIMITS.maxAttributes) {
-      throw new RangeError(
-        `knowledge-graph attributes may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxAttributes} keys`
-      );
-    }
-    if (key.length < 1 || key.length > KNOWLEDGE_GRAPH_LIMITS.maxAttributeKeyLength) {
-      throw new RangeError(
-        `knowledge-graph attribute keys must contain 1 to ${KNOWLEDGE_GRAPH_LIMITS.maxAttributeKeyLength} characters`
-      );
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(attributes, key);
-    if (!descriptor || !("value" in descriptor)) {
-      throw new TypeError("knowledge-graph attribute accessors are not supported");
-    }
-    const value = descriptor.value;
-    if (!Array.isArray(value)) {
-      assertAttributeScalar(value);
-      snapshot[key] = value;
-      continue;
-    }
-    if (value.length > KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems) {
-      throw new RangeError(
-        `knowledge-graph attribute arrays may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems} items`
-      );
-    }
-    const items = new Array(value.length);
-    for (let index = 0; index < value.length; index++) {
-      const item = Object.getOwnPropertyDescriptor(value, String(index));
-      if (!item || !("value" in item)) {
-        throw new TypeError("knowledge-graph attribute arrays must be dense data arrays");
-      }
-      assertAttributeScalar(item.value);
-      items[index] = item.value;
-    }
-    snapshot[key] = items;
-  }
-  return snapshot;
-}
-function snapshotEpistemic(epistemic) {
-  if (epistemic === void 0) return void 0;
-  if (epistemic.status !== "derived_advisory" || epistemic.advisory_only !== true || epistemic.is_paper_local_evidence !== false || epistemic.calibrated_posterior !== false) {
-    throw new TypeError("knowledge-graph epistemic metadata must remain derived/advisory");
-  }
-  return {
-    status: epistemic.status,
-    advisory_only: epistemic.advisory_only,
-    is_paper_local_evidence: epistemic.is_paper_local_evidence,
-    calibrated_posterior: epistemic.calibrated_posterior
-  };
-}
-function snapshotEvidence(evidence) {
-  if (evidence === void 0) return void 0;
-  if (evidence.length > KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement) {
-    throw new RangeError(
-      `knowledge-graph evidence may contain at most ${KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement} references`
-    );
-  }
-  const snapshot = new Array(evidence.length);
-  for (let index = 0; index < evidence.length; index++) {
-    const item = Object.getOwnPropertyDescriptor(evidence, String(index));
-    if (!item || !("value" in item) || item.value === null || typeof item.value !== "object") {
-      throw new TypeError("knowledge-graph evidence must be a dense data array");
-    }
-    const reference = item.value;
-    switch (reference.kind) {
-      case "graph_snapshot_record":
-        snapshot[index] = {
-          kind: reference.kind,
-          evidence_id: boundedString(
-            reference.evidence_id,
-            "knowledge-graph evidence id",
-            KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength
-          ),
-          record_id: boundedString(
-            reference.record_id,
-            "knowledge-graph record id",
-            KNOWLEDGE_GRAPH_LIMITS.maxRecordIdLength
-          ),
-          locator: optionalBoundedString(
-            reference.locator,
-            "knowledge-graph evidence locator",
-            KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength
-          )
-        };
-        break;
-      case "graph_node":
-        snapshot[index] = {
-          kind: reference.kind,
-          evidence_id: boundedString(
-            reference.evidence_id,
-            "knowledge-graph evidence id",
-            KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength
-          ),
-          node_id: boundedString(
-            reference.node_id,
-            "knowledge-graph evidence node id",
-            KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength
-          ),
-          locator: optionalBoundedString(
-            reference.locator,
-            "knowledge-graph evidence locator",
-            KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength
-          ),
-          excerpt: optionalBoundedString(
-            reference.excerpt,
-            "knowledge-graph evidence excerpt",
-            KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength
-          )
-        };
-        break;
-      case "citation":
-        if (reference.page !== void 0 && (!Number.isSafeInteger(reference.page) || reference.page < 0)) {
-          throw new TypeError("knowledge-graph citation page must be a non-negative integer");
-        }
-        snapshot[index] = {
-          kind: reference.kind,
-          evidence_id: boundedString(
-            reference.evidence_id,
-            "knowledge-graph evidence id",
-            KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength
-          ),
-          paper_id: boundedString(
-            reference.paper_id,
-            "knowledge-graph evidence paper id",
-            KNOWLEDGE_GRAPH_LIMITS.maxPaperIdLength
-          ),
-          citation_id: boundedString(
-            reference.citation_id,
-            "knowledge-graph citation id",
-            KNOWLEDGE_GRAPH_LIMITS.maxCitationIdLength
-          ),
-          page: reference.page,
-          locator: optionalBoundedString(
-            reference.locator,
-            "knowledge-graph evidence locator",
-            KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength
-          ),
-          excerpt: optionalBoundedString(
-            reference.excerpt,
-            "knowledge-graph evidence excerpt",
-            KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength
-          ),
-          doi: optionalBoundedString(
-            reference.doi,
-            "knowledge-graph evidence DOI",
-            KNOWLEDGE_GRAPH_LIMITS.maxDoiLength
-          )
-        };
-        break;
-      case "external_source":
-        snapshot[index] = {
-          kind: reference.kind,
-          evidence_id: boundedString(
-            reference.evidence_id,
-            "knowledge-graph evidence id",
-            KNOWLEDGE_GRAPH_LIMITS.maxEvidenceIdLength
-          ),
-          source_id: boundedString(
-            reference.source_id,
-            "knowledge-graph evidence source id",
-            KNOWLEDGE_GRAPH_LIMITS.maxSourceIdLength
-          ),
-          locator: optionalBoundedString(
-            reference.locator,
-            "knowledge-graph evidence locator",
-            KNOWLEDGE_GRAPH_LIMITS.maxLocatorLength
-          ),
-          excerpt: optionalBoundedString(
-            reference.excerpt,
-            "knowledge-graph evidence excerpt",
-            KNOWLEDGE_GRAPH_LIMITS.maxExcerptLength
-          )
-        };
-        break;
-      default:
-        throw new TypeError("unsupported knowledge-graph evidence reference");
-    }
-  }
-  return snapshot;
-}
-function snapshotScore(score) {
-  if (score === void 0) return void 0;
-  const value = finiteNumber(score.value, "knowledge-graph score value");
-  if (![
-    "extraction_confidence",
-    "citation_resolution_confidence",
-    "structural_similarity",
-    "behavioral_agreement",
-    "retrieval_relevance"
-  ].includes(score.kind) || score.calibrated_posterior !== false || value < 0 || value > 1) {
-    throw new TypeError("knowledge-graph scores must be bounded and explicitly uncalibrated");
-  }
-  return {
-    kind: score.kind,
-    value,
-    calibrated_posterior: score.calibrated_posterior
-  };
-}
-function snapshotNode(node) {
-  if (typeof node.radius !== "number") {
-    throw new TypeError("knowledge-graph node radius must be numeric");
-  }
-  return {
-    id: boundedString(
-      node.id,
-      "knowledge-graph node id",
-      KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength
-    ),
-    label: boundedString(
-      node.label,
-      "knowledge-graph node label",
-      KNOWLEDGE_GRAPH_LIMITS.maxNodeLabelLength
-    ),
-    detail: optionalBoundedString(
-      node.detail,
-      "knowledge-graph node detail",
-      KNOWLEDGE_GRAPH_LIMITS.maxDetailLength
-    ),
-    attributes: snapshotAttributes(node.attributes),
-    epistemic: snapshotEpistemic(node.epistemic),
-    evidence: snapshotEvidence(node.evidence),
-    uncalibrated_score: snapshotScore(node.uncalibrated_score),
-    color: boundedString(
-      node.color,
-      "knowledge-graph node color",
-      KNOWLEDGE_GRAPH_LIMITS.maxColorLength
-    ),
-    radius: node.radius,
-    radiusMeaning: optionalBoundedString(
-      node.radiusMeaning,
-      "knowledge-graph radius meaning",
-      KNOWLEDGE_GRAPH_LIMITS.maxRadiusMeaningLength
-    ),
-    kind: boundedString(
-      node.kind,
-      "knowledge-graph node kind",
-      KNOWLEDGE_GRAPH_LIMITS.maxKindLength
-    )
-  };
-}
-function snapshotEdge(edge) {
-  return {
-    id: optionalBoundedString(
-      edge.id,
-      "knowledge-graph edge id",
-      KNOWLEDGE_GRAPH_LIMITS.maxEdgeIdLength
-    ),
-    label: optionalBoundedString(
-      edge.label,
-      "knowledge-graph edge label",
-      KNOWLEDGE_GRAPH_LIMITS.maxEdgeLabelLength
-    ),
-    attributes: snapshotAttributes(edge.attributes),
-    epistemic: snapshotEpistemic(edge.epistemic),
-    evidence: snapshotEvidence(edge.evidence),
-    uncalibrated_score: snapshotScore(edge.uncalibrated_score),
-    source: boundedString(
-      edge.source,
-      "knowledge-graph edge source",
-      KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength
-    ),
-    target: boundedString(
-      edge.target,
-      "knowledge-graph edge target",
-      KNOWLEDGE_GRAPH_LIMITS.maxNodeIdLength
-    ),
-    color: boundedString(
-      edge.color,
-      "knowledge-graph edge color",
-      KNOWLEDGE_GRAPH_LIMITS.maxColorLength
-    ),
-    directed: optionalBoolean(edge.directed, "knowledge-graph edge directed"),
-    kind: boundedString(
-      edge.kind,
-      "knowledge-graph edge kind",
-      KNOWLEDGE_GRAPH_LIMITS.maxKindLength
-    ),
-    particles: optionalBoolean(edge.particles, "knowledge-graph edge particles")
-  };
-}
-function snapshotKnowledgeGraphPresentation(nodes, edges) {
-  return {
-    nodes: nodes.map(snapshotNode),
-    edges: edges.map(snapshotEdge)
-  };
 }
 
 // react/knowledgeGraphInteraction.internal.ts
+var KNOWLEDGE_GRAPH_CLICK_MAX_DELTA = 2;
+function isKnowledgeGraphInstanceId(instanceId, instanceCount) {
+  return instanceId !== void 0 && instanceId !== null && Number.isSafeInteger(instanceId) && instanceId >= 0 && Number.isSafeInteger(instanceCount) && instanceCount >= 0 && instanceId < instanceCount;
+}
+function isIntentionalKnowledgeGraphClick(delta) {
+  return Number.isFinite(delta) && delta >= 0 && delta <= KNOWLEDGE_GRAPH_CLICK_MAX_DELTA;
+}
+function handleKnowledgeGraphNodeClick(ready, instanceId, instanceCount, delta, stopPropagation, activate) {
+  if (!ready || !isKnowledgeGraphInstanceId(instanceId, instanceCount)) return;
+  stopPropagation();
+  if (isIntentionalKnowledgeGraphClick(delta)) activate(instanceId);
+}
+function toggledKnowledgeGraphSelection(selectedId, activatedId) {
+  return selectedId === activatedId ? null : activatedId;
+}
 function hasCompleteStartEventSurface(value) {
   return value !== null && typeof value.addEventListener === "function" && typeof value.removeEventListener === "function";
 }
@@ -1206,7 +446,201 @@ function handleKnowledgeGraphPointerOut(ready, stopPropagation, clearHover) {
   clearHover();
 }
 
+// react/knowledgeGraphCamera.internal.ts
+var KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN = 1.12;
+var KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE = 120;
+var KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN = 1.25;
+var KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR = 1e-3;
+var IDENTITY_MATRIX_ELEMENTS = Object.freeze([
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  1
+]);
+function finiteEqual(observed, expected) {
+  if (!Number.isFinite(observed) || !Number.isFinite(expected)) return false;
+  const scale = Math.max(1, Math.abs(observed), Math.abs(expected));
+  return Math.abs(observed - expected) <= Number.EPSILON * 64 * scale;
+}
+function isKnowledgeGraphIdentityMatrixElements(elements) {
+  if (elements.length !== 16) return false;
+  for (let index = 0; index < 16; index++) {
+    if (!finiteEqual(elements[index], IDENTITY_MATRIX_ELEMENTS[index])) return false;
+  }
+  return true;
+}
+function areKnowledgeGraphMatrixElementsEqual(first, second) {
+  if (first.length !== 16 || second.length !== 16) return false;
+  for (let index = 0; index < 16; index++) {
+    if (!finiteEqual(first[index], second[index])) return false;
+  }
+  return true;
+}
+function isKnowledgeGraphCameraSelfTransformCanonical(input) {
+  const { position, quaternion, scale } = input;
+  if (!input.matrixAutoUpdate || !isKnowledgeGraphCameraVectorFinite(position.x, position.y, position.z) || !isKnowledgeGraphCameraVectorFinite(scale.x, scale.y, scale.z) || scale.x !== 1 || scale.y !== 1 || scale.z !== 1 || !Number.isFinite(quaternion.x) || !Number.isFinite(quaternion.y) || !Number.isFinite(quaternion.z) || !Number.isFinite(quaternion.w) || input.matrix.elements.length !== 16 || input.matrixWorld.elements.length !== 16) return false;
+  const norm = quaternion.x * quaternion.x + quaternion.y * quaternion.y + quaternion.z * quaternion.z + quaternion.w * quaternion.w;
+  if (!finiteEqual(norm, 1)) return false;
+  const x2 = quaternion.x + quaternion.x;
+  const y2 = quaternion.y + quaternion.y;
+  const z2 = quaternion.z + quaternion.z;
+  const xx = quaternion.x * x2;
+  const xy = quaternion.x * y2;
+  const xz = quaternion.x * z2;
+  const yy = quaternion.y * y2;
+  const yz = quaternion.y * z2;
+  const zz = quaternion.z * z2;
+  const wx = quaternion.w * x2;
+  const wy = quaternion.w * y2;
+  const wz = quaternion.w * z2;
+  const matrix = input.matrix.elements;
+  if (!(finiteEqual(matrix[0], 1 - (yy + zz)) && finiteEqual(matrix[1], xy + wz) && finiteEqual(matrix[2], xz - wy) && finiteEqual(matrix[3], 0) && finiteEqual(matrix[4], xy - wz) && finiteEqual(matrix[5], 1 - (xx + zz)) && finiteEqual(matrix[6], yz + wx) && finiteEqual(matrix[7], 0) && finiteEqual(matrix[8], xz + wy) && finiteEqual(matrix[9], yz - wx) && finiteEqual(matrix[10], 1 - (xx + yy)) && finiteEqual(matrix[11], 0) && finiteEqual(matrix[12], position.x) && finiteEqual(matrix[13], position.y) && finiteEqual(matrix[14], position.z) && finiteEqual(matrix[15], 1))) return false;
+  return areKnowledgeGraphMatrixElementsEqual(matrix, input.matrixWorld.elements);
+}
+function isKnowledgeGraphCameraParentChainIdentity(parent) {
+  let cursor = parent;
+  let depth = 0;
+  while (cursor !== null) {
+    depth++;
+    if (depth > 64) return false;
+    if (cursor.position.x !== 0 || cursor.position.y !== 0 || cursor.position.z !== 0 || cursor.quaternion.x !== 0 || cursor.quaternion.y !== 0 || cursor.quaternion.z !== 0 || cursor.quaternion.w !== 1 || cursor.scale.x !== 1 || cursor.scale.y !== 1 || cursor.scale.z !== 1 || !isKnowledgeGraphIdentityMatrixElements(cursor.matrix.elements) || !isKnowledgeGraphIdentityMatrixElements(cursor.matrixWorld.elements)) return false;
+    cursor = cursor.parent;
+  }
+  return true;
+}
+function canonicalPerspectiveProjection(input) {
+  if (!Number.isFinite(input.fovDegrees) || input.fovDegrees <= 0 || input.fovDegrees >= 180 || !Number.isFinite(input.aspect) || input.aspect <= 0 || !Number.isFinite(input.zoom) || input.zoom <= 0 || !Number.isFinite(input.near) || input.near <= 0 || !Number.isFinite(input.far) || input.far <= input.near || !Number.isFinite(input.filmOffset) || input.filmOffset !== 0 || input.projectionMatrixElements.length !== 16) return false;
+  const halfFov = input.fovDegrees * Math.PI / 360;
+  const y = input.zoom / Math.tan(halfFov);
+  const x = y / input.aspect;
+  const c = -(input.far + input.near) / (input.far - input.near);
+  const d = -2 * input.far * input.near / (input.far - input.near);
+  const matrix = input.projectionMatrixElements;
+  return finiteEqual(matrix[0], x) && finiteEqual(matrix[1], 0) && finiteEqual(matrix[2], 0) && finiteEqual(matrix[3], 0) && finiteEqual(matrix[4], 0) && finiteEqual(matrix[5], y) && finiteEqual(matrix[6], 0) && finiteEqual(matrix[7], 0) && finiteEqual(matrix[8], 0) && finiteEqual(matrix[9], 0) && finiteEqual(matrix[10], c) && finiteEqual(matrix[11], -1) && finiteEqual(matrix[12], 0) && finiteEqual(matrix[13], 0) && finiteEqual(matrix[14], d) && finiteEqual(matrix[15], 0);
+}
+function canonicalOrthographicProjection(input) {
+  if (!Number.isFinite(input.left) || !Number.isFinite(input.right) || !Number.isFinite(input.top) || !Number.isFinite(input.bottom) || input.right <= input.left || input.top <= input.bottom || !finiteEqual(input.left, -input.right) || !finiteEqual(input.bottom, -input.top) || !Number.isFinite(input.zoom) || input.zoom <= 0 || !Number.isFinite(input.near) || input.near < 0 || !Number.isFinite(input.far) || input.far <= input.near || input.projectionMatrixElements.length !== 16) return false;
+  const x = 2 * input.zoom / (input.right - input.left);
+  const y = 2 * input.zoom / (input.top - input.bottom);
+  const c = -2 / (input.far - input.near);
+  const d = -(input.far + input.near) / (input.far - input.near);
+  const matrix = input.projectionMatrixElements;
+  return finiteEqual(matrix[0], x) && finiteEqual(matrix[1], 0) && finiteEqual(matrix[2], 0) && finiteEqual(matrix[3], 0) && finiteEqual(matrix[4], 0) && finiteEqual(matrix[5], y) && finiteEqual(matrix[6], 0) && finiteEqual(matrix[7], 0) && finiteEqual(matrix[8], 0) && finiteEqual(matrix[9], 0) && finiteEqual(matrix[10], c) && finiteEqual(matrix[11], 0) && finiteEqual(matrix[12], 0) && finiteEqual(matrix[13], 0) && finiteEqual(matrix[14], d) && finiteEqual(matrix[15], 1);
+}
+function isKnowledgeGraphCenteredAutoFrameProjectionSupported(input) {
+  if (input.isArrayCamera || input.viewEnabled || !input.parentTransformIdentity || !input.selfTransformCanonical || !input.cameraMethodsCanonical || !input.projectionMethodCanonical || !input.webGlCoordinateSystem) return false;
+  if (input.kind === "perspective") {
+    return input.effectiveFovMethodCanonical && canonicalPerspectiveProjection(input);
+  }
+  return canonicalOrthographicProjection(input);
+}
+function isKnowledgeGraphPerspectiveProjectionReady(effectiveFovDegrees, aspect) {
+  return Number.isFinite(effectiveFovDegrees) && effectiveFovDegrees > 0 && effectiveFovDegrees < 180 && Number.isFinite(aspect) && aspect > 0;
+}
+function isKnowledgeGraphOrthographicProjectionReady(horizontalSpan, verticalSpan, zoom) {
+  return Number.isFinite(horizontalSpan) && horizontalSpan > 0 && Number.isFinite(verticalSpan) && verticalSpan > 0 && Number.isFinite(zoom) && zoom > 0;
+}
+function isKnowledgeGraphCameraVectorFinite(x, y, z) {
+  return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z);
+}
+function knowledgeGraphCameraProjectionKind(camera) {
+  const perspective = camera.isPerspectiveCamera === true;
+  const orthographic = camera.isOrthographicCamera === true;
+  if (perspective === orthographic) return null;
+  if (perspective) return "perspective";
+  if (orthographic) return "orthographic";
+  return null;
+}
+function planKnowledgeGraphCameraClippingInto(kind, currentNearValue, currentFarValue, distanceValue, contentRadiusValue, target) {
+  const radius = positiveFinite(contentRadiusValue, 1);
+  const distance = positiveFinite(
+    distanceValue,
+    KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE
+  );
+  const minimumNear = kind === "perspective" ? KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR : 0;
+  const maximumNear = Math.max(
+    minimumNear,
+    distance - radius * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN
+  );
+  const fallbackNear = kind === "perspective" ? Math.min(0.1, maximumNear) : 0;
+  const currentNear = Number.isFinite(currentNearValue) && currentNearValue >= minimumNear ? currentNearValue : fallbackNear;
+  const near = Math.min(currentNear, maximumNear);
+  const requiredFar = Math.max(
+    near + KNOWLEDGE_GRAPH_PERSPECTIVE_MIN_NEAR,
+    distance + radius * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN
+  );
+  const currentFar = Number.isFinite(currentFarValue) && currentFarValue > near ? currentFarValue : requiredFar;
+  target.near = near;
+  target.far = Math.max(currentFar, requiredFar);
+  return target;
+}
+function positiveFinite(value, fallback) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+function planKnowledgeGraphPerspectiveCameraFitInto(contentRadius, currentCameraDistance, verticalFovDegrees, aspectRatio, target) {
+  const radius = positiveFinite(contentRadius, 1);
+  positiveFinite(currentCameraDistance, 0);
+  const paddedRadius = radius * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN;
+  const verticalFov = positiveFinite(verticalFovDegrees, 50);
+  const aspect = positiveFinite(aspectRatio, 1);
+  const verticalHalf = Math.min(89.5, Math.max(0.5, verticalFov / 2)) * Math.PI / 180;
+  const horizontalHalf = Math.atan(Math.tan(verticalHalf) * aspect);
+  const limitingHalf = Math.max(1e-6, Math.min(
+    verticalHalf,
+    horizontalHalf
+  ));
+  const fitDistance = paddedRadius / Math.sin(limitingHalf);
+  target.distance = Math.max(
+    KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE,
+    fitDistance
+  );
+  target.orthographicZoom = void 0;
+  return target;
+}
+function planKnowledgeGraphOrthographicCameraFitInto(contentRadius, currentCameraDistance, horizontalSpan, verticalSpan, currentCameraZoom, target) {
+  const radius = positiveFinite(contentRadius, 1);
+  positiveFinite(currentCameraDistance, 0);
+  const paddedRadius = radius * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN;
+  const horizontalHalf = positiveFinite(horizontalSpan, 2) / 2;
+  const verticalHalf = positiveFinite(verticalSpan, 2) / 2;
+  const fitZoom = Math.min(horizontalHalf, verticalHalf) / paddedRadius;
+  const currentZoom = positiveFinite(currentCameraZoom, 1);
+  target.distance = Math.max(
+    KNOWLEDGE_GRAPH_CAMERA_MIN_DISTANCE,
+    paddedRadius * 2
+  );
+  target.orthographicZoom = positiveFinite(fitZoom, currentZoom);
+  return target;
+}
+
 // react/knowledgeGraphParticles.internal.ts
+var KNOWLEDGE_GRAPH_FLOW_CYCLES_PER_SECOND = 0.28;
+var MAX_KNOWLEDGE_GRAPH_FLOW_FRAME_DELTA_SECONDS = 0.1;
+function advanceKnowledgeGraphFlowPhase(currentPhase, deltaSeconds) {
+  const normalized = Number.isFinite(currentPhase) ? (currentPhase % 1 + 1) % 1 : 0;
+  const delta = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? Math.min(deltaSeconds, MAX_KNOWLEDGE_GRAPH_FLOW_FRAME_DELTA_SECONDS) : 0;
+  return (normalized + delta * KNOWLEDGE_GRAPH_FLOW_CYCLES_PER_SECOND) % 1;
+}
+function reducedMotionFlowParticleFraction(particleIndex, particlesOnEdge) {
+  if (!Number.isSafeInteger(particlesOnEdge) || particlesOnEdge < 1 || !Number.isSafeInteger(particleIndex) || particleIndex < 0 || particleIndex >= particlesOnEdge) {
+    throw new RangeError(
+      "reduced-motion particle index must belong to a positive finite allocation"
+    );
+  }
+  return (particleIndex + 1) / (particlesOnEdge + 1);
+}
 function planFlowParticleDistribution(flowEdgeCount, requestedPerEdge, maxParticles) {
   const edges = Number.isFinite(flowEdgeCount) ? Math.max(0, Math.floor(flowEdgeCount)) : 0;
   const total = flowParticleCount(edges, requestedPerEdge, maxParticles);
@@ -1223,21 +657,64 @@ function planFlowParticleDistribution(flowEdgeCount, requestedPerEdge, maxPartic
 }
 
 // react/KnowledgeGraphA11yList.tsx
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+
+// react/knowledgeGraphA11yNavigation.internal.ts
+function planKnowledgeGraphA11yNavigation(queryActive, queryMatchIndexes, selectedIndex, pageSize, pageCount) {
+  const boundedPageCount = Math.max(1, pageCount);
+  if (queryActive && queryMatchIndexes.length > 0) {
+    const selectedCursor = selectedIndex < 0 ? -1 : queryMatchIndexes.indexOf(selectedIndex);
+    const matchCursor = selectedCursor < 0 ? 0 : selectedCursor;
+    const rowIndex = queryMatchIndexes[matchCursor] ?? 0;
+    return Object.freeze({
+      matchCursor,
+      nodePage: Math.min(
+        boundedPageCount - 1,
+        Math.max(0, Math.floor(rowIndex / pageSize))
+      )
+    });
+  }
+  return Object.freeze({
+    matchCursor: 0,
+    nodePage: selectedIndex < 0 ? 0 : Math.min(
+      boundedPageCount - 1,
+      Math.max(0, Math.floor(selectedIndex / pageSize))
+    )
+  });
+}
+function knowledgeGraphA11yNavigationContextKey(normalizedQuery, pageSize, selectedId, orderedNodeIds, orderedMatchIds) {
+  return JSON.stringify([
+    normalizedQuery,
+    pageSize,
+    selectedId,
+    orderedNodeIds,
+    orderedMatchIds
+  ]);
+}
+
+// react/KnowledgeGraphA11yList.tsx
+import {
+  assertPreparedCorpusKnowledgeGraphPresentation,
+  assertPreparedGenericKnowledgeGraphPresentation,
+  assertPreparedKnowledgeGraphView,
+  assertPreparedKnowledgeGraphPresentation,
+  knowledgeGraphViewContainsNode
+} from "#cortexel-knowledge-graph-presentation-capability";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 var INLINE_RELATION_LIMIT = 8;
-var RELATION_PAGE_SIZE = 25;
+var RELATION_PAGE_SIZE = 8;
 var INLINE_ATTRIBUTE_LIMIT = 3;
 var INLINE_ATTRIBUTE_ARRAY_LIMIT = 3;
 var INLINE_EVIDENCE_LIMIT = 2;
-var DEFAULT_A11Y_NODE_PAGE_SIZE = 100;
-var MAX_A11Y_NODE_PAGE_SIZE = 200;
-var CALLER_DEFINED_RADIUS_MEANING = "Caller-defined visual size; not quantitative evidence.";
-function radiusMeaningText(value) {
-  return safeDiagnosticText(
+var DEFAULT_A11Y_NODE_PAGE_SIZE = 25;
+var MAX_A11Y_NODE_PAGE_SIZE = 100;
+var CALLER_DEFINED_RADIUS_MEANING = "visual size has no declared quantitative interpretation";
+function radiusMeaningText(value, corpusVisualMapping) {
+  const meaning = safeDiagnosticText(
     value.radiusMeaning ?? CALLER_DEFINED_RADIUS_MEANING,
     400
   );
+  return corpusVisualMapping ? meaning : `Caller-declared: ${meaning}`;
 }
 function attributeValueText(value) {
   if (Array.isArray(value)) {
@@ -1270,14 +747,18 @@ function fullAttributeValueText(value) {
 function hasMetadata(value) {
   return value.radius !== void 0 || value.detail !== void 0 || value.attributes !== void 0 && Object.keys(value.attributes).length > 0 || value.epistemic !== void 0 || value.evidence !== void 0 && value.evidence.length > 0 || value.uncalibrated_score !== void 0;
 }
-function FullMetadata({ value, label }) {
+function FullMetadata({
+  value,
+  label,
+  corpusVisualMapping
+}) {
   return /* @__PURE__ */ jsxs("div", { "aria-label": safeDiagnosticText(label, 400), children: [
     value.radius !== void 0 && /* @__PURE__ */ jsxs("p", { children: [
       "Visual radius: ",
       normalizeGraphNodeRadius(value.radius),
       ". Radius meaning:",
       " ",
-      radiusMeaningText(value)
+      radiusMeaningText(value, corpusVisualMapping)
     ] }),
     value.detail && /* @__PURE__ */ jsxs("p", { children: [
       "Detail: ",
@@ -1326,7 +807,8 @@ function FullMetadata({ value, label }) {
 }
 function MetadataDisclosure({
   value,
-  label
+  label,
+  corpusVisualMapping = false
 }) {
   const [expanded, setExpanded] = useState(false);
   if (!hasMetadata(value)) return null;
@@ -1335,14 +817,21 @@ function MetadataDisclosure({
       "Browse full metadata for ",
       safeDiagnosticText(label, 400)
     ] }),
-    expanded && /* @__PURE__ */ jsx(FullMetadata, { value, label: `Full metadata for ${label}` })
+    expanded && /* @__PURE__ */ jsx(
+      FullMetadata,
+      {
+        value,
+        label: `Full metadata for ${label}`,
+        corpusVisualMapping
+      }
+    )
   ] });
 }
-function metadataSummary(value) {
+function metadataSummary(value, corpusVisualMapping = false) {
   const parts = [];
   if (value.radius !== void 0) {
     parts.push(
-      `Visual radius: ${normalizeGraphNodeRadius(value.radius)}; radius meaning: ${radiusMeaningText(value)}`
+      `Visual radius: ${normalizeGraphNodeRadius(value.radius)}; radius meaning: ${radiusMeaningText(value, corpusVisualMapping)}`
     );
   }
   if (value.detail) parts.push(`Detail: ${safeDiagnosticText(value.detail, 300)}`);
@@ -1385,75 +874,227 @@ function relationshipText(nodeId, edge, byId) {
   return `${label}${assertion}: ${direction} ${safeDiagnosticText(other.label, 240)} (node id ${safeDiagnosticText(other.id, 120)})` + (metadata ? `. ${metadata}` : "");
 }
 function KnowledgeGraphA11yList(props) {
-  const { graphIdentity, nodes, edges } = props;
-  assertKnowledgeGraphIdentity(graphIdentity);
+  assertPreparedGenericKnowledgeGraphPresentation(props.presentation);
+  return renderKnowledgeGraphA11yList(props);
+}
+function KnowledgeGraphCorpusA11yListInternal(props) {
+  assertPreparedCorpusKnowledgeGraphPresentation(props.presentation);
+  return renderKnowledgeGraphA11yList(props);
+}
+function renderKnowledgeGraphA11yList(props) {
+  const { presentation, view, ...interactionProps } = props;
+  assertPreparedKnowledgeGraphPresentation(presentation);
+  if (view !== void 0) assertPreparedKnowledgeGraphView(view, presentation);
   assertKnowledgeGraphNodeReference(props.selectedId, "knowledge-graph selected id");
-  assertKnowledgeGraphBudget(nodes.length, edges.length);
-  const snapshot = snapshotKnowledgeGraphPresentation(nodes, edges);
-  assertUniqueGraphNodeIds(snapshot.nodes);
-  assertRenderableGraphEdges(snapshot.nodes, snapshot.edges);
+  const selectedId = view !== void 0 && props.selectedId !== null && !knowledgeGraphViewContainsNode(view, presentation, props.selectedId) ? null : props.selectedId;
   return /* @__PURE__ */ jsx(
     KnowledgeGraphA11yListInstance,
     {
-      ...props,
-      nodes: snapshot.nodes,
-      edges: snapshot.edges
+      ...interactionProps,
+      selectedId,
+      nodes: view?.nodes ?? presentation.nodes,
+      edges: view?.edges ?? presentation.edges,
+      corpusVisualMapping: presentation.profile === "corpus_entity",
+      view
     },
-    graphIdentity
+    presentation.graphIdentity
   );
 }
 function KnowledgeGraphA11yListInstance({
   nodes,
   edges,
+  corpusVisualMapping,
   selectedId,
   onSelect,
   query = "",
   className,
   label = "Knowledge graph nodes",
-  nodePageSize = DEFAULT_A11Y_NODE_PAGE_SIZE
+  nodePageSize = DEFAULT_A11Y_NODE_PAGE_SIZE,
+  view
 }) {
   const instanceId = useId().replace(/:/g, "");
   const safePageSize = Number.isSafeInteger(nodePageSize) ? Math.min(MAX_A11Y_NODE_PAGE_SIZE, Math.max(1, nodePageSize)) : DEFAULT_A11Y_NODE_PAGE_SIZE;
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const validEdges = filterGraphEdges(new Set(byId.keys()), edges);
-  const relations = /* @__PURE__ */ new Map();
-  for (const node of nodes) relations.set(node.id, []);
-  for (let index = 0; index < validEdges.length; index++) {
-    const edge = validEdges[index];
-    const source = byId.get(edge.source);
-    const target = byId.get(edge.target);
-    if (!source || !target || source.id === target.id) continue;
-    relations.get(source.id)?.push(index);
-    relations.get(target.id)?.push(index);
-  }
-  const normalizedQuery = normalizeGraphQuery(query);
-  const matchingNodeIds = graphQueryMatchIds(nodes, normalizedQuery, validEdges);
-  const rows = nodes.filter(
-    (node) => node.id === selectedId || matchingNodeIds.has(node.id)
-  ).map((node) => ({ node, relationIndexes: relations.get(node.id) ?? [] }));
-  const [nodePage, setNodePage] = useState(() => {
-    const selectedIndex2 = rows.findIndex(({ node }) => node.id === selectedId);
-    return selectedIndex2 < 0 ? 0 : Math.floor(selectedIndex2 / safePageSize);
-  });
+  const { byId, validEdges, relations } = useMemo(() => {
+    const byId2 = new Map(nodes.map((node) => [node.id, node]));
+    const validEdges2 = filterGraphEdges(new Set(byId2.keys()), edges);
+    const relations2 = /* @__PURE__ */ new Map();
+    for (const node of nodes) relations2.set(node.id, []);
+    for (let index = 0; index < validEdges2.length; index++) {
+      const edge = validEdges2[index];
+      const source = byId2.get(edge.source);
+      const target = byId2.get(edge.target);
+      if (!source || !target || source.id === target.id) continue;
+      relations2.get(source.id)?.push(index);
+      relations2.get(target.id)?.push(index);
+    }
+    return { byId: byId2, validEdges: validEdges2, relations: relations2 };
+  }, [nodes, edges]);
+  const normalizedQuery = useMemo(() => normalizeGraphQuery(query), [query]);
+  const matchingNodeIds = useMemo(
+    () => graphQueryMatchIds(nodes, normalizedQuery, validEdges),
+    [nodes, normalizedQuery, validEdges]
+  );
+  const rows = useMemo(() => nodes.map((node) => ({
+    node,
+    relationIndexes: relations.get(node.id) ?? [],
+    queryMatch: normalizedQuery.length === 0 || matchingNodeIds.has(node.id)
+  })), [nodes, relations, normalizedQuery, matchingNodeIds]);
+  const queryMatchIndexes = useMemo(
+    () => rows.flatMap(({ queryMatch }, index) => queryMatch ? [index] : []),
+    [rows]
+  );
+  const queryMatchCount = queryMatchIndexes.length;
   const nodePageCount = Math.max(1, Math.ceil(rows.length / safePageSize));
-  const currentNodePage = Math.min(nodePage, nodePageCount - 1);
+  const selectedIndex = rows.findIndex(({ node }) => node.id === selectedId);
+  const queryNavigationKey = useMemo(
+    () => knowledgeGraphA11yNavigationContextKey(
+      normalizedQuery,
+      safePageSize,
+      selectedId,
+      rows.map(({ node }) => node.id),
+      queryMatchIndexes.map((index) => rows[index]?.node.id ?? "")
+    ),
+    [normalizedQuery, safePageSize, selectedId, rows, queryMatchIndexes]
+  );
+  const plannedNavigation = useMemo(() => ({
+    contextKey: queryNavigationKey,
+    ...planKnowledgeGraphA11yNavigation(
+      normalizedQuery.length > 0,
+      queryMatchIndexes,
+      selectedIndex,
+      safePageSize,
+      nodePageCount
+    )
+  }), [
+    queryNavigationKey,
+    normalizedQuery,
+    queryMatchIndexes,
+    selectedIndex,
+    safePageSize,
+    nodePageCount
+  ]);
+  const [navigation, setNavigation] = useState(plannedNavigation);
+  const activeNavigation = navigation.contextKey === queryNavigationKey ? navigation : plannedNavigation;
+  const [queryFocusRequestId, setQueryFocusRequestId] = useState(null);
+  const queryMatchTargetRef = useRef(null);
+  useEffect(() => {
+    setNavigation((current) => current.contextKey === queryNavigationKey ? current : plannedNavigation);
+    setQueryFocusRequestId(null);
+  }, [queryNavigationKey, plannedNavigation]);
+  const currentNodePage = Math.min(
+    activeNavigation.nodePage,
+    nodePageCount - 1
+  );
   const visibleRows = rows.slice(
     currentNodePage * safePageSize,
     (currentNodePage + 1) * safePageSize
   );
-  const selectedIndex = rows.findIndex(({ node }) => node.id === selectedId);
-  useEffect(() => setNodePage(0), [normalizedQuery, safePageSize]);
+  const currentQueryMatchCursor = Math.min(
+    activeNavigation.matchCursor,
+    Math.max(0, queryMatchCount - 1)
+  );
+  const currentQueryMatchRowIndex = queryMatchIndexes[currentQueryMatchCursor];
+  const navigatedQueryMatchNode = currentQueryMatchRowIndex === void 0 ? void 0 : rows[currentQueryMatchRowIndex]?.node;
+  const currentPageStart = currentNodePage * safePageSize;
+  const currentPageStop = currentPageStart + safePageSize;
+  const currentQueryMatchNode = currentQueryMatchRowIndex !== void 0 && currentQueryMatchRowIndex >= currentPageStart && currentQueryMatchRowIndex < currentPageStop ? navigatedQueryMatchNode : void 0;
   useEffect(() => {
-    if (selectedIndex >= 0) setNodePage(Math.floor(selectedIndex / safePageSize));
-    else setNodePage((page) => Math.min(page, nodePageCount - 1));
-  }, [selectedIndex, safePageSize, nodePageCount]);
+    if (queryFocusRequestId === null || currentQueryMatchNode?.id !== queryFocusRequestId || queryMatchTargetRef.current === null) return;
+    queryMatchTargetRef.current.focus();
+    setQueryFocusRequestId(null);
+  }, [queryFocusRequestId, currentQueryMatchNode, currentNodePage]);
+  const showQueryMatch = (cursor) => {
+    const bounded = Math.max(0, Math.min(queryMatchCount - 1, cursor));
+    const rowIndex = queryMatchIndexes[bounded];
+    if (rowIndex === void 0) return;
+    const targetId = rows[rowIndex]?.node.id;
+    if (targetId === void 0) return;
+    setNavigation({
+      contextKey: queryNavigationKey,
+      matchCursor: bounded,
+      nodePage: Math.floor(rowIndex / safePageSize)
+    });
+    setQueryFocusRequestId(targetId);
+  };
+  const showNodePage = (page) => {
+    const nodePage = Math.max(0, Math.min(nodePageCount - 1, page));
+    const pageStart = nodePage * safePageSize;
+    const pageStop = pageStart + safePageSize;
+    const firstMatchOnPage = queryMatchIndexes.findIndex(
+      (rowIndex) => rowIndex >= pageStart && rowIndex < pageStop
+    );
+    setNavigation({
+      ...activeNavigation,
+      contextKey: queryNavigationKey,
+      matchCursor: firstMatchOnPage < 0 ? activeNavigation.matchCursor : firstMatchOnPage,
+      nodePage
+    });
+  };
   return /* @__PURE__ */ jsxs("section", { className, "aria-label": safeDiagnosticText(label, 240), children: [
-    rows.length === 0 ? /* @__PURE__ */ jsx("p", { role: "status", children: "No graph nodes match this view." }) : /* @__PURE__ */ jsx("ul", { children: visibleRows.map(({ node, relationIndexes }, rowOffset) => {
+    view !== void 0 && /* @__PURE__ */ jsxs("p", { role: "note", children: [
+      "Filtered view: showing ",
+      view.counts.visibleNodes,
+      " of ",
+      view.counts.sourceNodes,
+      " ",
+      "nodes and ",
+      view.counts.visibleEdges,
+      " of ",
+      view.counts.sourceEdges,
+      " ",
+      "relationships. Relationships excluded by kind: ",
+      " ",
+      view.counts.edgeKindFilteredEdges,
+      ". Relationships excluded because a filtered endpoint is absent:",
+      " ",
+      view.counts.endpointPrunedEdges,
+      "."
+    ] }),
+    normalizedQuery.length > 0 && /* @__PURE__ */ jsxs("p", { role: "status", children: [
+      "Query emphasizes ",
+      queryMatchCount,
+      " of ",
+      rows.length,
+      " nodes; all nodes remain available below."
+    ] }),
+    normalizedQuery.length > 0 && queryMatchCount > 0 && /* @__PURE__ */ jsxs("nav", { "aria-label": "Knowledge graph query matches", children: [
+      /* @__PURE__ */ jsx("p", { "aria-live": "polite", children: currentQueryMatchNode === void 0 ? `Node page ${currentNodePage + 1} has no current query match; use the query-match controls to navigate to one.` : `Query match ${currentQueryMatchCursor + 1} of ${queryMatchCount}: ${safeDiagnosticText(currentQueryMatchNode.label, 120)}. Node id ${safeDiagnosticText(currentQueryMatchNode.id, 120)}.` }),
+      /* @__PURE__ */ jsx(
+        "button",
+        {
+          type: "button",
+          disabled: currentQueryMatchCursor === 0,
+          onClick: () => showQueryMatch(currentQueryMatchCursor - 1),
+          style: { minWidth: 44, minHeight: 44 },
+          children: "Previous query match"
+        }
+      ),
+      /* @__PURE__ */ jsx(
+        "button",
+        {
+          type: "button",
+          disabled: currentQueryMatchCursor + 1 >= queryMatchCount,
+          onClick: () => showQueryMatch(currentQueryMatchCursor + 1),
+          style: { minWidth: 44, minHeight: 44 },
+          children: "Next query match"
+        }
+      ),
+      currentQueryMatchNode === void 0 && /* @__PURE__ */ jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => showQueryMatch(currentQueryMatchCursor),
+          style: { minWidth: 44, minHeight: 44 },
+          children: "Go to current query match"
+        }
+      )
+    ] }),
+    rows.length === 0 ? /* @__PURE__ */ jsx("p", { role: "status", children: view === void 0 ? "This graph contains no nodes." : `This filtered view contains no nodes; the full source contains ${view.counts.sourceNodes}.` }) : /* @__PURE__ */ jsx("ul", { children: visibleRows.map(({ node, relationIndexes, queryMatch }, rowOffset) => {
       const rowIndex = currentNodePage * safePageSize + rowOffset;
       const detailsId = `cortexel-kg-${instanceId}-${rowIndex}-details`;
       const preview = relationIndexes.slice(0, INLINE_RELATION_LIMIT).map((index) => relationshipText(node.id, validEdges[index], byId));
       const omitted = relationIndexes.length - preview.length;
-      const nodeMetadata = metadataSummary(node);
+      const nodeMetadata = metadataSummary(node, corpusVisualMapping);
       return /* @__PURE__ */ jsxs("li", { children: [
         /* @__PURE__ */ jsx(
           "button",
@@ -1461,8 +1102,12 @@ function KnowledgeGraphA11yListInstance({
             type: "button",
             className: "cortexel-knowledge-graph-node",
             "aria-pressed": selectedId === node.id,
+            "aria-current": currentQueryMatchNode?.id === node.id ? "true" : void 0,
             "aria-describedby": detailsId,
-            onClick: () => onSelect(node.id),
+            ref: currentQueryMatchNode?.id === node.id ? queryMatchTargetRef : void 0,
+            onClick: () => onSelect(
+              toggledKnowledgeGraphSelection(selectedId, node.id)
+            ),
             style: { minWidth: 44, minHeight: 44 },
             children: safeDiagnosticText(node.label, 240)
           }
@@ -1474,10 +1119,18 @@ function KnowledgeGraphA11yListInstance({
           safeDiagnosticText(node.id, 120),
           ".",
           " ",
+          normalizedQuery.length > 0 ? queryMatch ? currentQueryMatchNode?.id === node.id ? "Current navigated query match; visually emphasized. " : "Query match; visually emphasized. " : "Not a query match; visually de-emphasized but still present. " : "",
           nodeMetadata ? `${nodeMetadata}. ` : "",
-          preview.length > 0 ? `${preview.join("; ")}${omitted > 0 ? `; ${omitted} more relationships` : ""}` : "No rendered relationships."
+          preview.length > 0 ? `${preview.join("; ")}${omitted > 0 ? `; ${omitted} more relationships` : ""}` : "No relationships in this active view."
         ] }),
-        selectedId === node.id && /* @__PURE__ */ jsx(MetadataDisclosure, { value: node, label: `node ${node.label}` }),
+        selectedId === node.id && /* @__PURE__ */ jsx(
+          MetadataDisclosure,
+          {
+            value: node,
+            label: `node ${node.label}`,
+            corpusVisualMapping
+          }
+        ),
         selectedId === node.id && relationIndexes.length > 0 && /* @__PURE__ */ jsx(
           RelationshipPager,
           {
@@ -1504,7 +1157,7 @@ function KnowledgeGraphA11yListInstance({
         {
           type: "button",
           disabled: currentNodePage === 0,
-          onClick: () => setNodePage((page) => Math.max(0, page - 1)),
+          onClick: () => showNodePage(currentNodePage - 1),
           style: { minWidth: 44, minHeight: 44 },
           children: "Previous nodes"
         }
@@ -1514,7 +1167,7 @@ function KnowledgeGraphA11yListInstance({
         {
           type: "button",
           disabled: currentNodePage + 1 >= nodePageCount,
-          onClick: () => setNodePage((page) => Math.min(nodePageCount - 1, page + 1)),
+          onClick: () => showNodePage(currentNodePage + 1),
           style: { minWidth: 44, minHeight: 44 },
           children: "Next nodes"
         }
@@ -1526,26 +1179,39 @@ function compareLegendEntries(a, b) {
   if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
   return a.color === b.color ? 0 : a.color < b.color ? -1 : 1;
 }
-function KnowledgeGraphLegend({
-  nodes,
-  edges,
-  context,
+function KnowledgeGraphLegend(props) {
+  assertPreparedGenericKnowledgeGraphPresentation(props.presentation);
+  return renderKnowledgeGraphLegend(props);
+}
+function KnowledgeGraphCorpusLegendInternal(props) {
+  assertPreparedCorpusKnowledgeGraphPresentation(props.presentation);
+  return renderKnowledgeGraphLegend(props);
+}
+function renderKnowledgeGraphLegend({
+  presentation,
+  view,
   className,
-  label = "Knowledge graph legend"
+  label = "Knowledge graph legend",
+  themeMode = "dark"
 }) {
-  assertKnowledgeGraphBudget(nodes.length, edges.length);
-  const snapshot = snapshotKnowledgeGraphPresentation(nodes, edges);
-  assertUniqueGraphNodeIds(snapshot.nodes);
-  assertRenderableGraphEdges(snapshot.nodes, snapshot.edges);
-  const nodeEntries = [];
-  const edgeEntries = [];
-  {
+  assertPreparedKnowledgeGraphPresentation(presentation);
+  if (view !== void 0) assertPreparedKnowledgeGraphView(view, presentation);
+  const nodes = view?.nodes ?? presentation.nodes;
+  const edges = view?.edges ?? presentation.edges;
+  const { context } = presentation;
+  const { nodeEntries, edgeEntries } = useMemo(() => {
+    const nodeEntries2 = [];
+    const edgeEntries2 = [];
     const nodeGroups = /* @__PURE__ */ new Map();
-    for (let index = 0; index < snapshot.nodes.length; index++) {
-      const node = snapshot.nodes[index];
+    for (let index = 0; index < nodes.length; index++) {
+      const node = nodes[index];
       const radius = normalizeGraphNodeRadius(node.radius);
-      const radiusMeaning = radiusMeaningText(node);
-      const key = JSON.stringify([node.kind, node.color, radiusMeaning]);
+      const radiusMeaning = radiusMeaningText(
+        node,
+        presentation.profile === "corpus_entity"
+      );
+      const nodeGlyph = node.nodeGlyph ?? "sphere_outline";
+      const key = JSON.stringify([node.kind, node.color, radiusMeaning, nodeGlyph]);
       const entry = nodeGroups.get(key);
       if (entry) {
         entry.count += 1;
@@ -1558,20 +1224,28 @@ function KnowledgeGraphLegend({
           count: 1,
           minRadius: radius,
           maxRadius: radius,
-          radiusMeaning
+          radiusMeaning,
+          nodeGlyph
         });
       }
     }
     const edgeGroups = /* @__PURE__ */ new Map();
     const validEdges = filterGraphEdges(
-      new Set(snapshot.nodes.map(({ id }) => id)),
-      snapshot.edges
+      new Set(nodes.map(({ id }) => id)),
+      edges
     );
     for (let index = 0; index < validEdges.length; index++) {
       const edge = validEdges[index];
       const directed = edge.directed !== false;
       const particles = edge.particles === true;
-      const key = JSON.stringify([edge.kind, edge.color, directed, particles]);
+      const edgeStrokePattern = edge.edgeStrokePattern ?? "solid";
+      const key = JSON.stringify([
+        edge.kind,
+        edge.color,
+        directed,
+        particles,
+        edgeStrokePattern
+      ]);
       const entry = edgeGroups.get(key);
       if (entry) entry.count += 1;
       else {
@@ -1580,13 +1254,15 @@ function KnowledgeGraphLegend({
           color: edge.color,
           directed,
           particles,
+          edgeStrokePattern,
           count: 1
         });
       }
     }
-    nodeEntries.push(...[...nodeGroups.values()].sort((a, b) => compareLegendEntries(a, b) || (a.radiusMeaning === b.radiusMeaning ? 0 : a.radiusMeaning < b.radiusMeaning ? -1 : 1)));
-    edgeEntries.push(...[...edgeGroups.values()].sort((a, b) => compareLegendEntries(a, b) || Number(a.directed) - Number(b.directed) || Number(a.particles) - Number(b.particles)));
-  }
+    nodeEntries2.push(...[...nodeGroups.values()].sort((a, b) => compareLegendEntries(a, b) || (a.radiusMeaning === b.radiusMeaning ? 0 : a.radiusMeaning < b.radiusMeaning ? -1 : 1)));
+    edgeEntries2.push(...[...edgeGroups.values()].sort((a, b) => compareLegendEntries(a, b) || Number(a.directed) - Number(b.directed) || Number(a.particles) - Number(b.particles)));
+    return { nodeEntries: nodeEntries2, edgeEntries: edgeEntries2 };
+  }, [nodes, edges, presentation.profile]);
   const swatchStyle = (color) => ({
     display: "inline-block",
     width: 16,
@@ -1596,6 +1272,19 @@ function KnowledgeGraphLegend({
     backgroundColor: color
   });
   return /* @__PURE__ */ jsxs("aside", { className, "aria-label": safeDiagnosticText(label, 240), children: [
+    view !== void 0 && /* @__PURE__ */ jsxs("p", { role: "note", children: [
+      "Filtered view: showing ",
+      view.counts.visibleNodes,
+      " of ",
+      view.counts.sourceNodes,
+      " ",
+      "nodes and ",
+      view.counts.visibleEdges,
+      " of ",
+      view.counts.sourceEdges,
+      " ",
+      "relationships."
+    ] }),
     context && /* @__PURE__ */ jsxs(Fragment, { children: [
       /* @__PURE__ */ jsx("p", { children: "Graph context" }),
       /* @__PURE__ */ jsxs("dl", { children: [
@@ -1603,7 +1292,7 @@ function KnowledgeGraphLegend({
         /* @__PURE__ */ jsx("dd", { children: safeDiagnosticText(context.graph_id, 160) }),
         /* @__PURE__ */ jsx("dt", { children: "Graph source" }),
         /* @__PURE__ */ jsx("dd", { children: safeDiagnosticText(context.graph_source, 200) }),
-        /* @__PURE__ */ jsx("dt", { children: "Graph snapshot id" }),
+        /* @__PURE__ */ jsx("dt", { children: "Caller-declared snapshot namespace" }),
         /* @__PURE__ */ jsx("dd", { children: safeDiagnosticText(context.graph_snapshot_id, 200) }),
         /* @__PURE__ */ jsx("dt", { children: "Graph scope" }),
         /* @__PURE__ */ jsx("dd", { children: safeDiagnosticText(context.graph_scope, 80) }),
@@ -1612,26 +1301,46 @@ function KnowledgeGraphLegend({
       ] })
     ] }),
     /* @__PURE__ */ jsx("p", { children: "Node kinds" }),
-    nodeEntries.length === 0 ? /* @__PURE__ */ jsx("p", { children: "No rendered nodes." }) : /* @__PURE__ */ jsx("ul", { children: nodeEntries.map((entry) => /* @__PURE__ */ jsxs("li", { children: [
-      /* @__PURE__ */ jsx("span", { "aria-hidden": "true", style: swatchStyle(entry.color) }),
-      safeDiagnosticText(entry.kind, 80),
-      ": ",
-      entry.count,
-      " ",
-      entry.count === 1 ? "node" : "nodes",
-      "; color",
-      " ",
-      safeDiagnosticText(entry.color, 80),
-      "; visual radius",
-      " ",
-      entry.minRadius === entry.maxRadius ? entry.minRadius : `${entry.minRadius}\u2013${entry.maxRadius}`,
-      ";",
-      " ",
-      entry.radiusMeaning
-    ] }, JSON.stringify([entry.kind, entry.color, entry.radiusMeaning]))) }),
+    nodeEntries.length === 0 ? /* @__PURE__ */ jsx("p", { children: "No nodes in this active view." }) : /* @__PURE__ */ jsx("ul", { children: nodeEntries.map((entry) => {
+      const renderedColor = knowledgeGraphContrastSafeColor(entry.color, themeMode);
+      return /* @__PURE__ */ jsxs("li", { children: [
+        /* @__PURE__ */ jsx("span", { "aria-hidden": "true", style: swatchStyle(renderedColor) }),
+        safeDiagnosticText(entry.kind, 80),
+        ": ",
+        entry.count,
+        " ",
+        entry.count === 1 ? "node" : "nodes",
+        "; source color",
+        " ",
+        safeDiagnosticText(entry.color, 80),
+        "; intended undimmed scene color",
+        " ",
+        safeDiagnosticText(renderedColor, 80),
+        "; glyph",
+        " ",
+        knowledgeGraphNodeGlyphDescription(entry.nodeGlyph),
+        "; visual radius",
+        " ",
+        entry.minRadius === entry.maxRadius ? entry.minRadius : `${entry.minRadius}\u2013${entry.maxRadius}`,
+        ";",
+        " ",
+        entry.radiusMeaning
+      ] }, JSON.stringify([
+        entry.kind,
+        entry.color,
+        entry.radiusMeaning,
+        entry.nodeGlyph
+      ]));
+    }) }),
     /* @__PURE__ */ jsx("p", { children: "Relationship kinds" }),
-    edgeEntries.length === 0 ? /* @__PURE__ */ jsx("p", { children: "No rendered relationships." }) : /* @__PURE__ */ jsx("ul", { children: edgeEntries.map((entry) => /* @__PURE__ */ jsxs("li", { children: [
-      /* @__PURE__ */ jsx("span", { "aria-hidden": "true", style: swatchStyle(entry.color) }),
+    edgeEntries.length === 0 ? /* @__PURE__ */ jsx("p", { children: "No relationships in this active view." }) : /* @__PURE__ */ jsx("ul", { children: edgeEntries.map((entry) => /* @__PURE__ */ jsxs("li", { children: [
+      /* @__PURE__ */ jsx(
+        "span",
+        {
+          "aria-hidden": "true",
+          style: swatchStyle(knowledgeGraphContrastSafeColor(entry.color, themeMode))
+        }
+      ),
       safeDiagnosticText(entry.kind, 80),
       ": ",
       entry.count,
@@ -1640,17 +1349,31 @@ function KnowledgeGraphLegend({
       ";",
       " ",
       entry.directed ? "directed" : "undirected",
-      "; color",
+      "; source color",
       " ",
       safeDiagnosticText(entry.color, 80),
+      "; intended undimmed scene color",
+      " ",
+      safeDiagnosticText(
+        knowledgeGraphContrastSafeColor(entry.color, themeMode),
+        80
+      ),
+      "; ",
+      knowledgeGraphEdgeStrokeDescription(entry.edgeStrokePattern),
       entry.particles ? "; flow markers" : ""
     ] }, JSON.stringify([
       entry.kind,
       entry.color,
       entry.directed,
-      entry.particles
+      entry.particles,
+      entry.edgeStrokePattern
     ]))) }),
-    /* @__PURE__ */ jsx("p", { role: "note", children: "Layout positions and distances are schematic, not quantitative evidence." })
+    /* @__PURE__ */ jsxs("p", { role: "note", children: [
+      "The listed scene colors are the intended undimmed baseline. Glyph shells use",
+      " ",
+      themeMode === "light" ? "#0f172a" : "#f8fafc",
+      " before dimming. Focus and query interactions dim peripheral node fills, glyph shells, relationships, arrows, and flow markers without changing their kind glyph, stroke pattern, direction, or DOM record. Layout positions and distances are schematic, not quantitative evidence."
+    ] })
   ] });
 }
 function RelationshipPager({
@@ -1713,15 +1436,753 @@ function RelationshipPager({
   ] });
 }
 
-// react/KnowledgeGraph3DScene.tsx
+// react/KnowledgeGraphStaticRecordView.tsx
+import { useEffect as useEffect2, useMemo as useMemo2, useState as useState2 } from "react";
+import {
+  assertPreparedCorpusKnowledgeGraphPresentation as assertPreparedCorpusKnowledgeGraphPresentation2,
+  assertPreparedGenericKnowledgeGraphPresentation as assertPreparedGenericKnowledgeGraphPresentation2,
+  assertPreparedKnowledgeGraphView as assertPreparedKnowledgeGraphView2,
+  assertPreparedKnowledgeGraphPresentation as assertPreparedKnowledgeGraphPresentation2
+} from "#cortexel-knowledge-graph-presentation-capability";
 import { Fragment as Fragment2, jsx as jsx2, jsxs as jsxs2 } from "react/jsx-runtime";
+var DEFAULT_STATIC_PAGE_SIZE = 10;
+var MAX_STATIC_PAGE_SIZE = 25;
+var STATIC_RECORD_INSTANCE_KEYS = /* @__PURE__ */ new WeakMap();
+var nextStaticRecordInstanceKey = 0n;
+function staticRecordInstanceKey(presentation) {
+  const existing = STATIC_RECORD_INSTANCE_KEYS.get(presentation);
+  if (existing !== void 0) return existing;
+  const created = `cortexel-kg-record-${nextStaticRecordInstanceKey}`;
+  nextStaticRecordInstanceKey += 1n;
+  STATIC_RECORD_INSTANCE_KEYS.set(presentation, created);
+  return created;
+}
+function boundedPageSize(value) {
+  return Number.isSafeInteger(value) ? Math.max(1, Math.min(MAX_STATIC_PAGE_SIZE, value)) : DEFAULT_STATIC_PAGE_SIZE;
+}
+function codeUnitCompare(left, right) {
+  return left === right ? 0 : left < right ? -1 : 1;
+}
+function compareOptionalString(left, right) {
+  if (left === right) return 0;
+  if (left === void 0) return -1;
+  if (right === void 0) return 1;
+  return codeUnitCompare(left, right);
+}
+function compareEvidence(left, right) {
+  const common = codeUnitCompare(left.kind, right.kind) || codeUnitCompare(left.evidence_id, right.evidence_id);
+  if (common !== 0 || left.kind !== right.kind) return common;
+  switch (left.kind) {
+    case "graph_snapshot_record": {
+      const matching = right;
+      return codeUnitCompare(left.record_id, matching.record_id) || compareOptionalString(left.locator, matching.locator);
+    }
+    case "graph_node": {
+      const matching = right;
+      return codeUnitCompare(left.node_id, matching.node_id) || compareOptionalString(left.locator, matching.locator) || compareOptionalString(left.excerpt, matching.excerpt);
+    }
+    case "citation": {
+      const matching = right;
+      return codeUnitCompare(left.paper_id, matching.paper_id) || codeUnitCompare(left.citation_id, matching.citation_id) || (left.page ?? -1) - (matching.page ?? -1) || compareOptionalString(left.locator, matching.locator) || compareOptionalString(left.excerpt, matching.excerpt) || compareOptionalString(left.doi, matching.doi);
+    }
+    case "external_source": {
+      const matching = right;
+      return codeUnitCompare(left.source_id, matching.source_id) || compareOptionalString(left.locator, matching.locator) || compareOptionalString(left.excerpt, matching.excerpt);
+    }
+  }
+}
+function EvidenceReference({ reference }) {
+  return /* @__PURE__ */ jsx2("li", { children: /* @__PURE__ */ jsxs2("dl", { children: [
+    /* @__PURE__ */ jsx2("dt", { children: "Kind" }),
+    /* @__PURE__ */ jsx2("dd", { children: reference.kind }),
+    /* @__PURE__ */ jsx2("dt", { children: "Evidence id" }),
+    /* @__PURE__ */ jsx2("dd", { children: reference.evidence_id }),
+    reference.kind === "graph_snapshot_record" && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("dt", { children: "Record id" }),
+      /* @__PURE__ */ jsx2("dd", { children: reference.record_id })
+    ] }),
+    reference.kind === "graph_node" && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("dt", { children: "Referenced node id" }),
+      /* @__PURE__ */ jsx2("dd", { children: reference.node_id })
+    ] }),
+    reference.kind === "citation" && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("dt", { children: "Paper id" }),
+      /* @__PURE__ */ jsx2("dd", { children: reference.paper_id }),
+      /* @__PURE__ */ jsx2("dt", { children: "Citation id" }),
+      /* @__PURE__ */ jsx2("dd", { children: reference.citation_id }),
+      reference.page !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "Page" }),
+        /* @__PURE__ */ jsx2("dd", { children: reference.page })
+      ] }),
+      reference.doi !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "DOI" }),
+        /* @__PURE__ */ jsx2("dd", { children: reference.doi })
+      ] })
+    ] }),
+    reference.kind === "external_source" && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("dt", { children: "Source id" }),
+      /* @__PURE__ */ jsx2("dd", { children: reference.source_id })
+    ] }),
+    reference.locator !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("dt", { children: "Locator" }),
+      /* @__PURE__ */ jsx2("dd", { children: reference.locator })
+    ] }),
+    "excerpt" in reference && reference.excerpt !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("dt", { children: "Excerpt" }),
+      /* @__PURE__ */ jsx2("dd", { children: reference.excerpt })
+    ] })
+  ] }) });
+}
+function scalarText(value) {
+  if (value === null) return "null";
+  if (typeof value === "string") return value;
+  return String(value);
+}
+function attributeValue(value) {
+  if (Array.isArray(value)) {
+    return /* @__PURE__ */ jsx2("ol", { children: value.map((item, index) => /* @__PURE__ */ jsx2("li", { children: scalarText(item) }, index)) });
+  }
+  return scalarText(value);
+}
+function CompleteMetadata({ value }) {
+  const attributeEntries = Object.entries(value.attributes ?? {}).sort(([left], [right]) => codeUnitCompare(left, right));
+  const evidence = [...value.evidence ?? []].sort(compareEvidence);
+  return /* @__PURE__ */ jsxs2(Fragment2, { children: [
+    value.detail !== void 0 && /* @__PURE__ */ jsxs2("p", { children: [
+      "Detail: ",
+      value.detail
+    ] }),
+    attributeEntries.length > 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("p", { children: "Attributes" }),
+      /* @__PURE__ */ jsx2("dl", { children: attributeEntries.map(([key, item]) => /* @__PURE__ */ jsxs2("div", { children: [
+        /* @__PURE__ */ jsx2("dt", { children: key }),
+        /* @__PURE__ */ jsx2("dd", { children: attributeValue(item) })
+      ] }, key)) })
+    ] }),
+    value.epistemic !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("p", { children: "Epistemic record" }),
+      /* @__PURE__ */ jsxs2("dl", { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "Status" }),
+        /* @__PURE__ */ jsx2("dd", { children: value.epistemic.status }),
+        /* @__PURE__ */ jsx2("dt", { children: "Advisory only" }),
+        /* @__PURE__ */ jsx2("dd", { children: String(value.epistemic.advisory_only) }),
+        /* @__PURE__ */ jsx2("dt", { children: "Paper-local evidence" }),
+        /* @__PURE__ */ jsx2("dd", { children: String(value.epistemic.is_paper_local_evidence) }),
+        /* @__PURE__ */ jsx2("dt", { children: "Calibrated posterior" }),
+        /* @__PURE__ */ jsx2("dd", { children: String(value.epistemic.calibrated_posterior) })
+      ] })
+    ] }),
+    value.uncalibrated_score !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("p", { children: "Uncalibrated score" }),
+      /* @__PURE__ */ jsxs2("dl", { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "Meaning" }),
+        /* @__PURE__ */ jsx2("dd", { children: value.uncalibrated_score.kind }),
+        /* @__PURE__ */ jsx2("dt", { children: "Value" }),
+        /* @__PURE__ */ jsx2("dd", { children: value.uncalibrated_score.value }),
+        /* @__PURE__ */ jsx2("dt", { children: "Calibrated posterior" }),
+        /* @__PURE__ */ jsx2("dd", { children: String(value.uncalibrated_score.calibrated_posterior) })
+      ] })
+    ] }),
+    evidence.length > 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsxs2("p", { children: [
+        "Evidence references (",
+        evidence.length,
+        ")"
+      ] }),
+      /* @__PURE__ */ jsx2("ol", { children: evidence.map((reference) => /* @__PURE__ */ jsx2(EvidenceReference, { reference }, reference.evidence_id)) })
+    ] })
+  ] });
+}
+function compareNodes(left, right) {
+  return codeUnitCompare(left.id, right.id) || codeUnitCompare(left.kind, right.kind) || codeUnitCompare(left.label, right.label);
+}
+function compareEdges(left, right) {
+  if (left.id !== void 0 || right.id !== void 0) {
+    const byId = compareOptionalString(left.id, right.id);
+    if (byId !== 0) return byId;
+  }
+  return codeUnitCompare(left.source, right.source) || codeUnitCompare(left.target, right.target) || codeUnitCompare(left.kind, right.kind) || Number(left.directed !== false) - Number(right.directed !== false) || compareOptionalString(left.label, right.label);
+}
+function KnowledgeGraphStaticRecordView(props) {
+  assertPreparedGenericKnowledgeGraphPresentation2(props.presentation);
+  return renderKnowledgeGraphStaticRecordView(props);
+}
+function KnowledgeGraphCorpusStaticRecordViewInternal(props) {
+  assertPreparedCorpusKnowledgeGraphPresentation2(props.presentation);
+  return renderKnowledgeGraphStaticRecordView(props);
+}
+function renderKnowledgeGraphStaticRecordView(props) {
+  assertPreparedKnowledgeGraphPresentation2(props.presentation);
+  if (props.view !== void 0) {
+    assertPreparedKnowledgeGraphView2(props.view, props.presentation);
+  }
+  return /* @__PURE__ */ jsx2(
+    KnowledgeGraphStaticRecordViewInstance,
+    {
+      ...props
+    },
+    staticRecordInstanceKey(props.presentation)
+  );
+}
+function KnowledgeGraphStaticRecordViewInstance({
+  presentation,
+  view,
+  className,
+  label = "Deterministic paginated knowledge graph record view",
+  nodePageSize,
+  edgePageSize
+}) {
+  const nodes = useMemo2(
+    () => [...presentation.nodes].sort(compareNodes),
+    [presentation.nodes]
+  );
+  const edges = useMemo2(
+    () => [...presentation.edges].sort(compareEdges),
+    [presentation.edges]
+  );
+  const safeNodePageSize = boundedPageSize(nodePageSize);
+  const safeEdgePageSize = boundedPageSize(edgePageSize);
+  const [nodePage, setNodePage] = useState2(0);
+  const [edgePage, setEdgePage] = useState2(0);
+  const nodePageCount = Math.max(1, Math.ceil(nodes.length / safeNodePageSize));
+  const edgePageCount = Math.max(1, Math.ceil(edges.length / safeEdgePageSize));
+  const currentNodePage = Math.min(nodePage, nodePageCount - 1);
+  const currentEdgePage = Math.min(edgePage, edgePageCount - 1);
+  useEffect2(() => {
+    setNodePage((page) => Math.min(page, nodePageCount - 1));
+  }, [nodePageCount]);
+  useEffect2(() => {
+    setEdgePage((page) => Math.min(page, edgePageCount - 1));
+  }, [edgePageCount]);
+  const visibleNodes = nodes.slice(
+    currentNodePage * safeNodePageSize,
+    (currentNodePage + 1) * safeNodePageSize
+  );
+  const visibleEdges = edges.slice(
+    currentEdgePage * safeEdgePageSize,
+    (currentEdgePage + 1) * safeEdgePageSize
+  );
+  return /* @__PURE__ */ jsxs2("section", { className, "aria-label": safeDiagnosticText(label, 240), children: [
+    view !== void 0 && /* @__PURE__ */ jsxs2("div", { role: "note", children: [
+      /* @__PURE__ */ jsxs2("p", { children: [
+        "Filtered interactive view: showing ",
+        view.counts.visibleNodes,
+        " of",
+        " ",
+        view.counts.sourceNodes,
+        " nodes and ",
+        view.counts.visibleEdges,
+        " of",
+        " ",
+        view.counts.sourceEdges,
+        " relationships. The paginated records below remain the full source presentation."
+      ] }),
+      /* @__PURE__ */ jsxs2("dl", { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "Requested node kinds" }),
+        /* @__PURE__ */ jsx2("dd", { children: view.policy.nodeKinds === "all" ? "all" : view.policy.nodeKinds.length === 0 ? "none" : view.policy.nodeKinds.join(", ") }),
+        /* @__PURE__ */ jsx2("dt", { children: "Requested relationship kinds" }),
+        /* @__PURE__ */ jsx2("dd", { children: view.policy.edgeKinds === "all" ? "all" : view.policy.edgeKinds.length === 0 ? "none" : view.policy.edgeKinds.join(", ") }),
+        /* @__PURE__ */ jsx2("dt", { children: "Endpoint-pruned relationships" }),
+        /* @__PURE__ */ jsx2("dd", { children: view.counts.endpointPrunedEdges }),
+        /* @__PURE__ */ jsx2("dt", { children: "Kind-filtered relationships" }),
+        /* @__PURE__ */ jsx2("dd", { children: view.counts.edgeKindFilteredEdges })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx2("h3", { children: "Presentation metadata" }),
+    /* @__PURE__ */ jsxs2("dl", { children: [
+      /* @__PURE__ */ jsx2("dt", { children: "Prepared contract" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.contract }),
+      /* @__PURE__ */ jsx2("dt", { children: "Profile" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.profile }),
+      /* @__PURE__ */ jsx2("dt", { children: "Graph lifecycle identity" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.graphIdentity }),
+      /* @__PURE__ */ jsx2("dt", { children: "Input boundary" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.inputAssurance.boundary }),
+      /* @__PURE__ */ jsx2("dt", { children: "Duplicate-member assurance" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.inputAssurance.duplicateMembers }),
+      /* @__PURE__ */ jsx2("dt", { children: "Proxy-trap assurance" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.inputAssurance.proxyTrapFreedom }),
+      /* @__PURE__ */ jsx2("dt", { children: "Visual mapping authority" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.mappingAuthority.kind }),
+      presentation.mappingAuthority.kind === "corpus_visual_mapping" && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "Presentation invariants" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.mappingAuthority.presentationInvariants }),
+        /* @__PURE__ */ jsx2("dt", { children: "Derivation authentication" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.mappingAuthority.derivationAuthentication })
+      ] }),
+      /* @__PURE__ */ jsx2("dt", { children: "Scientific authority" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.mappingAuthority.scientificAuthority }),
+      /* @__PURE__ */ jsx2("dt", { children: "Retained input occurrences" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.budget.retainedOccurrences }),
+      /* @__PURE__ */ jsx2("dt", { children: "Accepted source string code units" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.budget.sourceStringCodeUnits }),
+      /* @__PURE__ */ jsx2("dt", { children: "Inspection work" }),
+      /* @__PURE__ */ jsx2("dd", { children: presentation.budget.inspectionWork })
+    ] }),
+    presentation.context !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+      /* @__PURE__ */ jsx2("p", { children: "Caller-declared graph context" }),
+      /* @__PURE__ */ jsxs2("dl", { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "Graph id" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.context.graph_id }),
+        /* @__PURE__ */ jsx2("dt", { children: "Graph source" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.context.graph_source }),
+        /* @__PURE__ */ jsx2("dt", { children: "Caller-declared snapshot namespace" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.context.graph_snapshot_id }),
+        /* @__PURE__ */ jsx2("dt", { children: "Graph scope" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.context.graph_scope }),
+        /* @__PURE__ */ jsx2("dt", { children: "Generated at" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.context.generated_at })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx2("p", { role: "note", children: "This view preserves caller-supplied reference identifiers but does not resolve, authenticate, or establish custody for them. It contains no force-layout coordinates; visual positions and distances are not evidence." }),
+    /* @__PURE__ */ jsxs2("h3", { children: [
+      "Nodes (",
+      nodes.length,
+      ")"
+    ] }),
+    nodes.length === 0 && /* @__PURE__ */ jsx2("p", { children: "This source presentation contains no nodes." }),
+    /* @__PURE__ */ jsx2("ol", { children: visibleNodes.map((node) => /* @__PURE__ */ jsxs2("li", { children: [
+      /* @__PURE__ */ jsx2("h4", { children: node.label }),
+      /* @__PURE__ */ jsxs2("dl", { children: [
+        /* @__PURE__ */ jsx2("dt", { children: "Node id" }),
+        /* @__PURE__ */ jsx2("dd", { children: node.id }),
+        /* @__PURE__ */ jsx2("dt", { children: "Kind" }),
+        /* @__PURE__ */ jsx2("dd", { children: node.kind }),
+        /* @__PURE__ */ jsx2("dt", { children: "Visual color" }),
+        /* @__PURE__ */ jsx2("dd", { children: node.color }),
+        /* @__PURE__ */ jsx2("dt", { children: "Visual glyph" }),
+        /* @__PURE__ */ jsx2("dd", { children: node.nodeGlyph ?? "sphere_outline" }),
+        /* @__PURE__ */ jsx2("dt", { children: "Visual radius" }),
+        /* @__PURE__ */ jsx2("dd", { children: node.radius }),
+        /* @__PURE__ */ jsx2("dt", { children: "Radius meaning" }),
+        /* @__PURE__ */ jsx2("dd", { children: presentation.profile === "corpus_entity" ? node.radiusMeaning : `Caller-declared: ${node.radiusMeaning ?? "visual size has no declared quantitative interpretation."}` })
+      ] }),
+      /* @__PURE__ */ jsx2(CompleteMetadata, { value: node })
+    ] }, node.id)) }),
+    nodes.length > safeNodePageSize && /* @__PURE__ */ jsxs2("nav", { "aria-label": "Static record node pages", children: [
+      /* @__PURE__ */ jsxs2("p", { "aria-live": "polite", children: [
+        "Node page ",
+        currentNodePage + 1,
+        " of ",
+        nodePageCount
+      ] }),
+      /* @__PURE__ */ jsx2(
+        "button",
+        {
+          type: "button",
+          style: { minHeight: 44, minWidth: 44 },
+          disabled: currentNodePage === 0,
+          onClick: () => setNodePage(Math.max(0, currentNodePage - 1)),
+          children: "Previous node records"
+        }
+      ),
+      /* @__PURE__ */ jsx2(
+        "button",
+        {
+          type: "button",
+          style: { minHeight: 44, minWidth: 44 },
+          disabled: currentNodePage + 1 >= nodePageCount,
+          onClick: () => setNodePage(
+            Math.min(nodePageCount - 1, currentNodePage + 1)
+          ),
+          children: "Next node records"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxs2("h3", { children: [
+      "Relationships (",
+      edges.length,
+      ")"
+    ] }),
+    edges.length === 0 && /* @__PURE__ */ jsx2("p", { children: "This source presentation contains no relationships." }),
+    /* @__PURE__ */ jsx2("ol", { children: visibleEdges.map((edge) => /* @__PURE__ */ jsxs2("li", { children: [
+      /* @__PURE__ */ jsx2("h4", { children: edge.label ?? edge.kind }),
+      /* @__PURE__ */ jsxs2("dl", { children: [
+        edge.id !== void 0 && /* @__PURE__ */ jsxs2(Fragment2, { children: [
+          /* @__PURE__ */ jsx2("dt", { children: "Assertion id" }),
+          /* @__PURE__ */ jsx2("dd", { children: edge.id })
+        ] }),
+        /* @__PURE__ */ jsx2("dt", { children: "Source node id" }),
+        /* @__PURE__ */ jsx2("dd", { children: edge.source }),
+        /* @__PURE__ */ jsx2("dt", { children: "Target node id" }),
+        /* @__PURE__ */ jsx2("dd", { children: edge.target }),
+        /* @__PURE__ */ jsx2("dt", { children: "Kind" }),
+        /* @__PURE__ */ jsx2("dd", { children: edge.kind }),
+        /* @__PURE__ */ jsx2("dt", { children: "Direction" }),
+        /* @__PURE__ */ jsx2("dd", { children: edge.directed === false ? "undirected" : "source to target" }),
+        /* @__PURE__ */ jsx2("dt", { children: "Visual color" }),
+        /* @__PURE__ */ jsx2("dd", { children: edge.color }),
+        /* @__PURE__ */ jsx2("dt", { children: "Visual stroke pattern" }),
+        /* @__PURE__ */ jsx2("dd", { children: edge.edgeStrokePattern ?? "solid" }),
+        /* @__PURE__ */ jsx2("dt", { children: "Flow-marker encoding enabled" }),
+        /* @__PURE__ */ jsx2("dd", { children: String(edge.particles === true) })
+      ] }),
+      /* @__PURE__ */ jsx2(CompleteMetadata, { value: edge })
+    ] }, graphEdgeIdentityKey(edge))) }),
+    edges.length > safeEdgePageSize && /* @__PURE__ */ jsxs2("nav", { "aria-label": "Static record relationship pages", children: [
+      /* @__PURE__ */ jsxs2("p", { "aria-live": "polite", children: [
+        "Relationship page ",
+        currentEdgePage + 1,
+        " of ",
+        edgePageCount
+      ] }),
+      /* @__PURE__ */ jsx2(
+        "button",
+        {
+          type: "button",
+          style: { minHeight: 44, minWidth: 44 },
+          disabled: currentEdgePage === 0,
+          onClick: () => setEdgePage(Math.max(0, currentEdgePage - 1)),
+          children: "Previous relationship records"
+        }
+      ),
+      /* @__PURE__ */ jsx2(
+        "button",
+        {
+          type: "button",
+          style: { minHeight: 44, minWidth: 44 },
+          disabled: currentEdgePage + 1 >= edgePageCount,
+          onClick: () => setEdgePage(
+            Math.min(edgePageCount - 1, currentEdgePage + 1)
+          ),
+          children: "Next relationship records"
+        }
+      )
+    ] })
+  ] });
+}
+
+// react/KnowledgeGraphAccessibleFigure.tsx
+import {
+  Component,
+  useEffect as useEffect3,
+  useId as useId2,
+  useMemo as useMemo3,
+  useRef as useRef2
+} from "react";
+import {
+  knowledgeGraphPresentationContainsNode,
+  knowledgeGraphViewContainsNode as knowledgeGraphViewContainsNode2,
+  prepareKnowledgeGraphView
+} from "#cortexel-knowledge-graph-presentation-capability";
+import { Fragment as Fragment3, jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
+var KnowledgeGraphVisualBoundary = class extends Component {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(_error, _info) {
+  }
+  componentDidUpdate(previous) {
+    if ((previous.resetToken !== this.props.resetToken || !Object.is(previous.retryToken, this.props.retryToken)) && this.state.failed) {
+      this.setState({ failed: false });
+    }
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+};
+function KnowledgeGraphVisualMount({ renderVisual, scene, context }) {
+  return /* @__PURE__ */ jsx3(Fragment3, { children: renderVisual(scene, context) });
+}
+function inputBoundaryFailure(message) {
+  return Object.freeze({
+    ok: false,
+    errors: Object.freeze([Object.freeze({
+      code: "input_boundary_rejected",
+      path: "spec/specJson",
+      message
+    })])
+  });
+}
+function KnowledgeGraphAccessibleFigure(props) {
+  const {
+    renderVisual,
+    selectedId,
+    onSelect,
+    hoverId,
+    onHover,
+    visualAvailable = true,
+    visualRetryKey,
+    viewPolicy,
+    query = "",
+    controlsRef,
+    autoFrame = true,
+    flyToSelection,
+    labelColor,
+    particleColor,
+    reducedMotion,
+    nodePageSize,
+    recordNodePageSize,
+    recordEdgePageSize,
+    activePalette,
+    className,
+    label = "Interactive knowledge graph"
+  } = props;
+  const hasSpec = Object.hasOwn(props, "spec");
+  const hasSpecJson = Object.hasOwn(props, "specJson");
+  const spec = hasSpec ? props.spec : void 0;
+  const specJson = hasSpecJson ? props.specJson : void 0;
+  const preparedSource = useMemo3(
+    () => {
+      if (hasSpec === hasSpecJson) {
+        return inputBoundaryFailure(
+          "provide exactly one own input property: spec or specJson"
+        );
+      }
+      if (hasSpecJson) {
+        if (typeof specJson !== "string") {
+          return inputBoundaryFailure("specJson must be a string");
+        }
+        return prepareCorpusKnowledgeGraphFigureJson(specJson, { activePalette });
+      }
+      return prepareCorpusKnowledgeGraphFigure(spec, { activePalette });
+    },
+    [hasSpec, hasSpecJson, spec, specJson, activePalette]
+  );
+  const preparedView = useMemo3(() => {
+    if (!preparedSource.ok || viewPolicy === void 0) {
+      return { ok: true, view: void 0 };
+    }
+    try {
+      return {
+        ok: true,
+        view: prepareKnowledgeGraphView(preparedSource.presentation, viewPolicy)
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: `knowledge-graph view preparation failed: ${safeErrorMessage(error)}`
+      };
+    }
+  }, [preparedSource, viewPolicy]);
+  const hostPolicy = useMemo3(
+    () => {
+      if (!preparedSource.ok || !preparedView.ok) return void 0;
+      const activeNodes = preparedView.view?.nodes ?? preparedSource.presentation.nodes;
+      const activeEdges = preparedView.view?.edges ?? preparedSource.presentation.edges;
+      return Object.freeze({
+        ...preparedSource.hostPolicy,
+        view: preparedView.view,
+        liveForceAvailability: knowledgeGraphLiveForceAvailability(
+          activeNodes.length,
+          activeEdges.length
+        )
+      });
+    },
+    [preparedSource, preparedView]
+  );
+  const captionId = `cortexel-kg-caption-${useId2().replace(/:/gu, "")}`;
+  const selectionInvalidation = useRef2(null);
+  const hoverInvalidation = useRef2(null);
+  const activeToken = preparedSource.ok && preparedView.ok ? preparedView.view ?? preparedSource.presentation : void 0;
+  const selectedIsInvalid = preparedSource.ok && preparedView.ok && selectedId !== null && !(preparedView.view === void 0 ? knowledgeGraphPresentationContainsNode(preparedSource.presentation, selectedId) : knowledgeGraphViewContainsNode2(
+    preparedView.view,
+    preparedSource.presentation,
+    selectedId
+  ));
+  const hoverIsInvalid = preparedSource.ok && preparedView.ok && hoverId !== null && !(preparedView.view === void 0 ? knowledgeGraphPresentationContainsNode(preparedSource.presentation, hoverId) : knowledgeGraphViewContainsNode2(
+    preparedView.view,
+    preparedSource.presentation,
+    hoverId
+  ));
+  useEffect3(() => {
+    if (!selectedIsInvalid || activeToken === void 0 || selectedId === null) {
+      selectionInvalidation.current = null;
+      return;
+    }
+    const previous = selectionInvalidation.current;
+    if (previous?.token === activeToken && previous.id === selectedId) return;
+    selectionInvalidation.current = { token: activeToken, id: selectedId };
+    onSelect(null);
+  }, [activeToken, onSelect, selectedId, selectedIsInvalid]);
+  useEffect3(() => {
+    if (!hoverIsInvalid || activeToken === void 0 || hoverId === null) {
+      hoverInvalidation.current = null;
+      return;
+    }
+    const previous = hoverInvalidation.current;
+    if (previous?.token === activeToken && previous.id === hoverId) return;
+    hoverInvalidation.current = { token: activeToken, id: hoverId };
+    onHover(null);
+  }, [activeToken, hoverId, hoverIsInvalid, onHover]);
+  if (!preparedSource.ok) {
+    return /* @__PURE__ */ jsxs3("section", { role: "alert", "aria-label": "Invalid knowledge graph figure", children: [
+      /* @__PURE__ */ jsx3("h3", { children: "Knowledge graph figure rejected" }),
+      /* @__PURE__ */ jsx3("ul", { children: preparedSource.errors.map((error, index) => /* @__PURE__ */ jsx3("li", { children: safeDiagnosticText(`${error.path}: ${error.message}`, 840) }, index)) })
+    ] });
+  }
+  if (!preparedView.ok) {
+    return /* @__PURE__ */ jsxs3(
+      "figure",
+      {
+        className,
+        "aria-label": safeDiagnosticText(label, 240),
+        "aria-describedby": captionId,
+        children: [
+          /* @__PURE__ */ jsx3("figcaption", { id: captionId, children: /* @__PURE__ */ jsx3("bdi", { dir: "auto", style: { unicodeBidi: "isolate" }, children: preparedSource.caption }) }),
+          /* @__PURE__ */ jsxs3("section", { role: "alert", "aria-label": "Invalid knowledge graph view policy", children: [
+            /* @__PURE__ */ jsx3("h3", { children: "Knowledge graph view rejected" }),
+            /* @__PURE__ */ jsx3("p", { children: safeDiagnosticText(`viewPolicy: ${preparedView.message}`, 840) })
+          ] }),
+          /* @__PURE__ */ jsx3(
+            KnowledgeGraphCorpusStaticRecordViewInternal,
+            {
+              presentation: preparedSource.presentation,
+              nodePageSize: recordNodePageSize,
+              edgePageSize: recordEdgePageSize
+            }
+          )
+        ]
+      }
+    );
+  }
+  if (hostPolicy === void 0) {
+    throw new Error("knowledge-graph host policy invariant failed");
+  }
+  const { caption, presentation } = preparedSource;
+  const { view } = preparedView;
+  const visualUnavailableStatus = /* @__PURE__ */ jsx3("p", { role: "status", children: "The host-owned interactive 3D view is unavailable. The paginated graph-record browser remains below; its controls expose every accepted record after hydration." });
+  const { liveForceAvailability } = hostPolicy;
+  const liveForceAvailable = liveForceAvailability.status === "available";
+  const liveForceLimitStatus = /* @__PURE__ */ jsxs3("p", { role: "status", children: [
+    "The host-owned interactive 3D force view was not mounted: this active view has",
+    " ",
+    liveForceAvailability.nodeCount,
+    " nodes and ",
+    liveForceAvailability.edgeCount,
+    " ",
+    "relationships; the reviewed main-thread ceiling is",
+    " ",
+    liveForceAvailability.maxNodes,
+    " nodes and ",
+    liveForceAvailability.maxEdges,
+    " ",
+    "relationships. If an available exact kind filter reduces this source below the ceiling, that filtered view can mount the visual; some single-kind sources have no nonempty eligible view. The bound caption, legend, interactive DOM controls, and paginated source-record browser remain below; after hydration the browser controls expose every accepted source record."
+  ] });
+  const scene = liveForceAvailable ? /* @__PURE__ */ jsx3(
+    KnowledgeGraphCorpus3DSceneInternal,
+    {
+      presentation,
+      view,
+      selectedId,
+      query,
+      onSelect,
+      hoverId,
+      onHover,
+      controlsRef,
+      autoFrame,
+      flyToSelection,
+      labelColor,
+      particleColor,
+      themeMode: hostPolicy.themeMode,
+      reducedMotion
+    }
+  ) : null;
+  return /* @__PURE__ */ jsxs3(
+    "figure",
+    {
+      className,
+      "aria-label": safeDiagnosticText(label, 240),
+      "aria-describedby": captionId,
+      children: [
+        /* @__PURE__ */ jsx3("figcaption", { id: captionId, children: /* @__PURE__ */ jsx3("bdi", { dir: "auto", style: { unicodeBidi: "isolate" }, children: caption }) }),
+        view !== void 0 && /* @__PURE__ */ jsxs3("p", { role: "note", children: [
+          "Filtered view: showing ",
+          view.counts.visibleNodes,
+          " of ",
+          view.counts.sourceNodes,
+          " ",
+          "nodes and ",
+          view.counts.visibleEdges,
+          " of ",
+          view.counts.sourceEdges,
+          " ",
+          "relationships. Relationships excluded by kind: ",
+          " ",
+          view.counts.edgeKindFilteredEdges,
+          "; excluded because an endpoint is hidden:",
+          " ",
+          view.counts.endpointPrunedEdges,
+          ". The caption and record browser remain bound to the full source."
+        ] }),
+        visualAvailable && liveForceAvailable && scene !== null ? /* @__PURE__ */ jsx3(
+          KnowledgeGraphVisualBoundary,
+          {
+            resetToken: view ?? presentation,
+            retryToken: visualRetryKey,
+            fallback: visualUnavailableStatus,
+            children: /* @__PURE__ */ jsx3(
+              KnowledgeGraphVisualMount,
+              {
+                renderVisual,
+                scene,
+                context: hostPolicy
+              }
+            )
+          }
+        ) : liveForceAvailable ? visualUnavailableStatus : liveForceLimitStatus,
+        /* @__PURE__ */ jsx3(
+          KnowledgeGraphCorpusLegendInternal,
+          {
+            presentation,
+            view,
+            themeMode: hostPolicy.themeMode
+          }
+        ),
+        /* @__PURE__ */ jsx3(
+          KnowledgeGraphCorpusA11yListInternal,
+          {
+            presentation,
+            view,
+            selectedId,
+            onSelect,
+            query,
+            nodePageSize
+          }
+        ),
+        /* @__PURE__ */ jsx3(
+          KnowledgeGraphCorpusStaticRecordViewInternal,
+          {
+            presentation,
+            view,
+            nodePageSize: recordNodePageSize,
+            edgePageSize: recordEdgePageSize
+          }
+        )
+      ]
+    }
+  );
+}
+
+// react/KnowledgeGraph3DScene.tsx
+import {
+  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+  PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1,
+  PREPARED_KNOWLEDGE_GRAPH_VIEW_V1,
+  KnowledgeGraphPresentationJsonError,
+  assertPreparedKnowledgeGraphView as assertPreparedKnowledgeGraphView4,
+  assertPreparedKnowledgeGraphPresentation as assertPreparedKnowledgeGraphPresentation4,
+  isPreparedKnowledgeGraphPresentation,
+  isPreparedKnowledgeGraphView,
+  knowledgeGraphPresentationContainsNode as knowledgeGraphPresentationContainsNode2,
+  knowledgeGraphViewContainsNode as knowledgeGraphViewContainsNode4,
+  parseKnowledgeGraphPresentationJson,
+  prepareKnowledgeGraphPresentation,
+  prepareKnowledgeGraphView as prepareKnowledgeGraphView2,
+  serializePreparedKnowledgeGraphPresentation
+} from "#cortexel-knowledge-graph-presentation-capability";
+import { Fragment as Fragment4, jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
 var PARTICLES_PER_EDGE = 4;
-var MAX_PARTICLES = MAX_KNOWLEDGE_GRAPH_SCENE_EDGES;
+var GRAPH_DIRECTION_MARKER_PADDING = 2;
+var GRAPH_LAYOUT_SETTLED_ALPHA = 8e-3;
+var MAX_PARTICLES = MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES;
 var FALLBACK_COLOR = "#64748b";
 var MAX_REMEMBERED_POSITIONS = 5e3;
 var _dummy = new THREE2.Object3D();
 var _color = new THREE2.Color();
-var _dimTarget = new THREE2.Color("#030711");
+var _darkDimTarget = new THREE2.Color("#030711");
+var _lightDimTarget = new THREE2.Color("#f8fafc");
 var _a = new THREE2.Vector3();
 var _b = new THREE2.Vector3();
 var _curveControl = new THREE2.Vector3();
@@ -1732,28 +2193,72 @@ var _up = new THREE2.Vector3(0, 1, 0);
 var _box = new THREE2.Box3();
 var _sphere = new THREE2.Sphere();
 var _layoutClockResult = { ticks: 0, remainderSeconds: 0 };
+var _cameraFitResult = { distance: 0, orthographicZoom: void 0 };
+var _cameraClippingResult = { near: 0, far: 0 };
+var _perspectiveAutoFrameProjection = {
+  kind: "perspective",
+  isArrayCamera: false,
+  viewEnabled: false,
+  parentTransformIdentity: false,
+  selfTransformCanonical: false,
+  cameraMethodsCanonical: false,
+  projectionMethodCanonical: false,
+  effectiveFovMethodCanonical: false,
+  webGlCoordinateSystem: false,
+  fovDegrees: 0,
+  aspect: 0,
+  zoom: 0,
+  near: 0,
+  far: 0,
+  filmOffset: 0,
+  projectionMatrixElements: []
+};
+var _orthographicAutoFrameProjection = {
+  kind: "orthographic",
+  isArrayCamera: false,
+  viewEnabled: false,
+  parentTransformIdentity: false,
+  selfTransformCanonical: false,
+  cameraMethodsCanonical: false,
+  projectionMethodCanonical: false,
+  webGlCoordinateSystem: false,
+  left: 0,
+  right: 0,
+  top: 0,
+  bottom: 0,
+  zoom: 0,
+  near: 0,
+  far: 0,
+  projectionMatrixElements: []
+};
 var selectCamera = (state) => state.camera;
 var selectRenderer = (state) => state.gl;
 var selectInvalidate = (state) => state.invalidate;
+var disableKnowledgeGraphGlyphRaycast = () => {
+};
 function devWarn(msg) {
   if (typeof process !== "undefined" && process.env && process.env.NODE_ENV === "production") {
     return;
   }
   if (typeof console !== "undefined" && console.warn) console.warn(`[cortexel] ${msg}`);
 }
-function dim(hex, amount) {
+function dim(hex, amount, themeMode) {
   _color.set(FALLBACK_COLOR);
   _color.set(hex);
-  return _color.lerp(_dimTarget, amount);
+  return _color.lerp(
+    themeMode === "light" ? _lightDimTarget : _darkDimTarget,
+    amount
+  );
 }
 function FocusLabelSprite({
+  spriteRef,
   text,
   color,
+  themeMode,
   invalidate
 }) {
   const label = safeDiagnosticText(text, 120);
-  const spriteRef = useRef(null);
-  const materialRef = useRef(null);
+  const materialRef = useRef3(null);
   useLayoutEffect(() => {
     const sprite = spriteRef.current;
     const material = materialRef.current;
@@ -1763,41 +2268,110 @@ function FocusLabelSprite({
       material,
       label,
       color,
+      themeMode,
       invalidate
     });
-  }, [label, color, invalidate]);
-  return /* @__PURE__ */ jsx2("sprite", { ref: spriteRef, visible: false, children: /* @__PURE__ */ jsx2(
-    "spriteMaterial",
+  }, [label, color, themeMode, invalidate]);
+  return /* @__PURE__ */ jsx4(
+    "sprite",
     {
-      ref: materialRef,
-      transparent: true,
-      depthWrite: false,
-      toneMapped: false
+      ref: spriteRef,
+      visible: false,
+      frustumCulled: false,
+      renderOrder: 1e3,
+      children: /* @__PURE__ */ jsx4(
+        "spriteMaterial",
+        {
+          ref: materialRef,
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
+          toneMapped: false
+        }
+      )
     }
-  ) });
+  );
 }
 function setEdgeCurve(source, target, lane) {
   _a.set(source.x ?? 0, source.y ?? 0, source.z ?? 0);
   _b.set(target.x ?? 0, target.y ?? 0, target.z ?? 0);
   graphEdgeControlPointInto(_a, _b, lane, _curveControl);
 }
+function updateKnowledgeGraphGlyphMatrices(glyphMesh, nodeIndexes, simNodes, focus, focusSet) {
+  if (glyphMesh === null) return;
+  for (let glyphIndex = 0; glyphIndex < nodeIndexes.length; glyphIndex++) {
+    const node = simNodes[nodeIndexes[glyphIndex]];
+    const scale = knowledgeGraphRenderedNodeScale(
+      focus !== null && (node.id === focus || focusSet?.has(node.id) === true)
+    );
+    _dummy.position.set(node.x ?? 0, node.y ?? 0, node.z ?? 0);
+    _dummy.quaternion.identity();
+    _dummy.scale.setScalar(node.r * scale);
+    _dummy.updateMatrix();
+    glyphMesh.setMatrixAt(glyphIndex, _dummy.matrix);
+  }
+  glyphMesh.instanceMatrix.needsUpdate = true;
+  glyphMesh.boundingSphere = null;
+}
+function updateKnowledgeGraphGlyphColors(glyphMesh, nodeIndexes, visualNodes, glyphColor, focus, focusSet, queryActive, queryMatchIds, themeMode) {
+  if (glyphMesh === null) return;
+  for (let glyphIndex = 0; glyphIndex < nodeIndexes.length; glyphIndex++) {
+    const node = visualNodes[nodeIndexes[glyphIndex]];
+    const amount = knowledgeGraphNodeEmphasisDimAmount(
+      node.id,
+      focus,
+      focusSet,
+      queryActive,
+      queryMatchIds
+    );
+    glyphMesh.setColorAt(glyphIndex, dim(glyphColor, amount, themeMode));
+  }
+  if (glyphMesh.instanceColor) glyphMesh.instanceColor.needsUpdate = true;
+}
 function KnowledgeGraph3DScene(props) {
-  const { graphIdentity, nodes, edges } = props;
+  assertPreparedGenericKnowledgeGraphPresentation3(props.presentation);
+  if (props.view !== void 0) {
+    assertPreparedKnowledgeGraphView3(props.view, props.presentation);
+  }
+  const nodes = props.view?.nodes ?? props.presentation.nodes;
+  const edges = props.view?.edges ?? props.presentation.edges;
+  assertKnowledgeGraphLiveForceBudget(nodes.length, edges.length);
+  return renderKnowledgeGraph3DScene(props);
+}
+function KnowledgeGraphCorpus3DSceneInternal(props) {
+  assertPreparedCorpusKnowledgeGraphPresentation3(props.presentation);
+  if (props.view !== void 0) {
+    assertPreparedKnowledgeGraphView3(props.view, props.presentation);
+  }
+  const nodes = props.view?.nodes ?? props.presentation.nodes;
+  const edges = props.view?.edges ?? props.presentation.edges;
+  assertKnowledgeGraphLiveForceBudget(nodes.length, edges.length);
+  return renderKnowledgeGraph3DScene(props);
+}
+function renderKnowledgeGraph3DScene(props) {
+  const { presentation, view, ...interactionProps } = props;
+  assertPreparedKnowledgeGraphPresentation3(presentation);
+  if (view !== void 0) assertPreparedKnowledgeGraphView3(view, presentation);
+  const { graphIdentity } = presentation;
+  const nodes = view?.nodes ?? presentation.nodes;
+  const edges = view?.edges ?? presentation.edges;
+  const selectedId = view !== void 0 && props.selectedId !== null && !knowledgeGraphViewContainsNode3(view, presentation, props.selectedId) ? null : props.selectedId;
+  const hoverId = view !== void 0 && props.hoverId !== null && !knowledgeGraphViewContainsNode3(view, presentation, props.hoverId) ? null : props.hoverId;
   assertKnowledgeGraphIdentity(graphIdentity);
   assertKnowledgeGraphNodeReference(props.selectedId, "knowledge-graph selected id");
   assertKnowledgeGraphNodeReference(props.hoverId, "knowledge-graph hover id");
   assertKnowledgeGraphColor(props.labelColor, "knowledge-graph label color");
   assertKnowledgeGraphColor(props.particleColor, "knowledge-graph particle color");
-  assertKnowledgeGraphBudget(nodes.length, edges.length);
-  const snapshot = snapshotKnowledgeGraphPresentation(nodes, edges);
-  assertUniqueGraphNodeIds(snapshot.nodes);
-  assertRenderableGraphEdges(snapshot.nodes, snapshot.edges);
-  return /* @__PURE__ */ jsx2(
+  return /* @__PURE__ */ jsx4(
     KnowledgeGraph3DSceneInstance,
     {
-      ...props,
-      nodes: snapshot.nodes,
-      edges: snapshot.edges
+      ...interactionProps,
+      selectedId,
+      hoverId,
+      autoFrame: nodes.length > 0 ? props.autoFrame : false,
+      graphIdentity,
+      nodes,
+      edges
     },
     graphIdentity
   );
@@ -1814,38 +2388,61 @@ function KnowledgeGraph3DSceneInstance({
   controlsRef,
   autoFrame = false,
   flyToSelection = false,
-  labelColor = "#e2e8f0",
-  particleColor = "#8fd3ff",
+  labelColor,
+  particleColor,
+  themeMode = "dark",
   reducedMotion = false
 }) {
-  const meshRef = useRef(null);
-  const linesRef = useRef(null);
-  const particlesRef = useRef(null);
-  const arrowsRef = useRef(null);
-  const labelGroupRef = useRef(null);
-  const sceneGroupRef = useRef(null);
+  const meshRef = useRef3(null);
+  const linesRef = useRef3(null);
+  const particlesRef = useRef3(null);
+  const arrowsRef = useRef3(null);
+  const sphereGlyphsRef = useRef3(null);
+  const boxGlyphsRef = useRef3(null);
+  const diamondGlyphsRef = useRef3(null);
+  const labelSpriteRef = useRef3(null);
+  const sceneGroupRef = useRef3(null);
   const camera = useThree(selectCamera);
   const gl = useThree(selectRenderer);
   const invalidate = useThree(selectInvalidate);
-  const [posMap] = useState2(() => ({
+  const cameraProjectionKind = knowledgeGraphCameraProjectionKind(camera);
+  const perspectiveCamera = camera;
+  const orthographicCamera = camera;
+  const resolvedLabelColor = labelColor ?? (themeMode === "light" ? "#0f172a" : "#e2e8f0");
+  const resolvedParticleColor = particleColor ?? (themeMode === "light" ? "#0369a1" : "#8fd3ff");
+  const resolvedGlyphColor = themeMode === "light" ? "#0f172a" : "#f8fafc";
+  useEffect4(() => {
+    if (autoFrame && cameraProjectionKind === null) {
+      devWarn(
+        "knowledge-graph auto-frame supports only perspective and orthographic cameras"
+      );
+    }
+  }, [autoFrame, cameraProjectionKind]);
+  const [posMap] = useState3(() => ({
     current: /* @__PURE__ */ new Map()
   }));
-  const readyGraphKeyRef = useRef(null);
-  const framedRef = useRef(false);
-  const flyToIdRef = useRef(null);
-  const onHoverRef = useRef(onHover);
+  const readyGraphKeyRef = useRef3(null);
+  const autoFrameStageRef = useRef3(0);
+  const flyToIdRef = useRef3(null);
+  const onHoverRef = useRef3(onHover);
+  const hoverIdRef = useRef3(hoverId);
   useLayoutEffect(() => {
     onHoverRef.current = onHover;
-  }, [onHover]);
-  useEffect2(() => () => onHoverRef.current(null), []);
-  const attachedControlsRef = useRef(null);
-  const [onUserGrab] = useState2(
+    hoverIdRef.current = hoverId;
+  }, [onHover, hoverId]);
+  useEffect4(() => () => {
+    if (hoverIdRef.current === null) return;
+    hoverIdRef.current = null;
+    onHoverRef.current(null);
+  }, []);
+  const attachedControlsRef = useRef3(null);
+  const [onUserGrab] = useState3(
     () => () => {
-      framedRef.current = true;
+      autoFrameStageRef.current = 2;
       flyToIdRef.current = null;
     }
   );
-  useEffect2(
+  useEffect4(
     () => () => {
       synchronizeKnowledgeGraphControlsListener(
         attachedControlsRef,
@@ -1855,13 +2452,32 @@ function KnowledgeGraph3DSceneInstance({
     },
     [onUserGrab]
   );
-  const layoutInput = snapshotGraphLayoutInputs(nodes, edges);
+  const layoutInput = useMemo4(
+    () => snapshotGraphLayoutInputs(nodes, edges),
+    [nodes, edges]
+  );
   const graphKey = layoutInput.graphKey;
-  const normalizedQuery = useMemo(() => normalizeGraphQuery(query), [query]);
-  const queryMatchIds = graphQueryMatchIds(nodes, normalizedQuery, edges);
+  const normalizedQuery = useMemo4(() => normalizeGraphQuery(query), [query]);
+  const queryMatchIds = useMemo4(
+    () => graphQueryMatchIds(nodes, normalizedQuery, edges),
+    [nodes, normalizedQuery, edges]
+  );
   const queryActive = normalizedQuery.length > 0;
-  const visualNodes = nodes.map(({ id, label, color }) => ({ id, label, color }));
-  const { layoutNodes, simLinks, validEdges, edgeLanes, index } = useMemo(() => {
+  const visualNodes = useMemo4(
+    () => nodes.map(({ id, label, color, nodeGlyph }) => ({
+      id,
+      label,
+      color: knowledgeGraphContrastSafeColor(color, themeMode),
+      nodeGlyph: nodeGlyph ?? "sphere_outline"
+    })),
+    [nodes, themeMode]
+  );
+  const glyphNodeIndexes = useMemo4(() => ({
+    sphere: visualNodes.flatMap((node, index2) => node.nodeGlyph === "sphere_outline" ? [index2] : []),
+    box: visualNodes.flatMap((node, index2) => node.nodeGlyph === "box_shell" ? [index2] : []),
+    diamond: visualNodes.flatMap((node, index2) => node.nodeGlyph === "diamond_shell" ? [index2] : [])
+  }), [visualNodes]);
+  const { layoutNodes, simLinks, validEdges, edgeLanes, index } = useMemo4(() => {
     const index2 = /* @__PURE__ */ new Map();
     const layoutNodes2 = layoutInput.nodes.map((n, i) => {
       index2.set(n.id, i);
@@ -1872,11 +2488,11 @@ function KnowledgeGraph3DSceneInstance({
     const simLinks2 = uniqueGraphTopologyLinks(validEdges2);
     return { layoutNodes: layoutNodes2, simLinks: simLinks2, validEdges: validEdges2, edgeLanes: edgeLanes2, index: index2 };
   }, [graphKey]);
-  const neighbors = useMemo(
+  const neighbors = useMemo4(
     () => buildAdjacency(new Set(index.keys()), validEdges),
     [index, validEdges]
   );
-  useEffect2(() => {
+  useEffect4(() => {
     if (hoverId == null || !index.has(hoverId)) return;
     const element = gl.domElement;
     const previous = element.style.cursor;
@@ -1885,40 +2501,81 @@ function KnowledgeGraph3DSceneInstance({
       element.style.cursor = previous;
     };
   }, [gl, hoverId, index]);
-  const flowEdges = useMemo(
+  const flowEdges = useMemo4(
     () => edgeLanes.filter(({ edge }) => edge.particles),
     [edgeLanes]
   );
-  const directedEdges = useMemo(
+  const directedEdges = useMemo4(
     () => edgeLanes.filter(({ edge }) => edge.directed !== false),
     [edgeLanes]
   );
-  const particleDistribution = planFlowParticleDistribution(
-    flowEdges.length,
-    PARTICLES_PER_EDGE,
-    MAX_PARTICLES
+  const edgeDisplayColors = useMemo4(
+    () => validEdges.map((edge) => knowledgeGraphContrastSafeColor(edge.color, themeMode)),
+    [validEdges, themeMode]
+  );
+  const particleDistribution = useMemo4(
+    () => planFlowParticleDistribution(
+      flowEdges.length,
+      PARTICLES_PER_EDGE,
+      MAX_PARTICLES
+    ),
+    [flowEdges.length]
   );
   const particleCount = particleDistribution.total;
-  useEffect2(() => {
+  useEffect4(() => {
     if (flowEdges.length * PARTICLES_PER_EDGE > MAX_PARTICLES) {
       devWarn(
         `KnowledgeGraph3DScene: ${flowEdges.length} flow edges exceed the ${MAX_PARTICLES}-particle cap at four markers each; marker density is reduced evenly and every flow edge retains at least one marker.`
       );
     }
   }, [flowEdges.length]);
-  const linePos = useMemo(
-    () => new Float32Array(validEdges.length * GRAPH_EDGE_CURVE_SEGMENTS * 6),
+  const visibleLineSegmentCount = useMemo4(
+    () => validEdges.reduce((count, edge) => {
+      let visible = 0;
+      for (let chord = 0; chord < GRAPH_EDGE_CURVE_SEGMENTS; chord++) {
+        if (knowledgeGraphEdgeStrokeSegmentVisible(
+          edge.edgeStrokePattern ?? "solid",
+          chord,
+          GRAPH_EDGE_CURVE_SEGMENTS
+        )) visible++;
+      }
+      return count + visible;
+    }, 0),
     [validEdges]
   );
-  const lineCol = useMemo(
-    () => new Float32Array(validEdges.length * GRAPH_EDGE_CURVE_SEGMENTS * 6),
-    [validEdges]
+  const linePos = useMemo4(
+    () => new Float32Array(visibleLineSegmentCount * 6),
+    [visibleLineSegmentCount]
   );
-  const layoutRuntimeRef = useRef(null);
-  const layoutTickAccumulatorRef = useRef(0);
-  const geometryDirtyRef = useRef(true);
-  const flowTimeRef = useRef(0);
-  useEffect2(() => {
+  const lineCol = useMemo4(
+    () => new Float32Array(visibleLineSegmentCount * 6),
+    [visibleLineSegmentCount]
+  );
+  useLayoutEffect(() => {
+    meshRef.current?.instanceMatrix.setUsage(THREE2.DynamicDrawUsage);
+    sphereGlyphsRef.current?.instanceMatrix.setUsage(THREE2.DynamicDrawUsage);
+    boxGlyphsRef.current?.instanceMatrix.setUsage(THREE2.DynamicDrawUsage);
+    diamondGlyphsRef.current?.instanceMatrix.setUsage(THREE2.DynamicDrawUsage);
+    arrowsRef.current?.instanceMatrix.setUsage(THREE2.DynamicDrawUsage);
+    particlesRef.current?.instanceMatrix.setUsage(THREE2.DynamicDrawUsage);
+    const position = linesRef.current?.geometry.getAttribute("position");
+    if (position instanceof THREE2.BufferAttribute) {
+      position.setUsage(THREE2.DynamicDrawUsage);
+    }
+  }, [
+    linePos,
+    nodes.length,
+    directedEdges.length,
+    particleCount,
+    glyphNodeIndexes.sphere.length,
+    glyphNodeIndexes.box.length,
+    glyphNodeIndexes.diamond.length
+  ]);
+  const layoutRuntimeRef = useRef3(null);
+  const layoutTickAccumulatorRef = useRef3(0);
+  const geometryDirtyRef = useRef3(true);
+  const flowPhaseRef = useRef3(0);
+  useEffect4(() => {
     const plan = planGraphLayoutCache(
       layoutNodes,
       posMap.current,
@@ -1927,10 +2584,18 @@ function KnowledgeGraph3DSceneInstance({
     const simNodes = plan.nodes;
     const runtimeLinks = simLinks.map(({ source, target }) => ({ source, target }));
     const linkForce = forceLink(runtimeLinks).id((d) => d.id).distance(34).strength(0.35);
-    const sim = forceSimulation(simNodes, 3).force("charge", forceManyBody().strength(-140).distanceMax(600)).force("link", linkForce).force("center", forceCenter(0, 0, 0).strength(0.04)).force("collide", forceCollide((d) => d.r + 3).iterations(2)).alpha(plan.warmStart ? 0.5 : 1).alphaDecay(0.018).velocityDecay(0.42).stop();
+    const sim = forceSimulation(simNodes, 3).force("charge", forceManyBody().strength(-140).distanceMax(600)).force("link", linkForce).force("center", forceCenter(0, 0, 0).strength(0.04)).force("collide", forceCollide((d) => {
+      const node = d;
+      const visualNode = visualNodes[index.get(node.id)];
+      return knowledgeGraphRenderedNodeRadialExtent(
+        node.r,
+        visualNode.nodeGlyph,
+        true
+      ) + 3;
+    }).iterations(2)).alpha(plan.warmStart ? 0.5 : 1).alphaDecay(0.018).velocityDecay(0.42).stop();
     if (reducedMotion) {
       const budget = reducedMotionLayoutTickBudget(simNodes.length, simLinks.length);
-      for (let i = 0; i < budget && sim.alpha() > 8e-3; i++) sim.tick();
+      for (let i = 0; i < budget && sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA; i++) sim.tick();
       sim.alpha(0);
     }
     const runtime = {
@@ -1949,14 +2614,26 @@ function KnowledgeGraph3DSceneInstance({
       sim.stop();
       if (layoutRuntimeRef.current === runtime) layoutRuntimeRef.current = null;
     };
-  }, [graphKey, layoutNodes, simLinks, reducedMotion, invalidate]);
+  }, [
+    graphKey,
+    layoutNodes,
+    simLinks,
+    visualNodes,
+    index,
+    reducedMotion,
+    invalidate
+  ]);
   useLayoutEffect(() => {
     beginKnowledgeGraphRuntimeTransition(
       readyGraphKeyRef,
       geometryDirtyRef,
       sceneGroupRef.current,
       invalidate,
-      () => onHoverRef.current(null)
+      () => {
+        if (hoverIdRef.current === null) return;
+        hoverIdRef.current = null;
+        onHoverRef.current(null);
+      }
     );
   }, [graphKey, reducedMotion, invalidate]);
   const applyEmphasis = useCallback(() => {
@@ -1964,22 +2641,70 @@ function KnowledgeGraph3DSceneInstance({
     const raw = hoverId ?? selectedId;
     const focus = raw != null && index.has(raw) ? raw : null;
     const focusSet = focus ? neighbors.get(focus) : null;
-    const isDimmed = (id) => {
-      if (focus && id !== focus && !focusSet?.has(id)) return 0.8;
-      if (!focus && queryActive && !queryMatchIds.has(id)) return 0.82;
-      return 0;
-    };
     if (mesh) {
       visualNodes.forEach((n, i) => {
-        mesh.setColorAt(i, dim(n.color, isDimmed(n.id)));
+        mesh.setColorAt(i, dim(
+          n.color,
+          knowledgeGraphNodeEmphasisDimAmount(
+            n.id,
+            focus,
+            focusSet,
+            queryActive,
+            queryMatchIds
+          ),
+          themeMode
+        ));
       });
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+    updateKnowledgeGraphGlyphColors(
+      sphereGlyphsRef.current,
+      glyphNodeIndexes.sphere,
+      visualNodes,
+      resolvedGlyphColor,
+      focus,
+      focusSet,
+      queryActive,
+      queryMatchIds,
+      themeMode
+    );
+    updateKnowledgeGraphGlyphColors(
+      boxGlyphsRef.current,
+      glyphNodeIndexes.box,
+      visualNodes,
+      resolvedGlyphColor,
+      focus,
+      focusSet,
+      queryActive,
+      queryMatchIds,
+      themeMode
+    );
+    updateKnowledgeGraphGlyphColors(
+      diamondGlyphsRef.current,
+      glyphNodeIndexes.diamond,
+      visualNodes,
+      resolvedGlyphColor,
+      focus,
+      focusSet,
+      queryActive,
+      queryMatchIds,
+      themeMode
+    );
     let k = 0;
-    for (const e of validEdges) {
+    for (let edgeIndex = 0; edgeIndex < validEdges.length; edgeIndex++) {
+      const e = validEdges[edgeIndex];
       const incident = focus ? e.source === focus || e.target === focus : graphEdgeMatchesQuery(e.source, e.target, queryMatchIds, normalizedQuery);
-      const c = dim(e.color, incident ? 0.25 : 0.86);
+      const c = dim(
+        edgeDisplayColors[edgeIndex],
+        focus === null && !queryActive ? 0 : incident ? 0 : 0.86,
+        themeMode
+      );
       for (let chord = 0; chord < GRAPH_EDGE_CURVE_SEGMENTS; chord++) {
+        if (!knowledgeGraphEdgeStrokeSegmentVisible(
+          e.edgeStrokePattern ?? "solid",
+          chord,
+          GRAPH_EDGE_CURVE_SEGMENTS
+        )) continue;
         lineCol[k] = c.r;
         lineCol[k + 1] = c.g;
         lineCol[k + 2] = c.b;
@@ -2001,12 +2726,21 @@ function KnowledgeGraph3DSceneInstance({
           queryMatchIds,
           normalizedQuery
         );
-        arrows.setColorAt(arrowIndex, dim(edge.color, incident ? 0.15 : 0.86));
+        arrows.setColorAt(
+          arrowIndex,
+          dim(
+            edgeDisplayColors[directedEdges[arrowIndex].edgeIndex],
+            focus === null && !queryActive ? 0 : incident ? 0 : 0.86,
+            themeMode
+          )
+        );
       });
       if (arrows.instanceColor) arrows.instanceColor.needsUpdate = true;
     }
   }, [
     visualNodes,
+    glyphNodeIndexes,
+    resolvedGlyphColor,
     validEdges,
     directedEdges,
     index,
@@ -2016,16 +2750,21 @@ function KnowledgeGraph3DSceneInstance({
     queryActive,
     queryMatchIds,
     normalizedQuery,
-    lineCol
+    lineCol,
+    edgeDisplayColors,
+    themeMode
   ]);
   useLayoutEffect(() => {
     applyEmphasis();
     geometryDirtyRef.current = true;
     invalidate();
   }, [applyEmphasis, invalidate]);
-  useEffect2(() => {
+  useEffect4(() => {
     flyToIdRef.current = flyToSelection && selectedId && index.has(selectedId) ? selectedId : null;
-    if (flyToIdRef.current) invalidate();
+    if (flyToIdRef.current) {
+      autoFrameStageRef.current = 2;
+      invalidate();
+    }
   }, [graphIdentity, selectedId, index, flyToSelection, invalidate]);
   useFrame((_, delta) => {
     const runtime = layoutRuntimeRef.current;
@@ -2040,14 +2779,14 @@ function KnowledgeGraph3DSceneInstance({
     const sim = runtime.sim;
     const simNodes = runtime.nodes;
     let positionsChanged = geometryDirtyRef.current;
-    if (sim.alpha() > 8e-3) {
+    if (sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA) {
       const advanced = advanceGraphLayoutClockInto(
         layoutTickAccumulatorRef.current,
         delta,
         _layoutClockResult
       );
       layoutTickAccumulatorRef.current = advanced.remainderSeconds;
-      for (let tick = 0; tick < advanced.ticks && sim.alpha() > 8e-3; tick++) {
+      for (let tick = 0; tick < advanced.ticks && sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA; tick++) {
         sim.tick();
         positionsChanged = true;
       }
@@ -2074,13 +2813,36 @@ function KnowledgeGraph3DSceneInstance({
         remembered[1] = y;
         remembered[2] = z;
         _dummy.position.set(x, y, z);
-        const pop = focus && (n.id === focus || focusSet?.has(n.id)) ? 1.28 : 1;
+        const pop = knowledgeGraphRenderedNodeScale(
+          focus !== null && (n.id === focus || focusSet?.has(n.id) === true)
+        );
         _dummy.scale.setScalar(n.r * pop);
         _dummy.updateMatrix();
         mesh.setMatrixAt(i, _dummy.matrix);
       }
       mesh.instanceMatrix.needsUpdate = true;
       mesh.boundingSphere = null;
+      updateKnowledgeGraphGlyphMatrices(
+        sphereGlyphsRef.current,
+        glyphNodeIndexes.sphere,
+        simNodes,
+        focus,
+        focusSet
+      );
+      updateKnowledgeGraphGlyphMatrices(
+        boxGlyphsRef.current,
+        glyphNodeIndexes.box,
+        simNodes,
+        focus,
+        focusSet
+      );
+      updateKnowledgeGraphGlyphMatrices(
+        diamondGlyphsRef.current,
+        glyphNodeIndexes.diamond,
+        simNodes,
+        focus,
+        focusSet
+      );
       let k = 0;
       for (let edgeIndex = 0; edgeIndex < edgeLanes.length; edgeIndex++) {
         const lane = edgeLanes[edgeIndex];
@@ -2097,14 +2859,21 @@ function KnowledgeGraph3DSceneInstance({
             (chord + 1) / GRAPH_EDGE_CURVE_SEGMENTS,
             _curveNext
           );
-          linePos[k] = _curvePoint.x;
-          linePos[k + 1] = _curvePoint.y;
-          linePos[k + 2] = _curvePoint.z;
-          linePos[k + 3] = _curveNext.x;
-          linePos[k + 4] = _curveNext.y;
-          linePos[k + 5] = _curveNext.z;
+          const chordVisible = knowledgeGraphEdgeStrokeSegmentVisible(
+            e.edgeStrokePattern ?? "solid",
+            chord,
+            GRAPH_EDGE_CURVE_SEGMENTS
+          );
+          if (chordVisible) {
+            linePos[k] = _curvePoint.x;
+            linePos[k + 1] = _curvePoint.y;
+            linePos[k + 2] = _curvePoint.z;
+            linePos[k + 3] = _curveNext.x;
+            linePos[k + 4] = _curveNext.y;
+            linePos[k + 5] = _curveNext.z;
+            k += 6;
+          }
           _curvePoint.copy(_curveNext);
-          k += 6;
         }
       }
       const posAttr = linesRef.current?.geometry.getAttribute("position");
@@ -2115,18 +2884,36 @@ function KnowledgeGraph3DSceneInstance({
           const lane = directedEdges[i];
           const edge = lane.edge;
           const source = simNodes[index.get(edge.source)];
-          const target = simNodes[index.get(edge.target)];
+          const targetIndex = index.get(edge.target);
+          const target = simNodes[targetIndex];
           setEdgeCurve(source, target, lane);
-          _direction.subVectors(_b, _curveControl);
-          if (_direction.lengthSq() <= 1e-12) {
+          const targetExtent = knowledgeGraphRenderedNodeRadialExtent(
+            target.r,
+            visualNodes[targetIndex].nodeGlyph,
+            focus !== null && (target.id === focus || focusSet?.has(target.id) === true)
+          );
+          if (!graphEdgeTargetBoundaryInto(
+            _a,
+            _curveControl,
+            _b,
+            targetExtent,
+            _curveNext,
+            _direction
+          )) {
             _dummy.position.copy(_b);
             _dummy.quaternion.identity();
             _dummy.scale.setScalar(0);
           } else {
-            _direction.normalize();
-            _dummy.position.copy(_b).addScaledVector(_direction, -(target.r + 1.5));
+            _dummy.position.copy(_curveNext).addScaledVector(
+              _direction,
+              -KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH / 2
+            );
             _dummy.quaternion.setFromUnitVectors(_up, _direction);
-            _dummy.scale.set(1.25, 3, 1.25);
+            _dummy.scale.set(
+              1.25,
+              KNOWLEDGE_GRAPH_DIRECTION_MARKER_LENGTH,
+              1.25
+            );
           }
           _dummy.updateMatrix();
           arrows.setMatrixAt(i, _dummy.matrix);
@@ -2138,9 +2925,13 @@ function KnowledgeGraph3DSceneInstance({
     const pmesh = particlesRef.current;
     if (pmesh && particleCount > 0 && (positionsChanged || !reducedMotion)) {
       _dummy.quaternion.identity();
-      const speed = 0.28;
-      if (!reducedMotion) flowTimeRef.current += delta;
-      const base = reducedMotion ? 0 : flowTimeRef.current * speed;
+      if (!reducedMotion) {
+        flowPhaseRef.current = advanceKnowledgeGraphFlowPhase(
+          flowPhaseRef.current,
+          delta
+        );
+      }
+      const base = reducedMotion ? 0 : flowPhaseRef.current;
       let p = 0;
       for (let fe = 0; fe < flowEdges.length && p < particleCount; fe++) {
         const lane = flowEdges[fe];
@@ -2163,7 +2954,7 @@ function KnowledgeGraph3DSceneInstance({
         const phase = fe * 0.618034;
         const edgeParticleCount = particleDistribution.basePerEdge + (fe < particleDistribution.extraEdgeCount ? 1 : 0);
         for (let q = 0; q < edgeParticleCount && p < particleCount; q++) {
-          const frac = (base + phase + q / edgeParticleCount) % 1;
+          const frac = reducedMotion ? reducedMotionFlowParticleFraction(q, edgeParticleCount) : (base + phase + q / edgeParticleCount) % 1;
           graphEdgeCurvePointInto(_a, _curveControl, _b, frac, _dummy.position);
           _dummy.scale.setScalar(size);
           _dummy.updateMatrix();
@@ -2173,29 +2964,173 @@ function KnowledgeGraph3DSceneInstance({
       }
       pmesh.instanceMatrix.needsUpdate = true;
     }
-    const label = labelGroupRef.current;
+    const label = labelSpriteRef.current;
     if (label) {
       const fi = focus != null ? index.get(focus) : void 0;
       if (fi != null) {
         const n = simNodes[fi];
-        label.position.set(n.x ?? 0, (n.y ?? 0) + n.r + 4, n.z ?? 0);
+        label.position.set(n.x ?? 0, n.y ?? 0, n.z ?? 0);
+        label.center.set(
+          0.5,
+          knowledgeGraphFocusLabelSpriteCenterY(
+            n.r,
+            visualNodes[fi].nodeGlyph
+          )
+        );
         label.visible = true;
       } else {
         label.visible = false;
       }
     }
-    if (autoFrame && controls && !framedRef.current && simNodes.length > 0 && sim.alpha() < 0.25) {
-      _box.makeEmpty();
-      for (let nodeIndex = 0; nodeIndex < simNodes.length; nodeIndex++) {
-        const n = simNodes[nodeIndex];
-        _box.expandByPoint(_a.set(n.x ?? 0, n.y ?? 0, n.z ?? 0));
+    const layoutSettled = sim.alpha() <= GRAPH_LAYOUT_SETTLED_ALPHA;
+    if (autoFrame && autoFrameStageRef.current < 2 && (autoFrameStageRef.current === 0 || layoutSettled) && simNodes.length > 0 && cameraProjectionKind !== null) {
+      const cameraParentIdentity = isKnowledgeGraphCameraParentChainIdentity(
+        camera.parent
+      );
+      const cameraSelfTransformCanonical = isKnowledgeGraphCameraSelfTransformCanonical(camera);
+      const cameraMethodsCanonical = camera.getWorldDirection === THREE2.Camera.prototype.getWorldDirection && camera.lookAt === THREE2.Object3D.prototype.lookAt && camera.updateMatrixWorld === THREE2.Camera.prototype.updateMatrixWorld && camera.updateWorldMatrix === THREE2.Camera.prototype.updateWorldMatrix;
+      let centeredProjectionSupported = false;
+      if (cameraProjectionKind === "perspective") {
+        _perspectiveAutoFrameProjection.isArrayCamera = camera.isArrayCamera === true;
+        _perspectiveAutoFrameProjection.viewEnabled = perspectiveCamera.view?.enabled === true;
+        _perspectiveAutoFrameProjection.parentTransformIdentity = cameraParentIdentity;
+        _perspectiveAutoFrameProjection.selfTransformCanonical = cameraSelfTransformCanonical;
+        _perspectiveAutoFrameProjection.cameraMethodsCanonical = cameraMethodsCanonical;
+        _perspectiveAutoFrameProjection.projectionMethodCanonical = camera.updateProjectionMatrix === THREE2.PerspectiveCamera.prototype.updateProjectionMatrix;
+        _perspectiveAutoFrameProjection.effectiveFovMethodCanonical = perspectiveCamera.getEffectiveFOV === THREE2.PerspectiveCamera.prototype.getEffectiveFOV;
+        _perspectiveAutoFrameProjection.webGlCoordinateSystem = camera.coordinateSystem === THREE2.WebGLCoordinateSystem;
+        _perspectiveAutoFrameProjection.fovDegrees = perspectiveCamera.fov;
+        _perspectiveAutoFrameProjection.aspect = perspectiveCamera.aspect;
+        _perspectiveAutoFrameProjection.zoom = perspectiveCamera.zoom;
+        _perspectiveAutoFrameProjection.near = perspectiveCamera.near;
+        _perspectiveAutoFrameProjection.far = perspectiveCamera.far;
+        _perspectiveAutoFrameProjection.filmOffset = perspectiveCamera.filmOffset;
+        _perspectiveAutoFrameProjection.projectionMatrixElements = perspectiveCamera.projectionMatrix.elements;
+        centeredProjectionSupported = isKnowledgeGraphCenteredAutoFrameProjectionSupported(
+          _perspectiveAutoFrameProjection
+        );
+      } else {
+        _orthographicAutoFrameProjection.isArrayCamera = camera.isArrayCamera === true;
+        _orthographicAutoFrameProjection.viewEnabled = orthographicCamera.view?.enabled === true;
+        _orthographicAutoFrameProjection.parentTransformIdentity = cameraParentIdentity;
+        _orthographicAutoFrameProjection.selfTransformCanonical = cameraSelfTransformCanonical;
+        _orthographicAutoFrameProjection.cameraMethodsCanonical = cameraMethodsCanonical;
+        _orthographicAutoFrameProjection.projectionMethodCanonical = camera.updateProjectionMatrix === THREE2.OrthographicCamera.prototype.updateProjectionMatrix;
+        _orthographicAutoFrameProjection.webGlCoordinateSystem = camera.coordinateSystem === THREE2.WebGLCoordinateSystem;
+        _orthographicAutoFrameProjection.left = orthographicCamera.left;
+        _orthographicAutoFrameProjection.right = orthographicCamera.right;
+        _orthographicAutoFrameProjection.top = orthographicCamera.top;
+        _orthographicAutoFrameProjection.bottom = orthographicCamera.bottom;
+        _orthographicAutoFrameProjection.zoom = orthographicCamera.zoom;
+        _orthographicAutoFrameProjection.near = orthographicCamera.near;
+        _orthographicAutoFrameProjection.far = orthographicCamera.far;
+        _orthographicAutoFrameProjection.projectionMatrixElements = orthographicCamera.projectionMatrix.elements;
+        centeredProjectionSupported = isKnowledgeGraphCenteredAutoFrameProjectionSupported(
+          _orthographicAutoFrameProjection
+        );
       }
-      const sphere = _box.getBoundingSphere(_sphere);
-      const dist = Math.max(120, sphere.radius * 2.4);
-      camera.position.set(sphere.center.x, sphere.center.y, sphere.center.z + dist);
-      controls.target.copy(sphere.center);
-      controls.update();
-      framedRef.current = true;
+      const perspectiveFov = centeredProjectionSupported && cameraProjectionKind === "perspective" ? perspectiveCamera.getEffectiveFOV() : 0;
+      const horizontalSpan = cameraProjectionKind === "orthographic" ? Math.abs(orthographicCamera.right - orthographicCamera.left) : 0;
+      const verticalSpan = cameraProjectionKind === "orthographic" ? Math.abs(orthographicCamera.top - orthographicCamera.bottom) : 0;
+      const projectionReady = centeredProjectionSupported && (cameraProjectionKind === "perspective" ? isKnowledgeGraphPerspectiveProjectionReady(
+        perspectiveFov,
+        perspectiveCamera.aspect
+      ) : isKnowledgeGraphOrthographicProjectionReady(
+        horizontalSpan,
+        verticalSpan,
+        orthographicCamera.zoom
+      ));
+      const cameraPositionReady = isKnowledgeGraphCameraVectorFinite(
+        camera.position.x,
+        camera.position.y,
+        camera.position.z
+      );
+      const controlsTargetReady = controls === null || isKnowledgeGraphCameraVectorFinite(
+        controls.target.x,
+        controls.target.y,
+        controls.target.z
+      );
+      if (projectionReady && cameraPositionReady && controlsTargetReady) {
+        _box.makeEmpty();
+        for (let nodeIndex = 0; nodeIndex < simNodes.length; nodeIndex++) {
+          const n = simNodes[nodeIndex];
+          const glyph = visualNodes[nodeIndex].nodeGlyph;
+          const radius = knowledgeGraphAutoFrameNodeRadialExtent(
+            n.r,
+            glyph,
+            visualNodes[nodeIndex].id === focus
+          );
+          _box.expandByPoint(_a.set(
+            (n.x ?? 0) - radius,
+            (n.y ?? 0) - radius,
+            (n.z ?? 0) - radius
+          ));
+          _box.expandByPoint(_b.set(
+            (n.x ?? 0) + radius,
+            (n.y ?? 0) + radius,
+            (n.z ?? 0) + radius
+          ));
+        }
+        if (validEdges.length > 0) {
+          _box.expandByScalar(
+            MAX_GRAPH_EDGE_LANE_OFFSET + GRAPH_DIRECTION_MARKER_PADDING
+          );
+        }
+        const sphere = _box.getBoundingSphere(_sphere);
+        const currentDistance = controls ? camera.position.distanceTo(controls.target) : camera.position.distanceTo(sphere.center);
+        if (controls && camera.position.distanceToSquared(controls.target) > 1e-12) {
+          _direction.copy(camera.position).sub(controls.target).normalize();
+        } else {
+          camera.getWorldDirection(_direction).multiplyScalar(-1);
+        }
+        const directionReady = isKnowledgeGraphCameraVectorFinite(
+          _direction.x,
+          _direction.y,
+          _direction.z
+        );
+        if (directionReady) {
+          if (_direction.lengthSq() <= 1e-12) _direction.set(0, 0, 1);
+          else _direction.normalize();
+          const fit = cameraProjectionKind === "orthographic" ? planKnowledgeGraphOrthographicCameraFitInto(
+            sphere.radius,
+            currentDistance,
+            horizontalSpan,
+            verticalSpan,
+            orthographicCamera.zoom,
+            _cameraFitResult
+          ) : planKnowledgeGraphPerspectiveCameraFitInto(
+            sphere.radius,
+            currentDistance,
+            perspectiveFov,
+            perspectiveCamera.aspect,
+            _cameraFitResult
+          );
+          camera.position.copy(sphere.center).addScaledVector(_direction, fit.distance);
+          if (cameraProjectionKind === "orthographic" && fit.orthographicZoom !== void 0) {
+            orthographicCamera.zoom = fit.orthographicZoom;
+          }
+          const projected = camera;
+          const clipping = planKnowledgeGraphCameraClippingInto(
+            cameraProjectionKind,
+            projected.near,
+            projected.far,
+            fit.distance,
+            sphere.radius,
+            _cameraClippingResult
+          );
+          projected.near = clipping.near;
+          projected.far = clipping.far;
+          projected.updateProjectionMatrix();
+          if (controls) {
+            controls.target.copy(sphere.center);
+            controls.update();
+          } else {
+            camera.lookAt(sphere.center);
+            camera.updateMatrixWorld();
+          }
+          autoFrameStageRef.current = layoutSettled ? 2 : 1;
+        }
+      }
     }
     if (flyToIdRef.current) {
       const fi = index.get(flyToIdRef.current);
@@ -2211,7 +3146,7 @@ function KnowledgeGraph3DSceneInstance({
         flyToIdRef.current = null;
       }
     }
-    if (sim.alpha() > 8e-3 || !reducedMotion && particleCount > 0 || flyToIdRef.current !== null) {
+    if (sim.alpha() > GRAPH_LAYOUT_SETTLED_ALPHA || !reducedMotion && particleCount > 0 || flyToIdRef.current !== null) {
       invalidate();
     }
     if (positionsChanged) {
@@ -2229,12 +3164,15 @@ function KnowledgeGraph3DSceneInstance({
     (e) => {
       const runtime = layoutRuntimeRef.current;
       if (readyGraphKeyRef.current !== graphKey || geometryDirtyRef.current || runtime?.graphKey !== graphKey || runtime.reducedMotion !== reducedMotion) return;
-      if (e.instanceId == null || e.instanceId >= visualNodes.length) return;
+      if (!isKnowledgeGraphInstanceId(e.instanceId, visualNodes.length)) return;
       e.stopPropagation();
       const id = visualNodes[e.instanceId].id;
-      if (id !== hoverId) onHover(id);
+      if (id !== hoverIdRef.current) {
+        hoverIdRef.current = id;
+        onHoverRef.current(id);
+      }
     },
-    [graphKey, reducedMotion, visualNodes, onHover, hoverId]
+    [graphKey, reducedMotion, visualNodes]
   );
   const handleOut = useCallback(
     (e) => {
@@ -2243,24 +3181,35 @@ function KnowledgeGraph3DSceneInstance({
       handleKnowledgeGraphPointerOut(
         ready,
         () => e.stopPropagation(),
-        () => onHover(null)
+        () => {
+          if (hoverIdRef.current === null) return;
+          hoverIdRef.current = null;
+          onHoverRef.current(null);
+        }
       );
     },
-    [graphKey, reducedMotion, onHover]
+    [graphKey, reducedMotion]
   );
   const handleClick = useCallback(
     (e) => {
       const runtime = layoutRuntimeRef.current;
-      if (readyGraphKeyRef.current !== graphKey || geometryDirtyRef.current || runtime?.graphKey !== graphKey || runtime.reducedMotion !== reducedMotion) return;
-      if (e.instanceId != null && e.instanceId < visualNodes.length) {
-        e.stopPropagation();
-        onSelect(visualNodes[e.instanceId].id);
-      }
+      const ready = !(readyGraphKeyRef.current !== graphKey || geometryDirtyRef.current || runtime?.graphKey !== graphKey || runtime.reducedMotion !== reducedMotion);
+      handleKnowledgeGraphNodeClick(
+        ready,
+        e.instanceId,
+        visualNodes.length,
+        e.delta,
+        () => e.stopPropagation(),
+        (instanceId) => {
+          const id = visualNodes[instanceId].id;
+          onSelect(toggledKnowledgeGraphSelection(selectedId, id));
+        }
+      );
     },
-    [graphKey, reducedMotion, visualNodes, onSelect]
+    [graphKey, reducedMotion, visualNodes, onSelect, selectedId]
   );
-  return /* @__PURE__ */ jsx2(Fragment2, { children: /* @__PURE__ */ jsxs2("group", { ref: sceneGroupRef, visible: false, children: [
-    nodes.length > 0 ? /* @__PURE__ */ jsxs2(
+  return /* @__PURE__ */ jsx4(Fragment4, { children: /* @__PURE__ */ jsxs4("group", { ref: sceneGroupRef, visible: false, children: [
+    nodes.length > 0 ? /* @__PURE__ */ jsxs4(
       "instancedMesh",
       {
         ref: meshRef,
@@ -2270,97 +3219,203 @@ function KnowledgeGraph3DSceneInstance({
         onPointerOut: handleOut,
         onClick: handleClick,
         children: [
-          /* @__PURE__ */ jsx2("sphereGeometry", { args: [1, 20, 20] }),
-          /* @__PURE__ */ jsx2("meshBasicMaterial", { toneMapped: false })
+          /* @__PURE__ */ jsx4("sphereGeometry", { args: [1, 20, 20] }),
+          /* @__PURE__ */ jsx4("meshBasicMaterial", { toneMapped: false })
         ]
       },
       `nodes-${nodes.length}`
     ) : null,
-    /* @__PURE__ */ jsxs2("lineSegments", { ref: linesRef, frustumCulled: false, children: [
-      /* @__PURE__ */ jsxs2("bufferGeometry", { children: [
-        /* @__PURE__ */ jsx2("bufferAttribute", { attach: "attributes-position", args: [linePos, 3] }),
-        /* @__PURE__ */ jsx2("bufferAttribute", { attach: "attributes-color", args: [lineCol, 3] })
+    glyphNodeIndexes.sphere.length > 0 ? /* @__PURE__ */ jsxs4(
+      "instancedMesh",
+      {
+        ref: sphereGlyphsRef,
+        args: [void 0, void 0, glyphNodeIndexes.sphere.length],
+        frustumCulled: false,
+        raycast: disableKnowledgeGraphGlyphRaycast,
+        children: [
+          /* @__PURE__ */ jsx4("sphereGeometry", { args: [
+            KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.sphere_outline,
+            12,
+            12
+          ] }),
+          /* @__PURE__ */ jsx4(
+            "meshBasicMaterial",
+            {
+              color: "#ffffff",
+              wireframe: true,
+              toneMapped: false
+            }
+          )
+        ]
+      }
+    ) : null,
+    glyphNodeIndexes.box.length > 0 ? /* @__PURE__ */ jsxs4(
+      "instancedMesh",
+      {
+        ref: boxGlyphsRef,
+        args: [void 0, void 0, glyphNodeIndexes.box.length],
+        frustumCulled: false,
+        raycast: disableKnowledgeGraphGlyphRaycast,
+        children: [
+          /* @__PURE__ */ jsx4("boxGeometry", { args: [
+            KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
+            KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
+            KNOWLEDGE_GRAPH_BOX_SHELL_SIDE,
+            1,
+            1,
+            1
+          ] }),
+          /* @__PURE__ */ jsx4(
+            "meshBasicMaterial",
+            {
+              color: "#ffffff",
+              wireframe: true,
+              toneMapped: false
+            }
+          )
+        ]
+      }
+    ) : null,
+    glyphNodeIndexes.diamond.length > 0 ? /* @__PURE__ */ jsxs4(
+      "instancedMesh",
+      {
+        ref: diamondGlyphsRef,
+        args: [void 0, void 0, glyphNodeIndexes.diamond.length],
+        frustumCulled: false,
+        raycast: disableKnowledgeGraphGlyphRaycast,
+        children: [
+          /* @__PURE__ */ jsx4("octahedronGeometry", { args: [
+            KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.diamond_shell,
+            0
+          ] }),
+          /* @__PURE__ */ jsx4(
+            "meshBasicMaterial",
+            {
+              color: "#ffffff",
+              wireframe: true,
+              toneMapped: false
+            }
+          )
+        ]
+      }
+    ) : null,
+    /* @__PURE__ */ jsxs4("lineSegments", { ref: linesRef, frustumCulled: false, children: [
+      /* @__PURE__ */ jsxs4("bufferGeometry", { children: [
+        /* @__PURE__ */ jsx4("bufferAttribute", { attach: "attributes-position", args: [linePos, 3] }),
+        /* @__PURE__ */ jsx4("bufferAttribute", { attach: "attributes-color", args: [lineCol, 3] })
       ] }),
-      /* @__PURE__ */ jsx2(
+      /* @__PURE__ */ jsx4(
         "lineBasicMaterial",
         {
           vertexColors: true,
-          transparent: true,
-          opacity: 0.75,
           toneMapped: false,
           depthWrite: false,
-          blending: THREE2.AdditiveBlending
+          blending: THREE2.NormalBlending
         }
       )
     ] }, `lines-${validEdges.length}`),
-    directedEdges.length > 0 ? /* @__PURE__ */ jsxs2(
+    directedEdges.length > 0 ? /* @__PURE__ */ jsxs4(
       "instancedMesh",
       {
         ref: arrowsRef,
         args: [void 0, void 0, directedEdges.length],
         frustumCulled: false,
         children: [
-          /* @__PURE__ */ jsx2("coneGeometry", { args: [1, 1, 8] }),
-          /* @__PURE__ */ jsx2("meshBasicMaterial", { toneMapped: false })
+          /* @__PURE__ */ jsx4("coneGeometry", { args: [1, 1, 8] }),
+          /* @__PURE__ */ jsx4("meshBasicMaterial", { toneMapped: false })
         ]
       },
       `arrows-${directedEdges.length}`
     ) : null,
-    particleCount > 0 ? /* @__PURE__ */ jsxs2(
+    particleCount > 0 ? /* @__PURE__ */ jsxs4(
       "instancedMesh",
       {
         ref: particlesRef,
         args: [void 0, void 0, particleCount],
         frustumCulled: false,
         children: [
-          /* @__PURE__ */ jsx2("sphereGeometry", { args: [0.6, 6, 6] }),
-          /* @__PURE__ */ jsx2(
+          /* @__PURE__ */ jsx4("sphereGeometry", { args: [0.6, 6, 6] }),
+          /* @__PURE__ */ jsx4(
             "meshBasicMaterial",
             {
-              color: particleColor,
+              color: resolvedParticleColor,
               toneMapped: false,
               transparent: true,
               opacity: 0.9,
               depthWrite: false,
-              blending: THREE2.AdditiveBlending
+              blending: themeMode === "light" ? THREE2.NormalBlending : THREE2.AdditiveBlending
             }
           )
         ]
       },
       `p-${particleCount}`
     ) : null,
-    /* @__PURE__ */ jsx2("group", { ref: labelGroupRef, visible: false, children: /* @__PURE__ */ jsx2(
+    /* @__PURE__ */ jsx4(
       FocusLabelSprite,
       {
+        spriteRef: labelSpriteRef,
         text: focusLabel,
-        color: labelColor,
+        color: resolvedLabelColor,
+        themeMode,
         invalidate
       }
-    ) })
+    )
   ] }, `graph-${graphKey}`) });
 }
+
+// react/knowledgeGraphPublic.ts
+import {
+  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1 as KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V12,
+  PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1 as PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V12,
+  PREPARED_KNOWLEDGE_GRAPH_VIEW_V1 as PREPARED_KNOWLEDGE_GRAPH_VIEW_V12,
+  KnowledgeGraphPresentationJsonError as KnowledgeGraphPresentationJsonError2,
+  assertPreparedGenericKnowledgeGraphPresentation as assertPreparedGenericKnowledgeGraphPresentation4,
+  assertPreparedKnowledgeGraphPresentation as assertPreparedKnowledgeGraphPresentation5,
+  assertPreparedKnowledgeGraphView as assertPreparedKnowledgeGraphView5,
+  isPreparedKnowledgeGraphPresentation as isPreparedKnowledgeGraphPresentation2,
+  isPreparedKnowledgeGraphView as isPreparedKnowledgeGraphView2,
+  knowledgeGraphPresentationContainsNode as knowledgeGraphPresentationContainsNode3,
+  knowledgeGraphViewContainsNode as knowledgeGraphViewContainsNode5,
+  parseKnowledgeGraphPresentationJson as parseKnowledgeGraphPresentationJson2,
+  prepareKnowledgeGraphPresentation as prepareKnowledgeGraphPresentation2,
+  prepareKnowledgeGraphView as prepareKnowledgeGraphView3,
+  serializePreparedKnowledgeGraphPresentation as serializePreparedKnowledgeGraphPresentation2
+} from "#cortexel-knowledge-graph-presentation-capability";
 export {
   CORPUS_GRAPH_RADIUS_MEANING,
   DEFAULT_A11Y_NODE_PAGE_SIZE,
   DEFAULT_GRAPH_NODE_RADIUS,
   GRAPH_EDGE_CURVE_SEGMENTS,
   GRAPH_EDGE_LANE_SPACING,
+  GRAPH_EDGE_TARGET_BOUNDARY_SOLVE_ITERATIONS,
   GRAPH_LAYOUT_TICK_SECONDS,
+  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V12 as KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
   KnowledgeGraph3DScene,
   KnowledgeGraphA11yList,
+  KnowledgeGraphAccessibleFigure,
   KnowledgeGraphLegend,
+  KnowledgeGraphPresentationJsonError2 as KnowledgeGraphPresentationJsonError,
+  KnowledgeGraphStaticRecordView,
   MAX_A11Y_NODE_PAGE_SIZE,
   MAX_GRAPH_EDGE_LANE_OFFSET,
   MAX_GRAPH_LAYOUT_TICKS_PER_FRAME,
   MAX_GRAPH_NODE_RADIUS,
   MAX_GRAPH_PARALLEL_EDGES,
   MAX_GRAPH_QUERY_LENGTH,
-  MAX_KNOWLEDGE_GRAPH_SCENE_EDGES,
-  MAX_KNOWLEDGE_GRAPH_SCENE_NODES,
+  MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+  MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+  MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES,
+  MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES,
+  PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V12 as PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1,
+  PREPARED_KNOWLEDGE_GRAPH_VIEW_V12 as PREPARED_KNOWLEDGE_GRAPH_VIEW_V1,
   advanceGraphLayoutClock,
   advanceGraphLayoutClockInto,
-  assertKnowledgeGraphBudget,
   assertKnowledgeGraphIdentity,
+  assertKnowledgeGraphLiveForceBudget,
+  assertKnowledgeGraphPresentationBudget,
+  assertPreparedGenericKnowledgeGraphPresentation4 as assertPreparedGenericKnowledgeGraphPresentation,
+  assertPreparedKnowledgeGraphPresentation5 as assertPreparedKnowledgeGraphPresentation,
+  assertPreparedKnowledgeGraphView5 as assertPreparedKnowledgeGraphView,
   assertRenderableGraphEdges,
   assertUniqueGraphNodeIds,
   assignGraphEdgeLanes,
@@ -2375,13 +3430,25 @@ export {
   graphEdgeControlPointInto,
   graphEdgeCurvePointInto,
   graphEdgeMatchesQuery,
+  graphEdgeTargetBoundaryInto,
   graphQueryMatchIds,
   graphSignature,
-  mapCorpusKnowledgeGraph,
+  isKnowledgeGraphLiveForceWithinBudget,
+  isPreparedKnowledgeGraphPresentation2 as isPreparedKnowledgeGraphPresentation,
+  isPreparedKnowledgeGraphView2 as isPreparedKnowledgeGraphView,
+  knowledgeGraphLiveForceAvailability,
+  knowledgeGraphPresentationContainsNode3 as knowledgeGraphPresentationContainsNode,
+  knowledgeGraphViewContainsNode5 as knowledgeGraphViewContainsNode,
   matchesGraphQuery,
   normalizeGraphNodeRadius,
   normalizeGraphQuery,
+  parseKnowledgeGraphPresentationJson2 as parseKnowledgeGraphPresentationJson,
+  prepareCorpusKnowledgeGraphFigure,
+  prepareCorpusKnowledgeGraphFigureJson,
+  prepareKnowledgeGraphPresentation2 as prepareKnowledgeGraphPresentation,
+  prepareKnowledgeGraphView3 as prepareKnowledgeGraphView,
   reducedMotionLayoutTickBudget,
+  serializePreparedKnowledgeGraphPresentation2 as serializePreparedKnowledgeGraphPresentation,
   uniqueGraphTopologyLinks
 };
 //# sourceMappingURL=knowledge-graph.js.map

@@ -1704,7 +1704,12 @@ describe('offline NEST official-example source inventory', () => {
     }));
   }, 120_000);
 
-  it('distinguishes verified offline context and ignores ambient Git repository redirects', () => {
+  it('distinguishes verified offline context and ignores ambient Git repository redirects', {
+    // This integration case intentionally performs several complete reviewed-Git
+    // builds. Each command keeps its production timeout; this outer watchdog must
+    // cover their bounded serial composition under a loaded CI host.
+    timeout: 900_000,
+  }, () => {
     const fixture = sourceFixture();
     const previousGitDir = process.env.GIT_DIR;
     const previousObjectDirectory = process.env.GIT_OBJECT_DIRECTORY;
@@ -1794,7 +1799,7 @@ describe('offline NEST official-example source inventory', () => {
       fixture.authority,
       acquisition,
     )).toThrow(/still has a configured remote/u);
-  }, 180_000);
+  });
 
   it('rejects transferable tokens and indirect object-database authority', () => {
     const first = sourceFixture();
@@ -1900,7 +1905,11 @@ describe('offline NEST official-example source inventory', () => {
     }
   }, 180_000);
 
-  it('fails closed on root-tree, mode, alias, and selector drift', () => {
+  it('fails closed on root-tree, mode, alias, and selector drift', {
+    // Five independent fail-closed builds compose multiple reviewed Git commands;
+    // their command-level bounds remain authoritative inside this outer watchdog.
+    timeout: 300_000,
+  }, () => {
     const fixture = sourceFixture();
     expect(() => buildNestExampleSourceInventory(
       fixture.repository,
@@ -1956,5 +1965,5 @@ describe('offline NEST official-example source inventory', () => {
         },
       },
     )).toThrow(/documentation group targets drifted/u);
-  }, 120_000);
+  });
 });

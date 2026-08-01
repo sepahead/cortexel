@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import fc from 'fast-check';
 import { readFileSync } from 'node:fs';
 import { createElement, Profiler } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -10,7 +11,8 @@ import {
   buildAdjacency,
   advanceGraphLayoutClock,
   advanceGraphLayoutClockInto,
-  assertKnowledgeGraphBudget,
+  assertKnowledgeGraphLiveForceBudget,
+  assertKnowledgeGraphPresentationBudget,
   assertRenderableGraphEdges,
   assertUniqueGraphNodeIds,
   CORPUS_GRAPH_RADIUS_MEANING,
@@ -21,18 +23,24 @@ import {
   flowParticleCount,
   GRAPH_EDGE_CURVE_SEGMENTS,
   GRAPH_EDGE_LANE_SPACING,
+  GRAPH_LAYOUT_TICK_SECONDS,
   graphEdgeControlPointInto,
   graphEdgeCurvePointInto,
   graphEdgeMatchesQuery,
+  graphEdgeTargetBoundaryInto,
   graphCameraTargetDamping,
   graphQueryMatchIds,
   graphSignature,
+  isKnowledgeGraphLiveForceWithinBudget,
+  knowledgeGraphLiveForceAvailability,
   MAX_GRAPH_QUERY_LENGTH,
   MAX_GRAPH_EDGE_LANE_OFFSET,
   MAX_GRAPH_NODE_RADIUS,
   MAX_GRAPH_PARALLEL_EDGES,
-  MAX_KNOWLEDGE_GRAPH_SCENE_EDGES,
-  MAX_KNOWLEDGE_GRAPH_SCENE_NODES,
+  MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+  MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+  MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES,
+  MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES,
   normalizeGraphQuery,
   normalizeGraphNodeRadius,
   matchesGraphQuery,
@@ -45,15 +53,61 @@ import {
   publishGraphLayoutCache,
   snapshotGraphLayoutInputs,
 } from '../react/knowledgeGraphLayout.internal';
-import { installFocusLabelResource } from '../react/focusLabelResource.internal';
-import { snapshotKnowledgeGraphPresentation } from '../react/knowledgeGraphPresentation.internal';
+import {
+  FOCUS_LABEL_NODE_GAP,
+  FOCUS_LABEL_WORLD_HEIGHT,
+  installFocusLabelResource,
+  knowledgeGraphFocusLabelCenterOffset,
+  knowledgeGraphFocusLabelSpriteCenterY,
+  knowledgeGraphFocusedNodeAndLabelRadius,
+} from '../react/focusLabelResource.internal';
+import {
+  KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+  prepareKnowledgeGraphPresentation,
+  type KnowledgeGraph3DEdge,
+} from '../react/KnowledgeGraph3DScene';
 import {
   beginKnowledgeGraphRuntimeTransition,
+  handleKnowledgeGraphNodeClick,
   handleKnowledgeGraphPointerOut,
+  isIntentionalKnowledgeGraphClick,
+  isKnowledgeGraphInstanceId,
   synchronizeKnowledgeGraphControlsListener,
+  toggledKnowledgeGraphSelection,
 } from '../react/knowledgeGraphInteraction.internal';
+import {
+  KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN,
+  KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN,
+  isKnowledgeGraphCameraVectorFinite,
+  isKnowledgeGraphCameraParentChainIdentity,
+  isKnowledgeGraphCameraSelfTransformCanonical,
+  isKnowledgeGraphCenteredAutoFrameProjectionSupported,
+  isKnowledgeGraphOrthographicProjectionReady,
+  isKnowledgeGraphPerspectiveProjectionReady,
+  knowledgeGraphCameraProjectionKind,
+  planKnowledgeGraphCameraClipping,
+  planKnowledgeGraphCameraClippingInto,
+  planKnowledgeGraphCameraFit,
+} from '../react/knowledgeGraphCamera.internal';
+import {
+  CORPUS_EDGE_STROKE_PATTERN_BY_KIND,
+  CORPUS_NODE_GLYPH_BY_KIND,
+  KNOWLEDGE_GRAPH_FOCUSED_NODE_SCALE,
+  KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE,
+  knowledgeGraphAutoFrameNodeRadialExtent,
+  knowledgeGraphContrastSafeColor,
+  knowledgeGraphEdgeStrokeSegmentVisible,
+  knowledgeGraphNodeEmphasisDimAmount,
+  knowledgeGraphRenderedNodeRadialExtent,
+} from '../react/knowledgeGraphVisualEncoding.internal';
 import { graphEdgeIdentityKey } from '../react/knowledgeGraphIdentity.internal';
-import { planFlowParticleDistribution } from '../react/knowledgeGraphParticles.internal';
+import {
+  advanceKnowledgeGraphFlowPhase,
+  KNOWLEDGE_GRAPH_FLOW_CYCLES_PER_SECOND,
+  MAX_KNOWLEDGE_GRAPH_FLOW_FRAME_DELTA_SECONDS,
+  planFlowParticleDistribution,
+  reducedMotionFlowParticleFraction,
+} from '../react/knowledgeGraphParticles.internal';
 import {
   KnowledgeGraph3DScene,
   KnowledgeGraphA11yList,
@@ -68,10 +122,46 @@ import { KNOWLEDGE_GRAPH_LIMITS, PARAM_LIMITS } from '../core/skills/params';
 // server-rendered only through the pre-hook fail-closed path; no GPU is mounted.
 const P = CORTEXEL_PALETTE;
 
+type RawKnowledgeGraphProps = {
+  readonly graphIdentity: string;
+  readonly nodes: readonly KnowledgeGraph3DNode[];
+  readonly edges: readonly KnowledgeGraph3DEdge[];
+};
+
+function withPreparedPresentation<T extends RawKnowledgeGraphProps>(
+  props: T,
+): Omit<T, keyof RawKnowledgeGraphProps> & {
+  presentation: ReturnType<typeof prepareKnowledgeGraphPresentation>;
+} {
+  const { graphIdentity, nodes, edges, ...rest } = props;
+  const presentation = prepareKnowledgeGraphPresentation({
+    contract: KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+    profile: 'generic_visual',
+    graphIdentity,
+    nodes,
+    edges,
+  });
+  return { ...rest, presentation };
+}
+
+function prepareGenericGraph(
+  nodes: readonly KnowledgeGraph3DNode[],
+  edges: readonly KnowledgeGraph3DEdge[],
+) {
+  return prepareKnowledgeGraphPresentation({
+    contract: KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+    profile: 'generic_visual',
+    graphIdentity: 'cortexel:test:generic-graph',
+    nodes,
+    edges,
+  });
+}
+
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function makeFocusLabelCanvas() {
   let effectiveFillStyle = '';
+  let fillRectStyle = '';
   let fillTextStyle = '';
   const context = {
     font: '',
@@ -86,7 +176,9 @@ function makeFocusLabelCanvas() {
       if (value !== 'definitely-not-a-css-color') effectiveFillStyle = value;
     },
     measureText: () => ({ width: 120 }),
-    fillRect: () => {},
+    fillRect: () => {
+      fillRectStyle = effectiveFillStyle;
+    },
     fillText: () => {
       fillTextStyle = effectiveFillStyle;
     },
@@ -98,6 +190,7 @@ function makeFocusLabelCanvas() {
   } as unknown as HTMLCanvasElement;
   return {
     canvas,
+    fillRectStyle: () => fillRectStyle,
     fillTextStyle: () => fillTextStyle,
   };
 }
@@ -118,6 +211,485 @@ function testRendererText(value: unknown): string {
 }
 
 describe('graph helpers', () => {
+  it('fits perspective and orthographic cameras without discarding orientation', () => {
+    const radius = 64;
+    const square = planKnowledgeGraphCameraFit({
+      contentRadius: radius,
+      currentDistance: 5,
+      projection: { kind: 'perspective', verticalFovDegrees: 50, aspect: 1 },
+    });
+    const portrait = planKnowledgeGraphCameraFit({
+      contentRadius: radius,
+      currentDistance: 5,
+      projection: { kind: 'perspective', verticalFovDegrees: 50, aspect: 0.4 },
+    });
+    expect(square.distance).toBeGreaterThan(120);
+    expect(portrait.distance).toBeGreaterThan(square.distance);
+    const horizontalHalf = Math.atan(Math.tan(25 * Math.PI / 180) * 0.4);
+    expect(portrait.distance * Math.sin(horizontalHalf)).toBeGreaterThanOrEqual(
+      radius * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN,
+    );
+    const zoomedOut = planKnowledgeGraphCameraFit({
+      contentRadius: radius,
+      currentDistance: 10_000,
+      projection: { kind: 'perspective', verticalFovDegrees: 50, aspect: 1 },
+    });
+    expect(zoomedOut.distance).toBeCloseTo(square.distance);
+
+    const orthographic = planKnowledgeGraphCameraFit({
+      contentRadius: 20,
+      currentDistance: 40,
+      projection: {
+        kind: 'orthographic',
+        horizontalSpan: 100,
+        verticalSpan: 50,
+        currentZoom: 2,
+      },
+    });
+    expect(orthographic.distance).toBe(120);
+    expect(orthographic.orthographicZoom).toBeCloseTo(
+      25 / (20 * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN),
+    );
+    const orthographicZoomedOut = planKnowledgeGraphCameraFit({
+      contentRadius: 20,
+      currentDistance: 10_000,
+      projection: {
+        kind: 'orthographic',
+        horizontalSpan: 100,
+        verticalSpan: 50,
+        currentZoom: 0.01,
+      },
+    });
+    expect(orthographicZoomedOut.distance).toBe(120);
+    expect(orthographicZoomedOut.orthographicZoom).toBeCloseTo(
+      orthographic.orthographicZoom!,
+    );
+
+    fc.assert(fc.property(
+      fc.double({ min: 0.01, max: 100_000, noNaN: true, noDefaultInfinity: true }),
+      fc.double({ min: 1, max: 170, noNaN: true, noDefaultInfinity: true }),
+      fc.double({ min: 0.05, max: 10, noNaN: true, noDefaultInfinity: true }),
+      (contentRadius, verticalFovDegrees, aspect) => {
+        const plan = planKnowledgeGraphCameraFit({
+          contentRadius,
+          currentDistance: 0,
+          projection: { kind: 'perspective', verticalFovDegrees, aspect },
+        });
+        const verticalHalf = Math.min(89.5, Math.max(0.5, verticalFovDegrees / 2)) *
+          Math.PI / 180;
+        const horizontalHalf = Math.atan(Math.tan(verticalHalf) * aspect);
+        return plan.distance * Math.sin(Math.min(verticalHalf, horizontalHalf)) >=
+          contentRadius * KNOWLEDGE_GRAPH_CAMERA_FIT_MARGIN * (1 - 1e-12);
+      },
+    ));
+  });
+
+  it('keeps the fitted sphere inside finite camera clipping planes', () => {
+    const reusable = { near: -1, far: -1 };
+    expect(planKnowledgeGraphCameraClippingInto(
+      'perspective',
+      500,
+      10,
+      300,
+      80,
+      reusable,
+    )).toBe(reusable);
+    expect(reusable.near).toBeLessThan(500);
+    expect(reusable.far).toBeGreaterThan(300);
+
+    const perspective = planKnowledgeGraphCameraClipping({
+      kind: 'perspective',
+      currentNear: 500,
+      currentFar: 10,
+      distance: 300,
+      contentRadius: 80,
+    });
+    expect(perspective.near).toBeLessThanOrEqual(
+      300 - 80 * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN,
+    );
+    expect(perspective.near).toBeGreaterThan(0);
+    expect(perspective.far).toBeGreaterThanOrEqual(
+      300 + 80 * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN,
+    );
+
+    const orthographic = planKnowledgeGraphCameraClipping({
+      kind: 'orthographic',
+      currentNear: Number.NaN,
+      currentFar: Number.NaN,
+      distance: 120,
+      contentRadius: 20,
+    });
+    expect(orthographic.near).toBe(0);
+    expect(orthographic.far).toBe(145);
+
+    fc.assert(fc.property(
+      fc.constantFrom('perspective' as const, 'orthographic' as const),
+      fc.double({ min: 1, max: 1_000_000, noNaN: true, noDefaultInfinity: true }),
+      fc.double({ min: 0.01, max: 100_000, noNaN: true, noDefaultInfinity: true }),
+      fc.double({ min: 0, max: 1_000_000, noNaN: true, noDefaultInfinity: true }),
+      fc.double({ min: 0.001, max: 2_000_000, noNaN: true, noDefaultInfinity: true }),
+      (kind, distance, radius, currentNear, currentFar) => {
+        const plan = planKnowledgeGraphCameraClipping({
+          kind,
+          currentNear,
+          currentFar,
+          distance,
+          contentRadius: radius,
+        });
+        return Number.isFinite(plan.near) && Number.isFinite(plan.far) &&
+          plan.near >= 0 && plan.far > plan.near &&
+          plan.near <= Math.max(
+            kind === 'perspective' ? 0.001 : 0,
+            distance - radius * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN,
+          ) &&
+          plan.far >= distance + radius * KNOWLEDGE_GRAPH_CAMERA_DEPTH_MARGIN;
+      },
+    ));
+  });
+
+  it('refuses to invent projection semantics for unsupported cameras', () => {
+    expect(knowledgeGraphCameraProjectionKind({ isPerspectiveCamera: true })).toBe(
+      'perspective',
+    );
+    expect(knowledgeGraphCameraProjectionKind({ isOrthographicCamera: true })).toBe(
+      'orthographic',
+    );
+    expect(knowledgeGraphCameraProjectionKind({})).toBeNull();
+    expect(knowledgeGraphCameraProjectionKind({
+      isPerspectiveCamera: false,
+      isOrthographicCamera: false,
+    })).toBeNull();
+    expect(knowledgeGraphCameraProjectionKind({
+      isPerspectiveCamera: true,
+      isOrthographicCamera: true,
+    })).toBeNull();
+    expect(isKnowledgeGraphPerspectiveProjectionReady(50, 1)).toBe(true);
+    expect(isKnowledgeGraphPerspectiveProjectionReady(50, 0)).toBe(false);
+    expect(isKnowledgeGraphPerspectiveProjectionReady(Number.NaN, 1)).toBe(false);
+    expect(isKnowledgeGraphPerspectiveProjectionReady(180, 1)).toBe(false);
+    expect(isKnowledgeGraphOrthographicProjectionReady(100, 50, 1)).toBe(true);
+    expect(isKnowledgeGraphOrthographicProjectionReady(0, 50, 1)).toBe(false);
+    expect(isKnowledgeGraphOrthographicProjectionReady(100, Number.NaN, 1)).toBe(
+      false,
+    );
+    expect(isKnowledgeGraphOrthographicProjectionReady(100, 50, 0)).toBe(false);
+    expect(isKnowledgeGraphCameraVectorFinite(0, 1, -2)).toBe(true);
+    expect(isKnowledgeGraphCameraVectorFinite(Number.NaN, 1, 2)).toBe(false);
+  });
+
+  it('auto-frames only canonical centered cameras with identity parent transforms', () => {
+    const perspective = new THREE.PerspectiveCamera(50, 1.5, 0.1, 1_000);
+    perspective.updateProjectionMatrix();
+    const perspectiveAuthority = {
+      kind: 'perspective' as const,
+      isArrayCamera: false,
+      viewEnabled: false,
+      parentTransformIdentity: true,
+      selfTransformCanonical: true,
+      cameraMethodsCanonical: true,
+      projectionMethodCanonical: true,
+      effectiveFovMethodCanonical: true,
+      webGlCoordinateSystem: true,
+      fovDegrees: perspective.fov,
+      aspect: perspective.aspect,
+      zoom: perspective.zoom,
+      near: perspective.near,
+      far: perspective.far,
+      filmOffset: perspective.filmOffset,
+      projectionMatrixElements: perspective.projectionMatrix.elements,
+    };
+    expect(isKnowledgeGraphCenteredAutoFrameProjectionSupported(
+      perspectiveAuthority,
+    )).toBe(true);
+    for (const mutation of [
+      { isArrayCamera: true },
+      { viewEnabled: true },
+      { parentTransformIdentity: false },
+      { selfTransformCanonical: false },
+      { cameraMethodsCanonical: false },
+      { projectionMethodCanonical: false },
+      { effectiveFovMethodCanonical: false },
+      { webGlCoordinateSystem: false },
+      { filmOffset: 1 },
+    ]) {
+      expect(isKnowledgeGraphCenteredAutoFrameProjectionSupported({
+        ...perspectiveAuthority,
+        ...mutation,
+      })).toBe(false);
+    }
+    const customPerspectiveMatrix = [...perspective.projectionMatrix.elements];
+    customPerspectiveMatrix[8] = 0.25;
+    expect(isKnowledgeGraphCenteredAutoFrameProjectionSupported({
+      ...perspectiveAuthority,
+      projectionMatrixElements: customPerspectiveMatrix,
+    })).toBe(false);
+
+    const orthographic = new THREE.OrthographicCamera(-2, 2, 1, -1, 0.1, 1_000);
+    orthographic.updateProjectionMatrix();
+    const orthographicAuthority = {
+      kind: 'orthographic' as const,
+      isArrayCamera: false,
+      viewEnabled: false,
+      parentTransformIdentity: true,
+      selfTransformCanonical: true,
+      cameraMethodsCanonical: true,
+      projectionMethodCanonical: true,
+      webGlCoordinateSystem: true,
+      left: orthographic.left,
+      right: orthographic.right,
+      top: orthographic.top,
+      bottom: orthographic.bottom,
+      zoom: orthographic.zoom,
+      near: orthographic.near,
+      far: orthographic.far,
+      projectionMatrixElements: orthographic.projectionMatrix.elements,
+    };
+    expect(isKnowledgeGraphCenteredAutoFrameProjectionSupported(
+      orthographicAuthority,
+    )).toBe(true);
+    expect(isKnowledgeGraphCenteredAutoFrameProjectionSupported({
+      ...orthographicAuthority,
+      left: -1,
+    })).toBe(false);
+    expect(isKnowledgeGraphCenteredAutoFrameProjectionSupported({
+      ...orthographicAuthority,
+      left: 3,
+    })).toBe(false);
+
+    const identityParent = new THREE.Group();
+    identityParent.updateMatrix();
+    identityParent.updateMatrixWorld(true);
+    expect(isKnowledgeGraphCameraParentChainIdentity(identityParent)).toBe(true);
+    identityParent.position.x = 1;
+    identityParent.updateMatrix();
+    identityParent.updateMatrixWorld(true);
+    expect(isKnowledgeGraphCameraParentChainIdentity(identityParent)).toBe(false);
+
+    perspective.position.set(1, 2, 3);
+    perspective.lookAt(0, 0, 0);
+    perspective.updateMatrixWorld(true);
+    const selfTransform = () =>
+      isKnowledgeGraphCameraSelfTransformCanonical(perspective);
+    expect(selfTransform()).toBe(true);
+    perspective.scale.setScalar(2);
+    perspective.updateMatrixWorld(true);
+    expect(selfTransform()).toBe(false);
+    perspective.scale.setScalar(1);
+    perspective.updateMatrixWorld(true);
+    perspective.matrixWorld.elements[12] += 1;
+    expect(selfTransform()).toBe(false);
+
+  });
+
+  it('uses bounded non-color kind channels and keeps focused arrows outside targets', () => {
+    expect(CORPUS_NODE_GLYPH_BY_KIND).toEqual({
+      paper: 'sphere_outline',
+      model: 'box_shell',
+      family: 'diamond_shell',
+    });
+    expect(CORPUS_EDGE_STROKE_PATTERN_BY_KIND).toEqual({
+      cites: 'solid',
+      same_as: 'solid',
+      variant_of: 'long_dash',
+      instantiates: 'short_dash',
+      belongs_to_family: 'dotted',
+    });
+    const masks = Object.fromEntries(
+      Object.values(CORPUS_EDGE_STROKE_PATTERN_BY_KIND).map((pattern) => [
+        pattern,
+        Array.from({ length: GRAPH_EDGE_CURVE_SEGMENTS }, (_, chord) =>
+          knowledgeGraphEdgeStrokeSegmentVisible(
+            pattern,
+            chord,
+            GRAPH_EDGE_CURVE_SEGMENTS,
+          )),
+      ]),
+    );
+    expect(new Set(Object.values(masks).map((mask) => JSON.stringify(mask))).size).toBe(4);
+    expect(masks.solid.every(Boolean)).toBe(true);
+    expect(KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.sphere_outline).toBeGreaterThan(1);
+    expect(
+      KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.box_shell * Math.sqrt(2 / 3),
+    ).toBeGreaterThan(1.05);
+    expect(
+      KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.diamond_shell / Math.sqrt(2),
+    ).toBeGreaterThan(1.05);
+    expect(() => knowledgeGraphEdgeStrokeSegmentVisible('solid', 12, 12)).toThrow(
+      /segment index/u,
+    );
+
+    const radius = 12;
+    const glyph = 'diamond_shell' as const;
+    const radialExtent = knowledgeGraphRenderedNodeRadialExtent(
+      radius,
+      glyph,
+      true,
+    );
+    expect(radialExtent).toBe(
+      radius * KNOWLEDGE_GRAPH_FOCUSED_NODE_SCALE *
+      KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.diamond_shell,
+    );
+    const labelCenter = knowledgeGraphFocusLabelCenterOffset(radius, glyph);
+    expect(labelCenter).toBeGreaterThan(radialExtent);
+    const spriteCenterY = knowledgeGraphFocusLabelSpriteCenterY(radius, glyph);
+    expect(-spriteCenterY * FOCUS_LABEL_WORLD_HEIGHT).toBe(
+      radialExtent + FOCUS_LABEL_NODE_GAP,
+    );
+    expect(knowledgeGraphFocusedNodeAndLabelRadius(radius, glyph)).toBeGreaterThan(
+      labelCenter,
+    );
+    const sceneSource = readFileSync(
+      new URL('../react/KnowledgeGraph3DScene.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(sceneSource).toContain(
+      'KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.sphere_outline',
+    );
+    expect(sceneSource).toContain(
+      'KNOWLEDGE_GRAPH_NODE_GLYPH_RADIAL_SCALE.diamond_shell',
+    );
+    expect(sceneSource).toContain('knowledgeGraphFocusLabelSpriteCenterY(');
+    expect(sceneSource).not.toContain('camera.matrixWorld.elements');
+    expect(sceneSource).toContain('depthTest={false}');
+    expect(sceneSource).toContain('frustumCulled={false}');
+    expect(sceneSource.match(/updateKnowledgeGraphGlyphColors\(/g)).toHaveLength(4);
+    expect(sceneSource.match(/color="#ffffff"/g)).toHaveLength(3);
+    expect(knowledgeGraphNodeEmphasisDimAmount(
+      'neighbor',
+      'focus',
+      new Set(['neighbor']),
+      false,
+      new Set(),
+    )).toBe(0);
+    expect(knowledgeGraphNodeEmphasisDimAmount(
+      'peripheral',
+      'focus',
+      new Set(['neighbor']),
+      false,
+      new Set(),
+    )).toBe(0.8);
+    expect(knowledgeGraphNodeEmphasisDimAmount(
+      'nonmatch',
+      null,
+      null,
+      true,
+      new Set(['match']),
+    )).toBe(0.82);
+  });
+
+  it('frames the whole graph from rendered geometry, not inactive label envelopes', () => {
+    const nodeRadius = 4;
+    const glyph = 'sphere_outline' as const;
+    const renderedExtent = knowledgeGraphRenderedNodeRadialExtent(
+      nodeRadius,
+      glyph,
+      false,
+    );
+    const focusedExtent = knowledgeGraphRenderedNodeRadialExtent(
+      nodeRadius,
+      glyph,
+      true,
+    );
+    expect(knowledgeGraphAutoFrameNodeRadialExtent(
+      nodeRadius,
+      glyph,
+      false,
+    )).toBe(renderedExtent);
+    expect(knowledgeGraphAutoFrameNodeRadialExtent(
+      nodeRadius,
+      glyph,
+      true,
+    )).toBe(focusedExtent);
+    const hypotheticalLabelExtent = knowledgeGraphFocusedNodeAndLabelRadius(
+      nodeRadius,
+      glyph,
+    );
+    const projection = {
+      kind: 'perspective' as const,
+      verticalFovDegrees: 50,
+      aspect: 1098 / 618,
+    };
+    // The scene accumulates an axis-aligned box and then fits its bounding
+    // sphere. A one-node graph therefore makes the old hypothetical-label bug
+    // directly measurable without depending on a browser, font, or GPU.
+    const renderedFit = planKnowledgeGraphCameraFit({
+      contentRadius: renderedExtent * Math.sqrt(3),
+      currentDistance: 260,
+      projection,
+    });
+    const hypotheticalLabelFit = planKnowledgeGraphCameraFit({
+      contentRadius: hypotheticalLabelExtent * Math.sqrt(3),
+      currentDistance: 260,
+      projection,
+    });
+    expect(hypotheticalLabelExtent).toBeGreaterThan(renderedExtent * 10);
+    expect(hypotheticalLabelFit.distance).toBeGreaterThan(renderedFit.distance * 3);
+  });
+
+  it('normalizes every undimmed opaque source mark to 3:1 against its background', () => {
+    const contrast = (foreground: string, background: string): number => {
+      const channels = (value: string) => [1, 3, 5].map((offset) =>
+        Number.parseInt(value.slice(offset, offset + 2), 16) / 255).map((channel) =>
+          channel <= 0.04045
+            ? channel / 12.92
+            : ((channel + 0.055) / 1.055) ** 2.4);
+      const luminance = (value: string) => {
+        const [red, green, blue] = channels(value);
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+      };
+      const first = luminance(foreground);
+      const second = luminance(background);
+      return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+    };
+    for (const [source, themeMode, background] of [
+      ['#faccfa', 'light', '#f8fafc'],
+      ['#c09036', 'light', '#f8fafc'],
+      ['#275a60', 'dark', '#030711'],
+      ['#ffffff', 'dark', '#030711'],
+    ] as const) {
+      const rendered = knowledgeGraphContrastSafeColor(source, themeMode);
+      expect(rendered).toMatch(/^#[0-9a-f]{6}$/u);
+      expect(contrast(rendered, background)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('distinguishes pointer clicks from control drags and toggles selection', () => {
+    expect(isIntentionalKnowledgeGraphClick(0)).toBe(true);
+    expect(isIntentionalKnowledgeGraphClick(2)).toBe(true);
+    expect(isIntentionalKnowledgeGraphClick(2.01)).toBe(false);
+    expect(isIntentionalKnowledgeGraphClick(Number.NaN)).toBe(false);
+    expect(isIntentionalKnowledgeGraphClick(-1)).toBe(false);
+    expect(toggledKnowledgeGraphSelection(null, 'node:a')).toBe('node:a');
+    expect(toggledKnowledgeGraphSelection('node:a', 'node:a')).toBeNull();
+    expect(toggledKnowledgeGraphSelection('node:a', 'node:b')).toBe('node:b');
+
+    const stopPropagation = vi.fn();
+    const activate = vi.fn();
+    handleKnowledgeGraphNodeClick(true, 0, 1, 9, stopPropagation, activate);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(activate).not.toHaveBeenCalled();
+    handleKnowledgeGraphNodeClick(true, 0, 1, 1, stopPropagation, activate);
+    expect(stopPropagation).toHaveBeenCalledTimes(2);
+    expect(activate).toHaveBeenLastCalledWith(0);
+    for (const [ready, instanceId] of [
+      [false, 0],
+      [true, -1],
+      [true, 1],
+      [true, undefined],
+    ] as const) {
+      handleKnowledgeGraphNodeClick(
+        ready,
+        instanceId,
+        1,
+        0,
+        stopPropagation,
+        activate,
+      );
+    }
+    expect(stopPropagation).toHaveBeenCalledTimes(2);
+    expect(activate).toHaveBeenCalledTimes(1);
+  });
+
   it('owns, invalidates, and disposes a focus-label texture exactly once', () => {
     const canvas = makeFocusLabelCanvas();
     const targets = makeFocusLabelTargets();
@@ -127,6 +699,7 @@ describe('graph helpers', () => {
       material: targets.material,
       label: 'Model A',
       color: '#ffffff',
+      themeMode: 'dark',
       invalidate,
       createCanvas: () => canvas.canvas,
       createTexture: () => targets.texture,
@@ -157,6 +730,7 @@ describe('graph helpers', () => {
       material: targets.material,
       label: 'Model A',
       color: '#ffffff',
+      themeMode: 'dark',
       invalidate: () => {
         throw failure;
       },
@@ -179,6 +753,7 @@ describe('graph helpers', () => {
       material: targets.material,
       label: 'Model A',
       color: '#ffffff',
+      themeMode: 'dark',
       invalidate: () => {
         invalidations += 1;
         if (invalidations === 2) throw failure;
@@ -209,6 +784,7 @@ describe('graph helpers', () => {
       material,
       label: 'First',
       color: '#ffffff',
+      themeMode: 'dark',
       invalidate: () => {},
       createCanvas: () => canvas.canvas,
       createTexture: () => firstTexture,
@@ -218,6 +794,7 @@ describe('graph helpers', () => {
       material,
       label: 'Second',
       color: '#ffffff',
+      themeMode: 'dark',
       invalidate: () => {},
       createCanvas: () => canvas.canvas,
       createTexture: () => secondTexture,
@@ -234,22 +811,29 @@ describe('graph helpers', () => {
     material.dispose();
   });
 
-  it('keeps focus-label text readable when Canvas rejects a caller color', () => {
-    const canvas = makeFocusLabelCanvas();
-    const targets = makeFocusLabelTargets();
-    const cleanup = installFocusLabelResource({
-      sprite: targets.sprite,
-      material: targets.material,
-      label: 'Model A',
-      color: 'definitely-not-a-css-color',
-      invalidate: () => {},
-      createCanvas: () => canvas.canvas,
-      createTexture: () => targets.texture,
-    });
+  it('uses readable theme pairs and survives a rejected caller text color', () => {
+    for (const [themeMode, expectedBackground, expectedText] of [
+      ['dark', '#030711', '#e2e8f0'],
+      ['light', '#f8fafc', '#0f172a'],
+    ] as const) {
+      const canvas = makeFocusLabelCanvas();
+      const targets = makeFocusLabelTargets();
+      const cleanup = installFocusLabelResource({
+        sprite: targets.sprite,
+        material: targets.material,
+        label: 'Model A',
+        color: 'definitely-not-a-css-color',
+        themeMode,
+        invalidate: () => {},
+        createCanvas: () => canvas.canvas,
+        createTexture: () => targets.texture,
+      });
 
-    expect(canvas.fillTextStyle()).toBe('#e2e8f0');
-    cleanup!();
-    targets.material.dispose();
+      expect(canvas.fillRectStyle()).toBe(expectedBackground);
+      expect(canvas.fillTextStyle()).toBe(expectedText);
+      cleanup!();
+      targets.material.dispose();
+    }
   });
 
   it('deeply detaches every mutable knowledge-graph presentation container', () => {
@@ -282,7 +866,7 @@ describe('graph helpers', () => {
       evidence,
       uncalibrated_score: score,
     }];
-    const snapshot = snapshotKnowledgeGraphPresentation(nodes, []);
+    const snapshot = prepareGenericGraph(nodes, []);
 
     attributes.aliases[0] = 'MUTATED';
     epistemic.status = 'derived_advisory';
@@ -318,11 +902,11 @@ describe('graph helpers', () => {
         (_, index) => [`attribute:${index}`, index],
       ),
     );
-    expect(() => snapshotKnowledgeGraphPresentation(
+    expect(() => prepareGenericGraph(
       node({ attributes: tooManyAttributes }),
       [],
     )).toThrow(/at most 24 keys/);
-    expect(() => snapshotKnowledgeGraphPresentation(
+    expect(() => prepareGenericGraph(
       node({
         attributes: {
           values: new Array(KNOWLEDGE_GRAPH_LIMITS.maxAttributeArrayItems + 1).fill(0),
@@ -330,7 +914,7 @@ describe('graph helpers', () => {
       }),
       [],
     )).toThrow(/at most 16 items/);
-    expect(() => snapshotKnowledgeGraphPresentation(
+    expect(() => prepareGenericGraph(
       node({
         evidence: new Array(KNOWLEDGE_GRAPH_LIMITS.maxEvidenceRefsPerElement + 1).fill({
           kind: 'external_source',
@@ -339,22 +923,22 @@ describe('graph helpers', () => {
         }),
       }),
       [],
-    )).toThrow(/at most 8 references/);
+    )).toThrow(/at most 8 items/);
 
     const attributeGetter = vi.fn(() => 'forbidden');
     const accessorAttributes = Object.defineProperty({}, 'claim', {
       enumerable: true,
       get: attributeGetter,
     });
-    expect(() => snapshotKnowledgeGraphPresentation(
+    expect(() => prepareGenericGraph(
       node({ attributes: accessorAttributes }),
       [],
-    )).toThrow(/accessors are not supported/);
+    )).toThrow(/enumerable data property/);
     expect(attributeGetter).not.toHaveBeenCalled();
-    expect(() => snapshotKnowledgeGraphPresentation(
+    expect(() => prepareGenericGraph(
       node({ attributes: { values: new Array(1) } }),
       [],
-    )).toThrow(/dense data arrays/);
+    )).toThrow(/dense and contain no extra properties/);
 
     const evidenceGetter = vi.fn(() => ({
       kind: 'external_source',
@@ -367,15 +951,15 @@ describe('graph helpers', () => {
       get: evidenceGetter,
     });
     Object.defineProperty(accessorEvidence, 'length', { value: 1 });
-    expect(() => snapshotKnowledgeGraphPresentation(
+    expect(() => prepareGenericGraph(
       node({ evidence: accessorEvidence }),
       [],
-    )).toThrow(/dense data array/);
+    )).toThrow(/enumerable data elements/);
     expect(evidenceGetter).not.toHaveBeenCalled();
-    expect(() => snapshotKnowledgeGraphPresentation(
+    expect(() => prepareGenericGraph(
       node({ evidence: new Array(1) }),
       [],
-    )).toThrow(/dense data array/);
+    )).toThrow(/dense and contain no extra properties/);
   });
 
   it('hides and gates stale graph geometry before a throwing host hover callback', () => {
@@ -681,6 +1265,54 @@ describe('graph helpers', () => {
     )).toEqual(target);
   });
 
+  it('places direction-marker tips on the routed target boundary', () => {
+    const verify = (
+      source: { x: number; y: number; z: number },
+      target: { x: number; y: number; z: number },
+      laneOffset: number,
+      canonicalDirectionSign: 1 | -1,
+      radius: number,
+    ) => {
+      const control = graphEdgeControlPointInto(
+        source,
+        target,
+        { laneOffset, canonicalDirectionSign },
+        { x: 0, y: 0, z: 0 },
+      );
+      const point = { x: 0, y: 0, z: 0 };
+      const direction = { x: 0, y: 0, z: 0 };
+      expect(graphEdgeTargetBoundaryInto(
+        source,
+        control,
+        target,
+        radius,
+        point,
+        direction,
+      )).toBe(true);
+      expect(Math.hypot(
+        point.x - target.x,
+        point.y - target.y,
+        point.z - target.z,
+      )).toBeCloseTo(radius, 4);
+      expect(Math.hypot(direction.x, direction.y, direction.z)).toBeCloseTo(1, 12);
+      const towardTarget = (target.x - point.x) * direction.x +
+        (target.y - point.y) * direction.y +
+        (target.z - point.z) * direction.z;
+      expect(towardTarget).toBeGreaterThan(0);
+    };
+    verify({ x: 0, y: 0, z: 0 }, { x: 34, y: 0, z: 0 }, 4, 1, 10);
+    verify({ x: 34, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, 4, -1, 10);
+    verify({ x: 0, y: 0, z: 0 }, { x: 80, y: 20, z: -10 }, -4, 1, 30);
+    expect(graphEdgeTargetBoundaryInto(
+      { x: 0, y: 0, z: 0 },
+      { x: 5, y: 0, z: 0 },
+      { x: 10, y: 0, z: 0 },
+      100,
+      { x: 0, y: 0, z: 0 },
+      { x: 0, y: 0, z: 0 },
+    )).toBe(false);
+  });
+
   it('buildAdjacency never leaks a dangling (non-node) id into a neighbor set', () => {
     const ids = new Set(['a', 'b']);
     const adj = buildAdjacency(ids, [
@@ -697,6 +1329,27 @@ describe('graph helpers', () => {
     expect(flowParticleCount(5000, 4, 4000)).toBe(4000);
     expect(flowParticleCount(-1, 4, 4000)).toBe(0);
     expect(flowParticleCount(0, 4, 4000)).toBe(0);
+  });
+
+  it('keeps the animated flow phase finite, bounded, and resume-safe', () => {
+    expect(advanceKnowledgeGraphFlowPhase(0.9, Number.NaN)).toBeCloseTo(0.9);
+    expect(advanceKnowledgeGraphFlowPhase(Number.POSITIVE_INFINITY, 0)).toBe(0);
+    expect(advanceKnowledgeGraphFlowPhase(-0.1, -1)).toBeCloseTo(0.9);
+    const capped = advanceKnowledgeGraphFlowPhase(0, Number.MAX_VALUE);
+    expect(capped).toBeCloseTo(
+      MAX_KNOWLEDGE_GRAPH_FLOW_FRAME_DELTA_SECONDS *
+        KNOWLEDGE_GRAPH_FLOW_CYCLES_PER_SECOND,
+    );
+    fc.assert(fc.property(
+      fc.double({ noNaN: false, noDefaultInfinity: false }),
+      fc.double({ noNaN: false, noDefaultInfinity: false }),
+      (phase, delta) => {
+        const next = advanceKnowledgeGraphFlowPhase(phase, delta);
+        expect(Number.isFinite(next)).toBe(true);
+        expect(next).toBeGreaterThanOrEqual(0);
+        expect(next).toBeLessThan(1);
+      },
+    ));
   });
 
   it('balances a capped flow-marker budget across every renderable relationship', () => {
@@ -720,11 +1373,44 @@ describe('graph helpers', () => {
     );
   });
 
+  it('keeps every reduced-motion marker at a finite strictly interior curve parameter', () => {
+    fc.assert(fc.property(
+      fc.integer({ min: 1, max: 4_000 }),
+      fc.integer({ min: 0, max: 4_000 }),
+      (count, seed) => {
+        const index = seed % count;
+        const fraction = reducedMotionFlowParticleFraction(index, count);
+        expect(Number.isFinite(fraction)).toBe(true);
+        expect(fraction).toBeGreaterThan(0);
+        expect(fraction).toBeLessThan(1);
+      },
+    ));
+    for (let index = 0; index < 4_000; index++) {
+      const fraction = reducedMotionFlowParticleFraction(index, 4_000);
+      expect(fraction).toBeGreaterThan(0);
+      expect(fraction).toBeLessThan(1);
+      if (index > 0) {
+        expect(fraction).toBeGreaterThan(
+          reducedMotionFlowParticleFraction(index - 1, 4_000),
+        );
+      }
+    }
+    expect(() => reducedMotionFlowParticleFraction(0, 0)).toThrow(/positive finite/);
+    expect(() => reducedMotionFlowParticleFraction(1, 1)).toThrow(/must belong/);
+  });
+
   it('bounds and normalizes free-text graph queries', () => {
     expect(normalizeGraphQuery('  PAPER  ')).toBe('paper');
     expect(normalizeGraphQuery('X'.repeat(MAX_GRAPH_QUERY_LENGTH + 100))).toHaveLength(
       MAX_GRAPH_QUERY_LENGTH,
     );
+    expect(normalizeGraphQuery('\u0130'.repeat(MAX_GRAPH_QUERY_LENGTH))).toHaveLength(
+      MAX_GRAPH_QUERY_LENGTH,
+    );
+    const splitBoundary = `${'x'.repeat(MAX_GRAPH_QUERY_LENGTH - 1)}😀tail`;
+    const bounded = normalizeGraphQuery(splitBoundary);
+    expect(bounded).toHaveLength(MAX_GRAPH_QUERY_LENGTH - 1);
+    expect(bounded).not.toMatch(/[\uD800-\uDFFF]$/u);
   });
 
   it('uses one query definition for id, label, and kind across visual and DOM surfaces', () => {
@@ -811,10 +1497,10 @@ describe('graph helpers', () => {
       onHover: () => {},
     };
     // Both public React surfaces reject before ambiguous selection/edge binding.
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraphA11yList, props))).toThrow(
+    expect(() => withPreparedPresentation(props)).toThrow(
       /duplicated at index 1/,
     );
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, props))).toThrow(
+    expect(() => withPreparedPresentation(props)).toThrow(
       /duplicated at index 1/,
     );
   });
@@ -830,20 +1516,20 @@ describe('graph helpers', () => {
       hoverId: null,
       onHover: () => {},
     };
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, props))).toThrow(
-      /non-empty string <= 1024/,
+    expect(() => withPreparedPresentation(props)).toThrow(
+      /non-empty display-safe string <= 1024/,
     );
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraphA11yList, props))).toThrow(
-      /non-empty string <= 1024/,
+    expect(() => withPreparedPresentation(props)).toThrow(
+      /non-empty display-safe string <= 1024/,
     );
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, {
+    expect(() => withPreparedPresentation({
       ...props,
       graphIdentity: 'g'.repeat(1_025),
-    }))).toThrow(/non-empty string <= 1024/);
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+    })).toThrow(/non-empty display-safe string <= 1024/);
+    expect(() => withPreparedPresentation({
       ...props,
       graphIdentity: 'g'.repeat(1_025),
-    }))).toThrow(/non-empty string <= 1024/);
+    })).toThrow(/non-empty display-safe string <= 1024/);
   });
 
   it('keys the scene-owned lifecycle boundary by the declared graph namespace', () => {
@@ -857,28 +1543,31 @@ describe('graph helpers', () => {
       hoverId: null,
       onHover: () => {},
     };
-    const first = KnowledgeGraph3DScene(props);
-    const same = KnowledgeGraph3DScene({ ...props });
-    const other = KnowledgeGraph3DScene({ ...props, graphIdentity: 'graph:two' });
+    const first = KnowledgeGraph3DScene(withPreparedPresentation(props));
+    const same = KnowledgeGraph3DScene(withPreparedPresentation({ ...props }));
+    const other = KnowledgeGraph3DScene(withPreparedPresentation({
+      ...props,
+      graphIdentity: 'graph:two',
+    }));
     expect(first.key).toBe('graph:one');
     expect(same.key).toBe(first.key);
     expect(other.key).toBe('graph:two');
     expect(other.type).toBe(first.type);
 
-    const a11yFirst = KnowledgeGraphA11yList({
+    const a11yFirst = KnowledgeGraphA11yList(withPreparedPresentation({
       graphIdentity: 'graph:one',
       nodes: [],
       edges: [],
       selectedId: null,
       onSelect: () => {},
-    });
-    const a11yOther = KnowledgeGraphA11yList({
+    }));
+    const a11yOther = KnowledgeGraphA11yList(withPreparedPresentation({
       graphIdentity: 'graph:two',
       nodes: [],
       edges: [],
       selectedId: null,
       onSelect: () => {},
-    });
+    }));
     expect(a11yFirst.key).toBe('graph:one');
     expect(a11yOther.key).toBe('graph:two');
   });
@@ -900,7 +1589,10 @@ describe('graph helpers', () => {
     };
     let renderer!: ReturnType<typeof create>;
     await act(async () => {
-      renderer = create(createElement(KnowledgeGraphA11yList, props));
+      renderer = create(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation(props),
+      ));
     });
     const next = () => renderer.root.findAllByType('button').find(
       (button) => button.children.join('') === 'Next nodes',
@@ -909,18 +1601,21 @@ describe('graph helpers', () => {
       'aria-live': 'polite',
     }).children.join('');
     await act(async () => next().props.onClick());
-    expect(nodePageText()).toContain('Node page 2 of 3');
+    expect(nodePageText()).toContain('Node page 2 of 9');
     await act(async () => {
-      renderer.update(createElement(KnowledgeGraphA11yList, { ...props }));
+      renderer.update(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation({ ...props }),
+      ));
     });
-    expect(nodePageText()).toContain('Node page 2 of 3');
+    expect(nodePageText()).toContain('Node page 2 of 9');
     await act(async () => {
-      renderer.update(createElement(KnowledgeGraphA11yList, {
+      renderer.update(createElement(KnowledgeGraphA11yList, withPreparedPresentation({
         ...props,
         graphIdentity: 'graph:two',
-      }));
+      })));
     });
-    expect(nodePageText()).toContain('Node page 1 of 3');
+    expect(nodePageText()).toContain('Node page 1 of 9');
   });
 
   it('fails closed on unrenderable direct edges before either React surface runs hooks', () => {
@@ -977,10 +1672,10 @@ describe('graph helpers', () => {
       hoverId: null,
       onHover: () => {},
     };
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraphA11yList, props))).toThrow(
+    expect(() => withPreparedPresentation(props)).toThrow(
       /missing endpoint/,
     );
-    expect(() => renderToStaticMarkup(createElement(KnowledgeGraph3DScene, props))).toThrow(
+    expect(() => withPreparedPresentation(props)).toThrow(
       /missing endpoint/,
     );
     const directionalMismatch = {
@@ -995,10 +1690,10 @@ describe('graph helpers', () => {
       }],
     };
     expect(() =>
-      renderToStaticMarkup(createElement(KnowledgeGraphA11yList, directionalMismatch)),
+      withPreparedPresentation(directionalMismatch),
     ).toThrow(/undirected but carries directional particles/);
     expect(() =>
-      renderToStaticMarkup(createElement(KnowledgeGraph3DScene, directionalMismatch)),
+      withPreparedPresentation(directionalMismatch),
     ).toThrow(/undirected but carries directional particles/);
   });
 
@@ -1007,22 +1702,256 @@ describe('graph helpers', () => {
       { id: 'paper:a', label: 'Matching paper', kind: 'paper', color: '#fff', radius: 4 },
       { id: 'model:selected', label: 'Selected model', kind: 'model', color: '#fff', radius: 4 },
     ];
-    const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+    const html = renderToStaticMarkup(createElement(
+      KnowledgeGraphA11yList,
+      withPreparedPresentation({
       graphIdentity: 'graph:test',
       nodes,
       edges: [],
       selectedId: 'model:selected',
       query: 'no node matches this',
       onSelect: () => {},
-    }));
+      }),
+    ));
     expect(html).toContain('Selected model');
     expect(html).toContain('aria-pressed="true"');
-    expect(html).not.toContain('Matching paper');
+    expect(html).toContain('Matching paper');
+    expect(html).toContain('all nodes remain available below');
     expect(html).not.toContain('No graph nodes match this view');
   });
 
+  it('jumps to remote query matches and lets either surface clear selection', async () => {
+    const onSelect = vi.fn();
+    const nodes = Array.from({ length: 100 }, (_, index) => ({
+      id: `node:${index}`,
+      label: index === 77 || index === 99 ? `Needle ${index}` : `Node ${index}`,
+      kind: 'model',
+      color: '#fff',
+      radius: 4,
+    }));
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation({
+          graphIdentity: 'graph:query-navigation',
+          nodes,
+          edges: [],
+          selectedId: null,
+          query: 'needle',
+          nodePageSize: 10,
+          onSelect,
+        }),
+      ));
+    });
+    const liveText = () => renderer.root.findAllByProps({
+      'aria-live': 'polite',
+    }).map((node) => node.children.join(''));
+    expect(liveText()).toContain('Node page 8 of 10; 100 nodes');
+    expect(liveText()).toContain('Query match 1 of 2: Needle 77. Node id node:77.');
+    const nextMatch = renderer.root.findAllByType('button').find(
+      (button) => button.children.join('') === 'Next query match',
+    )!;
+    await act(async () => nextMatch.props.onClick());
+    expect(liveText()).toContain('Node page 10 of 10; 100 nodes');
+    expect(liveText()).toContain('Query match 2 of 2: Needle 99. Node id node:99.');
+
+    const lastNode = renderer.root.findAllByProps({
+      className: 'cortexel-knowledge-graph-node',
+    }).find((button) => button.children.join('') === 'Needle 99')!;
+    await act(async () => lastNode.props.onClick());
+    expect(onSelect).toHaveBeenLastCalledWith('node:99');
+    await act(async () => {
+      renderer.update(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation({
+          graphIdentity: 'graph:query-navigation',
+          nodes,
+          edges: [],
+          selectedId: 'node:99',
+          query: 'needle',
+          nodePageSize: 10,
+          onSelect,
+        }),
+      ));
+    });
+    const selected = renderer.root.findAllByProps({
+      className: 'cortexel-knowledge-graph-node',
+    }).find((button) => button.children.join('') === 'Needle 99')!;
+    await act(async () => selected.props.onClick());
+    expect(onSelect).toHaveBeenLastCalledWith(null);
+    await act(async () => renderer.unmount());
+  });
+
+  it('binds query cursor, page, aria-current, and explicit keyboard focus atomically', async () => {
+    const focus = vi.fn();
+    const nodes = Array.from({ length: 12 }, (_, index) => ({
+      id: `node:${index}`,
+      label: index === 1 || index === 2
+        ? `Needle ${index}`
+        : index === 11
+          ? 'Remote needle'
+          : `Node ${index}`,
+      kind: 'model',
+      color: '#fff',
+      radius: 4,
+    }));
+    const props = {
+      graphIdentity: 'graph:query-focus',
+      nodes,
+      edges: [],
+      selectedId: 'node:2',
+      query: 'needle',
+      nodePageSize: 10,
+      onSelect: () => {},
+    };
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(
+        createElement(KnowledgeGraphA11yList, withPreparedPresentation(props)),
+        {
+          createNodeMock: (element) => element.type === 'button' ? { focus } : {},
+        },
+      );
+    });
+    const liveText = () => renderer.root.findAllByProps({
+      'aria-live': 'polite',
+    }).map((node) => node.children.join(''));
+    const currentMatch = () => renderer.root.findAllByProps({
+      className: 'cortexel-knowledge-graph-node',
+    }).find((button) => button.props['aria-current'] === 'true');
+    const navButton = (label: string) => renderer.root.findAllByType('button').find(
+      (button) => button.children.join('') === label,
+    )!;
+
+    expect(liveText()).toContain('Query match 2 of 3: Needle 2. Node id node:2.');
+    expect(liveText()).toContain('Node page 1 of 2; 12 nodes');
+    expect(currentMatch()?.children.join('')).toBe('Needle 2');
+    expect(focus).not.toHaveBeenCalled();
+
+    await act(async () => navButton('Previous query match').props.onClick());
+    expect(liveText()).toContain('Query match 1 of 3: Needle 1. Node id node:1.');
+    expect(currentMatch()?.children.join('')).toBe('Needle 1');
+    expect(focus).toHaveBeenCalledTimes(1);
+
+    await act(async () => navButton('Next query match').props.onClick());
+    await act(async () => navButton('Next query match').props.onClick());
+    expect(liveText()).toContain(
+      'Query match 3 of 3: Remote needle. Node id node:11.',
+    );
+    expect(liveText()).toContain('Node page 2 of 2; 12 nodes');
+    expect(currentMatch()?.children.join('')).toBe('Remote needle');
+    expect(focus).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      renderer.update(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation({ ...props, query: 'remote' }),
+      ));
+    });
+    expect(liveText()).toContain(
+      'Query match 1 of 1: Remote needle. Node id node:11.',
+    );
+    expect(currentMatch()?.children.join('')).toBe('Remote needle');
+    // Query/data changes retarget semantics without stealing focus from the
+    // control the user is currently operating.
+    expect(focus).toHaveBeenCalledTimes(3);
+    await act(async () => renderer.unmount());
+  });
+
+  it('does not announce an off-page query match after manual node paging', async () => {
+    const nodes = Array.from({ length: 30 }, (_, index) => ({
+      id: `node:${index}`,
+      label: index === 1 || index === 25 ? `Needle ${index}` : `Node ${index}`,
+      kind: 'model',
+      color: '#fff',
+      radius: 4,
+    }));
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation({
+          graphIdentity: 'graph:manual-query-page',
+          nodes,
+          edges: [],
+          selectedId: null,
+          query: 'needle',
+          nodePageSize: 10,
+          onSelect: () => {},
+        }),
+      ));
+    });
+    const liveText = () => renderer.root.findAllByProps({
+      'aria-live': 'polite',
+    }).map((node) => node.children.join(''));
+    const currentMatch = () => renderer.root.findAllByProps({
+      className: 'cortexel-knowledge-graph-node',
+    }).find((button) => button.props['aria-current'] === 'true');
+    const nextPage = () => renderer.root.findAllByType('button').find(
+      (button) => button.children.join('') === 'Next nodes',
+    )!;
+
+    expect(currentMatch()?.children.join('')).toBe('Needle 1');
+    await act(async () => nextPage().props.onClick());
+    expect(liveText()).toContain(
+      'Node page 2 has no current query match; use the query-match controls to navigate to one.',
+    );
+    expect(currentMatch()).toBeUndefined();
+
+    await act(async () => nextPage().props.onClick());
+    expect(liveText()).toContain('Query match 2 of 2: Needle 25. Node id node:25.');
+    expect(currentMatch()?.children.join('')).toBe('Needle 25');
+    await act(async () => renderer.unmount());
+  });
+
+  it('keeps a one-match query recoverable after manual paging moves it off-page', async () => {
+    const focus = vi.fn();
+    const nodes = Array.from({ length: 20 }, (_, index) => ({
+      id: `node:${index}`,
+      label: index === 1 ? 'Only needle' : `Node ${index}`,
+      kind: 'model',
+      color: '#fff',
+      radius: 4,
+    }));
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation({
+          graphIdentity: 'graph:one-query-match',
+          nodes,
+          edges: [],
+          selectedId: null,
+          query: 'needle',
+          nodePageSize: 10,
+          onSelect: () => {},
+        }),
+      ), {
+        createNodeMock: (element) => element.type === 'button' ? { focus } : {},
+      });
+    });
+    const button = (label: string) => renderer.root.findAllByType('button').find(
+      (candidate) => candidate.children.join('') === label,
+    );
+    await act(async () => button('Next nodes')!.props.onClick());
+    expect(button('Previous query match')!.props.disabled).toBe(true);
+    expect(button('Next query match')!.props.disabled).toBe(true);
+    expect(button('Go to current query match')!.props.disabled).not.toBe(true);
+    await act(async () => button('Go to current query match')!.props.onClick());
+    expect(renderer.root.findAllByProps({
+      className: 'cortexel-knowledge-graph-node',
+    }).find((candidate) => candidate.props['aria-current'] === 'true')
+      ?.children.join('')).toBe('Only needle');
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(button('Go to current query match')).toBeUndefined();
+    await act(async () => renderer.unmount());
+  });
+
   it('puts stable node ids in accessible descriptions when labels collide', () => {
-    const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+    const html = renderToStaticMarkup(createElement(
+      KnowledgeGraphA11yList,
+      withPreparedPresentation({
       graphIdentity: 'graph:test',
       nodes: [
         { id: 'model:a', label: 'Same label', kind: 'model', color: '#fff', radius: 4 },
@@ -1031,7 +1960,8 @@ describe('graph helpers', () => {
       edges: [],
       selectedId: null,
       onSelect: () => {},
-    }));
+      }),
+    ));
     expect(html.match(/aria-describedby=/g)).toHaveLength(2);
     expect(html.match(/>Same label<\/button>/g)).toHaveLength(2);
     expect(html).toContain('model. Node id model:a.');
@@ -1039,7 +1969,9 @@ describe('graph helpers', () => {
   });
 
   it('puts the other endpoint id in relationship prose when labels collide', () => {
-    const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+    const html = renderToStaticMarkup(createElement(
+      KnowledgeGraphA11yList,
+      withPreparedPresentation({
       graphIdentity: 'graph:test',
       nodes: [
         { id: 'hub', label: 'Hub', kind: 'model', color: '#fff', radius: 4 },
@@ -1052,7 +1984,8 @@ describe('graph helpers', () => {
       ],
       selectedId: 'hub',
       onSelect: () => {},
-    }));
+      }),
+    ));
     expect(html).toContain(
       'variant_of [edge:a]: points to Same label (node id model:a)',
     );
@@ -1244,7 +2177,7 @@ describe('graph helpers', () => {
     )).toThrow('node ids must be unique');
   });
 
-  it('schedules a fixed 60-Hz layout clock at 30, 60, and 144 FPS', () => {
+  it('schedules at most one 60-Hz tick per frame without suspended-tab backlog', () => {
     const elapsedByRate: number[] = [];
     for (const refreshRate of [30, 60, 144]) {
       let elapsed = 0;
@@ -1259,8 +2192,31 @@ describe('graph helpers', () => {
       }
       elapsedByRate.push(elapsed);
     }
-    expect(Math.max(...elapsedByRate) - Math.min(...elapsedByRate)).toBeLessThan(1 / 30);
+    expect(elapsedByRate[0]).toBeCloseTo(266 / 30, 1);
     expect(elapsedByRate[1]).toBeCloseTo(266 / 60, 1);
+    expect(elapsedByRate[2]).toBeCloseTo(266 / 60, 1);
+    for (const delta of [
+      Number.NaN,
+      Number.NEGATIVE_INFINITY,
+      -1,
+      0,
+      1 / 144,
+      1 / 60,
+      1 / 30,
+      Number.MAX_VALUE,
+    ]) {
+      const next = advanceGraphLayoutClock(0, delta);
+      expect(next.ticks).toBeGreaterThanOrEqual(0);
+      expect(next.ticks).toBeLessThanOrEqual(1);
+      expect(next.remainderSeconds).toBeGreaterThanOrEqual(0);
+      expect(next.remainderSeconds).toBeLessThan(GRAPH_LAYOUT_TICK_SECONDS);
+    }
+    const resumed = advanceGraphLayoutClock(0, Number.MAX_VALUE);
+    expect(resumed).toEqual({ ticks: 1, remainderSeconds: 0 });
+    expect(advanceGraphLayoutClock(resumed.remainderSeconds, 0)).toEqual({
+      ticks: 0,
+      remainderSeconds: 0,
+    });
   });
 
   it('mutates and reuses the supplied layout-clock result object', () => {
@@ -1280,15 +2236,17 @@ describe('graph helpers', () => {
     expect(source).toContain('(positionsChanged || !reducedMotion)');
     expect(source).toContain('advanceGraphLayoutClockInto(');
     expect(source).toContain('_layoutClockResult');
-    expect(
-      source.match(/validEdges\.length \* GRAPH_EDGE_CURVE_SEGMENTS \* 6/g),
-    ).toHaveLength(2);
+    expect(source.match(/visibleLineSegmentCount \* 6/g)).toHaveLength(2);
+    expect(source).toContain('if (chordVisible)');
+    expect(source).not.toContain('const chordEnd =');
+    expect(source.match(/setUsage\(THREE\.DynamicDrawUsage\)/g)).toHaveLength(7);
+    expect(source).toContain('focus === null && !queryActive ? 0');
     // One definition plus the line, arrowhead, and particle call sites: all
     // three visual encodings must consume the same routed quadratic.
     expect(source.match(/setEdgeCurve\(/g)).toHaveLength(4);
     expect(source.match(/graphEdgeCurvePointInto\(/g)).toHaveLength(2);
     expect(source).toContain('uniqueGraphTopologyLinks(validEdges)');
-    expect(GRAPH_EDGE_CURVE_SEGMENTS).toBe(4);
+    expect(GRAPH_EDGE_CURVE_SEGMENTS).toBe(12);
     // Lines, arrowheads, and flow particles must all consume the same pure edge
     // query predicate; otherwise a dimmed relationship can keep glowing/moving.
     expect(source.match(/graphEdgeMatchesQuery\(/g)).toHaveLength(3);
@@ -1312,13 +2270,16 @@ describe('graph helpers', () => {
       color: '#fff',
       directed: true,
     }));
-    const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+    const html = renderToStaticMarkup(createElement(
+      KnowledgeGraphA11yList,
+      withPreparedPresentation({
       graphIdentity: 'graph:test',
       nodes,
       edges,
       selectedId: 'hub',
       onSelect: () => {},
-    }));
+      }),
+    ));
     expect(html).toContain('<summary style="min-height:44px">');
     expect(html).toContain('Browse all 9 relationships');
   });
@@ -1353,9 +2314,9 @@ describe('graph helpers', () => {
     let captureCommit = false;
     const committedTrees: string[] = [];
     const committedPageTexts: string[] = [];
-    const pageText = () => renderer.root.findByProps({
+    const pageText = () => renderer.root.findAllByProps({
       'aria-live': 'polite',
-    }).children.join('');
+    }).map((node) => node.children.join('')).find((text) => text.startsWith('Page '))!;
     const tree = (nextEdges: typeof edges) => createElement(
       Profiler,
       {
@@ -1367,7 +2328,10 @@ describe('graph helpers', () => {
           }
         },
       },
-      createElement(KnowledgeGraphA11yList, { ...props, edges: nextEdges }),
+      createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation({ ...props, edges: nextEdges }),
+      ),
     );
     await act(async () => {
       renderer = create(tree(edges));
@@ -1376,11 +2340,11 @@ describe('graph helpers', () => {
       (button) => button.children.join('') === 'Next relationships',
     )!;
     await act(async () => next.props.onClick());
-    expect(pageText()).toBe('Page 2 of 2');
+    expect(pageText()).toBe('Page 2 of 4');
     await act(async () => {
       renderer.update(tree(edges.map((edge) => ({ ...edge }))));
     });
-    expect(pageText()).toBe('Page 2 of 2');
+    expect(pageText()).toBe('Page 2 of 4');
     captureCommit = true;
     await act(async () => {
       renderer.update(tree(edges.slice(0, 2)));
@@ -1398,7 +2362,7 @@ describe('graph helpers', () => {
     await act(async () => {
       renderer.update(tree(edges));
     });
-    expect(pageText()).toBe('Page 1 of 2');
+    expect(pageText()).toBe('Page 1 of 4');
     await act(async () => renderer.unmount());
   });
 
@@ -1426,8 +2390,14 @@ describe('graph helpers', () => {
     let a11y!: ReturnType<typeof create>;
     let legend!: ReturnType<typeof create>;
     await act(async () => {
-      a11y = create(createElement(KnowledgeGraphA11yList, a11yProps));
-      legend = create(createElement(KnowledgeGraphLegend, { nodes, edges }));
+      a11y = create(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation(a11yProps),
+      ));
+      legend = create(createElement(
+        KnowledgeGraphLegend,
+        withPreparedPresentation({ graphIdentity: 'graph:mutable', nodes, edges }),
+      ));
     });
     expect(testRendererText(a11y.toJSON())).toContain('points to Model B');
     expect(testRendererText(legend.toJSON())).toContain('cites: 1 relationship; directed');
@@ -1439,15 +2409,24 @@ describe('graph helpers', () => {
     nodes[0].kind = 'family';
     nodes[0].color = '#ff00ff';
     await act(async () => {
-      a11y.update(createElement(KnowledgeGraphA11yList, a11yProps));
-      legend.update(createElement(KnowledgeGraphLegend, { nodes, edges }));
+      a11y.update(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation(a11yProps),
+      ));
+      legend.update(createElement(
+        KnowledgeGraphLegend,
+        withPreparedPresentation({ graphIdentity: 'graph:mutable', nodes, edges }),
+      ));
     });
 
     const accessibleText = testRendererText(a11y.toJSON());
     const legendText = testRendererText(legend.toJSON());
     expect(accessibleText).toContain('connected to Model C');
     expect(accessibleText).not.toContain('points to Model B');
-    expect(legendText).toContain('family: 1 node; color #ff00ff');
+    expect(legendText).toContain(
+      'family: 1 node; source color #ff00ff; intended undimmed scene color #ff00ff; ' +
+      'glyph outlined sphere',
+    );
     expect(legendText).toContain('variant_of: 1 relationship; undirected');
     expect(legendText).not.toContain('cites: 1 relationship; directed');
     await act(async () => {
@@ -1507,7 +2486,10 @@ describe('graph helpers', () => {
     };
     let renderer!: ReturnType<typeof create>;
     await act(async () => {
-      renderer = create(createElement(KnowledgeGraphA11yList, props));
+      renderer = create(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation(props),
+      ));
     });
     const findMetadata = (needle: string) => renderer.root
       .findAllByType('details')
@@ -1525,7 +2507,10 @@ describe('graph helpers', () => {
 
     edges.reverse();
     await act(async () => {
-      renderer.update(createElement(KnowledgeGraphA11yList, props));
+      renderer.update(createElement(
+        KnowledgeGraphA11yList,
+        withPreparedPresentation(props),
+      ));
     });
     expect(testRendererText(findMetadata('Identified assertion')!.children))
       .toContain('IDENTIFIED FULL EXCERPT');
@@ -1539,7 +2524,9 @@ describe('graph helpers', () => {
       { id: 'a', label: 'Model A', kind: 'model', color: '#fff', radius: 4 },
       { id: 'b', label: 'Model B', kind: 'model', color: '#fff', radius: 4 },
     ];
-    const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+    const html = renderToStaticMarkup(createElement(
+      KnowledgeGraphA11yList,
+      withPreparedPresentation({
       graphIdentity: 'graph:test',
       nodes,
       edges: [
@@ -1562,7 +2549,8 @@ describe('graph helpers', () => {
       ],
       selectedId: 'a',
       onSelect: () => {},
-    }));
+      }),
+    ));
     expect(html).toContain('same_as [identity-claim]: connected to Model B');
     expect(html).toContain('variant_of [variant-claim]: points to Model B');
   });
@@ -1574,7 +2562,9 @@ describe('graph helpers', () => {
       is_paper_local_evidence: false,
       calibrated_posterior: false,
     } as const;
-    const html = renderToStaticMarkup(createElement(KnowledgeGraphA11yList, {
+    const html = renderToStaticMarkup(createElement(
+      KnowledgeGraphA11yList,
+      withPreparedPresentation({
       graphIdentity: 'graph:test',
       nodes: [
         {
@@ -1622,10 +2612,11 @@ describe('graph helpers', () => {
       }],
       selectedId: 'a',
       onSelect: () => {},
-    }));
+      }),
+    ));
     expect(html).toContain('Detail: Balanced asynchronous regime');
     expect(html).toContain(
-      'Visual radius: 4; radius meaning: Caller-defined visual size; not quantitative evidence.',
+      'Visual radius: 4; radius meaning: Caller-declared: visual size has no declared quantitative interpretation.',
     );
     expect(html).toContain('Attributes: simulator=NEST');
     expect(html).toContain('Epistemic: derived_advisory; advisory only; not paper-local evidence; uncalibrated');
@@ -1690,13 +2681,13 @@ describe('graph helpers', () => {
     }];
     let renderer!: ReturnType<typeof create>;
     await act(async () => {
-      renderer = create(createElement(KnowledgeGraphA11yList, {
+      renderer = create(createElement(KnowledgeGraphA11yList, withPreparedPresentation({
         graphIdentity: 'graph:test',
         nodes,
         edges,
         selectedId: 'a',
         onSelect: () => {},
-      }));
+      })));
     });
     expect(JSON.stringify(renderer.toJSON())).not.toContain('last node attribute scalar');
     expect(JSON.stringify(renderer.toJSON())).not.toContain('last edge evidence excerpt');
@@ -1718,7 +2709,9 @@ describe('graph helpers', () => {
     });
     const expanded = JSON.stringify(renderer.toJSON());
     expect(expanded).toContain('Visual radius: ');
-    expect(expanded).toContain('Caller-defined visual size; not quantitative evidence.');
+    expect(expanded).toContain(
+      'Caller-declared: visual size has no declared quantitative interpretation',
+    );
     expect(expanded).toContain('node_attribute_23');
     expect(expanded).toContain('last node attribute scalar');
     expect(expanded).toContain('last node evidence excerpt');
@@ -1730,45 +2723,52 @@ describe('graph helpers', () => {
 
   it('renders a complete text-redundant legend for every present graph kind', () => {
     const nodes = [
-      { id: 'p1', label: 'Paper 1', kind: 'paper', color: '#00ffff', radius: 4 },
-      { id: 'p2', label: 'Paper 2', kind: 'paper', color: '#00ffff', radius: 6 },
-      { id: 'm1', label: 'Model 1', kind: 'model', color: '#ffaa00', radius: 4 },
-      { id: 'm2', label: 'Model 2', kind: 'model', color: '#ffaa00', radius: 4 },
-      { id: 'f1', label: 'Family', kind: 'family', color: '#aa55ff', radius: 4 },
+      { id: 'p1', label: 'Paper 1', kind: 'paper', color: '#00ffff', radius: 4,
+        nodeGlyph: 'sphere_outline' as const },
+      { id: 'p2', label: 'Paper 2', kind: 'paper', color: '#00ffff', radius: 6,
+        nodeGlyph: 'sphere_outline' as const },
+      { id: 'm1', label: 'Model 1', kind: 'model', color: '#ffaa00', radius: 4,
+        nodeGlyph: 'box_shell' as const },
+      { id: 'm2', label: 'Model 2', kind: 'model', color: '#ffaa00', radius: 4,
+        nodeGlyph: 'box_shell' as const },
+      { id: 'f1', label: 'Family', kind: 'family', color: '#aa55ff', radius: 4,
+        nodeGlyph: 'diamond_shell' as const },
     ];
     const edges = [
-      { id: 'e1', source: 'p1', target: 'p2', kind: 'cites', color: '#11ff11', directed: true, particles: true },
-      { id: 'e2', source: 'p1', target: 'm1', kind: 'instantiates', color: '#00aaaa', directed: true },
-      { id: 'e3', source: 'm1', target: 'f1', kind: 'belongs_to_family', color: '#888888', directed: true },
-      { id: 'e4', source: 'm1', target: 'm2', kind: 'same_as', color: '#ff8800', directed: false },
-      { id: 'e5', source: 'm2', target: 'm1', kind: 'variant_of', color: '#ff0088', directed: true },
+      { id: 'e1', source: 'p1', target: 'p2', kind: 'cites', color: '#11ff11',
+        directed: true, particles: true, edgeStrokePattern: 'solid' as const },
+      { id: 'e2', source: 'p1', target: 'm1', kind: 'instantiates', color: '#00aaaa',
+        directed: true, edgeStrokePattern: 'short_dash' as const },
+      { id: 'e3', source: 'm1', target: 'f1', kind: 'belongs_to_family', color: '#888888',
+        directed: true, edgeStrokePattern: 'dotted' as const },
+      { id: 'e4', source: 'm1', target: 'm2', kind: 'same_as', color: '#ff8800',
+        directed: false, edgeStrokePattern: 'solid' as const },
+      { id: 'e5', source: 'm2', target: 'm1', kind: 'variant_of', color: '#ff0088',
+        directed: true, edgeStrokePattern: 'long_dash' as const },
     ];
-    const html = renderToStaticMarkup(createElement(KnowledgeGraphLegend, {
+    const html = renderToStaticMarkup(createElement(
+      KnowledgeGraphLegend,
+      withPreparedPresentation({
+      graphIdentity: 'graph:legend',
       nodes,
       edges,
-      context: {
-        graph_id: 'graph:legend',
-        graph_source: 'engram:corpus',
-        graph_snapshot_id: 'sha256:legend-snapshot',
-        graph_scope: 'corpus_entity',
-        generated_at: '2026-07-11T00:00:00Z',
-      },
-    }));
-    expect(html).toContain('<dt>Graph id</dt><dd>graph:legend</dd>');
-    expect(html).toContain('<dt>Graph source</dt><dd>engram:corpus</dd>');
+      }),
+    ));
     expect(html).toContain(
-      '<dt>Graph snapshot id</dt><dd>sha256:legend-snapshot</dd>',
+      'paper: 2 nodes; source color #00ffff; intended undimmed scene color #00ffff; ' +
+      'glyph outlined sphere',
     );
-    expect(html).toContain('<dt>Graph scope</dt><dd>corpus_entity</dd>');
     expect(html).toContain(
-      '<dt>Generated at</dt><dd>2026-07-11T00:00:00Z</dd>',
+      'visual radius 4–6; Caller-declared: visual size has no declared quantitative interpretation',
     );
-    expect(html).toContain('paper: 2 nodes; color #00ffff');
     expect(html).toContain(
-      'visual radius 4–6; Caller-defined visual size; not quantitative evidence.',
+      'model: 2 nodes; source color #ffaa00; intended undimmed scene color #ffaa00; ' +
+      'glyph sphere with box shell',
     );
-    expect(html).toContain('model: 2 nodes; color #ffaa00');
-    expect(html).toContain('family: 1 node; color #aa55ff');
+    expect(html).toContain(
+      'family: 1 node; source color #aa55ff; intended undimmed scene color #aa55ff; ' +
+      'glyph sphere with diamond shell',
+    );
     for (const kind of [
       'cites',
       'instantiates',
@@ -1778,8 +2778,20 @@ describe('graph helpers', () => {
     ]) {
       expect(html).toContain(`${kind}: 1 relationship;`);
     }
-    expect(html).toContain('same_as: 1 relationship; undirected; color #ff8800');
-    expect(html).toContain('cites: 1 relationship; directed; color #11ff11; flow markers');
+    expect(html).toContain(
+      'same_as: 1 relationship; undirected; source color #ff8800; ' +
+      'intended undimmed scene color #ff8800; solid stroke',
+    );
+    expect(html).toContain(
+      'cites: 1 relationship; directed; source color #11ff11; ' +
+      'intended undimmed scene color #11ff11; solid stroke; flow markers',
+    );
+    expect(html).toContain('instantiates: 1 relationship; directed; source color ' +
+      '#00aaaa; intended undimmed scene color #00aaaa; short-dash stroke');
+    expect(html).toContain('belongs_to_family: 1 relationship; directed; source color ' +
+      '#888888; intended undimmed scene color #888888; dotted stroke');
+    expect(html).toContain('variant_of: 1 relationship; directed; source color ' +
+      '#ff0088; intended undimmed scene color #ff0088; long-dash stroke');
     expect(html).toContain(
       'Layout positions and distances are schematic, not quantitative evidence.',
     );
@@ -1793,17 +2805,54 @@ describe('graph helpers', () => {
     expect(normalizeGraphNodeRadius(0)).toBe(4);
   });
 
-  it('keeps direct React entrypoints within the same browser graph budget as params', () => {
-    expect(MAX_KNOWLEDGE_GRAPH_SCENE_NODES).toBe(PARAM_LIMITS.maxGraphNodes);
-    expect(MAX_KNOWLEDGE_GRAPH_SCENE_EDGES).toBe(PARAM_LIMITS.maxGraphEdges);
+  it('separates accepted presentation authority from live-force admission', () => {
+    expect(MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES).toBe(PARAM_LIMITS.maxGraphNodes);
+    expect(MAX_KNOWLEDGE_GRAPH_PRESENTATION_EDGES).toBe(PARAM_LIMITS.maxGraphEdges);
+    expect(MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES).toBe(250);
+    expect(MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES).toBe(1_000);
     expect(MAX_GRAPH_PARALLEL_EDGES).toBe(
       KNOWLEDGE_GRAPH_LIMITS.maxParallelEdgesPerPair,
     );
-    expect(() => assertKnowledgeGraphBudget(1_000, 4_000)).not.toThrow();
-    expect(() => assertKnowledgeGraphBudget(1_001, 0)).toThrow(RangeError);
-    expect(() => assertKnowledgeGraphBudget(0, 4_001)).toThrow(RangeError);
-    expect(reducedMotionLayoutTickBudget(1_000, 4_000)).toBe(2);
-    expect(reducedMotionLayoutTickBudget(100, 400)).toBe(8);
+    expect(() => assertKnowledgeGraphPresentationBudget(1_000, 4_000)).not.toThrow();
+    expect(() => assertKnowledgeGraphPresentationBudget(1_001, 0)).toThrow(RangeError);
+    expect(() => assertKnowledgeGraphPresentationBudget(0, 4_001)).toThrow(RangeError);
+    expect(() => assertKnowledgeGraphLiveForceBudget(250, 1_000)).not.toThrow();
+    expect(() => assertKnowledgeGraphLiveForceBudget(251, 0)).toThrow(RangeError);
+    expect(() => assertKnowledgeGraphLiveForceBudget(0, 1_001)).toThrow(RangeError);
+    expect(isKnowledgeGraphLiveForceWithinBudget(250, 1_000)).toBe(true);
+    expect(isKnowledgeGraphLiveForceWithinBudget(251, 1_000)).toBe(false);
+    const available = knowledgeGraphLiveForceAvailability(250, 1_000);
+    const unavailable = knowledgeGraphLiveForceAvailability(251, 1_001);
+    expect(available.status).toBe('available');
+    expect(unavailable).toMatchObject({
+      status: 'unavailable_resource_limit',
+      exceeded: ['nodes', 'edges'],
+    });
+    expect(Object.isFrozen(unavailable)).toBe(true);
+    expect(Object.isFrozen(unavailable.exceeded)).toBe(true);
+    expect(reducedMotionLayoutTickBudget(0, 0)).toBe(0);
+    expect(reducedMotionLayoutTickBudget(250, 1_000)).toBe(1);
+  });
+
+  it('rejects an over-limit prepared graph before constructing the scene instance', () => {
+    const presentation = prepareGenericGraph(
+      Array.from({ length: MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES + 1 }, (_, index) => ({
+        id: `live:${index}`,
+        label: `Live ${index}`,
+        kind: 'model',
+        color: '#ffffff',
+        radius: 4,
+      })),
+      [],
+    );
+    expect(() => KnowledgeGraph3DScene({
+      presentation,
+      selectedId: null,
+      query: '',
+      onSelect: () => {},
+      hoverId: null,
+      onHover: () => {},
+    })).toThrow(/live knowledge-graph force layout/u);
   });
 
   it('rejects oversized direct graphs before reading or snapshotting any record', () => {
@@ -1813,22 +2862,13 @@ describe('graph helpers', () => {
       label: { enumerable: true, get: () => { recordReads += 1; throw new Error('read label'); } },
     }) as KnowledgeGraph3DNode;
     const nodes = new Array<KnowledgeGraph3DNode>(
-      MAX_KNOWLEDGE_GRAPH_SCENE_NODES + 1,
+      MAX_KNOWLEDGE_GRAPH_PRESENTATION_NODES + 1,
     ).fill(poisonousNode);
-    const sceneProps = {
+    expect(() => withPreparedPresentation({
       graphIdentity: 'graph:oversized',
       nodes,
       edges: [],
-      selectedId: null,
-      query: '',
-      onSelect: () => {},
-      hoverId: null,
-      onHover: () => {},
-    };
-
-    expect(() => KnowledgeGraph3DScene(sceneProps)).toThrow(RangeError);
-    expect(() => KnowledgeGraphA11yList(sceneProps)).toThrow(RangeError);
-    expect(() => KnowledgeGraphLegend({ nodes, edges: [] })).toThrow(RangeError);
+    })).toThrow(RangeError);
     expect(recordReads).toBe(0);
   });
 
@@ -1842,6 +2882,15 @@ describe('graph helpers', () => {
     expect(graphCameraTargetDamping(Number.NaN, false)).toBe(0);
     expect(graphCameraTargetDamping(Number.POSITIVE_INFINITY, false)).toBe(0);
     expect(graphCameraTargetDamping(Number.NaN, true)).toBe(1);
+  });
+
+  it('admits only safe in-range instanced-mesh identifiers', () => {
+    expect(isKnowledgeGraphInstanceId(0, 1)).toBe(true);
+    expect(isKnowledgeGraphInstanceId(-1, 1)).toBe(false);
+    expect(isKnowledgeGraphInstanceId(0.5, 1)).toBe(false);
+    expect(isKnowledgeGraphInstanceId(Number.NaN, 1)).toBe(false);
+    expect(isKnowledgeGraphInstanceId(1, 1)).toBe(false);
+    expect(isKnowledgeGraphInstanceId(0, Number.NaN)).toBe(false);
   });
 });
 
@@ -1860,7 +2909,7 @@ describe('graphSignature (content key that stops needless sim restarts)', () => 
     expect(graphSignature(g1.nodes, g1.edges)).toBe(graphSignature(g2.nodes, g2.edges));
   });
 
-  it('changes on structure, radius, edge styling, and ORDER', () => {
+  it('changes on structure, radius, glyph/stroke styling, and ORDER', () => {
     const base = graphSignature(graph().nodes, graph().edges);
     const radius = graph();
     radius.nodes[0].radius = 5;
@@ -1868,9 +2917,18 @@ describe('graphSignature (content key that stops needless sim restarts)', () => 
     edgeColor.edges[0].color = '#000';
     const particles = graph();
     particles.edges[0].particles = false;
+    const glyph = graph();
+    glyph.nodes = glyph.nodes.map((node, index) => index === 0
+      ? { ...node, nodeGlyph: 'box_shell' }
+      : node);
+    const stroke = graph();
+    stroke.edges = stroke.edges.map((edge) => ({
+      ...edge,
+      edgeStrokePattern: 'dotted',
+    }));
     const order = graph();
     order.nodes.reverse(); // node order IS instance order — must invalidate
-    for (const g of [radius, edgeColor, particles, order]) {
+    for (const g of [radius, edgeColor, particles, glyph, stroke, order]) {
       expect(graphSignature(g.nodes, g.edges)).not.toBe(base);
     }
   });
@@ -1946,7 +3004,11 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
     label,
     attributes: {},
     epistemic,
-    evidence: [{ kind: 'graph_node', evidence_id: `evidence:${id}`, node_id: id }],
+    evidence: [{
+      kind: 'external_source',
+      evidence_id: `evidence:${id}`,
+      source_id: `source:${id}`,
+    }],
   });
   const edge = (
     id: string,
@@ -1979,7 +3041,7 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
         detail: 'Balanced asynchronous regime',
         attributes: { simulator: 'NEST', resolution_ms: 0.1 },
         uncalibrated_score: {
-          kind: 'retrieval_relevance',
+          kind: 'extraction_confidence',
           value: 0.91,
           calibrated_posterior: false,
         },
@@ -2040,6 +3102,9 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
     expect(byId.p1.color).toBe(colors.paper);
     expect(byId.m1.color).toBe(colors.model);
     expect(byId.f1.color).toBe(colors.family);
+    expect(byId.p1.nodeGlyph).toBe('sphere_outline');
+    expect(byId.m1.nodeGlyph).toBe('box_shell');
+    expect(byId.f1.nodeGlyph).toBe('diamond_shell');
     for (const n of nodes) {
       expect(Number.isFinite(n.radius)).toBe(true);
       expect(n.radius).toBeGreaterThan(0);
@@ -2057,11 +3122,11 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
     expect(() => mapCorpusKnowledgeGraph({
       ...params,
       edges: [...params.edges, edge('edge:dangling', 'p1', 'ghost', 'cites')],
-    }, P)).toThrow(/missing endpoint/);
+    }, P)).toThrow(/does not reference a node/);
     expect(() => mapCorpusKnowledgeGraph({
       ...params,
       edges: [...params.edges, edge('edge:cites', 'p1', 'm1', 'cites')],
-    }, P)).toThrow(/id is duplicated/);
+    }, P)).toThrow(/duplicate edge id/);
   });
 
   it('only cites edges flow particles; same_as is undirected', () => {
@@ -2070,8 +3135,14 @@ describe('mapCorpusKnowledgeGraph (agent params → scene props)', () => {
     const sameAs = edges.find((e) => e.kind === 'same_as')!;
     expect(cites.particles).toBe(true);
     expect(cites.directed).toBe(true);
+    expect(cites.edgeStrokePattern).toBe('solid');
     expect(sameAs.particles).toBe(false);
     expect(sameAs.directed).toBe(false);
+    expect(sameAs.edgeStrokePattern).toBe('solid');
+    expect(edges.find((edge) => edge.kind === 'instantiates')?.edgeStrokePattern)
+      .toBe('short_dash');
+    expect(edges.find((edge) => edge.kind === 'belongs_to_family')?.edgeStrokePattern)
+      .toBe('dotted');
   });
 
   it('allows color overrides without delegating direction or flow semantics', () => {

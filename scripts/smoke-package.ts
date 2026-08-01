@@ -36,6 +36,7 @@ import {
   dirname,
   isAbsolute,
   join,
+  posix,
   relative,
   resolve,
   sep,
@@ -53,7 +54,14 @@ import { CORTEXEL_SPEC_VERSION } from '../core/vizSpec';
 import { canonicalize } from '../src/core/canonicalize';
 import { getBudgetLimits } from '../src/core/limits';
 import { parseJsonStrict, type JsonValue } from '../src/core/parse-json';
-import { SOURCE_ADAPTER_CATALOG } from '../src/adapters/source-catalog';
+import {
+  SOURCE_ADAPTER_CATALOG,
+  SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+  SOURCE_ADAPTER_DESCRIPTOR_DIGESTS,
+  SOURCE_ADAPTER_DISCOVERY_CATALOG,
+} from '../src/adapters/source-catalog';
+import { SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER } from '../src/adapters/source-example';
 import { nestSpikeRecorderToRaster as sourceNestSpikeRecorderToRaster } from '../src/adapters/nest';
 import { validateRequestValue as validateSourceRequestValue } from '../src/core/request';
 import {
@@ -86,6 +94,39 @@ const STATE_FILENAME = PACKAGE_SMOKE_STATE_FILENAME;
 const PACK_RESULT_FILENAME = 'pack-result.v1.json';
 const NETWORK_GUARD_FILENAME = 'network-and-write-guard.cjs';
 const LOCAL_TARBALL_FILENAME = 'cortexel-smoke.tgz';
+const BROWSER_BUNDLE_ENTRY_FILENAME = 'browser-bundle-entry.ts';
+const BROWSER_BUNDLE_BUILDER_FILENAME = 'browser-bundle-build.mjs';
+const BROWSER_BUNDLE_OUTPUT_FILENAME = 'browser-bundle-output.mjs';
+const BROWSER_BUNDLE_RECEIPT_FILENAME = 'browser-bundle-receipt.v1.json';
+const BROWSER_BUNDLE_RECEIPT_SCHEMA = 'cortexel-package-smoke-browser-bundle.v1';
+const REVIEWED_ESBUILD_VERSION = '0.28.1';
+const BROWSER_BARE_CHUNK_IMPORT_PATTERN =
+  String.raw`^import "(\.\./chunk-[A-Za-z0-9_-]+\.js)";$`;
+const BROWSER_INSTALLED_CHUNK_PATH_PATTERN =
+  String.raw`^node_modules/cortexel/dist/chunk-[A-Za-z0-9_-]+\.js$`;
+const BROWSER_BARE_CHUNK_IMPORT_REGEXP = new RegExp(
+  BROWSER_BARE_CHUNK_IMPORT_PATTERN,
+  'u',
+);
+const BROWSER_INSTALLED_CHUNK_PATH_REGEXP = new RegExp(
+  BROWSER_INSTALLED_CHUNK_PATH_PATTERN,
+  'u',
+);
+
+/** Exact regex declarations embedded in the sealed browser-build helper. */
+export function generatedBrowserBundlePatternDeclarations(): string {
+  return [
+    `const reviewedBareChunkImport = new RegExp(${JSON.stringify(
+      BROWSER_BARE_CHUNK_IMPORT_PATTERN,
+    )}, 'u');`,
+    `const reviewedInstalledChunkPath = new RegExp(${JSON.stringify(
+      BROWSER_INSTALLED_CHUNK_PATH_PATTERN,
+    )}, 'u');`,
+  ].join('\n');
+}
+
+const MAX_BROWSER_BUNDLE_BYTES = 4 * 1024 * 1024;
+const MAX_BROWSER_BUNDLE_RECEIPT_BYTES = 1024 * 1024;
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
 const MAX_TREE_ENTRIES = 200_000;
 const MAX_TREE_BYTES = 4 * 1024 * 1024 * 1024;
@@ -114,6 +155,10 @@ export const PACKAGE_SMOKE_COMMAND_POLICIES = Object.freeze({
     operation: 'prepare.npm-version',
     timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
   }),
+  nodeRuntimeIdentity: Object.freeze({
+    operation: 'prepare.node-runtime-identity',
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
+  }),
   npmPack: Object.freeze({
     operation: 'prepare.npm-pack',
     timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
@@ -129,6 +174,10 @@ export const PACKAGE_SMOKE_COMMAND_POLICIES = Object.freeze({
   npmCiFull: Object.freeze({
     operation: 'prepare.npm-ci.full',
     timeoutMs: NPM_CI_COMMAND_TIMEOUT_MS,
+  }),
+  browserBundle: Object.freeze({
+    operation: 'prepare.browser-bundle',
+    timeoutMs: DEFAULT_COMMAND_TIMEOUT_MS,
   }),
 } satisfies Readonly<Record<string, PackageSmokeCommandPolicy>>);
 
@@ -155,6 +204,13 @@ export const PACKAGE_SMOKE_CONSUMER_PROFILES = Object.freeze({
 const CLOSED_PACKAGE_SMOKE_COMMAND_POLICIES = new Set<PackageSmokeCommandPolicy>(
   Object.values(PACKAGE_SMOKE_COMMAND_POLICIES),
 );
+// npm ci is always invoked with --ignore-scripts. This record acknowledges the
+// exact locked package whose manifest contains a lifecycle script without ever
+// authorizing that script to execute; esbuild's platform binary is supplied by
+// its exact optional package closure instead.
+const REVIEWED_IGNORED_INSTALL_SCRIPT_PACKAGES: ReadonlyMap<string, string> = new Map([
+  ['node_modules/esbuild', REVIEWED_ESBUILD_VERSION],
+] as const);
 const LEGACY_REVIEWED_NODE_RESERVED_ENVIRONMENT_KEYS = Object.freeze([
   'CORTEXEL_PACKAGE_SMOKE_SUPERVISOR_PAYLOAD',
   'CORTEXEL_PACKAGE_SMOKE_GUARDIAN_PAYLOAD',
@@ -257,9 +313,10 @@ function openExpectedRegularFileAfterReview(
 }
 
 /*
- * The synchronous child_process timeout waits for a signal-resistant target and
- * for descendant-held pipes. The shared reviewed-POSIX boundary therefore starts
- * an exact launcher, supervisor, gated guardian, and non-leader worker. The
+ * The synchronous child_process timeout is an outer operational kill, not an
+ * owner-death join for signal-resistant descendants. The shared reviewed-POSIX
+ * boundary therefore starts an exact launcher, supervisor, gated guardian, and
+ * non-leader worker. The
  * guardian is the live group leader and the only production process allowed to
  * address the group: it writes one bounded sweep intent and then calls one
  * self-addressed negative-PID SIGKILL while its own live identity pins the PGID.
@@ -268,14 +325,15 @@ function openExpectedRegularFileAfterReview(
  * worker remains the reviewed target's immediate parent, so killing that parent
  * cannot kill the group anchor.
  *
- * The outer caller's protocol pipe is also an outer-authored lifetime capability
- * retained by the live guardian. The call therefore cannot return after launcher
- * or supervisor loss until that capability reaches EOF. It receives only an
+ * While the exact launcher remains live, it actively drains a dedicated zero-data
+ * pipe retained only by the guardian and withholds buffered protocol until real
+ * peer EOF plus supervisor close. The caller receives only an
  * unforgeable-for-cleanup boolean armed handshake, never a PID/PGID, and performs
- * no numeric fallback. Deliberate regrouping/detachment, discovery and killing of
- * the guardian, or hostile signal-authority changes still require an external
- * cgroup/sandbox/Job Object; uncertain cleanup fails without signalling a reusable
- * numeric identity.
+ * no numeric fallback. Launcher SIGKILL/OOM loss or the outer hard kill can still
+ * let Bun return before asynchronous group cleanup. Those cases, deliberate
+ * regrouping/detachment, guardian killing, and hostile signal-authority changes
+ * require an external cgroup/sandbox/Job Object; uncertainty never triggers a
+ * signal to a reusable numeric identity.
  */
 
 function activeCommandEnvironment(): NodeJS.ProcessEnv {
@@ -851,13 +909,14 @@ function run(
 }
 
 const EXPECTED_FIXTURE_MANIFEST_SHA256 =
-  '8507e234f5f9b9ebed89339d172b57f89ec558b279f6cd2930564322cdbb5be8';
+  '1db62cc21bf88b949399f213a792eb3784912dd67f65b714ae66ca5e60d444ec';
 const EXPECTED_FIXTURE_LOCK_SHA256 =
-  '1b1f20245812f21d5353635a7e9242450ec4fb042af07efb9f4f48548c15428e';
+  'c804767e2a73034f5600d3185f8e16c65ade42d2de4d50f334de7513612a6f6c';
 const EXPECTED_DEV_DEPENDENCIES = Object.freeze({
   '@types/node': '20.19.43',
   '@types/react': '19.2.17',
   '@types/react-dom': '19.2.3',
+  esbuild: '0.28.1',
   react: '19.2.7',
   'react-dom': '19.2.7',
   typescript: '5.9.3',
@@ -870,10 +929,14 @@ const EXPECTED_OPTIONAL_DEPENDENCIES = Object.freeze({
 });
 const EXPECTED_PACKAGE_FILE_ENTRIES = Object.freeze([
   'dist',
+  'assets',
+  'docs',
   'README.md',
   'AGENTS.md',
   'CLAUDE.md',
   'CONTRIBUTING.md',
+  'GOVERNANCE.md',
+  'ROADMAP.md',
   'SECURITY.md',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
@@ -987,6 +1050,12 @@ export interface NodeExecutableFileAuthority {
 
 export interface NodeExecutableAuthority extends NodeExecutableFileAuthority {
   readonly version: string;
+  readonly runtime: NodeRuntimeIdentity;
+}
+
+export interface NodeRuntimeIdentity {
+  readonly platform: NodeJS.Platform;
+  readonly arch: string;
 }
 
 export interface NpmPackageTreeAuthority {
@@ -1101,6 +1170,20 @@ function strictJson(text: string, label: string, maximumBytes = MAX_JSON_BYTES):
   return parsed.value;
 }
 
+/** Duplicate-key-safe JSON equality over values, deliberately independent of wire formatting. */
+export function parseAndAssertExactJsonValue(
+  text: string,
+  label: string,
+  expected: unknown,
+  maximumBytes = MAX_JSON_BYTES,
+): JsonValue {
+  const observed = strictJson(text, label, maximumBytes);
+  if (canonicalize(observed) !== canonicalize(expected)) {
+    fail(`${label} differs from the expected JSON value`);
+  }
+  return observed;
+}
+
 function decodeUtf8Fatal(raw: Buffer, label: string): string {
   try {
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(raw);
@@ -1208,6 +1291,757 @@ function assertCanonicalArtifactPath(path: string, label: string): void {
     path.split('/').some((segment) => !isCanonicalArtifactSegment(segment))
   ) {
     fail(`${label} is not a canonical package-relative path: ${path}`);
+  }
+}
+
+const MAX_PACKED_MARKDOWN_LINKS = 50_000;
+const MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES = 8 * 1024;
+const MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS =
+  MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES * 2 + 16;
+const MAX_PACKED_MARKDOWN_DOCUMENT_BYTES = 8 * 1024 * 1024;
+const MAX_PACKED_MARKDOWN_TOTAL_BYTES = 32 * 1024 * 1024;
+
+export interface PackedMarkdownDocument {
+  readonly path: string;
+  readonly source: string;
+}
+
+export interface PackedMarkdownLinkTarget {
+  readonly line: number;
+  readonly target: string;
+}
+
+export interface PackedMarkdownAngleReferenceScan {
+  readonly inspectedCodeUnits: number;
+  readonly targets: readonly PackedMarkdownLinkTarget[];
+  readonly workLimit: number;
+}
+
+function appendPackedMarkdownTargets(
+  result: PackedMarkdownLinkTarget[],
+  additions: readonly PackedMarkdownLinkTarget[],
+): void {
+  if (result.length + additions.length > MAX_PACKED_MARKDOWN_LINKS) {
+    fail('packed Markdown link count exceeds its bound');
+  }
+  for (const target of additions) result.push(target);
+}
+
+function asciiCaseInsensitiveAt(source: string, index: number, expected: string): boolean {
+  if (index < 0 || index + expected.length > source.length) return false;
+  for (let offset = 0; offset < expected.length; offset++) {
+    const code = source.charCodeAt(index + offset);
+    const lowerCode = code >= 0x41 && code <= 0x5a ? code + 0x20 : code;
+    if (lowerCode !== expected.charCodeAt(offset)) return false;
+  }
+  return true;
+}
+
+function markdownBackslashEscaped(source: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && source[cursor] === '\\'; cursor--) {
+    slashCount++;
+  }
+  return slashCount % 2 === 1;
+}
+
+function utf8ByteLengthForCodePoint(codePoint: number): number {
+  if (codePoint <= 0x7f) return 1;
+  if (codePoint <= 0x7ff) return 2;
+  if (codePoint <= 0xffff) return 3;
+  return 4;
+}
+
+function boundedMarkdownLinkTargetValue(
+  source: string,
+  start: number,
+  end: number,
+  label: string,
+): string {
+  if (end - start > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+    fail(`${label} exceeds its code-unit bound`);
+  }
+  let decodedBytes = 0;
+  for (let cursor = start; cursor < end;) {
+    if (source[cursor] === '\\' && cursor + 1 < end) cursor++;
+    const codePoint = source.codePointAt(cursor)!;
+    decodedBytes += utf8ByteLengthForCodePoint(codePoint);
+    if (decodedBytes > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+      fail(`${label} exceeds its UTF-8 byte bound`);
+    }
+    cursor += codePoint > 0xffff ? 2 : 1;
+  }
+
+  let result = '';
+  for (let cursor = start; cursor < end; cursor++) {
+    if (source[cursor] === '\\' && cursor + 1 < end) cursor++;
+    const codePoint = source.codePointAt(cursor)!;
+    const width = codePoint > 0xffff ? 2 : 1;
+    result += source.slice(cursor, cursor + width);
+    cursor += width - 1;
+  }
+  return result;
+}
+
+function parseInlineMarkdownLinkTarget(
+  source: string,
+  openingParenthesis: number,
+  label: string,
+): { readonly target: string; readonly end: number } | undefined {
+  const candidateStart = openingParenthesis + 1;
+  let cursor = openingParenthesis + 1;
+  while (source[cursor] === ' ' || source[cursor] === '\t') {
+    if (cursor - candidateStart >= MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS) {
+      fail(`${label} candidate exceeds its code-unit bound`);
+    }
+    cursor++;
+  }
+  if (cursor >= source.length) return undefined;
+  if (source[cursor] === '<') {
+    const targetStart = ++cursor;
+    while (cursor < source.length) {
+      if (source[cursor] === '>' && !markdownBackslashEscaped(source, cursor)) break;
+      if (cursor - candidateStart >= MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS) {
+        fail(`${label} candidate exceeds its code-unit bound`);
+      }
+      if (cursor - targetStart >= MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+        fail(`${label} target exceeds its code-unit bound`);
+      }
+      cursor++;
+    }
+    if (cursor >= source.length) return undefined;
+    const target = boundedMarkdownLinkTargetValue(
+      source,
+      targetStart,
+      cursor,
+      `${label} target`,
+    );
+    cursor++;
+    while (source[cursor] === ' ' || source[cursor] === '\t') {
+      if (cursor - candidateStart >= MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS) {
+        fail(`${label} candidate exceeds its code-unit bound`);
+      }
+      cursor++;
+    }
+    if (source[cursor] !== ')') return undefined;
+    return { target, end: cursor + 1 };
+  }
+
+  const targetStart = cursor;
+  let depth = 1;
+  let targetEnd = -1;
+  while (cursor < source.length) {
+    const character = source[cursor]!;
+    const targetTerminator = depth === 1 && (
+      character === ')' || character === ' ' || character === '\t'
+    );
+    if (
+      cursor - candidateStart >= MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS &&
+      !(character === ')' && depth === 1)
+    ) {
+      fail(`${label} candidate exceeds its code-unit bound`);
+    }
+    if (
+      targetEnd < 0 &&
+      cursor - targetStart >= MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES &&
+      !targetTerminator
+    ) {
+      fail(`${label} target exceeds its code-unit bound`);
+    }
+    if (character === '\\' && cursor + 1 < source.length) {
+      if (
+        cursor + 1 - candidateStart >=
+          MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS
+      ) {
+        fail(`${label} candidate exceeds its code-unit bound`);
+      }
+      if (
+        targetEnd < 0 &&
+        cursor + 1 - targetStart >= MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES
+      ) {
+        fail(`${label} target exceeds its code-unit bound`);
+      }
+      cursor += 2;
+      continue;
+    }
+    if (character === '(') {
+      depth++;
+      if (depth > 32) return undefined;
+    } else if (character === ')') {
+      depth--;
+      if (depth === 0) {
+        if (targetEnd < 0) targetEnd = cursor;
+        return {
+          target: boundedMarkdownLinkTargetValue(
+            source,
+            targetStart,
+            targetEnd,
+            `${label} target`,
+          ),
+          end: cursor + 1,
+        };
+      }
+    } else if ((character === ' ' || character === '\t') && depth === 1 && targetEnd < 0) {
+      targetEnd = cursor;
+    }
+    cursor++;
+  }
+  return undefined;
+}
+
+function parseReferenceMarkdownLinkTarget(
+  source: string,
+  destinationStart: number,
+  label: string,
+): string | undefined {
+  let cursor = destinationStart;
+  while (source[cursor] === ' ' || source[cursor] === '\t') {
+    if (
+      cursor - destinationStart >=
+        MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS
+    ) {
+      fail(`${label} candidate exceeds its code-unit bound`);
+    }
+    cursor++;
+  }
+  if (cursor >= source.length) return undefined;
+  if (source[cursor] === '<') {
+    const targetStart = ++cursor;
+    while (cursor < source.length) {
+      if (source[cursor] === '>' && !markdownBackslashEscaped(source, cursor)) {
+        return boundedMarkdownLinkTargetValue(
+          source,
+          targetStart,
+          cursor,
+          `${label} target`,
+        );
+      }
+      if (
+        cursor - destinationStart >=
+          MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS
+      ) {
+        fail(`${label} candidate exceeds its code-unit bound`);
+      }
+      if (cursor - targetStart >= MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+        fail(`${label} target exceeds its code-unit bound`);
+      }
+      cursor++;
+    }
+    return undefined;
+  }
+  const targetStart = cursor;
+  while (cursor < source.length && source[cursor] !== ' ' && source[cursor] !== '\t') {
+    if (
+      cursor - destinationStart >=
+        MAX_PACKED_MARKDOWN_LINK_CANDIDATE_CODE_UNITS
+    ) {
+      fail(`${label} candidate exceeds its code-unit bound`);
+    }
+    if (cursor - targetStart >= MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+      fail(`${label} target exceeds its code-unit bound`);
+    }
+    if (source[cursor] === '\\' && cursor + 1 < source.length) {
+      if (cursor + 1 - targetStart >= MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+        fail(`${label} target exceeds its code-unit bound`);
+      }
+      cursor++;
+    }
+    cursor++;
+  }
+  return boundedMarkdownLinkTargetValue(
+    source,
+    targetStart,
+    cursor,
+    `${label} target`,
+  );
+}
+
+function conservativeReferenceDestinationOffset(line: string): number | null {
+  // Scan one line once and recognize a reference-definition-like destination in
+  // every context, including indentation, block markers, code, and comments.
+  // This deliberately accepts more than CommonMark. A nested '[' simply starts
+  // a newer candidate, keeping rejected bracket runs linear.
+  let inLabel = false;
+  let labelHasContent = false;
+  for (let index = 0; index < line.length; index++) {
+    const character = line[index]!;
+    if (character === '[') {
+      inLabel = true;
+      labelHasContent = false;
+      continue;
+    }
+    if (!inLabel) continue;
+    if (character === '\\' && index + 1 < line.length) {
+      labelHasContent = true;
+      index++;
+      continue;
+    }
+    if (character === ']') {
+      if (labelHasContent && line[index + 1] === ':') {
+        return index + 2;
+      }
+      inLabel = false;
+      labelHasContent = false;
+      continue;
+    }
+    labelHasContent = true;
+  }
+  return null;
+}
+
+function decodePackedHtmlReferenceValue(raw: string, label: string): string {
+  if (raw.length > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+    fail(`${label} exceeds its code-unit bound`);
+  }
+  let result = '';
+  let decodedBytes = 0;
+  const appendDecoded = (value: string): void => {
+    for (let cursor = 0; cursor < value.length;) {
+      const codePoint = value.codePointAt(cursor)!;
+      decodedBytes += utf8ByteLengthForCodePoint(codePoint);
+      if (decodedBytes > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+        fail(`${label} exceeds its UTF-8 byte bound`);
+      }
+      cursor += codePoint > 0xffff ? 2 : 1;
+    }
+    result += value;
+  };
+  for (let index = 0; index < raw.length;) {
+    if (raw[index] !== '&') {
+      const codePoint = raw.codePointAt(index)!;
+      const width = codePoint > 0xffff ? 2 : 1;
+      appendDecoded(raw.slice(index, index + width));
+      index += width;
+      continue;
+    }
+    const terminator = raw.indexOf(';', index + 1);
+    if (terminator < 0 || terminator - index > 32) {
+      fail(`${label} contains an unterminated HTML character reference`);
+    }
+    const token = raw.slice(index + 1, terminator);
+    const named: Readonly<Record<string, string>> = {
+      amp: '&',
+      apos: "'",
+      gt: '>',
+      lt: '<',
+      quot: '"',
+    };
+    let decoded = named[token];
+    if (decoded === undefined && /^#[0-9]+$/u.test(token)) {
+      const codePoint = Number.parseInt(token.slice(1), 10);
+      if (
+        !Number.isSafeInteger(codePoint) ||
+        codePoint <= 0 ||
+        codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff)
+      ) {
+        fail(`${label} contains an invalid numeric HTML character reference`);
+      }
+      decoded = String.fromCodePoint(codePoint);
+    }
+    if (decoded === undefined && /^#x[0-9A-Fa-f]+$/u.test(token)) {
+      const codePoint = Number.parseInt(token.slice(2), 16);
+      if (
+        !Number.isSafeInteger(codePoint) ||
+        codePoint <= 0 ||
+        codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff)
+      ) {
+        fail(`${label} contains an invalid hexadecimal HTML character reference`);
+      }
+      decoded = String.fromCodePoint(codePoint);
+    }
+    if (decoded === undefined) {
+      fail(`${label} contains an unsupported HTML character reference`);
+    }
+    appendDecoded(decoded);
+    index = terminator + 1;
+  }
+  return result;
+}
+
+function packedSrcsetTargets(
+  value: string,
+  documentPath: string,
+  line: number,
+): readonly PackedMarkdownLinkTarget[] {
+  if (value.trim().length === 0) return [];
+  const result: PackedMarkdownLinkTarget[] = [];
+  const candidates = value.split(',');
+  for (const candidate of candidates) {
+    const fields = candidate.trim().split(/[ \t\r\n]+/u);
+    if (fields.length < 1 || fields.length > 2 || fields[0]!.length === 0) {
+      fail(`packed Markdown HTML srcset is malformed: ${documentPath}:${line}`);
+    }
+    if (fields.length === 2) {
+      const descriptor = fields[1]!;
+      const width = /^([1-9][0-9]*)w$/u.exec(descriptor);
+      const density = /^((?:[0-9]+(?:\.[0-9]+)?)|(?:\.[0-9]+))x$/u.exec(descriptor);
+      if (
+        (width === null && density === null) ||
+        (density !== null && (!Number.isFinite(Number(density[1])) || Number(density[1]) <= 0))
+      ) {
+        fail(`packed Markdown HTML srcset descriptor is malformed: ${documentPath}:${line}`);
+      }
+    }
+    result.push({ line, target: fields[0]! });
+  }
+  return result;
+}
+
+function packedHtmlAttributeLikeTargets(
+  source: string,
+  documentPath: string,
+): readonly PackedMarkdownLinkTarget[] {
+  const result: PackedMarkdownLinkTarget[] = [];
+  const nameCharacter = /[A-Za-z0-9_.:-]/u;
+  let cursor = 0;
+  let line = 1;
+  while (cursor < source.length) {
+    if (source[cursor] === '\n') {
+      line++;
+      cursor++;
+      continue;
+    }
+    const firstCode = source.charCodeAt(cursor);
+    const firstLowerCode = firstCode >= 0x41 && firstCode <= 0x5a
+      ? firstCode + 0x20
+      : firstCode;
+    const candidate = firstLowerCode === 0x68
+      ? 'href'
+      : firstLowerCode === 0x73 && asciiCaseInsensitiveAt(source, cursor, 'srcset')
+        ? 'srcset'
+        : firstLowerCode === 0x73
+          ? 'src'
+          : undefined;
+    const name = candidate !== undefined &&
+      asciiCaseInsensitiveAt(source, cursor, candidate) &&
+      !nameCharacter.test(source[cursor - 1] ?? '') &&
+      !nameCharacter.test(source[cursor + candidate.length] ?? '')
+      ? candidate
+      : undefined;
+    if (name === undefined) {
+      cursor++;
+      continue;
+    }
+    const startLine = line;
+    let probe = cursor + name.length;
+    while (/\s/u.test(source[probe] ?? '')) probe++;
+    if (source[probe] !== '=') {
+      if (source[probe] === '>') {
+        fail(`packed Markdown raw HTML-like ${name} lacks a value: ${documentPath}:${startLine}`);
+      }
+      cursor += name.length;
+      continue;
+    }
+    for (let index = cursor + name.length; index < probe; index++) {
+      if (source[index] === '\n') line++;
+    }
+    probe++;
+    while (/\s/u.test(source[probe] ?? '')) {
+      if (source[probe] === '\n') line++;
+      probe++;
+    }
+    const quote = source[probe] === '"' || source[probe] === "'"
+      ? source[probe]!
+      : undefined;
+    let value: string;
+    if (quote !== undefined) {
+      const valueStart = ++probe;
+      while (probe < source.length && source[probe] !== quote) {
+        if (source[probe] === '\n') line++;
+        probe++;
+        if (probe - valueStart > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+          fail(`packed Markdown raw HTML-like ${name} exceeds its bound: ${documentPath}:${startLine}`);
+        }
+      }
+      if (source[probe] !== quote) {
+        fail(`packed Markdown raw HTML-like ${name} quote is unterminated: ${documentPath}:${startLine}`);
+      }
+      value = source.slice(valueStart, probe);
+      probe++;
+    } else {
+      const valueStart = probe;
+      while (probe < source.length && !/[\s>]/u.test(source[probe]!)) {
+        probe++;
+        if (probe - valueStart > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+          fail(`packed Markdown raw HTML-like ${name} exceeds its bound: ${documentPath}:${startLine}`);
+        }
+      }
+      value = source.slice(valueStart, probe);
+      if (value.length === 0 || /["'<=`]/u.test(value)) {
+        fail(`packed Markdown raw HTML-like ${name} value is malformed: ${documentPath}:${startLine}`);
+      }
+    }
+    const decoded = decodePackedHtmlReferenceValue(
+      value,
+      `packed Markdown raw HTML-like ${name} at ${documentPath}:${startLine}`,
+    );
+    if (name === 'srcset') {
+      appendPackedMarkdownTargets(
+        result,
+        packedSrcsetTargets(decoded, documentPath, startLine),
+      );
+    } else {
+      appendPackedMarkdownTargets(result, [{ line: startLine, target: decoded }]);
+    }
+    cursor = probe;
+  }
+  return result;
+}
+
+export function inspectPackedMarkdownAngleReferences(
+  source: string,
+  documentPath: string,
+): PackedMarkdownAngleReferenceScan {
+  const result: PackedMarkdownLinkTarget[] = [];
+  let cursor = 0;
+  let line = 1;
+  let inspectedCodeUnits = 0;
+  // The outer cursor visits each ordinary code unit once. An angle candidate
+  // scans its disjoint bounded body once, and nested '<' advances directly to
+  // that delimiter rather than rescanning the suffix. Four source lengths
+  // therefore conservatively dominate every branch.
+  const workLimit = source.length * 4 + 1;
+  const readCodeUnit = (index: number): string | undefined => {
+    inspectedCodeUnits++;
+    if (inspectedCodeUnits > workLimit) {
+      fail(`packed Markdown angle-reference scan exceeds its work bound: ${documentPath}`);
+    }
+    return source[index];
+  };
+  while (cursor < source.length) {
+    const outerCharacter = readCodeUnit(cursor)!;
+    if (outerCharacter === '\n') {
+      line++;
+      cursor++;
+      continue;
+    }
+    if (outerCharacter !== '<') {
+      cursor++;
+      continue;
+    }
+    const start = cursor;
+    const startLine = line;
+
+    // URI/email autolinks cannot contain another '<', '>', or an ASCII control
+    // or space. Stop at the first such delimiter and advance directly to a nested
+    // '<' so an invalid prefix never rescans the remaining suffix.
+    let simpleEnd = -1;
+    let barrier = -1;
+    let barrierCharacter: string | undefined;
+    let probe = start + 1;
+    while (probe < source.length) {
+      const character = readCodeUnit(probe)!;
+      if (character === '>') {
+        simpleEnd = probe;
+        break;
+      }
+      if (
+        character === '<' ||
+        character.charCodeAt(0) <= 0x20 ||
+        character.charCodeAt(0) === 0x7f
+      ) {
+        barrier = probe;
+        barrierCharacter = character;
+        break;
+      }
+      if (probe - (start + 1) >= MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES) {
+        fail(`packed Markdown angle-reference candidate exceeds its bound: ${documentPath}:${startLine}`);
+      }
+      probe++;
+    }
+    if (simpleEnd >= 0) {
+      const body = source.slice(start + 1, simpleEnd);
+      if (
+        /^[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\u0000-\u0020\u007f]*$/u.test(body)
+      ) {
+        appendPackedMarkdownTargets(result, [{
+          line: startLine,
+          target: decodePackedHtmlReferenceValue(
+            body,
+            `packed Markdown autolink at ${documentPath}:${startLine}`,
+          ),
+        }]);
+      } else if (
+        /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/u
+          .test(body)
+      ) {
+        appendPackedMarkdownTargets(result, [{ line: startLine, target: `mailto:${body}` }]);
+      }
+      cursor = simpleEnd + 1;
+      continue;
+    }
+    if (barrier >= 0) {
+      cursor = barrierCharacter === '<' ? barrier : barrier + 1;
+      if (barrierCharacter === '\n') line++;
+      continue;
+    }
+    cursor = source.length;
+  }
+  return Object.freeze({
+    inspectedCodeUnits,
+    targets: Object.freeze(result.slice()),
+    workLimit,
+  });
+}
+
+function packedMarkdownLinkTargets(
+  document: PackedMarkdownDocument,
+): readonly PackedMarkdownLinkTarget[] {
+  const targets: PackedMarkdownLinkTarget[] = [];
+  const lines = document.source.split('\n');
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]!;
+    const referenceOffset = conservativeReferenceDestinationOffset(line);
+    if (referenceOffset !== null) {
+      const target = parseReferenceMarkdownLinkTarget(
+        line,
+        referenceOffset,
+        `packed Markdown reference at ${document.path}:${lineIndex + 1}`,
+      );
+      if (target === undefined) {
+        fail(`packed Markdown has an unsupported reference destination: ${document.path}:${lineIndex + 1}`);
+      }
+      appendPackedMarkdownTargets(targets, [{ line: lineIndex + 1, target }]);
+    }
+
+    for (let index = 0; index + 1 < line.length;) {
+      const openingParenthesis = line.indexOf('](', index);
+      if (openingParenthesis < 0) break;
+      if (markdownBackslashEscaped(line, openingParenthesis)) {
+        index = openingParenthesis + 2;
+        continue;
+      }
+      const parsed = parseInlineMarkdownLinkTarget(
+        line,
+        openingParenthesis + 1,
+        `packed Markdown inline link at ${document.path}:${lineIndex + 1}`,
+      );
+      if (parsed === undefined) {
+        fail(`packed Markdown has an unsupported inline link destination: ${document.path}:${lineIndex + 1}`);
+      }
+      appendPackedMarkdownTargets(targets, [{
+        line: lineIndex + 1,
+        target: parsed.target,
+      }]);
+      index = parsed.end;
+    }
+  }
+  appendPackedMarkdownTargets(
+    targets,
+    packedHtmlAttributeLikeTargets(document.source, document.path),
+  );
+  appendPackedMarkdownTargets(
+    targets,
+    inspectPackedMarkdownAngleReferences(document.source, document.path).targets,
+  );
+  return targets;
+}
+
+/**
+ * Checks a conservative syntactic over-approximation of Markdown destinations as
+ * package-consumer paths, not source-checkout paths. Code, comments, fences, raw
+ * HTML blocks, and indented regions are scanned too: this is deliberately not a
+ * CommonMark render-equivalence claim, and false positives fail closed rather than
+ * letting parser precedence hide a live destination. Relative targets must stay
+ * inside and resolve within the exact tar inventory; external targets must carry an
+ * explicit HTTPS origin. The policy does not forgive unpackaged source files.
+ */
+export function assertPackedMarkdownLinkClosure(
+  documents: readonly PackedMarkdownDocument[],
+  packedPaths: readonly string[],
+): void {
+  const packageFiles = new Set(packedPaths);
+  const expectedMarkdownPaths = packedPaths
+    .filter((path) => /\.(?:md|markdown)$/iu.test(path))
+    .sort();
+  const packageDirectories = new Set<string>();
+  for (const path of packedPaths) {
+    assertCanonicalArtifactPath(path, 'packed Markdown inventory path');
+    let parent = posix.dirname(path);
+    while (parent !== '.') {
+      packageDirectories.add(parent);
+      parent = posix.dirname(parent);
+    }
+  }
+  const seenDocuments = new Set<string>();
+  let linkCount = 0;
+  let markdownBytes = 0;
+  for (const document of documents) {
+    assertCanonicalArtifactPath(document.path, 'packed Markdown document path');
+    if (!packageFiles.has(document.path) || seenDocuments.has(document.path)) {
+      fail(`packed Markdown document is absent or duplicated: ${document.path}`);
+    }
+    seenDocuments.add(document.path);
+    const documentBytes = Buffer.byteLength(document.source, 'utf8');
+    if (documentBytes > MAX_PACKED_MARKDOWN_DOCUMENT_BYTES) {
+      fail(`packed Markdown document exceeds its byte bound: ${document.path}`);
+    }
+    markdownBytes += documentBytes;
+    if (markdownBytes > MAX_PACKED_MARKDOWN_TOTAL_BYTES) {
+      fail('packed Markdown documents exceed their total byte bound');
+    }
+    for (const link of packedMarkdownLinkTargets(document)) {
+      linkCount++;
+      if (linkCount > MAX_PACKED_MARKDOWN_LINKS) {
+        fail('packed Markdown link count exceeds its bound');
+      }
+      if (
+        link.target.length > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES ||
+        Buffer.byteLength(link.target, 'utf8') > MAX_PACKED_MARKDOWN_LINK_TARGET_BYTES ||
+        /[\u0000-\u001f\u007f]/u.test(link.target)
+      ) {
+        fail(`packed Markdown link target is invalid: ${document.path}:${link.line}`);
+      }
+      if (/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(link.target)) {
+        let url: URL;
+        try {
+          url = new URL(link.target);
+        } catch {
+          fail(`packed Markdown external link is malformed: ${document.path}:${link.line}`);
+        }
+        if (
+          url.protocol !== 'https:' ||
+          url.hostname.length === 0 ||
+          url.username.length > 0 ||
+          url.password.length > 0
+        ) {
+          fail(`packed Markdown external link is not an explicit HTTPS URL: ${document.path}:${link.line}`);
+        }
+        continue;
+      }
+      if (link.target.startsWith('//') || link.target.includes('\\')) {
+        fail(`packed Markdown relative link is ambiguous: ${document.path}:${link.line}`);
+      }
+      const encodedPath = link.target.split(/[?#]/u, 1)[0]!;
+      let decodedPath: string;
+      try {
+        decodedPath = decodeURIComponent(encodedPath);
+      } catch {
+        fail(`packed Markdown relative link has malformed encoding: ${document.path}:${link.line}`);
+      }
+      if (decodedPath.includes('\\') || decodedPath.startsWith('/')) {
+        fail(`packed Markdown relative link escapes package semantics: ${document.path}:${link.line}`);
+      }
+      const resolved = decodedPath.length === 0
+        ? document.path
+        : posix.normalize(posix.join(posix.dirname(document.path), decodedPath));
+      if (
+        resolved === '..' ||
+        resolved.startsWith('../') ||
+        (!packageFiles.has(resolved) && !packageDirectories.has(resolved.replace(/\/$/u, '')))
+      ) {
+        fail(
+          `packed Markdown relative link does not resolve inside the tarball: ` +
+          `${document.path}:${link.line} -> ${link.target}`,
+        );
+      }
+    }
+  }
+  const observedMarkdownPaths = [...seenDocuments].sort();
+  if (canonicalize(observedMarkdownPaths) !== canonicalize(expectedMarkdownPaths)) {
+    fail('packed Markdown document set differs from the exact tar inventory');
   }
 }
 
@@ -1344,6 +2178,7 @@ export function inspectNpmPackageTarball(
   const seen = new Set<string>();
   const seenFolded = new Set<string>();
   const inspected: ExpectedPackageFile[] = [];
+  const markdownDocuments: PackedMarkdownDocument[] = [];
   let offset = 0;
   let fileBytes = 0;
   while (true) {
@@ -1416,6 +2251,12 @@ export function inspectNpmPackageTarball(
         expectedFile.mode !== mode || expectedFile.digest !== digest) {
       fail(`package tar entry differs from expected package content: ${path}`);
     }
+    if (/\.(?:md|markdown)$/iu.test(path)) {
+      markdownDocuments.push({
+        path,
+        source: decodeUtf8Fatal(content, `packed Markdown ${path}`),
+      });
+    }
     inspected.push({ path, size, mode, digest });
     fileBytes += size;
     seen.add(path);
@@ -1425,6 +2266,10 @@ export function inspectNpmPackageTarball(
   if (inspected.length === 0 || inspected.length !== npmFiles.size || fileBytes !== expectedFileBytes) {
     fail('package tar file closure is incomplete');
   }
+  assertPackedMarkdownLinkClosure(
+    markdownDocuments,
+    inspected.map((file) => file.path),
+  );
   inspected.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
   return {
     compressedBytes: tarball.byteLength,
@@ -1449,6 +2294,50 @@ function canonicalJsonSourceDigest(path: string, label: string): string {
 
 function exactJsonEqual(left: unknown, right: unknown): boolean {
   return canonicalize(left) === canonicalize(right);
+}
+
+function jsonDifferencePathSegment(key: string): string {
+  const bounded = jsonDiagnosticString(key, 256);
+  return `[${bounded.encoded}${bounded.truncated ? '<truncated>' : ''}]`;
+}
+
+function firstJsonDifferencePath(
+  expected: JsonValue,
+  actual: JsonValue,
+  path = '$',
+  depth = 0,
+): string | undefined {
+  if (Object.is(expected, actual)) return undefined;
+  if (depth >= 128) return path;
+  if (Array.isArray(expected) && Array.isArray(actual)) {
+    if (expected.length !== actual.length) return `${path}.length`;
+    for (let index = 0; index < expected.length; index++) {
+      const difference = firstJsonDifferencePath(
+        expected[index]!,
+        actual[index]!,
+        `${path}[${index}]`,
+        depth + 1,
+      );
+      if (difference !== undefined) return difference;
+    }
+    return undefined;
+  }
+  if (isRecord(expected) && isRecord(actual)) {
+    const keys = [...new Set([...Object.keys(expected), ...Object.keys(actual)])].sort();
+    for (const key of keys) {
+      const nextPath = `${path}${jsonDifferencePathSegment(key)}`;
+      if (!Object.hasOwn(expected, key) || !Object.hasOwn(actual, key)) return nextPath;
+      const difference = firstJsonDifferencePath(
+        expected[key]!,
+        actual[key]!,
+        nextPath,
+        depth + 1,
+      );
+      if (difference !== undefined) return difference;
+    }
+    return undefined;
+  }
+  return path;
 }
 
 function expectRecord(value: JsonValue | undefined, label: string): Record<string, JsonValue> {
@@ -1640,23 +2529,31 @@ export function validatePackageSmokeFixture(
     if (path === '' || path === 'node_modules/cortexel') continue;
     if (!isCanonicalLockPackagePath(path)) fail(`fixture lock has an unsafe package path ${path}`);
     const record = expectRecord(candidate, `fixture lock package ${path}`);
-    if (
-      record.link === true ||
-      record.inBundle === true ||
-      record.bundled === true ||
-      record.hasInstallScript === true
-    ) {
-      fail(`fixture lock package ${path} uses an unreviewed script, bundle, or link`);
+    if (record.link === true || record.inBundle === true || record.bundled === true) {
+      fail(`fixture lock package ${path} uses an unreviewed bundle or link`);
     }
     const version = expectString(record.version, `fixture lock package ${path} version`);
     if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version)) {
       fail(`fixture lock package ${path} does not have an exact version`);
+    }
+    if (
+      record.hasInstallScript === true &&
+      REVIEWED_IGNORED_INSTALL_SCRIPT_PACKAGES.get(path) !== version
+    ) {
+      fail(`fixture lock package ${path} uses an unreviewed script`);
     }
     const resolved = expectString(record.resolved, `fixture lock package ${path} resolved`);
     if (!resolved.startsWith('https://registry.npmjs.org/')) {
       fail(`fixture lock package ${path} is not pinned to the reviewed npm registry`);
     }
     assertSri512(expectString(record.integrity, `fixture lock package ${path} integrity`), path);
+  }
+
+  for (const [path, version] of REVIEWED_IGNORED_INSTALL_SCRIPT_PACKAGES) {
+    const record = expectRecord(packages[path], `reviewed ignored-script package ${path}`);
+    if (record.version !== version || record.hasInstallScript !== true) {
+      fail(`fixture lock does not preserve the exact ignored-script authority for ${path}`);
+    }
   }
 
   for (const [path, candidate] of Object.entries(packages)) {
@@ -1914,6 +2811,46 @@ function executableVersion(executable: string, label: string): string {
     fail(`${label} returned an invalid version`);
   }
   return value;
+}
+
+function nodeRuntimeIdentity(nodeExecutable: string): NodeRuntimeIdentity {
+  const output = run(
+    nodeExecutable,
+    [
+      '--input-type=module',
+      '--eval',
+      'process.stdout.write(JSON.stringify({arch:process.arch,platform:process.platform}))',
+    ],
+    root,
+    PACKAGE_SMOKE_COMMAND_POLICIES.nodeRuntimeIdentity,
+  );
+  const record = expectRecord(
+    strictJson(output, 'reviewed Node runtime identity'),
+    'reviewed Node runtime identity',
+  );
+  exactKeys(record, ['arch', 'platform'], 'reviewed Node runtime identity');
+  const platform = expectString(record.platform, 'reviewed Node platform');
+  const arch = expectString(record.arch, 'reviewed Node architecture');
+  if (
+    (platform !== 'darwin' && platform !== 'linux') ||
+    !/^[a-z0-9][a-z0-9_-]{0,31}$/u.test(arch)
+  ) {
+    fail('reviewed Node runtime identity is outside the supported POSIX domain');
+  }
+  if (platform !== process.platform) {
+    fail('reviewed Node platform differs from the supervising host platform');
+  }
+  return Object.freeze({ platform, arch });
+}
+
+export function assertPreparedNodeRuntimeIdentity(
+  observed: NodeRuntimeIdentity,
+  expected: NodeRuntimeIdentity,
+  label: string,
+): void {
+  if (observed.platform !== expected.platform || observed.arch !== expected.arch) {
+    fail(`${label} Node runtime identity changed`);
+  }
 }
 
 function nodeCliVersion(nodeExecutable: string, cli: string, label: string): string {
@@ -2768,7 +3705,11 @@ export function assertPackageRuntimeAuthority(expected: PackageRuntimeAuthority,
   const npm = inspectNpmPackageAuthority(expected.npm.cli);
   const observed: PackageRuntimeAuthority = {
     scope: RUNTIME_AUTHORITY_SCOPE,
-    node: { ...nodeFile, version: expected.node.version },
+    node: {
+      ...nodeFile,
+      version: expected.node.version,
+      runtime: expected.node.runtime,
+    },
     npm,
   };
   if (!exactJsonEqual(observed, expected)) fail(`${label} package runtime authority changed`);
@@ -3050,6 +3991,54 @@ function lockPackageName(path: string): string {
   return name;
 }
 
+function lockRuntimeSelectorMatches(
+  value: JsonValue | undefined,
+  observed: string,
+  label: string,
+): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(`${label} must be a non-empty selector array`);
+  }
+  if (value.length === 1 && value[0] === 'any') return true;
+  const positive: string[] = [];
+  const negative = new Set<string>();
+  for (const candidate of value) {
+    if (
+      typeof candidate !== 'string' ||
+      !/^!?[a-z0-9][a-z0-9_-]*$/u.test(candidate)
+    ) {
+      fail(`${label} contains an invalid selector`);
+    }
+    if (candidate.startsWith('!')) negative.add(candidate.slice(1));
+    else positive.push(candidate);
+  }
+  return !negative.has(observed) && (positive.length === 0 || positive.includes(observed));
+}
+
+function lockPackageSupportsCurrentRuntime(
+  record: Record<string, JsonValue>,
+  path: string,
+  runtime: NodeRuntimeIdentity,
+): boolean {
+  if (record.libc !== undefined) {
+    fail(`prepared package lock ${path} uses an unreviewed libc selector`);
+  }
+  // Parse both selectors unconditionally. A nonmatching OS must not hide a
+  // malformed CPU selector and make lock validity depend on the verifier host.
+  const osMatches = lockRuntimeSelectorMatches(
+    record.os,
+    runtime.platform,
+    `${path} os`,
+  );
+  const cpuMatches = lockRuntimeSelectorMatches(
+    record.cpu,
+    runtime.arch,
+    `${path} cpu`,
+  );
+  return osMatches && cpuMatches;
+}
+
 /**
  * Proves the complete npm-installed package topology against the exact prepared
  * lock and omit policy. This deliberately derives the expectation from every
@@ -3060,9 +4049,16 @@ export function assertInstalledRecursivePackageClosure(
   preparedLockValue: JsonValue,
   omittedDependencyClasses: readonly OmittedDependencyClass[],
   npmMajor: number,
+  runtime: NodeRuntimeIdentity,
 ): void {
   if (npmMajor !== 10 && npmMajor !== 11) {
     fail('recursive package closure requires reviewed npm major 10 or 11');
+  }
+  if (
+    (runtime.platform !== 'darwin' && runtime.platform !== 'linux') ||
+    !/^[a-z0-9][a-z0-9_-]{0,31}$/u.test(runtime.arch)
+  ) {
+    fail('recursive package closure received an invalid reviewed Node runtime identity');
   }
   const omitted = new Set<OmittedDependencyClass>();
   for (const dependencyClass of omittedDependencyClasses) {
@@ -3098,12 +4094,29 @@ export function assertInstalledRecursivePackageClosure(
     if (path === '') continue;
     if (!isCanonicalLockPackagePath(path)) fail(`prepared package lock has an unsafe path ${path}`);
     const record = expectRecord(candidate, `prepared package lock package ${path}`);
-    for (const dependencyClass of ['dev', 'optional'] as const) {
-      if (record[dependencyClass] !== undefined && typeof record[dependencyClass] !== 'boolean') {
-        fail(`prepared package lock ${path} has a non-boolean ${dependencyClass} flag`);
+    for (const dependencyClass of ['dev', 'optional', 'devOptional'] as const) {
+      if (record[dependencyClass] !== undefined && record[dependencyClass] !== true) {
+        fail(`prepared package lock ${path} has a noncanonical ${dependencyClass} flag`);
       }
     }
-    if ([...omitted].some((dependencyClass) => record[dependencyClass] === true)) continue;
+    if (record.devOptional === true && (record.dev === true || record.optional === true)) {
+      fail(`prepared package lock ${path} has redundant dependency-class flags`);
+    }
+    const omittedByClass =
+      (omitted.has('dev') && record.dev === true) ||
+      (omitted.has('optional') && record.optional === true) ||
+      (
+        record.devOptional === true &&
+        omitted.has('dev') &&
+        omitted.has('optional')
+      );
+    if (omittedByClass) continue;
+    if (!lockPackageSupportsCurrentRuntime(record, path, runtime)) {
+      if (record.optional !== true) {
+        fail(`prepared package lock ${path} is runtime-incompatible but not optional`);
+      }
+      continue;
+    }
     expectedPackages.set(path, record);
   }
   if (expectedPackages.size === 0 || expectedPackages.size > 10_000) {
@@ -3157,7 +4170,9 @@ export function assertInstalledRecursivePackageClosure(
     fail('installed node_modules root is not a canonical real directory');
   }
 
-  const expectedHiddenPackages = Object.fromEntries(expectedPackages);
+  const expectedHiddenPackages = Object.fromEntries(
+    expectedPackages,
+  );
   const expectedHiddenLock = {
     name: lock.name,
     version: lock.version,
@@ -3168,7 +4183,13 @@ export function assertInstalledRecursivePackageClosure(
   const hiddenLockPath = join(nodeModules, '.package-lock.json');
   const actualHiddenLock = readStrictJson(hiddenLockPath, 'installed hidden package lock');
   if (!exactJsonEqual(actualHiddenLock, expectedHiddenLock)) {
-    fail('installed hidden package lock differs from the exact filtered prepared lock');
+    const consumerName = jsonDiagnosticString(basename(consumer), 256);
+    const difference = firstJsonDifferencePath(expectedHiddenLock, actualHiddenLock) ?? '$';
+    fail(
+      'installed hidden package lock differs from the exact filtered prepared lock for ' +
+      `consumer ${consumerName.encoded}${consumerName.truncated ? ' (truncated)' : ''}, ` +
+      `omit=${omitPolicy || 'none'}, first difference ${difference}`,
+    );
   }
 
   const expectedManagementPaths = new Set(containerPackages.keys());
@@ -3632,6 +4653,7 @@ function prepareConsumer(
   npmExecutable: string,
   profile: PackageSmokeConsumerProfile,
   npmMajor: number,
+  runtime: NodeRuntimeIdentity,
 ): void {
   const { commandPolicy, omittedDependencyClasses } = profile;
   assertClosedPackageSmokeCommandPolicy(commandPolicy);
@@ -3674,6 +4696,7 @@ function prepareConsumer(
     derivedLock,
     omittedDependencyClasses,
     npmMajor,
+    runtime,
   );
 }
 
@@ -3687,6 +4710,7 @@ function assertPreparedConsumerClosures(options: {
   readonly exactFixtureLockValue: JsonValue;
   readonly exactFixtureManifestRaw: Buffer;
   readonly npmVersion: string;
+  readonly runtime: NodeRuntimeIdentity;
   readonly permissionPhase: 'prepared-writable' | 'finalized-read-only';
 }): void {
   if (sha512Integrity(options.artifact) !== options.artifactIntegrity) {
@@ -3741,6 +4765,7 @@ function assertPreparedConsumerClosures(options: {
       installedLock,
       omittedDependencyClasses,
       npmMajor,
+      options.runtime,
     );
   }
 }
@@ -3916,7 +4941,7 @@ function parsePackageRuntimeAuthority(value: JsonValue | undefined): PackageRunt
   exactKeys(record, ['scope', 'node', 'npm'], 'prepared package runtime authority');
   if (record.scope !== RUNTIME_AUTHORITY_SCOPE) fail('prepared runtime authority scope is unsupported');
   const nodeRecord = expectRecord(record.node, 'prepared Node executable authority');
-  exactKeys(nodeRecord, ['executable', 'version', 'file', 'ancestry'],
+  exactKeys(nodeRecord, ['executable', 'version', 'runtime', 'file', 'ancestry'],
     'prepared Node executable authority');
   const nodeExecutable = expectString(nodeRecord.executable, 'prepared Node executable');
   const nodeFile = parseRuntimeFileAuthority(nodeRecord.file, 'prepared Node executable file');
@@ -3927,6 +4952,16 @@ function parsePackageRuntimeAuthority(value: JsonValue | undefined): PackageRunt
     fail('prepared Node executable authority is internally inconsistent');
   }
   assertSupportedNodeVersion(nodeVersion);
+  const runtimeRecord = expectRecord(nodeRecord.runtime, 'prepared Node runtime identity');
+  exactKeys(runtimeRecord, ['platform', 'arch'], 'prepared Node runtime identity');
+  const runtimePlatform = expectString(runtimeRecord.platform, 'prepared Node platform');
+  const runtimeArch = expectString(runtimeRecord.arch, 'prepared Node architecture');
+  if (
+    (runtimePlatform !== 'darwin' && runtimePlatform !== 'linux') ||
+    !/^[a-z0-9][a-z0-9_-]{0,31}$/u.test(runtimeArch)
+  ) {
+    fail('prepared Node runtime identity is outside the supported POSIX domain');
+  }
   const npmRecord = expectRecord(record.npm, 'prepared npm package authority');
   exactKeys(npmRecord, [
     'root',
@@ -3953,6 +4988,10 @@ function parsePackageRuntimeAuthority(value: JsonValue | undefined): PackageRunt
     node: {
       executable: nodeExecutable,
       version: nodeVersion,
+      runtime: {
+        platform: runtimePlatform,
+        arch: runtimeArch,
+      },
       file: nodeFile,
       ancestry: parseRuntimeAncestry(nodeRecord.ancestry, 'prepared Node ancestry'),
     },
@@ -4164,6 +5203,11 @@ function readAndVerifyPreparedState(
     process.platform,
     'execute',
   );
+  assertPreparedNodeRuntimeIdentity(
+    nodeRuntimeIdentity(canonicalNode),
+    preparedNode.runtime,
+    'pre-closure execute',
+  );
   const artifactPath = join(workspace, 'artifact', LOCAL_TARBALL_FILENAME);
   const artifactStats = lstatSync(artifactPath);
   const artifact = readRegularFileStable(
@@ -4201,6 +5245,7 @@ function readAndVerifyPreparedState(
     exactFixtureManifestRaw: fixture.manifestRaw,
     expectedFiles,
     npmVersion: state.runtimeAuthority.npm.version,
+    runtime: state.runtimeAuthority.node.runtime,
     permissionPhase: 'finalized-read-only',
   });
   const postSemanticSeal = fingerprintPackageSmokeWorkspace(workspace, true);
@@ -4573,6 +5618,9 @@ const runtimeFigureContractProbe = `
   const authoringExportNames = Object.keys(authoring).sort();
   if (JSON.stringify(authoringExportNames) !== JSON.stringify([
       'AUTHORING_SCHEMA_COMPILATION_PROFILE_V1',
+      'CAPABILITY_AVAILABILITIES',
+      'CAPABILITY_CATALOG',
+      'CAPABILITY_IDS',
       'CATALOG_DIGEST',
       'CATALOG_DIGEST_DOMAIN',
       'SKILL_AUTHORING',
@@ -4580,13 +5628,26 @@ const runtimeFigureContractProbe = `
       'SOURCE_ADAPTER_CATALOG',
       'SOURCE_ADAPTER_CATALOG_DIGEST',
       'SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN',
+      'SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE',
+      'SOURCE_ADAPTER_DESCRIPTOR_DIGESTS',
+      'SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN',
+      'SOURCE_ADAPTER_DISCOVERY_CATALOG',
+      'SOURCE_ADAPTER_EXAMPLE_ACTION',
+      'SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER',
+      'SOURCE_ADAPTER_EXAMPLE_PROTOCOL',
+      'SOURCE_ADAPTER_EXAMPLE_PROTOCOL_VERSION',
       'SOURCE_ADAPTER_IDS',
       'STABLE_CATALOG_SCHEMA_RESOURCES',
       'STABLE_SKILL_IDS',
+      'classifySourceAdapterExampleEnvelope',
+      'isCapabilityId',
+      'isSourceAdapterExampleGuard',
       'isSourceAdapterId',
       'isStableSkillId',
+      'lookupCapabilityCatalogEntry',
       'lookupSkillCatalogEntry',
       'lookupSourceAdapter',
+      'lookupSourceAdapterDescriptorDigest',
     ])) {
     throw new Error('packed authoring entry exposes an unexpected runtime surface: ' +
       JSON.stringify(authoringExportNames));
@@ -4629,6 +5690,30 @@ const runtimeFigureContractProbe = `
       throw new Error('packed stable catalog lookup admitted an unknown or prototype key');
     }
   }
+  const capabilityIds = [...figure.CAPABILITY_IDS];
+  if (JSON.stringify(capabilityIds) !== JSON.stringify([...capabilityIds].sort()) ||
+      JSON.stringify(authoring.CAPABILITY_IDS) !== JSON.stringify(capabilityIds) ||
+      JSON.stringify(Object.keys(figure.CAPABILITY_CATALOG)) !== JSON.stringify(capabilityIds) ||
+      JSON.stringify(authoring.CAPABILITY_CATALOG) !==
+        JSON.stringify(figure.CAPABILITY_CATALOG) ||
+      JSON.stringify(authoring.CAPABILITY_AVAILABILITIES) !==
+        JSON.stringify(figure.CAPABILITY_AVAILABILITIES)) {
+    throw new Error('packed finite capability catalog surfaces disagree');
+  }
+  for (const id of capabilityIds) {
+    if (!authoring.isCapabilityId(id) || !figure.isCapabilityId(id) ||
+        authoring.lookupCapabilityCatalogEntry(id) !== authoring.CAPABILITY_CATALOG[id] ||
+        figure.lookupCapabilityCatalogEntry(id) !== figure.CAPABILITY_CATALOG[id]) {
+      throw new Error('packed capability guard or lookup disagrees with its finite map');
+    }
+  }
+  for (const id of ['', 'not.a.capability', '__proto__', 'constructor']) {
+    if (authoring.isCapabilityId(id) || figure.isCapabilityId(id) ||
+        authoring.lookupCapabilityCatalogEntry(id) !== undefined ||
+        figure.lookupCapabilityCatalogEntry(id) !== undefined) {
+      throw new Error('packed capability lookup admitted an unknown or prototype key');
+    }
+  }
   if (JSON.stringify(authoring.SOURCE_ADAPTER_IDS) !==
       JSON.stringify(['nest-spike-recorder']) ||
       Object.keys(authoring.SOURCE_ADAPTER_CATALOG.adapters).length !== 1 ||
@@ -4643,10 +5728,23 @@ const runtimeFigureContractProbe = `
       throw new Error('packed source-adapter lookup admitted an unknown or prototype key');
     }
   }
-  if (figure.sha256Digest(figure.canonicalize({
-    domain: authoring.SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
-    catalog: authoring.SOURCE_ADAPTER_CATALOG,
-  })) !== authoring.SOURCE_ADAPTER_CATALOG_DIGEST) {
+  const sourceAdapterDescriptor =
+    authoring.SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'];
+  if (figure.sha256Digest(figure.canonicalize(
+        authoring.SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE,
+      )) !== authoring.SOURCE_ADAPTER_CATALOG_DIGEST ||
+      JSON.stringify(authoring.SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE) !==
+        JSON.stringify({
+          domain: authoring.SOURCE_ADAPTER_CATALOG_DIGEST_DOMAIN,
+          catalog: authoring.SOURCE_ADAPTER_DISCOVERY_CATALOG,
+        }) ||
+      figure.sha256Digest(figure.canonicalize({
+        domain: authoring.SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN,
+        descriptor: sourceAdapterDescriptor,
+      })) !== authoring.SOURCE_ADAPTER_DESCRIPTOR_DIGESTS['nest-spike-recorder'] ||
+      authoring.lookupSourceAdapterDescriptorDigest('nest-spike-recorder') !==
+        authoring.SOURCE_ADAPTER_DESCRIPTOR_DIGESTS['nest-spike-recorder'] ||
+      authoring.lookupSourceAdapterDescriptorDigest('constructor') !== undefined) {
     throw new Error('packed source-adapter discovery bytes do not reproduce their digest');
   }
   const catalogView = {
@@ -4715,18 +5813,46 @@ const runtimeFigureContractProbe = `
     throw new Error('packed NEST adapter descriptor or branch inventory is incoherent');
   }
   for (const branch of ['positiveInfinity', 'finiteStop']) {
-    const example = packagedNestSource.examples[branch];
+    const exampleEnvelope = packagedNestSource.examples[branch];
+    if (authoring.classifySourceAdapterExampleEnvelope(exampleEnvelope).kind !==
+          'template_only') {
+      throw new Error('packed NEST source example lost its template-only envelope');
+    }
+    const guardedInput = exampleEnvelope.inputTemplate;
+    const guardedAttempt = nestAdapter.nestSpikeRecorderToRaster(
+      guardedInput.exportedStatus,
+      guardedInput.options,
+    );
+    if (guardedAttempt.ok ||
+        !guardedAttempt.errors.some((error) =>
+          error.instancePath === '/' + authoring.SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER)) {
+      throw new Error('packed NEST adapter admitted its extracted guarded ' + branch + ' input');
+    }
+    // Explicit package-smoke-only model of a caller that replaced the template:
+    // the installed API never performs either acknowledgement on the caller's behalf.
+    const callerCapture = JSON.parse(JSON.stringify(guardedInput));
+    delete callerCapture.options[authoring.SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER];
+    callerCapture.options.captureAuthority.kind = 'caller_declaration';
     const adapted = nestAdapter.nestSpikeRecorderToRaster(
-      example.exportedStatus,
-      example.options,
+      callerCapture.exportedStatus,
+      callerCapture.options,
     );
     if (!adapted.ok || !figure.validateRequestValue(adapted.request).ok) {
       throw new Error('packed NEST adapter ' + branch +
-        ' example does not pass the packed adapter and validator');
+        ' explicit test-owned caller capture does not pass the adapter and validator');
     }
   }
   if (capabilityRegistry.registry !== 'cortexel-capabilities' ||
       requestSchema.$id !== 'https://sepahead.github.io/cortexel/schemas/v1/figure-request.v1.schema.json' ||
+      packageMetadata.imports?.['#cortexel-knowledge-graph-presentation-capability'] !==
+        './dist/internal/knowledge-graph-presentation-capability.cjs' ||
+      JSON.stringify(
+        packageMetadata.imports?.['#cortexel-knowledge-graph-presentation-brand'],
+      ) !== JSON.stringify({
+        types: './dist/internal/knowledge-graph-presentation-brand.d.ts',
+        import: './dist/internal/knowledge-graph-presentation-brand.js',
+        require: './dist/internal/knowledge-graph-presentation-brand.cjs',
+      }) ||
       packageMetadata.imports?.['#cortexel-request-capability'] !==
         './dist/internal/request-capability.cjs' ||
       JSON.stringify(packageMetadata.imports?.['#cortexel-validated-request-brand']) !==
@@ -4793,6 +5919,131 @@ function assertInstalledNodeBinShimAt(
   if ((statSync(shim).mode & 0o111) === 0) fail(`installed ${binName} target is not executable`);
 }
 
+function readPreparedBrowserBundleFile(
+  path: string,
+  label: string,
+  maximumBytes: number,
+  permissionPhase: 'prepared-writable' | 'finalized-read-only',
+): Buffer {
+  const stats = lstatSync(path);
+  const expectedMode = permissionPhase === 'prepared-writable' ? 0o644 : 0o444;
+  if (
+    !stats.isFile() ||
+    stats.isSymbolicLink() ||
+    stats.nlink !== 1 ||
+    (stats.mode & 0o777) !== expectedMode ||
+    stats.size < 1 ||
+    stats.size > maximumBytes
+  ) {
+    fail(`${label} lacks exact regular-file authority`);
+  }
+  return readRegularFileStable(path, stats.size, label, maximumBytes);
+}
+
+function assertPreparedBrowserBundle(options: {
+  readonly consumer: string;
+  readonly entrySource: string;
+  readonly packedPaths: readonly string[];
+  readonly permissionPhase: 'prepared-writable' | 'finalized-read-only';
+}): void {
+  const bundle = readPreparedBrowserBundleFile(
+    join(options.consumer, BROWSER_BUNDLE_OUTPUT_FILENAME),
+    'prepared browser bundle',
+    MAX_BROWSER_BUNDLE_BYTES,
+    options.permissionPhase,
+  );
+  const receiptRaw = readPreparedBrowserBundleFile(
+    join(options.consumer, BROWSER_BUNDLE_RECEIPT_FILENAME),
+    'prepared browser-bundle receipt',
+    MAX_BROWSER_BUNDLE_RECEIPT_BYTES,
+    options.permissionPhase,
+  );
+  const receipt = expectRecord(
+    parseCanonicalJsonBuffer(
+      receiptRaw,
+      'prepared browser-bundle receipt',
+      MAX_BROWSER_BUNDLE_RECEIPT_BYTES,
+    ),
+    'prepared browser-bundle receipt',
+  );
+  exactKeys(receipt, [
+    'schema',
+    'esbuildVersion',
+    'entrySourceSha256',
+    'bundleSha256',
+    'bundleBytes',
+    'publicInputs',
+    'warnings',
+  ], 'prepared browser-bundle receipt');
+  const expectedPublicInputs = [
+    'node_modules/cortexel/dist/knowledge-graph/index.js',
+    'node_modules/cortexel/dist/react/knowledge-graph.js',
+  ];
+  if (
+    receipt.schema !== BROWSER_BUNDLE_RECEIPT_SCHEMA ||
+    receipt.esbuildVersion !== REVIEWED_ESBUILD_VERSION ||
+    receipt.entrySourceSha256 !== sha256(options.entrySource) ||
+    receipt.bundleSha256 !== sha256(bundle) ||
+    receipt.bundleBytes !== bundle.byteLength ||
+    !Array.isArray(receipt.publicInputs) ||
+    canonicalize(receipt.publicInputs) !== canonicalize(expectedPublicInputs) ||
+    !Array.isArray(receipt.warnings)
+  ) {
+    fail('prepared browser-bundle receipt does not bind the reviewed build');
+  }
+  const bundleText = decodeUtf8Fatal(bundle, 'prepared browser bundle');
+  if (bundleText.includes('#cortexel-knowledge-graph-presentation-capability')) {
+    fail('prepared browser bundle retains an unresolved private capability specifier');
+  }
+  const warningIdentities = new Set<string>();
+  for (let index = 0; index < receipt.warnings.length; index++) {
+    const warning = expectRecord(
+      receipt.warnings[index],
+      `prepared browser-bundle warning ${index}`,
+    );
+    exactKeys(warning, [
+      'id',
+      'source',
+      'line',
+      'lineText',
+      'target',
+      'bytesInOutput',
+    ], `prepared browser-bundle warning ${index}`);
+    const source = expectString(warning.source, `browser-bundle warning ${index} source`);
+    const line = expectInteger(warning.line, `browser-bundle warning ${index} line`);
+    const lineText = expectString(
+      warning.lineText,
+      `browser-bundle warning ${index} line text`,
+    );
+    const target = expectString(warning.target, `browser-bundle warning ${index} target`);
+    const bytesInOutput = expectInteger(
+      warning.bytesInOutput,
+      `browser-bundle warning ${index} output bytes`,
+    );
+    const specifier = BROWSER_BARE_CHUNK_IMPORT_REGEXP.exec(lineText)?.[1];
+    if (
+      warning.id !== 'ignored-bare-import' ||
+      !expectedPublicInputs.includes(source) ||
+      line < 1 ||
+      specifier === undefined ||
+      join(dirname(source), specifier) !== target ||
+      !BROWSER_INSTALLED_CHUNK_PATH_REGEXP.test(target) ||
+      bytesInOutput < 1
+    ) {
+      fail(`browser-bundle warning ${index} is outside the reviewed warning class`);
+    }
+    const packagePath = target.slice('node_modules/cortexel/'.length);
+    if (!options.packedPaths.includes(packagePath)) {
+      fail(`browser-bundle warning ${index} targets an unsealed package path`);
+    }
+    const identity = canonicalize([source, line, lineText, target]);
+    if (warningIdentities.has(identity)) {
+      fail(`browser-bundle warning ${index} duplicates a prior warning`);
+    }
+    warningIdentities.add(identity);
+  }
+}
+
 function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): string {
   let consumer = context.coreConsumer;
   const chartsConsumer = context.chartsConsumer;
@@ -4852,7 +6103,26 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   if (!packedPaths.includes('dist/internal/request-capability.cjs')) {
     throw new Error('tarball is missing the shared request-capability runtime');
   }
+  if (!packedPaths.includes('dist/internal/knowledge-graph-presentation-capability.cjs')) {
+    throw new Error('tarball is missing the shared knowledge-graph capability runtime');
+  }
+  for (const forbiddenAlternateRuntime of [
+    'dist/internal/request-capability.js',
+    'dist/internal/request-capability.js.map',
+    'dist/internal/knowledge-graph-presentation-capability.js',
+    'dist/internal/knowledge-graph-presentation-capability.js.map',
+  ]) {
+    if (packedPaths.includes(forbiddenAlternateRuntime)) {
+      throw new Error(
+        `tarball contains an alternate private capability runtime: ${forbiddenAlternateRuntime}`,
+      );
+    }
+  }
   for (const nominalBrandPath of [
+    'dist/internal/knowledge-graph-presentation-brand.cjs',
+    'dist/internal/knowledge-graph-presentation-brand.d.cts',
+    'dist/internal/knowledge-graph-presentation-brand.d.ts',
+    'dist/internal/knowledge-graph-presentation-brand.js',
     'dist/internal/validated-request-brand.cjs',
     'dist/internal/validated-request-brand.d.cts',
     'dist/internal/validated-request-brand.d.ts',
@@ -4962,6 +6232,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         const figure = await import('cortexel/figure');
         const authoring = await import('cortexel/authoring');
         const renderSvg = await import('cortexel/render-svg');
+        const knowledgeGraph = await import('cortexel/knowledge-graph');
         const nestAdapter = await import('cortexel/adapters/nest');
         const manifest = (await import('cortexel/skills.manifest.json', {
           with: { type: 'json' },
@@ -5010,10 +6281,23 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             typeof authoring.SOURCE_ADAPTER_CATALOG !== 'object' ||
             typeof authoring.lookupSourceAdapter !== 'function' ||
             typeof renderSvg.buildFigure !== 'function' ||
+            typeof knowledgeGraph.prepareKnowledgeGraphPresentation !== 'function' ||
+            typeof knowledgeGraph.isPreparedKnowledgeGraphPresentation !== 'function' ||
             typeof nestAdapter.nestSpikeRecorderToRaster !== 'function' ||
             packageMetadata.name !== 'cortexel' ||
             core.ROUTING_DISCRIMINATORS?.get_connections?.connection_graph !== 'nest.connection_graph') {
           throw new Error('ESM core exports are incomplete');
+        }
+        const headlessGraph = knowledgeGraph.prepareKnowledgeGraphPresentation({
+          contract: knowledgeGraph.KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+          profile: 'generic_visual',
+          graphIdentity: 'package-smoke:peer-free-esm',
+          nodes: [{ id: 'n', label: 'Node', kind: 'model', color: '#fff', radius: 4 }],
+          edges: [],
+        });
+        if (!knowledgeGraph.isPreparedKnowledgeGraphPresentation(headlessGraph) ||
+            headlessGraph.nodes[0]?.nodeGlyph !== 'sphere_outline') {
+          throw new Error('ESM peer-free knowledge-graph surface is incomplete');
         }
         ${runtimeAnalysisProbe}
         ${runtimeTopologyProbe}
@@ -5033,6 +6317,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         const figure = require('cortexel/figure');
         const authoring = require('cortexel/authoring');
         const renderSvg = require('cortexel/render-svg');
+        const knowledgeGraph = require('cortexel/knowledge-graph');
         const nestAdapter = require('cortexel/adapters/nest');
         const manifest = require('cortexel/skills.manifest.json');
         const contractManifest = require('cortexel/contract/manifest.json');
@@ -5063,10 +6348,23 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
             typeof authoring.SOURCE_ADAPTER_CATALOG !== 'object' ||
             typeof authoring.lookupSourceAdapter !== 'function' ||
             typeof renderSvg.buildFigure !== 'function' ||
+            typeof knowledgeGraph.prepareKnowledgeGraphPresentation !== 'function' ||
+            typeof knowledgeGraph.isPreparedKnowledgeGraphPresentation !== 'function' ||
             typeof nestAdapter.nestSpikeRecorderToRaster !== 'function' ||
             packageMetadata.name !== 'cortexel' ||
             core.ROUTING_DISCRIMINATORS?.get_connections?.connection_graph !== 'nest.connection_graph') {
           throw new Error('CJS core exports are incomplete');
+        }
+        const headlessGraph = knowledgeGraph.prepareKnowledgeGraphPresentation({
+          contract: knowledgeGraph.KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+          profile: 'generic_visual',
+          graphIdentity: 'package-smoke:peer-free-cjs',
+          nodes: [{ id: 'n', label: 'Node', kind: 'model', color: '#fff', radius: 4 }],
+          edges: [],
+        });
+        if (!knowledgeGraph.isPreparedKnowledgeGraphPresentation(headlessGraph) ||
+            headlessGraph.nodes[0]?.nodeGlyph !== 'sphere_outline') {
+          throw new Error('CJS peer-free knowledge-graph surface is incomplete');
         }
         if (!Array.isArray(manifest.skills) || manifest.skills.length !== ${NEST_SKILL_IDS.length} ||
             manifest.manifestVersion !== '11' ||
@@ -5092,22 +6390,34 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   // One process can load either conditional public surface. Every producer/consumer
   // pairing must share the exact private WeakSet, including mixed module formats.
   phaseWriteFile(
-    join(consumer, 'mixed-capability-probe.mjs'),
+    join(fullConsumer, 'mixed-capability-probe.mjs'),
     `
       import { createRequire } from 'node:module';
       import * as esmFigure from 'cortexel/figure';
       import * as esmRenderer from 'cortexel/render-svg';
+      import * as esmGraph from 'cortexel/knowledge-graph';
+      import * as esmInteractiveGraph from 'cortexel/react/knowledge-graph';
+      import * as esmCore from 'cortexel/core';
       const require = createRequire(import.meta.url);
       const cjsFigure = require('cortexel/figure');
       const cjsRenderer = require('cortexel/render-svg');
+      const cjsGraph = require('cortexel/knowledge-graph');
+      const cjsInteractiveGraph = require('cortexel/react/knowledge-graph');
+      const cjsCore = require('cortexel/core');
       // An export map is API encapsulation, not a sandbox against code already
       // executing in this process: createRequire can deliberately choose a parent
       // inside another package. Even through that unsupported route, the physical
-      // singleton must expose only the same validating functions, never membership
-      // mutation or the private WeakSet itself.
+      // singleton must expose only checked preparation/predicate functions, never
+      // unchecked registry mutation or the private WeakSet/WeakMap objects themselves.
       const packageScopedRequire = createRequire(require.resolve('cortexel/package.json'));
       const internalCapability = packageScopedRequire('#cortexel-request-capability');
+      const internalGraphCapability = packageScopedRequire(
+        '#cortexel-knowledge-graph-presentation-capability'
+      );
       const nominalBrandRuntime = packageScopedRequire('#cortexel-validated-request-brand');
+      const graphNominalBrandRuntime = packageScopedRequire(
+        '#cortexel-knowledge-graph-presentation-brand'
+      );
       const expectedInternalExports = [
         'isValidatedRequest',
         'parseAndValidateRequest',
@@ -5121,6 +6431,273 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       }
       if (JSON.stringify(Object.keys(nominalBrandRuntime)) !== JSON.stringify([])) {
         throw new Error('type-only validated-request brand exposes runtime authority');
+      }
+      const expectedGraphInternalExports = [
+        'KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1',
+        'KnowledgeGraphPresentationJsonError',
+        'PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1',
+        'PREPARED_KNOWLEDGE_GRAPH_VIEW_V1',
+        'assertPreparedCorpusKnowledgeGraphPresentation',
+        'assertPreparedGenericKnowledgeGraphPresentation',
+        'assertPreparedKnowledgeGraphPresentation',
+        'assertPreparedKnowledgeGraphView',
+        'isPreparedKnowledgeGraphPresentation',
+        'isPreparedKnowledgeGraphView',
+        'knowledgeGraphPresentationContainsNode',
+        'knowledgeGraphViewContainsNode',
+        'parseKnowledgeGraphPresentationJson',
+        'prepareCorpusKnowledgeGraphPresentation',
+        'prepareKnowledgeGraphPresentation',
+        'prepareKnowledgeGraphView',
+        'serializePreparedKnowledgeGraphPresentation',
+      ];
+      const expectedGraphPublicExports = [
+        'CORPUS_GRAPH_RADIUS_MEANING',
+        'KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1',
+        'KnowledgeGraphPresentationJsonError',
+        'PREPARED_KNOWLEDGE_GRAPH_PRESENTATION_V1',
+        'PREPARED_KNOWLEDGE_GRAPH_VIEW_V1',
+        'assertPreparedGenericKnowledgeGraphPresentation',
+        'assertPreparedKnowledgeGraphPresentation',
+        'assertPreparedKnowledgeGraphView',
+        'corpusGraphInstanceIdentity',
+        'corpusGraphRadiusMeaning',
+        'isPreparedKnowledgeGraphPresentation',
+        'isPreparedKnowledgeGraphView',
+        'knowledgeGraphPresentationContainsNode',
+        'knowledgeGraphViewContainsNode',
+        'parseKnowledgeGraphPresentationJson',
+        'prepareCorpusKnowledgeGraphFigure',
+        'prepareCorpusKnowledgeGraphFigureJson',
+        'prepareKnowledgeGraphPresentation',
+        'prepareKnowledgeGraphView',
+        'serializePreparedKnowledgeGraphPresentation',
+      ];
+      if (JSON.stringify(Object.keys(esmGraph).sort()) !==
+            JSON.stringify(expectedGraphPublicExports) ||
+          JSON.stringify(Object.keys(cjsGraph).sort()) !==
+            JSON.stringify(expectedGraphPublicExports)) {
+        throw new Error('public knowledge-graph surface drifted or leaked authority');
+      }
+      if (Object.hasOwn(esmGraph, 'mapCorpusKnowledgeGraph') ||
+          Object.hasOwn(cjsGraph, 'mapCorpusKnowledgeGraph') ||
+          Object.hasOwn(esmInteractiveGraph, 'mapCorpusKnowledgeGraph') ||
+          Object.hasOwn(cjsInteractiveGraph, 'mapCorpusKnowledgeGraph')) {
+        throw new Error('public knowledge-graph surface exposed the ungated corpus mapper');
+      }
+      if (JSON.stringify(Object.keys(internalGraphCapability).sort()) !==
+          JSON.stringify(expectedGraphInternalExports) ||
+          internalGraphCapability.prepareKnowledgeGraphPresentation !==
+            esmGraph.prepareKnowledgeGraphPresentation ||
+          internalGraphCapability.prepareKnowledgeGraphPresentation !==
+            cjsGraph.prepareKnowledgeGraphPresentation ||
+          Object.keys(internalGraphCapability).some((key) =>
+            /unchecked|register|weakset|weakmap/i.test(key))) {
+        throw new Error(
+          'shared knowledge-graph capability exposes unchecked registry authority or split identity'
+        );
+      }
+      if (JSON.stringify(Object.keys(graphNominalBrandRuntime)) !== JSON.stringify([])) {
+        throw new Error('type-only knowledge-graph brand exposes runtime authority');
+      }
+      const graphInput = {
+        contract: esmGraph.KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+        profile: 'generic_visual',
+        graphIdentity: 'package-smoke:graph',
+        nodes: [{ id: 'n', label: 'Node', kind: 'model', color: '#fff', radius: 4 }],
+        edges: [],
+      };
+      const esmPreparedGraph = esmGraph.prepareKnowledgeGraphPresentation(graphInput);
+      const cjsPreparedGraph = cjsGraph.prepareKnowledgeGraphPresentation(graphInput);
+      if (esmPreparedGraph.nodes[0]?.nodeGlyph !== 'sphere_outline' ||
+          cjsPreparedGraph.nodes[0]?.nodeGlyph !== 'sphere_outline') {
+        throw new Error('packed generic graph did not close its default glyph channel');
+      }
+      const parsedEsmGraph = esmGraph.parseKnowledgeGraphPresentationJson(
+        JSON.stringify(graphInput)
+      );
+      const parsedCjsGraph = cjsGraph.parseKnowledgeGraphPresentationJson(
+        JSON.stringify(graphInput)
+      );
+      for (const token of [
+        esmPreparedGraph,
+        cjsPreparedGraph,
+        parsedEsmGraph,
+        parsedCjsGraph,
+      ]) {
+        if (!esmGraph.isPreparedKnowledgeGraphPresentation(token) ||
+            !cjsGraph.isPreparedKnowledgeGraphPresentation(token)) {
+          throw new Error('mixed-format knowledge-graph capability handoff failed');
+        }
+        const esmBytes = esmGraph.serializePreparedKnowledgeGraphPresentation(token);
+        const cjsBytes = cjsGraph.serializePreparedKnowledgeGraphPresentation(token);
+        if (esmBytes !== cjsBytes ||
+            esmGraph.isPreparedKnowledgeGraphPresentation(JSON.parse(esmBytes)) ||
+            cjsGraph.isPreparedKnowledgeGraphPresentation(JSON.parse(cjsBytes))) {
+          throw new Error('canonical graph record bytes drifted or rehydrated authority');
+        }
+      }
+      for (const candidate of [
+        { ...esmPreparedGraph },
+        new Proxy(esmPreparedGraph, {}),
+      ]) {
+        if (esmGraph.isPreparedKnowledgeGraphPresentation(candidate) ||
+            cjsGraph.isPreparedKnowledgeGraphPresentation(candidate)) {
+          throw new Error('knowledge-graph capability identity was forgeable');
+        }
+      }
+      if (!esmGraph.knowledgeGraphPresentationContainsNode(cjsPreparedGraph, 'n') ||
+          !cjsGraph.knowledgeGraphPresentationContainsNode(esmPreparedGraph, 'n')) {
+        throw new Error('mixed-format presentation membership lookup failed');
+      }
+      const esmViewOverCjsSource = esmGraph.prepareKnowledgeGraphView(
+        cjsPreparedGraph,
+        { nodeKinds: ['model'] },
+      );
+      const cjsViewOverEsmSource = cjsGraph.prepareKnowledgeGraphView(
+        esmPreparedGraph,
+        { nodeKinds: ['model'] },
+      );
+      for (const [view, source, wrongSource] of [
+        [esmViewOverCjsSource, cjsPreparedGraph, esmPreparedGraph],
+        [cjsViewOverEsmSource, esmPreparedGraph, cjsPreparedGraph],
+      ]) {
+        if (!esmGraph.isPreparedKnowledgeGraphView(view) ||
+            !cjsGraph.isPreparedKnowledgeGraphView(view) ||
+            !esmGraph.knowledgeGraphViewContainsNode(view, source, 'n') ||
+            !cjsGraph.knowledgeGraphViewContainsNode(view, source, 'n')) {
+          throw new Error('mixed-format knowledge-graph view handoff failed');
+        }
+        for (const graph of [esmGraph, cjsGraph]) {
+          graph.assertPreparedKnowledgeGraphView(view, source);
+          let wrongSourceRejected = false;
+          try { graph.assertPreparedKnowledgeGraphView(view, wrongSource); } catch {
+            wrongSourceRejected = true;
+          }
+          if (!wrongSourceRejected) {
+            throw new Error('knowledge-graph view was rebound to an equal wrong source');
+          }
+        }
+      }
+      let forgedViewTrapCount = 0;
+      const proxiedView = new Proxy(esmViewOverCjsSource, {
+        get() { forgedViewTrapCount += 1; throw new Error('must not read forged view'); },
+        getPrototypeOf() {
+          forgedViewTrapCount += 1;
+          throw new Error('must not inspect forged view');
+        },
+      });
+      for (const candidate of [{ ...esmViewOverCjsSource }, proxiedView]) {
+        if (esmGraph.isPreparedKnowledgeGraphView(candidate) ||
+            cjsGraph.isPreparedKnowledgeGraphView(candidate)) {
+          throw new Error('knowledge-graph view capability identity was forgeable');
+        }
+      }
+      if (forgedViewTrapCount !== 0) {
+        throw new Error('knowledge-graph view predicate executed candidate traps');
+      }
+      const corpusSpec = esmCore.getExamplePayload('corpus.knowledge_graph');
+      const corpusSpecCjs = cjsCore.getExamplePayload('corpus.knowledge_graph');
+      const esmCorpus = esmGraph.prepareCorpusKnowledgeGraphFigure(corpusSpec, {
+        viewPolicy: { nodeKinds: ['paper'] },
+      });
+      const cjsCorpus = cjsGraph.prepareCorpusKnowledgeGraphFigure(corpusSpecCjs, {
+        viewPolicy: { nodeKinds: ['paper'] },
+      });
+      const esmRawCorpus = esmGraph.prepareCorpusKnowledgeGraphFigureJson(
+        JSON.stringify(corpusSpec),
+        { viewPolicy: { nodeKinds: ['paper'] } },
+      );
+      const cjsRawCorpus = cjsGraph.prepareCorpusKnowledgeGraphFigureJson(
+        JSON.stringify(corpusSpecCjs),
+        { viewPolicy: { nodeKinds: ['paper'] } },
+      );
+      for (const result of [esmCorpus, cjsCorpus, esmRawCorpus, cjsRawCorpus]) {
+        const expectedBackground = result.ok && result.hostPolicy.themeMode === 'light'
+          ? '#f8fafc'
+          : '#030711';
+        const glyphByKind = {
+          paper: 'sphere_outline',
+          model: 'box_shell',
+          family: 'diamond_shell',
+        };
+        const strokeByKind = {
+          cites: 'solid',
+          same_as: 'solid',
+          variant_of: 'long_dash',
+          instantiates: 'short_dash',
+          belongs_to_family: 'dotted',
+        };
+        if (!result.ok || result.caption.length < 1 ||
+            !esmGraph.isPreparedKnowledgeGraphPresentation(result.presentation) ||
+            !cjsGraph.isPreparedKnowledgeGraphPresentation(result.presentation) ||
+            !esmGraph.isPreparedKnowledgeGraphView(result.view) ||
+            !cjsGraph.isPreparedKnowledgeGraphView(result.view) ||
+            result.hostPolicy.presentation !== result.presentation ||
+            result.hostPolicy.view !== result.view ||
+            result.hostPolicy.sourceInputAssurance !== result.sourceInputAssurance ||
+            result.hostPolicy.backgroundColor !== expectedBackground ||
+            result.hostPolicy.liveForceAvailability?.status !== 'available' ||
+            result.hostPolicy.liveForceAvailability.nodeCount !== result.view.nodes.length ||
+            result.hostPolicy.liveForceAvailability.edgeCount !== result.view.edges.length ||
+            !Object.isFrozen(result.hostPolicy.liveForceAvailability) ||
+            !Object.isFrozen(result.hostPolicy.liveForceAvailability.exceeded) ||
+            !result.presentation.nodes.every((node) =>
+              node.nodeGlyph === glyphByKind[node.kind]) ||
+            !result.presentation.edges.every((edge) =>
+              edge.edgeStrokePattern === strokeByKind[edge.kind]) ||
+            !Object.isFrozen(result.hostPolicy)) {
+          throw new Error('packed corpus bind-and-prepare boundary is incoherent');
+        }
+      }
+      const directSurfaceArgs = (presentation) => ({
+        scene: {
+          presentation,
+          selectedId: null,
+          query: '',
+          onSelect() {},
+          hoverId: null,
+          onHover() {},
+        },
+        list: { presentation, selectedId: null, onSelect() {} },
+        legend: { presentation },
+        records: { presentation },
+      });
+      for (const [surface, result] of [
+        [esmInteractiveGraph, esmCorpus],
+        [cjsInteractiveGraph, cjsCorpus],
+      ]) {
+        const args = directSurfaceArgs(result.presentation);
+        for (const [component, props] of [
+          [surface.KnowledgeGraph3DScene, args.scene],
+          [surface.KnowledgeGraphA11yList, args.list],
+          [surface.KnowledgeGraphLegend, args.legend],
+          [surface.KnowledgeGraphStaticRecordView, args.records],
+        ]) {
+          let rejected = false;
+          try { component(props); } catch (error) {
+            rejected = /only generic_visual/.test(String(error?.message));
+          }
+          if (!rejected) {
+            throw new Error('direct packed graph surface accepted a captionless corpus token');
+          }
+        }
+      }
+      if (esmCorpus.sourceInputAssurance.boundary !== 'materialized_javascript_value' ||
+          cjsCorpus.sourceInputAssurance.boundary !== 'materialized_javascript_value' ||
+          esmRawCorpus.sourceInputAssurance.boundary !== 'raw_json_text' ||
+          cjsRawCorpus.sourceInputAssurance.boundary !== 'raw_json_text') {
+        throw new Error('packed corpus input assurance crossed its actual boundary');
+      }
+      const duplicateCorpus = esmGraph.prepareCorpusKnowledgeGraphFigureJson(
+        JSON.stringify(corpusSpec).replace(
+          '{',
+          '{"skill":"corpus.knowledge_graph",',
+        ),
+      );
+      if (duplicateCorpus.ok ||
+          duplicateCorpus.errors?.[0]?.gateCode !== 'JSON_DUPLICATE_KEY') {
+        throw new Error('packed raw corpus boundary admitted a duplicate member');
       }
       const contract = require('cortexel/contract/skills/neuro.spike_raster.v1.json');
       const input = JSON.stringify(contract.examples.valid[0]);
@@ -5162,6 +6739,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       for (const specifier of [
         'cortexel/internal/request-capability',
         'cortexel/dist/internal/request-capability.cjs',
+        'cortexel/internal/knowledge-graph-presentation-capability',
+        'cortexel/dist/internal/knowledge-graph-presentation-capability.cjs',
       ]) {
         let importBlocked = false;
         let requireBlocked = false;
@@ -5178,6 +6757,8 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       for (const specifier of [
         'cortexel/contract/../internal/request-capability.cjs',
         'cortexel/contract/%2e%2e/internal/request-capability.cjs',
+        'cortexel/contract/../internal/knowledge-graph-presentation-capability.cjs',
+        'cortexel/contract/%2e%2e/internal/knowledge-graph-presentation-capability.cjs',
       ]) {
         let importBlocked = false;
         let requireBlocked = false;
@@ -5203,7 +6784,11 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       if (!privateImportBlocked || !privateRequireBlocked) {
         throw new Error('consumer reached Cortexel package-private import mapping');
       }
-      for (const specifier of ['#cortexel-validated-request-brand']) {
+      for (const specifier of [
+        '#cortexel-validated-request-brand',
+        '#cortexel-knowledge-graph-presentation-capability',
+        '#cortexel-knowledge-graph-presentation-brand',
+      ]) {
         let importBlocked = false;
         let requireBlocked = false;
         try { await import(specifier); } catch (error) {
@@ -5219,7 +6804,207 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       }
     `,
   );
-  phaseRun(nodeExecutable, [join(consumer, 'mixed-capability-probe.mjs')], consumer);
+  phaseRun(
+    nodeExecutable,
+    [join(fullConsumer, 'mixed-capability-probe.mjs')],
+    fullConsumer,
+  );
+
+  // Build with the full consumer's exact locked esbuild + visualization peers
+  // during prepare, while the reviewed POSIX supervisor can contain esbuild's
+  // native service. The generated bundle and canonical build receipt are then
+  // sealed with the workspace. Execute imports only that sealed bundle under the
+  // normal child-process/network/write-denying guard; the guard is never weakened.
+  const browserBundleEntrySource = `
+    import * as headless from 'cortexel/knowledge-graph';
+    import * as interactive from 'cortexel/react/knowledge-graph';
+    const input = {
+      contract: headless.KNOWLEDGE_GRAPH_PRESENTATION_INPUT_V1,
+      profile: 'generic_visual',
+      graphIdentity: 'package-smoke:browser-bundle',
+      nodes: [{ id: 'n', label: 'Node', kind: 'model', color: '#fff', radius: 4 }],
+      edges: [],
+    };
+    const token = headless.prepareKnowledgeGraphPresentation(input);
+    if (!interactive.isPreparedKnowledgeGraphPresentation(token)) {
+      throw new Error('browser bundle split knowledge-graph capability identity');
+    }
+    const liveForce = interactive.knowledgeGraphLiveForceAvailability(
+      interactive.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+      interactive.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+    );
+    if (liveForce.status !== 'available' || !Object.isFrozen(liveForce)) {
+      throw new Error('browser bundle omitted the live-force admission boundary');
+    }
+    const view = interactive.prepareKnowledgeGraphView(token, { nodeKinds: ['model'] });
+    headless.assertPreparedKnowledgeGraphView(view, token);
+    const rawRejected = headless.prepareCorpusKnowledgeGraphFigureJson('{}');
+    if (rawRejected.ok || rawRejected.errors[0]?.code !== 'strict_gate_rejected') {
+      throw new Error('browser bundle did not retain the raw corpus JSON boundary');
+    }
+    export const browserBundleCapabilityVerified = true;
+  `;
+  const browserBundleBuilderSource = `
+    import { createHash } from 'node:crypto';
+    import {
+      lstatSync,
+      readFileSync,
+      realpathSync,
+      writeFileSync,
+    } from 'node:fs';
+    import { dirname, join, relative, resolve, sep } from 'node:path';
+    import { build, version as esbuildVersion } from 'esbuild';
+
+    const root = import.meta.dirname;
+    const entryFilename = ${JSON.stringify(BROWSER_BUNDLE_ENTRY_FILENAME)};
+    const bundleFilename = ${JSON.stringify(BROWSER_BUNDLE_OUTPUT_FILENAME)};
+    const receiptFilename = ${JSON.stringify(BROWSER_BUNDLE_RECEIPT_FILENAME)};
+    const expectedVersion = ${JSON.stringify(REVIEWED_ESBUILD_VERSION)};
+    const receiptSchema = ${JSON.stringify(BROWSER_BUNDLE_RECEIPT_SCHEMA)};
+    const expectedPublicInputs = [
+      'node_modules/cortexel/dist/knowledge-graph/index.js',
+      'node_modules/cortexel/dist/react/knowledge-graph.js',
+    ];
+    ${generatedBrowserBundlePatternDeclarations()}
+    const canonicalize = (value) => {
+      if (value === null || typeof value === 'boolean' || typeof value === 'number' ||
+          typeof value === 'string') return JSON.stringify(value);
+      if (Array.isArray(value)) return '[' + value.map(canonicalize).join(',') + ']';
+      const keys = Object.keys(value).sort();
+      return '{' + keys.map((key) => JSON.stringify(key) + ':' + canonicalize(value[key]))
+        .join(',') + '}';
+    };
+    const sha256 = (value) => 'sha256:' + createHash('sha256').update(value).digest('hex');
+    const relativePath = (value) => {
+      const absolute = resolve(root, value);
+      const result = relative(root, absolute).split(sep).join('/');
+      if (result === '' || result === '..' || result.startsWith('../')) {
+        throw new Error('browser-bundle path escaped the full consumer');
+      }
+      return result;
+    };
+
+    if (esbuildVersion !== expectedVersion) {
+      throw new Error('browser bundle used an unreviewed esbuild version');
+    }
+    const result = await build({
+      absWorkingDir: root,
+      entryPoints: [entryFilename],
+      bundle: true,
+      platform: 'browser',
+      format: 'esm',
+      conditions: ['browser', 'import', 'default'],
+      treeShaking: true,
+      write: false,
+      metafile: true,
+      logLevel: 'silent',
+      legalComments: 'none',
+      charset: 'utf8',
+    });
+    if (result.outputFiles.length !== 1) {
+      throw new Error('browser bundle produced an ambiguous output set');
+    }
+    const inputPaths = new Set(Object.keys(result.metafile.inputs).map(relativePath));
+    for (const expected of expectedPublicInputs) {
+      if (!inputPaths.has(expected)) {
+        throw new Error('browser bundle omitted reviewed public input ' + expected);
+      }
+    }
+    const outputs = Object.values(result.metafile.outputs);
+    if (outputs.length !== 1) throw new Error('browser bundle metafile output is ambiguous');
+    const outputInputs = new Map(Object.entries(outputs[0].inputs).map(
+      ([path, value]) => [relativePath(path), value],
+    ));
+    const packageRoot = realpathSync(join(root, 'node_modules', 'cortexel'));
+    const warnings = result.warnings.map((warning) => {
+      if (warning.id !== 'ignored-bare-import' || warning.location == null) {
+        throw new Error('browser bundle emitted an unreviewed warning');
+      }
+      const source = relativePath(warning.location.file);
+      if (!expectedPublicInputs.includes(source)) {
+        throw new Error('ignored bare import came from an unreviewed source');
+      }
+      const match = reviewedBareChunkImport.exec(warning.location.lineText);
+      if (match == null) throw new Error('ignored bare import has an unreviewed spelling');
+      const target = relativePath(join(dirname(source), match[1]));
+      if (!reviewedInstalledChunkPath.test(target)) {
+        throw new Error('ignored bare import targets an unreviewed path');
+      }
+      const targetPath = resolve(root, target);
+      const targetStats = lstatSync(targetPath);
+      const targetReal = realpathSync(targetPath);
+      if (!targetStats.isFile() || targetStats.isSymbolicLink() || targetStats.nlink !== 1 ||
+          !targetReal.startsWith(packageRoot + sep)) {
+        throw new Error('ignored bare import lacks installed-package file authority');
+      }
+      const bytesInOutput = outputInputs.get(target)?.bytesInOutput;
+      if (!Number.isSafeInteger(bytesInOutput) || bytesInOutput < 1) {
+        throw new Error('ignored bare target is not independently retained in the bundle');
+      }
+      return {
+        id: warning.id,
+        source,
+        line: warning.location.line,
+        lineText: warning.location.lineText,
+        target,
+        bytesInOutput,
+      };
+    }).sort((left, right) => {
+      const a = canonicalize(left);
+      const b = canonicalize(right);
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    const warningKeys = warnings.map((warning) => canonicalize([
+      warning.source,
+      warning.line,
+      warning.lineText,
+      warning.target,
+    ]));
+    if (new Set(warningKeys).size !== warningKeys.length) {
+      throw new Error('browser bundle emitted duplicate warnings');
+    }
+    const bundle = Buffer.from(result.outputFiles[0].contents);
+    const bundleText = bundle.toString('utf8');
+    if (bundleText.includes('#cortexel-knowledge-graph-presentation-capability')) {
+      throw new Error('browser bundle retained an unresolved private capability specifier');
+    }
+    const entrySource = readFileSync(join(root, entryFilename));
+    const receipt = {
+      schema: receiptSchema,
+      esbuildVersion,
+      entrySourceSha256: sha256(entrySource),
+      bundleSha256: sha256(bundle),
+      bundleBytes: bundle.byteLength,
+      publicInputs: expectedPublicInputs,
+      warnings,
+    };
+    writeFileSync(join(root, bundleFilename), bundle, { flag: 'wx', mode: 0o644 });
+    writeFileSync(
+      join(root, receiptFilename),
+      canonicalize(receipt) + '\\n',
+      { encoding: 'utf8', flag: 'wx', mode: 0o644 },
+    );
+  `;
+  const browserEntryPath = join(fullConsumer, BROWSER_BUNDLE_ENTRY_FILENAME);
+  const browserBuilderPath = join(fullConsumer, BROWSER_BUNDLE_BUILDER_FILENAME);
+  const browserOutputPath = join(fullConsumer, BROWSER_BUNDLE_OUTPUT_FILENAME);
+  phaseWriteFile(browserEntryPath, browserBundleEntrySource);
+  phaseWriteFile(browserBuilderPath, browserBundleBuilderSource);
+  if (phase === 'prepare') {
+    run(
+      nodeExecutable,
+      [browserBuilderPath],
+      fullConsumer,
+      PACKAGE_SMOKE_COMMAND_POLICIES.browserBundle,
+    );
+  }
+  assertPreparedBrowserBundle({
+    consumer: fullConsumer,
+    entrySource: browserBundleEntrySource,
+    packedPaths,
+    permissionPhase: phase === 'prepare' ? 'prepared-writable' : 'finalized-read-only',
+  });
+  phaseRun(nodeExecutable, [browserOutputPath], fullConsumer);
 
   // Resolve the package from the probe module, then execute it from a directory with
   // no package.json, node_modules, or contract tree. Validation must locate schemas
@@ -5288,22 +7073,58 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
     );
     authoringFixturePaths.set(skillId, authoringPath);
   }
+  const sourceAdapterExample =
+    SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example;
+  const sourceAdapterCliExamplePath = join(
+    unrelated,
+    'source-example-nest-spike-recorder.json',
+  );
+  phaseWriteFile(
+    sourceAdapterCliExamplePath,
+    `${canonicalize(sourceAdapterExample)}\n`,
+  );
+  const guardedSourceAdapterInputPath = join(
+    unrelated,
+    'source-example-guarded-input-nest-spike-recorder.json',
+  );
+  phaseWriteFile(
+    guardedSourceAdapterInputPath,
+    `${canonicalize(sourceAdapterExample.inputTemplate)}\n`,
+  );
+
+  const callerCaptureTemplate = structuredClone(sourceAdapterExample.inputTemplate);
+  const callerCaptureOptions = {
+    ...callerCaptureTemplate.options,
+  } as Record<string, unknown>;
+  // This package-smoke fixture explicitly models the post-replacement caller
+  // boundary. The shipped outer envelope and guarded nested input are exercised
+  // separately as negative controls; no installed-package path strips this marker.
+  delete callerCaptureOptions[SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER];
+  callerCaptureOptions.captureAuthority = {
+    ...(callerCaptureOptions.captureAuthority as Record<string, unknown>),
+    kind: 'caller_declaration',
+  };
+  const sourceAdapterCallerCapture = {
+    exportedStatus: callerCaptureTemplate.exportedStatus,
+    options: callerCaptureOptions,
+  } as unknown as {
+    readonly exportedStatus: Parameters<typeof sourceNestSpikeRecorderToRaster>[0];
+    readonly options: Parameters<typeof sourceNestSpikeRecorderToRaster>[1];
+  };
   const sourceAdapterFixturePath = join(
     unrelated,
-    'source-adapter-nest-spike-recorder.json',
+    'source-adapter-test-owned-nest-spike-recorder.json',
   );
   phaseWriteFile(
     sourceAdapterFixturePath,
-    `${canonicalize(SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example)}\n`,
+    `${canonicalize(sourceAdapterCallerCapture)}\n`,
   );
-  const sourceAdapterExample =
-    SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'].example;
   const sourceAdapted = sourceNestSpikeRecorderToRaster(
-    sourceAdapterExample.exportedStatus,
-    sourceAdapterExample.options,
+    sourceAdapterCallerCapture.exportedStatus,
+    sourceAdapterCallerCapture.options,
   );
   if (!sourceAdapted.ok) {
-    fail('source adapter rejected the source-catalog example before package execution');
+    fail('source adapter rejected the explicit test-owned caller capture before package execution');
   }
   const sourceAdaptedValidation = validateSourceRequestValue(sourceAdapted.request);
   if (!sourceAdaptedValidation.ok) {
@@ -5397,6 +7218,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       cliSourceCatalog.protocolVersion !== 1 ||
       typeof cliSourceCatalog.sourceAdapterCatalogDigest !== 'string' ||
       typeof cliSourceCatalog.sourceAdapterCatalogDigestDomain !== 'string' ||
+      !isRecord(cliSourceCatalog.sourceAdapterCatalogDigestPreimage) ||
       !Array.isArray(cliSourceCatalog.adapters) ||
       cliSourceCatalog.adapters.length !== 1 ||
       !isRecord(cliSourceCatalog.adapters[0]) ||
@@ -5406,10 +7228,20 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       throw new Error('packed CLI source catalog protocol is malformed');
     }
     if (
-      sha256(canonicalize({
-        domain: cliSourceCatalog.sourceAdapterCatalogDigestDomain,
-        catalog: SOURCE_ADAPTER_CATALOG,
-      })) !== cliSourceCatalog.sourceAdapterCatalogDigest
+      canonicalize(cliSourceCatalog.sourceAdapterCatalogDigestPreimage) !==
+        canonicalize(SOURCE_ADAPTER_CATALOG_DIGEST_PREIMAGE) ||
+      canonicalize(cliSourceCatalog.adapters) !==
+        canonicalize(SOURCE_ADAPTER_DISCOVERY_CATALOG.adapters) ||
+      cliSourceCatalog.sourceAdapterCatalogDigestPreimage.domain !==
+        cliSourceCatalog.sourceAdapterCatalogDigestDomain ||
+      canonicalize(cliSourceCatalog.sourceAdapterCatalogDigestPreimage.catalog) !==
+        canonicalize({
+          protocol: 'cortexel-source-adapter-discovery-catalog',
+          protocolVersion: 1,
+          adapters: cliSourceCatalog.adapters,
+        }) ||
+      sha256(canonicalize(cliSourceCatalog.sourceAdapterCatalogDigestPreimage)) !==
+        cliSourceCatalog.sourceAdapterCatalogDigest
     ) {
       throw new Error('packed CLI source discovery bytes do not reproduce its digest');
     }
@@ -5429,10 +7261,75 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       !isRecord(sourceDescription) ||
       sourceDescription.protocol !== 'cortexel-cli-source-describe' ||
       sourceDescription.protocolVersion !== 1 ||
+      sourceDescription.sourceAdapterDescriptorDigestDomain !==
+        SOURCE_ADAPTER_DESCRIPTOR_DIGEST_DOMAIN ||
+      sourceDescription.sourceAdapterDescriptorDigest !==
+        SOURCE_ADAPTER_DESCRIPTOR_DIGESTS['nest-spike-recorder'] ||
       canonicalize(sourceDescription.adapter) !==
-        canonicalize(SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder'])
+        canonicalize(SOURCE_ADAPTER_CATALOG.adapters['nest-spike-recorder']) ||
+      sha256(canonicalize({
+        domain: sourceDescription.sourceAdapterDescriptorDigestDomain,
+        descriptor: sourceDescription.adapter,
+      })) !== sourceDescription.sourceAdapterDescriptorDigest
     ) {
       throw new Error('packed CLI source description differs from prepared source');
+    }
+    const sourceExampleResult = runInstalledCli([
+      'source',
+      'example',
+      'nest-spike-recorder',
+    ]);
+    if (sourceExampleResult.status !== 0 || sourceExampleResult.stderr !== '') {
+      throw new Error('packed CLI source example command failed');
+    }
+    parseAndAssertExactJsonValue(
+      sourceExampleResult.stdout,
+      'installed CLI source example',
+      sourceAdapterExample,
+    );
+    // Deterministic stdout is a separate property from the descriptor-bound JSON
+    // value: compare two packed invocations, never pretty JSON against JCS bytes.
+    const repeatedSourceExampleResult = runInstalledCli([
+      'source',
+      'example',
+      'nest-spike-recorder',
+    ]);
+    if (
+      repeatedSourceExampleResult.status !== sourceExampleResult.status ||
+      repeatedSourceExampleResult.stdout !== sourceExampleResult.stdout ||
+      repeatedSourceExampleResult.stderr !== sourceExampleResult.stderr
+    ) {
+      throw new Error('packed CLI source example output is not deterministic');
+    }
+    const guardedSourceAdapt = runInstalledCli([
+      'source',
+      'adapt',
+      'nest-spike-recorder',
+      sourceAdapterCliExamplePath,
+      '--format',
+      'json',
+    ]);
+    if (
+      guardedSourceAdapt.status !== 5 ||
+      guardedSourceAdapt.stdout !== '' ||
+      !guardedSourceAdapt.stderr.includes('not simulator output')
+    ) {
+      throw new Error('packed CLI admitted its unchanged synthetic source example');
+    }
+    const guardedInputAdapt = runInstalledCli([
+      'source',
+      'adapt',
+      'nest-spike-recorder',
+      guardedSourceAdapterInputPath,
+      '--format',
+      'json',
+    ]);
+    if (
+      guardedInputAdapt.status !== 5 ||
+      guardedInputAdapt.stdout !== '' ||
+      !guardedInputAdapt.stderr.includes(SOURCE_ADAPTER_EXAMPLE_GUARD_MEMBER)
+    ) {
+      throw new Error('packed CLI admitted the extracted guarded synthetic input');
     }
     const sourceAdaptResult = runInstalledCli([
       'source',
@@ -5443,7 +7340,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       'json',
     ]);
     if (sourceAdaptResult.status !== 0 || sourceAdaptResult.stderr !== '') {
-      throw new Error('packed CLI source adapter rejected its copyable example');
+      throw new Error('packed CLI source adapter rejected the explicit test-owned caller capture');
     }
     const adaptedRequest = strictJson(
       sourceAdaptResult.stdout,
@@ -5753,22 +7650,76 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         ? `
             const react = await import('cortexel/react');
             const graph = await import('cortexel/react/knowledge-graph');
+            const headlessGraph = await import('cortexel/knowledge-graph');
+            const liveLimit = graph.knowledgeGraphLiveForceAvailability(
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+            );
+            const liveOverLimit = graph.knowledgeGraphLiveForceAvailability(
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES + 1,
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES + 1,
+            );
             if (typeof react.VizSpecRenderer !== 'function' ||
                 typeof react.PopulationA11yList !== 'function' ||
                 typeof react.NeuronA11yPager !== 'function' ||
                 typeof graph.KnowledgeGraph3DScene !== 'function' ||
-                typeof graph.KnowledgeGraphLegend !== 'function') {
+                typeof graph.KnowledgeGraphLegend !== 'function' ||
+                typeof graph.KnowledgeGraphAccessibleFigure !== 'function' ||
+                typeof graph.knowledgeGraphLiveForceAvailability !== 'function' ||
+                graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES !== 250 ||
+                graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES !== 1000 ||
+                liveLimit.status !== 'available' ||
+                liveLimit.exceeded.length !== 0 ||
+                liveOverLimit.status !== 'unavailable_resource_limit' ||
+                liveOverLimit.exceeded.join(',') !== 'nodes,edges' ||
+                !Object.isFrozen(liveLimit) || !Object.isFrozen(liveLimit.exceeded) ||
+                !Object.isFrozen(liveOverLimit) || !Object.isFrozen(liveOverLimit.exceeded) ||
+                typeof headlessGraph.prepareCorpusKnowledgeGraphFigure !== 'function' ||
+                typeof headlessGraph.prepareCorpusKnowledgeGraphFigureJson !== 'function' ||
+                typeof headlessGraph.prepareKnowledgeGraphView !== 'function' ||
+                typeof headlessGraph.serializePreparedKnowledgeGraphPresentation !== 'function' ||
+                graph.prepareKnowledgeGraphPresentation !==
+                  headlessGraph.prepareKnowledgeGraphPresentation ||
+                graph.isPreparedKnowledgeGraphPresentation !==
+                  headlessGraph.isPreparedKnowledgeGraphPresentation) {
               throw new Error('ESM React exports are incomplete');
             }
           `
         : `
             const react = require('cortexel/react');
             const graph = require('cortexel/react/knowledge-graph');
+            const headlessGraph = require('cortexel/knowledge-graph');
+            const liveLimit = graph.knowledgeGraphLiveForceAvailability(
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+            );
+            const liveOverLimit = graph.knowledgeGraphLiveForceAvailability(
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES + 1,
+              graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES + 1,
+            );
             if (typeof react.VizSpecRenderer !== 'function' ||
                 typeof react.PopulationA11yList !== 'function' ||
                 typeof react.NeuronA11yPager !== 'function' ||
                 typeof graph.KnowledgeGraph3DScene !== 'function' ||
-                typeof graph.KnowledgeGraphLegend !== 'function') {
+                typeof graph.KnowledgeGraphLegend !== 'function' ||
+                typeof graph.KnowledgeGraphAccessibleFigure !== 'function' ||
+                typeof graph.knowledgeGraphLiveForceAvailability !== 'function' ||
+                graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES !== 250 ||
+                graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES !== 1000 ||
+                liveLimit.status !== 'available' ||
+                liveLimit.exceeded.length !== 0 ||
+                liveOverLimit.status !== 'unavailable_resource_limit' ||
+                liveOverLimit.exceeded.join(',') !== 'nodes,edges' ||
+                !Object.isFrozen(liveLimit) || !Object.isFrozen(liveLimit.exceeded) ||
+                !Object.isFrozen(liveOverLimit) || !Object.isFrozen(liveOverLimit.exceeded) ||
+                typeof headlessGraph.prepareCorpusKnowledgeGraphFigure !== 'function' ||
+                typeof headlessGraph.prepareCorpusKnowledgeGraphFigureJson !== 'function' ||
+                typeof headlessGraph.prepareKnowledgeGraphView !== 'function' ||
+                typeof headlessGraph.serializePreparedKnowledgeGraphPresentation !== 'function' ||
+                graph.prepareKnowledgeGraphPresentation !==
+                  headlessGraph.prepareKnowledgeGraphPresentation ||
+                graph.isPreparedKnowledgeGraphPresentation !==
+                  headlessGraph.isPreparedKnowledgeGraphPresentation) {
               throw new Error('CJS React exports are incomplete');
             }
           `;
@@ -5784,6 +7735,74 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
   // Prove the published conditional declarations work in a real consumer, not
   // only under Cortexel's source tsconfig. .ts selects import types; .cts selects
   // require types under NodeNext.
+  phaseWriteFile(
+    join(consumer, 'documented-knowledge-graph-example.tsx'),
+    `
+      import { useState } from 'react';
+      import { Canvas } from '@react-three/fiber';
+      import {
+        prepareCorpusKnowledgeGraphFigureJson,
+        serializePreparedKnowledgeGraphPresentation,
+      } from 'cortexel/knowledge-graph';
+      import { KnowledgeGraphAccessibleFigure } from
+        'cortexel/react/knowledge-graph';
+
+      export function prepareCorpusGraphJson(text: string) {
+        const result = prepareCorpusKnowledgeGraphFigureJson(text);
+        if (!result.ok) return result;
+        return {
+          caption: result.caption,
+          sourceInputAssurance: result.sourceInputAssurance,
+          presentationRecord: serializePreparedKnowledgeGraphPresentation(
+            result.presentation,
+          ),
+        };
+      }
+
+      export function CorpusGraphFigure({ spec }: { spec: unknown }) {
+        const [selectedId, setSelectedId] = useState<string | null>(null);
+        const [hoverId, setHoverId] = useState<string | null>(null);
+        return (
+          <KnowledgeGraphAccessibleFigure
+            spec={spec}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            hoverId={hoverId}
+            onHover={setHoverId}
+            renderVisual={(scene, hostPolicy) => (
+              <div
+                data-theme={hostPolicy.themeMode}
+                style={{ height: 640, background: hostPolicy.backgroundColor }}
+              >
+                <Canvas
+                  frameloop="demand"
+                  camera={{ position: [0, 0, 260], fov: 50, near: 0.1, far: 10_000 }}
+                >
+                  <color attach="background" args={[hostPolicy.backgroundColor]} />
+                  {scene}
+                </Canvas>
+              </div>
+            )}
+          />
+        );
+      }
+
+      export function CorpusGraphJsonFigure({ text }: { text: string }) {
+        const [selectedId, setSelectedId] = useState<string | null>(null);
+        const [hoverId, setHoverId] = useState<string | null>(null);
+        return (
+          <KnowledgeGraphAccessibleFigure
+            specJson={text}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            hoverId={hoverId}
+            onHover={setHoverId}
+            renderVisual={(scene) => <Canvas frameloop="demand">{scene}</Canvas>}
+          />
+        );
+      }
+    `,
+  );
   phaseWriteFile(
     join(consumer, 'tsconfig.json'),
     JSON.stringify({
@@ -5804,6 +7823,11 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         'brand-consumer.cts',
         'brand-producer.cts',
         'brand-consumer.mts',
+        'graph-brand-producer.mts',
+        'graph-brand-consumer.cts',
+        'graph-brand-producer.cts',
+        'graph-brand-consumer.mts',
+        'documented-knowledge-graph-example.tsx',
       ],
     }),
   );
@@ -5822,12 +7846,18 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       } from 'cortexel/figure';
       import {
         AUTHORING_SCHEMA_COMPILATION_PROFILE_V1,
+        CAPABILITY_CATALOG as AUTHORING_CAPABILITY_CATALOG,
+        CAPABILITY_IDS as AUTHORING_CAPABILITY_IDS,
         CATALOG_DIGEST as AUTHORING_CATALOG_DIGEST,
+        isCapabilityId as isAuthoringCapabilityId,
+        lookupCapabilityCatalogEntry as lookupAuthoringCapabilityCatalogEntry,
         lookupSkillCatalogEntry as lookupAuthoringSkillCatalogEntry,
         SKILL_AUTHORING,
         SKILL_CATALOG as AUTHORING_SKILL_CATALOG,
         STABLE_CATALOG_SCHEMA_RESOURCES,
         STABLE_SKILL_IDS as AUTHORING_STABLE_SKILL_IDS,
+        type CapabilityCatalogEntry,
+        type CapabilityId,
         type SkillAuthoringEntry,
         type SkillCatalogEntry,
         type StableSkillId,
@@ -5877,10 +7907,17 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         type RenderSceneArgs,
       } from 'cortexel/react';
       import {
+        MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+        MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
         KnowledgeGraph3DScene,
         KnowledgeGraphA11yList,
+        KnowledgeGraphAccessibleFigure,
         KnowledgeGraphLegend,
+        KnowledgeGraphStaticRecordView,
+        knowledgeGraphLiveForceAvailability,
+        type KnowledgeGraphLiveForceAvailabilityV1,
       } from 'cortexel/react/knowledge-graph';
+      import * as headlessGraph from 'cortexel/knowledge-graph';
       import {
         ReferenceVizSpecFigure,
         aggregateDegreeBins,
@@ -5915,10 +7952,49 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       const authoringEntry: SkillAuthoringEntry = SKILL_AUTHORING[authoringSkillId];
       const authoringCatalogEntry: SkillCatalogEntry =
         AUTHORING_SKILL_CATALOG[authoringSkillId];
+      const capabilityId: CapabilityId = 'cortexel/authoring';
+      const capabilityEntry: CapabilityCatalogEntry =
+        AUTHORING_CAPABILITY_CATALOG[capabilityId];
+      const unknownCapabilityEntry: CapabilityCatalogEntry | undefined =
+        lookupAuthoringCapabilityCatalogEntry('not.a.capability');
+      declare const untrustedCapabilityId: string;
+      if (isAuthoringCapabilityId(untrustedCapabilityId)) {
+        const narrowedCapabilityId: CapabilityId = untrustedCapabilityId;
+        void AUTHORING_CAPABILITY_CATALOG[narrowedCapabilityId];
+      }
       const figureResult = {} as FigureResult;
       const figureFailure = {} as FigureFailure;
       const nestExport = {} as NestSpikeExport;
       const nestOptions = {} as NestSpikeOptions;
+      type AccessibleGraphProps = Parameters<typeof KnowledgeGraphAccessibleFigure>[0];
+      type AccessibleGraphHostContext = Parameters<
+        AccessibleGraphProps['renderVisual']
+      >[1];
+      const accessibleGraphContext = {} as AccessibleGraphHostContext;
+      const liveForceAvailability: KnowledgeGraphLiveForceAvailabilityV1 =
+        knowledgeGraphLiveForceAvailability(
+          MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+          MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+        );
+      type PreparedGraph = ReturnType<
+        typeof headlessGraph.prepareKnowledgeGraphPresentation
+      >;
+      type PublicPreparedGraph = Pick<PreparedGraph, Extract<keyof PreparedGraph, string>>;
+      declare const structuralPreparedGraph: PublicPreparedGraph;
+      // @ts-expect-error a complete structural graph record lacks the private nominal brand
+      const forgedPreparedGraph: PreparedGraph = structuralPreparedGraph;
+      type PreparedGraphView = ReturnType<typeof headlessGraph.prepareKnowledgeGraphView>;
+      type PublicPreparedGraphView = Pick<
+        PreparedGraphView,
+        Extract<keyof PreparedGraphView, string>
+      >;
+      declare const structuralPreparedGraphView: PublicPreparedGraphView;
+      // @ts-expect-error a complete structural view record lacks the private nominal brand
+      const forgedPreparedGraphView: PreparedGraphView = structuralPreparedGraphView;
+      // @ts-expect-error the canonical figure derives presentation from spec
+      type ForbiddenIndependentPresentationProp = AccessibleGraphProps['presentation'];
+      // @ts-expect-error the canonical figure derives its bound caption from spec
+      type ForbiddenIndependentCaptionProp = AccessibleGraphProps['honestyCaption'];
       // @ts-expect-error the raw serializer is intentionally compiler-internal
       void renderSvgSurface.renderSvg;
       // @ts-expect-error resource accounting is intentionally compiler-internal
@@ -5961,10 +8037,19 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenDeepRenderModule = typeof import('cortexel/dist/render-svg/index.js');
       // @ts-expect-error the shared capability registry is package-private
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
+      type ForbiddenGraphCapabilityModule =
+        // @ts-expect-error the graph capability registry is package-private
+        typeof import('cortexel/internal/knowledge-graph-presentation-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      type ForbiddenGraphPrivateImport =
+        // @ts-expect-error graph package imports do not leak into the consumer package scope
+        typeof import('#cortexel-knowledge-graph-presentation-capability');
       // @ts-expect-error the package-private nominal brand is not a consumer import
       type ForbiddenNominalBrandImport = typeof import('#cortexel-validated-request-brand');
+      type ForbiddenGraphNominalBrandImport =
+        // @ts-expect-error the graph nominal brand is package-private
+        typeof import('#cortexel-knowledge-graph-presentation-brand');
       // @ts-expect-error unknown stable skill ids are rejected by the authoring map
       void SKILL_AUTHORING['not.a.skill'];
       const unknownCatalogEntry: SkillCatalogEntry | undefined =
@@ -5974,6 +8059,11 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         lookupAuthoringSkillCatalogEntry('not.a.skill');
       // @ts-expect-error unknown literals are not keys of the finite catalog
       void AUTHORING_SKILL_CATALOG['not.a.skill'];
+      // @ts-expect-error unknown literals are not keys of the finite capability catalog
+      void AUTHORING_CAPABILITY_CATALOG['not.a.capability'];
+      // @ts-expect-error an untrusted capability lookup cannot be assumed present
+      const requiredUnknownCapabilityEntry: CapabilityCatalogEntry =
+        lookupAuthoringCapabilityCatalogEntry('not.a.capability');
       void [
         authored,
         safeRepairOutcome,
@@ -5989,11 +8079,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         validatedRequest,
         AUTHORING_CATALOG_DIGEST,
         AUTHORING_SCHEMA_COMPILATION_PROFILE_V1.options.strictRequired,
+        AUTHORING_CAPABILITY_IDS,
         AUTHORING_STABLE_SKILL_IDS,
         STABLE_CATALOG_SCHEMA_RESOURCES,
         authoringEntry.requestSchema,
         authoringEntry.authoringExample,
         authoringCatalogEntry.id,
+        capabilityEntry.id,
+        unknownCapabilityEntry,
+        requiredUnknownCapabilityEntry,
         unknownCatalogEntry,
         requiredUnknownCatalogEntry,
         figureResult,
@@ -6035,7 +8129,19 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         equalAspectDomains,
         KnowledgeGraph3DScene,
         KnowledgeGraphA11yList,
+        KnowledgeGraphAccessibleFigure,
         KnowledgeGraphLegend,
+        KnowledgeGraphStaticRecordView,
+        liveForceAvailability.status,
+        headlessGraph.prepareKnowledgeGraphPresentation,
+        headlessGraph.prepareCorpusKnowledgeGraphFigure,
+        headlessGraph.prepareCorpusKnowledgeGraphFigureJson,
+        headlessGraph.prepareKnowledgeGraphView,
+        headlessGraph.serializePreparedKnowledgeGraphPresentation,
+        accessibleGraphContext.view,
+        accessibleGraphContext.sourceInputAssurance.boundary,
+        forgedPreparedGraph,
+        forgedPreparedGraphView,
       ];
     `,
   );
@@ -6051,6 +8157,7 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       import react = require('cortexel/react');
       import charts = require('cortexel/react/charts');
       import graph = require('cortexel/react/knowledge-graph');
+      import headlessGraph = require('cortexel/knowledge-graph');
       const build: typeof cortexel.buildVizSpec = core.buildVizSpec;
       const graphOptions = {} as core.ConnectionGraphOptions;
       const delayOptions = {} as core.DelayDistributionOptions;
@@ -6065,10 +8172,47 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         authoring.SKILL_AUTHORING[authoringSkillId];
       const authoringCatalogEntry: authoring.SkillCatalogEntry =
         authoring.SKILL_CATALOG[authoringSkillId];
+      const capabilityId: authoring.CapabilityId = 'cortexel/authoring';
+      const capabilityEntry: authoring.CapabilityCatalogEntry =
+        authoring.CAPABILITY_CATALOG[capabilityId];
+      const unknownCapabilityEntry: authoring.CapabilityCatalogEntry | undefined =
+        authoring.lookupCapabilityCatalogEntry('not.a.capability');
+      declare const untrustedCapabilityId: string;
+      if (authoring.isCapabilityId(untrustedCapabilityId)) {
+        const narrowedCapabilityId: authoring.CapabilityId = untrustedCapabilityId;
+        void authoring.CAPABILITY_CATALOG[narrowedCapabilityId];
+      }
       const figureResult = {} as renderSvg.FigureResult;
       const figureFailure = {} as renderSvg.FigureFailure;
       const nestExport = {} as nestAdapter.NestSpikeExport;
       const nestOptions = {} as nestAdapter.NestSpikeOptions;
+      type AccessibleGraphProps = Parameters<typeof graph.KnowledgeGraphAccessibleFigure>[0];
+      type AccessibleGraphHostContext = Parameters<
+        AccessibleGraphProps['renderVisual']
+      >[1];
+      const accessibleGraphContext = {} as AccessibleGraphHostContext;
+      const liveForceAvailability: graph.KnowledgeGraphLiveForceAvailabilityV1 =
+        graph.knowledgeGraphLiveForceAvailability(
+          graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_NODES,
+          graph.MAX_KNOWLEDGE_GRAPH_LIVE_FORCE_EDGES,
+        );
+      type PreparedGraph = ReturnType<typeof headlessGraph.prepareKnowledgeGraphPresentation>;
+      type PublicPreparedGraph = Pick<PreparedGraph, Extract<keyof PreparedGraph, string>>;
+      declare const structuralPreparedGraph: PublicPreparedGraph;
+      // @ts-expect-error a complete structural graph record lacks the private nominal brand
+      const forgedPreparedGraph: PreparedGraph = structuralPreparedGraph;
+      type PreparedGraphView = ReturnType<typeof headlessGraph.prepareKnowledgeGraphView>;
+      type PublicPreparedGraphView = Pick<
+        PreparedGraphView,
+        Extract<keyof PreparedGraphView, string>
+      >;
+      declare const structuralPreparedGraphView: PublicPreparedGraphView;
+      // @ts-expect-error a complete structural view record lacks the private nominal brand
+      const forgedPreparedGraphView: PreparedGraphView = structuralPreparedGraphView;
+      // @ts-expect-error the canonical figure derives presentation from spec
+      type ForbiddenIndependentPresentationProp = AccessibleGraphProps['presentation'];
+      // @ts-expect-error the canonical figure derives its bound caption from spec
+      type ForbiddenIndependentCaptionProp = AccessibleGraphProps['honestyCaption'];
       const checkedRequest = figure.parseAndValidateRequest('{}');
       if (checkedRequest.ok) renderSvg.buildFigureFromValidated(checkedRequest.request);
       const safeRepairOutcome: figure.SafeRepairOutcome = figure.applySafeRepairs('{}');
@@ -6115,10 +8259,19 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       type ForbiddenDeepRenderModule = typeof import('cortexel/dist/render-svg/index.cjs');
       // @ts-expect-error the shared capability registry is package-private
       type ForbiddenCapabilityModule = typeof import('cortexel/internal/request-capability');
+      type ForbiddenGraphCapabilityModule =
+        // @ts-expect-error the graph capability registry is package-private
+        typeof import('cortexel/internal/knowledge-graph-presentation-capability');
       // @ts-expect-error package imports do not leak into the consumer package scope
       type ForbiddenPrivateImport = typeof import('#cortexel-request-capability');
+      type ForbiddenGraphPrivateImport =
+        // @ts-expect-error graph package imports do not leak into the consumer package scope
+        typeof import('#cortexel-knowledge-graph-presentation-capability');
       // @ts-expect-error the package-private nominal brand is not a consumer import
       type ForbiddenNominalBrandImport = typeof import('#cortexel-validated-request-brand');
+      type ForbiddenGraphNominalBrandImport =
+        // @ts-expect-error the graph nominal brand is package-private
+        typeof import('#cortexel-knowledge-graph-presentation-brand');
       // @ts-expect-error unknown stable skill ids are rejected by the authoring map
       void authoring.SKILL_AUTHORING['not.a.skill'];
       const unknownCatalogEntry: authoring.SkillCatalogEntry | undefined =
@@ -6128,6 +8281,11 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         authoring.lookupSkillCatalogEntry('not.a.skill');
       // @ts-expect-error unknown literals are not keys of the finite catalog
       void authoring.SKILL_CATALOG['not.a.skill'];
+      // @ts-expect-error unknown literals are not keys of the finite capability catalog
+      void authoring.CAPABILITY_CATALOG['not.a.capability'];
+      // @ts-expect-error an untrusted capability lookup cannot be assumed present
+      const requiredUnknownCapabilityEntry: authoring.CapabilityCatalogEntry =
+        authoring.lookupCapabilityCatalogEntry('not.a.capability');
       void [
         build,
         safeRepairOutcome,
@@ -6143,11 +8301,15 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         validatedRequest,
         authoring.CATALOG_DIGEST,
         authoring.AUTHORING_SCHEMA_COMPILATION_PROFILE_V1.options.strictRequired,
+        authoring.CAPABILITY_IDS,
         authoring.STABLE_SKILL_IDS,
         authoring.STABLE_CATALOG_SCHEMA_RESOURCES,
         authoringEntry.requestSchema,
         authoringEntry.authoringExample,
         authoringCatalogEntry.id,
+        capabilityEntry.id,
+        unknownCapabilityEntry,
+        requiredUnknownCapabilityEntry,
         unknownCatalogEntry,
         requiredUnknownCatalogEntry,
         figureResult,
@@ -6184,7 +8346,19 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
         charts.aggregateUniformHistogramBins,
         charts.equalAspectDomains,
         graph.KnowledgeGraph3DScene,
+        graph.KnowledgeGraphAccessibleFigure,
         graph.KnowledgeGraphLegend,
+        graph.KnowledgeGraphStaticRecordView,
+        liveForceAvailability.status,
+        headlessGraph.prepareKnowledgeGraphPresentation,
+        headlessGraph.prepareCorpusKnowledgeGraphFigure,
+        headlessGraph.prepareCorpusKnowledgeGraphFigureJson,
+        headlessGraph.prepareKnowledgeGraphView,
+        headlessGraph.serializePreparedKnowledgeGraphPresentation,
+        accessibleGraphContext.view,
+        accessibleGraphContext.sourceInputAssurance.boundary,
+        forgedPreparedGraph,
+        forgedPreparedGraphView,
       ];
     `,
   );
@@ -6220,6 +8394,66 @@ function runPackageSmokeBody(phase: SmokePhase, context: PackageSmokeContext): s
       import type { CjsRepairedRequest } from './brand-producer.cjs';
       declare const request: CjsRepairedRequest;
       buildFigureFromValidated(request);
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'graph-brand-producer.mts'),
+    `
+      import {
+        prepareKnowledgeGraphPresentation,
+        prepareKnowledgeGraphView,
+      } from
+        'cortexel/knowledge-graph';
+      export type EsmPreparedGraph =
+        ReturnType<typeof prepareKnowledgeGraphPresentation>;
+      export type EsmPreparedGraphView =
+        ReturnType<typeof prepareKnowledgeGraphView>;
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'graph-brand-consumer.cts'),
+    `
+      import graph = require('cortexel/react/knowledge-graph');
+      import type {
+        EsmPreparedGraph,
+        EsmPreparedGraphView,
+      } from './graph-brand-producer.mjs';
+      declare const presentation: EsmPreparedGraph;
+      type CjsPresentation =
+        Parameters<typeof graph.KnowledgeGraphStaticRecordView>[0]['presentation'];
+      const accepted: CjsPresentation = presentation;
+      declare const view: EsmPreparedGraphView;
+      type CjsView = NonNullable<
+        Parameters<typeof graph.KnowledgeGraphStaticRecordView>[0]['view']
+      >;
+      const acceptedView: CjsView = view;
+      void [accepted, acceptedView];
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'graph-brand-producer.cts'),
+    `
+      import graph = require('cortexel/knowledge-graph');
+      export type CjsPreparedGraph =
+        ReturnType<typeof graph.prepareKnowledgeGraphPresentation>;
+      export type CjsPreparedGraphView =
+        ReturnType<typeof graph.prepareKnowledgeGraphView>;
+    `,
+  );
+  phaseWriteFile(
+    join(consumer, 'graph-brand-consumer.mts'),
+    `
+      import type {
+        CjsPreparedGraph,
+        CjsPreparedGraphView,
+      } from './graph-brand-producer.cjs';
+      import type { KnowledgeGraphStaticRecordViewProps } from
+        'cortexel/react/knowledge-graph';
+      declare const presentation: CjsPreparedGraph;
+      const accepted: KnowledgeGraphStaticRecordViewProps['presentation'] = presentation;
+      declare const view: CjsPreparedGraphView;
+      const acceptedView: NonNullable<KnowledgeGraphStaticRecordViewProps['view']> = view;
+      void [accepted, acceptedView];
     `,
   );
   const installedTsc = join(consumer, 'node_modules', 'typescript', 'bin', 'tsc');
@@ -6274,11 +8508,12 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
   commandEnvironment = packageSmokeEnvironment(nodeExecutable, workspace);
   const nodeVersion = executableVersion(nodeExecutable, 'Node');
   assertSupportedNodeVersion(nodeVersion);
+  const nodeRuntime = nodeRuntimeIdentity(nodeExecutable);
   const npmExecutable = resolveNpmCli(options.npmExecutable);
   const npmAuthority = inspectNpmPackageAuthority(npmExecutable);
   const runtimeAuthority: PackageRuntimeAuthority = {
     scope: RUNTIME_AUTHORITY_SCOPE,
-    node: { ...nodeFileAuthority, version: nodeVersion },
+    node: { ...nodeFileAuthority, version: nodeVersion, runtime: nodeRuntime },
     npm: npmAuthority,
   };
   commandRuntimeAuthority = runtimeAuthority;
@@ -6358,6 +8593,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.core,
     npmMajor,
+    nodeRuntime,
   );
   prepareConsumer(
     chartsConsumer,
@@ -6370,6 +8606,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.charts,
     npmMajor,
+    nodeRuntime,
   );
   prepareConsumer(
     consumer,
@@ -6382,6 +8619,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     npmExecutable,
     PACKAGE_SMOKE_CONSUMER_PROFILES.full,
     npmMajor,
+    nodeRuntime,
   );
   writeFileSync(join(workspace, NETWORK_GUARD_FILENAME), NETWORK_AND_WRITE_GUARD, {
     encoding: 'utf8',
@@ -6410,6 +8648,7 @@ function preparePackageSmokeWorkspaceWithinCommandRuntime(options: {
     exactFixtureManifestRaw: fixture.manifestRaw,
     expectedFiles,
     npmVersion,
+    runtime: nodeRuntime,
   } as const;
   assertPreparedConsumerClosures({
     ...consumerClosureOptions,
